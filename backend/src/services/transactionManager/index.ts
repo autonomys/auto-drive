@@ -1,4 +1,4 @@
-export { createTransactionManager } from './transactionManager';
-export { Transaction, TransactionResult } from './types';
-export { createApi, createKeyPair, getAccountNonce } from './networkApi';
-export { retrieveRemarkFromTransaction } from './retrieveTransactionData';
+export { createTransactionManager } from "./transactionManager.js";
+export { Transaction, TransactionResult } from "./types.js";
+export { createApi, createKeyPair, getAccountNonce } from "./networkApi.js";
+export { retrieveRemarkFromTransaction } from "./retrieveTransactionData.js";

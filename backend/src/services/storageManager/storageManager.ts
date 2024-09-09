@@ -1,108 +1,127 @@
-import { hashData, chunkData, Chunk } from '../../utils';
-import { storeData, retrieveData, storeTransactionResult } from '../../api';
-import { createTransactionManager, TransactionResult } from '../transactionManager';
-import { isJson } from '../../utils';
-import dotenv from 'dotenv';
+import { hashData, chunkData, Chunk } from "../../utils/index.js";
+import {
+  storeData,
+  retrieveData,
+  storeTransactionResult,
+} from "../../api/index.js";
+import {
+  createTransactionManager,
+  TransactionResult,
+} from "../transactionManager/index.js";
+import { isJson } from "../../utils/index.js";
+import dotenv from "dotenv";
+import { cidToString } from "../../utils/cid.js";
+import { createNode, encode } from "@ipld/dag-pb";
 
 dotenv.config();
 
-const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'ws://localhost:9944';
-const KEYPAIR_URI = process.env.KEYPAIR_URI || '//Alice';
+const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
+const KEYPAIR_URI = process.env.KEYPAIR_URI || "//Alice";
 
 export type Metadata = {
-    dataCid: string;
-    filename?: string;
-    mimeType?: string;
-    totalSize: number;
-    totalChunks: number;
-    chunks: Array<{
-        cid: string;
-        order: number;
-        size: number;
-    }>;
+  dataCid: string;
+  filename?: string;
+  mimeType?: string;
+  totalSize: number;
+  totalChunks: number;
+  chunks: Chunk[];
 };
 
 const storeMetadata = async (metadata: Metadata): Promise<string> => {
-    const metadataString = JSON.stringify(metadata);
-    return await storeData(`metadata:${metadata.dataCid}`, metadataString);
+  const metadataString = JSON.stringify(metadata);
+  return await storeData(`metadata:${metadata.dataCid}`, metadataString);
 };
 
 const storeChunks = async (chunks: Chunk[]): Promise<void> => {
-    await Promise.all(chunks.map(chunk => storeData(chunk.cid, chunk.data.toString('base64'))));
+  await Promise.all(
+    chunks.map((chunk) =>
+      storeData(cidToString(chunk.cid), chunk.data.toString("base64"))
+    )
+  );
 };
 
 export const processData = async (
-    data: Buffer,
-    filename?: string,
-    mimeType?: string
+  data: Buffer,
+  filename?: string,
+  mimeType?: string
 ): Promise<{ cid: string; transactionResults: TransactionResult[] }> => {
-    const chunks = chunkData(data);
-    const dataCid = hashData(data);
+  const chunks = chunkData(data);
 
-    const metadata: Metadata = {
-        dataCid,
-        filename,
-        mimeType,
-        totalSize: data.length,
-        totalChunks: chunks.length,
-        chunks: chunks,
-    };
+  const headChunk = createNode(
+    new Uint8Array([]),
+    chunks.map((chunk) => ({
+      Hash: chunk.cid,
+      Size: chunk.size,
+    }))
+  );
+  const dataCid = hashData(Buffer.from(encode(headChunk).buffer));
 
-    const metadataString = JSON.stringify(metadata);
+  const metadata: Metadata = {
+    dataCid: cidToString(dataCid),
+    filename,
+    mimeType,
+    totalSize: data.length,
+    totalChunks: chunks.length,
+    chunks: chunks,
+  };
 
-    const transactionManager = createTransactionManager(RPC_ENDPOINT!, KEYPAIR_URI!);
-    const transactions = [
-        {
-            module: 'system',
-            method: 'remarkWithEvent',
-            params: [metadataString],
-        },
-        ...chunks.map(chunk => ({
-            module: 'system',
-            method: 'remarkWithEvent',
-            params: [chunk.data.toString('base64')],
-        })),
-    ];
+  const metadataString = JSON.stringify(metadata);
 
-    const results = await transactionManager.submit(transactions);
+  const transactionManager = createTransactionManager(
+    RPC_ENDPOINT!,
+    KEYPAIR_URI!
+  );
+  const transactions = [
+    {
+      module: "system",
+      method: "remarkWithEvent",
+      params: [metadataString],
+    },
+    ...chunks.map((chunk) => ({
+      module: "system",
+      method: "remarkWithEvent",
+      params: [chunk.data.toString("base64")],
+    })),
+  ];
 
-    await storeMetadata(metadata);
-    await storeChunks(chunks);
+  const results: TransactionResult[] = []; //await transactionManager.submit(transactions);
 
-    await storeTransactionResult(dataCid, JSON.stringify(results));
+  await storeMetadata(metadata);
+  await storeChunks(chunks);
 
-    return { cid: dataCid, transactionResults: results };
+  await storeTransactionResult(cidToString(dataCid), JSON.stringify(results));
+
+  return { cid: cidToString(dataCid), transactionResults: results };
 };
 
-export const retrieveAndReassembleData = async (metadataCid: string): Promise<Buffer> => {
-    const metadataString = await retrieveData(metadataCid);
-    if (!metadataString || !isJson(metadataString)) {
-        throw new Error('Metadata not found');
+export const retrieveAndReassembleData = async (
+  metadataCid: string
+): Promise<Buffer> => {
+  const metadataString = await retrieveData(metadataCid);
+  if (!metadataString || !isJson(metadataString)) {
+    throw new Error("Metadata not found");
+  }
+
+  const metadata: Metadata = JSON.parse(metadataString);
+
+  if (metadata.totalChunks === 1) {
+    const data = await retrieveData(cidToString(metadata.chunks[0].cid));
+    if (!data) {
+      throw new Error(`Data with CID ${metadata.chunks[0].cid} not found`);
     }
+    console.log("data", data);
+    return Buffer.from(data, "base64");
+  }
 
-    const metadata: Metadata = JSON.parse(metadataString);
+  const chunks: Buffer[] = await Promise.all(
+    metadata.chunks.map(async (chunk) => {
+      const chunkData = await retrieveData(cidToString(chunk.cid));
+      if (!chunkData) {
+        throw new Error(`Chunk with CID ${chunk.cid} not found`);
+      }
+      return Buffer.from(chunkData, "base64");
+    })
+  );
 
-    if (metadata.totalChunks === 1) {
-        const data = await retrieveData(metadata.chunks[0].cid);
-        if (!data) {
-            throw new Error(`Data with CID ${metadata.chunks[0].cid} not found`);
-        }
-        console.log('data', data);
-        return Buffer.from(data, 'base64');
-    }
-
-    // Ensure the chunks are sorted by order
-    const sortedChunks = metadata.chunks.sort((a, b) => a.order - b.order);
-
-    const chunks: Buffer[] = await Promise.all(
-        sortedChunks.map(async chunk => {
-            const chunkData = await retrieveData(chunk.cid);
-            if (!chunkData) {
-                throw new Error(`Chunk with CID ${chunk.cid} not found`);
-            }
-            return Buffer.from(chunkData, 'base64');
-        })
-    );
-
-    return Buffer.concat(chunks);
+  return Buffer.concat(chunks);
 };
