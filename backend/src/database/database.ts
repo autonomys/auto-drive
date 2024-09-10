@@ -27,12 +27,10 @@ export const initDatabase = async () => {
   const db = await createDB();
 
   const setData = async (key: string, value: string): Promise<void> => {
-    await db
-      .run("INSERT OR REPLACE INTO mappings (key, value) VALUES (?, ?)", [
-        key,
-        value,
-      ])
-      .then((e) => console.log(e.changes));
+    await db.run("INSERT OR REPLACE INTO mappings (key, value) VALUES (?, ?)", [
+      key,
+      value,
+    ]);
   };
 
   const getData = async (key: string): Promise<string | undefined> => {

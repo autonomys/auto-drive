@@ -1,1 +1,5 @@
-export { processFile, retrieveAndReassembleData } from "./storageManager.js";
+export {
+  processTree as processFolder,
+  processFile,
+  retrieveAndReassembleData,
+} from "./storageManager.js";

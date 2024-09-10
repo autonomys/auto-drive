@@ -21,20 +21,23 @@ import { isJson } from "./utils/index.js";
 
 import dotenv from "dotenv";
 import { Metadata } from "./models/index.js";
+import { FolderTreeSchema } from "./models/folderTree.js";
+import { processTree } from "./services/storageManager/storageManager.js";
 dotenv.config();
 
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
 
 const setContentTypeHeaders = (res: express.Response, metadata: Metadata) => {
-  res.set("Content-Type", metadata.mimeType || "application/octet-stream");
-  if (metadata.filename) {
+  res.set(
+    "Content-Type",
+    (metadata.type === "file" && metadata.mimeType) ||
+      "application/octet-stream"
+  );
+  if (metadata.name) {
     console.log(
-      `Setting Content-Disposition to attachment with filename: ${metadata.filename}`
+      `Setting Content-Disposition to attachment with filename: ${metadata.name}`
     );
-    res.set(
-      "Content-Disposition",
-      `attachment; filename="${metadata.filename}"`
-    );
+    res.set("Content-Disposition", `attachment; filename="${metadata.name}"`);
   }
 };
 
@@ -62,6 +65,23 @@ const createServer = async () => {
       console.error("Error processing data:", error);
       res.status(500).json({ error: "Failed to process and submit data" });
     }
+  });
+
+  /// folderTree is a tree of folders and files
+  /// each file is uploaded as a separate entry in the form data
+  app.post("/upload-folder", async (req, res) => {
+    const { folderTree: uncheckedFolderTree } = req.body;
+
+    const parsedFolderTree = FolderTreeSchema.safeParse(uncheckedFolderTree);
+    if (!parsedFolderTree.success) {
+      return res.status(400).json({ error: "Invalid folder tree" });
+    }
+
+    const folderTree = parsedFolderTree.data;
+
+    const result = await processTree(folderTree, req.body);
+
+    res.json({ result });
   });
 
   app.get("/retrieve/:cid", async (req, res) => {

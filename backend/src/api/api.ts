@@ -11,7 +11,6 @@ const ensureDbInitialized = async () => {
 export const storeData = async (key: string, data: string): Promise<string> => {
   await ensureDbInitialized();
   await dbOps!.setData(key, data);
-  console.log(`Stored data with key: ${key}`);
   return key;
 };
 
@@ -44,7 +43,6 @@ export const storeTransactionResult = async (
 ): Promise<string> => {
   await ensureDbInitialized();
   await dbOps!.setTransactionResult(key, data);
-  console.log(`Stored transaction result with key: ${key}`);
   return key;
 };
 

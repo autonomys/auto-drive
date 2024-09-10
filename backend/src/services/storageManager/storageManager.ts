@@ -9,15 +9,28 @@ import {
 } from "../transactionManager/index.js";
 import { isJson } from "../../utils/index.js";
 import dotenv from "dotenv";
-import { cidToString, fileToIpldPbDag } from "@autonomys/auto-drive";
+import {
+  cidOfNode,
+  cidToString,
+  fileToIpldPbDag,
+  stringToCid,
+} from "@autonomys/auto-drive";
 import { createNode, encode, decode } from "@ipld/dag-pb";
 import {
   ChunkInfo,
   chunkInfoFromNode,
   fileMetadata as createFileMetadata,
+  folderMetadata,
   Metadata,
   metadataToBytes,
 } from "../../models/index.js";
+import { CID } from "multiformats/cid";
+import {
+  FolderTree,
+  getFiles,
+  getMapObjectById,
+  groupObjectIdsByPath,
+} from "../../models/folderTree.js";
 
 dotenv.config();
 
@@ -84,7 +97,72 @@ export const processFile = async (
     JSON.stringify(results)
   );
 
-  return { cid: cidToString(dag.headCID), transactionResults: results };
+  console.log("Processed file: ", filename);
+  return { cid: cidToString(dag.headCID), transactionResults: [] };
+};
+
+type Base64File = {
+  data: string;
+  filename: string;
+  mimeType: string;
+};
+
+export const processTree = async (
+  folderTree: FolderTree,
+  formData: Record<string, Base64File>
+): Promise<{ cid: string; transactionResults: TransactionResult[] }> => {
+  if (folderTree.type === "file") {
+    return processFile(
+      Buffer.from(formData[folderTree.id].data, "base64"),
+      folderTree.name,
+      formData[folderTree.id].mimeType
+    );
+  }
+
+  const parsedChildren = await Promise.all(
+    folderTree.children.map((e) => processTree(e, formData))
+  );
+
+  console.log("processing folder: ", folderTree.name);
+
+  const cids = parsedChildren.map((e) => e.cid).flat();
+
+  const folderNode = createNode(
+    new Uint8Array(0),
+    cids.map((e) => ({ Hash: stringToCid(e) }))
+  );
+  const folderNodeBytes = Buffer.from(encode(folderNode));
+  const cid = cidToString(cidOfNode(folderNode));
+
+  const metadata: Metadata = folderMetadata(cid, cids);
+  const metadataPbFormatted = metadataToBytes(metadata);
+
+  const transactions = [
+    {
+      module: "system",
+      method: "remarkWithEvent",
+      params: [metadataPbFormatted],
+    },
+    {
+      module: "system",
+      method: "remarkWithEvent",
+      params: [Buffer.from(encode(folderNode))],
+    },
+  ];
+
+  console.log(cid);
+  console.log("-".repeat(100));
+
+  const transactionManager = createTransactionManager(
+    RPC_ENDPOINT!,
+    KEYPAIR_URI!
+  );
+  const transactionResults = await transactionManager.submit(transactions);
+
+  await storeMetadata(metadata);
+  await storeData(cid, folderNodeBytes.toString("base64"));
+
+  return { cid, transactionResults };
 };
 
 export const retrieveAndReassembleData = async (
@@ -96,6 +174,10 @@ export const retrieveAndReassembleData = async (
   }
 
   const metadata: Metadata = JSON.parse(metadataString);
+
+  if (metadata.type === "folder") {
+    throw new Error("Folder not supported");
+  }
 
   if (metadata.totalChunks === 1) {
     const data = await retrieveData(metadata.chunks[0].cid);
