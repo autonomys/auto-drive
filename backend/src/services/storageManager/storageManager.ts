@@ -74,7 +74,7 @@ export const processFile = async (
     {
       module: "system",
       method: "remarkWithEvent",
-      params: [metadataPbFormatted],
+      params: [metadataPbFormatted.toString("base64")],
     },
     ...chunkNodes
       .map((e) => Buffer.from(encode(e)))
