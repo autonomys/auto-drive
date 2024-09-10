@@ -1,1 +1,1 @@
-export { processData, retrieveAndReassembleData } from "./storageManager.js";
+export { processFile, retrieveAndReassembleData } from "./storageManager.js";

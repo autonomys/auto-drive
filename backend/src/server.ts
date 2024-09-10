@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import {
-  processData,
+  processFile,
   retrieveAndReassembleData,
 } from "./services/storageManager/index.js";
 import {
@@ -55,7 +55,7 @@ const createServer = async () => {
       }
 
       const buffer = Buffer.from(data, "base64");
-      const result = await processData(buffer, filename, mimeType);
+      const result = await processFile(buffer, filename, mimeType);
 
       res.json({ result });
     } catch (error) {

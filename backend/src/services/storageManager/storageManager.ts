@@ -35,7 +35,7 @@ const storeChunks = async (chunks: ChunkInfo[]): Promise<void> => {
   );
 };
 
-export const processData = async (
+export const processFile = async (
   data: Buffer,
   filename?: string,
   mimeType?: string
