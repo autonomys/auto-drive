@@ -27,7 +27,7 @@ export interface Metadata {
 }
 
 export const uploadFile = async (data: string, filename: string, mimeType: string): Promise<UploadResponse> => {
-    const response = await axios.post<UploadResponse>(`${API_BASE_URL}/submit`, {
+    const response = await axios.post<UploadResponse>(`${API_BASE_URL}/upload-file`, {
         data,
         filename,
         mimeType,

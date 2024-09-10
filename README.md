@@ -4,42 +4,42 @@ This project implements a data storage service using the Autonomys Network's sub
 
 ## Features
 
--   Data chunking and reassembly
--   Metadata management
--   Blockchain integration for data storage
--   Transaction management
--   RESTful API for data operations
+- Data chunking and reassembly
+- Metadata management
+- Blockchain integration for data storage
+- Transaction management
+- RESTful API for data operations
 
 ## Getting Started
 
 ### Prerequisites
 
--   Node.js (v14 or later)
--   Yarn
--   Access to an Autonomys Network node
+- Node.js (v14 or later)
+- Yarn
+- Access to an Autonomys Network node
 
 ### Installation
 
 1. Clone the repository:
 
-    ```
-    git clone https://github.com/your-username/autonomys-data-storage.git
-    cd autonomys-data-storage
-    ```
+   ```
+   git clone https://github.com/your-username/autonomys-data-storage.git
+   cd autonomys-data-storage
+   ```
 
 2. Install dependencies:
 
-    ```
-    yarn install
-    ```
+   ```
+   yarn install
+   ```
 
 3. Set up environment variables:
    Create a `.env` file in the root directory and add the following:
-    ```
-    RPC_ENDPOINT=ws://localhost:9944
-    KEYPAIR_URI=//Alice
-    ```
-    Adjust the values as needed for your Autonomys Network setup.
+   ```
+   RPC_ENDPOINT=ws://localhost:9944
+   KEYPAIR_URI=//Alice
+   ```
+   Adjust the values as needed for your Autonomys Network setup.
 
 ### Running the Service
 
@@ -54,13 +54,13 @@ The server will start on `http://localhost:3000`.
 
 ## API Endpoints
 
--   `POST /submit`: Submit data for storage
--   `GET /retrieve/:cid`: Retrieve data by CID
--   `GET /metadata/:cid`: Get metadata for a specific CID
--   `GET /all`: Get all stored data (limited to 500 characters per entry)
--   `GET /transaction/:cid`: Get transaction result for a specific CID
--   `GET /transactions`: Get all transaction results
--   `GET /fromTransactions/:cid`: Retrieve data directly from blockchain transactions
+- `POST /upload-file`: Submit data for storage
+- `GET /retrieve/:cid`: Retrieve data by CID
+- `GET /metadata/:cid`: Get metadata for a specific CID
+- `GET /all`: Get all stored data (limited to 500 characters per entry)
+- `GET /transaction/:cid`: Get transaction result for a specific CID
+- `GET /transactions`: Get all transaction results
+- `GET /fromTransactions/:cid`: Retrieve data directly from blockchain transactions
 
 ## Architecture
 

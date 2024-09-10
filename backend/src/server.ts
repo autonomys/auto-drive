@@ -47,7 +47,7 @@ const createServer = async () => {
   app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
   app.use(cors());
 
-  app.post("/submit", async (req, res) => {
+  app.post("/upload-file", async (req, res) => {
     try {
       const { data, filename, mimeType } = req.body;
       if (!data) {

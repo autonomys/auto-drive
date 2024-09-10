@@ -7,7 +7,7 @@ You can interact with the server using the following curl commands:
 To submit data to the server:
 
 ```bash
-curl -X POST http://localhost:3000/submit \
+curl -X POST http://localhost:3000/upload-file \
      -H "Content-Type: application/json" \
      -d '{
        "data": "Your data here",
@@ -21,7 +21,7 @@ This will return a JSON response with the metadata CID of the stored data:
 
 ```json
 {
-    "metadataCid": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+  "metadataCid": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
 }
 ```
 
@@ -39,7 +39,7 @@ This will return a JSON response with the retrieved data:
 
 ```json
 {
-    "data": "Your data here"
+  "data": "Your data here"
 }
 ```
 
@@ -49,8 +49,8 @@ Note: Make sure the server is running (use `yarn start:server`) before executing
 
 ### Additional Information
 
--   The server can handle both small and large data submissions.
--   For large data (>64KB), the server will automatically chunk the data and store it accordingly.
--   The `dataType` field in the submit request can be either "raw" or "file".
--   You can include optional `name` and `mimeType` fields for better metadata management.
--   Custom metadata can be included in the submit request as additional fields.
+- The server can handle both small and large data submissions.
+- For large data (>64KB), the server will automatically chunk the data and store it accordingly.
+- The `dataType` field in the submit request can be either "raw" or "file".
+- You can include optional `name` and `mimeType` fields for better metadata management.
+- Custom metadata can be included in the submit request as additional fields.

@@ -4,7 +4,7 @@ import fs from 'fs/promises'; // Added import for fs
 const API_URL = 'http://localhost:3000';
 
 const submitData = (data: string | Buffer, filename?: string, mimeType?: string) =>
-    axios.post(`${API_URL}/submit`, {
+    axios.post(`${API_URL}/upload-file`, {
         data: Buffer.isBuffer(data) ? data.toString('base64') : Buffer.from(data).toString('base64'),
         filename,
         mimeType,
