@@ -15,22 +15,14 @@ import {
   fileToIpldPbDag,
   stringToCid,
 } from "@autonomys/auto-drive";
-import { createNode, encode, decode } from "@ipld/dag-pb";
+import { createNode, encode, decode, PBNode } from "@ipld/dag-pb";
 import {
-  ChunkInfo,
-  chunkInfoFromNode,
   fileMetadata as createFileMetadata,
   folderMetadata,
   Metadata,
   metadataToBytes,
 } from "../../models/index.js";
-import { CID } from "multiformats/cid";
-import {
-  FolderTree,
-  getFiles,
-  getMapObjectById,
-  groupObjectIdsByPath,
-} from "../../models/folderTree.js";
+import { FolderTree } from "../../models/folderTree.js";
 
 dotenv.config();
 
@@ -42,9 +34,14 @@ const storeMetadata = async (metadata: Metadata): Promise<string> => {
   return await storeData(`metadata:${metadata.dataCid}`, metadataString);
 };
 
-const storeChunks = async (chunks: ChunkInfo[]): Promise<void> => {
+const storeChunks = async (chunks: PBNode[]): Promise<void> => {
   await Promise.all(
-    chunks.map((chunk) => storeData(chunk.cid, chunk.data.toString("base64")))
+    chunks.map((chunk) =>
+      storeData(
+        cidToString(cidOfNode(chunk)),
+        Buffer.from(chunk.Data!).toString("base64")
+      )
+    )
   );
 };
 
@@ -90,7 +87,7 @@ export const processFile = async (
   );
 
   await storeMetadata(metadata);
-  await storeChunks(chunkNodes.map(chunkInfoFromNode));
+  await storeChunks(chunkNodes);
 
   await storeTransactionResult(
     cidToString(dag.headCID),

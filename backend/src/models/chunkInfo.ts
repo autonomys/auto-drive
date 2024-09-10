@@ -4,7 +4,6 @@ import { encode, PBNode } from "@ipld/dag-pb";
 export interface ChunkInfo {
   size: number;
   cid: string;
-  data: Buffer;
 }
 
 export const chunkInfoFromNode = (node: PBNode): ChunkInfo => {
@@ -13,6 +12,5 @@ export const chunkInfoFromNode = (node: PBNode): ChunkInfo => {
   return {
     size: encoded.length,
     cid: cidToString(cidOfNode(node)),
-    data: Buffer.from(encoded),
   };
 };
