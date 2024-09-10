@@ -1,5 +1,6 @@
 import { IPLDDag, cidOfNode, cidToString } from "@autonomys/auto-drive";
 import { ChunkInfo } from "./chunkInfo";
+import { PBNode, createNode, decode, encode } from "@ipld/dag-pb";
 
 export type Metadata = {
   dataCid: string;
@@ -28,4 +29,16 @@ export const fileMetadata = (
       data: Buffer.from(chunk.Data ?? new Uint8Array()),
     })),
   };
+};
+
+export const metadataFromBytes = (bytes: Buffer): Metadata => {
+  return JSON.parse(
+    Buffer.from(decode(bytes).Data ?? new Uint8Array()).toString()
+  );
+};
+
+export const metadataToBytes = (metadata: Metadata): Buffer => {
+  return Buffer.from(
+    encode(createNode(Buffer.from(JSON.stringify(metadata)), []))
+  );
 };

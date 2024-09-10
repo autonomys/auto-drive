@@ -16,6 +16,7 @@ import {
   chunkInfoFromNode,
   fileMetadata as createFileMetadata,
   Metadata,
+  metadataToBytes,
 } from "../../models/index.js";
 
 dotenv.config();
@@ -48,9 +49,7 @@ export const processData = async (
     mimeType
   );
 
-  const metadataPbFormatted = encode(
-    createNode(Buffer.from(JSON.stringify(metadata)), [])
-  );
+  const metadataPbFormatted = metadataToBytes(metadata);
 
   const chunkNodes = Array.from(dag.nodes.values());
 
