@@ -4,7 +4,6 @@ import bodyParser from "body-parser";
 import {
   processData,
   retrieveAndReassembleData,
-  Metadata,
 } from "./services/storageManager/index.js";
 import {
   retrieveData,
@@ -21,6 +20,7 @@ import {
 import { isJson } from "./utils/index.js";
 
 import dotenv from "dotenv";
+import { Metadata } from "./models/index.js";
 dotenv.config();
 
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";

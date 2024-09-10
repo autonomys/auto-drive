@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "start:server": "ts-node src/server.ts",
+    "start:server": "node --loader ts-node/esm src/server.ts",
     "test": "jest"
   },
   "dependencies": {

@@ -1,4 +1,3 @@
-import { hashData, chunkData, Chunk } from "../../utils/index.js";
 import {
   storeData,
   retrieveData,
@@ -10,33 +9,28 @@ import {
 } from "../transactionManager/index.js";
 import { isJson } from "../../utils/index.js";
 import dotenv from "dotenv";
-import { cidToString } from "../../utils/cid.js";
-import { createNode, encode } from "@ipld/dag-pb";
+import { cidToString, fileToIpldPbDag } from "@autonomys/auto-drive";
+import { createNode, encode, decode } from "@ipld/dag-pb";
+import {
+  ChunkInfo,
+  chunkInfoFromNode,
+  fileMetadata as createFileMetadata,
+  Metadata,
+} from "../../models/index.js";
 
 dotenv.config();
 
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
 const KEYPAIR_URI = process.env.KEYPAIR_URI || "//Alice";
 
-export type Metadata = {
-  dataCid: string;
-  filename?: string;
-  mimeType?: string;
-  totalSize: number;
-  totalChunks: number;
-  chunks: Chunk[];
-};
-
 const storeMetadata = async (metadata: Metadata): Promise<string> => {
   const metadataString = JSON.stringify(metadata);
   return await storeData(`metadata:${metadata.dataCid}`, metadataString);
 };
 
-const storeChunks = async (chunks: Chunk[]): Promise<void> => {
+const storeChunks = async (chunks: ChunkInfo[]): Promise<void> => {
   await Promise.all(
-    chunks.map((chunk) =>
-      storeData(cidToString(chunk.cid), chunk.data.toString("base64"))
-    )
+    chunks.map((chunk) => storeData(chunk.cid, chunk.data.toString("base64")))
   );
 };
 
@@ -45,27 +39,20 @@ export const processData = async (
   filename?: string,
   mimeType?: string
 ): Promise<{ cid: string; transactionResults: TransactionResult[] }> => {
-  const chunks = chunkData(data);
+  const dag = fileToIpldPbDag(data);
 
-  const headChunk = createNode(
-    new Uint8Array([]),
-    chunks.map((chunk) => ({
-      Hash: chunk.cid,
-      Size: chunk.size,
-    }))
-  );
-  const dataCid = hashData(Buffer.from(encode(headChunk).buffer));
-
-  const metadata: Metadata = {
-    dataCid: cidToString(dataCid),
+  const metadata: Metadata = createFileMetadata(
+    dag,
+    data.length,
     filename,
-    mimeType,
-    totalSize: data.length,
-    totalChunks: chunks.length,
-    chunks: chunks,
-  };
+    mimeType
+  );
 
-  const metadataString = JSON.stringify(metadata);
+  const metadataPbFormatted = encode(
+    createNode(Buffer.from(JSON.stringify(metadata)), [])
+  );
+
+  const chunkNodes = Array.from(dag.nodes.values());
 
   const transactionManager = createTransactionManager(
     RPC_ENDPOINT!,
@@ -75,23 +62,30 @@ export const processData = async (
     {
       module: "system",
       method: "remarkWithEvent",
-      params: [metadataString],
+      params: [metadataPbFormatted],
     },
-    ...chunks.map((chunk) => ({
-      module: "system",
-      method: "remarkWithEvent",
-      params: [chunk.data.toString("base64")],
-    })),
+    ...chunkNodes
+      .map((e) => Buffer.from(encode(e)))
+      .map((chunk) => ({
+        module: "system",
+        method: "remarkWithEvent",
+        params: [chunk.toString("base64")],
+      })),
   ];
 
-  const results: TransactionResult[] = []; //await transactionManager.submit(transactions);
+  const results: TransactionResult[] = await transactionManager.submit(
+    transactions
+  );
 
   await storeMetadata(metadata);
-  await storeChunks(chunks);
+  await storeChunks(chunkNodes.map(chunkInfoFromNode));
 
-  await storeTransactionResult(cidToString(dataCid), JSON.stringify(results));
+  await storeTransactionResult(
+    cidToString(dag.headCID),
+    JSON.stringify(results)
+  );
 
-  return { cid: cidToString(dataCid), transactionResults: results };
+  return { cid: cidToString(dag.headCID), transactionResults: results };
 };
 
 export const retrieveAndReassembleData = async (
@@ -105,7 +99,7 @@ export const retrieveAndReassembleData = async (
   const metadata: Metadata = JSON.parse(metadataString);
 
   if (metadata.totalChunks === 1) {
-    const data = await retrieveData(cidToString(metadata.chunks[0].cid));
+    const data = await retrieveData(metadata.chunks[0].cid);
     if (!data) {
       throw new Error(`Data with CID ${metadata.chunks[0].cid} not found`);
     }
@@ -115,11 +109,11 @@ export const retrieveAndReassembleData = async (
 
   const chunks: Buffer[] = await Promise.all(
     metadata.chunks.map(async (chunk) => {
-      const chunkData = await retrieveData(cidToString(chunk.cid));
+      const chunkData = await retrieveData(chunk.cid);
       if (!chunkData) {
         throw new Error(`Chunk with CID ${chunk.cid} not found`);
       }
-      return Buffer.from(chunkData, "base64");
+      return Buffer.from(decode(Buffer.from(chunkData, "base64")).Data ?? "");
     })
   );
 

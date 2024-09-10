@@ -1,17 +1,21 @@
 {
   "compilerOptions": {
-    "target": "es6",
-    "module": "NodeNext",
-    "strict": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": "src",
     "paths": {
       "*": ["*"]
-    }
+    },
+    "strict": true,
+    "allowJs": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

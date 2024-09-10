@@ -1,5 +1,1 @@
-export {
-  processData,
-  retrieveAndReassembleData,
-  Metadata,
-} from "./storageManager.js";
+export { processData, retrieveAndReassembleData } from "./storageManager.js";
