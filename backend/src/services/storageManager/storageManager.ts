@@ -132,7 +132,10 @@ export const processTree = async (
   const folderNodeBytes = Buffer.from(encode(folderNode));
   const cid = cidToString(cidOfNode(folderNode));
 
-  const metadata: Metadata = folderMetadata(cid, cids);
+  const populatedChildren = await Promise.all(
+    cids.map((e) => retrieveMetadata(e).then((e) => e!))
+  );
+  const metadata: Metadata = folderMetadata(cid, populatedChildren);
   const metadataPbFormatted = metadataToBytes(metadata);
 
   const transactions = [
@@ -197,4 +200,16 @@ export const retrieveAndReassembleData = async (
   );
 
   return Buffer.concat(chunks);
+};
+
+export const retrieveMetadata = async (
+  cid: string
+): Promise<Metadata | null> => {
+  const metadataString = await retrieveData(`metadata:${cid}`);
+  if (!metadataString) {
+    return null;
+  }
+  const metadata: Metadata = JSON.parse(metadataString);
+
+  return metadata;
 };

@@ -23,7 +23,10 @@ import { isJson } from "./utils/index.js";
 import dotenv from "dotenv";
 import { Metadata } from "./models/index.js";
 import { FolderTreeSchema } from "./models/folderTree.js";
-import { processTree } from "./services/storageManager/storageManager.js";
+import {
+  processTree,
+  retrieveMetadata,
+} from "./services/storageManager/storageManager.js";
 dotenv.config();
 
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
@@ -55,7 +58,7 @@ const createServer = async () => {
     try {
       const { data, filename, mimeType } = req.body;
       if (!data) {
-        return res.status(400).json({ error: "Data is required" });
+        return res.status(400).json({ error: "Field `data` is required" });
       }
 
       const buffer = Buffer.from(data, "base64");
@@ -91,8 +94,6 @@ const createServer = async () => {
           details: validatedFolderTree.error,
         });
       }
-
-      console.log(req.files);
 
       const result = await processTree(
         validatedFolderTree.data,
@@ -135,11 +136,10 @@ const createServer = async () => {
   app.get("/metadata/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const metadataString = await retrieveData(`metadata:${cid}`);
-      if (!metadataString) {
+      const metadata = await retrieveMetadata(cid);
+      if (!metadata) {
         return res.status(404).json({ error: "Metadata not found" });
       }
-      const metadata: Metadata = JSON.parse(metadataString);
       res.json(metadata);
     } catch (error: any) {
       console.error("Error retrieving metadata:", error);
