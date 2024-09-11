@@ -98,12 +98,6 @@ export const processFile = async (
   return { cid: cidToString(dag.headCID), transactionResults: [] };
 };
 
-type Base64File = {
-  data: string;
-  filename: string;
-  mimeType: string;
-};
-
 export const processTree = async (
   folderTree: FolderTree,
   files: Express.Multer.File[]
