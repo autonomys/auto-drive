@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import multer from "multer";
 import bodyParser from "body-parser";
 import {
   processFile,
@@ -67,21 +68,44 @@ const createServer = async () => {
     }
   });
 
-  /// folderTree is a tree of folders and files
-  /// each file is uploaded as a separate entry in the form data
-  app.post("/upload-folder", async (req, res) => {
-    const { folderTree: uncheckedFolderTree } = req.body;
+  app.post("/upload-folder", multer().any(), async (req, res) => {
+    try {
+      const folderTreeString = req.body.folderTree;
+      if (!folderTreeString) {
+        return res
+          .status(400)
+          .json({ error: "Missing folderTree in request body" });
+      }
 
-    const parsedFolderTree = FolderTreeSchema.safeParse(uncheckedFolderTree);
-    if (!parsedFolderTree.success) {
-      return res.status(400).json({ error: "Invalid folder tree" });
+      let parsedFolderTree;
+      try {
+        parsedFolderTree = JSON.parse(folderTreeString);
+      } catch (error) {
+        return res.status(400).json({ error: "Invalid JSON in folderTree" });
+      }
+
+      const validatedFolderTree = FolderTreeSchema.safeParse(parsedFolderTree);
+      if (!validatedFolderTree.success) {
+        return res.status(400).json({
+          error: "Invalid folder tree structure",
+          details: validatedFolderTree.error,
+        });
+      }
+
+      console.log(req.files);
+
+      const result = await processTree(
+        validatedFolderTree.data,
+        (req.files || []) as Express.Multer.File[]
+      );
+
+      console.log(`Processed folder upload with cid: ${result.cid}`);
+
+      res.json({ result });
+    } catch (error) {
+      console.error("Error processing folder upload:", error);
+      res.status(500).json({ error: "Failed to process folder upload" });
     }
-
-    const folderTree = parsedFolderTree.data;
-
-    const result = await processTree(folderTree, req.body);
-
-    res.json({ result });
   });
 
   app.get("/retrieve/:cid", async (req, res) => {

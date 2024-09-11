@@ -1,5 +1,5 @@
 export {
-  processTree as processFolder,
+  processTree,
   processFile,
   retrieveAndReassembleData,
 } from "./storageManager.js";

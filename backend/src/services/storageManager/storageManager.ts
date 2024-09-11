@@ -39,7 +39,7 @@ const storeChunks = async (chunks: PBNode[]): Promise<void> => {
     chunks.map((chunk) =>
       storeData(
         cidToString(cidOfNode(chunk)),
-        Buffer.from(chunk.Data!).toString("base64")
+        Buffer.from(encode(chunk)).toString("base64")
       )
     )
   );
@@ -106,21 +106,22 @@ type Base64File = {
 
 export const processTree = async (
   folderTree: FolderTree,
-  formData: Record<string, Base64File>
+  files: Express.Multer.File[]
 ): Promise<{ cid: string; transactionResults: TransactionResult[] }> => {
   if (folderTree.type === "file") {
-    return processFile(
-      Buffer.from(formData[folderTree.id].data, "base64"),
-      folderTree.name,
-      formData[folderTree.id].mimeType
-    );
+    const file = files.find((e) => e.fieldname === folderTree.id);
+    if (!file) {
+      throw new Error(`File with fieldname ${folderTree.id} not found`);
+    }
+
+    return processFile(file.buffer, folderTree.name, file.mimetype);
   }
 
-  const parsedChildren = await Promise.all(
-    folderTree.children.map((e) => processTree(e, formData))
-  );
-
-  console.log("processing folder: ", folderTree.name);
+  const parsedChildren = [];
+  for (const child of folderTree.children) {
+    const result = await processTree(child, files);
+    parsedChildren.push(result);
+  }
 
   const cids = parsedChildren.map((e) => e.cid).flat();
 
@@ -138,12 +139,12 @@ export const processTree = async (
     {
       module: "system",
       method: "remarkWithEvent",
-      params: [metadataPbFormatted],
+      params: [metadataPbFormatted.toString("base64")],
     },
     {
       module: "system",
       method: "remarkWithEvent",
-      params: [Buffer.from(encode(folderNode))],
+      params: [Buffer.from(encode(folderNode)).toString("base64")],
     },
   ];
 
