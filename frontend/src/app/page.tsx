@@ -2,7 +2,7 @@
 
 import { useLocalStorage } from "@uidotdev/usehooks";
 import { Metadata } from "../models/Metadata";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiService } from "../services/api";
 import FileCard from "../components/common/FileCard";
 
