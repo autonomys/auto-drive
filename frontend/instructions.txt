@@ -1,4 +1,0 @@
-Features
-- UI to retrieve data from backend, either from database or from fromTransactions
-- UI to browse files via metadata
-- 
