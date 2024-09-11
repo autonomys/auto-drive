@@ -13,15 +13,8 @@ export default function Page() {
   const [rootObjectMetadata, setRootObjectMetadata] = useState<Metadata[]>([]);
 
 
-  const fetchRootObjectMetadata = useCallback(async () => {
-    const rootsMetadata = await Promise.all(localObjectCIDs.map(e => ApiService.fetchMetadata(e)));
-    setRootObjectMetadata(rootsMetadata);
-  }, [localObjectCIDs]);
-
   useEffect(() => {
-    if (localObjectCIDs.length > 0) {
-      fetchRootObjectMetadata();
-    }
+    Promise.all(localObjectCIDs.map(e => ApiService.fetchMetadata(e))).then(setRootObjectMetadata);
   }, [localObjectCIDs]);
 
 
