@@ -10,7 +10,7 @@ export default async function Page({ params }: { params: { cid: string } }) {
         throw new Error('File type not supported');
     }
 
-    const childrenMetadata = await Promise.all(metadata.children.map(e => ApiService.fetchMetadata(e)));
+    const childrenMetadata = await Promise.all(metadata.children.map(e => ApiService.fetchMetadata(e.cid)));
 
     return (
         <div>

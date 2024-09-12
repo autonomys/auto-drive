@@ -17,6 +17,6 @@
     "strict": true,
     "allowJs": true
   },
-  "include": ["src/**/*", "../frontend/src/utils/file.ts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

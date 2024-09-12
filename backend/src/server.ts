@@ -21,17 +21,21 @@ import {
 import { isJson } from "./utils/index.js";
 
 import dotenv from "dotenv";
-import { Metadata } from "./models/index.js";
 import { FolderTreeSchema } from "./models/folderTree.js";
 import {
   processTree,
   retrieveMetadata,
 } from "./services/storageManager/storageManager.js";
+import { OffchainMetadata } from "@autonomys/auto-drive";
+
 dotenv.config();
 
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
 
-const setContentTypeHeaders = (res: express.Response, metadata: Metadata) => {
+const setContentTypeHeaders = (
+  res: express.Response,
+  metadata: OffchainMetadata
+) => {
   res.set(
     "Content-Type",
     (metadata.type === "file" && metadata.mimeType) ||
@@ -118,7 +122,7 @@ const createServer = async () => {
       if (!metadataString) {
         return res.status(404).json({ error: "Metadata not found" });
       }
-      const metadata: Metadata = JSON.parse(metadataString);
+      const metadata: OffchainMetadata = JSON.parse(metadataString);
 
       console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
       const data = await retrieveAndReassembleData(metadataCid);
@@ -136,6 +140,7 @@ const createServer = async () => {
   app.get("/metadata/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
+      console.log(`Retrieving metadata for cid: ${cid}`);
       const metadata = await retrieveMetadata(cid);
       if (!metadata) {
         return res.status(404).json({ error: "Metadata not found" });
@@ -241,7 +246,7 @@ const createServer = async () => {
         return res.status(400).json({ error: "Invalid metadata format" });
       }
 
-      const metadata: Metadata = JSON.parse(remarks[0]);
+      const metadata: OffchainMetadata = JSON.parse(remarks[0]);
 
       const data = remarks
         .slice(1)

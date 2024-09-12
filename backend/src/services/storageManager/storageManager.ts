@@ -12,16 +12,17 @@ import dotenv from "dotenv";
 import {
   cidOfNode,
   cidToString,
-  fileToIpldPbDag,
+  createFolderIpldNode,
+  createFileIPLDDag,
   stringToCid,
-} from "@autonomys/auto-drive";
-import { createNode, encode, decode, PBNode } from "@ipld/dag-pb";
-import {
-  fileMetadata as createFileMetadata,
+  fileMetadata,
+  OffchainMetadata,
+  createMetadataNode,
+  encodeNode,
+  OffchainFolderMetadata,
   folderMetadata,
-  Metadata,
-  metadataToBytes,
-} from "../../models/index.js";
+} from "@autonomys/auto-drive";
+import { decode, encode, PBNode } from "@ipld/dag-pb";
 import { FolderTree } from "../../models/folderTree.js";
 
 dotenv.config();
@@ -29,7 +30,7 @@ dotenv.config();
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
 const KEYPAIR_URI = process.env.KEYPAIR_URI || "//Alice";
 
-const storeMetadata = async (metadata: Metadata): Promise<string> => {
+const storeMetadata = async (metadata: OffchainMetadata): Promise<string> => {
   const metadataString = JSON.stringify(metadata);
   return await storeData(`metadata:${metadata.dataCid}`, metadataString);
 };
@@ -50,16 +51,16 @@ export const processFile = async (
   filename?: string,
   mimeType?: string
 ): Promise<{ cid: string; transactionResults: TransactionResult[] }> => {
-  const dag = fileToIpldPbDag(data);
+  const dag = createFileIPLDDag(data, filename);
 
-  const metadata: Metadata = createFileMetadata(
+  const metadata: OffchainMetadata = fileMetadata(
     dag,
     data.length,
     filename,
     mimeType
   );
 
-  const metadataPbFormatted = metadataToBytes(metadata);
+  const metadataPbFormatted = encodeNode(createMetadataNode(metadata));
 
   const chunkNodes = Array.from(dag.nodes.values());
 
@@ -119,18 +120,30 @@ export const processTree = async (
 
   const cids = parsedChildren.map((e) => e.cid).flat();
 
-  const folderNode = createNode(
-    new Uint8Array(0),
-    cids.map((e) => ({ Hash: stringToCid(e) }))
+  const childrenMetadata = await Promise.all(
+    cids.map((e) =>
+      retrieveMetadata(e).then((e) => ({
+        type: e!.type,
+        name: e!.name,
+        cid: e!.dataCid,
+        totalSize: e!.totalSize,
+      }))
+    )
+  );
+
+  const folderNode = createFolderIpldNode(
+    cids.map((e) => stringToCid(e)),
+    folderTree.name,
+    BigInt(childrenMetadata.reduce((acc, e) => acc + e.totalSize, 0))
   );
   const folderNodeBytes = Buffer.from(encode(folderNode));
   const cid = cidToString(cidOfNode(folderNode));
 
-  const populatedChildren = await Promise.all(
-    cids.map((e) => retrieveMetadata(e).then((e) => e!))
+  const metadata: OffchainFolderMetadata = folderMetadata(
+    cid,
+    childrenMetadata
   );
-  const metadata: Metadata = folderMetadata(cid, populatedChildren);
-  const metadataPbFormatted = metadataToBytes(metadata);
+  const metadataPbFormatted = encodeNode(createMetadataNode(metadata));
 
   const transactions = [
     {
@@ -168,7 +181,7 @@ export const retrieveAndReassembleData = async (
     throw new Error("Metadata not found");
   }
 
-  const metadata: Metadata = JSON.parse(metadataString);
+  const metadata: OffchainMetadata = JSON.parse(metadataString);
 
   if (metadata.type === "folder") {
     throw new Error("Folder not supported");
@@ -198,12 +211,13 @@ export const retrieveAndReassembleData = async (
 
 export const retrieveMetadata = async (
   cid: string
-): Promise<Metadata | null> => {
+): Promise<OffchainMetadata | null> => {
   const metadataString = await retrieveData(`metadata:${cid}`);
+
   if (!metadataString) {
     return null;
   }
-  const metadata: Metadata = JSON.parse(metadataString);
+  const metadata: OffchainMetadata = JSON.parse(metadataString);
 
   return metadata;
 };
