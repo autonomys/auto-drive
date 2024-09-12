@@ -140,7 +140,6 @@ const createServer = async () => {
   app.get("/metadata/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      console.log(`Retrieving metadata for cid: ${cid}`);
       const metadata = await retrieveMetadata(cid);
       if (!metadata) {
         return res.status(404).json({ error: "Metadata not found" });
