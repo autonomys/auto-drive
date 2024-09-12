@@ -1,7 +1,0 @@
-on submission of data, the following happens:
-
-1. the data is split into chunks and a metadata object is created
-2. each chunk and the meta data object are uploaded to Autonomys via system.remarkWithEvent call
-3. each chunk and metadata object are uploaded to the database
-4. the metadata hash is returned to the user
-
