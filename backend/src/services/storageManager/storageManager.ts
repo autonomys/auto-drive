@@ -12,7 +12,6 @@ import dotenv from "dotenv";
 import {
   cidOfNode,
   cidToString,
-  createFolderIpldNode,
   createFileIPLDDag,
   stringToCid,
   fileMetadata,
@@ -21,6 +20,7 @@ import {
   encodeNode,
   OffchainFolderMetadata,
   folderMetadata,
+  createFolderIPLDDag,
 } from "@autonomys/auto-drive";
 import { decode, encode, PBNode } from "@ipld/dag-pb";
 import { FolderTree } from "../../models/folderTree.js";
@@ -131,16 +131,22 @@ export const processTree = async (
     )
   );
 
-  const folderNode = createFolderIpldNode(
+  const { headCID, nodes } = createFolderIPLDDag(
     cids.map((e) => stringToCid(e)),
     folderTree.name,
-    BigInt(childrenMetadata.reduce((acc, e) => acc + e.totalSize, 0))
+    childrenMetadata.reduce((acc, e) => acc + e.totalSize, 0)
   );
-  const folderNodeBytes = Buffer.from(encode(folderNode));
-  const cid = cidToString(cidOfNode(folderNode));
+  const cid = cidToString(headCID);
+
+  const folderNode = nodes.get(headCID);
+  if (!folderNode) {
+    throw new Error("Folder node not found");
+  }
+
+  const chunkNodes = Array.from(nodes.values());
 
   const metadata: OffchainFolderMetadata = folderMetadata(
-    cid,
+    cidToString(cidOfNode(folderNode)),
     childrenMetadata
   );
   const metadataPbFormatted = encodeNode(createMetadataNode(metadata));
@@ -156,10 +162,14 @@ export const processTree = async (
       method: "remarkWithEvent",
       params: [Buffer.from(encode(folderNode)).toString("base64")],
     },
+    ...chunkNodes
+      .map((e) => Buffer.from(encode(e)))
+      .map((chunk) => ({
+        module: "system",
+        method: "remarkWithEvent",
+        params: [chunk.toString("base64")],
+      })),
   ];
-
-  console.log(cid);
-  console.log("-".repeat(100));
 
   const transactionManager = createTransactionManager(
     RPC_ENDPOINT!,
@@ -168,7 +178,12 @@ export const processTree = async (
   const transactionResults = await transactionManager.submit(transactions);
 
   await storeMetadata(metadata);
-  await storeData(cid, folderNodeBytes.toString("base64"));
+  await Promise.all(
+    chunkNodes.map((e) =>
+      storeData(cidToString(cidOfNode(e)), encodeNode(e).toString("base64"))
+    )
+  );
+  await storeData(cid, encodeNode(folderNode).toString("base64"));
 
   return { cid, transactionResults };
 };
