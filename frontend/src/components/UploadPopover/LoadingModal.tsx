@@ -1,11 +1,6 @@
 'use client'
 
 import { Loader2 } from "lucide-react";
-import Modal from "react-modal";
-
-if (typeof window !== 'undefined') {
-    Modal.setAppElement('body');
-}
 
 export const UploadingModal = ({
     text = "Uploading file...",
