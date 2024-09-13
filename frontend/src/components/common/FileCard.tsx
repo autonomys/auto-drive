@@ -23,7 +23,7 @@ export default function FileCard({ type, name, size, modified, icon }: FileCardP
 
     return (
         <div
-            className="w-60 h-72 m-2 p-4 bg-white rounded-lg shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md flex flex-col justify-between"
+            className="flex-1 max-w-72 h-72 m-2 p-4 bg-white rounded-lg shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md flex flex-col justify-between"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >

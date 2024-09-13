@@ -25,7 +25,7 @@ export default function Page() {
         rootObjectMetadata ? rootObjectMetadata.length > 0 ? rootObjectMetadata.map((metadata) => {
           switch (metadata.type) {
             case "folder":
-              return <a key={metadata.dataCid} href={`/${metadata.dataCid}`} className="contents">
+              return <a key={metadata.dataCid} href={`/fs/${metadata.dataCid}`} className="contents">
                 <FileCard name={metadata.dataCid ?? ""} type={metadata.type} size={metadata.totalSize} />
               </a>
             case "file":

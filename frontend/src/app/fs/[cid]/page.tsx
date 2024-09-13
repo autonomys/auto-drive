@@ -13,7 +13,7 @@ export default async function Page({ params }: { params: { cid: string } }) {
     const childrenMetadata = await Promise.all(metadata.children.map(e => ApiService.fetchMetadata(e.cid)));
 
     return (
-        <div>
+        <div className='grid grid-cols-4 gap-4'>
             {
                 childrenMetadata.map((metadata) => {
                     return <FileCard key={metadata.dataCid} name={metadata.name ?? ""} type={metadata.type} size={metadata.totalSize} />

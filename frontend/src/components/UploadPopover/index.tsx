@@ -3,9 +3,10 @@
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react"
 import { PlusIcon, FolderIcon, FileIcon } from "lucide-react"
 import { buttonVariantClasses } from "../common/Button"
-import { useCallback, useRef } from "react"
+import { useCallback, useRef, useState } from "react"
 import { ApiService } from "../../services/api"
 import { useLocalStorage } from "@uidotdev/usehooks"
+import { UploadingModal } from "./LoadingModal"
 
 declare module 'react' {
     interface InputHTMLAttributes<T> extends HTMLAttributes<T> {
@@ -16,6 +17,7 @@ declare module 'react' {
 
 export const UploadPopover = () => {
     const [localObjectCIDs, setLocalObjectCIDs] = useLocalStorage<string[]>("root-objects-cid", []);
+    const [uploadingText, setUploadingText] = useState<string | null>(null)
     const folderInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -25,11 +27,12 @@ export const UploadPopover = () => {
             return
         }
 
+        setUploadingText("Uploading file...")
+
         const { result } = await ApiService.uploadFile(file)
-
         setLocalObjectCIDs([...localObjectCIDs, result.cid])
-
-        alert("File uploaded")
+        setUploadingText(null)
+        window.location.reload()
     }, [localObjectCIDs, setLocalObjectCIDs]);
 
     const handleFolderUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,11 +41,12 @@ export const UploadPopover = () => {
             return
         }
 
+        setUploadingText("Uploading folder...")
         const { result } = await ApiService.uploadFolder(files)
+        setUploadingText(null)
 
         setLocalObjectCIDs([...localObjectCIDs, result.cid])
-
-        alert("Folder uploaded")
+        window.location.reload()
     }, [localObjectCIDs, setLocalObjectCIDs]);
 
     return <Popover className="contents flex">
@@ -70,5 +74,6 @@ export const UploadPopover = () => {
                 </a>
             </div>
         </PopoverPanel>
+        {uploadingText && <UploadingModal text={uploadingText} />}
     </Popover>
 }
