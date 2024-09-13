@@ -4,7 +4,7 @@ import { SubmittableResultValue } from "@polkadot/api/types";
 import { createApi, createKeyPair, getAccountNonce } from "./networkApi.js";
 import { Transaction, TransactionResult } from "./types.js";
 
-const MAX_BATCH_SIZE = 3000 * 1024; // 3 MiB
+const MAX_BATCH_SIZE = 240 * 1024; // 240 KiB
 
 const submitBatchTransaction = async (
   api: ApiPromise,
