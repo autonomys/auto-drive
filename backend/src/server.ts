@@ -113,6 +113,12 @@ const createServer = async () => {
     }
   });
 
+  app.get("/retrieve/:cid/node", async (req, res) => {
+    const { cid } = req.params;
+    const node = await retrieveData(cid);
+    res.send(node);
+  });
+
   app.get("/retrieve/:cid", async (req, res) => {
     try {
       const { cid } = req.params;

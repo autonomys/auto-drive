@@ -58,15 +58,21 @@ export const ApiService = {
     return response.json();
   },
   fetchMetadata: async (cid: string): Promise<OffchainMetadata> => {
-    console.log(`Fetching metadata for cid: ${cid}`);
-
-    const ca = typeof cid === "string" ? cid : JSON.stringify(cid);
-    const response = await fetch(`${API_BASE_URL}/metadata/${ca}`);
+    const response = await fetch(`${API_BASE_URL}/metadata/${cid}`);
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
     return response.json();
+  },
+  fetchData: async (cid: string): Promise<Buffer> => {
+    const response = await fetch(`${API_BASE_URL}/retrieve/${cid}/node`);
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return Buffer.from(await response.arrayBuffer());
   },
 };

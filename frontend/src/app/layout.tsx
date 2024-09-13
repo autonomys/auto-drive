@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { UploadPopover } from "../components/UploadPopover";
 import { Button } from "../components/common/Button";
-import { FolderRoot, HelpCircle } from "lucide-react";
+import { FolderRoot, HelpCircle, Network } from "lucide-react";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -49,6 +49,12 @@ export default function RootLayout({
                 <Button variant="outline" className="w-full gap-2 flex items-center justify-start">
                   <FolderRoot className="h-5 w-5" />
                   My Drive
+                </Button>
+              </a>
+              <a className="contents" href="/explorer">
+                <Button variant="outline" className="w-full gap-2 flex items-center justify-start">
+                  <Network className="h-5 w-5" />
+                  Node Explorer
                 </Button>
               </a>
             </aside>
