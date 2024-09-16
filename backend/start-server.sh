@@ -1,3 +1,2 @@
 yarn install
-yarn build
-node dist/server.js
+yarn start:server
