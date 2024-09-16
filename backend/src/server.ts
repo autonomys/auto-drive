@@ -26,7 +26,13 @@ import {
   processTree,
   retrieveMetadata,
 } from "./services/storageManager/storageManager.js";
-import { OffchainMetadata } from "@autonomys/auto-drive";
+import {
+  cidToString,
+  IPLDNodeData,
+  OffchainMetadata,
+} from "@autonomys/auto-drive";
+import { decode } from "@ipld/dag-pb";
+import { NodeWithMetadata } from "./models/nodeWithMetadata.js";
 
 dotenv.config();
 
@@ -115,8 +121,18 @@ const createServer = async () => {
 
   app.get("/retrieve/:cid/node", async (req, res) => {
     const { cid } = req.params;
-    const node = await retrieveData(cid);
-    res.send(node);
+    const encodedNode = await retrieveData(cid);
+    if (!encodedNode) {
+      return res.status(404).json({ error: "Node not found" });
+    }
+    const decodedNode = decode(Buffer.from(encodedNode, "base64"));
+    const metadata = decodedNode.Data && IPLDNodeData.decode(decodedNode.Data);
+
+    res.json({
+      cid,
+      metadata,
+      links: decodedNode.Links.map((link) => cidToString(link.Hash)),
+    } as NodeWithMetadata);
   });
 
   app.get("/retrieve/:cid", async (req, res) => {
