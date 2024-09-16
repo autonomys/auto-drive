@@ -1,6 +1,7 @@
 import { constructFromFileList, getFileId } from "../models/FileTree";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { uploadFileContent } from "../utils/file";
+import { NodeWithMetadata } from "../models/NodeWithMetadata";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -65,14 +66,14 @@ export const ApiService = {
 
     return response.json();
   },
-  fetchData: async (cid: string): Promise<Buffer> => {
+  fetchData: async (cid: string): Promise<NodeWithMetadata> => {
     const response = await fetch(`${API_BASE_URL}/retrieve/${cid}/node`);
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return Buffer.from(await response.arrayBuffer());
+    return response.json() as Promise<NodeWithMetadata>;
   },
   fetchDataURL: (cid: string): string => {
     return `${API_BASE_URL}/retrieve/${cid}`;

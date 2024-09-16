@@ -1,27 +1,23 @@
 'use client'
 
+import { IPLDNodeData } from "@autonomys/auto-drive"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import { FC, useState } from "react"
 
-interface IPFSData {
-    Links: string[]
-    Data?: {
-        type?: string
-        linkDepth?: number
-        size?: number
-        name?: string
-        data?: Uint8Array
-    }
+interface NodeExplorerProps {
+    cid: string
+    links: string[]
+    metadata: IPLDNodeData
 }
 
-export const NodeExplorer: FC<{ cid: string, data: IPFSData }> = ({ cid, data }) => {
+export const NodeExplorer: FC<NodeExplorerProps> = ({ cid, links, metadata }) => {
     const [isMetadataOpen, setIsMetadataOpen] = useState(true)
     const [isLinksOpen, setIsLinksOpen] = useState(true)
 
     const toggleMetadata = () => setIsMetadataOpen(!isMetadataOpen)
     const toggleLinks = () => setIsLinksOpen(!isLinksOpen)
 
-    const hasMetadata = data.Data && Object.keys(data.Data).length > 0;
+    const hasMetadata = metadata && Object.keys(metadata).length > 0;
 
     return <div className="max-w-4xl mx-auto p-6 bg-white shadow-lg rounded-lg">
         <h1 className="text-3xl font-bold mb-6 text-gray-800">Node {cid.slice(0, 10)}</h1>
@@ -37,7 +33,7 @@ export const NodeExplorer: FC<{ cid: string, data: IPFSData }> = ({ cid, data })
                 </button>
                 {isMetadataOpen && (
                     <div className="mt-4 bg-gray-50 p-4 rounded-md">
-                        {data.Data && Object.entries(data.Data).map(([key, value]) => (
+                        {metadata && Object.entries(metadata).map(([key, value]) => (
                             <div key={key} className="grid grid-cols-2 gap-4 mb-2">
                                 <span className="font-medium text-gray-600">{key}</span>
                                 <span className="text-gray-800 text-wrap text-ellipsis">{value.toString()}</span>
@@ -58,7 +54,7 @@ export const NodeExplorer: FC<{ cid: string, data: IPFSData }> = ({ cid, data })
             </button>
             {isLinksOpen && (
                 <ul className="mt-4 space-y-2">
-                    {data.Links.map((link, index) => (
+                    {links.map((link, index) => (
                         <li key={index}>
                             <a
                                 href={`/explorer/${link}`}
