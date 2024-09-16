@@ -5,8 +5,8 @@ import { PlusIcon, FolderIcon, FileIcon } from "lucide-react"
 import { buttonVariantClasses } from "../common/Button"
 import { useCallback, useRef, useState } from "react"
 import { ApiService } from "../../services/api"
-import { useLocalStorage } from "@uidotdev/usehooks"
 import { UploadingModal } from "./LoadingModal"
+import useLocalStorage from "../../hooks/useLocalStorage"
 
 declare module 'react' {
     interface InputHTMLAttributes<T> extends HTMLAttributes<T> {

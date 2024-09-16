@@ -1,10 +1,10 @@
 'use client'
 
-import { useLocalStorage } from "@uidotdev/usehooks";
 import { useEffect, useState } from "react";
 import { ApiService } from "../../services/api";
 import FileCard from "../../components/common/FileCard";
 import { OffchainMetadata } from "@autonomys/auto-drive";
+import useLocalStorage from "../../hooks/useLocalStorage";
 
 
 export default function Page() {

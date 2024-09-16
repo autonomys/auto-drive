@@ -1,14 +1,13 @@
 'use client'
 
-import { useLocalStorage } from "@uidotdev/usehooks";
 import { useEffect, useState } from "react";
 import { ApiService } from "../services/api";
 import FileCard from "../components/common/FileCard";
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import dynamic from "next/dynamic";
+import useLocalStorage from "../hooks/useLocalStorage";
 
 
-export function Page() {
+export default function Page() {
   const [localObjectCIDs,] = useLocalStorage<string[]>("root-objects-cid", []);
 
   const [rootObjectMetadata, setRootObjectMetadata] = useState<OffchainMetadata[]>();
@@ -39,5 +38,3 @@ export function Page() {
     </div>
   );
 }
-
-export default dynamic(() => Promise.resolve(Page), { ssr: false });
