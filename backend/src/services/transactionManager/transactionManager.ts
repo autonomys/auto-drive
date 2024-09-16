@@ -1,7 +1,14 @@
 import { ApiPromise } from "@polkadot/api";
 import { KeyringPair } from "@polkadot/keyring/types";
+import { waitReady } from "@polkadot/wasm-crypto";
 import { SubmittableResultValue } from "@polkadot/api/types";
-import { createApi, createKeyPair, getAccountNonce } from "./networkApi.js";
+import { createApi } from "./networkApi.js";
+import {
+  addTransaction,
+  getAvailableAccount as getAccount,
+  getAccountNonce,
+  initializeQueue,
+} from "./queue.js";
 import { Transaction, TransactionResult } from "./types.js";
 
 const MAX_BATCH_SIZE = 240 * 1024; // 240 KiB
@@ -93,6 +100,15 @@ const submitBatchTransaction = async (
         }
       )
       .then((unsub) => {
+        addTransaction(
+          {
+            module: "utility",
+            method: "batchAll",
+            params: [txs],
+          },
+          nonce,
+          keyPair
+        );
         unsubscribe = unsub;
       })
       .catch((error) => {
@@ -124,7 +140,7 @@ const createBatches = (
 
 const submitBatchTransactions = async (
   api: ApiPromise,
-  keyPair: KeyringPair,
+  account: KeyringPair,
   batches: Transaction[][],
   startNonce: number
 ): Promise<TransactionResult[]> => {
@@ -134,7 +150,7 @@ const submitBatchTransactions = async (
   for (const batch of batches) {
     const batchResults = await submitBatchTransaction(
       api,
-      keyPair,
+      account,
       batch,
       nonce
     );
@@ -145,36 +161,26 @@ const submitBatchTransactions = async (
   return results;
 };
 
-export const createTransactionManager = (
-  rpcEndpoint: string,
-  keypairUri: string
-) => {
-  let api: ApiPromise | null = null;
-  let keyPair: KeyringPair | null = null;
-
-  const initialize = async (): Promise<void> => {
-    api = await createApi(rpcEndpoint);
-    keyPair = createKeyPair(keypairUri);
-  };
+export const createTransactionManager = (rpcEndpoint: string) => {
+  let api: ApiPromise;
 
   const ensureInitialized = async (): Promise<void> => {
-    if (!api || !keyPair) {
-      await initialize();
-    }
+    await waitReady();
+    api = await createApi(rpcEndpoint);
+    initializeQueue(api);
   };
 
   const submit = async (
     transactions: Transaction[]
   ): Promise<TransactionResult[]> => {
     await ensureInitialized();
-    if (!api || !keyPair) {
-      throw new Error("Transaction manager not initialized");
-    }
-    const nonce = await getAccountNonce(api, keyPair.address);
+    const account = getAccount();
+
+    const nonce = await getAccountNonce(api, account.address);
     console.log(`Starting nonce: ${nonce}`);
 
     const batches = createBatches(api, transactions);
-    return await submitBatchTransactions(api, keyPair, batches, nonce);
+    return await submitBatchTransactions(api, account, batches, nonce);
   };
 
   return { submit };

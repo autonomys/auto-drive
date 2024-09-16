@@ -27,8 +27,9 @@ import { FolderTree } from "../../models/folderTree.js";
 
 dotenv.config();
 
-const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
-const KEYPAIR_URI = process.env.KEYPAIR_URI || "//Alice";
+const transactionManager = createTransactionManager(
+  process.env.RPC_ENDPOINT || "ws://localhost:9944"
+);
 
 const storeMetadata = async (metadata: OffchainMetadata): Promise<string> => {
   const metadataString = JSON.stringify(metadata);
@@ -64,10 +65,6 @@ export const processFile = async (
 
   const chunkNodes = Array.from(dag.nodes.values());
 
-  const transactionManager = createTransactionManager(
-    RPC_ENDPOINT!,
-    KEYPAIR_URI!
-  );
   const transactions = [
     {
       module: "system",
@@ -171,10 +168,6 @@ export const processTree = async (
       })),
   ];
 
-  const transactionManager = createTransactionManager(
-    RPC_ENDPOINT!,
-    KEYPAIR_URI!
-  );
   const transactionResults = await transactionManager.submit(transactions);
 
   await storeMetadata(metadata);

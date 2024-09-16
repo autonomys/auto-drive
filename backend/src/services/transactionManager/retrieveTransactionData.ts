@@ -1,4 +1,3 @@
-import "@polkadot/api-augment";
 import { ApiPromise } from "@polkadot/api";
 import { TransactionResult } from "./types.js";
 

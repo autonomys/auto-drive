@@ -12,6 +12,7 @@
   "dependencies": {
     "@autonomys/auto-drive": "^0.5.0",
     "@polkadot/api": "^12.3.1",
+    "@polkadot/types": "^13.0.1",
     "@polkadot/util-crypto": "^13.0.2",
     "@types/express": "^4.17.21",
     "body-parser": "^1.20.2",
