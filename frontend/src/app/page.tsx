@@ -5,9 +5,10 @@ import { useEffect, useState } from "react";
 import { ApiService } from "../services/api";
 import FileCard from "../components/common/FileCard";
 import { OffchainMetadata } from "@autonomys/auto-drive";
+import dynamic from "next/dynamic";
 
 
-export default function Page() {
+export function Page() {
   const [localObjectCIDs,] = useLocalStorage<string[]>("root-objects-cid", []);
 
   const [rootObjectMetadata, setRootObjectMetadata] = useState<OffchainMetadata[]>();
@@ -38,3 +39,5 @@ export default function Page() {
     </div>
   );
 }
+
+export default dynamic(() => Promise.resolve(Page), { ssr: false });
