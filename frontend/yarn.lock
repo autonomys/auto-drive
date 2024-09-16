@@ -146,6 +146,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@ipld/dag-pb@npm:^4.1.2":
+  version: 4.1.2
+  resolution: "@ipld/dag-pb@npm:4.1.2"
+  dependencies:
+    multiformats: "npm:^13.1.0"
+  checksum: 10c0/c984376952d2c80dc66b7183e3808d1f9fd6712bbf3bd9838f09179ae1e70dcc4e8d4b3e3ce936e08719c800a38a56393306c6d2c2b52cba41bdc112fbf13988
+  languageName: node
+  linkType: hard
+
 "@isaacs/cliui@npm:^8.0.2":
   version: 8.0.2
   resolution: "@isaacs/cliui@npm:8.0.2"
@@ -1910,6 +1919,7 @@ __metadata:
   resolution: "frontend@workspace:."
   dependencies:
     "@headlessui/react": "npm:^2.1.7"
+    "@ipld/dag-pb": "npm:^4.1.2"
     "@types/node": "npm:^20"
     "@types/react": "npm:^18"
     "@types/react-dom": "npm:^18"
@@ -2979,6 +2989,13 @@ __metadata:
   version: 2.1.3
   resolution: "ms@npm:2.1.3"
   checksum: 10c0/d924b57e7312b3b63ad21fc5b3dc0af5e78d61a1fc7cfb5457edaf26326bf62be5307cc87ffb6862ef1c2b33b0233cdb5d4f01c4c958cc0d660948b65a287a48
+  languageName: node
+  linkType: hard
+
+"multiformats@npm:^13.1.0":
+  version: 13.3.0
+  resolution: "multiformats@npm:13.3.0"
+  checksum: 10c0/4ef4d591e36ab610b8592a975f3f7fec0d678450290cf668e093a561942bbcc03181f513422cdf996e73f014efa849207d00ddd252a4e640068c767dd0071312
   languageName: node
   linkType: hard
 

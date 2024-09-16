@@ -1,4 +1,3 @@
-import { types } from "util";
 import { constructFromFileList, getFileId } from "../models/FileTree";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { uploadFileContent } from "../utils/file";
