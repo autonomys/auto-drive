@@ -1,25 +1,34 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
 import { Folder, File, MoreVertical, Download, Trash, Edit, Share2 } from 'lucide-react'
+import { ApiService } from '../../services/api'
 
 interface FileCardProps {
     type: 'folder' | 'file'
     name: string
-
+    cid: string
     size?: number
     modified?: string
     icon?: React.ReactNode
 }
 
-export default function FileCard({ type, name, size, modified, icon }: FileCardProps) {
+export default function FileCard({ type, name, size, modified, icon, cid }: FileCardProps) {
     const [isHovered, setIsHovered] = useState(false)
 
     const getFileIcon = () => {
         if (icon) return icon
         return type === 'folder' ? <Folder className="w-8 h-8 text-blue-500" /> : <File className="w-8 h-8 text-gray-500" />
     }
+
+    const onDownload = useCallback((event: React.MouseEvent<HTMLButtonElement>, cid: string) => {
+        console.log(cid);
+        event.preventDefault()
+        event.stopPropagation()
+        const url = ApiService.fetchDataURL(cid)
+        window.open(url, '_blank')
+    }, [])
 
     return (
         <div
@@ -61,6 +70,7 @@ export default function FileCard({ type, name, size, modified, icon }: FileCardP
                                 <MenuItem>
                                     {({ focus }) => (
                                         <button
+                                            onClick={(event) => onDownload(event, cid)}
                                             className={`${focus ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
                                                 } group flex rounded-md items-center w-full px-2 py-2 text-sm`}
                                         >
@@ -91,7 +101,7 @@ export default function FileCard({ type, name, size, modified, icon }: FileCardP
                 {modified && <p className="text-sm text-gray-500 mt-1">Modified: {modified}</p>}
             </div>
             {isHovered && type === 'file' && (
-                <button className="mt-4 w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors duration-200 flex items-center justify-center">
+                <button onClick={(event) => onDownload(event, cid)} className="mt-4 w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors duration-200 flex items-center justify-center">
                     <Download className="mr-2 h-4 w-4" />
                     Download
                 </button>

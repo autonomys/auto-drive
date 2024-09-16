@@ -75,4 +75,7 @@ export const ApiService = {
 
     return Buffer.from(await response.arrayBuffer());
   },
+  fetchDataURL: (cid: string): string => {
+    return `${API_BASE_URL}/retrieve/${cid}`;
+  },
 };

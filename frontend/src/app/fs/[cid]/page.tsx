@@ -16,7 +16,7 @@ export default async function Page({ params }: { params: { cid: string } }) {
         <div className='grid grid-cols-4 gap-4'>
             {
                 childrenMetadata.map((metadata) => {
-                    return <FileCard key={metadata.dataCid} name={metadata.name ?? ""} type={metadata.type} size={metadata.totalSize} />
+                    return <FileCard cid={metadata.dataCid} key={metadata.dataCid} name={metadata.name ?? ""} type={metadata.type} size={metadata.totalSize} />
                 })
             }
         </div>

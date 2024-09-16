@@ -26,10 +26,10 @@ export default function Page() {
           switch (metadata.type) {
             case "folder":
               return <a key={metadata.dataCid} href={`/fs/${metadata.dataCid}`} className="contents">
-                <FileCard name={metadata.dataCid ?? ""} type={metadata.type} size={metadata.totalSize} />
+                <FileCard cid={metadata.dataCid} name={metadata.dataCid ?? ""} type={metadata.type} size={metadata.totalSize} />
               </a>
             case "file":
-              return <FileCard name={metadata.name ?? ""} type={metadata.type} size={metadata.totalSize} />
+              return <FileCard cid={metadata.dataCid} name={metadata.name ?? ""} type={metadata.type} size={metadata.totalSize} />
           }
         }) : <div className="text-center text-gray-500 flex flex-col items-center justify-center h-[50%] w-full text-xl">
           No root objects, upload some!
