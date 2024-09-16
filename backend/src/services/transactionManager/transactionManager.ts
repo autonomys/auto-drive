@@ -180,7 +180,7 @@ export const createTransactionManager = (rpcEndpoint: string) => {
     console.log(`Starting nonce: ${nonce}`);
 
     const batches = createBatches(api, transactions);
-    return await submitBatchTransactions(api, account, batches, nonce);
+    return await submitBatchTransactions(api, account, batches, nonce + 1);
   };
 
   return { submit };

@@ -1,4 +1,3 @@
-import { SubmittableExtrinsic } from "@polkadot/api/submittable/types";
 import { Transaction } from "../services/transactionManager";
 import { ApiPromise } from "@polkadot/api";
 
@@ -12,6 +11,8 @@ interface TransactionInfo {
   nonce: number;
   account: string;
   status: TransactionStatus;
+  sentAt: number;
+  retries: number;
 }
 
 export enum TransactionStatus {

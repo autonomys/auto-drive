@@ -13,3 +13,8 @@ export const getAccounts = () => {
 
   return keyring.getPairs();
 };
+
+export const getAccount = (address: string) => {
+  const accounts = getAccounts();
+  return accounts.find((account) => account.address === address);
+};

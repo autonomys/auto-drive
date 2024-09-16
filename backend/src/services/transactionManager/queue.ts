@@ -1,9 +1,10 @@
 import { KeyringPair } from "@polkadot/keyring/types";
 import { Queue, TransactionStatus } from "../../models/transaction.js";
-import { getAccounts } from "./accountPool.js";
+import { getAccount, getAccounts } from "./accountPool.js";
 import { ApiPromise } from "@polkadot/api";
 import { Transaction } from "./types.js";
 import { getOnChainNonce } from "./networkApi.js";
+import { queueConfig } from "./config.js";
 
 export const queue: Queue = {
   api: null,
@@ -65,10 +66,12 @@ export const addTransaction = (
     nonce,
     account: account.address,
     status: TransactionStatus.PENDING,
+    sentAt: Date.now(),
+    retries: queueConfig.transactionRetryLimit,
   });
 };
 
-export const drainQueue = async () => {
+const drainQueue = async () => {
   if (!queue.api) {
     throw new Error("Queue not initialized");
   }
@@ -83,12 +86,70 @@ export const drainQueue = async () => {
   console.log(
     `Queue drained there are ${queue.transactions.length} transactions left`
   );
+};
 
-  setTimeout(drainQueue, 10_000);
+const retryTransactions = () => {
+  if (queue.api === null) {
+    throw new Error("Queue not initialized");
+  }
+
+  let transactionsToRetry = queue.transactions.filter(
+    (tx) => Date.now() - tx.sentAt > queueConfig.transactionRetryPeriod
+  );
+
+  queue.transactions = queue.transactions.filter(
+    (tx) => !transactionsToRetry.includes(tx) || tx.retries > 0
+  );
+
+  console.log(`Retrying ${transactionsToRetry.length} transactions`);
+
+  transactionsToRetry = transactionsToRetry.filter((tx) => tx.retries > 0);
+  transactionsToRetry.forEach(async (tx) => {
+    if (!queue.api) {
+      console.error("Queue not initialized");
+      return;
+    }
+
+    const rebuiltTransaction = queue.api.tx[tx.transaction.module][
+      tx.transaction.method
+    ](...tx.transaction.params);
+
+    const account = getAccount(tx.account);
+    if (!account) {
+      console.error("Account not found");
+      return;
+    }
+
+    await rebuiltTransaction.signAndSend(account, {
+      nonce: tx.nonce,
+    });
+
+    queue.transactions = queue.transactions.map((t) =>
+      t.account === tx.account && t.nonce === tx.nonce
+        ? {
+            ...t,
+            status: TransactionStatus.PENDING,
+            sentAt: Date.now(),
+            retries: tx.retries - 1,
+          }
+        : t
+    );
+  });
+};
+
+export const updateQueue = async () => {
+  if (!queue.api) {
+    throw new Error("Queue not initialized");
+  }
+
+  await drainQueue();
+  retryTransactions();
+
+  setTimeout(updateQueue, queueConfig.updatePeriod);
 };
 
 export const initializeQueue = (api: ApiPromise) => {
   queue.api = api;
 
-  setTimeout(drainQueue, 10_000);
+  setTimeout(updateQueue, queueConfig.updatePeriod);
 };
