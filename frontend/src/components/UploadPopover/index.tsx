@@ -6,7 +6,7 @@ import { buttonVariantClasses } from "../common/Button"
 import { useCallback, useRef, useState } from "react"
 import { ApiService } from "../../services/api"
 import { UploadingModal } from "./LoadingModal"
-import useLocalStorage from "../../hooks/useLocalStorage"
+import { useLocalStorage } from "usehooks-ts"
 
 declare module 'react' {
     interface InputHTMLAttributes<T> extends HTMLAttributes<T> {
