@@ -1,1 +1,1 @@
-export { initDatabase } from "./database.js";
+export { initDatabase } from "./sqlite.js";
