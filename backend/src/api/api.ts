@@ -1,3 +1,4 @@
+import { decodeIPLDNodeData } from "@autonomys/auto-drive";
 import { initDatabase } from "../database/index.js";
 
 let dbOps: Awaited<ReturnType<typeof initDatabase>> | null = null;
@@ -14,11 +15,28 @@ export const storeData = async (key: string, data: string): Promise<string> => {
   return key;
 };
 
-export const retrieveData = async (
+export const retrieveNodeData = async (
   key: string
 ): Promise<string | undefined> => {
   await ensureDbInitialized();
   return await dbOps!.getData(key);
+};
+
+export const retrieveChunkData = async (
+  key: string
+): Promise<Buffer | undefined> => {
+  await ensureDbInitialized();
+  const nodeData = await dbOps!.getData(key);
+  if (!nodeData) {
+    return undefined;
+  }
+
+  const fileData = decodeIPLDNodeData(Buffer.from(nodeData, "base64")).data;
+  if (!fileData) {
+    return undefined;
+  }
+
+  return Buffer.from(fileData);
 };
 
 //TODO: add pagination

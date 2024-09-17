@@ -1,6 +1,6 @@
 export {
   storeData,
-  retrieveData,
+  retrieveNodeData,
   getAllData,
   getAllMetadata,
   storeTransactionResult,

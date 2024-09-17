@@ -1,6 +1,6 @@
 import {
   storeData,
-  retrieveData,
+  retrieveNodeData,
   storeTransactionResult,
 } from "../../api/index.js";
 import {
@@ -22,8 +22,9 @@ import {
   folderMetadata,
   createFolderIPLDDag,
 } from "@autonomys/auto-drive";
-import { decode, encode, PBNode } from "@ipld/dag-pb";
+import { encode, PBNode } from "@ipld/dag-pb";
 import { FolderTree } from "../../models/folderTree.js";
+import { retrieveChunkData } from "../../api/api.js";
 
 dotenv.config();
 
@@ -183,8 +184,8 @@ export const processTree = async (
 
 export const retrieveAndReassembleData = async (
   metadataCid: string
-): Promise<Buffer> => {
-  const metadataString = await retrieveData(metadataCid);
+): Promise<Buffer | undefined> => {
+  const metadataString = await retrieveNodeData(metadataCid);
   if (!metadataString || !isJson(metadataString)) {
     throw new Error("Metadata not found");
   }
@@ -196,21 +197,16 @@ export const retrieveAndReassembleData = async (
   }
 
   if (metadata.totalChunks === 1) {
-    const data = await retrieveData(metadata.chunks[0].cid);
-    if (!data) {
-      throw new Error(`Data with CID ${metadata.chunks[0].cid} not found`);
-    }
-    console.log("data", data);
-    return Buffer.from(data, "base64");
+    return retrieveChunkData(metadata.chunks[0].cid);
   }
 
   const chunks: Buffer[] = await Promise.all(
     metadata.chunks.map(async (chunk) => {
-      const chunkData = await retrieveData(chunk.cid);
+      const chunkData = await retrieveChunkData(chunk.cid);
       if (!chunkData) {
         throw new Error(`Chunk with CID ${chunk.cid} not found`);
       }
-      return Buffer.from(decode(Buffer.from(chunkData, "base64")).Data ?? "");
+      return chunkData;
     })
   );
 
@@ -220,7 +216,7 @@ export const retrieveAndReassembleData = async (
 export const retrieveMetadata = async (
   cid: string
 ): Promise<OffchainMetadata | null> => {
-  const metadataString = await retrieveData(`metadata:${cid}`);
+  const metadataString = await retrieveNodeData(`metadata:${cid}`);
 
   if (!metadataString) {
     return null;

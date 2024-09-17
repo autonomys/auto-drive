@@ -7,7 +7,7 @@ import {
   retrieveAndReassembleData,
 } from "./services/storageManager/index.js";
 import {
-  retrieveData,
+  retrieveNodeData,
   getAllData,
   getAllMetadata,
   retrieveTransactionResult,
@@ -121,7 +121,7 @@ const createServer = async () => {
 
   app.get("/retrieve/:cid/node", async (req, res) => {
     const { cid } = req.params;
-    const encodedNode = await retrieveData(cid);
+    const encodedNode = await retrieveNodeData(cid);
     if (!encodedNode) {
       return res.status(404).json({ error: "Node not found" });
     }
@@ -140,7 +140,7 @@ const createServer = async () => {
       const { cid } = req.params;
       const metadataCid = `metadata:${cid}`;
 
-      const metadataString = await retrieveData(metadataCid);
+      const metadataString = await retrieveNodeData(metadataCid);
       if (!metadataString) {
         return res.status(404).json({ error: "Metadata not found" });
       }
