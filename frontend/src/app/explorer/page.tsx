@@ -8,7 +8,7 @@ import { useLocalStorage } from "usehooks-ts";
 
 
 export default function Page() {
-    const [localObjectCIDs,] = useLocalStorage<string[]>("root-objects-cid", []);
+    const [localObjectCIDs,] = useLocalStorage<string[]>("root-objects-cid-v2", []);
 
     const [rootObjectMetadata, setRootObjectMetadata] = useState<OffchainMetadata[]>();
 
