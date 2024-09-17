@@ -1,5 +1,5 @@
 import { decodeIPLDNodeData } from "@autonomys/auto-drive";
-import { initDatabase } from "../database/index.js";
+import { initDatabase } from "../repositories/index.js";
 
 let dbOps: Awaited<ReturnType<typeof initDatabase>> | null = null;
 
