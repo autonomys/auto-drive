@@ -10,5 +10,4 @@ export type TransactionResult = {
     blockHash?: string;
     status: string;
     error?: string;
-    index?: number;
 };

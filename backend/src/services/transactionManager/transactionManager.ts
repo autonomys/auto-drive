@@ -1,29 +1,27 @@
 import { ApiPromise } from "@polkadot/api";
 import { KeyringPair } from "@polkadot/keyring/types";
 import { waitReady } from "@polkadot/wasm-crypto";
-import { SubmittableResultValue } from "@polkadot/api/types";
+import {
+  ApiTypes,
+  SubmittableExtrinsic,
+  SubmittableResultValue,
+} from "@polkadot/api/types";
 import { createApi } from "./networkApi.js";
 import {
   addTransaction,
   getAvailableAccount as getAccount,
-  getAccountNonce,
+  registerTransactionInQueue,
   initializeQueue,
 } from "./queue.js";
 import { Transaction, TransactionResult } from "./types.js";
 
-const MAX_BATCH_SIZE = 240 * 1024; // 240 KiB
-
-const submitBatchTransaction = async (
+const submitTransaction = async (
   api: ApiPromise,
   keyPair: KeyringPair,
-  transactions: Transaction[],
+  transaction: SubmittableExtrinsic<"promise">,
   nonce: number
-): Promise<TransactionResult[]> => {
+): Promise<TransactionResult> => {
   return new Promise((resolve, reject) => {
-    const txs = transactions.map((tx) =>
-      api.tx[tx.module][tx.method](...tx.params)
-    );
-    const batchTx = api.tx.utility.batchAll(txs);
     let unsubscribe: (() => void) | undefined;
     let isResolved = false;
 
@@ -33,7 +31,7 @@ const submitBatchTransaction = async (
       }
       if (!isResolved) {
         console.log(
-          `Transaction timed out. Tx hash: ${batchTx.hash.toString()}`
+          `Transaction timed out. Tx hash: ${transaction.hash.toString()}`
         );
         reject(new Error("Transaction timeout"));
       }
@@ -46,7 +44,7 @@ const submitBatchTransaction = async (
       }
     };
 
-    batchTx
+    transaction
       .signAndSend(
         keyPair,
         { nonce },
@@ -56,7 +54,7 @@ const submitBatchTransaction = async (
           console.log(
             `Current status: ${
               status.type
-            }, Tx hash: ${batchTx.hash.toString()}`
+            }, Tx hash: ${transaction.hash.toString()}`
           );
 
           if (status.isInBlock || status.isFinalized) {
@@ -73,24 +71,20 @@ const submitBatchTransaction = async (
               } else {
                 errorMessage = dispatchError.toString();
               }
-              resolve(
-                transactions.map(() => ({
-                  success: false,
-                  batchTxHash: batchTx.hash.toString(),
-                  status: status.type,
-                  error: errorMessage,
-                }))
-              );
+              resolve({
+                success: false,
+                batchTxHash: transaction.hash.toString(),
+                status: status.type,
+                error: errorMessage,
+              });
             } else {
-              const results = transactions.map((_, index) => ({
+              console.log(`In block: ${status.asInBlock.toString()}`);
+              resolve({
                 success: true,
-                batchTxHash: batchTx.hash.toString(),
+                batchTxHash: transaction.hash.toString(),
                 blockHash: status.asInBlock.toString(),
                 status: status.type,
-                index,
-              }));
-              console.log(`In block: ${status.asInBlock.toString()}`);
-              resolve(results);
+              });
             }
           } else if (status.isDropped || status.isInvalid || status.isUsurped) {
             cleanup();
@@ -100,15 +94,6 @@ const submitBatchTransaction = async (
         }
       )
       .then((unsub) => {
-        addTransaction(
-          {
-            module: "utility",
-            method: "batchAll",
-            params: [txs],
-          },
-          nonce,
-          keyPair
-        );
         unsubscribe = unsub;
       })
       .catch((error) => {
@@ -116,49 +101,6 @@ const submitBatchTransaction = async (
         reject(error);
       });
   });
-};
-
-const createBatches = (
-  api: ApiPromise,
-  transactions: Transaction[]
-): Transaction[][] => {
-  const batches: Transaction[][] = [[]];
-  let currentBatchSize = 0;
-
-  transactions.forEach((tx) => {
-    const txSize = api.tx[tx.module][tx.method](...tx.params).encodedLength;
-    if (currentBatchSize + txSize > MAX_BATCH_SIZE) {
-      batches.push([]);
-      currentBatchSize = 0;
-    }
-    batches[batches.length - 1].push(tx);
-    currentBatchSize += txSize;
-  });
-
-  return batches;
-};
-
-const submitBatchTransactions = async (
-  api: ApiPromise,
-  account: KeyringPair,
-  batches: Transaction[][],
-  startNonce: number
-): Promise<TransactionResult[]> => {
-  let nonce = startNonce;
-  const results: TransactionResult[] = [];
-
-  for (const batch of batches) {
-    const batchResults = await submitBatchTransaction(
-      api,
-      account,
-      batch,
-      nonce
-    );
-    results.push(...batchResults);
-    nonce++;
-  }
-
-  return results;
 };
 
 export const createTransactionManager = (rpcEndpoint: string) => {
@@ -174,13 +116,19 @@ export const createTransactionManager = (rpcEndpoint: string) => {
     transactions: Transaction[]
   ): Promise<TransactionResult[]> => {
     await ensureInitialized();
-    const account = getAccount();
 
-    const nonce = await getAccountNonce(api, account.address);
-    console.log(`Starting nonce: ${nonce}`);
+    const promises: Promise<TransactionResult>[] = [];
+    for (const transaction of transactions) {
+      const { account, nonce } = await registerTransactionInQueue(transaction);
 
-    const batches = createBatches(api, transactions);
-    return await submitBatchTransactions(api, account, batches, nonce);
+      const trx = api.tx[transaction.module][transaction.method](
+        ...transaction.params
+      );
+
+      promises.push(submitTransaction(api, account, trx, nonce));
+    }
+
+    return Promise.all(promises);
   };
 
   return { submit };

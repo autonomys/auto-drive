@@ -5,7 +5,7 @@ export const retrieveRemarkFromTransaction = async (
   api: ApiPromise,
   result: TransactionResult
 ): Promise<string | null> => {
-  if (!result.success || !result.blockHash || result.index === undefined) {
+  if (!result.success || !result.blockHash) {
     console.error("Invalid transaction result");
     return null;
   }
@@ -23,31 +23,14 @@ export const retrieveRemarkFromTransaction = async (
       return null;
     }
 
-    if (batchExtrinsic.method.method !== "batchAll") {
+    if (batchExtrinsic.method.method !== "remarkWithEvent") {
       console.error("Extrinsic is not a batch");
       return null;
     }
 
-    const batchCalls = batchExtrinsic.method.args[0] as unknown as any[];
+    const bytes = batchExtrinsic.method.args[0];
 
-    if (result.index >= batchCalls.length) {
-      console.error("Invalid extrinsic index within batch");
-      return null;
-    }
-
-    const targetCall = batchCalls[result.index];
-
-    if (
-      (targetCall.method === "remarkWithEvent" ||
-        targetCall.method === "remark") &&
-      targetCall.section === "system"
-    ) {
-      const remarkHex = targetCall.args[0].toHex();
-      return Buffer.from(remarkHex.slice(2), "hex").toString("utf8");
-    } else {
-      console.error("Target call is not a remark");
-      return null;
-    }
+    return Buffer.from(bytes.toHex(), "hex").toString("utf8");
   } catch (error) {
     console.error("Error retrieving remark:", error);
     return null;

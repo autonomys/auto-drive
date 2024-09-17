@@ -32,6 +32,15 @@ export const getAvailableAccount = (): KeyringPair => {
   return account;
 };
 
+const internalAccountNonce = (account: KeyringPair): number | undefined => {
+  const nonce = queue.transactions
+    .filter((tx) => tx.account === account.address)
+    .sort((a, b) => b.nonce - a.nonce)
+    .map((tx) => tx.nonce)[0];
+
+  return nonce ? nonce + 1 : undefined;
+};
+
 export const getAccountNonce = async (
   api: ApiPromise,
   address: string
@@ -39,13 +48,16 @@ export const getAccountNonce = async (
   if (!queue.api) {
     throw new Error("Queue not initialized");
   }
+  const account = getAccount(address);
 
-  const [highestNonceTrx] = queue.transactions
-    .filter((tx) => tx.account === address)
-    .sort((a, b) => a.nonce - b.nonce);
+  if (!account) {
+    throw new Error("Account not found");
+  }
 
-  if (highestNonceTrx) {
-    return highestNonceTrx.nonce;
+  const internalNonce = internalAccountNonce(account);
+
+  if (internalNonce) {
+    return internalNonce;
   }
 
   const nonce = await getOnChainNonce(api, address);
@@ -69,6 +81,8 @@ export const addTransaction = (
     sentAt: Date.now(),
     retries: queueConfig.transactionRetryLimit,
   });
+
+  console.log(queue.transactions);
 };
 
 const drainQueue = async () => {
@@ -152,4 +166,22 @@ export const initializeQueue = (api: ApiPromise) => {
   queue.api = api;
 
   setTimeout(updateQueue, queueConfig.updatePeriod);
+};
+
+export const registerTransactionInQueue = async (
+  transaction: Transaction
+): Promise<{
+  account: KeyringPair;
+  nonce: number;
+}> => {
+  if (!queue.api) {
+    throw new Error("Queue not initialized");
+  }
+
+  const account = getAvailableAccount();
+  const nonce = await getAccountNonce(queue.api, account.address);
+
+  addTransaction(transaction, nonce, account);
+
+  return { account, nonce };
 };
