@@ -73,6 +73,7 @@ const getNodes = async ({
 };
 
 export const nodesRepository = {
+  initTable,
   getNode,
   getNodes,
   setNode,

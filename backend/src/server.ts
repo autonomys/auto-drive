@@ -25,9 +25,15 @@ import { decode } from "@ipld/dag-pb";
 import { NodeWithMetadata } from "./models/nodeWithMetadata.js";
 import { getNode } from "./api/nodes.js";
 import { getMetadata } from "./api/metadata.js";
-import { getTransactionResults } from "./api/transactionResults.js";
+import {
+  getHeadTransactionResults,
+  getNodeTransactionResult,
+} from "./api/transactionResults.js";
+import { uploadManager } from "./services/uploadManager/index.js";
 
 dotenv.config();
+
+uploadManager.start();
 
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
 
@@ -170,7 +176,7 @@ const createServer = async () => {
   app.get("/transaction/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const transactionResult = await getTransactionResults(cid);
+      const transactionResult = await getNodeTransactionResult(cid);
       if (!transactionResult) {
         return res.status(404).json({ error: "Transaction result not found" });
       }
@@ -187,7 +193,7 @@ const createServer = async () => {
   app.get("/fromTransactions/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const transactionResults = await getTransactionResults(cid);
+      const transactionResults = await getHeadTransactionResults(cid);
 
       if (!transactionResults) {
         return res.status(404).json({ error: "Transaction result not found" });

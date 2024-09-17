@@ -2,7 +2,6 @@ import {
   createTransactionManager,
   TransactionResult,
 } from "../transactionManager/index.js";
-import { isJson } from "../../utils/index.js";
 import dotenv from "dotenv";
 import {
   cidOfNode,
@@ -19,7 +18,7 @@ import {
   MetadataType,
   IPLDNodeData,
 } from "@autonomys/auto-drive";
-import { encode } from "@ipld/dag-pb";
+import { PBNode } from "@ipld/dag-pb";
 import { FolderTree } from "../../models/folderTree.js";
 import {
   getChunkData,
@@ -27,19 +26,14 @@ import {
   setNode,
 } from "../../api/nodes.js";
 import { getMetadata, saveMetadata } from "../../api/metadata.js";
-import { setTransactionResults } from "../../api/transactionResults.js";
 
 dotenv.config();
-
-const transactionManager = createTransactionManager(
-  process.env.RPC_ENDPOINT || "ws://localhost:9944"
-);
 
 export const processFile = async (
   data: Buffer,
   filename?: string,
   mimeType?: string
-): Promise<{ cid: string; transactionResults: TransactionResult[] }> => {
+): Promise<{ cid: string; nodes: PBNode[] }> => {
   const dag = createFileIPLDDag(data, filename);
 
   const metadata: OffchainMetadata = fileMetadata(
@@ -49,42 +43,26 @@ export const processFile = async (
     mimeType
   );
 
-  const metadataPbFormatted = encodeNode(createMetadataNode(metadata));
-
+  const metadataNode = createMetadataNode(metadata);
   const chunkNodes = Array.from(dag.nodes.values());
 
-  const transactions = [
-    {
-      module: "system",
-      method: "remarkWithEvent",
-      params: [metadataPbFormatted.toString("base64")],
-    },
-    ...chunkNodes
-      .map((e) => Buffer.from(encode(e)))
-      .map((chunk) => ({
-        module: "system",
-        method: "remarkWithEvent",
-        params: [chunk.toString("base64")],
-      })),
-  ];
-
-  const results: TransactionResult[] = await transactionManager.submit(
-    transactions
-  );
+  const nodes = [metadataNode, ...chunkNodes];
 
   await saveMetadata(cidToString(dag.headCID), metadata);
   await saveNodesWithHeadCID(chunkNodes, dag.headCID);
 
-  await setTransactionResults(cidToString(dag.headCID), results);
-
   console.log("Processed file: ", filename);
-  return { cid: cidToString(dag.headCID), transactionResults: [] };
+
+  return {
+    cid: cidToString(dag.headCID),
+    nodes,
+  };
 };
 
 export const processTree = async (
   folderTree: FolderTree,
   files: Express.Multer.File[]
-): Promise<{ cid: string; transactionResults: TransactionResult[] }> => {
+): Promise<{ cid: string; nodes: PBNode[] }> => {
   if (folderTree.type === "file") {
     const file = files.find((e) => e.fieldname === folderTree.id);
     if (!file) {
@@ -131,29 +109,7 @@ export const processTree = async (
     cidToString(cidOfNode(folderNode)),
     childrenMetadata
   );
-  const metadataPbFormatted = encodeNode(createMetadataNode(metadata));
-
-  const transactions = [
-    {
-      module: "system",
-      method: "remarkWithEvent",
-      params: [metadataPbFormatted.toString("base64")],
-    },
-    {
-      module: "system",
-      method: "remarkWithEvent",
-      params: [Buffer.from(encode(folderNode)).toString("base64")],
-    },
-    ...chunkNodes
-      .map((e) => Buffer.from(encode(e)))
-      .map((chunk) => ({
-        module: "system",
-        method: "remarkWithEvent",
-        params: [chunk.toString("base64")],
-      })),
-  ];
-
-  const transactionResults = await transactionManager.submit(transactions);
+  const metadataNode = createMetadataNode(metadata);
 
   await saveMetadata(cidToString(headCID), metadata);
   await Promise.all(
@@ -167,8 +123,6 @@ export const processTree = async (
     )
   );
 
-  await setTransactionResults(cidToString(headCID), transactionResults);
-
   await setNode(
     cidToString(headCID),
     cidToString(cidOfNode(folderNode)),
@@ -176,7 +130,14 @@ export const processTree = async (
     encodeNode(folderNode).toString("base64")
   );
 
-  return { cid, transactionResults };
+  return {
+    cid,
+    nodes: [
+      metadataNode,
+      ...parsedChildren.map((e) => e.nodes).flat(),
+      ...chunkNodes,
+    ],
+  };
 };
 
 export const retrieveAndReassembleData = async (
