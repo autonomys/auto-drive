@@ -7,13 +7,6 @@ import {
   retrieveAndReassembleData,
 } from "./services/storageManager/index.js";
 import {
-  retrieveNodeData,
-  getAllData,
-  getAllMetadata,
-  retrieveTransactionResult,
-  getAllTransactionResults,
-} from "./api/index.js";
-import {
   TransactionResult,
   createApi,
   retrieveRemarkFromTransaction,
@@ -22,10 +15,7 @@ import { isJson } from "./utils/index.js";
 
 import dotenv from "dotenv";
 import { FolderTreeSchema } from "./models/folderTree.js";
-import {
-  processTree,
-  retrieveMetadata,
-} from "./services/storageManager/storageManager.js";
+import { processTree } from "./services/storageManager/storageManager.js";
 import {
   cidToString,
   IPLDNodeData,
@@ -33,6 +23,9 @@ import {
 } from "@autonomys/auto-drive";
 import { decode } from "@ipld/dag-pb";
 import { NodeWithMetadata } from "./models/nodeWithMetadata.js";
+import { getNode } from "./api/nodes.js";
+import { getMetadata } from "./api/metadata.js";
+import { getTransactionResults } from "./api/transactionResults.js";
 
 dotenv.config();
 
@@ -121,7 +114,7 @@ const createServer = async () => {
 
   app.get("/retrieve/:cid/node", async (req, res) => {
     const { cid } = req.params;
-    const encodedNode = await retrieveNodeData(cid);
+    const encodedNode = await getNode(cid);
     if (!encodedNode) {
       return res.status(404).json({ error: "Node not found" });
     }
@@ -138,16 +131,14 @@ const createServer = async () => {
   app.get("/retrieve/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const metadataCid = `metadata:${cid}`;
 
-      const metadataString = await retrieveNodeData(metadataCid);
-      if (!metadataString) {
+      const metadata = await getMetadata(cid);
+      if (!metadata) {
         return res.status(404).json({ error: "Metadata not found" });
       }
-      const metadata: OffchainMetadata = JSON.parse(metadataString);
 
       console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
-      const data = await retrieveAndReassembleData(metadataCid);
+      const data = await retrieveAndReassembleData(cid);
 
       setContentTypeHeaders(res, metadata);
       res.send(data);
@@ -162,10 +153,11 @@ const createServer = async () => {
   app.get("/metadata/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const metadata = await retrieveMetadata(cid);
+      const metadata = await getMetadata(cid);
       if (!metadata) {
         return res.status(404).json({ error: "Metadata not found" });
       }
+
       res.json(metadata);
     } catch (error: any) {
       console.error("Error retrieving metadata:", error);
@@ -175,42 +167,14 @@ const createServer = async () => {
     }
   });
 
-  app.get("/allMetadata", async (req, res) => {
-    try {
-      const allMetadata = await getAllMetadata();
-      const formattedMetadata = allMetadata.map(({ value }) =>
-        JSON.parse(value)
-      );
-      console.log("downloaded formattedMetadata", formattedMetadata);
-      res.json(formattedMetadata);
-    } catch (error) {
-      console.error("Error retrieving all metadata:", error);
-      res.status(500).json({ error: "Failed to retrieve all metadata" });
-    }
-  });
-
-  app.get("/all", async (req, res) => {
-    try {
-      const allData = await getAllData();
-      const formattedData = allData.map(({ key, value }) => ({
-        key,
-        value: value.length > 500 ? value.substring(0, 500) + "..." : value,
-      }));
-      res.json(formattedData);
-    } catch (error) {
-      console.error("Error retrieving all data:", error);
-      res.status(500).json({ error: "Failed to retrieve all data" });
-    }
-  });
-
   app.get("/transaction/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const transactionResult = await retrieveTransactionResult(cid);
+      const transactionResult = await getTransactionResults(cid);
       if (!transactionResult) {
         return res.status(404).json({ error: "Transaction result not found" });
       }
-      res.json(JSON.parse(transactionResult));
+      res.json(transactionResult);
     } catch (error: any) {
       console.error("Error retrieving transaction result:", error);
       res.status(500).json({
@@ -220,35 +184,14 @@ const createServer = async () => {
     }
   });
 
-  app.get("/transactions", async (req, res) => {
-    try {
-      const allTransactionResults = await getAllTransactionResults();
-      const formattedResults = allTransactionResults.map(({ key, value }) => ({
-        key,
-        value: JSON.parse(value),
-      }));
-      res.json(formattedResults);
-    } catch (error: any) {
-      console.error("Error retrieving all transaction results:", error);
-      res.status(500).json({
-        error: "Failed to retrieve all transaction results",
-        details: error.message,
-      });
-    }
-  });
-
   app.get("/fromTransactions/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const transactionResultsString = await retrieveTransactionResult(cid);
+      const transactionResults = await getTransactionResults(cid);
 
-      if (!transactionResultsString) {
+      if (!transactionResults) {
         return res.status(404).json({ error: "Transaction result not found" });
       }
-
-      const transactionResults: TransactionResult[] = JSON.parse(
-        transactionResultsString
-      );
 
       const api = await createApi(RPC_ENDPOINT);
       const remarks = await Promise.all(

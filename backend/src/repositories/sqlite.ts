@@ -14,6 +14,10 @@ const createDB = async (
   return db;
 };
 
-export const initDatabase = async () => {
-  db = await createDB();
+export const getDatabase = async () => {
+  if (!db) {
+    db = await createDB();
+  }
+
+  return db;
 };

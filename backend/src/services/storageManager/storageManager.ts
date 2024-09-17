@@ -1,9 +1,4 @@
 import {
-  storeData,
-  retrieveNodeData,
-  storeTransactionResult,
-} from "../../api/index.js";
-import {
   createTransactionManager,
   TransactionResult,
 } from "../transactionManager/index.js";
@@ -21,32 +16,24 @@ import {
   OffchainFolderMetadata,
   folderMetadata,
   createFolderIPLDDag,
+  MetadataType,
+  IPLDNodeData,
 } from "@autonomys/auto-drive";
-import { encode, PBNode } from "@ipld/dag-pb";
+import { encode } from "@ipld/dag-pb";
 import { FolderTree } from "../../models/folderTree.js";
-import { retrieveChunkData } from "../../api/api.js";
+import {
+  getChunkData,
+  saveNodesWithHeadCID,
+  setNode,
+} from "../../api/nodes.js";
+import { getMetadata, saveMetadata } from "../../api/metadata.js";
+import { setTransactionResults } from "../../api/transactionResults.js";
 
 dotenv.config();
 
 const transactionManager = createTransactionManager(
   process.env.RPC_ENDPOINT || "ws://localhost:9944"
 );
-
-const storeMetadata = async (metadata: OffchainMetadata): Promise<string> => {
-  const metadataString = JSON.stringify(metadata);
-  return await storeData(`metadata:${metadata.dataCid}`, metadataString);
-};
-
-const storeChunks = async (chunks: PBNode[]): Promise<void> => {
-  await Promise.all(
-    chunks.map((chunk) =>
-      storeData(
-        cidToString(cidOfNode(chunk)),
-        Buffer.from(encode(chunk)).toString("base64")
-      )
-    )
-  );
-};
 
 export const processFile = async (
   data: Buffer,
@@ -85,13 +72,10 @@ export const processFile = async (
     transactions
   );
 
-  await storeMetadata(metadata);
-  await storeChunks(chunkNodes);
+  await saveMetadata(cidToString(dag.headCID), metadata);
+  await saveNodesWithHeadCID(chunkNodes, dag.headCID);
 
-  await storeTransactionResult(
-    cidToString(dag.headCID),
-    JSON.stringify(results)
-  );
+  await setTransactionResults(cidToString(dag.headCID), results);
 
   console.log("Processed file: ", filename);
   return { cid: cidToString(dag.headCID), transactionResults: [] };
@@ -120,7 +104,7 @@ export const processTree = async (
 
   const childrenMetadata = await Promise.all(
     cids.map((e) =>
-      retrieveMetadata(e).then((e) => ({
+      getMetadata(e).then((e) => ({
         type: e!.type,
         name: e!.name,
         cid: e!.dataCid,
@@ -171,13 +155,26 @@ export const processTree = async (
 
   const transactionResults = await transactionManager.submit(transactions);
 
-  await storeMetadata(metadata);
+  await saveMetadata(cidToString(headCID), metadata);
   await Promise.all(
     chunkNodes.map((e) =>
-      storeData(cidToString(cidOfNode(e)), encodeNode(e).toString("base64"))
+      setNode(
+        cidToString(headCID),
+        cidToString(cidOfNode(e)),
+        IPLDNodeData.decode(e.Data!).type,
+        encodeNode(e).toString("base64")
+      )
     )
   );
-  await storeData(cid, encodeNode(folderNode).toString("base64"));
+
+  await setTransactionResults(cidToString(headCID), transactionResults);
+
+  await setNode(
+    cidToString(headCID),
+    cidToString(cidOfNode(folderNode)),
+    MetadataType.Folder,
+    encodeNode(folderNode).toString("base64")
+  );
 
   return { cid, transactionResults };
 };
@@ -185,24 +182,23 @@ export const processTree = async (
 export const retrieveAndReassembleData = async (
   metadataCid: string
 ): Promise<Buffer | undefined> => {
-  const metadataString = await retrieveNodeData(metadataCid);
-  if (!metadataString || !isJson(metadataString)) {
-    throw new Error("Metadata not found");
-  }
+  const metadata = await getMetadata(metadataCid);
 
-  const metadata: OffchainMetadata = JSON.parse(metadataString);
+  if (!metadata) {
+    throw new Error(`Metadata with CID ${metadataCid} not found`);
+  }
 
   if (metadata.type === "folder") {
     throw new Error("Folder not supported");
   }
 
   if (metadata.totalChunks === 1) {
-    return retrieveChunkData(metadata.chunks[0].cid);
+    return getChunkData(metadata.chunks[0].cid);
   }
 
   const chunks: Buffer[] = await Promise.all(
     metadata.chunks.map(async (chunk) => {
-      const chunkData = await retrieveChunkData(chunk.cid);
+      const chunkData = await getChunkData(chunk.cid);
       if (!chunkData) {
         throw new Error(`Chunk with CID ${chunk.cid} not found`);
       }
@@ -211,17 +207,4 @@ export const retrieveAndReassembleData = async (
   );
 
   return Buffer.concat(chunks);
-};
-
-export const retrieveMetadata = async (
-  cid: string
-): Promise<OffchainMetadata | null> => {
-  const metadataString = await retrieveNodeData(`metadata:${cid}`);
-
-  if (!metadataString) {
-    return null;
-  }
-  const metadata: OffchainMetadata = JSON.parse(metadataString);
-
-  return metadata;
 };
