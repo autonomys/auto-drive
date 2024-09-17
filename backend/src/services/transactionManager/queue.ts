@@ -81,8 +81,6 @@ export const addTransaction = (
     sentAt: Date.now(),
     retries: queueConfig.transactionRetryLimit,
   });
-
-  console.log(queue.transactions);
 };
 
 const drainQueue = async () => {
