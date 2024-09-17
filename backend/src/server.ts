@@ -62,7 +62,7 @@ const createServer = async () => {
   // Increase the limit to 10MB (adjust as needed)
   app.use(bodyParser.json({ limit: "10mb" }));
   app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
-  app.use(cors());
+  app.use(cors({ origin: "*" }));
 
   app.post("/upload-file", async (req, res) => {
     try {
