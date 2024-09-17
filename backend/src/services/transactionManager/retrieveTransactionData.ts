@@ -23,7 +23,7 @@ export const retrieveRemarkFromTransaction = async (
       return null;
     }
 
-    if (batchExtrinsic.method.method !== "remarkWithEvent") {
+    if (["remarkWithEvent", "remark"].includes(batchExtrinsic.method.method)) {
       console.error("Extrinsic is not a batch");
       return null;
     }

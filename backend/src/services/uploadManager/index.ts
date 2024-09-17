@@ -23,7 +23,7 @@ const processPendingUploads = async () => {
   const transactions = pendingUploads.map((upload) => {
     return {
       module: "system",
-      method: "remarkWithEvent",
+      method: "remark",
       params: [upload.encoded_node],
     };
   });
