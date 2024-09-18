@@ -22,7 +22,7 @@ export const getNode = async (
   return node.encoded_node;
 };
 
-export const setNode = async (
+export const saveNode = async (
   head_cid: string | CID,
   cid: string | CID,
   type: MetadataType,
@@ -32,7 +32,7 @@ export const setNode = async (
     typeof head_cid === "string" ? head_cid : cidToString(head_cid);
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
 
-  await nodesRepository.setNode({
+  await nodesRepository.saveNode({
     cid: cidString,
     head_cid: headCidString,
     type,
@@ -68,7 +68,7 @@ export const saveNodesWithHeadCID = async (
     nodes.map((node) => {
       const cid = cidToString(cidOfNode(node));
       const { type } = IPLDNodeData.decode(node.Data!);
-      setNode(headCid, cid, type, encodeNode(node).toString("base64"));
+      saveNode(headCid, cid, type, encodeNode(node).toString("base64"));
     })
   );
 };

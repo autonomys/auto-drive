@@ -86,7 +86,7 @@ const submitTransaction = async (
                 status: status.type,
               });
             }
-          } else if (status.isDropped || status.isInvalid || status.isUsurped) {
+          } else if (status.isInvalid || status.isUsurped) {
             cleanup();
             isResolved = true;
             reject(new Error(`Transaction ${status.type}`));

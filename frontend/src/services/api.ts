@@ -1,19 +1,12 @@
 import { constructFromFileList, getFileId } from "../models/FileTree";
-import { OffchainMetadata } from "@autonomys/auto-drive";
 import { uploadFileContent } from "../utils/file";
 import { NodeWithMetadata } from "../models/NodeWithMetadata";
+import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export interface UploadResponse {
-  result: {
-    cid: string;
-    transactionResults: Array<{
-      blockHash: string;
-      batchTxHash: string;
-      index: number;
-    }>;
-  };
+  cid: string;
 }
 
 export const ApiService = {
@@ -57,7 +50,9 @@ export const ApiService = {
 
     return response.json();
   },
-  fetchMetadata: async (cid: string): Promise<OffchainMetadata> => {
+  fetchUploadedObjectMetadata: async (
+    cid: string
+  ): Promise<UploadedObjectMetadata> => {
     const response = await fetch(`${API_BASE_URL}/metadata/${cid}`);
 
     if (!response.ok) {

@@ -15,7 +15,11 @@ import { isJson } from "./utils/index.js";
 
 import dotenv from "dotenv";
 import { FolderTreeSchema } from "./models/folderTree.js";
-import { processTree } from "./services/storageManager/storageManager.js";
+import {
+  processTree,
+  uploadFile,
+  uploadTree,
+} from "./services/storageManager/storageManager.js";
 import {
   cidToString,
   IPLDNodeData,
@@ -30,6 +34,7 @@ import {
   getNodeTransactionResult,
 } from "./api/transactionResults.js";
 import { uploadManager } from "./services/uploadManager/index.js";
+import { transactionResultsRepository } from "./repositories/transactionResults.js";
 
 dotenv.config();
 
@@ -71,9 +76,9 @@ const createServer = async () => {
       }
 
       const buffer = Buffer.from(data, "base64");
-      const result = await processFile(buffer, filename, mimeType);
+      const cid = await uploadFile(buffer, filename, mimeType);
 
-      res.json({ result });
+      res.json({ cid });
     } catch (error) {
       console.error("Error processing data:", error);
       res.status(500).json({ error: "Failed to process and submit data" });
@@ -104,14 +109,14 @@ const createServer = async () => {
         });
       }
 
-      const result = await processTree(
+      const cid = await uploadTree(
         validatedFolderTree.data,
         (req.files || []) as Express.Multer.File[]
       );
 
-      console.log(`Processed folder upload with cid: ${result.cid}`);
+      console.log(`Processed folder upload with cid: ${cid}`);
 
-      res.json({ result });
+      res.json({ cid });
     } catch (error) {
       console.error("Error processing folder upload:", error);
       res.status(500).json({ error: "Failed to process folder upload" });
@@ -164,7 +169,17 @@ const createServer = async () => {
         return res.status(404).json({ error: "Metadata not found" });
       }
 
-      res.json(metadata);
+      const nodesToBeUploaded = (
+        await transactionResultsRepository.getPendingUploadsByHeadCid(cid)
+      ).length;
+      const uploadedNodes = (
+        await transactionResultsRepository.getHeadTransactionResults(cid)
+      ).length;
+
+      res.json({
+        metadata,
+        uploadStatus: { nodesToBeUploaded, uploadedNodes },
+      });
     } catch (error: any) {
       console.error("Error retrieving metadata:", error);
       res

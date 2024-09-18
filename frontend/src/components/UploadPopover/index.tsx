@@ -29,8 +29,8 @@ export const UploadPopover = () => {
 
         setUploadingText("Uploading file...")
 
-        const { result } = await ApiService.uploadFile(file)
-        setLocalObjectCIDs([...localObjectCIDs, result.cid])
+        const { cid } = await ApiService.uploadFile(file)
+        setLocalObjectCIDs([...localObjectCIDs, cid])
         setUploadingText(null)
         window.location.reload()
     }, [localObjectCIDs, setLocalObjectCIDs]);
@@ -42,10 +42,10 @@ export const UploadPopover = () => {
         }
 
         setUploadingText("Uploading folder...")
-        const { result } = await ApiService.uploadFolder(files)
+        const { cid } = await ApiService.uploadFolder(files)
         setUploadingText(null)
 
-        setLocalObjectCIDs([...localObjectCIDs, result.cid])
+        setLocalObjectCIDs([...localObjectCIDs, cid])
         window.location.reload()
     }, [localObjectCIDs, setLocalObjectCIDs]);
 

@@ -4,17 +4,15 @@ import React, { useCallback, useState } from 'react'
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
 import { Folder, File, MoreVertical, Download, Trash, Edit, Share2 } from 'lucide-react'
 import { ApiService } from '../../services/api'
+import { UploadedObjectMetadata } from '../../models/UploadedObjectMetadata'
+import { OffchainMetadata } from '@autonomys/auto-drive'
 
-interface FileCardProps {
-    type: 'folder' | 'file'
-    name: string
-    cid: string
-    size?: number
-    modified?: string
-    icon?: React.ReactNode
+interface FileCardProps extends Partial<UploadedObjectMetadata> {
+    icon?: React.ReactNode;
+    metadata: OffchainMetadata;
 }
 
-export default function FileCard({ type, name, size, modified, icon, cid }: FileCardProps) {
+export default function FileCard({ metadata: { type, name, totalSize, dataCid }, uploadStatus, icon }: FileCardProps) {
     const [isHovered, setIsHovered] = useState(false)
 
     const getFileIcon = () => {
@@ -30,9 +28,10 @@ export default function FileCard({ type, name, size, modified, icon, cid }: File
         window.open(url, '_blank')
     }, [])
 
+
     return (
         <div
-            className="flex-1 max-w-72 h-72 m-2 p-4 bg-white rounded-lg shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md flex flex-col justify-between"
+            className="relative flex-1 max-w-72 h-72 m-2 p-4 bg-white rounded-lg shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md flex flex-col justify-between"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
@@ -70,7 +69,7 @@ export default function FileCard({ type, name, size, modified, icon, cid }: File
                                 <MenuItem>
                                     {({ focus }) => (
                                         <button
-                                            onClick={(event) => onDownload(event, cid)}
+                                            onClick={(event) => onDownload(event, dataCid)}
                                             className={`${focus ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
                                                 } group flex rounded-md items-center w-full px-2 py-2 text-sm`}
                                         >
@@ -97,15 +96,19 @@ export default function FileCard({ type, name, size, modified, icon, cid }: File
             </div>
             <div className="mt-4">
                 <h3 className="font-semibold text-lg truncate">{name}</h3>
-                {size && <p className="text-sm text-gray-500 mt-1">Size: {size}</p>}
-                {modified && <p className="text-sm text-gray-500 mt-1">Modified: {modified}</p>}
+                {totalSize && <p className="text-sm text-gray-500 mt-1">Size: {totalSize}</p>}
             </div>
             {isHovered && type === 'file' && (
-                <button onClick={(event) => onDownload(event, cid)} className="mt-4 w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors duration-200 flex items-center justify-center">
+                <button onClick={(event) => onDownload(event, dataCid)} className="mt-4 w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors duration-200 flex items-center justify-center">
                     <Download className="mr-2 h-4 w-4" />
                     Download
                 </button>
             )}
+            <div className="absolute bottom-0 right-0 left-0 translate-y-full w-full bg-blue-500 text-white text-center font-semibold rounded-b-md">
+                {uploadStatus && uploadStatus.nodesToBeUploaded > 0 && (
+                    `${uploadStatus.uploadedNodes}/${uploadStatus.uploadedNodes + uploadStatus.nodesToBeUploaded} Chunks Uploaded Onchain`
+                )}
+            </div>
         </div>
     )
 }

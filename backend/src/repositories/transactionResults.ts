@@ -23,14 +23,14 @@ const initTable = async () => {
 const storeTransactionResult = async (
   head_cid: string,
   cid: string,
-  transaction_results: TransactionResult
+  transaction_result: TransactionResult
 ) => {
   const db = await initTable();
 
   await db.run(
     "INSERT OR REPLACE INTO transactionResults (cid, transaction_result, head_cid) VALUES (?, ?, ?)",
     cid,
-    JSON.stringify(transaction_results),
+    JSON.stringify(transaction_result),
     head_cid
   );
 };
@@ -78,9 +78,22 @@ const getPendingUploads = async (limit: number = 100) => {
   return result;
 };
 
+const getPendingUploadsByHeadCid = async (head_cid: string) => {
+  const db = await initTable();
+  const result = await db.all<Node[]>(
+    `
+    SELECT n.* FROM nodes n left join transactionResults tr on n.cid = tr.cid where tr.cid is null and n.head_cid = ?
+  `,
+    head_cid
+  );
+
+  return result;
+};
+
 export const transactionResultsRepository = {
   storeTransactionResult,
   getTransactionResult,
   getPendingUploads,
   getHeadTransactionResults,
+  getPendingUploadsByHeadCid,
 };

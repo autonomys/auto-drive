@@ -1,7 +1,3 @@
-import {
-  createTransactionManager,
-  TransactionResult,
-} from "../transactionManager/index.js";
 import dotenv from "dotenv";
 import {
   cidOfNode,
@@ -11,20 +7,13 @@ import {
   fileMetadata,
   OffchainMetadata,
   createMetadataNode,
-  encodeNode,
   OffchainFolderMetadata,
   folderMetadata,
   createFolderIPLDDag,
-  MetadataType,
-  IPLDNodeData,
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
 import { FolderTree } from "../../models/folderTree.js";
-import {
-  getChunkData,
-  saveNodesWithHeadCID,
-  setNode,
-} from "../../api/nodes.js";
+import { getChunkData, saveNodesWithHeadCID } from "../../api/nodes.js";
 import { getMetadata, saveMetadata } from "../../api/metadata.js";
 
 dotenv.config();
@@ -112,23 +101,6 @@ export const processTree = async (
   const metadataNode = createMetadataNode(metadata);
 
   await saveMetadata(cidToString(headCID), metadata);
-  await Promise.all(
-    chunkNodes.map((e) =>
-      setNode(
-        cidToString(headCID),
-        cidToString(cidOfNode(e)),
-        IPLDNodeData.decode(e.Data!).type,
-        encodeNode(e).toString("base64")
-      )
-    )
-  );
-
-  await setNode(
-    cidToString(headCID),
-    cidToString(cidOfNode(folderNode)),
-    MetadataType.Folder,
-    encodeNode(folderNode).toString("base64")
-  );
 
   return {
     cid,
@@ -168,4 +140,27 @@ export const retrieveAndReassembleData = async (
   );
 
   return Buffer.concat(chunks);
+};
+
+export const uploadFile = async (
+  data: Buffer,
+  filename?: string,
+  mimeType?: string
+): Promise<string> => {
+  const { cid, nodes } = await processFile(data, filename, mimeType);
+
+  await saveNodesWithHeadCID(nodes, cid);
+
+  return cid;
+};
+
+export const uploadTree = async (
+  folderTree: FolderTree,
+  files: Express.Multer.File[]
+): Promise<string> => {
+  const { cid, nodes } = await processTree(folderTree, files);
+
+  await saveNodesWithHeadCID(nodes, cid);
+
+  return cid;
 };

@@ -19,7 +19,7 @@ const initTable = async () => {
   return db;
 };
 
-const setNode = async (node: Node) => {
+const saveNode = async (node: Node) => {
   const db = await initTable();
 
   return db.run(
@@ -76,5 +76,5 @@ export const nodesRepository = {
   initTable,
   getNode,
   getNodes,
-  setNode,
+  saveNode,
 };
