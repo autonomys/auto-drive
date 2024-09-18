@@ -14,10 +14,9 @@ export const saveMetadata = async (cid: string, metadata: OffchainMetadata) => {
   return metadataRepository.setMetadata(cid, metadata);
 };
 
-export const searchMetadataByCID = async (cid: string, limit?: number) => {
-  const defaultLimit = 5;
+export const searchMetadataByCID = async (cid: string, limit: number =  5) => {
   return metadataRepository
-    .searchMetadataByCID(cid, limit ?? defaultLimit)
+    .searchMetadataByCID(cid, limit)
     .then((result) => result.map((entry) => entry.cid));
 };
 
