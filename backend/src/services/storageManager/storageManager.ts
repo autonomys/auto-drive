@@ -96,7 +96,8 @@ export const processTree = async (
 
   const metadata: OffchainFolderMetadata = folderMetadata(
     cidToString(cidOfNode(folderNode)),
-    childrenMetadata
+    childrenMetadata,
+    folderTree.name
   );
   const metadataNode = createMetadataNode(metadata);
 
