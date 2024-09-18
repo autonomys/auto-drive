@@ -36,10 +36,6 @@ const processPendingUploads = async () => {
       setTransactionResults(upload.head_cid, upload.cid, results[index]);
     })
   );
-
-  if (state.started) {
-    setTimeout(processPendingUploads, state.time);
-  }
 };
 
 export const uploadManager = {
@@ -47,8 +43,5 @@ export const uploadManager = {
     state.time = time;
     state.started = true;
     setTimeout(processPendingUploads, state.time);
-  },
-  stop: () => {
-    state.started = false;
   },
 };
