@@ -16,6 +16,7 @@ const transactionManager = createTransactionManager(
 const processPendingUploads = async () => {
   const pendingUploads = await getPendingTransactionResults();
 
+  console.log(`${pendingUploads.length} pending uploads`);
   if (pendingUploads.length === 0) {
     return;
   }
