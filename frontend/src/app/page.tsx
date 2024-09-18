@@ -8,7 +8,7 @@ import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
 
 
 export default function Page() {
-  const [localObjectCIDs,] = useLocalStorage<string[]>("root-objects-cid-v2", []);
+  const [localObjectCIDs,] = useLocalStorage<string[]>("root-objects-cid-v3", []);
 
   const [rootObjectMetadata, setRootObjectMetadata] = useState<UploadedObjectMetadata[]>();
 

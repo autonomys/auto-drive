@@ -16,7 +16,7 @@ declare module 'react' {
 }
 
 export const UploadPopover = () => {
-    const [localObjectCIDs, setLocalObjectCIDs] = useLocalStorage<string[]>("root-objects-cid-v2", []);
+    const [localObjectCIDs, setLocalObjectCIDs] = useLocalStorage<string[]>("root-objects-cid-v3", []);
     const [uploadingText, setUploadingText] = useState<string | null>(null)
     const folderInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
