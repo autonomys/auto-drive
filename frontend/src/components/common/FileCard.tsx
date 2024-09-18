@@ -21,7 +21,6 @@ export default function FileCard({ metadata: { type, name, totalSize, dataCid },
     }
 
     const onDownload = useCallback((event: React.MouseEvent<HTMLButtonElement>, cid: string) => {
-        console.log(cid);
         event.preventDefault()
         event.stopPropagation()
         const url = ApiService.fetchDataURL(cid)

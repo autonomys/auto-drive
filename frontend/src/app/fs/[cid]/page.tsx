@@ -12,9 +12,6 @@ export default async function Page({ params }: { params: { cid: string } }) {
 
     const childrenMetadata = await Promise.all(objMetadata.metadata.children.map(e => ApiService.fetchUploadedObjectMetadata(e.cid)));
 
-    console.log(childrenMetadata);
-
-
     return (
         <div className='grid grid-cols-4 gap-4'>
             {

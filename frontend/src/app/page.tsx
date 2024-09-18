@@ -13,12 +13,9 @@ export default function Page() {
   const [rootObjectMetadata, setRootObjectMetadata] = useState<UploadedObjectMetadata[]>();
 
   useEffect(() => {
-    Promise.all(localObjectCIDs.map(e => ApiService.fetchUploadedObjectMetadata(e))).then(setRootObjectMetadata);
+    Promise.all(localObjectCIDs.map(e => ApiService.fetchUploadedObjectMetadata(e)))
+      .then(setRootObjectMetadata);
   }, []);
-
-  useEffect(() => {
-    console.log(rootObjectMetadata);
-  }, [rootObjectMetadata]);
 
   return (
     <div className="grid grid-cols-4 gap-4">
