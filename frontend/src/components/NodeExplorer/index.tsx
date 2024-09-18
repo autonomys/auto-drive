@@ -1,6 +1,6 @@
 'use client'
 
-import { IPLDNodeData } from "@autonomys/auto-drive"
+import type { IPLDNodeData } from "@autonomys/auto-drive"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import { FC, useState } from "react"
 
