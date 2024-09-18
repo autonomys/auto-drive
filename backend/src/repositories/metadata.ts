@@ -40,6 +40,24 @@ const setMetadata = async (cid: string, metadata: OffchainMetadata) => {
   );
 };
 
+const searchMetadataByCID = async (cid: string, limit: number | undefined) => {
+  const db = await initTable();
+
+  return db
+    .all<{ cid: string }[]>(
+      "SELECT cid FROM metadata WHERE cid LIKE ? LIMIT ?",
+      `%${cid}%`,
+      limit
+    )
+    .then((entries) => {
+      return entries.map((entry) => {
+        return {
+          cid: entry.cid,
+        };
+      });
+    });
+};
+
 /// TODO: pagination and filtering
 export const getAllMetadata = async () => {
   const db = await initTable();
@@ -58,4 +76,5 @@ export const metadataRepository = {
   getMetadata,
   setMetadata,
   getAllMetadata,
+  searchMetadataByCID,
 };

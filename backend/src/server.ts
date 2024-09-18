@@ -28,7 +28,7 @@ import {
 import { decode } from "@ipld/dag-pb";
 import { NodeWithMetadata } from "./models/nodeWithMetadata.js";
 import { getNode } from "./api/nodes.js";
-import { getMetadata } from "./api/metadata.js";
+import { getMetadata, searchMetadataByCID } from "./api/metadata.js";
 import {
   getHeadTransactionResults,
   getNodeTransactionResult,
@@ -158,6 +158,22 @@ const createServer = async () => {
       res
         .status(500)
         .json({ error: "Failed to retrieve data", details: error.message });
+    }
+  });
+
+  app.get("/metadata/search/:cid", async (req, res) => {
+    try {
+      const { cid } = req.params;
+      const limit = req.query.limit
+        ? parseInt(req.query.limit as string)
+        : undefined;
+      const results = await searchMetadataByCID(cid, limit);
+      res.json(results);
+    } catch (error: any) {
+      console.error("Error searching metadata:", error);
+      res
+        .status(500)
+        .json({ error: "Failed to search metadata", details: error.message });
     }
   });
 
