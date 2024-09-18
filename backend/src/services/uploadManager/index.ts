@@ -37,7 +37,7 @@ const processPendingUploads = async () => {
   );
 
   if (state.started) {
-    setInterval(processPendingUploads, state.time);
+    setTimeout(processPendingUploads, state.time);
   }
 };
 
@@ -45,7 +45,7 @@ export const uploadManager = {
   start: (time: number = 10_000) => {
     state.time = time;
     state.started = true;
-    setInterval(processPendingUploads, state.time);
+    setTimeout(processPendingUploads, state.time);
   },
   stop: () => {
     state.started = false;
