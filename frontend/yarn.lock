@@ -12,7 +12,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^0.5.2":
+"@autonomys/auto-drive@npm:^0.5.0":
   version: 0.5.2
   resolution: "@autonomys/auto-drive@npm:0.5.2"
   dependencies:
@@ -2165,7 +2165,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "frontend@workspace:."
   dependencies:
-    "@autonomys/auto-drive": "npm:^0.5.2"
+    "@autonomys/auto-drive": "npm:^0.5.0"
     "@headlessui/react": "npm:^2.1.7"
     "@ipld/dag-pb": "npm:^4.1.2"
     "@types/node": "npm:^20"
