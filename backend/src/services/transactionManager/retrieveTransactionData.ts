@@ -3,7 +3,7 @@ import { TransactionResult } from "./types.js";
 
 export const retrieveRemarkFromTransaction = async (
   api: ApiPromise,
-  result: TransactionResult
+  result: TransactionResult,
 ): Promise<string | null> => {
   if (!result.success || !result.blockHash) {
     console.error("Invalid transaction result");
@@ -15,7 +15,7 @@ export const retrieveRemarkFromTransaction = async (
     const extrinsics = block.block.extrinsics;
 
     const batchExtrinsic = extrinsics.find(
-      (ex) => ex.hash.toHex() === result.batchTxHash
+      (ex) => ex.hash.toHex() === result.batchTxHash,
     );
 
     if (!batchExtrinsic) {

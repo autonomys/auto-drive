@@ -20,7 +20,7 @@ export const getHeadTransactionResults = async (cid: CID | string) => {
 export const setTransactionResults = async (
   head_cid: CID | string,
   cid: CID | string,
-  transactionResults: TransactionResult
+  transactionResults: TransactionResult,
 ) => {
   console.log("setTransactionResults", head_cid, cid, transactionResults);
 
@@ -31,7 +31,7 @@ export const setTransactionResults = async (
   return transactionResultsRepository.storeTransactionResult(
     headCidString,
     cidString,
-    transactionResults
+    transactionResults,
   );
 };
 

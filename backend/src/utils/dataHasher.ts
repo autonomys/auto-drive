@@ -5,7 +5,7 @@ import { hash } from "blake3";
 
 export const hashData = (
   data: string | Buffer,
-  algorithm: string = "blake3"
+  algorithm: string = "blake3",
 ): CID => {
   if (algorithm != "blake3") {
     throw new Error("Invalid algorithm");

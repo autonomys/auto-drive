@@ -4,7 +4,7 @@ import sqlite3 from "sqlite3";
 export let db: Database;
 
 const createDB = async (
-  filename: string = "./database.sqlite"
+  filename: string = "./database.sqlite",
 ): Promise<Database> => {
   const db = await open({
     filename,

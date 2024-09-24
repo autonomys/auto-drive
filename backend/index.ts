@@ -4,7 +4,7 @@ import "dotenv/config";
 
 async function main() {
   const provider = new WsProvider(
-    "wss://autoid-0.gemini-3h.subspace.network/ws"
+    "wss://autoid-0.gemini-3h.subspace.network/ws",
   );
 
   const api = await ApiPromise.create({
@@ -19,7 +19,7 @@ async function main() {
       method: e.method.toHuman(),
       nonce: e.nonce.toHuman(),
       signature: e.signature.toHuman(),
-    }))
+    })),
   );
 }
 

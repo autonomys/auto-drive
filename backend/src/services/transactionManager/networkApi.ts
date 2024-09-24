@@ -15,7 +15,7 @@ export const createKeyPair = (uri: string): KeyringPair => {
 
 export const getOnChainNonce = async (
   api: ApiPromise,
-  address: string
+  address: string,
 ): Promise<number> => {
   return api.rpc.system.accountNextIndex(address).then((res) => res.toNumber());
 };

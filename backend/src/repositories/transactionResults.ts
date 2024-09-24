@@ -3,7 +3,7 @@ import { Node, nodesRepository } from "./nodes.js";
 import { getDatabase } from "./sqlite.js";
 
 export interface TransactionResultEntry<
-  T extends TransactionResult | string = string
+  T extends TransactionResult | string = string,
 > {
   head_cid: string;
   cid: string;
@@ -14,7 +14,7 @@ const initTable = async () => {
   const db = await getDatabase();
   await nodesRepository.initTable();
   await db.run(
-    "CREATE TABLE IF NOT EXISTS transactionResults (cid TEXT PRIMARY KEY, transaction_result TEXT, head_cid TEXT)"
+    "CREATE TABLE IF NOT EXISTS transactionResults (cid TEXT PRIMARY KEY, transaction_result TEXT, head_cid TEXT)",
   );
 
   return db;
@@ -23,7 +23,7 @@ const initTable = async () => {
 const storeTransactionResult = async (
   head_cid: string,
   cid: string,
-  transaction_result: TransactionResult
+  transaction_result: TransactionResult,
 ) => {
   const db = await initTable();
 
@@ -31,7 +31,7 @@ const storeTransactionResult = async (
     "INSERT OR REPLACE INTO transactionResults (cid, transaction_result, head_cid) VALUES (?, ?, ?)",
     cid,
     JSON.stringify(transaction_result),
-    head_cid
+    head_cid,
   );
 };
 
@@ -41,7 +41,7 @@ const getTransactionResult = async (cid: string) => {
   const result = await db
     .get<TransactionResultEntry>(
       "SELECT * FROM transactionResults WHERE cid = ?",
-      cid
+      cid,
     )
     .then((row) => {
       return row
@@ -60,7 +60,7 @@ const getHeadTransactionResults = async (head_cid: string) => {
   const result = await db.all(
     `
     SELECT * FROM transactionResults WHERE head_cid = ?`,
-    head_cid
+    head_cid,
   );
 
   return result;
@@ -72,7 +72,7 @@ const getPendingUploads = async (limit: number = 100) => {
     `
     SELECT n.* FROM nodes n left join transactionResults tr on n.cid = tr.cid where tr.cid is null limit ?
   `,
-    limit
+    limit,
   );
 
   return result;
@@ -84,7 +84,7 @@ const getPendingUploadsByHeadCid = async (head_cid: string) => {
     `
     SELECT n.* FROM nodes n left join transactionResults tr on n.cid = tr.cid where tr.cid is null and n.head_cid = ?
   `,
-    head_cid
+    head_cid,
   );
 
   return result;
