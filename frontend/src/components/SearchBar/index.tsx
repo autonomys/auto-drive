@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Transition } from '@headlessui/react'
 import { SearchIcon } from 'lucide-react'
 import { ApiService } from '../../services/api'
@@ -8,13 +8,15 @@ import { ApiService } from '../../services/api'
 export const SearchBar = () => {
     const [query, setQuery] = useState('')
     const [isOpen, setIsOpen] = useState(false)
+    const [error, setError] = useState<string | null>(null)
     const inputRef = useRef<HTMLInputElement>(null)
     const dropdownRef = useRef<HTMLUListElement>(null)
     const [recommendations, setRecommendations] = useState<string[] | null>(null)
 
     useEffect(() => {
         if (query.length > 2) {
-            ApiService.searchHeadCID(query).then(setRecommendations)
+            setError(null)
+            ApiService.searchHeadCID(query).then(setRecommendations).catch(() => setError('Error fetching recommendations'))
         } else {
             setRecommendations(null)
         }
@@ -52,6 +54,34 @@ export const SearchBar = () => {
         }
     }
 
+    const searchBarResult = useMemo(() => {
+        if (query.length === 0 || !recommendations) {
+            return <></>
+        }
+
+        if (error) {
+            return <li className="relative cursor-default select-none py-2 px-4 text-red-500">
+                {error}
+            </li>
+        }
+
+        if (recommendations && recommendations.length === 0) {
+            return <li className="relative cursor-default select-none py-2 px-4 text-gray-700">
+                Nothing found.
+            </li>
+        }
+
+        return recommendations.map((item) => (
+            <li
+                key={item}
+                className="relative cursor-pointer select-none px-4 py-2 text-gray-900 hover:bg-blue-600 hover:text-white overflow-hidden text-ellipsis font-semibold"
+                onClick={() => handleSelectItem(item)}
+            >
+                {item}
+            </li>
+        ))
+    }, [query, recommendations])
+
     return (
         <div className="w-full max-w-md mx-auto">
             <div className="relative mt-1">
@@ -78,7 +108,7 @@ export const SearchBar = () => {
                     </button>
                 </div>
                 {
-                    recommendations && <Transition
+                    <Transition
                         show={isOpen}
                         enter="transition ease-out duration-100"
                         enterFrom="transform opacity-0 scale-95"
@@ -91,21 +121,7 @@ export const SearchBar = () => {
                             ref={dropdownRef}
                             className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm"
                         >
-                            {recommendations.length === 0 ? (
-                                <li className="relative cursor-default select-none py-2 px-4 text-gray-700">
-                                    Nothing found.
-                                </li>
-                            ) : (
-                                recommendations.map((item) => (
-                                    <li
-                                        key={item}
-                                        className="relative cursor-pointer select-none px-4 py-2 text-gray-900 hover:bg-blue-600 hover:text-white overflow-hidden text-ellipsis font-semibold"
-                                        onClick={() => handleSelectItem(item)}
-                                    >
-                                        {item}
-                                    </li>
-                                ))
-                            )}
+                            {searchBarResult}
                         </ul>
                     </Transition>
                 }
