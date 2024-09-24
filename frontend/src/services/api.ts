@@ -73,4 +73,8 @@ export const ApiService = {
   fetchDataURL: (cid: string): string => {
     return `${API_BASE_URL}/retrieve/${cid}`;
   },
+  searchHeadCID: async (query: string): Promise<string[]> => {
+    const response = await fetch(`${API_BASE_URL}/metadata/search/${query}`);
+    return response.json();
+  },
 };

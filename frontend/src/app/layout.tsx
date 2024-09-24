@@ -4,6 +4,7 @@ import "./globals.css";
 import { UploadPopover } from "../components/UploadPopover";
 import { Button } from "../components/common/Button";
 import { FolderRoot, HelpCircle, Network } from "lucide-react";
+import { SearchBar } from "../components/SearchBar";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -33,8 +34,13 @@ export default function RootLayout({
       >
         <div className="flex h-screen flex-col">
           <header className="flex items-center justify-between border-b px-6 py-3">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold">Auto-Drive</h1>
+            <div className="flex items-center">
+              <div className="text-center w-[13.5rem]">
+                <h1 className="text-2xl font-bold">Auto-Drive</h1>
+              </div>
+              <div className="w-80">
+                <SearchBar />
+              </div>
             </div>
             <div className="flex items-center space-x-4">
               <Button variant="outline">
