@@ -51,7 +51,7 @@ export const ApiService = {
     return response.json();
   },
   fetchUploadedObjectMetadata: async (
-    cid: string
+    cid: string,
   ): Promise<UploadedObjectMetadata> => {
     const response = await fetch(`${API_BASE_URL}/metadata/${cid}`);
 

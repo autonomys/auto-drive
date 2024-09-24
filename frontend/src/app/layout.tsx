@@ -52,21 +52,25 @@ export default function RootLayout({
             <aside className="flex flex-col gap-4 w-60 border-r p-4">
               <UploadPopover />
               <a className="contents" href="/">
-                <Button variant="outline" className="w-full gap-2 flex items-center justify-start">
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 flex items-center justify-start"
+                >
                   <FolderRoot className="h-5 w-5" />
                   My Drive
                 </Button>
               </a>
               <a className="contents" href="/explorer">
-                <Button variant="outline" className="w-full gap-2 flex items-center justify-start">
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 flex items-center justify-start"
+                >
                   <Network className="h-5 w-5" />
                   Node Explorer
                 </Button>
               </a>
             </aside>
-            <main className="flex-1 overflow-auto p-6">
-              {children}
-            </main>
+            <main className="flex-1 overflow-auto p-6">{children}</main>
           </div>
         </div>
       </body>
