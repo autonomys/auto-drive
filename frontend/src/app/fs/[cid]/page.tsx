@@ -1,4 +1,4 @@
-import FileCard from "../../../components/common/FileCard";
+import { FileCard } from "../../../components/common/FileCard";
 import { ApiService } from "../../../services/api";
 
 export default async function Page({ params }: { params: { cid: string } }) {
@@ -12,8 +12,8 @@ export default async function Page({ params }: { params: { cid: string } }) {
 
   const childrenMetadata = await Promise.all(
     objMetadata.metadata.children.map((e) =>
-      ApiService.fetchUploadedObjectMetadata(e.cid),
-    ),
+      ApiService.fetchUploadedObjectMetadata(e.cid)
+    )
   );
 
   return (

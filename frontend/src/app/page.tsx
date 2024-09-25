@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { ApiService } from "../services/api";
-import FileCard from "../components/common/FileCard";
 import { useLocalStorage } from "usehooks-ts";
 import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
+import { FileDropZone } from "../components/Files/FileDropZone";
+import { FileTable } from "../components/common/FileTable";
 
 export default function Page() {
   const [localObjectCIDs] = useLocalStorage<string[]>(
     "root-objects-cid-v3",
-    [],
+    []
   );
 
   const [rootObjectMetadata, setRootObjectMetadata] =
@@ -17,40 +18,18 @@ export default function Page() {
 
   useEffect(() => {
     Promise.all(
-      localObjectCIDs.map((e) => ApiService.fetchUploadedObjectMetadata(e)),
+      localObjectCIDs.map((e) => ApiService.fetchUploadedObjectMetadata(e))
     ).then(setRootObjectMetadata);
   }, []);
 
   return (
-    <div className="grid grid-cols-4 gap-4">
-      {rootObjectMetadata ? (
-        rootObjectMetadata.length > 0 ? (
-          rootObjectMetadata.map(({ metadata, uploadStatus }) => {
-            switch (metadata.type) {
-              case "folder":
-                return (
-                  <a
-                    key={metadata.dataCid}
-                    href={`/fs/${metadata.dataCid}`}
-                    className="contents"
-                  >
-                    <FileCard uploadStatus={uploadStatus} metadata={metadata} />
-                  </a>
-                );
-              case "file":
-                return (
-                  <FileCard uploadStatus={uploadStatus} metadata={metadata} />
-                );
-            }
-          })
-        ) : (
-          <div className="text-center text-gray-500 flex flex-col items-center justify-center h-[50%] w-full text-xl">
-            No root objects, upload some!
-          </div>
-        )
-      ) : (
-        <></>
-      )}
+    <div className="flex w-full">
+      <div className="w-full flex flex-col gap-4">
+        <FileDropZone />
+        <div className="">
+          {rootObjectMetadata && <FileTable files={rootObjectMetadata} />}
+        </div>
+      </div>
     </div>
   );
 }

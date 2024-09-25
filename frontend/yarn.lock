@@ -156,7 +156,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@headlessui/react@npm:^2.1.7":
+"@headlessui/react@npm:^2.1.8":
   version: 2.1.8
   resolution: "@headlessui/react@npm:2.1.8"
   dependencies:
@@ -168,6 +168,15 @@ __metadata:
     react: ^18
     react-dom: ^18
   checksum: 10c0/baed09a6420939540c5a793e5efc9feb036d72fb967a7cbd1559c73e79e46311c7cefe7b7e4d5990ff3ecd7ce5148a7452f5bc8ef5ee6c356fb91c0eb2ca1f71
+  languageName: node
+  linkType: hard
+
+"@heroicons/react@npm:^2.1.5":
+  version: 2.1.5
+  resolution: "@heroicons/react@npm:2.1.5"
+  peerDependencies:
+    react: ">= 16"
+  checksum: 10c0/d0ca2d017545da103ed8e90e9e6679d46329c1b09bb4c06ff509b0fe7cfbba7034409ea24b0469fabd2a0a9b144e8e717f58de924615e0b0a1bed7b51fcc5940
   languageName: node
   linkType: hard
 
@@ -2166,7 +2175,8 @@ __metadata:
   resolution: "frontend@workspace:."
   dependencies:
     "@autonomys/auto-drive": "npm:^0.5.3"
-    "@headlessui/react": "npm:^2.1.7"
+    "@headlessui/react": "npm:^2.1.8"
+    "@heroicons/react": "npm:^2.1.5"
     "@ipld/dag-pb": "npm:^4.1.2"
     "@types/node": "npm:^20"
     "@types/react": "npm:^18"

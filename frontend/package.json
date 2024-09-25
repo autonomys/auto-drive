@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@autonomys/auto-drive": "^0.5.3",
-    "@headlessui/react": "^2.1.7",
+    "@headlessui/react": "^2.1.8",
+    "@heroicons/react": "^2.1.5",
     "@ipld/dag-pb": "^4.1.2",
     "@uidotdev/usehooks": "^2.4.1",
     "lucide-react": "^0.439.0",
