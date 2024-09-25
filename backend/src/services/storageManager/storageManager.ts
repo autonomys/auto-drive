@@ -21,7 +21,7 @@ dotenv.config();
 export const processFile = async (
   data: Buffer,
   filename?: string,
-  mimeType?: string
+  mimeType?: string,
 ): Promise<{ cid: string; nodes: PBNode[] }> => {
   const dag = createFileIPLDDag(data, filename);
 
@@ -29,7 +29,7 @@ export const processFile = async (
     dag,
     data.length,
     filename,
-    mimeType
+    mimeType,
   );
 
   const metadataNode = createMetadataNode(metadata);
@@ -50,7 +50,7 @@ export const processFile = async (
 
 export const processTree = async (
   folderTree: FolderTree,
-  files: Express.Multer.File[]
+  files: Express.Multer.File[],
 ): Promise<{ cid: string; nodes: PBNode[] }> => {
   if (folderTree.type === "file") {
     const file = files.find((e) => e.fieldname === folderTree.id);
@@ -76,14 +76,14 @@ export const processTree = async (
         name: e!.name,
         cid: e!.dataCid,
         totalSize: e!.totalSize,
-      }))
-    )
+      })),
+    ),
   );
 
   const { headCID, nodes } = createFolderIPLDDag(
     cids.map((e) => stringToCid(e)),
     folderTree.name,
-    childrenMetadata.reduce((acc, e) => acc + e.totalSize, 0)
+    childrenMetadata.reduce((acc, e) => acc + e.totalSize, 0),
   );
   const cid = cidToString(headCID);
 
@@ -97,7 +97,7 @@ export const processTree = async (
   const metadata: OffchainFolderMetadata = folderMetadata(
     cidToString(cidOfNode(folderNode)),
     childrenMetadata,
-    folderTree.name
+    folderTree.name,
   );
   const metadataNode = createMetadataNode(metadata);
 
@@ -114,7 +114,7 @@ export const processTree = async (
 };
 
 export const retrieveAndReassembleData = async (
-  metadataCid: string
+  metadataCid: string,
 ): Promise<Buffer | undefined> => {
   const metadata = await getMetadata(metadataCid);
 
@@ -137,7 +137,7 @@ export const retrieveAndReassembleData = async (
         throw new Error(`Chunk with CID ${chunk.cid} not found`);
       }
       return chunkData;
-    })
+    }),
   );
 
   return Buffer.concat(chunks);
@@ -146,7 +146,7 @@ export const retrieveAndReassembleData = async (
 export const uploadFile = async (
   data: Buffer,
   filename?: string,
-  mimeType?: string
+  mimeType?: string,
 ): Promise<string> => {
   const { cid, nodes } = await processFile(data, filename, mimeType);
 
@@ -157,7 +157,7 @@ export const uploadFile = async (
 
 export const uploadTree = async (
   folderTree: FolderTree,
-  files: Express.Multer.File[]
+  files: Express.Multer.File[],
 ): Promise<string> => {
   const { cid, nodes } = await processTree(folderTree, files);
 

@@ -19,7 +19,7 @@ const submitTransaction = async (
   api: ApiPromise,
   keyPair: KeyringPair,
   transaction: SubmittableExtrinsic<"promise">,
-  nonce: number
+  nonce: number,
 ): Promise<TransactionResult> => {
   return new Promise((resolve, reject) => {
     let unsubscribe: (() => void) | undefined;
@@ -31,7 +31,7 @@ const submitTransaction = async (
       }
       if (!isResolved) {
         console.log(
-          `Transaction timed out. Tx hash: ${transaction.hash.toString()}`
+          `Transaction timed out. Tx hash: ${transaction.hash.toString()}`,
         );
         reject(new Error("Transaction timeout"));
       }
@@ -54,7 +54,7 @@ const submitTransaction = async (
           console.log(
             `Current status: ${
               status.type
-            }, Tx hash: ${transaction.hash.toString()}`
+            }, Tx hash: ${transaction.hash.toString()}`,
           );
 
           if (status.isInBlock || status.isFinalized) {
@@ -65,7 +65,7 @@ const submitTransaction = async (
               let errorMessage;
               if (dispatchError.isModule) {
                 const decoded = api.registry.findMetaError(
-                  dispatchError.asModule
+                  dispatchError.asModule,
                 );
                 errorMessage = `${decoded.section}.${decoded.name}: ${decoded.docs}`;
               } else {
@@ -91,7 +91,7 @@ const submitTransaction = async (
             isResolved = true;
             reject(new Error(`Transaction ${status.type}`));
           }
-        }
+        },
       )
       .then((unsub) => {
         unsubscribe = unsub;
@@ -113,7 +113,7 @@ export const createTransactionManager = (rpcEndpoint: string) => {
   };
 
   const submit = async (
-    transactions: Transaction[]
+    transactions: Transaction[],
   ): Promise<TransactionResult[]> => {
     await ensureInitialized();
 
@@ -122,7 +122,7 @@ export const createTransactionManager = (rpcEndpoint: string) => {
       const { account, nonce } = await registerTransactionInQueue(transaction);
 
       const trx = api.tx[transaction.module][transaction.method](
-        ...transaction.params
+        ...transaction.params,
       );
 
       promises.push(submitTransaction(api, account, trx, nonce));

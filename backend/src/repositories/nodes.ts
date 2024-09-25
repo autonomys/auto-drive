@@ -12,7 +12,7 @@ const initTable = async () => {
   const db = await getDatabase();
 
   db.exec(
-    "CREATE TABLE IF NOT EXISTS nodes (cid TEXT PRIMARY KEY, head_cid TEXT, type TEXT, encoded_node TEXT)"
+    "CREATE TABLE IF NOT EXISTS nodes (cid TEXT PRIMARY KEY, head_cid TEXT, type TEXT, encoded_node TEXT)",
   );
   db.exec("CREATE INDEX IF NOT EXISTS nodes_head_cid ON nodes (head_cid)");
 
@@ -24,7 +24,7 @@ const saveNode = async (node: Node) => {
 
   return db.run(
     "INSERT OR REPLACE INTO nodes (cid, head_cid, type, encoded_node) VALUES (?, ?, ?, ?)",
-    [node.cid, node.head_cid, node.type, node.encoded_node]
+    [node.cid, node.head_cid, node.type, node.encoded_node],
   );
 };
 
