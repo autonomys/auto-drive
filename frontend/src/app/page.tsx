@@ -6,6 +6,7 @@ import { useLocalStorage } from "usehooks-ts";
 import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
 import { FileDropZone } from "../components/Files/FileDropZone";
 import { FileTable } from "../components/common/FileTable";
+import { NoUploadsPlaceholder } from "../components/Files/NoUploadsPlaceholder";
 
 export default function Page() {
   const [localObjectCIDs] = useLocalStorage<string[]>(
@@ -27,7 +28,12 @@ export default function Page() {
       <div className="w-full flex flex-col gap-4">
         <FileDropZone />
         <div className="">
-          {rootObjectMetadata && <FileTable files={rootObjectMetadata} />}
+          {rootObjectMetadata && rootObjectMetadata.length > 0 && (
+            <FileTable files={rootObjectMetadata} />
+          )}
+          {rootObjectMetadata && rootObjectMetadata.length === 0 && (
+            <NoUploadsPlaceholder />
+          )}
         </div>
       </div>
     </div>
