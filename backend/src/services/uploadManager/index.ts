@@ -2,18 +2,24 @@ import {
   getPendingTransactionResults,
   setTransactionResults,
 } from "../../api/transactionResults.js";
+import { safeCallback } from "../../utils/safe.js";
 import { createTransactionManager } from "../transactionManager/index.js";
 
 let state = {
-  started: false,
+  executing: false,
   time: 10_000,
 };
 
 const transactionManager = createTransactionManager(
-  process.env.RPC_ENDPOINT || "ws://localhost:9944",
+  process.env.RPC_ENDPOINT || "ws://localhost:9944"
 );
 
-const processPendingUploads = async () => {
+const processPendingUploads = safeCallback(async () => {
+  if (state.executing) {
+    return;
+  }
+  state.executing = true;
+
   const pendingUploads = await getPendingTransactionResults();
 
   console.log(`${pendingUploads.length} pending uploads`);
@@ -34,16 +40,15 @@ const processPendingUploads = async () => {
   await Promise.all(
     pendingUploads.map((upload, index) => {
       setTransactionResults(upload.head_cid, upload.cid, results[index]);
-    }),
+    })
   );
 
-  setTimeout(processPendingUploads, state.time);
-};
+  state.executing = false;
+});
 
 export const uploadManager = {
   start: (time: number = 10_000) => {
     state.time = time;
-    state.started = true;
-    setTimeout(processPendingUploads, state.time);
+    setInterval(processPendingUploads, state.time);
   },
 };

@@ -38,22 +38,20 @@ import { transactionResultsRepository } from "./repositories/transactionResults.
 
 dotenv.config();
 
-uploadManager.start();
-
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
 
 const setContentTypeHeaders = (
   res: express.Response,
-  metadata: OffchainMetadata,
+  metadata: OffchainMetadata
 ) => {
   res.set(
     "Content-Type",
     (metadata.type === "file" && metadata.mimeType) ||
-      "application/octet-stream",
+      "application/octet-stream"
   );
   if (metadata.name) {
     console.log(
-      `Setting Content-Disposition to attachment with filename: ${metadata.name}`,
+      `Setting Content-Disposition to attachment with filename: ${metadata.name}`
     );
     res.set("Content-Disposition", `attachment; filename="${metadata.name}"`);
   }
@@ -111,7 +109,7 @@ const createServer = async () => {
 
       const cid = await uploadTree(
         validatedFolderTree.data,
-        (req.files || []) as Express.Multer.File[],
+        (req.files || []) as Express.Multer.File[]
       );
 
       console.log(`Processed folder upload with cid: ${cid}`);
@@ -233,8 +231,8 @@ const createServer = async () => {
       const api = await createApi(RPC_ENDPOINT);
       const remarks = await Promise.all(
         transactionResults.map((result) =>
-          retrieveRemarkFromTransaction(api, result),
-        ),
+          retrieveRemarkFromTransaction(api, result)
+        )
       );
 
       if (remarks.some((remark) => remark === null)) {
@@ -268,3 +266,4 @@ const createServer = async () => {
 };
 
 createServer().catch(console.error);
+uploadManager.start();
