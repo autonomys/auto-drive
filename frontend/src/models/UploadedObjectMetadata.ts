@@ -2,5 +2,10 @@ import { OffchainMetadata } from "@autonomys/auto-drive";
 
 export interface UploadedObjectMetadata {
   metadata: OffchainMetadata;
-  uploadStatus: { nodesToBeUploaded: number; uploadedNodes: number };
+  uploadStatus: UploadStatus;
+}
+
+export interface UploadStatus {
+  nodesToBeUploaded: number;
+  uploadedNodes: number;
 }

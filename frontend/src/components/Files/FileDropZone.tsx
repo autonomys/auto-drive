@@ -17,8 +17,12 @@ export function FileDropZone() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-  const [localObjectCIDs, setLocalObjectCIDs] = useLocalStorage<string[]>(
+  const [, setLocalObjectCIDs] = useLocalStorage<string[]>(
     "root-objects-cid-v3",
+    []
+  );
+  const [, setUploadingObjects] = useLocalStorage<string[]>(
+    "uploading-objects",
     []
   );
 
@@ -37,6 +41,11 @@ export function FileDropZone() {
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+  }, []);
+
+  const handleUploadingCID = useCallback((cid: string) => {
+    setLocalObjectCIDs((prev) => [...prev.filter((i) => i !== cid), cid]);
+    setUploadingObjects((prev) => [...prev.filter((i) => i !== cid), cid]);
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
@@ -60,8 +69,7 @@ export function FileDropZone() {
 
     const { cid } = await ApiService.uploadFolder(tree, files);
 
-    // add to local object cids discarding duplicates
-    setLocalObjectCIDs((prev) => [...prev.filter((i) => i !== cid), cid]);
+    handleUploadingCID(cid);
 
     window.location.reload();
   }, []);
@@ -113,9 +121,7 @@ export function FileDropZone() {
         const file = e.target.files[0];
         const { cid } = await ApiService.uploadFile(file);
 
-        // add to local object cids discarding duplicates
-        setLocalObjectCIDs((prev) => [...prev.filter((i) => i !== cid), cid]);
-
+        handleUploadingCID(cid);
         window.location.reload();
       }
     },
@@ -139,8 +145,7 @@ export function FileDropZone() {
           throw new Error("Error uploading folder");
         });
 
-        // add to local object cids discarding duplicates
-        setLocalObjectCIDs((prev) => [...prev.filter((i) => i !== cid), cid]);
+        handleUploadingCID(cid);
 
         window.location.reload();
       }
