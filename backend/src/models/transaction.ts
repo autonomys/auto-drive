@@ -1,9 +1,12 @@
-import { Transaction } from "../services/transactionManager";
 import { ApiPromise } from "@polkadot/api";
+import { Transaction } from "../services/transactionManager";
 
 export interface Queue {
   transactions: TransactionInfo[];
   api: ApiPromise | null;
+  updatePeriod: number;
+  transactionRetryPeriod: number;
+  transactionRetryLimit: number;
 }
 
 interface TransactionInfo {

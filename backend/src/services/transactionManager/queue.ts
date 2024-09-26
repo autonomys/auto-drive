@@ -3,12 +3,14 @@ import { KeyringPair } from "@polkadot/keyring/types";
 import { Queue, TransactionStatus } from "../../models/index.js";
 import { getOnChainNonce } from "../../utils/networkApi.js";
 import { getAccount, getAccounts } from "../accountManager/index.js";
-import { queueConfig } from "./config.js";
 import { Transaction } from "./types.js";
 
 export const queue: Queue = {
   api: null,
   transactions: [],
+  updatePeriod: 15_000,
+  transactionRetryPeriod: 30_000,
+  transactionRetryLimit: 1,
 };
 
 export const getAvailableAccount = (): KeyringPair => {
@@ -79,7 +81,7 @@ export const addTransaction = (
     account: account.address,
     status: TransactionStatus.PENDING,
     sentAt: Date.now(),
-    retries: queueConfig.transactionRetryLimit,
+    retries: queue.transactionRetryLimit,
   });
 };
 
@@ -106,7 +108,7 @@ const retryTransactions = () => {
   }
 
   let transactionsToRetry = queue.transactions.filter(
-    (tx) => Date.now() - tx.sentAt > queueConfig.transactionRetryPeriod
+    (tx) => Date.now() - tx.sentAt > queue.transactionRetryPeriod
   );
 
   queue.transactions = queue.transactions.filter(
@@ -157,13 +159,13 @@ export const updateQueue = async () => {
   await drainQueue();
   retryTransactions();
 
-  setTimeout(updateQueue, queueConfig.updatePeriod);
+  setTimeout(updateQueue, queue.updatePeriod);
 };
 
 export const initializeQueue = (api: ApiPromise) => {
   queue.api = api;
 
-  setTimeout(updateQueue, queueConfig.updatePeriod);
+  setTimeout(updateQueue, queue.updatePeriod);
 };
 
 export const registerTransactionInQueue = async (
