@@ -14,7 +14,7 @@ import { PBNode } from "@ipld/dag-pb";
 import dotenv from "dotenv";
 import { FolderTree } from "../../models/folderTree.js";
 import { MetadataUseCases } from "../../useCases/metadata.js";
-import { getChunkData, saveNodesWithHeadCID } from "../../useCases/nodes.js";
+import { NodesUseCases } from "../../useCases/nodes.js";
 
 dotenv.config();
 
@@ -38,7 +38,7 @@ export const processFile = async (
   const nodes = [metadataNode, ...chunkNodes];
 
   await MetadataUseCases.saveMetadata(cidToString(dag.headCID), metadata);
-  await saveNodesWithHeadCID(chunkNodes, dag.headCID);
+  await NodesUseCases.saveNodesWithHeadCID(chunkNodes, dag.headCID);
 
   console.log("Processed file: ", filename);
 
@@ -127,12 +127,12 @@ export const retrieveAndReassembleData = async (
   }
 
   if (metadata.totalChunks === 1) {
-    return getChunkData(metadata.chunks[0].cid);
+    return NodesUseCases.getChunkData(metadata.chunks[0].cid);
   }
 
   const chunks: Buffer[] = await Promise.all(
     metadata.chunks.map(async (chunk) => {
-      const chunkData = await getChunkData(chunk.cid);
+      const chunkData = await NodesUseCases.getChunkData(chunk.cid);
       if (!chunkData) {
         throw new Error(`Chunk with CID ${chunk.cid} not found`);
       }
@@ -150,7 +150,7 @@ export const uploadFile = async (
 ): Promise<string> => {
   const { cid, nodes } = await processFile(data, filename, mimeType);
 
-  await saveNodesWithHeadCID(nodes, cid);
+  await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
 
   return cid;
 };
@@ -161,7 +161,7 @@ export const uploadTree = async (
 ): Promise<string> => {
   const { cid, nodes } = await processTree(folderTree, files);
 
-  await saveNodesWithHeadCID(nodes, cid);
+  await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
 
   return cid;
 };

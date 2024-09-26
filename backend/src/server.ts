@@ -30,7 +30,7 @@ import {
 } from "./services/storageManager/storageManager.js";
 import { uploadManager } from "./services/uploadManager/index.js";
 import { MetadataUseCases } from "./useCases/metadata.js";
-import { getNode } from "./useCases/nodes.js";
+import { NodesUseCases } from "./useCases/nodes.js";
 import {
   getHeadTransactionResults,
   getNodeTransactionResult,
@@ -126,7 +126,7 @@ const createServer = async () => {
 
   app.get("/retrieve/:cid/node", async (req, res) => {
     const { cid } = req.params;
-    const encodedNode = await getNode(cid);
+    const encodedNode = await NodesUseCases.getNode(cid);
     if (!encodedNode) {
       return res.status(404).json({ error: "Node not found" });
     }
