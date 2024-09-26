@@ -14,21 +14,21 @@ export const retrieveRemarkFromTransaction = async (
     const block = await api.rpc.chain.getBlock(result.blockHash);
     const extrinsics = block.block.extrinsics;
 
-    const batchExtrinsic = extrinsics.find(
+    const extrinsic = extrinsics.find(
       (ex) => ex.hash.toHex() === result.batchTxHash,
     );
 
-    if (!batchExtrinsic) {
+    if (!extrinsic) {
       console.error("Batch extrinsic not found");
       return null;
     }
 
-    if (["remarkWithEvent", "remark"].includes(batchExtrinsic.method.method)) {
+    if (["remarkWithEvent", "remark"].includes(extrinsic.method.method)) {
       console.error("Extrinsic is not a batch");
       return null;
     }
 
-    const bytes = batchExtrinsic.method.args[0];
+    const bytes = extrinsic.method.args[0];
 
     return Buffer.from(bytes.toHex(), "hex").toString("utf8");
   } catch (error) {
