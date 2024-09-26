@@ -13,7 +13,7 @@ import {
 import { PBNode } from "@ipld/dag-pb";
 import dotenv from "dotenv";
 import { FolderTree } from "../../models/folderTree.js";
-import { getMetadata, saveMetadata } from "../../useCases/metadata.js";
+import { MetadataUseCases } from "../../useCases/metadata.js";
 import { getChunkData, saveNodesWithHeadCID } from "../../useCases/nodes.js";
 
 dotenv.config();
@@ -37,7 +37,7 @@ export const processFile = async (
 
   const nodes = [metadataNode, ...chunkNodes];
 
-  await saveMetadata(cidToString(dag.headCID), metadata);
+  await MetadataUseCases.saveMetadata(cidToString(dag.headCID), metadata);
   await saveNodesWithHeadCID(chunkNodes, dag.headCID);
 
   console.log("Processed file: ", filename);
@@ -71,7 +71,7 @@ export const processTree = async (
 
   const childrenMetadata = await Promise.all(
     cids.map((e) =>
-      getMetadata(e).then((e) => ({
+      MetadataUseCases.getMetadata(e).then((e) => ({
         type: e!.type,
         name: e!.name,
         cid: e!.dataCid,
@@ -101,7 +101,7 @@ export const processTree = async (
   );
   const metadataNode = createMetadataNode(metadata);
 
-  await saveMetadata(cidToString(headCID), metadata);
+  await MetadataUseCases.saveMetadata(cidToString(headCID), metadata);
 
   return {
     cid,
@@ -116,7 +116,7 @@ export const processTree = async (
 export const retrieveAndReassembleData = async (
   metadataCid: string
 ): Promise<Buffer | undefined> => {
-  const metadata = await getMetadata(metadataCid);
+  const metadata = await MetadataUseCases.getMetadata(metadataCid);
 
   if (!metadata) {
     throw new Error(`Metadata with CID ${metadataCid} not found`);

@@ -29,7 +29,7 @@ import {
   uploadTree,
 } from "./services/storageManager/storageManager.js";
 import { uploadManager } from "./services/uploadManager/index.js";
-import { getMetadata, searchMetadataByCID } from "./useCases/metadata.js";
+import { MetadataUseCases } from "./useCases/metadata.js";
 import { getNode } from "./useCases/nodes.js";
 import {
   getHeadTransactionResults,
@@ -144,7 +144,7 @@ const createServer = async () => {
     try {
       const { cid } = req.params;
 
-      const metadata = await getMetadata(cid);
+      const metadata = await MetadataUseCases.getMetadata(cid);
       if (!metadata) {
         return res.status(404).json({ error: "Metadata not found" });
       }
@@ -168,7 +168,7 @@ const createServer = async () => {
       const limit = req.query.limit
         ? parseInt(req.query.limit as string)
         : undefined;
-      const results = await searchMetadataByCID(cid, limit);
+      const results = await MetadataUseCases.searchMetadataByCID(cid, limit);
       res.json(results);
     } catch (error: any) {
       console.error("Error searching metadata:", error);
@@ -181,7 +181,7 @@ const createServer = async () => {
   app.get("/metadata/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const metadata = await getMetadata(cid);
+      const metadata = await MetadataUseCases.getMetadata(cid);
       if (!metadata) {
         return res.status(404).json({ error: "Metadata not found" });
       }
