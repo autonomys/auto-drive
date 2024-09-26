@@ -11,14 +11,11 @@ import {
   stringToCid,
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
-import dotenv from "dotenv";
 import { FolderTree } from "../models/folderTree.js";
 import { MetadataUseCases } from "../useCases/metadata.js";
 import { NodesUseCases } from "../useCases/nodes.js";
 
-dotenv.config();
-
-export const processFile = async (
+const processFile = async (
   data: Buffer,
   filename?: string,
   mimeType?: string
@@ -48,7 +45,7 @@ export const processFile = async (
   };
 };
 
-export const processTree = async (
+const processTree = async (
   folderTree: FolderTree,
   files: Express.Multer.File[]
 ): Promise<{ cid: string; nodes: PBNode[] }> => {
@@ -113,7 +110,7 @@ export const processTree = async (
   };
 };
 
-export const retrieveAndReassembleData = async (
+const retrieveAndReassembleData = async (
   metadataCid: string
 ): Promise<Buffer | undefined> => {
   const metadata = await MetadataUseCases.getMetadata(metadataCid);
@@ -143,7 +140,7 @@ export const retrieveAndReassembleData = async (
   return Buffer.concat(chunks);
 };
 
-export const uploadFile = async (
+const uploadFile = async (
   data: Buffer,
   filename?: string,
   mimeType?: string
@@ -155,7 +152,7 @@ export const uploadFile = async (
   return cid;
 };
 
-export const uploadTree = async (
+const uploadTree = async (
   folderTree: FolderTree,
   files: Express.Multer.File[]
 ): Promise<string> => {
@@ -164,4 +161,10 @@ export const uploadTree = async (
   await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
 
   return cid;
+};
+
+export const FilesUseCases = {
+  uploadFile,
+  uploadTree,
+  retrieveAndReassembleData,
 };

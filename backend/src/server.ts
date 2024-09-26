@@ -20,11 +20,7 @@ import { FolderTreeSchema } from "./models/folderTree.js";
 import { NodeWithMetadata } from "./models/nodeWithMetadata.js";
 import { transactionResultsRepository } from "./repositories/transactionResults.js";
 import { uploadManager } from "./services/uploadManager/index.js";
-import {
-  retrieveAndReassembleData,
-  uploadFile,
-  uploadTree,
-} from "./useCases/files.js";
+import { FilesUseCases } from "./useCases/files.js";
 import { MetadataUseCases } from "./useCases/metadata.js";
 import { NodesUseCases } from "./useCases/nodes.js";
 import { TransactionResultsUseCases } from "./useCases/transactionResults.js";
@@ -68,7 +64,7 @@ const createServer = async () => {
       }
 
       const buffer = Buffer.from(data, "base64");
-      const cid = await uploadFile(buffer, filename, mimeType);
+      const cid = await FilesUseCases.uploadFile(buffer, filename, mimeType);
 
       res.json({ cid });
     } catch (error) {
@@ -101,7 +97,7 @@ const createServer = async () => {
         });
       }
 
-      const cid = await uploadTree(
+      const cid = await FilesUseCases.uploadTree(
         validatedFolderTree.data,
         (req.files || []) as Express.Multer.File[]
       );
@@ -141,7 +137,7 @@ const createServer = async () => {
       }
 
       console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
-      const data = await retrieveAndReassembleData(cid);
+      const data = await FilesUseCases.retrieveAndReassembleData(cid);
 
       setContentTypeHeaders(res, metadata);
       res.send(data);
