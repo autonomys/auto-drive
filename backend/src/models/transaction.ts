@@ -1,5 +1,4 @@
 import { ApiPromise } from "@polkadot/api";
-import { Transaction } from "../services/transactionManager";
 
 export interface Queue {
   transactions: TransactionInfo[];
@@ -23,3 +22,17 @@ export enum TransactionStatus {
   CONFIRMED = "CONFIRMED",
   FAILED = "FAILED",
 }
+
+export type Transaction = {
+  module: string;
+  method: string;
+  params: any[];
+};
+
+export type TransactionResult = {
+  success: boolean;
+  batchTxHash: string;
+  blockHash?: string;
+  status: string;
+  error?: string;
+};
