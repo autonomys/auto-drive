@@ -1,5 +1,4 @@
 import { cidToString } from "@autonomys/auto-drive";
-import { ApiPromise } from "@polkadot/api";
 import { CID } from "multiformats";
 import { createConnection } from "../drivers/index.js";
 import { transactionResultsRepository } from "../repositories/index.js";
