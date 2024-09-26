@@ -1,9 +1,9 @@
 import { cidToString } from "@autonomys/auto-drive";
 import { CID } from "multiformats";
-import { TransactionResult } from "../services/transactionManager";
 import { transactionResultsRepository } from "../repositories/transactionResults.js";
+import { TransactionResult } from "../services/transactionManager";
 
-export const getNodeTransactionResult = async (cid: CID | string) => {
+const getNodeTransactionResult = async (cid: CID | string) => {
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
 
   return transactionResultsRepository
@@ -11,16 +11,16 @@ export const getNodeTransactionResult = async (cid: CID | string) => {
     .then((result) => (result ? result.transaction_result : undefined));
 };
 
-export const getHeadTransactionResults = async (cid: CID | string) => {
+const getHeadTransactionResults = async (cid: CID | string) => {
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
 
   return transactionResultsRepository.getHeadTransactionResults(cidString);
 };
 
-export const setTransactionResults = async (
+const setTransactionResults = async (
   head_cid: CID | string,
   cid: CID | string,
-  transactionResults: TransactionResult,
+  transactionResults: TransactionResult
 ) => {
   console.log("setTransactionResults", head_cid, cid, transactionResults);
 
@@ -31,10 +31,17 @@ export const setTransactionResults = async (
   return transactionResultsRepository.storeTransactionResult(
     headCidString,
     cidString,
-    transactionResults,
+    transactionResults
   );
 };
 
-export const getPendingTransactionResults = async () => {
+const getPendingTransactionResults = async () => {
   return transactionResultsRepository.getPendingUploads();
+};
+
+export const TransactionResultsUseCases = {
+  getNodeTransactionResult,
+  getHeadTransactionResults,
+  setTransactionResults,
+  getPendingTransactionResults,
 };

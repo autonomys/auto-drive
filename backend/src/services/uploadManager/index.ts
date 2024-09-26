@@ -1,7 +1,4 @@
-import {
-  getPendingTransactionResults,
-  setTransactionResults,
-} from "../../useCases/transactionResults.js";
+import { TransactionResultsUseCases } from "../../useCases/transactionResults.js";
 import { createTransactionManager } from "../transactionManager/index.js";
 
 let state = {
@@ -14,7 +11,8 @@ const transactionManager = createTransactionManager(
 );
 
 const processPendingUploads = async () => {
-  const pendingUploads = await getPendingTransactionResults();
+  const pendingUploads =
+    await TransactionResultsUseCases.getPendingTransactionResults();
 
   console.log(`${pendingUploads.length} pending uploads`);
   if (pendingUploads.length === 0) {
@@ -33,7 +31,11 @@ const processPendingUploads = async () => {
 
   await Promise.all(
     pendingUploads.map((upload, index) => {
-      setTransactionResults(upload.head_cid, upload.cid, results[index]);
+      TransactionResultsUseCases.setTransactionResults(
+        upload.head_cid,
+        upload.cid,
+        results[index]
+      );
     })
   );
 

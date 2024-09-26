@@ -31,10 +31,7 @@ import {
 import { uploadManager } from "./services/uploadManager/index.js";
 import { MetadataUseCases } from "./useCases/metadata.js";
 import { NodesUseCases } from "./useCases/nodes.js";
-import {
-  getHeadTransactionResults,
-  getNodeTransactionResult,
-} from "./useCases/transactionResults.js";
+import { TransactionResultsUseCases } from "./useCases/transactionResults.js";
 
 dotenv.config();
 
@@ -208,7 +205,8 @@ const createServer = async () => {
   app.get("/transaction/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const transactionResult = await getNodeTransactionResult(cid);
+      const transactionResult =
+        await TransactionResultsUseCases.getNodeTransactionResult(cid);
       if (!transactionResult) {
         return res.status(404).json({ error: "Transaction result not found" });
       }
@@ -225,7 +223,8 @@ const createServer = async () => {
   app.get("/fromTransactions/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const transactionResults = await getHeadTransactionResults(cid);
+      const transactionResults =
+        await TransactionResultsUseCases.getHeadTransactionResults(cid);
 
       if (!transactionResults) {
         return res.status(404).json({ error: "Transaction result not found" });
