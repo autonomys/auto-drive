@@ -2,14 +2,13 @@ import React from "react";
 
 interface Activity {
   user: string;
-  action: "uploaded" | "shared" | "deleted";
+  action: "uploaded" | "shared";
   fileId: string;
 }
 
 const recentActivities: Activity[] = [
   { user: "John", action: "uploaded", fileId: "h89433043894320448" },
   { user: "Anna", action: "shared", fileId: "h734895349547389284" },
-  { user: "Mark", action: "deleted", fileId: "h123892000347289034" },
 ];
 
 export const RecentActivities = ({
