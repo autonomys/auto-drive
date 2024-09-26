@@ -1,5 +1,5 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import { metadataRepository } from "../repositories/metadata.js";
+import { metadataRepository } from "../repositories/index.js";
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid);

@@ -1,6 +1,6 @@
 import { cidToString } from "@autonomys/auto-drive";
 import { CID } from "multiformats";
-import { transactionResultsRepository } from "../repositories/transactionResults.js";
+import { transactionResultsRepository } from "../repositories/index.js";
 import { TransactionResult } from "../services/transactionManager";
 
 const getNodeTransactionResult = async (cid: CID | string) => {

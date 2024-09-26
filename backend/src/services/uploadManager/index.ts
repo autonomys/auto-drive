@@ -1,4 +1,4 @@
-import { TransactionResultsUseCases } from "../../useCases/transactionResults.js";
+import { TransactionResultsUseCases } from "../../useCases/index.js";
 import { createTransactionManager } from "../transactionManager/index.js";
 
 let state = {

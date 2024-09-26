@@ -5,7 +5,6 @@ import multer from "multer";
 import {
   createApi,
   retrieveRemarkFromTransaction,
-  TransactionResult,
 } from "./services/transactionManager/index.js";
 import { isJson } from "./utils/index.js";
 
@@ -16,14 +15,15 @@ import {
 } from "@autonomys/auto-drive";
 import { decode } from "@ipld/dag-pb";
 import "dotenv/config.js";
-import { FolderTreeSchema } from "./models/folderTree.js";
-import { NodeWithMetadata } from "./models/nodeWithMetadata.js";
-import { transactionResultsRepository } from "./repositories/transactionResults.js";
+import { FolderTreeSchema, NodeWithMetadata } from "./models/index.js";
+import { transactionResultsRepository } from "./repositories/index.js";
 import { uploadManager } from "./services/uploadManager/index.js";
-import { FilesUseCases } from "./useCases/files.js";
-import { MetadataUseCases } from "./useCases/metadata.js";
-import { NodesUseCases } from "./useCases/nodes.js";
-import { TransactionResultsUseCases } from "./useCases/transactionResults.js";
+import {
+  FilesUseCases,
+  MetadataUseCases,
+  NodesUseCases,
+  TransactionResultsUseCases,
+} from "./useCases/index.js";
 
 uploadManager.start();
 

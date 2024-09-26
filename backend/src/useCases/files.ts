@@ -11,9 +11,8 @@ import {
   stringToCid,
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
-import { FolderTree } from "../models/folderTree.js";
-import { MetadataUseCases } from "../useCases/metadata.js";
-import { NodesUseCases } from "../useCases/nodes.js";
+import { FolderTree } from "../models/index.js";
+import { MetadataUseCases, NodesUseCases } from "../useCases/index.js";
 
 const processFile = async (
   data: Buffer,
