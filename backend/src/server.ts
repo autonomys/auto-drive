@@ -38,8 +38,6 @@ import { transactionResultsRepository } from "./repositories/transactionResults.
 
 dotenv.config();
 
-uploadManager.start();
-
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
 
 const setContentTypeHeaders = (
@@ -269,3 +267,4 @@ const createServer = async () => {
 };
 
 createServer().catch(console.error);
+uploadManager.start();
