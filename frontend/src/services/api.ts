@@ -1,4 +1,7 @@
-import { constructFromFileList, getFileId } from "../models/FileTree";
+import {
+  FolderTree,
+  getFileId,
+} from "../models/FileTree";
 import { uploadFileContent } from "../utils/file";
 import { NodeWithMetadata } from "../models/NodeWithMetadata";
 import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
@@ -29,14 +32,17 @@ export const ApiService = {
 
     return response.json();
   },
-  uploadFolder: async (files: FileList): Promise<UploadResponse> => {
+  uploadFolder: async (
+    tree: FolderTree,
+    files: Record<string, File>
+  ): Promise<UploadResponse> => {
+    console.log("uploading folder", tree, files);
+
     const formData = new FormData();
 
-    const folderTree = constructFromFileList(files);
-    formData.append("folderTree", JSON.stringify(folderTree));
-
-    Array.from(files).forEach((file) => {
-      formData.append(getFileId(file), file);
+    formData.append("folderTree", JSON.stringify(tree));
+    Object.entries(files).forEach(([fileId, file]) => {
+      formData.append(fileId, file);
     });
 
     const response = await fetch(`${API_BASE_URL}/upload-folder`, {
@@ -51,7 +57,7 @@ export const ApiService = {
     return response.json();
   },
   fetchUploadedObjectMetadata: async (
-    cid: string,
+    cid: string
   ): Promise<UploadedObjectMetadata> => {
     const response = await fetch(`${API_BASE_URL}/metadata/${cid}`);
 

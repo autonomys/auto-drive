@@ -1,7 +1,15 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
-import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuItems,
+  Popover,
+  PopoverButton,
+  PopoverPanel,
+} from "@headlessui/react";
 import {
   Folder,
   File,
@@ -10,6 +18,8 @@ import {
   Trash,
   Edit,
   Share2,
+  DownloadIcon,
+  FolderIcon,
 } from "lucide-react";
 import { ApiService } from "../../services/api";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
@@ -20,121 +30,106 @@ interface FileCardProps extends Partial<UploadedObjectMetadata> {
   metadata: OffchainMetadata;
 }
 
-export default function FileCard({
+export function FileCard({
   metadata: { type, name, totalSize, dataCid },
   uploadStatus,
   icon,
 }: FileCardProps) {
-  const [isHovered, setIsHovered] = useState(false);
+  const onDownload = useCallback(
+    (
+      event: React.MouseEvent<HTMLButtonElement | HTMLSpanElement>,
+      cid: string
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const url = ApiService.fetchDataURL(cid);
+      window.open(url, "_blank");
+    },
+    []
+  );
 
-  const getFileIcon = () => {
+  const onNavigate = useCallback(
+    (
+      event: React.MouseEvent<HTMLButtonElement | HTMLSpanElement>,
+      cid: string
+    ) => {
+      event.stopPropagation();
+      event.preventDefault();
+      window.location.assign(`/fs/${cid}`);
+    },
+    []
+  );
+
+  const objectIcon = useMemo(() => {
     if (icon) return icon;
     return type === "folder" ? (
       <Folder className="w-8 h-8 text-blue-500" />
     ) : (
       <File className="w-8 h-8 text-gray-500" />
     );
-  };
-
-  const onDownload = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>, cid: string) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const url = ApiService.fetchDataURL(cid);
-      window.open(url, "_blank");
-    },
-    [],
-  );
+  }, [icon, type]);
 
   return (
-    <div
-      className="relative flex-1 max-w-72 h-72 m-2 p-4 bg-white rounded-lg shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md flex flex-col justify-between"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div className="flex justify-between items-start">
-        {getFileIcon()}
-        <Menu as="div" className="relative inline-block text-left">
-          <MenuButton className="inline-flex items-center justify-center w-8 h-8 p-0 text-sm font-medium text-gray-700 bg-white rounded-md hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
-            <MoreVertical className="h-4 w-4" />
-          </MenuButton>
-          <MenuItems className="absolute right-0 w-56 mt-2 origin-top-right bg-white divide-y divide-gray-100 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-            <div className="px-1 py-1">
-              <MenuItem>
-                {({ focus }) => (
-                  <button
-                    className={`${
-                      focus ? "bg-gray-100 text-gray-900" : "text-gray-700"
-                    } group flex rounded-md items-center w-full px-2 py-2 text-sm`}
-                  >
-                    <Edit className="w-5 h-5 mr-2" aria-hidden="true" />
-                    Rename
-                  </button>
-                )}
-              </MenuItem>
-              <MenuItem>
-                {({ focus }) => (
-                  <button
-                    className={`${
-                      focus ? "bg-gray-100 text-gray-900" : "text-gray-700"
-                    } group flex rounded-md items-center w-full px-2 py-2 text-sm`}
-                  >
-                    <Share2 className="w-5 h-5 mr-2" aria-hidden="true" />
-                    Share
-                  </button>
-                )}
-              </MenuItem>
-              {type === "file" && (
-                <MenuItem>
-                  {({ focus }) => (
-                    <button
-                      onClick={(event) => onDownload(event, dataCid)}
-                      className={`${
-                        focus ? "bg-gray-100 text-gray-900" : "text-gray-700"
-                      } group flex rounded-md items-center w-full px-2 py-2 text-sm`}
-                    >
-                      <Download className="w-5 h-5 mr-2" aria-hidden="true" />
-                      Download
-                    </button>
-                  )}
-                </MenuItem>
-              )}
-              <MenuItem>
-                {({ focus }) => (
-                  <button
-                    className={`${
-                      focus ? "bg-gray-100 text-gray-900" : "text-gray-700"
-                    } group flex rounded-md items-center w-full px-2 py-2 text-sm text-red-600`}
-                  >
-                    <Trash className="w-5 h-5 mr-2" aria-hidden="true" />
-                    Delete
-                  </button>
-                )}
-              </MenuItem>
-            </div>
-          </MenuItems>
-        </Menu>
-      </div>
-      <div className="mt-4">
-        <h3 className="font-semibold text-lg truncate">{name}</h3>
-        {totalSize && (
-          <p className="text-sm text-gray-500 mt-1">Size: {totalSize}</p>
+    <Popover>
+      <div className="relative bg-white rounded-lg border border-gray-200 p-4 shadow-sm max-w-sm">
+        <div className="flex justify-between items-start mb-4">
+          {objectIcon}
+          <PopoverButton>
+            <MoreVertical size={20} />
+          </PopoverButton>
+        </div>
+        <h2 className="text-lg font-semibold text-gray-800 mb-2">{name}</h2>
+        <p className="text-gray-500 mb-4">Size: {totalSize}</p>
+        {type === "file" && (
+          <button
+            onClick={(event) => onDownload(event, dataCid)}
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center"
+          >
+            <Download size={20} className="mr-2" />
+            Download
+          </button>
         )}
+        {type === "folder" && (
+          <button
+            onClick={(event) => onNavigate(event, dataCid)}
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center"
+          >
+            <FolderIcon size={20} className="mr-2" />
+            Open
+          </button>
+        )}
+        <PopoverPanel className="absolute top-0 right-0 w-fit-content divide-y divide-gray-200 rounded-xl bg-white text-sm/6 transition duration-200 ring-1 ring-gray-200 ease-in-out [--anchor-gap:var(--spacing-5)] data-[closed]:-translate-y-1 data-[closed]:opacity-0">
+          <div className="p-3 flex flex-col gap-2 w-40">
+            <span className="flex items-center gap-2 font-semibold text-gray-800">
+              <Edit size={16} />
+              <span>Edit</span>
+            </span>
+            <span className="flex items-center gap-2 font-semibold text-gray-800">
+              <Share2 size={16} />
+              <span>Share</span>
+            </span>
+            {type === "file" && (
+              <span
+                className="flex items-center gap-2 font-semibold text-gray-800"
+                onClick={(event) => onDownload(event, dataCid)}
+              >
+                <DownloadIcon size={16} />
+                <span>Download</span>
+              </span>
+            )}
+
+            {type === "folder" && (
+              <span
+                className="flex items-center gap-2 font-semibold text-gray-800"
+                onClick={(event) => onNavigate(event, dataCid)}
+              >
+                <FolderIcon size={16} />
+                <span>Open</span>
+              </span>
+            )}
+          </div>
+        </PopoverPanel>
       </div>
-      {isHovered && type === "file" && (
-        <button
-          onClick={(event) => onDownload(event, dataCid)}
-          className="mt-4 w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors duration-200 flex items-center justify-center"
-        >
-          <Download className="mr-2 h-4 w-4" />
-          Download
-        </button>
-      )}
-      <div className="absolute bottom-0 right-0 left-0 translate-y-full w-full bg-blue-500 text-white text-center font-semibold rounded-b-md">
-        {uploadStatus &&
-          uploadStatus.nodesToBeUploaded > 0 &&
-          `${uploadStatus.uploadedNodes}/${uploadStatus.uploadedNodes + uploadStatus.nodesToBeUploaded} Chunks Uploaded Onchain`}
-      </div>
-    </div>
+    </Popover>
   );
 }

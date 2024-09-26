@@ -7,6 +7,7 @@ import { useCallback, useRef, useState } from "react";
 import { ApiService } from "../../services/api";
 import { UploadingModal } from "./LoadingModal";
 import { useLocalStorage } from "usehooks-ts";
+import { constructFromFileSystemEntries } from "../../models/FileTree";
 
 declare module "react" {
   interface InputHTMLAttributes<T> extends HTMLAttributes<T> {
@@ -43,15 +44,18 @@ export const UploadPopover = () => {
 
   const handleFolderUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const files = event.target.files;
-      if (!files) {
-        return;
-      }
+      if (!event.target.files) return;
 
-      setUploadingText("Uploading folder...");
-      const { cid } = await ApiService.uploadFolder(files);
+      const [tree, files] = constructFromFileSystemEntries(
+        Array.from(event.target.files).map((file) => ({
+          file,
+          path: file.webkitRelativePath,
+        }))
+      );
+
+      const { cid } = await ApiService.uploadFolder(tree, files);
+
       setUploadingText(null);
-
       setLocalObjectCIDs([...localObjectCIDs, cid]);
       window.location.reload();
     },

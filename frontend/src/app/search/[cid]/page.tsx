@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ApiService } from "../../../services/api";
-import FileCard from "../../../components/common/FileCard";
+import { FileCard } from "../../../components/common/FileCard";
 import { UploadedObjectMetadata } from "../../../models/UploadedObjectMetadata";
 
 export default function Page({ params: { cid } }: { params: { cid: string } }) {
@@ -13,7 +13,7 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
   useEffect(() => {
     ApiService.searchHeadCID(cid)
       .then((e) =>
-        Promise.all(e.map((e) => ApiService.fetchUploadedObjectMetadata(e))),
+        Promise.all(e.map((e) => ApiService.fetchUploadedObjectMetadata(e)))
       )
       .then(setObjectsMetadata)
       .catch(() => {
@@ -50,7 +50,7 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
           return (
             <a
               key={metadata.dataCid}
-              href={`/explorer/${metadata.dataCid}`}
+              href={`/fs/${metadata.dataCid}`}
               className="contents"
             >
               <FileCard metadata={metadata} uploadStatus={uploadStatus} />
@@ -60,7 +60,7 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
           return (
             <a
               key={metadata.dataCid}
-              href={`/explorer/${metadata.dataCid}`}
+              href={`/fs/${metadata.dataCid}`}
               className="contents"
             >
               <FileCard metadata={metadata} uploadStatus={uploadStatus} />

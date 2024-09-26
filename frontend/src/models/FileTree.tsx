@@ -12,20 +12,31 @@ type FolderTreeFile = {
 
 export type FolderTree = FolderTreeFolder | FolderTreeFile;
 
-export const constructFromFileList = (fileList: FileList): FolderTree => {
+export const getFileId = (file: File) => {
+  return `${file.webkitRelativePath}/${file.name}`;
+};
+
+export const constructFromFileSystemEntries = (
+  entries: { file: File; path: string }[]
+): [FolderTree, Record<string, File>] => {
   const root: FolderTreeFolder = {
     name: "root",
     type: "folder",
     children: [],
   };
-  for (const file of Array.from(fileList)) {
-    const pathParts = file.webkitRelativePath.split("/");
+
+  const files: Record<string, File> = {};
+  for (const entry of entries) {
+    if (entry.file) {
+      files[entry.path] = entry.file;
+    }
+    const pathParts = entry.path.split("/").filter(Boolean);
     let currentFolder = root;
 
     for (const [index, part] of Array.from(pathParts.entries())) {
       // Check if the part already exists in the current folder's children
       let existingFolder = currentFolder.children.find(
-        (child) => child.name === part,
+        (child) => child.name === part
       );
 
       if (!existingFolder) {
@@ -34,7 +45,7 @@ export const constructFromFileList = (fileList: FileList): FolderTree => {
           const fileNode: FolderTreeFile = {
             name: part,
             type: "file",
-            id: getFileId(file),
+            id: entry.path,
           };
           currentFolder.children.push(fileNode);
         } else {
@@ -52,9 +63,5 @@ export const constructFromFileList = (fileList: FileList): FolderTree => {
     }
   }
 
-  return root.children.length === 1 ? root.children[0] : root;
-};
-
-export const getFileId = (file: File) => {
-  return `${file.webkitRelativePath}/${file.name}`;
+  return [root.children.length === 1 ? root.children[0] : root, files];
 };
