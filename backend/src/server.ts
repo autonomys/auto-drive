@@ -3,10 +3,6 @@ import cors from "cors";
 import express from "express";
 import multer from "multer";
 import {
-  processFile,
-  retrieveAndReassembleData,
-} from "./services/storageManager/index.js";
-import {
   createApi,
   retrieveRemarkFromTransaction,
   TransactionResult,
@@ -19,21 +15,19 @@ import {
   OffchainMetadata,
 } from "@autonomys/auto-drive";
 import { decode } from "@ipld/dag-pb";
-import dotenv from "dotenv";
+import "dotenv/config.js";
 import { FolderTreeSchema } from "./models/folderTree.js";
 import { NodeWithMetadata } from "./models/nodeWithMetadata.js";
 import { transactionResultsRepository } from "./repositories/transactionResults.js";
+import { uploadManager } from "./services/uploadManager/index.js";
 import {
-  processTree,
+  retrieveAndReassembleData,
   uploadFile,
   uploadTree,
-} from "./services/storageManager/storageManager.js";
-import { uploadManager } from "./services/uploadManager/index.js";
+} from "./useCases/files.js";
 import { MetadataUseCases } from "./useCases/metadata.js";
 import { NodesUseCases } from "./useCases/nodes.js";
 import { TransactionResultsUseCases } from "./useCases/transactionResults.js";
-
-dotenv.config();
 
 uploadManager.start();
 

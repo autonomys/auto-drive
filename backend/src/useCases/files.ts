@@ -12,9 +12,9 @@ import {
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
 import dotenv from "dotenv";
-import { FolderTree } from "../../models/folderTree.js";
-import { MetadataUseCases } from "../../useCases/metadata.js";
-import { NodesUseCases } from "../../useCases/nodes.js";
+import { FolderTree } from "../models/folderTree.js";
+import { MetadataUseCases } from "../useCases/metadata.js";
+import { NodesUseCases } from "../useCases/nodes.js";
 
 dotenv.config();
 
