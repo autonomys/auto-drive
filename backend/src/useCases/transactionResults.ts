@@ -1,8 +1,9 @@
 import { cidToString } from "@autonomys/auto-drive";
 import { ApiPromise } from "@polkadot/api";
 import { CID } from "multiformats";
+import { createConnection } from "../drivers/index.js";
 import { transactionResultsRepository } from "../repositories/index.js";
-import { TransactionResult } from "../services/transactionManager";
+import { TransactionResult } from "../services/transactionManager/index.js";
 
 const getNodeTransactionResult = async (cid: CID | string) => {
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
@@ -37,7 +38,6 @@ const setTransactionResults = async (
 };
 
 const retrieveRemarkFromTransaction = async (
-  api: ApiPromise,
   result: TransactionResult
 ): Promise<string | null> => {
   if (!result.success || !result.blockHash) {
@@ -46,6 +46,7 @@ const retrieveRemarkFromTransaction = async (
   }
 
   try {
+    const api = await createConnection();
     const block = await api.rpc.chain.getBlock(result.blockHash);
     const extrinsics = block.block.extrinsics;
 

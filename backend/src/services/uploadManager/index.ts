@@ -6,9 +6,7 @@ let state = {
   time: 10_000,
 };
 
-const transactionManager = createTransactionManager(
-  process.env.RPC_ENDPOINT || "ws://localhost:9944"
-);
+const transactionManager = createTransactionManager();
 
 const processPendingUploads = async () => {
   const pendingUploads =

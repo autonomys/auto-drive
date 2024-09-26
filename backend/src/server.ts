@@ -2,7 +2,6 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import express from "express";
 import multer from "multer";
-import { createApi } from "./services/transactionManager/index.js";
 import { isJson } from "./utils/index.js";
 
 import {
@@ -23,8 +22,6 @@ import {
 } from "./useCases/index.js";
 
 uploadManager.start();
-
-const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
 
 const setContentTypeHeaders = (
   res: express.Response,
@@ -217,10 +214,9 @@ const createServer = async () => {
         return res.status(404).json({ error: "Transaction result not found" });
       }
 
-      const api = await createApi(RPC_ENDPOINT);
       const remarks = await Promise.all(
         transactionResults.map((result) =>
-          TransactionResultsUseCases.retrieveRemarkFromTransaction(api, result)
+          TransactionResultsUseCases.retrieveRemarkFromTransaction(result)
         )
       );
 

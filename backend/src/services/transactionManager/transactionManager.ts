@@ -6,7 +6,7 @@ import {
 } from "@polkadot/api/types";
 import { KeyringPair } from "@polkadot/keyring/types";
 import { waitReady } from "@polkadot/wasm-crypto";
-import { createApi } from "../../utils/networkApi.js";
+import { createConnection } from "../../drivers/substrate.js";
 import {
   addTransaction,
   getAvailableAccount as getAccount,
@@ -103,12 +103,12 @@ const submitTransaction = async (
   });
 };
 
-export const createTransactionManager = (rpcEndpoint: string) => {
+export const createTransactionManager = () => {
   let api: ApiPromise;
 
   const ensureInitialized = async (): Promise<void> => {
     await waitReady();
-    api = await createApi(rpcEndpoint);
+    api = await createConnection();
     initializeQueue(api);
   };
 
