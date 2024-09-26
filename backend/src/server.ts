@@ -2,10 +2,7 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import express from "express";
 import multer from "multer";
-import {
-  createApi,
-  retrieveRemarkFromTransaction,
-} from "./services/transactionManager/index.js";
+import { createApi } from "./services/transactionManager/index.js";
 import { isJson } from "./utils/index.js";
 
 import {
@@ -223,7 +220,7 @@ const createServer = async () => {
       const api = await createApi(RPC_ENDPOINT);
       const remarks = await Promise.all(
         transactionResults.map((result) =>
-          retrieveRemarkFromTransaction(api, result)
+          TransactionResultsUseCases.retrieveRemarkFromTransaction(api, result)
         )
       );
 
