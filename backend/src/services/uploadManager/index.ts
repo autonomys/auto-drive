@@ -15,7 +15,8 @@ const processPendingUploads = safeCallback(async () => {
   }
   state.executing = true;
 
-  const pendingUploads = await getPendingTransactionResults();
+  const pendingUploads =
+    await TransactionResultsUseCases.getPendingTransactionResults();
 
   console.log(`${pendingUploads.length} pending uploads`);
   if (pendingUploads.length === 0) {
@@ -33,11 +34,13 @@ const processPendingUploads = safeCallback(async () => {
   const results = await transactionManager.submit(transactions);
 
   await Promise.all(
-    pendingUploads.map((upload, index) => TransactionResultsUseCases.setTransactionResults(
+    pendingUploads.map((upload, index) =>
+      TransactionResultsUseCases.setTransactionResults(
         upload.head_cid,
         upload.cid,
         results[index]
-      ))
+      )
+    )
   );
 
   state.executing = false;
