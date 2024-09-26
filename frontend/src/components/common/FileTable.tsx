@@ -119,7 +119,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
           file.metadata.type === "folder" &&
           file.metadata.children &&
           file.metadata.children.map((child) => (
-            <tr key={child.cid} className="bg-gray-50 ml-40">
+            <tr key={child.cid} className="bg-gray-200 ml-40">
               <td className="px-6 py-4 whitespace-nowrap w-[50%]">
                 <input
                   type="checkbox"
