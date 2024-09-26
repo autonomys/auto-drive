@@ -1,9 +1,9 @@
 import { ApiPromise } from "@polkadot/api";
 import { KeyringPair } from "@polkadot/keyring/types";
 import { Queue, TransactionStatus } from "../../models/index.js";
+import { getOnChainNonce } from "../../utils/networkApi.js";
 import { getAccount, getAccounts } from "./accountPool.js";
 import { queueConfig } from "./config.js";
-import { getOnChainNonce } from "./networkApi.js";
 import { Transaction } from "./types.js";
 
 export const queue: Queue = {
