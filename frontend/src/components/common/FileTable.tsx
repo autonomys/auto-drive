@@ -10,7 +10,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 }) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const toggleRow = (id: string) => {
+  const toggleRow = useCallback((id: string) => {
     const newExpandedRows = new Set(expandedRows);
     if (newExpandedRows.has(id)) {
       newExpandedRows.delete(id);
@@ -18,13 +18,13 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       newExpandedRows.add(id);
     }
     setExpandedRows(newExpandedRows);
-  };
+  }, [expandedRows]);
 
-  const renderFileIcon = (type: string) => {
+  const renderFileIcon = useCallback((type: string) => {
     return <span></span>;
-  };
+  }, []);
 
-  const renderOwnerBadge = (owner: string) => {
+  const renderOwnerBadge = useCallback((owner: string) => {
     if (owner === "You") {
       return (
         <span className="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">
@@ -44,7 +44,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
         </span>
       );
     }
-  };
+  }, []);
 
   const downloadFile = useCallback((cid: string) => {
     window.open(ApiService.fetchDataURL(cid), "_blank");
@@ -54,7 +54,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     window.location.assign(`/fs/${cid}`);
   }, []);
 
-  const renderRow = (file: UploadedObjectMetadata, level: number = 0) => {
+  const renderRow = useCallback((file: UploadedObjectMetadata, level: number = 0) => {
     const isExpanded = expandedRows.has(file.metadata.dataCid);
 
     return (
@@ -161,7 +161,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
           ))}
       </Fragment>
     );
-  };
+  }, [expandedRows, navigateToFile, downloadFile, renderOwnerBadge, renderFileIcon, toggleRow]);
 
   return (
     <div className="flex flex-col">
