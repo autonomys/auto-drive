@@ -21,8 +21,6 @@ import {
   TransactionResultsUseCases,
 } from "./useCases/index.js";
 
-uploadManager.start();
-
 const setContentTypeHeaders = (
   res: express.Response,
   metadata: OffchainMetadata
@@ -251,3 +249,4 @@ const createServer = async () => {
 };
 
 createServer().catch(console.error);
+uploadManager.start();

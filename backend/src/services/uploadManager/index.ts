@@ -1,16 +1,21 @@
 import { TransactionResultsUseCases } from "../../useCases/index.js";
+import { safeCallback } from "../../utils/safe.js";
 import { createTransactionManager } from "../transactionManager/index.js";
 
 let state = {
-  started: false,
+  executing: false,
   time: 10_000,
 };
 
 const transactionManager = createTransactionManager();
 
-const processPendingUploads = async () => {
-  const pendingUploads =
-    await TransactionResultsUseCases.getPendingTransactionResults();
+const processPendingUploads = safeCallback(async () => {
+  if (state.executing) {
+    return;
+  }
+  state.executing = true;
+
+  const pendingUploads = await getPendingTransactionResults();
 
   console.log(`${pendingUploads.length} pending uploads`);
   if (pendingUploads.length === 0) {
@@ -28,22 +33,19 @@ const processPendingUploads = async () => {
   const results = await transactionManager.submit(transactions);
 
   await Promise.all(
-    pendingUploads.map((upload, index) => {
-      TransactionResultsUseCases.setTransactionResults(
+    pendingUploads.map((upload, index) => TransactionResultsUseCases.setTransactionResults(
         upload.head_cid,
         upload.cid,
         results[index]
-      );
-    })
+      ))
   );
 
-  setTimeout(processPendingUploads, state.time);
-};
+  state.executing = false;
+});
 
 export const uploadManager = {
   start: (time: number = 10_000) => {
     state.time = time;
-    state.started = true;
-    setTimeout(processPendingUploads, state.time);
+    setInterval(processPendingUploads, state.time);
   },
 };
