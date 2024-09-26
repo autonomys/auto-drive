@@ -1,7 +1,7 @@
 import {
   getPendingTransactionResults,
   setTransactionResults,
-} from "../../api/transactionResults.js";
+} from "../../useCases/transactionResults.js";
 import { createTransactionManager } from "../transactionManager/index.js";
 
 let state = {
@@ -10,7 +10,7 @@ let state = {
 };
 
 const transactionManager = createTransactionManager(
-  process.env.RPC_ENDPOINT || "ws://localhost:9944",
+  process.env.RPC_ENDPOINT || "ws://localhost:9944"
 );
 
 const processPendingUploads = async () => {
@@ -34,7 +34,7 @@ const processPendingUploads = async () => {
   await Promise.all(
     pendingUploads.map((upload, index) => {
       setTransactionResults(upload.head_cid, upload.cid, results[index]);
-    }),
+    })
   );
 
   setTimeout(processPendingUploads, state.time);
