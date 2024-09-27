@@ -13,6 +13,7 @@ import { decode } from "@ipld/dag-pb";
 import "dotenv/config.js";
 import { FolderTreeSchema, NodeWithMetadata } from "./models/index.js";
 import { transactionResultsRepository } from "./repositories/index.js";
+import { handleAuth } from "./services/authManager/express.js";
 import { uploadManager } from "./services/uploadManager/index.js";
 import {
   FilesUseCases,
@@ -55,8 +56,18 @@ const createServer = async () => {
         return res.status(400).json({ error: "Field `data` is required" });
       }
 
+      const user = await handleAuth(req, res);
+      if (!user) {
+        return;
+      }
+
       const buffer = Buffer.from(data, "base64");
-      const cid = await FilesUseCases.uploadFile(buffer, filename, mimeType);
+      const cid = await FilesUseCases.uploadFile(
+        user,
+        buffer,
+        filename,
+        mimeType
+      );
 
       res.json({ cid });
     } catch (error) {
@@ -67,6 +78,11 @@ const createServer = async () => {
 
   app.post("/upload-folder", multer().any(), async (req, res) => {
     try {
+      const user = await handleAuth(req, res);
+      if (!user) {
+        return;
+      }
+
       const folderTreeString = req.body.folderTree;
       if (!folderTreeString) {
         return res
@@ -90,6 +106,7 @@ const createServer = async () => {
       }
 
       const cid = await FilesUseCases.uploadTree(
+        user,
         validatedFolderTree.data,
         (req.files || []) as Express.Multer.File[]
       );

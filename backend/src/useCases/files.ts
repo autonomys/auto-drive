@@ -12,7 +12,12 @@ import {
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
 import { FolderTree } from "../models/index.js";
-import { MetadataUseCases, NodesUseCases } from "../useCases/index.js";
+import { User } from "../models/user.js";
+import {
+  MetadataUseCases,
+  NodesUseCases,
+  OwnershipUseCases,
+} from "../useCases/index.js";
 
 const processFile = async (
   data: Buffer,
@@ -140,6 +145,7 @@ const retrieveAndReassembleData = async (
 };
 
 const uploadFile = async (
+  user: User,
   data: Buffer,
   filename?: string,
   mimeType?: string
@@ -147,17 +153,20 @@ const uploadFile = async (
   const { cid, nodes } = await processFile(data, filename, mimeType);
 
   await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
+  await OwnershipUseCases.setUserAsOwner(user, cid);
 
   return cid;
 };
 
 const uploadTree = async (
+  user: User,
   folderTree: FolderTree,
   files: Express.Multer.File[]
 ): Promise<string> => {
   const { cid, nodes } = await processTree(folderTree, files);
 
   await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
+  await OwnershipUseCases.setUserAsOwner(user, cid);
 
   return cid;
 };
