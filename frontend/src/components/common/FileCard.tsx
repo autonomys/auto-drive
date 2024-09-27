@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import { OffchainMetadata } from "@autonomys/auto-drive";
 import {
   Menu,
   MenuButton,
@@ -11,19 +11,19 @@ import {
   PopoverPanel,
 } from "@headlessui/react";
 import {
-  Folder,
-  File,
-  MoreVertical,
   Download,
-  Trash,
-  Edit,
-  Share2,
   DownloadIcon,
+  Edit,
+  File,
+  Folder,
   FolderIcon,
+  MoreVertical,
+  Share2,
+  Trash,
 } from "lucide-react";
-import { ApiService } from "../../services/api";
+import React, { useCallback, useMemo, useState } from "react";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
-import { OffchainMetadata } from "@autonomys/auto-drive";
+import { ApiService } from "../../services/api";
 
 interface FileCardProps extends Partial<UploadedObjectMetadata> {
   icon?: React.ReactNode;
@@ -55,7 +55,7 @@ export function FileCard({
     ) => {
       event.stopPropagation();
       event.preventDefault();
-      window.location.assign(`/fs/${cid}`);
+      window.location.assign(`/app/fs/${cid}`);
     },
     []
   );

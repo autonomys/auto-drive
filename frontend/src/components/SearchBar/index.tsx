@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
 import { Transition } from "@headlessui/react";
 import { SearchIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiService } from "../../services/api";
 
 export const SearchBar = () => {
@@ -50,7 +50,7 @@ export const SearchBar = () => {
   const handleSelectItem = (item: string) => {
     setQuery(item);
     setIsOpen(false);
-    window.location.assign(`/search/${item}`);
+    window.location.assign(`/app/search/${item}`);
     inputRef.current?.focus();
   };
 
@@ -60,7 +60,7 @@ export const SearchBar = () => {
       recommendations &&
       recommendations.length > 0
     ) {
-      window.location.assign(`/search/${query}`);
+      window.location.assign(`/app/search/${query}`);
     }
   };
 

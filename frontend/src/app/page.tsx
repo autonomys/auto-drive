@@ -1,41 +1,37 @@
-"use client";
+import GoogleProvider from "next-auth/providers/google";
+import { FaGoogle } from "react-icons/fa";
 
-import { useEffect, useState } from "react";
-import { ApiService } from "../services/api";
-import { useLocalStorage } from "usehooks-ts";
-import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
-import { FileDropZone } from "../components/Files/FileDropZone";
-import { FileTable } from "../components/common/FileTable";
-import { NoUploadsPlaceholder } from "../components/Files/NoUploadsPlaceholder";
-import { UploadingObjects } from "../components/Files/UploadingObjects";
+export const authOptions = {
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+  ],
+};
 
-export default function Page() {
-  const [localObjectCIDs] = useLocalStorage<string[]>(
-    "root-objects-cid-v3",
-    []
-  );
-
-  const [rootObjectMetadata, setRootObjectMetadata] =
-    useState<UploadedObjectMetadata[]>();
-
-  useEffect(() => {
-    Promise.all(
-      localObjectCIDs.map((e) => ApiService.fetchUploadedObjectMetadata(e))
-    ).then(setRootObjectMetadata);
-  }, []);
-
+export default function App() {
   return (
-    <div className="flex w-full">
-      <div className="w-full flex flex-col gap-4">
-        <FileDropZone />
-        <div className="">
-          <UploadingObjects />
-          {rootObjectMetadata && rootObjectMetadata.length > 0 && (
-            <FileTable files={rootObjectMetadata} />
-          )}
-          {rootObjectMetadata && rootObjectMetadata.length === 0 && (
-            <NoUploadsPlaceholder />
-          )}
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="p-6 space-y-6">
+          <div className="text-center">
+            <span className="text-2xl justify-center font-semibold text-gray-800 flex items-center">
+              <img
+                src="/autonomys.png"
+                alt="Auto Drive"
+                className="w-8 h-8 mr-2"
+              />
+              Auto Drive
+            </span>
+            <p className="text-sm text-gray-500 mt-1">
+              Sign in to access your files
+            </p>
+          </div>
+          <button className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            <FaGoogle />
+            Sign in with Google
+          </button>
         </div>
       </div>
     </div>

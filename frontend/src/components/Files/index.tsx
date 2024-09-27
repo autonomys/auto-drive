@@ -15,7 +15,7 @@ export const FilesView = ({
               return (
                 <a
                   key={metadata.dataCid}
-                  href={`/fs/${metadata.dataCid}`}
+                  href={`/app/fs/${metadata.dataCid}`}
                   className="contents"
                 >
                   <FileCard uploadStatus={uploadStatus} metadata={metadata} />

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ApiService } from "../../../services/api";
-import { FileCard } from "../../../components/common/FileCard";
-import { UploadedObjectMetadata } from "../../../models/UploadedObjectMetadata";
+import { FileCard } from "../../../../components/common/FileCard";
+import { UploadedObjectMetadata } from "../../../../models/UploadedObjectMetadata";
+import { ApiService } from "../../../../services/api";
 
 export default function Page({ params: { cid } }: { params: { cid: string } }) {
   const [objectsMetadata, setObjectsMetadata] =
@@ -50,22 +50,14 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
           return (
             <a
               key={metadata.dataCid}
-              href={`/fs/${metadata.dataCid}`}
+              href={`/app/fs/${metadata.dataCid}`}
               className="contents"
             >
               <FileCard metadata={metadata} uploadStatus={uploadStatus} />
             </a>
           );
         case "file":
-          return (
-            <a
-              key={metadata.dataCid}
-              href={`/fs/${metadata.dataCid}`}
-              className="contents"
-            >
-              <FileCard metadata={metadata} uploadStatus={uploadStatus} />
-            </a>
-          );
+          return <FileCard metadata={metadata} uploadStatus={uploadStatus} />;
       }
     });
   }, [error, objectsMetadata]);

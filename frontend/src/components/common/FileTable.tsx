@@ -1,7 +1,7 @@
 "use client";
 
-import React, { FC, Fragment, useCallback, useState } from "react";
 import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import React, { FC, Fragment, useCallback, useState } from "react";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
 import { ApiService } from "../../services/api";
 
@@ -10,15 +10,18 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 }) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const toggleRow = useCallback((id: string) => {
-    const newExpandedRows = new Set(expandedRows);
-    if (newExpandedRows.has(id)) {
-      newExpandedRows.delete(id);
-    } else {
-      newExpandedRows.add(id);
-    }
-    setExpandedRows(newExpandedRows);
-  }, [expandedRows]);
+  const toggleRow = useCallback(
+    (id: string) => {
+      const newExpandedRows = new Set(expandedRows);
+      if (newExpandedRows.has(id)) {
+        newExpandedRows.delete(id);
+      } else {
+        newExpandedRows.add(id);
+      }
+      setExpandedRows(newExpandedRows);
+    },
+    [expandedRows]
+  );
 
   const renderFileIcon = useCallback((type: string) => {
     return <span></span>;
@@ -51,117 +54,131 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   }, []);
 
   const navigateToFile = useCallback((cid: string) => {
-    window.location.assign(`/fs/${cid}`);
+    window.location.assign(`/app/fs/${cid}`);
   }, []);
 
-  const renderRow = useCallback((file: UploadedObjectMetadata, level: number = 0) => {
-    const isExpanded = expandedRows.has(file.metadata.dataCid);
+  const renderRow = useCallback(
+    (file: UploadedObjectMetadata, level: number = 0) => {
+      const isExpanded = expandedRows.has(file.metadata.dataCid);
 
-    return (
-      <Fragment key={file.metadata.dataCid}>
-        <tr className="hover:bg-gray-100">
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              {file.metadata.type === "folder" && file.metadata.children && (
-                <button
-                  onClick={() => toggleRow(file.metadata.dataCid)}
-                  className="mr-2"
-                >
-                  {isExpanded ? (
-                    <ChevronDown size={16} />
-                  ) : (
-                    <ChevronRight size={16} />
-                  )}
-                </button>
-              )}
-              <span className="ml-2">{renderFileIcon(file.metadata.type)}</span>
-              <span
-                className={`ml-2 text-sm font-medium text-gray-900 ${
-                  file.metadata.type === "folder"
-                    ? "hover:underline hover:cursor-pointer"
-                    : ""
-                }`}
-                onClick={() =>
-                  file.metadata.type === "folder"
-                    ? navigateToFile(file.metadata.dataCid)
-                    : null
-                }
-              >
-                {file.metadata.dataCid}
-              </span>
-            </div>
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-            {file.metadata.type}
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-            {file.metadata.totalSize}
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-            {renderOwnerBadge("You")}
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-            {file.metadata.type === "file" && (
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                onClick={() => downloadFile(file.metadata.dataCid)}
-              >
-                Download
-              </button>
-            )}
-          </td>
-        </tr>
-        {isExpanded &&
-          file.metadata.type === "folder" &&
-          file.metadata.children &&
-          file.metadata.children.map((child) => (
-            <tr key={child.cid} className="bg-gray-200 ml-40">
-              <td className="px-6 py-4 whitespace-nowrap w-[50%]">
+      return (
+        <Fragment key={file.metadata.dataCid}>
+          <tr className="hover:bg-gray-100">
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <div className="flex items-center">
                 <input
                   type="checkbox"
                   className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
+                {file.metadata.type === "folder" && file.metadata.children && (
+                  <button
+                    onClick={() => toggleRow(file.metadata.dataCid)}
+                    className="mr-2"
+                  >
+                    {isExpanded ? (
+                      <ChevronDown size={16} />
+                    ) : (
+                      <ChevronRight size={16} />
+                    )}
+                  </button>
+                )}
+                <span className="ml-2">
+                  {renderFileIcon(file.metadata.type)}
+                </span>
                 <span
                   className={`ml-2 text-sm font-medium text-gray-900 ${
-                    child.type === "folder"
+                    file.metadata.type === "folder"
                       ? "hover:underline hover:cursor-pointer"
                       : ""
                   }`}
                   onClick={() =>
-                    child.type === "folder" ? navigateToFile(child.cid) : null
+                    file.metadata.type === "folder"
+                      ? navigateToFile(file.metadata.dataCid)
+                      : null
                   }
                 >
-                  {child.cid}
+                  {file.metadata.dataCid}
                 </span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className="text-sm text-gray-500">{child.type}</span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className="text-sm text-gray-500">{child.totalSize}</span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {renderOwnerBadge("You")}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                {child.type === "file" && (
-                  <button
-                    className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                    onClick={() => downloadFile(child.cid)}
+              </div>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {file.metadata.type}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {file.metadata.totalSize}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {renderOwnerBadge("You")}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              {file.metadata.type === "file" && (
+                <button
+                  className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+                  onClick={() => downloadFile(file.metadata.dataCid)}
+                >
+                  Download
+                </button>
+              )}
+            </td>
+          </tr>
+          {isExpanded &&
+            file.metadata.type === "folder" &&
+            file.metadata.children &&
+            file.metadata.children.map((child) => (
+              <tr key={child.cid} className="bg-gray-200 ml-40">
+                <td className="px-6 py-4 whitespace-nowrap w-[50%]">
+                  <input
+                    type="checkbox"
+                    className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span
+                    className={`ml-2 text-sm font-medium text-gray-900 ${
+                      child.type === "folder"
+                        ? "hover:underline hover:cursor-pointer"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      child.type === "folder" ? navigateToFile(child.cid) : null
+                    }
                   >
-                    Download
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-      </Fragment>
-    );
-  }, [expandedRows, navigateToFile, downloadFile, renderOwnerBadge, renderFileIcon, toggleRow]);
+                    {child.cid}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="text-sm text-gray-500">{child.type}</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="text-sm text-gray-500">
+                    {child.totalSize}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {renderOwnerBadge("You")}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  {child.type === "file" && (
+                    <button
+                      className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+                      onClick={() => downloadFile(child.cid)}
+                    >
+                      Download
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+        </Fragment>
+      );
+    },
+    [
+      expandedRows,
+      navigateToFile,
+      downloadFile,
+      renderOwnerBadge,
+      renderFileIcon,
+      toggleRow,
+    ]
+  );
 
   return (
     <div className="flex flex-col">
