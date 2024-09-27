@@ -24,13 +24,14 @@ const setUserAsAdmin = async (cid: string, userId: string) => {
   );
 };
 
-const setObjectAsDeleted = async (cid: string) => {
+const setObjectAsDeleted = async (userId: string, cid: string) => {
   const db = await getDatabase();
 
   await db.run(
-    "UPDATE object_ownership SET marked_as_deleted = ? WHERE cid = ?",
+    "UPDATE object_ownership SET marked_as_deleted = ? WHERE cid = ? AND user_id = ?",
     true,
-    cid
+    cid,
+    userId
   );
 };
 
