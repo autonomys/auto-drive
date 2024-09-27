@@ -1,7 +1,7 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import { metadataRepository } from "../repositories/metadata.js";
+import { metadataRepository } from "../repositories/index.js";
 
-export const getMetadata = async (cid: string) => {
+const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid);
   if (!entry) {
     return undefined;
@@ -10,18 +10,25 @@ export const getMetadata = async (cid: string) => {
   return entry.metadata;
 };
 
-export const saveMetadata = async (cid: string, metadata: OffchainMetadata) => {
+const saveMetadata = async (cid: string, metadata: OffchainMetadata) => {
   return metadataRepository.setMetadata(cid, metadata);
 };
 
-export const searchMetadataByCID = async (cid: string, limit: number = 5) => {
+const searchMetadataByCID = async (cid: string, limit: number = 5) => {
   return metadataRepository
     .searchMetadataByCID(cid, limit)
     .then((result) => result.map((entry) => entry.cid));
 };
 
-export const getAllMetadata = async () => {
+const getAllMetadata = async () => {
   return metadataRepository
     .getAllMetadata()
     .then((metadata) => metadata.map((entry) => entry.metadata));
+};
+
+export const MetadataUseCases = {
+  getMetadata,
+  saveMetadata,
+  searchMetadataByCID,
+  getAllMetadata,
 };

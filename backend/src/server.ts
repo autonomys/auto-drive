@@ -1,44 +1,25 @@
-import express from "express";
-import cors from "cors";
-import multer from "multer";
 import bodyParser from "body-parser";
-import {
-  processFile,
-  retrieveAndReassembleData,
-} from "./services/storageManager/index.js";
-import {
-  TransactionResult,
-  createApi,
-  retrieveRemarkFromTransaction,
-} from "./services/transactionManager/index.js";
+import cors from "cors";
+import express from "express";
+import multer from "multer";
 import { isJson } from "./utils/index.js";
 
-import dotenv from "dotenv";
-import { FolderTreeSchema } from "./models/folderTree.js";
-import {
-  processTree,
-  uploadFile,
-  uploadTree,
-} from "./services/storageManager/storageManager.js";
 import {
   cidToString,
   IPLDNodeData,
   OffchainMetadata,
 } from "@autonomys/auto-drive";
 import { decode } from "@ipld/dag-pb";
-import { NodeWithMetadata } from "./models/nodeWithMetadata.js";
-import { getNode } from "./api/nodes.js";
-import { getMetadata, searchMetadataByCID } from "./api/metadata.js";
-import {
-  getHeadTransactionResults,
-  getNodeTransactionResult,
-} from "./api/transactionResults.js";
+import "dotenv/config.js";
+import { FolderTreeSchema, NodeWithMetadata } from "./models/index.js";
+import { transactionResultsRepository } from "./repositories/index.js";
 import { uploadManager } from "./services/uploadManager/index.js";
-import { transactionResultsRepository } from "./repositories/transactionResults.js";
-
-dotenv.config();
-
-const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "ws://localhost:9944";
+import {
+  FilesUseCases,
+  MetadataUseCases,
+  NodesUseCases,
+  TransactionResultsUseCases,
+} from "./useCases/index.js";
 
 const setContentTypeHeaders = (
   res: express.Response,
@@ -75,7 +56,7 @@ const createServer = async () => {
       }
 
       const buffer = Buffer.from(data, "base64");
-      const cid = await uploadFile(buffer, filename, mimeType);
+      const cid = await FilesUseCases.uploadFile(buffer, filename, mimeType);
 
       res.json({ cid });
     } catch (error) {
@@ -108,7 +89,7 @@ const createServer = async () => {
         });
       }
 
-      const cid = await uploadTree(
+      const cid = await FilesUseCases.uploadTree(
         validatedFolderTree.data,
         (req.files || []) as Express.Multer.File[]
       );
@@ -124,7 +105,7 @@ const createServer = async () => {
 
   app.get("/retrieve/:cid/node", async (req, res) => {
     const { cid } = req.params;
-    const encodedNode = await getNode(cid);
+    const encodedNode = await NodesUseCases.getNode(cid);
     if (!encodedNode) {
       return res.status(404).json({ error: "Node not found" });
     }
@@ -142,13 +123,13 @@ const createServer = async () => {
     try {
       const { cid } = req.params;
 
-      const metadata = await getMetadata(cid);
+      const metadata = await MetadataUseCases.getMetadata(cid);
       if (!metadata) {
         return res.status(404).json({ error: "Metadata not found" });
       }
 
       console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
-      const data = await retrieveAndReassembleData(cid);
+      const data = await FilesUseCases.retrieveAndReassembleData(cid);
 
       setContentTypeHeaders(res, metadata);
       res.send(data);
@@ -166,7 +147,7 @@ const createServer = async () => {
       const limit = req.query.limit
         ? parseInt(req.query.limit as string)
         : undefined;
-      const results = await searchMetadataByCID(cid, limit);
+      const results = await MetadataUseCases.searchMetadataByCID(cid, limit);
       res.json(results);
     } catch (error: any) {
       console.error("Error searching metadata:", error);
@@ -179,7 +160,7 @@ const createServer = async () => {
   app.get("/metadata/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const metadata = await getMetadata(cid);
+      const metadata = await MetadataUseCases.getMetadata(cid);
       if (!metadata) {
         return res.status(404).json({ error: "Metadata not found" });
       }
@@ -206,7 +187,8 @@ const createServer = async () => {
   app.get("/transaction/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const transactionResult = await getNodeTransactionResult(cid);
+      const transactionResult =
+        await TransactionResultsUseCases.getNodeTransactionResult(cid);
       if (!transactionResult) {
         return res.status(404).json({ error: "Transaction result not found" });
       }
@@ -223,16 +205,16 @@ const createServer = async () => {
   app.get("/fromTransactions/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
-      const transactionResults = await getHeadTransactionResults(cid);
+      const transactionResults =
+        await TransactionResultsUseCases.getHeadTransactionResults(cid);
 
       if (!transactionResults) {
         return res.status(404).json({ error: "Transaction result not found" });
       }
 
-      const api = await createApi(RPC_ENDPOINT);
       const remarks = await Promise.all(
         transactionResults.map((result) =>
-          retrieveRemarkFromTransaction(api, result)
+          TransactionResultsUseCases.retrieveRemarkFromTransaction(result)
         )
       );
 

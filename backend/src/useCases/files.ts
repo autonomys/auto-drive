@@ -1,27 +1,23 @@
-import dotenv from "dotenv";
 import {
   cidOfNode,
   cidToString,
   createFileIPLDDag,
-  stringToCid,
-  fileMetadata,
-  OffchainMetadata,
-  createMetadataNode,
-  OffchainFolderMetadata,
-  folderMetadata,
   createFolderIPLDDag,
+  createMetadataNode,
+  fileMetadata,
+  folderMetadata,
+  OffchainFolderMetadata,
+  OffchainMetadata,
+  stringToCid,
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
-import { FolderTree } from "../../models/folderTree.js";
-import { getChunkData, saveNodesWithHeadCID } from "../../api/nodes.js";
-import { getMetadata, saveMetadata } from "../../api/metadata.js";
+import { FolderTree } from "../models/index.js";
+import { MetadataUseCases, NodesUseCases } from "../useCases/index.js";
 
-dotenv.config();
-
-export const processFile = async (
+const processFile = async (
   data: Buffer,
   filename?: string,
-  mimeType?: string,
+  mimeType?: string
 ): Promise<{ cid: string; nodes: PBNode[] }> => {
   const dag = createFileIPLDDag(data, filename);
 
@@ -29,7 +25,7 @@ export const processFile = async (
     dag,
     data.length,
     filename,
-    mimeType,
+    mimeType
   );
 
   const metadataNode = createMetadataNode(metadata);
@@ -37,8 +33,8 @@ export const processFile = async (
 
   const nodes = [metadataNode, ...chunkNodes];
 
-  await saveMetadata(cidToString(dag.headCID), metadata);
-  await saveNodesWithHeadCID(chunkNodes, dag.headCID);
+  await MetadataUseCases.saveMetadata(cidToString(dag.headCID), metadata);
+  await NodesUseCases.saveNodesWithHeadCID(chunkNodes, dag.headCID);
 
   console.log("Processed file: ", filename);
 
@@ -48,9 +44,9 @@ export const processFile = async (
   };
 };
 
-export const processTree = async (
+const processTree = async (
   folderTree: FolderTree,
-  files: Express.Multer.File[],
+  files: Express.Multer.File[]
 ): Promise<{ cid: string; nodes: PBNode[] }> => {
   if (folderTree.type === "file") {
     const file = files.find((e) => e.fieldname === folderTree.id);
@@ -71,19 +67,19 @@ export const processTree = async (
 
   const childrenMetadata = await Promise.all(
     cids.map((e) =>
-      getMetadata(e).then((e) => ({
+      MetadataUseCases.getMetadata(e).then((e) => ({
         type: e!.type,
         name: e!.name,
         cid: e!.dataCid,
         totalSize: e!.totalSize,
-      })),
-    ),
+      }))
+    )
   );
 
   const { headCID, nodes } = createFolderIPLDDag(
     cids.map((e) => stringToCid(e)),
     folderTree.name,
-    childrenMetadata.reduce((acc, e) => acc + e.totalSize, 0),
+    childrenMetadata.reduce((acc, e) => acc + e.totalSize, 0)
   );
   const cid = cidToString(headCID);
 
@@ -97,11 +93,11 @@ export const processTree = async (
   const metadata: OffchainFolderMetadata = folderMetadata(
     cidToString(cidOfNode(folderNode)),
     childrenMetadata,
-    folderTree.name,
+    folderTree.name
   );
   const metadataNode = createMetadataNode(metadata);
 
-  await saveMetadata(cidToString(headCID), metadata);
+  await MetadataUseCases.saveMetadata(cidToString(headCID), metadata);
 
   return {
     cid,
@@ -113,10 +109,10 @@ export const processTree = async (
   };
 };
 
-export const retrieveAndReassembleData = async (
-  metadataCid: string,
+const retrieveAndReassembleData = async (
+  metadataCid: string
 ): Promise<Buffer | undefined> => {
-  const metadata = await getMetadata(metadataCid);
+  const metadata = await MetadataUseCases.getMetadata(metadataCid);
 
   if (!metadata) {
     throw new Error(`Metadata with CID ${metadataCid} not found`);
@@ -127,41 +123,47 @@ export const retrieveAndReassembleData = async (
   }
 
   if (metadata.totalChunks === 1) {
-    return getChunkData(metadata.chunks[0].cid);
+    return NodesUseCases.getChunkData(metadata.chunks[0].cid);
   }
 
   const chunks: Buffer[] = await Promise.all(
     metadata.chunks.map(async (chunk) => {
-      const chunkData = await getChunkData(chunk.cid);
+      const chunkData = await NodesUseCases.getChunkData(chunk.cid);
       if (!chunkData) {
         throw new Error(`Chunk with CID ${chunk.cid} not found`);
       }
       return chunkData;
-    }),
+    })
   );
 
   return Buffer.concat(chunks);
 };
 
-export const uploadFile = async (
+const uploadFile = async (
   data: Buffer,
   filename?: string,
-  mimeType?: string,
+  mimeType?: string
 ): Promise<string> => {
   const { cid, nodes } = await processFile(data, filename, mimeType);
 
-  await saveNodesWithHeadCID(nodes, cid);
+  await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
 
   return cid;
 };
 
-export const uploadTree = async (
+const uploadTree = async (
   folderTree: FolderTree,
-  files: Express.Multer.File[],
+  files: Express.Multer.File[]
 ): Promise<string> => {
   const { cid, nodes } = await processTree(folderTree, files);
 
-  await saveNodesWithHeadCID(nodes, cid);
+  await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
 
   return cid;
+};
+
+export const FilesUseCases = {
+  uploadFile,
+  uploadTree,
+  retrieveAndReassembleData,
 };

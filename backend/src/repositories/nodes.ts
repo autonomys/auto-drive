@@ -1,5 +1,5 @@
 import { MetadataType } from "@autonomys/auto-drive";
-import { getDatabase } from "./sqlite.js";
+import { getDatabase } from "../drivers/sqlite.js";
 
 export interface Node {
   cid: string;
@@ -8,28 +8,17 @@ export interface Node {
   encoded_node: string;
 }
 
-const initTable = async () => {
-  const db = await getDatabase();
-
-  db.exec(
-    "CREATE TABLE IF NOT EXISTS nodes (cid TEXT PRIMARY KEY, head_cid TEXT, type TEXT, encoded_node TEXT)",
-  );
-  db.exec("CREATE INDEX IF NOT EXISTS nodes_head_cid ON nodes (head_cid)");
-
-  return db;
-};
-
 const saveNode = async (node: Node) => {
-  const db = await initTable();
+  const db = await getDatabase();
 
   return db.run(
     "INSERT OR REPLACE INTO nodes (cid, head_cid, type, encoded_node) VALUES (?, ?, ?, ?)",
-    [node.cid, node.head_cid, node.type, node.encoded_node],
+    [node.cid, node.head_cid, node.type, node.encoded_node]
   );
 };
 
 const getNode = async (cid: string) => {
-  const db = await initTable();
+  const db = await getDatabase();
 
   return db.get<Node>("SELECT * FROM nodes WHERE cid = ?", [cid]);
 };
@@ -44,7 +33,7 @@ const getNodes = async ({
   cid?: string;
   headCid?: string;
 }) => {
-  const db = await initTable();
+  const db = await getDatabase();
 
   let query = "SELECT * FROM nodes";
   const params = [];
@@ -73,7 +62,6 @@ const getNodes = async ({
 };
 
 export const nodesRepository = {
-  initTable,
   getNode,
   getNodes,
   saveNode,

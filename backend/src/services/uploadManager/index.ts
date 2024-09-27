@@ -1,7 +1,4 @@
-import {
-  getPendingTransactionResults,
-  setTransactionResults,
-} from "../../api/transactionResults.js";
+import { TransactionResultsUseCases } from "../../useCases/index.js";
 import { safeCallback } from "../../utils/safe.js";
 import { createTransactionManager } from "../transactionManager/index.js";
 
@@ -10,9 +7,7 @@ let state = {
   time: 10_000,
 };
 
-const transactionManager = createTransactionManager(
-  process.env.RPC_ENDPOINT || "ws://localhost:9944"
-);
+const transactionManager = createTransactionManager();
 
 const processPendingUploads = safeCallback(async () => {
   if (state.executing) {
@@ -20,7 +15,8 @@ const processPendingUploads = safeCallback(async () => {
   }
   state.executing = true;
 
-  const pendingUploads = await getPendingTransactionResults();
+  const pendingUploads =
+    await TransactionResultsUseCases.getPendingTransactionResults();
 
   console.log(`${pendingUploads.length} pending uploads`);
   if (pendingUploads.length === 0) {
@@ -38,9 +34,13 @@ const processPendingUploads = safeCallback(async () => {
   const results = await transactionManager.submit(transactions);
 
   await Promise.all(
-    pendingUploads.map((upload, index) => {
-      setTransactionResults(upload.head_cid, upload.cid, results[index]);
-    })
+    pendingUploads.map((upload, index) =>
+      TransactionResultsUseCases.setTransactionResults(
+        upload.head_cid,
+        upload.cid,
+        results[index]
+      )
+    )
   );
 
   state.executing = false;

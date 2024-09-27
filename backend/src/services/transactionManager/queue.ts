@@ -1,14 +1,15 @@
-import { KeyringPair } from "@polkadot/keyring/types";
-import { Queue, TransactionStatus } from "../../models/transaction.js";
-import { getAccount, getAccounts } from "./accountPool.js";
 import { ApiPromise } from "@polkadot/api";
-import { Transaction } from "./types.js";
-import { getOnChainNonce } from "./networkApi.js";
-import { queueConfig } from "./config.js";
+import { KeyringPair } from "@polkadot/keyring/types";
+import { Queue, Transaction, TransactionStatus } from "../../models/index.js";
+import { getOnChainNonce } from "../../utils/networkApi.js";
+import { getAccount, getAccounts } from "../accountManager/index.js";
 
 export const queue: Queue = {
   api: null,
   transactions: [],
+  updatePeriod: 15_000,
+  transactionRetryPeriod: 30_000,
+  transactionRetryLimit: 1,
 };
 
 export const getAvailableAccount = (): KeyringPair => {
@@ -21,12 +22,12 @@ export const getAvailableAccount = (): KeyringPair => {
   const account = accounts.reduce(
     (accountWithMinimumQueuedTrxs, account) =>
       queue.transactions.filter(
-        (tx) => tx.account === accountWithMinimumQueuedTrxs.address,
+        (tx) => tx.account === accountWithMinimumQueuedTrxs.address
       ).length >
       queue.transactions.filter((tx) => tx.account === account.address).length
         ? account
         : accountWithMinimumQueuedTrxs,
-    accounts[0],
+    accounts[0]
   );
 
   return account;
@@ -43,7 +44,7 @@ const internalAccountNonce = (account: KeyringPair): number | undefined => {
 
 export const getAccountNonce = async (
   api: ApiPromise,
-  address: string,
+  address: string
 ): Promise<number> => {
   if (!queue.api) {
     throw new Error("Queue not initialized");
@@ -67,7 +68,7 @@ export const getAccountNonce = async (
 export const addTransaction = (
   transaction: Transaction,
   nonce: number,
-  account: KeyringPair,
+  account: KeyringPair
 ) => {
   if (!queue.api) {
     throw new Error("Queue not initialized");
@@ -79,7 +80,7 @@ export const addTransaction = (
     account: account.address,
     status: TransactionStatus.PENDING,
     sentAt: Date.now(),
-    retries: queueConfig.transactionRetryLimit,
+    retries: queue.transactionRetryLimit,
   });
 };
 
@@ -91,12 +92,12 @@ const drainQueue = async () => {
   for (const account of getAccounts()) {
     const nonce = await getOnChainNonce(queue.api, account.address);
     queue.transactions = queue.transactions.filter(
-      (tx) => tx.account !== account.address || tx.nonce > nonce,
+      (tx) => tx.account !== account.address || tx.nonce > nonce
     );
   }
 
   console.log(
-    `Queue drained there are ${queue.transactions.length} transactions left`,
+    `Queue drained there are ${queue.transactions.length} transactions left`
   );
 };
 
@@ -106,11 +107,11 @@ const retryTransactions = () => {
   }
 
   let transactionsToRetry = queue.transactions.filter(
-    (tx) => Date.now() - tx.sentAt > queueConfig.transactionRetryPeriod,
+    (tx) => Date.now() - tx.sentAt > queue.transactionRetryPeriod
   );
 
   queue.transactions = queue.transactions.filter(
-    (tx) => !transactionsToRetry.includes(tx) || tx.retries > 0,
+    (tx) => !transactionsToRetry.includes(tx) || tx.retries > 0
   );
 
   console.log(`Retrying ${transactionsToRetry.length} transactions`);
@@ -144,7 +145,7 @@ const retryTransactions = () => {
             sentAt: Date.now(),
             retries: tx.retries - 1,
           }
-        : t,
+        : t
     );
   });
 };
@@ -157,17 +158,17 @@ export const updateQueue = async () => {
   await drainQueue();
   retryTransactions();
 
-  setTimeout(updateQueue, queueConfig.updatePeriod);
+  setTimeout(updateQueue, queue.updatePeriod);
 };
 
 export const initializeQueue = (api: ApiPromise) => {
   queue.api = api;
 
-  setTimeout(updateQueue, queueConfig.updatePeriod);
+  setTimeout(updateQueue, queue.updatePeriod);
 };
 
 export const registerTransactionInQueue = async (
-  transaction: Transaction,
+  transaction: Transaction
 ): Promise<{
   account: KeyringPair;
   nonce: number;
