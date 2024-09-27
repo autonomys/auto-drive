@@ -1,4 +1,4 @@
-import { getDatabase } from "../drivers/sqlite";
+import { getDatabase } from "../drivers/sqlite.js";
 
 const setUserAsOwner = async (cid: string, userId: string) => {
   const db = await getDatabase();
