@@ -1,5 +1,5 @@
-import { User } from "../../models/user";
-import { GoogleAuth } from "./providers/google";
+import { User } from "../../models/index.js";
+import { GoogleAuth } from "./providers/index.js";
 
 const getUserFromAccessToken = async (
   provider: string,

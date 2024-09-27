@@ -1,4 +1,4 @@
-import { User } from "../../../models/user";
+import { User } from "../../../models/index.js";
 
 type GoogleUser = {
   email: string;
