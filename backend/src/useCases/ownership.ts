@@ -1,16 +1,16 @@
-import { User } from "../models/user";
-import { OwnershipRepository } from "../repositories/ownership";
+import { User } from "../models/index.js";
+import { ownershipRepository } from "../repositories/index.js";
 
 const setUserAsOwner = async (user: User, cid: string) => {
-  await OwnershipRepository.setUserAsOwner(cid, user.email);
+  await ownershipRepository.setUserAsOwner(cid, user.email);
 };
 
 const setUserAsAdmin = async (user: User, cid: string) => {
-  await OwnershipRepository.setUserAsAdmin(cid, user.email);
+  await ownershipRepository.setUserAsAdmin(cid, user.email);
 };
 
 const setObjectAsDeleted = async (user: User, cid: string) => {
-  await OwnershipRepository.setObjectAsDeleted(user.email, cid);
+  await ownershipRepository.setObjectAsDeleted(user.email, cid);
 };
 
 export const OwnershipUseCases = {

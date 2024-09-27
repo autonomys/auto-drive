@@ -35,7 +35,7 @@ const setObjectAsDeleted = async (userId: string, cid: string) => {
   );
 };
 
-export const OwnershipRepository = {
+export const ownershipRepository = {
   setUserAsOwner,
   setUserAsAdmin,
   setObjectAsDeleted,
