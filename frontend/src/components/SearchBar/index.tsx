@@ -3,6 +3,7 @@
 import { Transition } from "@headlessui/react";
 import { SearchIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalStorage } from "usehooks-ts";
 import { ApiService } from "../../services/api";
 
 export const SearchBar = () => {
@@ -11,18 +12,19 @@ export const SearchBar = () => {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
+  const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
   const [recommendations, setRecommendations] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (query.length > 2) {
       setError(null);
-      ApiService.searchHeadCID(query)
+      ApiService.searchHeadCID(query, scope)
         .then(setRecommendations)
         .catch(() => setError("Error fetching recommendations"));
     } else {
       setRecommendations(null);
     }
-  }, [query]);
+  }, [query, scope]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

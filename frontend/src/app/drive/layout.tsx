@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { useLocalStorage } from "usehooks-ts";
+import { ScopeSwitch } from "../../components/common/ScopeSwitch";
 import { SearchBar } from "../../components/SearchBar";
 import "../globals.css";
 
@@ -32,8 +34,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [enabled, setEnabled] = [false, (b: boolean) => {}];
-
   return (
     <html lang="en">
       <body
@@ -51,20 +51,9 @@ export default function RootLayout({
                 <span className="text-xl font-semibold">Auto Drive</span>
               </div>
               <div className="flex items-center space-x-4">
-                <span className="text-sm font-medium">Global</span>
-                <Switch
-                  checked={enabled}
-                  className={`${
-                    enabled ? "bg-blue-600" : "bg-gray-200"
-                  } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
-                >
-                  <span
-                    className={`${
-                      enabled ? "translate-x-6" : "translate-x-1"
-                    } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
-                  />
-                </Switch>
                 <span className="text-sm font-medium">Your Files</span>
+                <ScopeSwitch />
+                <span className="text-sm font-medium">Global</span>
                 <div className="md:w-80">
                   <SearchBar />
                 </div>

@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getAuthSession } from "../utils/auth";
+import { isAuthenticated } from "../utils/auth";
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    getAuthSession().then((session) => {
+    isAuthenticated().then((session) => {
       if (session) {
         window.location.assign("/drive");
       }

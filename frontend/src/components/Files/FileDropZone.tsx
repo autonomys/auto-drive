@@ -14,10 +14,6 @@ export function FileDropZone() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-  const [, setLocalObjectCIDs] = useLocalStorage<string[]>(
-    "root-objects-cid-v3",
-    []
-  );
   const [, setUploadingObjects] = useLocalStorage<string[]>(
     "uploading-objects",
     []
@@ -41,7 +37,6 @@ export function FileDropZone() {
   }, []);
 
   const handleUploadingCID = useCallback((cid: string) => {
-    setLocalObjectCIDs((prev) => [...prev.filter((i) => i !== cid), cid]);
     setUploadingObjects((prev) => [...prev.filter((i) => i !== cid), cid]);
   }, []);
 

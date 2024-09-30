@@ -10,19 +10,19 @@ import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
 import { ApiService } from "../../services/api";
 
 export default function Page() {
-  const [localObjectCIDs] = useLocalStorage<string[]>(
-    "root-objects-cid-v3",
-    []
-  );
-
   const [rootObjectMetadata, setRootObjectMetadata] =
     useState<UploadedObjectMetadata[]>();
+  const [scope, setScope] = useLocalStorage<"user" | "global">(
+    "search-scope",
+    "global"
+  );
 
   useEffect(() => {
-    Promise.all(
-      localObjectCIDs.map((e) => ApiService.fetchUploadedObjectMetadata(e))
-    ).then(setRootObjectMetadata);
-  }, []);
+    ApiService.getRootObjects(scope).then((e) => {
+      const promises = e.map((e) => ApiService.fetchUploadedObjectMetadata(e));
+      Promise.all(promises).then(setRootObjectMetadata);
+    });
+  }, [scope]);
 
   return (
     <div className="flex w-full">

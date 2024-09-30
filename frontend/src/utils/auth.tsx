@@ -18,3 +18,11 @@ export const getAuthSession = async (): Promise<Session | null> => {
 
   return { accessToken: "", ...internalSession } as Session;
 };
+
+export const isAuthenticated = async (): Promise<boolean> => {
+  const internalSession = await (typeof window === "undefined"
+    ? getServerSession()
+    : getSession());
+
+  return !!internalSession;
+};

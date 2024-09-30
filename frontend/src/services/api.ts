@@ -93,8 +93,42 @@ export const ApiService = {
   fetchDataURL: (cid: string): string => {
     return `${API_BASE_URL}/retrieve/${cid}`;
   },
-  searchHeadCID: async (query: string): Promise<string[]> => {
-    const response = await fetch(`${API_BASE_URL}/metadata/search/${query}`);
+  searchHeadCID: async (
+    query: string,
+    scope: "user" | "global"
+  ): Promise<string[]> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/metadata/search/${query}?scope=${scope}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session?.accessToken}`,
+          "X-Auth-Provider": "google",
+        },
+      }
+    );
+    return response.json();
+  },
+  getRootObjects: async (scope: "user" | "global"): Promise<string[]> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/metadata/roots?scope=${scope}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session?.accessToken}`,
+          "X-Auth-Provider": "google",
+        },
+      }
+    );
+
     return response.json();
   },
 };

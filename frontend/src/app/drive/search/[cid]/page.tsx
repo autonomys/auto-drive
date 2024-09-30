@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useLocalStorage } from "usehooks-ts";
 import { FileCard } from "../../../../components/common/FileCard";
 import { UploadedObjectMetadata } from "../../../../models/UploadedObjectMetadata";
 import { ApiService } from "../../../../services/api";
@@ -9,9 +10,10 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
   const [objectsMetadata, setObjectsMetadata] =
     useState<UploadedObjectMetadata[]>();
   const [error, setError] = useState<string>();
+  const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
 
   useEffect(() => {
-    ApiService.searchHeadCID(cid)
+    ApiService.searchHeadCID(cid, scope)
       .then((e) =>
         Promise.all(e.map((e) => ApiService.fetchUploadedObjectMetadata(e)))
       )
@@ -19,7 +21,7 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
       .catch(() => {
         setError("Error searching for objects");
       });
-  }, [cid]);
+  }, [cid, scope]);
 
   const Content = useMemo(() => {
     if (error) {
