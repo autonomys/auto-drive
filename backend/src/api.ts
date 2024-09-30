@@ -161,10 +161,21 @@ const createServer = async () => {
   app.get("/metadata/search/:cid", async (req, res) => {
     try {
       const { cid } = req.params;
+      const { scope } = req.query;
+
+      const user = await handleAuth(req, res);
+      if (!user) {
+        return;
+      }
+
       const limit = req.query.limit
         ? parseInt(req.query.limit as string)
         : undefined;
-      const results = await MetadataUseCases.searchMetadataByCID(cid, limit);
+      const results = await MetadataUseCases.searchMetadataByCID(
+        cid,
+        limit,
+        user && scope === "user" ? { user, scope } : { scope: "global" }
+      );
       res.json(results);
     } catch (error: any) {
       console.error("Error searching metadata:", error);
@@ -172,6 +183,19 @@ const createServer = async () => {
         .status(500)
         .json({ error: "Failed to search metadata", details: error.message });
     }
+  });
+
+  app.get("/metadata/roots", async (req, res) => {
+    const user = await handleAuth(req, res);
+    const { scope } = req.query;
+    if (!user) {
+      return;
+    }
+
+    const roots = await MetadataUseCases.getRootObjects(
+      user && scope === "user" ? { user, scope } : { scope: "global" }
+    );
+    res.json(roots);
   });
 
   app.get("/metadata/:cid", async (req, res) => {
