@@ -24,7 +24,7 @@ const initSchema = async (db: Database) => {
 
   // Object Ownership
   await db.exec(
-    "CREATE TABLE IF NOT EXISTS object_ownership (cid TEXT PRIMARY KEY, user_id TEXT, is_admin BOOLEAN, marked_as_deleted BOOLEAN)"
+    "CREATE TABLE IF NOT EXISTS object_ownership (cid TEXT, user_id TEXT, is_admin BOOLEAN, marked_as_deleted BOOLEAN, PRIMARY KEY (cid, user_id))"
   );
 };
 
