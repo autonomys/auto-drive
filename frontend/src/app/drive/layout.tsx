@@ -24,11 +24,6 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
-export const metadata: Metadata = {
-  title: "Auto-Drive",
-  description: "Autonomys Drive",
-};
-
 export default function RootLayout({
   children,
 }: Readonly<{
