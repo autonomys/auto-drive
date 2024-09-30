@@ -14,7 +14,6 @@ import "dotenv/config.js";
 import { FolderTreeSchema, NodeWithMetadata } from "./models/index.js";
 import { transactionResultsRepository } from "./repositories/index.js";
 import { handleAuth } from "./services/authManager/express.js";
-import { uploadManager } from "./services/uploadManager/index.js";
 import {
   FilesUseCases,
   MetadataUseCases,
