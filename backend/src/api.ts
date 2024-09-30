@@ -41,11 +41,12 @@ const setContentTypeHeaders = (
 
 const createServer = async () => {
   const app = express();
-  const port = 3000;
+  const port = Number(process.env.PORT) || 3000;
 
   // Increase the limit to 10MB (adjust as needed)
-  app.use(bodyParser.json({ limit: "10mb" }));
-  app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
+  const requestSizeLimit = process.env.REQUEST_SIZE_LIMIT || "10mb";
+  app.use(bodyParser.json({ limit: requestSizeLimit }));
+  app.use(bodyParser.urlencoded({ limit: requestSizeLimit, extended: true }));
   process.env.CORS_ALLOW_ORIGINS &&
     app.use(cors({ origin: process.env.CORS_ALLOW_ORIGINS }));
 
