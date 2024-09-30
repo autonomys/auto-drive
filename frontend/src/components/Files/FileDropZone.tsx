@@ -10,6 +10,10 @@ import { useLocalStorage } from "usehooks-ts";
 import { constructFromFileSystemEntries } from "../../models/FileTree";
 import { ApiService } from "../../services/api";
 
+declare global {
+  interface Window {}
+}
+
 export function FileDropZone() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -167,7 +171,7 @@ export function FileDropZone() {
         ref={folderInputRef}
         onChange={handleFolderInputChange}
         className="hidden"
-        webkitdirectory="true"
+        {...{ webkitdirectory: "true" }}
       />
       <Popover as="div" className="relative">
         <PopoverButton as="div">
