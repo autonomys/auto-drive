@@ -1,17 +1,14 @@
-import React, { useState, useRef, useCallback } from "react";
-import { constructFromFileSystemEntries } from "../../models/FileTree";
 import {
-  Menu,
-  MenuButton,
-  MenuSection,
   Popover,
   PopoverButton,
   PopoverPanel,
   Transition,
 } from "@headlessui/react";
 import { FileIcon, FolderIcon } from "lucide-react";
-import { ApiService } from "../../services/api";
+import React, { useCallback, useRef, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
+import { constructFromFileSystemEntries } from "../../models/FileTree";
+import { ApiService } from "../../services/api";
 
 export function FileDropZone() {
   const [isDragging, setIsDragging] = useState(false);

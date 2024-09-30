@@ -72,7 +72,7 @@ export default function RootLayout({
             </header>
             <div className="flex flex-1 overflow-hidden">
               <aside className="w-16 md:w-64 space-y-4">
-                <a href="/app" className="contents">
+                <a href="/drive" className="contents">
                   <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">
                     <HomeIcon className="w-5 h-5" />
                     <span className="hidden md:block">Files</span>

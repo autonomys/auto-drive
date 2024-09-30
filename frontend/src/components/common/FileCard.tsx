@@ -55,7 +55,7 @@ export function FileCard({
     ) => {
       event.stopPropagation();
       event.preventDefault();
-      window.location.assign(`/app/fs/${cid}`);
+      window.location.assign(`/drive/fs/${cid}`);
     },
     []
   );

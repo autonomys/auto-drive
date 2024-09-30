@@ -50,7 +50,7 @@ export const SearchBar = () => {
   const handleSelectItem = (item: string) => {
     setQuery(item);
     setIsOpen(false);
-    window.location.assign(`/app/search/${item}`);
+    window.location.assign(`/drive/search/${item}`);
     inputRef.current?.focus();
   };
 
@@ -60,7 +60,7 @@ export const SearchBar = () => {
       recommendations &&
       recommendations.length > 0
     ) {
-      window.location.assign(`/app/search/${query}`);
+      window.location.assign(`/drive/search/${query}`);
     }
   };
 

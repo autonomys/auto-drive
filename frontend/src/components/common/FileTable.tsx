@@ -54,7 +54,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   }, []);
 
   const navigateToFile = useCallback((cid: string) => {
-    window.location.assign(`/app/fs/${cid}`);
+    window.location.assign(`/drive/fs/${cid}`);
   }, []);
 
   const renderRow = useCallback(

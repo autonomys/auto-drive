@@ -50,14 +50,22 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
           return (
             <a
               key={metadata.dataCid}
-              href={`/app/fs/${metadata.dataCid}`}
+              href={`/drive/fs/${metadata.dataCid}`}
               className="contents"
             >
               <FileCard metadata={metadata} uploadStatus={uploadStatus} />
             </a>
           );
         case "file":
-          return <FileCard metadata={metadata} uploadStatus={uploadStatus} />;
+          return (
+            <a
+              key={metadata.dataCid}
+              href={`/drive/fs/${metadata.dataCid}`}
+              className="contents"
+            >
+              <FileCard metadata={metadata} uploadStatus={uploadStatus} />
+            </a>
+          );
       }
     });
   }, [error, objectsMetadata]);

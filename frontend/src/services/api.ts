@@ -1,10 +1,8 @@
-import {
-  FolderTree,
-  getFileId,
-} from "../models/FileTree";
-import { uploadFileContent } from "../utils/file";
+import { FolderTree } from "../models/FileTree";
 import { NodeWithMetadata } from "../models/NodeWithMetadata";
 import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
+import { getAuthSession } from "../utils/auth";
+import { uploadFileContent } from "../utils/file";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -14,6 +12,11 @@ export interface UploadResponse {
 
 export const ApiService = {
   uploadFile: async (file: File): Promise<UploadResponse> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
     const response = await fetch(`${API_BASE_URL}/upload-file`, {
       method: "POST",
       body: JSON.stringify({
@@ -23,6 +26,8 @@ export const ApiService = {
       }),
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Auth-Provider": "google",
       },
     });
 
@@ -36,6 +41,11 @@ export const ApiService = {
     tree: FolderTree,
     files: Record<string, File>
   ): Promise<UploadResponse> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
     console.log("uploading folder", tree, files);
 
     const formData = new FormData();
@@ -48,6 +58,10 @@ export const ApiService = {
     const response = await fetch(`${API_BASE_URL}/upload-folder`, {
       method: "POST",
       body: formData,
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
     });
 
     if (!response.ok) {
