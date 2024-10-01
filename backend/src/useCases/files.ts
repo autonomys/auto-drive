@@ -11,6 +11,7 @@ import {
   stringToCid,
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
+import PizZip from "pizzip";
 import { FolderTree } from "../models/index.js";
 import { User } from "../models/user.js";
 import {
@@ -114,6 +115,43 @@ const processTree = async (
   };
 };
 
+export const createFolderZip = async (
+  parent: PizZip,
+  cid: string
+): Promise<PizZip> => {
+  const metadata = await MetadataUseCases.getMetadata(cid);
+  if (!metadata) {
+    throw new Error(`Metadata with CID ${cid} not found`);
+  }
+  if (!metadata.name) {
+    throw new Error(`Metadata with CID ${cid} has no name`);
+  }
+
+  if (metadata.type !== "folder") {
+    throw new Error(`Metadata with CID ${cid} is not a folder`);
+  }
+
+  const folder = parent.folder(metadata.name);
+
+  await Promise.all([
+    ...metadata.children
+      .filter((e) => e.type === "file")
+      .map(async (e) => {
+        const data = await retrieveAndReassembleData(e.cid);
+        if (!data) {
+          throw new Error(`Data with CID ${e.cid} not found`);
+        }
+
+        return folder.file(e.name!, data);
+      }),
+    ...metadata.children
+      .filter((e) => e.type === "folder")
+      .map((e) => createFolderZip(parent, e.cid)),
+  ]);
+
+  return folder;
+};
+
 const retrieveAndReassembleData = async (
   metadataCid: string
 ): Promise<Buffer | undefined> => {
@@ -124,7 +162,10 @@ const retrieveAndReassembleData = async (
   }
 
   if (metadata.type === "folder") {
-    throw new Error("Folder not supported");
+    const zip = await createFolderZip(new PizZip(), metadataCid);
+    return zip.generate({
+      type: "nodebuffer",
+    });
   }
 
   if (metadata.totalChunks === 1) {
@@ -132,13 +173,15 @@ const retrieveAndReassembleData = async (
   }
 
   const chunks: Buffer[] = await Promise.all(
-    metadata.chunks.map(async (chunk) => {
-      const chunkData = await NodesUseCases.getChunkData(chunk.cid);
-      if (!chunkData) {
-        throw new Error(`Chunk with CID ${chunk.cid} not found`);
-      }
-      return chunkData;
-    })
+    metadata.chunks
+      .filter((e) => e.cid !== metadata.dataCid)
+      .map(async (chunk) => {
+        const chunkData = await NodesUseCases.getChunkData(chunk.cid);
+        if (!chunkData) {
+          throw new Error(`Chunk with CID ${chunk.cid} not found`);
+        }
+        return chunkData;
+      })
   );
 
   return Buffer.concat(chunks);
