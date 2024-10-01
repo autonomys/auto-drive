@@ -31,10 +31,12 @@ const setContentTypeHeaders = (
       "application/octet-stream"
   );
   if (metadata.name) {
+    const filename =
+      metadata.type === "file" ? metadata.name : `${metadata.name}.zip`;
     console.log(
-      `Setting Content-Disposition to attachment with filename: ${metadata.name}`
+      `Setting Content-Disposition to attachment with filename: ${filename}`
     );
-    res.set("Content-Disposition", `attachment; filename="${metadata.name}"`);
+    res.set("Content-Disposition", `attachment; filename="${filename}"`);
   }
 };
 
@@ -146,7 +148,7 @@ const createServer = async () => {
       }
 
       console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
-      const data = await FilesUseCases.retrieveAndReassembleData(cid);
+      const data = await FilesUseCases.downloadObject(cid);
 
       setContentTypeHeaders(res, metadata);
       res.send(data);
