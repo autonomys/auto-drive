@@ -1,18 +1,9 @@
 "use client";
 
-import { isAuthenticated } from "@/utils/auth";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    isAuthenticated().then((session) => {
-      if (session) {
-        window.location.assign("/drive");
-      }
-    });
-  }, []);
 
   const handleAuth = useCallback(() => {
     setIsLoading(true);

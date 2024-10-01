@@ -13,7 +13,7 @@ export const getAuthSession = async (): Promise<Session | null> => {
   // @ts-ignore
   if (!internalSession?.accessToken) {
     console.log("access token", internalSession);
-    throw new Error("No access token");
+    return null;
   }
 
   return { accessToken: "", ...internalSession } as Session;

@@ -284,6 +284,20 @@ const createServer = async () => {
     }
   });
 
+  app.get("/auth/session", async (req, res) => {
+    try {
+      const user = await handleAuth(req, res);
+      if (!user) {
+        return;
+      }
+
+      res.json(user);
+    } catch (error) {
+      console.error("Error retrieving session:", error);
+      res.status(500).json({ error: "Failed to retrieve session" });
+    }
+  });
+
   app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
   });
