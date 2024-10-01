@@ -1,10 +1,10 @@
 "use client";
 
+import { ApiService } from "@/services/api";
 import { useEffect, useMemo, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
 import { FileCard } from "../../../../components/common/FileCard";
 import { UploadedObjectMetadata } from "../../../../models/UploadedObjectMetadata";
-import { ApiService } from "../../../../services/api";
 
 export default function Page({ params: { cid } }: { params: { cid: string } }) {
   const [objectsMetadata, setObjectsMetadata] =

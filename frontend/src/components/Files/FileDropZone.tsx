@@ -1,3 +1,5 @@
+import { constructFromFileSystemEntries } from "@/models/FileTree";
+import { ApiService } from "@/services/api";
 import {
   Popover,
   PopoverButton,
@@ -7,8 +9,6 @@ import {
 import { FileIcon, FolderIcon } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
-import { constructFromFileSystemEntries } from "../../models/FileTree";
-import { ApiService } from "../../services/api";
 
 declare global {
   interface Window {}

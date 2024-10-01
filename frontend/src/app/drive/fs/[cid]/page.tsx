@@ -1,5 +1,5 @@
+import { ApiService } from "@/services/api";
 import { FileCard } from "../../../../components/common/FileCard";
-import { ApiService } from "../../../../services/api";
 
 export default async function Page({ params }: { params: { cid: string } }) {
   const { cid } = params;

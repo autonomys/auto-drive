@@ -1,10 +1,10 @@
 "use client";
 
+import { ApiService } from "@/services/api";
 import { Transition } from "@headlessui/react";
 import { SearchIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
-import { ApiService } from "../../services/api";
 
 export const SearchBar = () => {
   const [query, setQuery] = useState("");

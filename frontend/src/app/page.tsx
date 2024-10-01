@@ -1,7 +1,7 @@
 "use client";
 
+import { isAuthenticated } from "@/utils/auth";
 import { useCallback, useEffect, useState } from "react";
-import { isAuthenticated } from "../utils/auth";
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(false);

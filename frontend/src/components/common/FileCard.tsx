@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
-import { ApiService } from "../../services/api";
+import { ApiService } from "@/services/api";
 
 interface FileCardProps extends Partial<UploadedObjectMetadata> {
   icon?: React.ReactNode;

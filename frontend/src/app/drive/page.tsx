@@ -1,13 +1,13 @@
 "use client";
 
+import { FileTable } from "@/components/common/FileTable";
+import { FileDropZone } from "@/components/Files/FileDropZone";
+import { NoUploadsPlaceholder } from "@/components/Files/NoUploadsPlaceholder";
+import { ApiService } from "@/services/api";
 import { useEffect, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
-import { FileTable } from "../../components/common/FileTable";
-import { FileDropZone } from "../../components/Files/FileDropZone";
-import { NoUploadsPlaceholder } from "../../components/Files/NoUploadsPlaceholder";
 import { UploadingObjects } from "../../components/Files/UploadingObjects";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
-import { ApiService } from "../../services/api";
 
 export default function Page() {
   const [rootObjectMetadata, setRootObjectMetadata] =

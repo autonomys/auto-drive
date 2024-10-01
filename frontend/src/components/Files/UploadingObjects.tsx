@@ -1,13 +1,13 @@
 "use client";
 
+import { ApiService } from "@/services/api";
+import { CrossIcon, FileIcon, FolderIcon, TrashIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInterval, useLocalStorage, useTimeout } from "usehooks-ts";
 import {
   UploadedObjectMetadata,
   UploadStatus,
 } from "../../models/UploadedObjectMetadata";
-import { ApiService } from "../../services/api";
-import { CrossIcon, FileIcon, FolderIcon, TrashIcon, X } from "lucide-react";
 
 export const UploadingObjects = () => {
   const [uploadingObjects] = useLocalStorage<string[]>("uploading-objects", []);

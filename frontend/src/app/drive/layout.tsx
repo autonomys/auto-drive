@@ -1,3 +1,5 @@
+import { ScopeSwitch } from "@/components/common/ScopeSwitch";
+import { SearchBar } from "@/components/SearchBar";
 import { Switch } from "@headlessui/react";
 import {
   GlobeIcon,
@@ -9,8 +11,6 @@ import {
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { useLocalStorage } from "usehooks-ts";
-import { ScopeSwitch } from "../../components/common/ScopeSwitch";
-import { SearchBar } from "../../components/SearchBar";
 import "../globals.css";
 
 const geistSans = localFont({

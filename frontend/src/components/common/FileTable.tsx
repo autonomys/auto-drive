@@ -1,9 +1,9 @@
 "use client";
 
+import { UploadedObjectMetadata } from "@/models/UploadedObjectMetadata";
+import { ApiService } from "@/services/api";
 import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import React, { FC, Fragment, useCallback, useState } from "react";
-import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
-import { ApiService } from "../../services/api";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
