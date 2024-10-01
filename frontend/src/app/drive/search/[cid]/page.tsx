@@ -1,17 +1,20 @@
 "use client";
 
+import { FileCard } from "@/components/common/FileCard";
+import { InternalLink } from "@/components/common/InternalLink";
+import { UploadedObjectMetadata } from "@/models/UploadedObjectMetadata";
+import { ApiService } from "@/services/api";
 import { useEffect, useMemo, useState } from "react";
-import { ApiService } from "../../../services/api";
-import { FileCard } from "../../../components/common/FileCard";
-import { UploadedObjectMetadata } from "../../../models/UploadedObjectMetadata";
+import { useLocalStorage } from "usehooks-ts";
 
 export default function Page({ params: { cid } }: { params: { cid: string } }) {
   const [objectsMetadata, setObjectsMetadata] =
     useState<UploadedObjectMetadata[]>();
   const [error, setError] = useState<string>();
+  const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
 
   useEffect(() => {
-    ApiService.searchHeadCID(cid)
+    ApiService.searchHeadCID(cid, scope)
       .then((e) =>
         Promise.all(e.map((e) => ApiService.fetchUploadedObjectMetadata(e)))
       )
@@ -19,7 +22,7 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
       .catch(() => {
         setError("Error searching for objects");
       });
-  }, [cid]);
+  }, [cid, scope]);
 
   const Content = useMemo(() => {
     if (error) {
@@ -48,23 +51,21 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
       switch (metadata.type) {
         case "folder":
           return (
-            <a
+            <InternalLink
               key={metadata.dataCid}
-              href={`/fs/${metadata.dataCid}`}
-              className="contents"
+              href={`/drive/fs/${metadata.dataCid}`}
             >
               <FileCard metadata={metadata} uploadStatus={uploadStatus} />
-            </a>
+            </InternalLink>
           );
         case "file":
           return (
-            <a
+            <InternalLink
               key={metadata.dataCid}
-              href={`/fs/${metadata.dataCid}`}
-              className="contents"
+              href={`/drive/fs/${metadata.dataCid}`}
             >
               <FileCard metadata={metadata} uploadStatus={uploadStatus} />
-            </a>
+            </InternalLink>
           );
       }
     });

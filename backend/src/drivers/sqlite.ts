@@ -21,6 +21,11 @@ const initSchema = async (db: Database) => {
   await db.run(
     "CREATE TABLE IF NOT EXISTS transactionResults (cid TEXT PRIMARY KEY, transaction_result TEXT, head_cid TEXT)"
   );
+
+  // Object Ownership
+  await db.exec(
+    "CREATE TABLE IF NOT EXISTS object_ownership (cid TEXT, oauth_provider TEXT, oauth_user_id TEXT, is_admin BOOLEAN, marked_as_deleted TIMESTAMP, PRIMARY KEY (cid, oauth_provider, oauth_user_id))"
+  );
 };
 
 const createDB = async (

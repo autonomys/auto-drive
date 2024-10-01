@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { ApiService } from "@/services/api";
 import { Transition } from "@headlessui/react";
 import { SearchIcon } from "lucide-react";
-import { ApiService } from "../../services/api";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalStorage } from "usehooks-ts";
 
 export const SearchBar = () => {
   const [query, setQuery] = useState("");
@@ -11,18 +13,20 @@ export const SearchBar = () => {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
+  const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
   const [recommendations, setRecommendations] = useState<string[] | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (query.length > 2) {
       setError(null);
-      ApiService.searchHeadCID(query)
+      ApiService.searchHeadCID(query, scope)
         .then(setRecommendations)
         .catch(() => setError("Error fetching recommendations"));
     } else {
       setRecommendations(null);
     }
-  }, [query]);
+  }, [query, scope]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -50,7 +54,7 @@ export const SearchBar = () => {
   const handleSelectItem = (item: string) => {
     setQuery(item);
     setIsOpen(false);
-    window.location.assign(`/search/${item}`);
+    router.push(`/drive/search/${item}`);
     inputRef.current?.focus();
   };
 
@@ -60,7 +64,7 @@ export const SearchBar = () => {
       recommendations &&
       recommendations.length > 0
     ) {
-      window.location.assign(`/search/${query}`);
+      router.push(`/drive/search/${query}`);
     }
   };
 

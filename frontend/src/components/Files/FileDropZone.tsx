@@ -1,26 +1,23 @@
-import React, { useState, useRef, useCallback } from "react";
-import { constructFromFileSystemEntries } from "../../models/FileTree";
+import { constructFromFileSystemEntries } from "@/models/FileTree";
+import { ApiService } from "@/services/api";
 import {
-  Menu,
-  MenuButton,
-  MenuSection,
   Popover,
   PopoverButton,
   PopoverPanel,
   Transition,
 } from "@headlessui/react";
 import { FileIcon, FolderIcon } from "lucide-react";
-import { ApiService } from "../../services/api";
+import React, { useCallback, useRef, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
+
+declare global {
+  interface Window {}
+}
 
 export function FileDropZone() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-  const [, setLocalObjectCIDs] = useLocalStorage<string[]>(
-    "root-objects-cid-v3",
-    []
-  );
   const [, setUploadingObjects] = useLocalStorage<string[]>(
     "uploading-objects",
     []
@@ -44,7 +41,6 @@ export function FileDropZone() {
   }, []);
 
   const handleUploadingCID = useCallback((cid: string) => {
-    setLocalObjectCIDs((prev) => [...prev.filter((i) => i !== cid), cid]);
     setUploadingObjects((prev) => [...prev.filter((i) => i !== cid), cid]);
   }, []);
 
@@ -175,7 +171,7 @@ export function FileDropZone() {
         ref={folderInputRef}
         onChange={handleFolderInputChange}
         className="hidden"
-        webkitdirectory="true"
+        {...{ webkitdirectory: "true" }}
       />
       <Popover as="div" className="relative">
         <PopoverButton as="div">

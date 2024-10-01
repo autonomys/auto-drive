@@ -3,7 +3,7 @@ import { Keyring } from "@polkadot/api";
 export const getAccounts = () => {
   const privateKeys = process.env.PRIVATE_KEYS_PATH ?? "//Alice";
   const privateKeysArray = privateKeys
-    .split("\n")
+    .split(",")
     .map((key) => key.trim())
     .filter((e) => e.length > 0);
 

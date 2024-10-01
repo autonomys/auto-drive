@@ -1,4 +1,5 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
+import { User } from "../models/index.js";
 import { metadataRepository } from "../repositories/index.js";
 
 const getMetadata = async (cid: string) => {
@@ -14,10 +15,23 @@ const saveMetadata = async (cid: string, metadata: OffchainMetadata) => {
   return metadataRepository.setMetadata(cid, metadata);
 };
 
-const searchMetadataByCID = async (cid: string, limit: number = 5) => {
+const searchMetadataByCID = async (
+  cid: string,
+  limit: number = 5,
+  filter: { scope: "user"; user: User } | { scope: "global" }
+) => {
+  if (filter.scope === "user") {
+    return metadataRepository.searchMetadataByCIDAndUser(
+      cid,
+      limit,
+      filter.user.provider,
+      filter.user.id
+    );
+  }
+
   return metadataRepository
     .searchMetadataByCID(cid, limit)
-    .then((result) => result.map((entry) => entry.cid));
+    .then((e) => e.map((e) => e.cid));
 };
 
 const getAllMetadata = async () => {
@@ -26,9 +40,23 @@ const getAllMetadata = async () => {
     .then((metadata) => metadata.map((entry) => entry.metadata));
 };
 
+const getRootObjects = async (
+  filter: { scope: "user"; user: User } | { scope: "global" }
+) => {
+  if (filter.scope === "user") {
+    return metadataRepository.getRootObjectsByUser(
+      filter.user.provider,
+      filter.user.id
+    );
+  }
+
+  return metadataRepository.getRootObjects();
+};
+
 export const MetadataUseCases = {
   getMetadata,
   saveMetadata,
   searchMetadataByCID,
   getAllMetadata,
+  getRootObjects,
 };

@@ -3,6 +3,7 @@
 import type { IPLDNodeData } from "@autonomys/auto-drive";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { FC, useState } from "react";
+import { InternalLink } from "../common/InternalLink";
 
 interface NodeExplorerProps {
   cid: string;
@@ -66,12 +67,12 @@ export const NodeExplorer: FC<NodeExplorerProps> = ({
           <ul className="mt-4 space-y-2">
             {links.map((link, index) => (
               <li key={index}>
-                <a
-                  href={`/fs/${link}`}
+                <InternalLink
+                  href={`/drive/fs/${link}`}
                   className="text-blue-600 hover:text-blue-800 hover:underline break-all"
                 >
                   {link}
-                </a>
+                </InternalLink>
               </li>
             ))}
           </ul>
