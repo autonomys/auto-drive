@@ -31,10 +31,12 @@ const setContentTypeHeaders = (
       "application/octet-stream"
   );
   if (metadata.name) {
+    const filename =
+      metadata.type === "file" ? metadata.name : `${metadata.name}.zip`;
     console.log(
-      `Setting Content-Disposition to attachment with filename: ${metadata.name}`
+      `Setting Content-Disposition to attachment with filename: ${filename}`
     );
-    res.set("Content-Disposition", `attachment; filename="${metadata.name}"`);
+    res.set("Content-Disposition", `attachment; filename="${filename}"`);
   }
 };
 
