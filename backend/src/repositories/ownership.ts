@@ -8,7 +8,7 @@ const setUserAsOwner = async (cid: string, userId: string) => {
     cid,
     userId,
     false,
-    false
+    null
   );
 };
 
@@ -20,7 +20,7 @@ const setUserAsAdmin = async (cid: string, userId: string) => {
     cid,
     userId,
     true,
-    false
+    null
   );
 };
 
@@ -29,7 +29,7 @@ const setObjectAsDeleted = async (userId: string, cid: string) => {
 
   await db.run(
     "UPDATE object_ownership SET marked_as_deleted = ? WHERE cid = ? AND user_id = ?",
-    true,
+    new Date(),
     cid,
     userId
   );

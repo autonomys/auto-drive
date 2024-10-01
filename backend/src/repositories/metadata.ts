@@ -35,7 +35,7 @@ const searchMetadataByCID = async (cid: string, limit: number | undefined) => {
 
   return db
     .all<MetadataEntry[]>(
-      "SELECT metadata.cid FROM metadata join object_ownership on metadata.cid = object_ownership.cid WHERE marked_as_deleted = 0 AND metadata.cid LIKE ? LIMIT ?",
+      "SELECT metadata.cid FROM metadata join object_ownership on metadata.cid = object_ownership.cid WHERE marked_as_deleted IS NULL AND metadata.cid LIKE ? LIMIT ?",
       `%${cid}%`,
       limit
     )
@@ -61,7 +61,7 @@ const searchMetadataByCIDAndUser = async (
     SELECT m.* FROM metadata m
     JOIN object_ownership oo ON m.cid = oo.cid
     WHERE oo.user_id = ?
-    AND oo.marked_as_deleted = 0
+    AND oo.marked_as_deleted IS NULL
     AND m.cid LIKE ?
     LIMIT ?
   `,
@@ -114,7 +114,7 @@ const getMetadataByUser = async (userId: string) => {
   const db = await getDatabase();
 
   return db.all<MetadataEntry[]>(
-    "SELECT * FROM metadata JOIN object_ownership ON metadata.cid = object_ownership.cid WHERE object_ownership.marked_as_deleted = 0 AND object_ownership.user_id = ?",
+    "SELECT * FROM metadata JOIN object_ownership ON metadata.cid = object_ownership.cid WHERE object_ownership.marked_as_deleted IS NULL AND object_ownership.user_id = ?",
     userId
   );
 };
