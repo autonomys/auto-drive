@@ -7,6 +7,7 @@ import {
   TrashIcon,
   UserIcon,
 } from "lucide-react";
+import { InternalLink } from "../../components/common/InternalLink";
 import "../globals.css";
 
 export default function AppLayout({
@@ -37,12 +38,12 @@ export default function AppLayout({
         </header>
         <div className="flex flex-1 overflow-hidden">
           <aside className="w-16 md:w-64 space-y-4">
-            <a href="/drive" className="contents">
+            <InternalLink href="/drive">
               <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">
                 <HomeIcon className="w-5 h-5" />
                 <span className="hidden md:block">Files</span>
               </button>
-            </a>
+            </InternalLink>
             <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">
               <ShareIcon className="w-5 h-5" />
               <span className="hidden md:block">Shared</span>

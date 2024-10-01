@@ -1,5 +1,6 @@
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
 import { FileCard } from "../common/FileCard";
+import { InternalLink } from "../common/InternalLink";
 
 export const FilesView = ({
   dirChildren,
@@ -13,13 +14,12 @@ export const FilesView = ({
           switch (metadata.type) {
             case "folder":
               return (
-                <a
+                <InternalLink
                   key={metadata.dataCid}
                   href={`/drive/fs/${metadata.dataCid}`}
-                  className="contents"
                 >
                   <FileCard uploadStatus={uploadStatus} metadata={metadata} />
-                </a>
+                </InternalLink>
               );
             case "file":
               return (

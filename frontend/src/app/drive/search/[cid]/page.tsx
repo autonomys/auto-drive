@@ -1,10 +1,11 @@
 "use client";
 
+import { FileCard } from "@/components/common/FileCard";
+import { InternalLink } from "@/components/common/InternalLink";
+import { UploadedObjectMetadata } from "@/models/UploadedObjectMetadata";
 import { ApiService } from "@/services/api";
 import { useEffect, useMemo, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
-import { FileCard } from "../../../../components/common/FileCard";
-import { UploadedObjectMetadata } from "../../../../models/UploadedObjectMetadata";
 
 export default function Page({ params: { cid } }: { params: { cid: string } }) {
   const [objectsMetadata, setObjectsMetadata] =
@@ -50,23 +51,21 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
       switch (metadata.type) {
         case "folder":
           return (
-            <a
+            <InternalLink
               key={metadata.dataCid}
               href={`/drive/fs/${metadata.dataCid}`}
-              className="contents"
             >
               <FileCard metadata={metadata} uploadStatus={uploadStatus} />
-            </a>
+            </InternalLink>
           );
         case "file":
           return (
-            <a
+            <InternalLink
               key={metadata.dataCid}
               href={`/drive/fs/${metadata.dataCid}`}
-              className="contents"
             >
               <FileCard metadata={metadata} uploadStatus={uploadStatus} />
-            </a>
+            </InternalLink>
           );
       }
     });

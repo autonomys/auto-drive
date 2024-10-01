@@ -3,6 +3,7 @@
 import { ApiService } from "@/services/api";
 import { Transition } from "@headlessui/react";
 import { SearchIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
 
@@ -14,6 +15,7 @@ export const SearchBar = () => {
   const dropdownRef = useRef<HTMLUListElement>(null);
   const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
   const [recommendations, setRecommendations] = useState<string[] | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (query.length > 2) {
@@ -52,7 +54,7 @@ export const SearchBar = () => {
   const handleSelectItem = (item: string) => {
     setQuery(item);
     setIsOpen(false);
-    window.location.assign(`/drive/search/${item}`);
+    router.push(`/drive/search/${item}`);
     inputRef.current?.focus();
   };
 
@@ -62,7 +64,7 @@ export const SearchBar = () => {
       recommendations &&
       recommendations.length > 0
     ) {
-      window.location.assign(`/drive/search/${query}`);
+      router.push(`/drive/search/${query}`);
     }
   };
 

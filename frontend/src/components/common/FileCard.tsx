@@ -1,15 +1,8 @@
 "use client";
 
+import { ApiService } from "@/services/api";
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import {
-  Menu,
-  MenuButton,
-  MenuItem,
-  MenuItems,
-  Popover,
-  PopoverButton,
-  PopoverPanel,
-} from "@headlessui/react";
+import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
 import {
   Download,
   DownloadIcon,
@@ -19,11 +12,10 @@ import {
   FolderIcon,
   MoreVertical,
   Share2,
-  Trash,
 } from "lucide-react";
-import React, { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import React, { useCallback, useMemo } from "react";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
-import { ApiService } from "@/services/api";
 
 interface FileCardProps extends Partial<UploadedObjectMetadata> {
   icon?: React.ReactNode;
@@ -32,9 +24,10 @@ interface FileCardProps extends Partial<UploadedObjectMetadata> {
 
 export function FileCard({
   metadata: { type, name, totalSize, dataCid },
-  uploadStatus,
   icon,
 }: FileCardProps) {
+  const router = useRouter();
+
   const onDownload = useCallback(
     (
       event: React.MouseEvent<HTMLButtonElement | HTMLSpanElement>,
@@ -55,9 +48,9 @@ export function FileCard({
     ) => {
       event.stopPropagation();
       event.preventDefault();
-      window.location.assign(`/drive/fs/${cid}`);
+      router.push(`/drive/fs/${cid}`);
     },
-    []
+    [router]
   );
 
   const objectIcon = useMemo(() => {
