@@ -148,7 +148,7 @@ const createServer = async () => {
       }
 
       console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
-      const data = await FilesUseCases.retrieveAndReassembleData(cid);
+      const data = await FilesUseCases.downloadObject(cid);
 
       setContentTypeHeaders(res, metadata);
       res.send(data);
