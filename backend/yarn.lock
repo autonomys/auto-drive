@@ -2733,6 +2733,7 @@ __metadata:
     jest: "npm:^29.7.0"
     multer: "npm:^1.4.5-lts.1"
     multiformats: "npm:^13.2.2"
+    pizzip: "npm:^3.1.7"
     sqlite: "npm:^5.1.1"
     sqlite3: "npm:^5.1.7"
     ts-jest: "npm:^29.2.4"
@@ -5288,6 +5289,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"pako@npm:^2.1.0":
+  version: 2.1.0
+  resolution: "pako@npm:2.1.0"
+  checksum: 10c0/8e8646581410654b50eb22a5dfd71159cae98145bd5086c9a7a816ec0370b5f72b4648d08674624b3870a521e6a3daffd6c2f7bc00fdefc7063c9d8232ff5116
+  languageName: node
+  linkType: hard
+
 "parse-json@npm:^5.2.0":
   version: 5.2.0
   resolution: "parse-json@npm:5.2.0"
@@ -5370,6 +5378,15 @@ __metadata:
   version: 4.0.6
   resolution: "pirates@npm:4.0.6"
   checksum: 10c0/00d5fa51f8dded94d7429700fb91a0c1ead00ae2c7fd27089f0c5b63e6eca36197fe46384631872690a66f390c5e27198e99006ab77ae472692ab9c2ca903f36
+  languageName: node
+  linkType: hard
+
+"pizzip@npm:^3.1.7":
+  version: 3.1.7
+  resolution: "pizzip@npm:3.1.7"
+  dependencies:
+    pako: "npm:^2.1.0"
+  checksum: 10c0/6bfbc4d03e3f99ee2717a2471b692b2294cd060d8d1842a147e33a9acbf6251c51f1d625cfc3eaaa4b2da43a83468558bdaea84e039d7095dbc0deba81c28d59
   languageName: node
   linkType: hard
 
