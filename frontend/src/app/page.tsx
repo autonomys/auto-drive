@@ -16,7 +16,7 @@ export default function App() {
     // These are example parameters. Replace with your actual values
     const params = new URLSearchParams({
       client_id: process.env.NEXT_PUBLIC_GOOGLE_AUTH_CLIENT_ID!,
-      redirect_uri: "http://localhost:8080/api/auth/callback/google",
+      redirect_uri: `${window.location.origin}/api/auth/callback/google`,
       response_type: "code",
       access_type: "offline",
       prompt: "consent",

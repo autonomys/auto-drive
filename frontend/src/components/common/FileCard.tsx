@@ -73,19 +73,17 @@ export function FileCard({
         </div>
         <h2 className="text-lg font-semibold text-gray-800 mb-2">{name}</h2>
         <p className="text-gray-500 mb-4">Size: {totalSize}</p>
-        {type === "file" && (
-          <button
-            onClick={(event) => onDownload(event, dataCid)}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center"
-          >
-            <Download size={20} className="mr-2" />
-            Download
-          </button>
-        )}
+        <button
+          onClick={(event) => onDownload(event, dataCid)}
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center"
+        >
+          <Download size={20} className="mr-2" />
+          Download
+        </button>
         {type === "folder" && (
           <button
             onClick={(event) => onNavigate(event, dataCid)}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center"
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center mt-2"
           >
             <FolderIcon size={20} className="mr-2" />
             Open
@@ -101,15 +99,13 @@ export function FileCard({
               <Share2 size={16} />
               <span>Share</span>
             </span>
-            {type === "file" && (
-              <span
-                className="flex items-center gap-2 font-semibold text-gray-800"
-                onClick={(event) => onDownload(event, dataCid)}
-              >
-                <DownloadIcon size={16} />
-                <span>Download</span>
-              </span>
-            )}
+            <span
+              className="flex items-center gap-2 font-semibold text-gray-800"
+              onClick={(event) => onDownload(event, dataCid)}
+            >
+              <DownloadIcon size={16} />
+              <span>Download</span>
+            </span>
 
             {type === "folder" && (
               <span
