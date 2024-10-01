@@ -1,6 +1,8 @@
-# Autonomys Data Storage Service
+# Auto Drive: Autonomys Network's Data Acess Layer
 
-This project implements a data storage service using the Autonomys Network's substrate-based blockchain. It provides functionality for storing, retrieving, and managing data chunks and metadata.
+Auto Drive is a decentralized content-addressed storage solution built on the Autonomys Network, leveraging its underlying permanent storage layer known as the Autonomys Distributed Storage Network (DSN). It provides users with a secure and efficient way to store, share, and manage digital assets with the assurance of long-term data persistence. 
+
+Auto Drive offers a user-friendly interface for uploading and downloading files, as well as an [SDK](https://github.com/autonomys/auto-sdk/tree/main/packages/auto-drive) and API for developers to integrate storage capabilities into their applications.
 
 ## Features
 
@@ -69,13 +71,6 @@ The service is built with the following components:
 1. Storage Manager: Handles data chunking, reassembly, and metadata management
 2. Transaction Manager: Manages blockchain transactions for data storage
 3. API Layer: Provides RESTful endpoints for interacting with the service
-
-For more details on the architecture and data flow, refer to the design document:
-
-```markdown:backend/design-doc.md
-startLine: 141
-endLine: 177
-```
 
 ## Testing
 
