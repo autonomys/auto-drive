@@ -26,6 +26,7 @@ const getUserFromAccessToken = async (accessToken: string): Promise<User> => {
   return {
     provider: "google",
     email: googleUser.email,
+    id: googleUser.id,
   };
 };
 

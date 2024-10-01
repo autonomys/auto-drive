@@ -24,7 +24,8 @@ const searchMetadataByCID = async (
     return metadataRepository.searchMetadataByCIDAndUser(
       cid,
       limit,
-      filter.user.email
+      filter.user.provider,
+      filter.user.id
     );
   }
 
@@ -43,7 +44,10 @@ const getRootObjects = async (
   filter: { scope: "user"; user: User } | { scope: "global" }
 ) => {
   if (filter.scope === "user") {
-    return metadataRepository.getRootObjectsByUser(filter.user.email);
+    return metadataRepository.getRootObjectsByUser(
+      filter.user.provider,
+      filter.user.id
+    );
   }
 
   return metadataRepository.getRootObjects();

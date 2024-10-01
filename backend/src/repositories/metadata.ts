@@ -51,6 +51,7 @@ const searchMetadataByCID = async (cid: string, limit: number | undefined) => {
 const searchMetadataByCIDAndUser = async (
   cid: string,
   limit: number | undefined,
+  provider: string,
   userId: string
 ): Promise<string[]> => {
   const db = await getDatabase();
@@ -60,11 +61,13 @@ const searchMetadataByCIDAndUser = async (
       `
     SELECT m.* FROM metadata m
     JOIN object_ownership oo ON m.cid = oo.cid
-    WHERE oo.user_id = ?
+    WHERE oo.oauth_provider = ?
+    AND oo.oauth_user_id = ?
     AND oo.marked_as_deleted IS NULL
     AND m.cid LIKE ?
     LIMIT ?
   `,
+      provider,
       userId,
       `%${cid}%`,
       limit
@@ -97,12 +100,13 @@ const getRootObjects = async () => {
     });
 };
 
-const getRootObjectsByUser = async (userId: string) => {
+const getRootObjectsByUser = async (provider: string, userId: string) => {
   const db = await getDatabase();
 
   return db
     .all<MetadataEntry[]>(
-      "SELECT m.* FROM metadata m, transactionResults tr, object_ownership oo where m.cid = tr.cid and oo.cid = tr.cid and tr.head_cid = tr.cid and oo.user_id = ?",
+      "SELECT m.* FROM metadata m, transactionResults tr, object_ownership oo where m.cid = tr.cid and oo.cid = tr.cid and tr.head_cid = tr.cid and oo.oauth_provider = ? and oo.oauth_user_id = ?",
+      provider,
       userId
     )
     .then((entries) => {
@@ -110,11 +114,12 @@ const getRootObjectsByUser = async (userId: string) => {
     });
 };
 
-const getMetadataByUser = async (userId: string) => {
+const getMetadataByUser = async (provider: string, userId: string) => {
   const db = await getDatabase();
 
   return db.all<MetadataEntry[]>(
-    "SELECT * FROM metadata JOIN object_ownership ON metadata.cid = object_ownership.cid WHERE object_ownership.marked_as_deleted IS NULL AND object_ownership.user_id = ?",
+    "SELECT * FROM metadata JOIN object_ownership ON metadata.cid = object_ownership.cid WHERE object_ownership.marked_as_deleted IS NULL AND object_ownership.oauth_provider = ? AND object_ownership.oauth_user_id = ?",
+    provider,
     userId
   );
 };
