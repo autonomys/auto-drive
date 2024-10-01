@@ -65,12 +65,12 @@ const UploadingObject = ({
   }, 5_000);
 
   useEffect(() => {
-    if (progress === 100) {
+    if (uploadStatus.nodesToBeUploaded === 0) {
       setUploadingObjects((prev) =>
         prev.filter((cid) => cid !== metadata.dataCid)
       );
     }
-  }, [progress]);
+  }, [uploadStatus.nodesToBeUploaded]);
 
   const handleClose = useCallback(() => {
     setIsClosed(true);
