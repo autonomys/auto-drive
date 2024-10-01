@@ -6,11 +6,13 @@ import {
   createMetadataNode,
   fileMetadata,
   folderMetadata,
+  OffchainFileMetadata,
   OffchainFolderMetadata,
   OffchainMetadata,
   stringToCid,
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
+import PizZip from "pizzip";
 import { FolderTree } from "../models/index.js";
 import { User } from "../models/user.js";
 import {
@@ -114,34 +116,80 @@ const processTree = async (
   };
 };
 
-const retrieveAndReassembleData = async (
-  metadataCid: string
+const retrieveAndReassembleFile = async (
+  metadata: OffchainFileMetadata
 ): Promise<Buffer | undefined> => {
-  const metadata = await MetadataUseCases.getMetadata(metadataCid);
-
-  if (!metadata) {
-    throw new Error(`Metadata with CID ${metadataCid} not found`);
-  }
-
-  if (metadata.type === "folder") {
-    throw new Error("Folder not supported");
-  }
-
   if (metadata.totalChunks === 1) {
     return NodesUseCases.getChunkData(metadata.chunks[0].cid);
   }
 
   const chunks: Buffer[] = await Promise.all(
-    metadata.chunks.map(async (chunk) => {
-      const chunkData = await NodesUseCases.getChunkData(chunk.cid);
-      if (!chunkData) {
-        throw new Error(`Chunk with CID ${chunk.cid} not found`);
-      }
-      return chunkData;
-    })
+    metadata.chunks
+      .filter((e) => e.cid !== metadata.dataCid)
+      .map(async (chunk) => {
+        const chunkData = await NodesUseCases.getChunkData(chunk.cid);
+        if (!chunkData) {
+          throw new Error(`Chunk with CID ${chunk.cid} not found`);
+        }
+        return chunkData;
+      })
   );
 
   return Buffer.concat(chunks);
+};
+
+const retrieveAndReassembleFolderAsZip = async (
+  parent: PizZip,
+  cid: string
+): Promise<PizZip> => {
+  const metadata = await MetadataUseCases.getMetadata(cid);
+  if (!metadata) {
+    throw new Error(`Metadata with CID ${cid} not found`);
+  }
+  if (!metadata.name) {
+    throw new Error(`Metadata with CID ${cid} has no name`);
+  }
+
+  if (metadata.type !== "folder") {
+    throw new Error(`Metadata with CID ${cid} is not a folder`);
+  }
+
+  const folder = parent.folder(metadata.name);
+
+  await Promise.all([
+    ...metadata.children
+      .filter((e) => e.type === "file")
+      .map(async (e) => {
+        const data = await downloadObject(e.cid);
+        if (!data) {
+          throw new Error(`Data with CID ${e.cid} not found`);
+        }
+
+        return folder.file(e.name!, data);
+      }),
+    ...metadata.children
+      .filter((e) => e.type === "folder")
+      .map((e) => retrieveAndReassembleFolderAsZip(parent, e.cid)),
+  ]);
+
+  return folder;
+};
+
+const downloadObject = async (cid: string): Promise<Buffer | undefined> => {
+  const metadata = await MetadataUseCases.getMetadata(cid);
+
+  if (!metadata) {
+    throw new Error(`Metadata with CID ${cid} not found`);
+  }
+
+  if (metadata.type === "folder") {
+    const zip = await retrieveAndReassembleFolderAsZip(new PizZip(), cid);
+    return zip.generate({
+      type: "nodebuffer",
+    });
+  }
+
+  return retrieveAndReassembleFile(metadata);
 };
 
 const uploadFile = async (
@@ -174,5 +222,5 @@ const uploadTree = async (
 export const FilesUseCases = {
   uploadFile,
   uploadTree,
-  retrieveAndReassembleData,
+  downloadObject,
 };

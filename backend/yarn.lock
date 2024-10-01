@@ -15,9 +15,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^0.5.3":
-  version: 0.5.3
-  resolution: "@autonomys/auto-drive@npm:0.5.3"
+"@autonomys/auto-drive@npm:^0.6.2":
+  version: 0.6.2
+  resolution: "@autonomys/auto-drive@npm:0.6.2"
   dependencies:
     "@ipld/dag-pb": "npm:^4.1.2"
     blake3: "npm:1.1.0"
@@ -25,7 +25,7 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/a58a49b1de033ccd1980f4839bf75ce4007fcf37175d5c05dc7a58af954e62d2322ec4085ae5a937dd3f24a33fb04af5f253b27b3fd14a1ba31c6fd814ebb60e
+  checksum: 10c0/3700c8ee843484b4ee007b00fa348c2804c8f510d885e2b01259660eb65c8cb31664ca2d7c41a242e6c08c74a35ad2fd5ba578abf7fe5b50df4869daf7f0c030
   languageName: node
   linkType: hard
 
@@ -2715,7 +2715,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "data-access-layer@workspace:."
   dependencies:
-    "@autonomys/auto-drive": "npm:^0.5.3"
+    "@autonomys/auto-drive": "npm:^0.6.2"
     "@polkadot/api": "npm:^12.3.1"
     "@polkadot/types": "npm:^13.0.1"
     "@polkadot/util-crypto": "npm:^13.0.2"
@@ -2733,6 +2733,7 @@ __metadata:
     jest: "npm:^29.7.0"
     multer: "npm:^1.4.5-lts.1"
     multiformats: "npm:^13.2.2"
+    pizzip: "npm:^3.1.7"
     sqlite: "npm:^5.1.1"
     sqlite3: "npm:^5.1.7"
     ts-jest: "npm:^29.2.4"
@@ -5288,6 +5289,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"pako@npm:^2.1.0":
+  version: 2.1.0
+  resolution: "pako@npm:2.1.0"
+  checksum: 10c0/8e8646581410654b50eb22a5dfd71159cae98145bd5086c9a7a816ec0370b5f72b4648d08674624b3870a521e6a3daffd6c2f7bc00fdefc7063c9d8232ff5116
+  languageName: node
+  linkType: hard
+
 "parse-json@npm:^5.2.0":
   version: 5.2.0
   resolution: "parse-json@npm:5.2.0"
@@ -5370,6 +5378,15 @@ __metadata:
   version: 4.0.6
   resolution: "pirates@npm:4.0.6"
   checksum: 10c0/00d5fa51f8dded94d7429700fb91a0c1ead00ae2c7fd27089f0c5b63e6eca36197fe46384631872690a66f390c5e27198e99006ab77ae472692ab9c2ca903f36
+  languageName: node
+  linkType: hard
+
+"pizzip@npm:^3.1.7":
+  version: 3.1.7
+  resolution: "pizzip@npm:3.1.7"
+  dependencies:
+    pako: "npm:^2.1.0"
+  checksum: 10c0/6bfbc4d03e3f99ee2717a2471b692b2294cd060d8d1842a147e33a9acbf6251c51f1d625cfc3eaaa4b2da43a83468558bdaea84e039d7095dbc0deba81c28d59
   languageName: node
   linkType: hard
 
