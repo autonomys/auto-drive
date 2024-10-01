@@ -10,40 +10,44 @@ let state = {
 const transactionManager = createTransactionManager();
 
 const processPendingUploads = safeCallback(async () => {
-  if (state.executing) {
-    return;
-  }
-  state.executing = true;
+  try {
+    if (state.executing) {
+      return;
+    }
+    state.executing = true;
 
-  const pendingUploads =
-    await TransactionResultsUseCases.getPendingTransactionResults();
+    const pendingUploads =
+      await TransactionResultsUseCases.getPendingTransactionResults();
 
-  console.log(`${pendingUploads.length} pending uploads`);
-  if (pendingUploads.length === 0) {
-    return;
-  }
+    console.log(`${pendingUploads.length} pending uploads`);
+    if (pendingUploads.length === 0) {
+      return;
+    }
 
-  const transactions = pendingUploads.map((upload) => {
-    return {
-      module: "system",
-      method: "remark",
-      params: [upload.encoded_node],
-    };
-  });
+    const transactions = pendingUploads.map((upload) => {
+      return {
+        module: "system",
+        method: "remark",
+        params: [upload.encoded_node],
+      };
+    });
 
-  const results = await transactionManager.submit(transactions);
+    const results = await transactionManager.submit(transactions);
 
-  await Promise.all(
-    pendingUploads.map((upload, index) =>
-      TransactionResultsUseCases.setTransactionResults(
-        upload.head_cid,
-        upload.cid,
-        results[index]
+    await Promise.all(
+      pendingUploads.map((upload, index) =>
+        TransactionResultsUseCases.setTransactionResults(
+          upload.head_cid,
+          upload.cid,
+          results[index]
+        )
       )
-    )
-  );
-
-  state.executing = false;
+    );
+  } catch (error) {
+    console.error(error);
+  } finally {
+    state.executing = false;
+  }
 });
 
 export const uploadManager = {
