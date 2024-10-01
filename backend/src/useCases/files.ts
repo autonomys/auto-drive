@@ -6,6 +6,7 @@ import {
   createMetadataNode,
   fileMetadata,
   folderMetadata,
+  OffchainFileMetadata,
   OffchainFolderMetadata,
   OffchainMetadata,
   stringToCid,
@@ -115,7 +116,29 @@ const processTree = async (
   };
 };
 
-export const createFolderZip = async (
+const retrieveAndReassembleFile = async (
+  metadata: OffchainFileMetadata
+): Promise<Buffer | undefined> => {
+  if (metadata.totalChunks === 1) {
+    return NodesUseCases.getChunkData(metadata.chunks[0].cid);
+  }
+
+  const chunks: Buffer[] = await Promise.all(
+    metadata.chunks
+      .filter((e) => e.cid !== metadata.dataCid)
+      .map(async (chunk) => {
+        const chunkData = await NodesUseCases.getChunkData(chunk.cid);
+        if (!chunkData) {
+          throw new Error(`Chunk with CID ${chunk.cid} not found`);
+        }
+        return chunkData;
+      })
+  );
+
+  return Buffer.concat(chunks);
+};
+
+const retrieveAndReassembleFolderAsZip = async (
   parent: PizZip,
   cid: string
 ): Promise<PizZip> => {
@@ -146,7 +169,7 @@ export const createFolderZip = async (
       }),
     ...metadata.children
       .filter((e) => e.type === "folder")
-      .map((e) => createFolderZip(parent, e.cid)),
+      .map((e) => retrieveAndReassembleFolderAsZip(parent, e.cid)),
   ]);
 
   return folder;
@@ -162,29 +185,16 @@ const retrieveAndReassembleData = async (
   }
 
   if (metadata.type === "folder") {
-    const zip = await createFolderZip(new PizZip(), metadataCid);
+    const zip = await retrieveAndReassembleFolderAsZip(
+      new PizZip(),
+      metadataCid
+    );
     return zip.generate({
       type: "nodebuffer",
     });
   }
 
-  if (metadata.totalChunks === 1) {
-    return NodesUseCases.getChunkData(metadata.chunks[0].cid);
-  }
-
-  const chunks: Buffer[] = await Promise.all(
-    metadata.chunks
-      .filter((e) => e.cid !== metadata.dataCid)
-      .map(async (chunk) => {
-        const chunkData = await NodesUseCases.getChunkData(chunk.cid);
-        if (!chunkData) {
-          throw new Error(`Chunk with CID ${chunk.cid} not found`);
-        }
-        return chunkData;
-      })
-  );
-
-  return Buffer.concat(chunks);
+  return retrieveAndReassembleFile(metadata);
 };
 
 const uploadFile = async (
