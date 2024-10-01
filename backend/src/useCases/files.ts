@@ -160,7 +160,7 @@ const retrieveAndReassembleFolderAsZip = async (
     ...metadata.children
       .filter((e) => e.type === "file")
       .map(async (e) => {
-        const data = await retrieveAndReassembleData(e.cid);
+        const data = await downloadObject(e.cid);
         if (!data) {
           throw new Error(`Data with CID ${e.cid} not found`);
         }
@@ -175,20 +175,15 @@ const retrieveAndReassembleFolderAsZip = async (
   return folder;
 };
 
-const retrieveAndReassembleData = async (
-  metadataCid: string
-): Promise<Buffer | undefined> => {
-  const metadata = await MetadataUseCases.getMetadata(metadataCid);
+const downloadObject = async (cid: string): Promise<Buffer | undefined> => {
+  const metadata = await MetadataUseCases.getMetadata(cid);
 
   if (!metadata) {
-    throw new Error(`Metadata with CID ${metadataCid} not found`);
+    throw new Error(`Metadata with CID ${cid} not found`);
   }
 
   if (metadata.type === "folder") {
-    const zip = await retrieveAndReassembleFolderAsZip(
-      new PizZip(),
-      metadataCid
-    );
+    const zip = await retrieveAndReassembleFolderAsZip(new PizZip(), cid);
     return zip.generate({
       type: "nodebuffer",
     });
@@ -227,5 +222,5 @@ const uploadTree = async (
 export const FilesUseCases = {
   uploadFile,
   uploadTree,
-  retrieveAndReassembleData,
+  downloadObject,
 };
