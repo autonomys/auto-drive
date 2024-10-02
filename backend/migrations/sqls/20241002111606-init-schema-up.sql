@@ -1,22 +1,22 @@
 -- Metadata
-CREATE TABLE IF NOT EXISTS metadata (cid TEXT PRIMARY KEY, metadata jsonb);
+CREATE TABLE metadata (cid TEXT PRIMARY KEY, metadata jsonb);
 -- Nodes
 -- 
-CREATE TABLE IF NOT EXISTS nodes (
+CREATE TABLE nodes (
   cid TEXT PRIMARY KEY,
   head_cid TEXT,
   type TEXT,
   encoded_node TEXT
 );
-CREATE INDEX IF NOT EXISTS nodes_head_cid ON nodes (head_cid);
+CREATE INDEX nodes_head_cid ON nodes (head_cid);
 -- Transaction Results
-CREATE TABLE IF NOT EXISTS transaction_results (
+CREATE TABLE transaction_results (
   cid TEXT PRIMARY KEY,
   transaction_result jsonb,
   head_cid TEXT
 );
 -- Object Ownership
-CREATE TABLE IF NOT EXISTS object_ownership (
+CREATE TABLE object_ownership (
   cid TEXT,
   oauth_provider TEXT,
   oauth_user_id TEXT,
