@@ -15,6 +15,10 @@ export const ScopeSwitch = () => {
     setScope(global ? "global" : "user");
   }, [global]);
 
+  useEffect(() => {
+    setGlobal(scope === "global");
+  }, []);
+
   return (
     <Switch
       checked={global}
