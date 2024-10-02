@@ -8,7 +8,7 @@ const setUserAsOwner = async (
   const db = await getDatabase();
 
   await db.run(
-    "INSERT INTO object_ownership (cid, oauth_provider, oauth_user_id, is_admin, marked_as_deleted) VALUES (?, ?, ?, ?, ?)",
+    "INSERT OR REPLACE INTO object_ownership (cid, oauth_provider, oauth_user_id, is_admin, marked_as_deleted) VALUES (?, ?, ?, ?, ?)",
     cid,
     provider,
     userId,
@@ -25,7 +25,7 @@ const setUserAsAdmin = async (
   const db = await getDatabase();
 
   await db.run(
-    "INSERT INTO object_ownership (cid, oauth_provider, oauth_user_id, is_admin, marked_as_deleted) VALUES (?, ?, ?, ?, ?)",
+    "INSERT OR REPLACE INTO object_ownership (cid, oauth_provider, oauth_user_id, is_admin, marked_as_deleted) VALUES (?, ?, ?, ?, ?)",
     cid,
     provider,
     userId,
