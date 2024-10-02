@@ -111,14 +111,12 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               {renderOwnerBadge("You")}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-              {file.metadata.type === "file" && (
-                <button
-                  className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                  onClick={() => downloadFile(file.metadata.dataCid)}
-                >
-                  Download
-                </button>
-              )}
+              <button
+                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+                onClick={() => downloadFile(file.metadata.dataCid)}
+              >
+                Download
+              </button>
             </td>
           </tr>
           {isExpanded &&

@@ -1,6 +1,7 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
+import { signIn } from "next-auth/react";
 import { useCallback, useState } from "react";
 import { GoogleIcon } from "../components/common/GoogleIcon";
 
@@ -9,22 +10,7 @@ export default function App() {
 
   const handleAuth = useCallback(() => {
     setIsLoading(true);
-
-    // Replace this URL with your actual Google OAuth 2.0 authorization endpoint
-    const authUrl = "https://accounts.google.com/o/oauth2/v2/auth";
-
-    // These are example parameters. Replace with your actual values
-    const params = new URLSearchParams({
-      client_id: process.env.NEXT_PUBLIC_GOOGLE_AUTH_CLIENT_ID!,
-      redirect_uri: "http://localhost:8080/api/auth/callback/google",
-      response_type: "code",
-      access_type: "offline",
-      prompt: "consent",
-      scope: "openid email",
-    });
-
-    // Redirect to the authorization URL
-    window.location.assign(`${authUrl}?${params.toString()}`);
+    signIn("google");
   }, []);
 
   return (
