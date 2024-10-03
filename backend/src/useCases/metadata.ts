@@ -1,5 +1,6 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { User } from "../models/index.js";
+import { ObjectInformation } from "../models/object.js";
 import { metadataRepository } from "../repositories/index.js";
 
 const getMetadata = async (cid: string) => {
@@ -51,6 +52,19 @@ const getRootObjects = async (
   }
 
   return metadataRepository.getRootObjects();
+};
+
+const getObjectInformation = async (
+  cid: string
+): Promise<ObjectInformation | undefined> => {
+  const metadata = await getMetadata(cid);
+  if (!metadata) {
+    return undefined;
+  }
+
+  return { cid, metadata, upload: {
+    uploadedNodes: 0,
+  } };
 };
 
 export const MetadataUseCases = {
