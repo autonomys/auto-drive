@@ -10,78 +10,6 @@ import {
 
 const objectController = Router();
 
-objectController.get("/:cid/metadata", async (req, res) => {
-  try {
-    const { cid } = req.params;
-    const metadata = await MetadataUseCases.getMetadata(cid);
-    if (!metadata) {
-      return res.status(404).json({ error: "Metadata not found" });
-    }
-
-    res.json(metadata);
-  } catch (error: any) {
-    console.error("Error retrieving metadata:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to retrieve metadata", details: error.message });
-  }
-});
-
-objectController.get("/:cid/status", async (req, res) => {
-  const { cid } = req.params;
-
-  const user = await handleAuth(req, res);
-  if (!user) {
-    return;
-  }
-
-  const objectInformation = await UploadStatusUseCases.getUploadStatus(cid);
-  res.json(objectInformation);
-});
-
-objectController.get("/:cid/download", async (req, res) => {
-  try {
-    const { cid } = req.params;
-
-    const metadata = await MetadataUseCases.getMetadata(cid);
-    if (!metadata) {
-      return res.status(404).json({ error: "Metadata not found" });
-    }
-
-    console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
-    const data = await FilesUseCases.downloadObject(cid);
-
-    if (metadata.type === "file") {
-      res.set("Content-Type", metadata.mimeType || "application/octet-stream");
-      res.set("Content-Disposition", `attachment; filename="${metadata.name}"`);
-    } else {
-      res.set("Content-Type", "application/zip");
-      res.set(
-        "Content-Disposition",
-        `attachment; filename="${metadata.name}.zip"`
-      );
-    }
-    res.send(data);
-  } catch (error: any) {
-    console.error("Error retrieving data:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to retrieve data", details: error.message });
-  }
-});
-
-objectController.get("/:cid", async (req, res) => {
-  const { cid } = req.params;
-
-  const user = await handleAuth(req, res);
-  if (!user) {
-    return;
-  }
-
-  const objectInformation = await MetadataUseCases.getObjectInformation(cid);
-  res.json(objectInformation);
-});
-
 objectController.get("/roots", async (req, res) => {
   const user = await handleAuth(req, res);
   const { scope } = req.query;
@@ -194,6 +122,78 @@ objectController.post("/folder", multer().any(), async (req, res) => {
     console.error("Error processing folder upload:", error);
     res.status(500).json({ error: "Failed to process folder upload" });
   }
+});
+
+objectController.get("/:cid/metadata", async (req, res) => {
+  try {
+    const { cid } = req.params;
+    const metadata = await MetadataUseCases.getMetadata(cid);
+    if (!metadata) {
+      return res.status(404).json({ error: "Metadata not found" });
+    }
+
+    res.json(metadata);
+  } catch (error: any) {
+    console.error("Error retrieving metadata:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to retrieve metadata", details: error.message });
+  }
+});
+
+objectController.get("/:cid/status", async (req, res) => {
+  const { cid } = req.params;
+
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  const objectInformation = await UploadStatusUseCases.getUploadStatus(cid);
+  res.json(objectInformation);
+});
+
+objectController.get("/:cid/download", async (req, res) => {
+  try {
+    const { cid } = req.params;
+
+    const metadata = await MetadataUseCases.getMetadata(cid);
+    if (!metadata) {
+      return res.status(404).json({ error: "Metadata not found" });
+    }
+
+    console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
+    const data = await FilesUseCases.downloadObject(cid);
+
+    if (metadata.type === "file") {
+      res.set("Content-Type", metadata.mimeType || "application/octet-stream");
+      res.set("Content-Disposition", `attachment; filename="${metadata.name}"`);
+    } else {
+      res.set("Content-Type", "application/zip");
+      res.set(
+        "Content-Disposition",
+        `attachment; filename="${metadata.name}.zip"`
+      );
+    }
+    res.send(data);
+  } catch (error: any) {
+    console.error("Error retrieving data:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to retrieve data", details: error.message });
+  }
+});
+
+objectController.get("/:cid", async (req, res) => {
+  const { cid } = req.params;
+
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  const objectInformation = await MetadataUseCases.getObjectInformation(cid);
+  res.json(objectInformation);
 });
 
 export { objectController };
