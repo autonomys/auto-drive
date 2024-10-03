@@ -1,5 +1,5 @@
-import { UploadStatus } from "../models/object";
-import { transactionResultsRepository } from "../repositories";
+import { UploadStatus } from "../models/index.js";
+import { transactionResultsRepository } from "../repositories/index.js";
 
 const getUploadStatus = async (cid: string): Promise<UploadStatus> => {
   const totalNodes =
