@@ -144,11 +144,6 @@ objectController.get("/:cid/metadata", async (req, res) => {
 objectController.get("/:cid/status", async (req, res) => {
   const { cid } = req.params;
 
-  const user = await handleAuth(req, res);
-  if (!user) {
-    return;
-  }
-
   const objectInformation = await UploadStatusUseCases.getUploadStatus(cid);
   res.json(objectInformation);
 });
@@ -186,11 +181,6 @@ objectController.get("/:cid/download", async (req, res) => {
 
 objectController.get("/:cid", async (req, res) => {
   const { cid } = req.params;
-
-  const user = await handleAuth(req, res);
-  if (!user) {
-    return;
-  }
 
   const objectInformation = await MetadataUseCases.getObjectInformation(cid);
   res.json(objectInformation);
