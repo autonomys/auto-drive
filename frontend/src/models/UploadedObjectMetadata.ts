@@ -6,6 +6,7 @@ export interface UploadedObjectMetadata {
 }
 
 export interface UploadStatus {
-  nodesToBeUploaded: number;
   uploadedNodes: number;
+  totalNodes: number;
+  minimumBlockDepth: number | null;
 }
