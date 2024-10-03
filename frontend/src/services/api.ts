@@ -93,7 +93,7 @@ export const ApiService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/objects/search?query=${query}&scope=${scope}`,
+      `${API_BASE_URL}/objects/search?cid=${query}&scope=${scope}`,
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
