@@ -3,6 +3,7 @@ import multer from "multer";
 import { FolderTreeSchema } from "../models";
 import { handleAuth } from "../services/authManager/express";
 import { FilesUseCases, MetadataUseCases } from "../useCases";
+import { UploadStatusUseCases } from "../useCases/uploadStatus";
 
 const objectController = Router();
 
@@ -24,7 +25,15 @@ objectController.get("/:cid/metadata", async (req, res) => {
 });
 
 objectController.get("/:cid/status", async (req, res) => {
-  /// Get the nodes for the given cid
+  const { cid } = req.params;
+
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  const objectInformation = await UploadStatusUseCases.getUploadStatus(cid);
+  res.json(objectInformation);
 });
 
 objectController.get("/:cid/download", async (req, res) => {
@@ -59,7 +68,15 @@ objectController.get("/:cid/download", async (req, res) => {
 });
 
 objectController.get("/:cid", async (req, res) => {
-  /// Aggregate the metadata, nodes and transaction results for the given cid
+  const { cid } = req.params;
+
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  const objectInformation = await MetadataUseCases.getObjectInformation(cid);
+  res.json(objectInformation);
 });
 
 objectController.get("/roots", async (req, res) => {

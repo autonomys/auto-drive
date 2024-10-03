@@ -74,10 +74,13 @@ const submitTransaction = async (
               });
             } else {
               console.log(`In block: ${status.asInBlock.toString()}`);
+              const blockHash = status.asInBlock.toString();
+              const { block } = await api.rpc.chain.getBlock(blockHash);  
               resolve({
                 success: true,
                 batchTxHash: transaction.hash.toString(),
                 blockHash: status.asInBlock.toString(),
+                blockNumber: block.header.number.toNumber(),
                 status: status.type,
               });
             }

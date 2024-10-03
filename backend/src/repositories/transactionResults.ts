@@ -76,10 +76,24 @@ const getPendingUploadsByHeadCid = async (head_cid: string) => {
   return result;
 };
 
+const getUploadedNodes = async (head_cid: string) => {
+  const db = await getDatabase();
+  const result = await db
+    .query<TransactionResultEntry>({
+      text: `select tr.* from transaction_results tr where tr.head_cid = $1 and tr.transaction_result->>'blockNumber' is not null order by tr.transaction_result->>'blockNumber' asc
+  `,
+      values: [head_cid],
+    })
+    .then(({ rows }) => rows);
+
+  return result;
+};
+
 export const transactionResultsRepository = {
   storeTransactionResult,
   getTransactionResult,
   getPendingUploads,
   getHeadTransactionResults,
   getPendingUploadsByHeadCid,
+  getUploadedNodes,
 };
