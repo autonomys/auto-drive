@@ -2,8 +2,10 @@
 
 import { UploadedObjectMetadata } from "@/models/UploadedObjectMetadata";
 import { ApiService } from "@/services/api";
-import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
+import { ChevronDown, ChevronRight, EllipsisIcon, Trash2 } from "lucide-react";
 import React, { FC, Fragment, useCallback, useState } from "react";
+import { Metadata } from "../Files/Metadata";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -63,7 +65,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
       return (
         <Fragment key={file.metadata.dataCid}>
-          <tr className="hover:bg-gray-100">
+          <tr className="hover:bg-gray-100 relative">
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               <div className="flex items-center">
                 <input
@@ -86,18 +88,24 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   {renderFileIcon(file.metadata.type)}
                 </span>
                 <span
-                  className={`ml-2 text-sm font-medium text-gray-900 ${
+                  className={`relative ml-2 text-sm font-medium text-gray-900 ${
                     file.metadata.type === "folder"
                       ? "hover:underline hover:cursor-pointer"
                       : ""
                   }`}
-                  onClick={() =>
-                    file.metadata.type === "folder"
-                      ? navigateToFile(file.metadata.dataCid)
-                      : null
-                  }
                 >
-                  {file.metadata.dataCid}
+                  <Popover>
+                    <PopoverButton>
+                      <span className="hover:cursor-pointer hover:underline">
+                        {file.metadata.dataCid}
+                      </span>
+                    </PopoverButton>
+                    <PopoverPanel className="absolute z-10 right-0">
+                      <div className="bg-white shadow-md rounded-lg">
+                        <Metadata object={file} />
+                      </div>
+                    </PopoverPanel>
+                  </Popover>
                 </span>
               </div>
             </td>
@@ -180,10 +188,10 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
   return (
     <div className="flex flex-col">
-      <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+      <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-          <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="shadow border-b border-gray-200 sm:rounded-lg">
+            <table className="min-w-full">
               <thead className="bg-gray-50">
                 <tr>
                   <th
@@ -218,9 +226,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {files.map((file) => renderRow(file))}
-              </tbody>
+              <tbody>{files.map((file) => renderRow(file))}</tbody>
             </table>
           </div>
         </div>
