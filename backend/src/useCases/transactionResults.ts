@@ -15,7 +15,9 @@ const getNodeTransactionResult = async (cid: CID | string) => {
 const getHeadTransactionResults = async (cid: CID | string) => {
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
 
-  return transactionResultsRepository.getHeadTransactionResults(cidString);
+  return transactionResultsRepository
+    .getHeadTransactionResults(cidString)
+    .then((rows) => rows.map((_) => _.transaction_result));
 };
 
 const setTransactionResults = async (
