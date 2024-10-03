@@ -1,9 +1,12 @@
 import { Router } from "express";
 import multer from "multer";
-import { FolderTreeSchema } from "../models";
-import { handleAuth } from "../services/authManager/express";
-import { FilesUseCases, MetadataUseCases } from "../useCases";
-import { UploadStatusUseCases } from "../useCases/uploadStatus";
+import { FolderTreeSchema } from "../models/index.js";
+import { handleAuth } from "../services/authManager/express.js";
+import {
+  FilesUseCases,
+  MetadataUseCases,
+  UploadStatusUseCases,
+} from "../useCases/index.js";
 
 const objectController = Router();
 
