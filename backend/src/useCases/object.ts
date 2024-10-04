@@ -2,6 +2,7 @@ import { OffchainMetadata } from "@autonomys/auto-drive";
 import { User } from "../models/index.js";
 import { ObjectInformation } from "../models/object.js";
 import { metadataRepository } from "../repositories/index.js";
+import { OwnershipUseCases } from "./ownership.js";
 import { UploadStatusUseCases } from "./uploadStatus.js";
 
 const getMetadata = async (cid: string) => {
@@ -68,6 +69,21 @@ const getObjectInformation = async (
   return { cid, metadata, uploadStatus };
 };
 
+const shareObject = async (cid: string, user: User) => {
+  const admins = await OwnershipUseCases.getAdmins(cid);
+  if (
+    admins.find(
+      (admin) =>
+        admin.oauth_provider === user.provider &&
+        admin.oauth_user_id === user.id
+    )
+  ) {
+    return;
+  }
+
+  await OwnershipUseCases.setUserAsOwner(user, cid);
+};
+
 export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
@@ -75,4 +91,5 @@ export const ObjectUseCases = {
   searchMetadataByCID,
   getAllMetadata,
   getRootObjects,
+  shareObject,
 };

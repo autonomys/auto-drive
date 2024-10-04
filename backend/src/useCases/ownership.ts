@@ -13,8 +13,18 @@ const setObjectAsDeleted = async (user: User, cid: string) => {
   await ownershipRepository.setObjectAsDeleted(user.provider, user.id, cid);
 };
 
+const getOwners = async (cid: string) => {
+  return ownershipRepository.getOwners(cid);
+};
+
+const getAdmins = async (cid: string) => {
+  return ownershipRepository.getAdmins(cid);
+};
+
 export const OwnershipUseCases = {
   setUserAsOwner,
   setUserAsAdmin,
   setObjectAsDeleted,
+  getOwners,
+  getAdmins,
 };

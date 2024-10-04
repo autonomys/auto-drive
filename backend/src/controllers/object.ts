@@ -148,6 +148,18 @@ objectController.get("/:cid/status", async (req, res) => {
   res.json(objectInformation);
 });
 
+objectController.post("/:cid/share", async (req, res) => {
+  const { cid } = req.params;
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  await ObjectUseCases.shareObject(cid, user);
+
+  res.sendStatus(200);
+});
+
 objectController.get("/:cid/download", async (req, res) => {
   try {
     const { cid } = req.params;
