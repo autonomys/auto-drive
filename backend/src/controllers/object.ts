@@ -4,7 +4,7 @@ import { FolderTreeSchema } from "../models/index.js";
 import { handleAuth } from "../services/authManager/express.js";
 import {
   FilesUseCases,
-  MetadataUseCases,
+  ObjectUseCases,
   UploadStatusUseCases,
 } from "../useCases/index.js";
 
@@ -17,7 +17,7 @@ objectController.get("/roots", async (req, res) => {
     return;
   }
 
-  const roots = await MetadataUseCases.getRootObjects(
+  const roots = await ObjectUseCases.getRootObjects(
     user && scope === "user" ? { user, scope } : { scope: "global" }
   );
   res.json(roots);
@@ -39,7 +39,7 @@ objectController.get("/search", async (req, res) => {
     const limit = req.query.limit
       ? parseInt(req.query.limit as string)
       : undefined;
-    const results = await MetadataUseCases.searchMetadataByCID(
+    const results = await ObjectUseCases.searchMetadataByCID(
       cid,
       limit,
       user && scope === "user" ? { user, scope } : { scope: "global" }
@@ -127,7 +127,7 @@ objectController.post("/folder", multer().any(), async (req, res) => {
 objectController.get("/:cid/metadata", async (req, res) => {
   try {
     const { cid } = req.params;
-    const metadata = await MetadataUseCases.getMetadata(cid);
+    const metadata = await ObjectUseCases.getMetadata(cid);
     if (!metadata) {
       return res.status(404).json({ error: "Metadata not found" });
     }
@@ -152,7 +152,7 @@ objectController.get("/:cid/download", async (req, res) => {
   try {
     const { cid } = req.params;
 
-    const metadata = await MetadataUseCases.getMetadata(cid);
+    const metadata = await ObjectUseCases.getMetadata(cid);
     if (!metadata) {
       return res.status(404).json({ error: "Metadata not found" });
     }
@@ -182,7 +182,7 @@ objectController.get("/:cid/download", async (req, res) => {
 objectController.get("/:cid", async (req, res) => {
   const { cid } = req.params;
 
-  const objectInformation = await MetadataUseCases.getObjectInformation(cid);
+  const objectInformation = await ObjectUseCases.getObjectInformation(cid);
   res.json(objectInformation);
 });
 

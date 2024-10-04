@@ -68,7 +68,7 @@ const getObjectInformation = async (
   return { cid, metadata, uploadStatus };
 };
 
-export const MetadataUseCases = {
+export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
   saveMetadata,
