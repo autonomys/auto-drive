@@ -14,7 +14,7 @@ const setObjectAsDeleted = async (user: User, cid: string) => {
 };
 
 const getOwners = async (cid: string) => {
-  return ownershipRepository.getOwners(cid);
+  return ownershipRepository.getOwnerships(cid);
 };
 
 const getAdmins = async (cid: string) => {

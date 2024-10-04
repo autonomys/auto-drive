@@ -47,7 +47,7 @@ const setObjectAsDeleted = async (
   });
 };
 
-const getOwners = async (cid: string): Promise<Ownership[]> => {
+const getOwnerships = async (cid: string): Promise<Ownership[]> => {
   const db = await getDatabase();
 
   const result = await db.query<Ownership>({
@@ -73,6 +73,6 @@ export const ownershipRepository = {
   setUserAsOwner,
   setUserAsAdmin,
   setObjectAsDeleted,
-  getOwners,
+  getOwnerships,
   getAdmins,
 };
