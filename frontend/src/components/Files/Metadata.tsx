@@ -27,11 +27,11 @@ export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
         </div>
         <div className="flex">
           <span>Total Nodes: </span>
-          <span className="ml-[4px]">16</span>
+          <span className="ml-[4px]">{object.uploadStatus.totalNodes}</span>
         </div>
         <div className="flex">
           <span>Uploaded Nodes: </span>
-          <span className="ml-[4px]">14</span>
+          <span className="ml-[4px]">{object.uploadStatus.uploadedNodes}</span>
         </div>
         <div className="flex">
           <span>Archive blocks count:</span>
