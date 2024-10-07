@@ -2,7 +2,12 @@
 
 import { UploadedObjectMetadata } from "@/models/UploadedObjectMetadata";
 import { ApiService } from "@/services/api";
-import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
+import {
+  Popover,
+  PopoverButton,
+  PopoverPanel,
+  Transition,
+} from "@headlessui/react";
 import { ChevronDown, ChevronRight, EllipsisIcon, Trash2 } from "lucide-react";
 import React, { FC, Fragment, useCallback, useState } from "react";
 import { Metadata } from "../Files/Metadata";
@@ -95,16 +100,29 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   }`}
                 >
                   <Popover>
-                    <PopoverButton>
-                      <span className="hover:cursor-pointer hover:underline">
+                    <PopoverButton
+                      onMouseEnter={(e) => e.currentTarget.click()}
+                      onMouseLeave={(e) => e.currentTarget.click()}
+                    >
+                      <span className="hover:cursor-pointer">
                         {file.metadata.dataCid}
                       </span>
                     </PopoverButton>
-                    <PopoverPanel className="absolute z-10 right-0">
-                      <div className="bg-white shadow-md rounded-lg">
-                        <Metadata object={file} />
-                      </div>
-                    </PopoverPanel>
+                    <Transition
+                      as={Fragment}
+                      enter="transition ease-out duration-200"
+                      enterFrom="opacity-0 translate-y-1"
+                      enterTo="opacity-100 translate-y-0"
+                      leave="transition ease-in duration-150"
+                      leaveFrom="opacity-100 translate-y-0"
+                      leaveTo="opacity-0 translate-y-1"
+                    >
+                      <PopoverPanel className="absolute z-10 right-0">
+                        <div className="bg-white shadow-md rounded-lg">
+                          <Metadata object={file} />
+                        </div>
+                      </PopoverPanel>
+                    </Transition>
                   </Popover>
                 </span>
               </div>
