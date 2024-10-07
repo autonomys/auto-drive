@@ -34,14 +34,20 @@ export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
           <span className="ml-[4px]">{object.uploadStatus.uploadedNodes}</span>
         </div>
         <div className="flex">
-          <span>Archive blocks count:</span>
-          <span className="ml-[4px]">0</span>
-        </div>
-        <div className="flex">
           <span>Minimum block depth:</span>
           <span className="ml-[4px]">
             {object.uploadStatus.minimumBlockDepth ?? "N/A"}
           </span>
+        </div>
+        <div className="flex">
+          <span>Maximum block depth:</span>
+          <span className="ml-[4px]">
+            {object.uploadStatus.maximumBlockDepth ?? "N/A"}
+          </span>
+        </div>
+        <div className="flex">
+          <span>Archive blocks count:</span>
+          <span className="ml-[4px]">0</span>
         </div>
       </div>
     </div>
