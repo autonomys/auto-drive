@@ -70,7 +70,15 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
       return (
         <Fragment key={file.metadata.dataCid}>
-          <tr className="hover:bg-gray-100 relative">
+          <tr
+            className={`hover:bg-gray-100 relative ${
+              file.metadata.type === "folder" ? "hover:cursor-pointer" : ""
+            }`}
+            onClick={() =>
+              file.metadata.type === "folder" &&
+              navigateToFile(file.metadata.dataCid)
+            }
+          >
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               <div className="flex items-center">
                 <input
@@ -79,7 +87,10 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 />
                 {file.metadata.type === "folder" && file.metadata.children && (
                   <button
-                    onClick={() => toggleRow(file.metadata.dataCid)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleRow(file.metadata.dataCid);
+                    }}
                     className="mr-2"
                   >
                     {isExpanded ? (
