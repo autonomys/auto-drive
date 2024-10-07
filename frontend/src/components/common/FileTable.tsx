@@ -91,7 +91,6 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       e.stopPropagation();
                       toggleRow(file.metadata.dataCid);
                     }}
-                    className="mr-2"
                   >
                     {isExpanded ? (
                       <ChevronDown size={16} />
