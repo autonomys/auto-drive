@@ -1,21 +1,42 @@
 "use client";
 
 import { Button, Input } from "@headlessui/react";
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { NoUploadsPlaceholder } from "../../components/Files/NoUploadsPlaceholder";
 import { ApiService } from "../../services/api";
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [handle, setHandle] = useState("@");
+  const [isHandleAvailable, setIsHandleAvailable] = useState<boolean | null>(
+    null
+  );
 
-  const updateHandleValue = useCallback((value: string) => {
-    if (value.startsWith("@")) {
-      setHandle(value);
-    } else {
-      setHandle("@");
+  const updateAvailability = useCallback((handle: string) => {
+    if (!handle.startsWith("@") || handle === "@") {
+      setIsHandleAvailable(null);
+      return;
     }
+
+    ApiService.checkHandleAvailability(handle).then((isAvailable) => {
+      setIsHandleAvailable(isAvailable);
+    });
   }, []);
+
+  useEffect(() => {
+    updateAvailability(handle);
+  }, [handle, updateAvailability]);
+
+  const updateHandleValue = useCallback(
+    (value: string) => {
+      if (value.startsWith("@")) {
+        setHandle(value);
+      } else {
+        setHandle("@");
+      }
+    },
+    [updateAvailability]
+  );
 
   const handleContinue = useCallback(() => {
     setStep(step + 1);
@@ -55,9 +76,33 @@ export default function OnboardingPage() {
         onChange={(e) => updateHandleValue(e.target.value)}
         className="p-1 max-w-40 border border-gray-300 rounded-md"
       />
+      {isHandleAvailable && (
+        <div
+          className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative"
+          role="alert"
+        >
+          <span className="block sm:inline">That handle is available!</span>
+        </div>
+      )}
+      {isHandleAvailable === false && (
+        <div
+          className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
+          role="alert"
+        >
+          <strong className="font-bold">Oops!</strong>
+          <span className="block sm:inline">
+            {" "}
+            That handle is already taken. Please choose another one.
+          </span>
+        </div>
+      )}
       <Button
-        className="bg-black text-white rounded p-1 hover:bg-gray-800 hover:scale-105 transition-all duration-300"
-        disabled={handle === "@"}
+        className={`bg-black text-white rounded p-1 transition-all duration-300 ${
+          isHandleAvailable
+            ? "opacity-100 hover:bg-gray-800 hover:scale-105"
+            : "opacity-50"
+        }`}
+        disabled={!isHandleAvailable}
         onClick={updateUserHandle}
       >
         Continue

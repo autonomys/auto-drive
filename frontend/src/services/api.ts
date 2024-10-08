@@ -171,4 +171,11 @@ export const ApiService = {
 
     return response.json();
   },
+  checkHandleAvailability: async (handle: string): Promise<boolean> => {
+    const response = await fetch(
+      `${API_BASE_URL}/users/checkHandleAvailability?handle=${handle}`
+    );
+
+    return response.json().then((data) => data.isAvailable);
+  },
 };
