@@ -7,3 +7,5 @@ DROP INDEX IF EXISTS nodes_head_cid;
 DROP TABLE IF EXISTS transaction_results;
 -- Object Ownership
 DROP TABLE IF EXISTS object_ownership;
+-- Users
+DROP TABLE IF EXISTS users;

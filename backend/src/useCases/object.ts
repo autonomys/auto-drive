@@ -1,7 +1,8 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import { User } from "../models/index.js";
+import { OAuthUser, User } from "../models/index.js";
 import { ObjectInformation } from "../models/object.js";
 import { metadataRepository } from "../repositories/index.js";
+import { UsersUseCases } from "./index.js";
 import { OwnershipUseCases } from "./ownership.js";
 import { UploadStatusUseCases } from "./uploadStatus.js";
 
@@ -27,8 +28,8 @@ const searchMetadataByCID = async (
     return metadataRepository.searchMetadataByCIDAndUser(
       cid,
       limit,
-      filter.user.provider,
-      filter.user.id
+      filter.user.oauthProvider,
+      filter.user.oauthUserId
     );
   }
 
@@ -48,8 +49,8 @@ const getRootObjects = async (
 ) => {
   if (filter.scope === "user") {
     return metadataRepository.getRootObjectsByUser(
-      filter.user.provider,
-      filter.user.id
+      filter.user.oauthProvider,
+      filter.user.oauthUserId
     );
   }
 
@@ -69,16 +70,20 @@ const getObjectInformation = async (
   return { cid, metadata, uploadStatus };
 };
 
-const shareObject = async (cid: string, user: User) => {
+const shareObject = async (executor: User, cid: string, handle: string) => {
   const admins = await OwnershipUseCases.getAdmins(cid);
-  if (
-    admins.find(
-      (admin) =>
-        admin.oauth_provider === user.provider &&
-        admin.oauth_user_id === user.id
-    )
-  ) {
-    return;
+  const isUserAdmin = admins.find(
+    (admin) =>
+      admin.oauth_provider === executor.oauthProvider &&
+      admin.oauth_user_id === executor.oauthUserId
+  );
+  if (!isUserAdmin) {
+    throw new Error("User is not an admin of this object");
+  }
+
+  const user = await UsersUseCases.getUserByHandle(handle);
+  if (!user) {
+    throw new Error("User not found");
   }
 
   await OwnershipUseCases.setUserAsOwner(user, cid);

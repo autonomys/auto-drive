@@ -1,4 +1,4 @@
-import { User } from "../../../models/index.js";
+import { OAuthUser } from "../../../models/index.js";
 
 type GoogleUser = {
   email: string;
@@ -8,7 +8,9 @@ type GoogleUser = {
   hd: string;
 };
 
-const getUserFromAccessToken = async (accessToken: string): Promise<User> => {
+const getUserFromAccessToken = async (
+  accessToken: string
+): Promise<OAuthUser> => {
   const googleUser = await fetch(
     "https://www.googleapis.com/oauth2/v1/userinfo?scope=https://www.googleapis.com/auth/userinfo.email",
     {

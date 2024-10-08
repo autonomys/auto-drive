@@ -1,6 +1,6 @@
 import pg from "pg";
 
-export let db: pg.Client;
+let db: pg.Client;
 
 const createDB = async (): Promise<pg.Client> => {
   const client = new pg.Client({

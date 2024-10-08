@@ -13,8 +13,7 @@ import {
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
 import PizZip from "pizzip";
-import { FolderTree } from "../models/index.js";
-import { User } from "../models/user.js";
+import { FolderTree, OAuthUser, User } from "../models/index.js";
 import {
   NodesUseCases,
   ObjectUseCases,
@@ -201,7 +200,7 @@ const uploadFile = async (
   const { cid, nodes } = await processFile(data, filename, mimeType);
 
   await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
-  await OwnershipUseCases.setUserAsOwner(user, cid);
+  await OwnershipUseCases.setUserAsAdmin(user, cid);
 
   return cid;
 };
@@ -214,7 +213,7 @@ const uploadTree = async (
   const { cid, nodes } = await processTree(folderTree, files);
 
   await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
-  await OwnershipUseCases.setUserAsOwner(user, cid);
+  await OwnershipUseCases.setUserAsAdmin(user, cid);
 
   return cid;
 };

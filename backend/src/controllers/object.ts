@@ -149,15 +149,27 @@ objectController.get("/:cid/status", async (req, res) => {
 });
 
 objectController.post("/:cid/share", async (req, res) => {
+  const { handle } = req.body;
   const { cid } = req.params;
+
+  if (!handle) {
+    return res.status(400).json({ error: "Missing `handle` in request body" });
+  }
+
   const user = await handleAuth(req, res);
   if (!user) {
     return;
   }
 
-  await ObjectUseCases.shareObject(cid, user);
-
-  res.sendStatus(200);
+  try {
+    await ObjectUseCases.shareObject(user, cid, handle);
+    res.sendStatus(200);
+  } catch (error: any) {
+    console.error("Error sharing object:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to share object", details: error.message });
+  }
 });
 
 objectController.get("/:cid/download", async (req, res) => {
