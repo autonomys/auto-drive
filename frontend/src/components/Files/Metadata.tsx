@@ -4,7 +4,7 @@ export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
   return (
     <div className="bg-white p-4 rounded-lg border-[#202124] border border-opacity-20 text-xs">
       <div className="flex flex-col mb-4">
-        <h4 className="font-medium text-sm text-black">
+        <h4 className="font-medium text-sm text-black text-wrap">
           {object.metadata.name}
         </h4>
         <p className="text-gray-500">Size: {object.metadata.totalSize}</p>
