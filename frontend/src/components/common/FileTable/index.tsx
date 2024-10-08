@@ -9,7 +9,7 @@ import {
   Transition,
 } from "@headlessui/react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { FC, Fragment, useCallback, useState } from "react";
+import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
 import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "./ShareModal";
 
@@ -58,9 +58,21 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     }
   }, []);
 
-  const downloadFile = useCallback((cid: string) => {
-    window.open(ApiService.fetchDataURL(cid), "_blank");
-  }, []);
+  const downloadFile = useCallback(
+    (event: MouseEvent<HTMLButtonElement>, cid: string) => {
+      event.stopPropagation();
+      window.open(ApiService.fetchDataURL(cid), "_blank");
+    },
+    []
+  );
+
+  const shareFile = useCallback(
+    (event: MouseEvent<HTMLButtonElement>, cid: string) => {
+      event.stopPropagation();
+      setShareCID(cid);
+    },
+    []
+  );
 
   const navigateToFile = useCallback((cid: string) => {
     window.location.assign(`/drive/fs/${cid}`);
@@ -152,13 +164,13 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               <button
                 className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                onClick={() => downloadFile(file.metadata.dataCid)}
+                onClick={(e) => downloadFile(e, file.metadata.dataCid)}
               >
                 Download
               </button>
               <button
                 className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                onClick={() => setShareCID(file.metadata.dataCid)}
+                onClick={(e) => shareFile(e, file.metadata.dataCid)}
               >
                 Share
               </button>
