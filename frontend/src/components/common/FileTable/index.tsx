@@ -239,7 +239,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   {child.type === "file" && (
                     <button
                       className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                      onClick={() => downloadFile(child.cid)}
+                      onClick={(e) => downloadFile(e, child.cid)}
                     >
                       Download
                     </button>
