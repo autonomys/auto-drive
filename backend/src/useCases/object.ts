@@ -66,8 +66,9 @@ const getObjectInformation = async (
   }
 
   const uploadStatus = await UploadStatusUseCases.getUploadStatus(cid);
+  const owners = await OwnershipUseCases.getOwners(cid);
 
-  return { cid, metadata, uploadStatus };
+  return { cid, metadata, uploadStatus, owners };
 };
 
 const shareObject = async (executor: User, cid: string, handle: string) => {
