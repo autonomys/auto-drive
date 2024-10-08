@@ -19,7 +19,7 @@ CREATE TABLE transaction_results (
 CREATE TABLE users (
   oauth_provider TEXT,
   oauth_user_id TEXT,
-  handle TEXT,
+  handle TEXT UNIQUE,
   PRIMARY KEY (oauth_provider, oauth_user_id)
 );
 -- Object Ownership
