@@ -18,6 +18,25 @@ userController.post("/@me/update", async (req, res) => {
       .json({ error: "Missing attribute `handle` in body" });
   }
 
+  if (!/^@[A-Za-z0-9_\.]+$/.test(handle)) {
+    return res.status(400).json({
+      error:
+        "Invalid handle format. Handle must start with @ and can only contain letters, numbers, underscores and dots",
+    });
+  }
+
+  if (handle.length > 32) {
+    return res.status(400).json({
+      error: "Handle must be 32 characters or less",
+    });
+  }
+
+  if (handle.length > 1) {
+    return res.status(400).json({
+      error: "Handle must be 1 characters or more",
+    });
+  }
+
   try {
     const updatedUser = await UsersUseCases.updateUserHandle(user, handle);
 
