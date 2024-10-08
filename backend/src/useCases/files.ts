@@ -13,11 +13,10 @@ import {
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
 import PizZip from "pizzip";
-import { FolderTree } from "../models/index.js";
-import { User } from "../models/user.js";
+import { FolderTree, User } from "../models/index.js";
 import {
-  MetadataUseCases,
   NodesUseCases,
+  ObjectUseCases,
   OwnershipUseCases,
 } from "../useCases/index.js";
 
@@ -40,7 +39,7 @@ const processFile = async (
 
   const nodes = [metadataNode, ...chunkNodes];
 
-  await MetadataUseCases.saveMetadata(cidToString(dag.headCID), metadata);
+  await ObjectUseCases.saveMetadata(cidToString(dag.headCID), metadata);
   await NodesUseCases.saveNodesWithHeadCID(chunkNodes, dag.headCID);
 
   console.log("Processed file: ", filename);
@@ -74,7 +73,7 @@ const processTree = async (
 
   const childrenMetadata = await Promise.all(
     cids.map((e) =>
-      MetadataUseCases.getMetadata(e).then((e) => ({
+      ObjectUseCases.getMetadata(e).then((e) => ({
         type: e!.type,
         name: e!.name,
         cid: e!.dataCid,
@@ -104,7 +103,7 @@ const processTree = async (
   );
   const metadataNode = createMetadataNode(metadata);
 
-  await MetadataUseCases.saveMetadata(cidToString(headCID), metadata);
+  await ObjectUseCases.saveMetadata(cidToString(headCID), metadata);
 
   return {
     cid,
@@ -142,7 +141,7 @@ const retrieveAndReassembleFolderAsZip = async (
   parent: PizZip,
   cid: string
 ): Promise<PizZip> => {
-  const metadata = await MetadataUseCases.getMetadata(cid);
+  const metadata = await ObjectUseCases.getMetadata(cid);
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`);
   }
@@ -176,7 +175,7 @@ const retrieveAndReassembleFolderAsZip = async (
 };
 
 const downloadObject = async (cid: string): Promise<Buffer | undefined> => {
-  const metadata = await MetadataUseCases.getMetadata(cid);
+  const metadata = await ObjectUseCases.getMetadata(cid);
 
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`);
@@ -201,7 +200,7 @@ const uploadFile = async (
   const { cid, nodes } = await processFile(data, filename, mimeType);
 
   await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
-  await OwnershipUseCases.setUserAsOwner(user, cid);
+  await OwnershipUseCases.setUserAsAdmin(user, cid);
 
   return cid;
 };
@@ -214,7 +213,7 @@ const uploadTree = async (
   const { cid, nodes } = await processTree(folderTree, files);
 
   await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
-  await OwnershipUseCases.setUserAsOwner(user, cid);
+  await OwnershipUseCases.setUserAsAdmin(user, cid);
 
   return cid;
 };

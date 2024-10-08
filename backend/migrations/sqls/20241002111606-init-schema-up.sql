@@ -15,6 +15,13 @@ CREATE TABLE transaction_results (
   transaction_result jsonb,
   head_cid TEXT
 );
+-- Users
+CREATE TABLE users (
+  oauth_provider TEXT,
+  oauth_user_id TEXT,
+  handle TEXT UNIQUE,
+  PRIMARY KEY (oauth_provider, oauth_user_id)
+);
 -- Object Ownership
 CREATE TABLE object_ownership (
   cid TEXT,

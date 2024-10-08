@@ -1,7 +1,12 @@
 import { Request, Response } from "express";
+import { User } from "../../models/index.js";
+import { UsersUseCases } from "../../useCases/index.js";
 import { AuthManager } from "./index.js";
 
-export const handleAuth = async (req: Request, res: Response) => {
+export const handleAuth = async (
+  req: Request,
+  res: Response
+): Promise<User | null> => {
   const accessToken = req.headers.authorization?.split(" ")[1];
   if (!accessToken) {
     res.status(401).json({ error: "Missing or invalid access token" });
@@ -17,15 +22,14 @@ export const handleAuth = async (req: Request, res: Response) => {
     return null;
   }
 
-  const user = await AuthManager.getUserFromAccessToken(
+  const oauthUser = await AuthManager.getUserFromAccessToken(
     provider,
     accessToken
   ).catch(() => null);
-
-  if (!user) {
+  if (!oauthUser) {
     res.status(401).json({ error: "Failed to authenticate user" });
     return null;
   }
 
-  return user;
+  return UsersUseCases.getUserByOAuthUser(oauthUser);
 };
