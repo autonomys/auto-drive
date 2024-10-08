@@ -51,4 +51,18 @@ userController.get("/search", async (req, res) => {
   res.json(users);
 });
 
+userController.get("/checkHandleAvailability", async (req, res) => {
+  const { handle } = req.query;
+
+  if (typeof handle !== "string") {
+    return res
+      .status(400)
+      .json({ error: "Missing or invalid attribute `handle` in query" });
+  }
+
+  const user = await UsersUseCases.getUserByHandle(handle);
+
+  res.json({ isAvailable: !user });
+});
+
 export { userController };
