@@ -25,13 +25,13 @@ userController.post("/@me/update", async (req, res) => {
     });
   }
 
-  if (handle.length > 32) {
+  if (handle.length > 33) {
     return res.status(400).json({
       error: "Handle must be 32 characters or less",
     });
   }
 
-  if (handle.length > 1) {
+  if (handle.length < 2) {
     return res.status(400).json({
       error: "Handle must be 1 characters or more",
     });
