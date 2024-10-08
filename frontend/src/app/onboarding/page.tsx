@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Input } from "@headlessui/react";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { NoUploadsPlaceholder } from "../../components/Files/NoUploadsPlaceholder";
 import { ApiService } from "../../services/api";
 
@@ -52,6 +52,24 @@ export default function OnboardingPage() {
       });
   }, [handle]);
 
+  const handleError = useMemo(() => {
+    if (handle.length < 2) {
+      return;
+    }
+
+    if (handle.length > 32) {
+      return "Handle is too long";
+    }
+
+    if (!handle.startsWith("@")) {
+      return "Handle must start with @";
+    }
+
+    if (!/^@[A-Za-z0-9_\.]+$/.test(handle)) {
+      return "Handle can only contain letters, numbers, underscores and dots";
+    }
+  }, [handle]);
+
   const steps = [
     <Fragment>
       <NoUploadsPlaceholder />
@@ -69,6 +87,10 @@ export default function OnboardingPage() {
           share files with you on Auto Drive. It's an important part of your
           identity on the platform.
         </p>
+        <p className="text-gray-600 max-w-md">
+          Your handle can only contain letters, numbers, underscores and dots.
+          Maximum length is 32 characters.
+        </p>
       </div>
       <Input
         placeholder="Enter your handle"
@@ -76,7 +98,15 @@ export default function OnboardingPage() {
         onChange={(e) => updateHandleValue(e.target.value)}
         className="p-1 max-w-40 border border-gray-300 rounded-md"
       />
-      {isHandleAvailable && (
+      {handleError && (
+        <div
+          className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
+          role="alert"
+        >
+          <span className="block sm:inline">{handleError}</span>
+        </div>
+      )}
+      {!handleError && isHandleAvailable && (
         <div
           className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative"
           role="alert"
@@ -84,7 +114,7 @@ export default function OnboardingPage() {
           <span className="block sm:inline">That handle is available!</span>
         </div>
       )}
-      {isHandleAvailable === false && (
+      {!handleError && isHandleAvailable === false && (
         <div
           className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
           role="alert"
