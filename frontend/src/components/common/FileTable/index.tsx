@@ -3,14 +3,17 @@
 import { UploadedObjectMetadata } from "@/models/UploadedObjectMetadata";
 import { ApiService } from "@/services/api";
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
-import { ChevronDown, ChevronRight, EllipsisIcon, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import React, { FC, Fragment, useCallback, useState } from "react";
-import { Metadata } from "../Files/Metadata";
+import { Metadata } from "../../Files/Metadata";
+import { ObjectShareModal } from "./ShareModal";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [shareModalMetadata, setShareModalMetadata] =
+    useState<UploadedObjectMetadata | null>(null);
 
   const toggleRow = useCallback(
     (id: string) => {
@@ -125,6 +128,12 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               >
                 Download
               </button>
+              <button
+                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+                onClick={() => setShareModalMetadata(file)}
+              >
+                Share
+              </button>
             </td>
           </tr>
           {isExpanded &&
@@ -188,6 +197,10 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
   return (
     <div className="flex flex-col">
+      <ObjectShareModal
+        metadata={shareModalMetadata}
+        closeModal={() => setShareModalMetadata(null)}
+      />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
           <div className="shadow border-b border-gray-200 sm:rounded-lg">

@@ -1,5 +1,6 @@
 import { FolderTree } from "../models/FileTree";
 import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
+import { User } from "../models/User";
 import { getAuthSession } from "../utils/auth";
 import { uploadFileContent } from "../utils/file";
 
@@ -118,6 +119,55 @@ export const ApiService = {
         },
       }
     );
+
+    return response.json();
+  },
+  shareObject: async (dataCid: string, handle: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    await fetch(`${API_BASE_URL}/objects/${dataCid}/share`, {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+        "Content-Type": "application/json",
+      },
+    });
+  },
+  updateUserHandle: async (handle: string): Promise<User> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/@me/update`, {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  searchUserHandle: async (handle: string): Promise<string[]> => {
+    const response = await fetch(
+      `${API_BASE_URL}/users/search?handle=${handle}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
 
     return response.json();
   },

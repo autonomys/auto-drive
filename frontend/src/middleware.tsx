@@ -13,20 +13,29 @@ export async function middleware(req: NextRequest) {
   }
 
   // @ts-ignore
-  const isValidToken = await AuthService.checkAuth(session?.accessToken);
-  if (!isValidToken && pathname.startsWith("/drive")) {
+  const user = await AuthService.checkAuth(session?.accessToken).catch((e) => {
+    console.log("error", e);
+    return null;
+  });
+
+  if (!user && pathname !== "/") {
     console.log("redirecting to home: 2");
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  if (isValidToken && !pathname.startsWith("/drive")) {
+  if (user && user.onboarded && !pathname.startsWith("/drive")) {
     console.log("redirecting to drive");
     return NextResponse.redirect(new URL("/drive", req.url));
+  }
+
+  if (user && !user.onboarded && !pathname.startsWith("/onboarding")) {
+    console.log("redirecting to onboarding");
+    return NextResponse.redirect(new URL("/onboarding", req.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/drive/:path*", "/"],
+  matcher: ["/drive/:path*", "/", "/onboarding"],
 };
