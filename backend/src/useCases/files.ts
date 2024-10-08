@@ -13,7 +13,7 @@ import {
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
 import PizZip from "pizzip";
-import { FolderTree, OAuthUser, User } from "../models/index.js";
+import { FolderTree, User } from "../models/index.js";
 import {
   NodesUseCases,
   ObjectUseCases,

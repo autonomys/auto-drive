@@ -1,5 +1,5 @@
-import { OAuthUser, User } from "../models/index.js";
-import { ownershipRepository } from "../repositories/index.js";
+import { Owner, User } from "../models/index.js";
+import { ownershipRepository, usersRepository } from "../repositories/index.js";
 
 const setUserAsOwner = async (user: User, cid: string) => {
   await ownershipRepository.setUserAsOwner(
@@ -25,8 +25,29 @@ const setObjectAsDeleted = async (user: User, cid: string) => {
   );
 };
 
-const getOwners = async (cid: string) => {
-  return ownershipRepository.getOwnerships(cid);
+const getOwners = async (cid: string): Promise<Owner[]> => {
+  const ownerships = await ownershipRepository.getOwnerships(cid);
+  const users = await Promise.all(
+    ownerships.map((e) =>
+      usersRepository.getUserByOAuthInformation(
+        e.oauth_provider,
+        e.oauth_user_id
+      )
+    )
+  );
+
+  if (users.some((user) => !user)) {
+    console.log("users", users);
+
+    throw new Error("Inconsistent database state");
+  }
+
+  const safeUsers = users.map((user) => user!);
+
+  return safeUsers.map((user, index) => ({
+    handle: user.handle,
+    role: ownerships[index].is_admin ? "admin" : "viewer",
+  }));
 };
 
 const getAdmins = async (cid: string) => {
