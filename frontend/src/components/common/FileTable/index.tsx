@@ -12,8 +12,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [shareModalMetadata, setShareModalMetadata] =
-    useState<UploadedObjectMetadata | null>(null);
+  const [shareCID, setShareCID] = useState<string | null>(null);
 
   const toggleRow = useCallback(
     (id: string) => {
@@ -130,7 +129,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               </button>
               <button
                 className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                onClick={() => setShareModalMetadata(file)}
+                onClick={() => setShareCID(file.metadata.dataCid)}
               >
                 Share
               </button>
@@ -198,8 +197,8 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   return (
     <div className="flex flex-col">
       <ObjectShareModal
-        metadata={shareModalMetadata}
-        closeModal={() => setShareModalMetadata(null)}
+        cid={shareCID}
+        closeModal={() => setShareCID(null)}
       />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">

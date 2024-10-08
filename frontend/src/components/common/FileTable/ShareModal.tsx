@@ -5,20 +5,29 @@ import {
   Transition,
   TransitionChild,
 } from "@headlessui/react";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import { UploadedObjectMetadata } from "../../../models/UploadedObjectMetadata";
 import { ApiService } from "../../../services/api";
 import { HandleSelector } from "../../HandleSearch";
 
 export const ObjectShareModal = ({
-  metadata,
+  cid,
   closeModal,
 }: {
-  metadata: UploadedObjectMetadata | null;
+  cid: string | null;
   closeModal: () => void;
 }) => {
-  const isOpen = metadata !== null;
+  const isOpen = cid !== null;
   const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
+  const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
+
+  useEffect(() => {
+    if (cid) {
+      ApiService.fetchUploadedObjectMetadata(cid).then(setMetadata);
+    }
+  }, [cid]);
+
   const shareObject = useCallback(async () => {
     if (!selectedHandle) {
       return;
@@ -28,14 +37,24 @@ export const ObjectShareModal = ({
       return;
     }
 
-    await ApiService.shareObject(metadata?.metadata.dataCid, selectedHandle);
-
-    closeModal();
+    await ApiService.shareObject(metadata?.metadata.dataCid, selectedHandle)
+      .then(async () => {
+        toast.success("Object shared successfully");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        closeModal();
+      })
+      .catch(() => {
+        toast.error("Failed to share object");
+      });
   }, [metadata, selectedHandle]);
 
   useEffect(() => {
     setSelectedHandle(null);
   }, [metadata]);
+
+  const isAlreadyOwnwer = useMemo(() => {
+    return !!metadata?.owners.some((owner) => owner.handle === selectedHandle);
+  }, [metadata, selectedHandle]);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -79,21 +98,25 @@ export const ObjectShareModal = ({
                   selectedHandle={selectedHandle}
                   setSelectedHandle={setSelectedHandle}
                 />
-
                 <div className="mt-4 flex justify-center">
                   <button
-                    disabled={!selectedHandle}
+                    disabled={!selectedHandle || isAlreadyOwnwer}
                     type="button"
                     className={`inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
-                      selectedHandle
+                      selectedHandle && !isAlreadyOwnwer
                         ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
-                        : "bg-gray-100 text-gray-900"
+                        : "bg-gray-100 text-gray-900 opacity-50"
                     }`}
                     onClick={shareObject}
                   >
                     Share
                   </button>
                 </div>
+                {isAlreadyOwnwer && (
+                  <p className="text-sm text-red-500 text-center mt-4">
+                    This user is already an owner of this object.
+                  </p>
+                )}
               </DialogPanel>
             </TransitionChild>
           </div>

@@ -3,7 +3,7 @@
 import { ApiService } from "@/services/api";
 import { Transition } from "@headlessui/react";
 import { SearchIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export const HandleSelector = ({
   selectedHandle,
@@ -18,12 +18,6 @@ export const HandleSelector = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
   const [recommendations, setRecommendations] = useState<string[] | null>(null);
-
-  useEffect(() => {
-    if (selectedHandle) {
-      setQuery(selectedHandle);
-    }
-  }, [selectedHandle]);
 
   useEffect(() => {
     if (query.length >= 2) {
@@ -60,13 +54,16 @@ export const HandleSelector = ({
     setIsOpen(true);
   };
 
-  const handleSelectItem = (item: string) => {
-    setIsOpen(false);
-    dropdownRef.current?.blur();
-    setRecommendations(null);
-    setSelectedHandle(item);
-    inputRef.current?.focus();
-  };
+  const handleSelectItem = useCallback(
+    (item: string) => {
+      setIsOpen(false);
+      dropdownRef.current?.blur();
+      setRecommendations(null);
+      setSelectedHandle(item);
+      inputRef.current?.focus();
+    },
+    [setSelectedHandle, setRecommendations, setIsOpen, dropdownRef, inputRef]
+  );
 
   const searchBarResult = useMemo(() => {
     if (query.length === 0 || !recommendations) {
@@ -100,6 +97,10 @@ export const HandleSelector = ({
     ));
   }, [query, recommendations]);
 
+  const isRecommendationsOpen = useMemo(() => {
+    return isOpen && recommendations && recommendations.length > 0;
+  }, [isOpen, recommendations]);
+
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="relative mt-1">
@@ -121,24 +122,22 @@ export const HandleSelector = ({
             <SearchIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
           </button>
         </div>
-        {
-          <Transition
-            show={isOpen}
-            enter="transition ease-out duration-100"
-            enterFrom="transform opacity-0 scale-95"
-            enterTo="transform opacity-100 scale-100"
-            leave="transition ease-in duration-75"
-            leaveFrom="transform opacity-100 scale-100"
-            leaveTo="transform opacity-0 scale-95"
+        <Transition
+          show={!!isRecommendationsOpen}
+          enter="transition ease-out duration-100"
+          enterFrom="transform opacity-0 scale-95"
+          enterTo="transform opacity-100 scale-100"
+          leave="transition ease-in duration-75"
+          leaveFrom="transform opacity-100 scale-100"
+          leaveTo="transform opacity-0 scale-95"
+        >
+          <ul
+            ref={dropdownRef}
+            className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm"
           >
-            <ul
-              ref={dropdownRef}
-              className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm"
-            >
-              {searchBarResult}
-            </ul>
-          </Transition>
-        }
+            {searchBarResult}
+          </ul>
+        </Transition>
       </div>
     </div>
   );
