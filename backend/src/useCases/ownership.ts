@@ -1,4 +1,4 @@
-import { Owner, User } from "../models/index.js";
+import { Owner, OwnerRole, User } from "../models/index.js";
 import { ownershipRepository, usersRepository } from "../repositories/index.js";
 
 const setUserAsOwner = async (user: User, cid: string) => {
@@ -46,7 +46,7 @@ const getOwners = async (cid: string): Promise<Owner[]> => {
 
   return safeUsers.map((user, index) => ({
     handle: user.handle,
-    role: ownerships[index].is_admin ? "admin" : "viewer",
+    role: ownerships[index].is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
   }));
 };
 
