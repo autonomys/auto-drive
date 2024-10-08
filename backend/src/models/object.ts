@@ -10,4 +10,5 @@ export interface UploadStatus {
   uploadedNodes: number;
   totalNodes: number;
   minimumBlockDepth: number | null;
+  maximumBlockDepth: number | null;
 }
