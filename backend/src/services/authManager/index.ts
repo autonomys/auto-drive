@@ -1,10 +1,10 @@
-import { User } from "../../models/index.js";
+import { OAuthUser } from "../../models/index.js";
 import { GoogleAuth } from "./providers/index.js";
 
 const getUserFromAccessToken = async (
   provider: string,
   accessToken: string
-): Promise<User> => {
+): Promise<OAuthUser> => {
   switch (provider) {
     case "google":
       return GoogleAuth.getUserFromAccessToken(accessToken);
