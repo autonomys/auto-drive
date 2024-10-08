@@ -15,5 +15,10 @@ export interface UploadStatus {
 
 export interface Owner {
   handle: string;
-  role: "admin" | "viewer";
+  role: OwnerRole;
+}
+
+export enum OwnerRole {
+  ADMIN = "admin",
+  VIEWER = "viewer",
 }
