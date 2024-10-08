@@ -12,7 +12,7 @@ const createServer = async () => {
   const port = Number(process.env.PORT) || 3000;
 
   // Increase the limit to 10MB (adjust as needed)
-  const requestSizeLimit = process.env.REQUEST_SIZE_LIMIT || "10mb";
+  const requestSizeLimit = process.env.REQUEST_SIZE_LIMIT || "200mb";
   app.use(express.json({ limit: requestSizeLimit }));
   app.use(express.urlencoded({ limit: requestSizeLimit, extended: true }));
   process.env.CORS_ALLOW_ORIGINS &&
