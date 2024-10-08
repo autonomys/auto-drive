@@ -1,4 +1,4 @@
-\import { Router } from "express";
+import { Router } from "express";
 import { handleAuth } from "../services/authManager/express.js";
 import { UsersUseCases } from "../useCases/index.js";
 
