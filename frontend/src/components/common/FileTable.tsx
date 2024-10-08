@@ -2,7 +2,12 @@
 
 import { UploadedObjectMetadata } from "@/models/UploadedObjectMetadata";
 import { ApiService } from "@/services/api";
-import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
+import {
+  Popover,
+  PopoverButton,
+  PopoverPanel,
+  Transition,
+} from "@headlessui/react";
 import { ChevronDown, ChevronRight, EllipsisIcon, Trash2 } from "lucide-react";
 import React, { FC, Fragment, useCallback, useState } from "react";
 import { Metadata } from "../Files/Metadata";
@@ -65,7 +70,15 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
       return (
         <Fragment key={file.metadata.dataCid}>
-          <tr className="hover:bg-gray-100 relative">
+          <tr
+            className={`hover:bg-gray-100 relative ${
+              file.metadata.type === "folder" ? "hover:cursor-pointer" : ""
+            }`}
+            onClick={() =>
+              file.metadata.type === "folder" &&
+              navigateToFile(file.metadata.dataCid)
+            }
+          >
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               <div className="flex items-center">
                 <input
@@ -74,8 +87,10 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 />
                 {file.metadata.type === "folder" && file.metadata.children && (
                   <button
-                    onClick={() => toggleRow(file.metadata.dataCid)}
-                    className="mr-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleRow(file.metadata.dataCid);
+                    }}
                   >
                     {isExpanded ? (
                       <ChevronDown size={16} />
@@ -95,16 +110,30 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   }`}
                 >
                   <Popover>
-                    <PopoverButton>
-                      <span className="hover:cursor-pointer hover:underline">
+                    <PopoverButton as="span">
+                      <span
+                        className="hover:cursor-pointer"
+                        onMouseEnter={(e) => e.currentTarget.click()}
+                        onMouseLeave={(e) => e.currentTarget.click()}
+                      >
                         {file.metadata.dataCid}
                       </span>
                     </PopoverButton>
-                    <PopoverPanel className="absolute z-10 right-0">
-                      <div className="bg-white shadow-md rounded-lg">
-                        <Metadata object={file} />
-                      </div>
-                    </PopoverPanel>
+                    <Transition
+                      as={Fragment}
+                      enter="transition ease-out delay-250"
+                      enterFrom="opacity-0 translate-y-1"
+                      enterTo="opacity-100 translate-y-0"
+                      leave="transition ease-in duration-300"
+                      leaveFrom="opacity-100 translate-y-0"
+                      leaveTo="opacity-0 translate-y-1"
+                    >
+                      <PopoverPanel className="absolute z-10 right-0">
+                        <div className="bg-white shadow-md rounded-lg">
+                          <Metadata object={file} />
+                        </div>
+                      </PopoverPanel>
+                    </Transition>
                   </Popover>
                 </span>
               </div>
@@ -133,22 +162,47 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
             file.metadata.children.map((child) => (
               <tr key={child.cid} className="bg-gray-200 ml-40">
                 <td className="px-6 py-4 whitespace-nowrap w-[50%]">
-                  <input
-                    type="checkbox"
-                    className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span
-                    className={`ml-2 text-sm font-medium text-gray-900 ${
-                      child.type === "folder"
-                        ? "hover:underline hover:cursor-pointer"
-                        : ""
-                    }`}
-                    onClick={() =>
-                      child.type === "folder" ? navigateToFile(child.cid) : null
-                    }
-                  >
-                    {child.cid}
-                  </span>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+
+                    <span
+                      className={`relative ml-2 text-sm font-medium text-gray-900 ${
+                        file.metadata.type === "folder"
+                          ? "hover:underline hover:cursor-pointer"
+                          : ""
+                      }`}
+                    >
+                      <Popover>
+                        <PopoverButton as="span">
+                          <span
+                            className="hover:cursor-pointer"
+                            onMouseEnter={(e) => e.currentTarget.click()}
+                            onMouseLeave={(e) => e.currentTarget.click()}
+                          >
+                            {file.metadata.dataCid}
+                          </span>
+                        </PopoverButton>
+                        <Transition
+                          as={Fragment}
+                          enter="transition ease-out delay-250"
+                          enterFrom="opacity-0 translate-y-1"
+                          enterTo="opacity-100 translate-y-0"
+                          leave="transition ease-in duration-300"
+                          leaveFrom="opacity-100 translate-y-0"
+                          leaveTo="opacity-0 translate-y-1"
+                        >
+                          <PopoverPanel className="absolute z-10 right-0">
+                            <div className="bg-white shadow-md rounded-lg">
+                              <Metadata object={file} />
+                            </div>
+                          </PopoverPanel>
+                        </Transition>
+                      </Popover>
+                    </span>
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm text-gray-500">{child.type}</span>
