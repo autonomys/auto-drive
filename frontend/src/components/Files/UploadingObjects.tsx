@@ -96,7 +96,7 @@ const UploadingObject = ({
         <div className="mb-4">
           {!hasBeenUploaded ? (
             <p className="text-sm font-semibold mb-1">
-              Uploading ({progress}%)
+              Uploading ({progress.toFixed(2)}%)
             </p>
           ) : (
             <p className="text-sm font-semibold mb-1">Uploaded</p>
@@ -106,7 +106,7 @@ const UploadingObject = ({
               className={`${
                 hasBeenUploaded ? "bg-green-500" : "bg-blue-500"
               } rounded-full h-2 transition-all duration-300 ease-in-out`}
-              style={{ width: `${progress}%` }}
+              style={{ width: `${progress.toFixed(2)}%` }}
             ></div>
           </div>
         </div>

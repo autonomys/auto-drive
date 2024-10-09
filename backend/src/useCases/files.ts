@@ -25,7 +25,11 @@ const processFile = async (
   data: Buffer,
   filename?: string,
   mimeType?: string
-): Promise<{ cid: string; nodes: PBNode[] }> => {
+): Promise<{
+  cid: string;
+  nodesByCid: { [headCid: string]: PBNode[] };
+  metadata: OffchainFileMetadata[];
+}> => {
   const dag = createFileIPLDDag(data, filename);
 
   const metadata: OffchainMetadata = fileMetadata(
@@ -41,21 +45,26 @@ const processFile = async (
 
   const nodes = [...metadataNodes, ...chunkNodes];
 
-  await ObjectUseCases.saveMetadata(cidToString(dag.headCID), metadata);
-  await NodesUseCases.saveNodesWithHeadCID(chunkNodes, dag.headCID);
-
   console.log("Processed file: ", filename);
+  const cid = cidToString(dag.headCID);
 
   return {
-    cid: cidToString(dag.headCID),
-    nodes,
+    cid,
+    nodesByCid: {
+      [cid]: nodes,
+    },
+    metadata: [metadata],
   };
 };
 
 const processTree = async (
   folderTree: FolderTree,
   files: Express.Multer.File[]
-): Promise<{ cid: string; nodes: PBNode[] }> => {
+): Promise<{
+  cid: string;
+  nodesByCid: { [headCid: string]: PBNode[] };
+  metadata: OffchainMetadata[];
+}> => {
   if (folderTree.type === "file") {
     const file = files.find((e) => e.fieldname === folderTree.id);
     if (!file) {
@@ -71,21 +80,10 @@ const processTree = async (
     parsedChildren.push(result);
   }
 
-  const cids = parsedChildren.map((e) => e.cid).flat();
-
-  const childrenMetadata = await Promise.all(
-    cids.map((e) =>
-      ObjectUseCases.getMetadata(e).then((e) => ({
-        type: e!.type,
-        name: e!.name,
-        cid: e!.dataCid,
-        totalSize: e!.totalSize,
-      }))
-    )
-  );
+  const childrenMetadata = parsedChildren.map((e) => e.metadata).flat();
 
   const { headCID, nodes } = createFolderIPLDDag(
-    cids.map((e) => stringToCid(e)),
+    parsedChildren.map((e) => stringToCid(e.cid)),
     folderTree.name,
     childrenMetadata.reduce((acc, e) => acc + e.totalSize, 0)
   );
@@ -100,20 +98,24 @@ const processTree = async (
 
   const metadata: OffchainFolderMetadata = folderMetadata(
     cidToString(cidOfNode(folderNode)),
-    childrenMetadata,
+    childrenMetadata.map((e) => ({
+      cid: e.dataCid,
+      name: e.name,
+      type: e.type,
+      totalSize: e.totalSize,
+    })),
     folderTree.name
   );
-  const metadataNode = createMetadataNode(metadata);
-
-  await ObjectUseCases.saveMetadata(cidToString(headCID), metadata);
+  const metadataDag = createMetadataIPLDDag(metadata);
+  const metadataNodes = Array.from(metadataDag.nodes.values());
 
   return {
     cid,
-    nodes: [
-      metadataNode,
-      ...parsedChildren.map((e) => e.nodes).flat(),
-      ...chunkNodes,
-    ],
+    nodesByCid: {
+      [cid]: [...metadataNodes, ...chunkNodes],
+      ...parsedChildren.reduce((acc, e) => ({ ...acc, ...e.nodesByCid }), {}),
+    },
+    metadata: [metadata, ...childrenMetadata],
   };
 };
 
@@ -199,12 +201,23 @@ const uploadFile = async (
   filename?: string,
   mimeType?: string
 ): Promise<string> => {
-  const { cid, nodes } = await processFile(data, filename, mimeType);
+  const {
+    cid: rootCid,
+    nodesByCid,
+    metadata,
+  } = await processFile(data, filename, mimeType);
 
-  await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
-  await OwnershipUseCases.setUserAsAdmin(user, cid);
+  await Promise.all(
+    Object.keys(nodesByCid).map((cid) => {
+      NodesUseCases.saveNodes(rootCid, cid, nodesByCid[cid]);
+    })
+  );
+  await OwnershipUseCases.setUserAsAdmin(user, rootCid);
+  await Promise.all(
+    metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
+  );
 
-  return cid;
+  return rootCid;
 };
 
 const uploadTree = async (
@@ -212,12 +225,23 @@ const uploadTree = async (
   folderTree: FolderTree,
   files: Express.Multer.File[]
 ): Promise<string> => {
-  const { cid, nodes } = await processTree(folderTree, files);
+  const {
+    cid: rootCid,
+    nodesByCid,
+    metadata,
+  } = await processTree(folderTree, files);
 
-  await NodesUseCases.saveNodesWithHeadCID(nodes, cid);
-  await OwnershipUseCases.setUserAsAdmin(user, cid);
+  await Promise.all(
+    Object.keys(nodesByCid).map((cid) => {
+      NodesUseCases.saveNodes(rootCid, cid, nodesByCid[cid]);
+    })
+  );
+  await OwnershipUseCases.setUserAsAdmin(user, rootCid);
+  await Promise.all(
+    metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
+  );
 
-  return cid;
+  return rootCid;
 };
 
 export const FilesUseCases = {

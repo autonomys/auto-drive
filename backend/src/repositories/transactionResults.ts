@@ -3,21 +3,19 @@ import { TransactionResult } from "../services/transactionManager";
 import { Node } from "./nodes.js";
 
 export interface TransactionResultEntry {
-  head_cid: string;
   cid: string;
   transaction_result: TransactionResult;
 }
 
 const storeTransactionResult = async (
-  head_cid: string,
   cid: string,
   transaction_result: TransactionResult
 ) => {
   const db = await getDatabase();
 
   await db.query({
-    text: "INSERT INTO transaction_results (cid, transaction_result, head_cid) VALUES ($1, $2, $3) ON CONFLICT (cid) DO UPDATE SET transaction_result = EXCLUDED.transaction_result, head_cid = EXCLUDED.head_cid",
-    values: [cid, JSON.stringify(transaction_result), head_cid],
+    text: "INSERT INTO transaction_results (cid, transaction_result) VALUES ($1, $2) ON CONFLICT (cid) DO UPDATE SET transaction_result = EXCLUDED.transaction_result",
+    values: [cid, JSON.stringify(transaction_result)],
   });
 };
 
@@ -62,27 +60,27 @@ const getPendingUploads = async (limit: number = 100) => {
   return result;
 };
 
-const getPendingUploadsByHeadCid = async (head_cid: string) => {
+const getPendingUploadsByHeadCid = async (headCid: string) => {
   const db = await getDatabase();
   const result = await db
     .query<Node>({
       text: `
-    SELECT n.* FROM nodes n left join transaction_results tr on n.cid = tr.cid where tr.cid is null and n.head_cid = $1
+    select tr.* from transaction_results tr join nodes n on tr.cid = n.cid where n.head_cid = $1 and tr.transaction_result->>'blockNumber' is not null order by tr.transaction_result->>'blockNumber' asc
   `,
-      values: [head_cid],
+      values: [headCid],
     })
     .then(({ rows }) => rows);
 
   return result;
 };
 
-const getUploadedNodes = async (head_cid: string) => {
+const getUploadedNodesByRootCid = async (rootCid: string) => {
   const db = await getDatabase();
   const result = await db
     .query<TransactionResultEntry>({
-      text: `select tr.* from transaction_results tr where tr.head_cid = $1 and tr.transaction_result->>'blockNumber' is not null order by tr.transaction_result->>'blockNumber' asc
+      text: `select tr.* from transaction_results tr join nodes n on tr.cid = n.cid where n.root_cid = $1 and tr.transaction_result->>'blockNumber' is not null order by tr.transaction_result->>'blockNumber' asc
   `,
-      values: [head_cid],
+      values: [rootCid],
     })
     .then(({ rows }) => rows);
 
@@ -95,5 +93,5 @@ export const transactionResultsRepository = {
   getPendingUploads,
   getHeadTransactionResults,
   getPendingUploadsByHeadCid,
-  getUploadedNodes,
+  getUploadedNodesByRootCid,
 };
