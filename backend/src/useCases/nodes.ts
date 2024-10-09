@@ -21,18 +21,22 @@ const getNode = async (cid: string | CID): Promise<string | undefined> => {
 };
 
 const saveNode = async (
-  head_cid: string | CID,
+  rootCid: string | CID,
+  headCid: string | CID,
   cid: string | CID,
   type: MetadataType,
   encodedNode: string
 ) => {
-  let headCidString =
-    typeof head_cid === "string" ? head_cid : cidToString(head_cid);
-  let cidString = typeof cid === "string" ? cid : cidToString(cid);
+  const headCidString =
+    typeof headCid === "string" ? headCid : cidToString(headCid);
+  const rootCidString =
+    typeof rootCid === "string" ? rootCid : cidToString(rootCid);
+  const cidString = typeof cid === "string" ? cid : cidToString(cid);
 
   await nodesRepository.saveNode({
-    cid: cidString,
+    root_cid: rootCidString,
     head_cid: headCidString,
+    cid: cidString,
     type,
     encoded_node: encodedNode,
   });
@@ -56,12 +60,22 @@ const getChunkData = async (cid: string | CID): Promise<Buffer | undefined> => {
   return Buffer.from(chunkData);
 };
 
-const saveNodesWithHeadCID = async (nodes: PBNode[], headCid: string | CID) => {
+const saveNodes = async (
+  rootCid: string | CID,
+  headCid: string | CID,
+  nodes: PBNode[]
+) => {
   return Promise.all(
     nodes.map((node) => {
       const cid = cidToString(cidOfNode(node));
       const { type } = IPLDNodeData.decode(node.Data!);
-      saveNode(headCid, cid, type, encodeNode(node).toString("base64"));
+      saveNode(
+        rootCid,
+        headCid,
+        cid,
+        type,
+        encodeNode(node).toString("base64")
+      );
     })
   );
 };
@@ -70,5 +84,5 @@ export const NodesUseCases = {
   getNode,
   saveNode,
   getChunkData,
-  saveNodesWithHeadCID,
+  saveNodes,
 };

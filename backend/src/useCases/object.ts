@@ -1,6 +1,6 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import { OAuthUser, User } from "../models/index.js";
-import { ObjectInformation } from "../models/object.js";
+import { User } from "../models/index.js";
+import { ObjectInformation, Owner } from "../models/object.js";
 import { metadataRepository } from "../repositories/index.js";
 import { UsersUseCases } from "./index.js";
 import { OwnershipUseCases } from "./ownership.js";
@@ -15,8 +15,12 @@ const getMetadata = async (cid: string) => {
   return entry.metadata;
 };
 
-const saveMetadata = async (cid: string, metadata: OffchainMetadata) => {
-  return metadataRepository.setMetadata(cid, metadata);
+const saveMetadata = async (
+  rootCid: string,
+  cid: string,
+  metadata: OffchainMetadata
+) => {
+  return metadataRepository.setMetadata(rootCid, cid, metadata);
 };
 
 const searchMetadataByCID = async (
@@ -66,7 +70,7 @@ const getObjectInformation = async (
   }
 
   const uploadStatus = await UploadStatusUseCases.getUploadStatus(cid);
-  const owners = await OwnershipUseCases.getOwners(cid);
+  const owners: Owner[] = [];
 
   return { cid, metadata, uploadStatus, owners };
 };

@@ -37,8 +37,6 @@ const getOwners = async (cid: string): Promise<Owner[]> => {
   );
 
   if (users.some((user) => !user)) {
-    console.log("users", users);
-
     throw new Error("Inconsistent database state");
   }
 

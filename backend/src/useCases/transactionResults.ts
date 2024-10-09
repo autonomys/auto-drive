@@ -20,25 +20,21 @@ const getHeadTransactionResults = async (cid: CID | string) => {
 };
 
 const setTransactionResults = async (
-  head_cid: CID | string,
   cid: CID | string,
   transactionResults: TransactionResult
 ) => {
-  console.log("setTransactionResults", head_cid, cid, transactionResults);
+  console.log("setTransactionResults", cid, transactionResults);
 
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
-  let headCidString =
-    typeof head_cid === "string" ? head_cid : cidToString(head_cid);
 
   return transactionResultsRepository.storeTransactionResult(
-    headCidString,
     cidString,
     transactionResults
   );
 };
 
-const getPendingTransactionResults = async () => {
-  return transactionResultsRepository.getPendingUploads();
+const getPendingTransactionResults = async (limit: number = 100) => {
+  return transactionResultsRepository.getPendingUploads(limit);
 };
 
 export const TransactionResultsUseCases = {
