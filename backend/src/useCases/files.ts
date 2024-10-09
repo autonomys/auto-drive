@@ -103,14 +103,15 @@ const processTree = async (
     childrenMetadata,
     folderTree.name
   );
-  const metadataNode = createMetadataNode(metadata);
+  const metadataDag = createMetadataIPLDDag(metadata);
+  const metadataNodes = Array.from(metadataDag.nodes.values());
 
   await ObjectUseCases.saveMetadata(cidToString(headCID), metadata);
 
   return {
     cid,
     nodes: [
-      metadataNode,
+      ...metadataNodes,
       ...parsedChildren.map((e) => e.nodes).flat(),
       ...chunkNodes,
     ],
