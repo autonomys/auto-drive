@@ -20,6 +20,7 @@
     "next-auth": "^4.24.8",
     "react": "^18",
     "react-dom": "^18",
+    "react-hot-toast": "^2.4.1",
     "usehooks-ts": "^3.1.0",
     "util-browser": "^0.0.2"
   },

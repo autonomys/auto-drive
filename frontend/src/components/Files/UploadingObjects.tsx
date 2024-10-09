@@ -24,11 +24,12 @@ export const UploadingObjects = () => {
 
   return (
     <div>
-      {uploadingObjectsMetadata?.map(({ metadata, uploadStatus }) => (
+      {uploadingObjectsMetadata?.map(({ metadata, uploadStatus, owners }) => (
         <UploadingObject
           key={metadata.dataCid}
           metadata={metadata}
           uploadStatus={uploadStatus}
+          owners={owners}
         />
       ))}
     </div>
