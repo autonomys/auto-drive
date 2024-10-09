@@ -175,32 +175,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                           : ""
                       }`}
                     >
-                      <Popover>
-                        <PopoverButton as="span">
-                          <span
-                            className="hover:cursor-pointer"
-                            onMouseEnter={(e) => e.currentTarget.click()}
-                            onMouseLeave={(e) => e.currentTarget.click()}
-                          >
-                            {file.metadata.dataCid}
-                          </span>
-                        </PopoverButton>
-                        <Transition
-                          as={Fragment}
-                          enter="transition ease-out delay-250"
-                          enterFrom="opacity-0 translate-y-1"
-                          enterTo="opacity-100 translate-y-0"
-                          leave="transition ease-in duration-300"
-                          leaveFrom="opacity-100 translate-y-0"
-                          leaveTo="opacity-0 translate-y-1"
-                        >
-                          <PopoverPanel className="absolute z-10 right-0">
-                            <div className="bg-white shadow-md rounded-lg">
-                              <Metadata object={file} />
-                            </div>
-                          </PopoverPanel>
-                        </Transition>
-                      </Popover>
+                      {child.cid}
                     </span>
                   </div>
                 </td>
