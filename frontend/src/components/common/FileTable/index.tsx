@@ -8,14 +8,16 @@ import {
   PopoverPanel,
   Transition,
 } from "@headlessui/react";
-import { ChevronDown, ChevronRight, EllipsisIcon, Trash2 } from "lucide-react";
-import React, { FC, Fragment, useCallback, useState } from "react";
-import { Metadata } from "../Files/Metadata";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
+import { Metadata } from "../../Files/Metadata";
+import { ObjectShareModal } from "./ShareModal";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [shareCID, setShareCID] = useState<string | null>(null);
 
   const toggleRow = useCallback(
     (id: string) => {
@@ -56,9 +58,21 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     }
   }, []);
 
-  const downloadFile = useCallback((cid: string) => {
-    window.open(ApiService.fetchDataURL(cid), "_blank");
-  }, []);
+  const downloadFile = useCallback(
+    (event: MouseEvent<HTMLButtonElement>, cid: string) => {
+      event.stopPropagation();
+      window.open(ApiService.fetchDataURL(cid), "_blank");
+    },
+    []
+  );
+
+  const shareFile = useCallback(
+    (event: MouseEvent<HTMLButtonElement>, cid: string) => {
+      event.stopPropagation();
+      setShareCID(cid);
+    },
+    []
+  );
 
   const navigateToFile = useCallback((cid: string) => {
     window.location.assign(`/drive/fs/${cid}`);
@@ -150,9 +164,15 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               <button
                 className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                onClick={() => downloadFile(file.metadata.dataCid)}
+                onClick={(e) => downloadFile(e, file.metadata.dataCid)}
               >
                 Download
+              </button>
+              <button
+                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+                onClick={(e) => shareFile(e, file.metadata.dataCid)}
+              >
+                Share
               </button>
             </td>
           </tr>
@@ -219,7 +239,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   {child.type === "file" && (
                     <button
                       className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                      onClick={() => downloadFile(child.cid)}
+                      onClick={(e) => downloadFile(e, child.cid)}
                     >
                       Download
                     </button>
@@ -242,6 +262,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
   return (
     <div className="flex flex-col">
+      <ObjectShareModal cid={shareCID} closeModal={() => setShareCID(null)} />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
           <div className="shadow border-b border-gray-200 sm:rounded-lg">
