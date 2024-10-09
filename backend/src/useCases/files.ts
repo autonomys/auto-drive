@@ -3,6 +3,7 @@ import {
   cidToString,
   createFileIPLDDag,
   createFolderIPLDDag,
+  createMetadataIPLDDag,
   createMetadataNode,
   fileMetadata,
   folderMetadata,
@@ -34,10 +35,11 @@ const processFile = async (
     mimeType
   );
 
-  const metadataNode = createMetadataNode(metadata);
+  const metadataDag = createMetadataIPLDDag(metadata);
+  const metadataNodes = Array.from(metadataDag.nodes.values());
   const chunkNodes = Array.from(dag.nodes.values());
 
-  const nodes = [metadataNode, ...chunkNodes];
+  const nodes = [...metadataNodes, ...chunkNodes];
 
   await ObjectUseCases.saveMetadata(cidToString(dag.headCID), metadata);
   await NodesUseCases.saveNodesWithHeadCID(chunkNodes, dag.headCID);
