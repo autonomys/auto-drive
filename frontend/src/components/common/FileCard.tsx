@@ -92,14 +92,6 @@ export function FileCard({
         )}
         <PopoverPanel className="absolute top-0 right-0 w-fit-content divide-y divide-gray-200 rounded-xl bg-white text-sm/6 transition duration-200 ring-1 ring-gray-200 ease-in-out [--anchor-gap:var(--spacing-5)] data-[closed]:-translate-y-1 data-[closed]:opacity-0">
           <div className="p-3 flex flex-col gap-2 w-40">
-            <span className="flex items-center gap-2 font-semibold text-gray-800">
-              <Edit size={16} />
-              <span>Edit</span>
-            </span>
-            <span className="flex items-center gap-2 font-semibold text-gray-800">
-              <Share2 size={16} />
-              <span>Share</span>
-            </span>
             <span
               className="flex items-center gap-2 font-semibold text-gray-800"
               onClick={(event) => onDownload(event, dataCid)}
