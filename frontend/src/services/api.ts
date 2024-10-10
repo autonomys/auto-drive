@@ -4,8 +4,7 @@ import { User } from "../models/User";
 import { getAuthSession } from "../utils/auth";
 import { uploadFileContent } from "../utils/file";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://demo.auto-drive.autonomys.xyz";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export interface UploadResponse {
   cid: string;
