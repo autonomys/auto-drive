@@ -7,9 +7,9 @@ import {
 } from "@headlessui/react";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { UploadedObjectMetadata } from "../../../models/UploadedObjectMetadata";
-import { ApiService } from "../../../services/api";
-import { HandleSelector } from "../../HandleSearch";
+import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
+import { ApiService } from "../../services/api";
+import { HandleSelector } from "../HandleSearch";
 
 export const ObjectShareModal = ({
   cid,
