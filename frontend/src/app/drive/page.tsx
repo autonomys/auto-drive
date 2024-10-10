@@ -8,16 +8,16 @@ import { useEffect, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
 import { UploadingObjects } from "../../components/Files/UploadingObjects";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
+import { Loader } from "lucide-react";
 
 export default function Page() {
-  const [rootObjectMetadata, setRootObjectMetadata] =
-    useState<UploadedObjectMetadata[]>();
-  const [scope, setScope] = useLocalStorage<"user" | "global">(
-    "search-scope",
-    "global"
-  );
+  const [rootObjectMetadata, setRootObjectMetadata] = useState<
+    UploadedObjectMetadata[] | null
+  >(null);
+  const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
 
   useEffect(() => {
+    setRootObjectMetadata(null);
     ApiService.getRootObjects(scope).then((e) => {
       const promises = e.map((e) => ApiService.fetchUploadedObjectMetadata(e));
       Promise.all(promises).then(setRootObjectMetadata);
@@ -30,6 +30,11 @@ export default function Page() {
         <FileDropZone />
         <div className="">
           <UploadingObjects />
+          {rootObjectMetadata === null && (
+            <div className="flex min-h-[50vh] justify-center items-center">
+              <Loader className="w-20 h-20 animate-spin" />
+            </div>
+          )}
           {rootObjectMetadata && rootObjectMetadata.length > 0 && (
             <FileTable files={rootObjectMetadata} />
           )}
