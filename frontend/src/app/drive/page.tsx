@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
 import { UploadingObjects } from "../../components/Files/UploadingObjects";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
-import { Loader } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 
 export default function Page() {
   const [rootObjectMetadata, setRootObjectMetadata] = useState<
@@ -32,7 +32,7 @@ export default function Page() {
           <UploadingObjects />
           {rootObjectMetadata === null && (
             <div className="flex min-h-[50vh] justify-center items-center">
-              <Loader className="w-20 h-20 animate-spin" />
+              <LoaderCircle className="w-10 h-10 animate-spin" />
             </div>
           )}
           {rootObjectMetadata && rootObjectMetadata.length > 0 && (
