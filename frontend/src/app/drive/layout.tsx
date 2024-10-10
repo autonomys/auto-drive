@@ -44,15 +44,24 @@ export default function AppLayout({
                 <span className="hidden md:block">Files</span>
               </button>
             </InternalLink>
-            <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">
+            <button
+              disabled={true}
+              className="flex items-center space-x-2 text-gray-700 opacity-50"
+            >
               <ShareIcon className="w-5 h-5" />
               <span className="hidden md:block">Shared</span>
             </button>
-            <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">
+            <button
+              disabled={true}
+              className="flex items-center space-x-2 text-gray-700 opacity-50"
+            >
               <TrashIcon className="w-5 h-5" />
               <span className="hidden md:block">Trash</span>
             </button>
-            <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">
+            <button
+              disabled={true}
+              className="flex items-center space-x-2 text-gray-700 opacity-50"
+            >
               <GlobeIcon className="w-5 h-5" />
               <span className="hidden md:block">Global feed</span>
             </button>

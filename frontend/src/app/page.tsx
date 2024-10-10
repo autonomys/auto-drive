@@ -17,10 +17,11 @@ export default function App() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600">
       <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
         <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">
-          Welcome Back
+          Welcome to Auto-Drive
         </h1>
         <p className="text-center mb-8 text-gray-600">
-          Sign in with your Google account to continue
+          Sign in with your Google account to start using our decentralized
+          storage service
         </p>
         <div className="flex justify-center">
           <button

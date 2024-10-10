@@ -644,6 +644,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/bytes@npm:^3":
+  version: 3.1.4
+  resolution: "@types/bytes@npm:3.1.4"
+  checksum: 10c0/4649550082e279f32a76a1dda31c3f88370eadfcd0b25fb7cbd22b22ffcc2be45ebe5486c14025acba0718247edb55e376255dcca6d759c833ce4c962e22b683
+  languageName: node
+  linkType: hard
+
 "@types/json-schema@npm:^7.0.12":
   version: 7.0.15
   resolution: "@types/json-schema@npm:7.0.15"
@@ -1203,6 +1210,13 @@ __metadata:
   dependencies:
     streamsearch: "npm:^1.1.0"
   checksum: 10c0/fa7e836a2b82699b6e074393428b91ae579d4f9e21f5ac468e1b459a244341d722d2d22d10920cdd849743dbece6dca11d72de939fb75a7448825cf2babfba1f
+  languageName: node
+  linkType: hard
+
+"bytes@npm:^3.1.2":
+  version: 3.1.2
+  resolution: "bytes@npm:3.1.2"
+  checksum: 10c0/76d1c43cbd602794ad8ad2ae94095cddeb1de78c5dddaa7005c51af10b0176c69971a6d88e805a90c2b6550d76636e43c40d8427a808b8645ede885de4a0358e
   languageName: node
   linkType: hard
 
@@ -2201,10 +2215,12 @@ __metadata:
     "@headlessui/react": "npm:^2.1.8"
     "@heroicons/react": "npm:^2.1.5"
     "@ipld/dag-pb": "npm:^4.1.2"
+    "@types/bytes": "npm:^3"
     "@types/node": "npm:^20"
     "@types/react": "npm:^18"
     "@types/react-dom": "npm:^18"
     "@uidotdev/usehooks": "npm:^2.4.1"
+    bytes: "npm:^3.1.2"
     eslint: "npm:^8"
     eslint-config-next: "npm:14.2.9"
     lucide-react: "npm:^0.439.0"

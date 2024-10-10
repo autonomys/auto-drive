@@ -1,4 +1,5 @@
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
+import bytes from "bytes";
 
 export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
   return (
@@ -7,7 +8,9 @@ export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
         <h4 className="font-medium text-sm text-black text-wrap">
           {object.metadata.name}
         </h4>
-        <p className="text-gray-500">Size: {object.metadata.totalSize}</p>
+        <p className="text-gray-500">
+          Size: {bytes(object.metadata.totalSize)}
+        </p>
         <p>
           CID: <span className="text-blue-500">{object.metadata.dataCid}</span>
         </p>
