@@ -11,7 +11,7 @@ import {
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
 import { Metadata } from "../../Files/Metadata";
-import { ObjectShareModal } from "./ShareModal";
+import { ObjectShareModal } from "../../Files/ShareModal";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
