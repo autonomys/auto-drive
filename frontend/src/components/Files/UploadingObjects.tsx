@@ -1,5 +1,6 @@
 "use client";
 
+import bytes from "bytes";
 import { ApiService } from "@/services/api";
 import { FileIcon, FolderIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -99,7 +100,9 @@ const UploadingObject = ({
           </div>
           <div>
             <p className="font-semibold">{metadata.name}</p>
-            <p className="text-sm text-gray-500">Size: {metadata.totalSize}</p>
+            <p className="text-sm text-gray-500">
+              Size: {bytes(metadata.totalSize)}
+            </p>
             <p className="text-sm text-gray-500">Fees: 0 ATC</p>
           </div>
         </div>

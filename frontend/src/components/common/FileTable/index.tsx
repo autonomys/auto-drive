@@ -12,6 +12,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
 import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ShareModal";
+import bytes from "bytes";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -157,7 +158,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               {file.metadata.type}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {file.metadata.totalSize}
+              {bytes(file.metadata.totalSize)}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               {renderOwnerBadge("You")}
@@ -205,7 +206,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm text-gray-500">
-                    {child.totalSize}
+                    {bytes(child.totalSize)}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

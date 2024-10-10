@@ -1,5 +1,6 @@
 "use client";
 
+import bytes from "bytes";
 import { ApiService } from "@/services/api";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
@@ -63,8 +64,8 @@ export function FileCard({
   }, [icon, type]);
 
   return (
-    <Popover>
-      <div className="relative bg-white rounded-lg border border-gray-200 p-4 shadow-sm max-w-sm">
+    <Popover className="flex flex-col flex-1">
+      <div className="relative bg-white rounded-lg border border-gray-200 p-4 shadow-sm max-w-sm flex flex-col flex-1">
         <div className="flex justify-between items-start mb-4">
           {objectIcon}
           <PopoverButton>
@@ -72,7 +73,7 @@ export function FileCard({
           </PopoverButton>
         </div>
         <h2 className="text-lg font-semibold text-gray-800 mb-2">{name}</h2>
-        <p className="text-gray-500 mb-4">Size: {totalSize}</p>
+        <p className="text-gray-500 mb-4">Size: {bytes(totalSize)}</p>
         <button
           onClick={(event) => onDownload(event, dataCid)}
           className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center"
