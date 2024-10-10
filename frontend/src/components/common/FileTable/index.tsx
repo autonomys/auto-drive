@@ -79,7 +79,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   }, []);
 
   const renderRow = useCallback(
-    (file: UploadedObjectMetadata, level: number = 0) => {
+    (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
 
       return (
