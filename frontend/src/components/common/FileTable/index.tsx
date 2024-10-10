@@ -130,7 +130,8 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                         onMouseEnter={(e) => e.currentTarget.click()}
                         onMouseLeave={(e) => e.currentTarget.click()}
                       >
-                        {file.metadata.dataCid}
+                        {file.metadata.name ??
+                          `No name (${file.metadata.dataCid.slice(0, 12)})`}
                       </span>
                     </PopoverButton>
                     <Transition
@@ -142,7 +143,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       leaveFrom="opacity-100 translate-y-0"
                       leaveTo="opacity-0 translate-y-1"
                     >
-                      <PopoverPanel className="absolute z-10 right-0">
+                      <PopoverPanel className="absolute z-10 left-0">
                         <div className="bg-white shadow-md rounded-lg">
                           <Metadata object={file} />
                         </div>
@@ -195,7 +196,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                           : ""
                       }`}
                     >
-                      {child.cid}
+                      {child.name ?? `No name (${child.cid.slice(0, 12)})`}
                     </span>
                   </div>
                 </td>
