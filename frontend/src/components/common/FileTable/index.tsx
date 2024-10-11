@@ -14,7 +14,7 @@ import {
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
 import { Metadata } from "../../Files/Metadata";
-import { ObjectShareModal } from "../../Files/ShareModal";
+import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
 import { ObjectDeleteModal } from "../../Files/ObjectDeleteModal";
 

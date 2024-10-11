@@ -35,6 +35,7 @@ export const ObjectDeleteModal = ({
       .then(() => {
         toast.success("Object deleted successfully");
         closeModal();
+        window.location.reload();
       })
       .catch(() => {
         toast.error("Failed to delete object");

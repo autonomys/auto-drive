@@ -42,6 +42,7 @@ export const ObjectShareModal = ({
         toast.success("Object shared successfully");
         await new Promise((resolve) => setTimeout(resolve, 100));
         closeModal();
+        window.location.reload();
       })
       .catch(() => {
         toast.error("Failed to share object");

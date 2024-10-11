@@ -9,7 +9,7 @@ import {
   UploadedObjectMetadata,
   UploadStatus,
 } from "../../models/UploadedObjectMetadata";
-import { ObjectShareModal } from "./ShareModal";
+import { ObjectShareModal } from "./ObjectShareModal";
 
 export const UploadingObjects = () => {
   const [uploadingObjects] = useLocalStorage<string[]>("uploading-objects", []);
