@@ -10,16 +10,13 @@ import {
   PopoverButton,
   PopoverPanel,
   Transition,
-  Dialog,
-  TransitionChild,
-  DialogPanel,
-  DialogTitle,
 } from "@headlessui/react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
 import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ShareModal";
 import bytes from "bytes";
+import { ObjectRestoreModal } from "../../Files/ObjectRestoreModal";
 
 export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -250,73 +247,10 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   return (
     <div className="flex flex-col">
       <ObjectShareModal cid={shareCID} closeModal={() => setShareCID(null)} />
-      <Transition appear show={restoreCID !== null} as={Fragment}>
-        <Dialog
-          as="div"
-          className="relative z-10"
-          onClose={() => setRestoreCID(null)}
-        >
-          <TransitionChild
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black bg-opacity-25" />
-          </TransitionChild>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <TransitionChild
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
-                  <DialogTitle
-                    as="h3"
-                    className="text-lg font-medium leading-6 text-gray-900"
-                  >
-                    Restore File
-                  </DialogTitle>
-                  <div className="mt-2">
-                    <p className="text-sm text-gray-500">
-                      Are you sure you want to restore this file?
-                    </p>
-                  </div>
-
-                  <div className="mt-4 flex justify-end space-x-2">
-                    <button
-                      type="button"
-                      className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                      onClick={() => {
-                        // TODO: Implement restore logic
-                        setRestoreCID(null);
-                      }}
-                    >
-                      Restore
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex justify-center rounded-md border border-transparent bg-red-100 px-4 py-2 text-sm font-medium text-red-900 hover:bg-red-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
-                      onClick={() => setRestoreCID(null)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </DialogPanel>
-              </TransitionChild>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
+      <ObjectRestoreModal
+        cid={restoreCID}
+        closeModal={() => setRestoreCID(null)}
+      />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
           <div className="shadow border-b border-gray-200 sm:rounded-lg">

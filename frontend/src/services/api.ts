@@ -190,6 +190,24 @@ export const ApiService = {
       },
     });
   },
+  restoreObject: async (cid: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/objects/${cid}/restore`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+  },
   updateUserHandle: async (handle: string): Promise<User> => {
     const session = await getAuthSession();
     if (!session) {
