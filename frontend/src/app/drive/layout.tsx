@@ -57,12 +57,6 @@ export default function AppLayout({
                 <span className="hidden md:block">Trash</span>
               </button>
             </InternalLink>
-            <InternalLink className="contents" href="/drive/global">
-              <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
-                <GlobeIcon className="w-5 h-5" />
-                <span className="hidden md:block">Global feed</span>
-              </button>
-            </InternalLink>
           </aside>
           <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
