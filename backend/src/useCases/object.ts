@@ -126,6 +126,21 @@ const markAsDeleted = async (executor: User, cid: string) => {
   await OwnershipUseCases.setObjectAsDeleted(executor, cid);
 };
 
+const restoreObject = async (executor: User, cid: string) => {
+  const ownerships = await ownershipRepository.getOwnerships(cid);
+  const isUserOwner = ownerships.find(
+    (owner) =>
+      owner.oauth_provider === executor.oauthProvider &&
+      owner.oauth_user_id === executor.oauthUserId
+  );
+
+  if (!isUserOwner) {
+    throw new Error("User is not an owner of this object");
+  }
+
+  await OwnershipUseCases.restoreObject(executor, cid);
+};
+
 export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
@@ -137,4 +152,5 @@ export const ObjectUseCases = {
   shareObject,
   getMarkedAsDeletedRoots,
   markAsDeleted,
+  restoreObject,
 };

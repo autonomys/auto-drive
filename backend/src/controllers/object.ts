@@ -254,7 +254,7 @@ objectController.post("/:cid/restore", async (req, res) => {
 
     const { cid } = req.params;
 
-    await ObjectUseCases.markAsDeleted(user, cid);
+    await ObjectUseCases.restoreObject(user, cid);
 
     res.sendStatus(200);
   } catch (error: any) {
