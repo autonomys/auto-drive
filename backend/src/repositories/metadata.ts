@@ -109,7 +109,36 @@ const getRootObjectsByUser = async (provider: string, userId: string) => {
 
   return db
     .query<MetadataEntry>({
-      text: "SELECT m.* FROM metadata m join object_ownership oo on m.root_cid = oo.cid where m.root_cid = m.head_cid and oo.oauth_provider = $1 and oo.oauth_user_id = $2 and oo.marked_as_deleted is null",
+      text: "SELECT m.* FROM metadata m join object_ownership oo on m.root_cid = oo.cid where m.root_cid = m.head_cid and oo.oauth_provider = $1 and oo.oauth_user_id = $2 and oo.is_admin is true and oo.marked_as_deleted is null",
+      values: [provider, userId],
+    })
+    .then((entries) => {
+      return entries.rows.map((entry) => entry.head_cid);
+    });
+};
+
+const getSharedRootObjectsByUser = async (provider: string, userId: string) => {
+  const db = await getDatabase();
+
+  return db
+    .query<MetadataEntry>({
+      text: "SELECT m.* FROM metadata m join object_ownership oo on m.root_cid = oo.cid where m.root_cid = m.head_cid and oo.oauth_provider = $1 and oo.oauth_user_id = $2 and oo.is_admin is false and oo.marked_as_deleted is null",
+      values: [provider, userId],
+    })
+    .then((entries) => {
+      return entries.rows.map((entry) => entry.head_cid);
+    });
+};
+
+const getMarkedAsDeletedRootObjectsByUser = async (
+  provider: string,
+  userId: string
+) => {
+  const db = await getDatabase();
+
+  return db
+    .query<MetadataEntry>({
+      text: "SELECT m.* FROM metadata m join object_ownership oo on m.root_cid = oo.cid where m.root_cid = m.head_cid and oo.oauth_provider = $1 and oo.oauth_user_id = $2 and oo.marked_as_deleted is not null",
       values: [provider, userId],
     })
     .then((entries) => {
@@ -136,4 +165,6 @@ export const metadataRepository = {
   getRootObjectsByUser,
   getMetadataByUser,
   getMetadataByRootCid,
+  getSharedRootObjectsByUser,
+  getMarkedAsDeletedRootObjectsByUser,
 };

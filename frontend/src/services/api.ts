@@ -122,6 +122,44 @@ export const ApiService = {
 
     return response.json();
   },
+  getSharedRoots: async (): Promise<string[]> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/objects/roots/shared`, {
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  getTrashObjects: async (): Promise<string[]> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/objects/roots/deleted`, {
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
   shareObject: async (dataCid: string, handle: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session) {
@@ -135,6 +173,20 @@ export const ApiService = {
         Authorization: `Bearer ${session?.accessToken}`,
         "X-Auth-Provider": "google",
         "Content-Type": "application/json",
+      },
+    });
+  },
+  markObjectAsDeleted: async (cid: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    await fetch(`${API_BASE_URL}/objects/${cid}/delete`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
       },
     });
   },

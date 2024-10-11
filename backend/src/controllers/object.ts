@@ -23,6 +23,28 @@ objectController.get("/roots", async (req, res) => {
   res.json(roots);
 });
 
+objectController.get("/roots/shared", async (req, res) => {
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  const sharedRoots = await ObjectUseCases.getSharedRoots(user);
+
+  res.json(sharedRoots);
+});
+
+objectController.get("/roots/deleted", async (req, res) => {
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  const deletedRoots = await ObjectUseCases.getMarkedAsDeletedRoots(user);
+
+  res.json(deletedRoots);
+});
+
 objectController.get("/search", async (req, res) => {
   try {
     const { scope, cid } = req.query;
@@ -200,6 +222,46 @@ objectController.get("/:cid/download", async (req, res) => {
     res
       .status(500)
       .json({ error: "Failed to retrieve data", details: error.message });
+  }
+});
+
+objectController.post("/:cid/delete", async (req, res) => {
+  try {
+    const user = await handleAuth(req, res);
+    if (!user) {
+      return;
+    }
+
+    const { cid } = req.params;
+
+    await ObjectUseCases.markAsDeleted(user, cid);
+
+    res.sendStatus(200);
+  } catch (error: any) {
+    console.error("Error deleting object:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to delete object", details: error.message });
+  }
+});
+
+objectController.post("/:cid/restore", async (req, res) => {
+  try {
+    const user = await handleAuth(req, res);
+    if (!user) {
+      return;
+    }
+
+    const { cid } = req.params;
+
+    await ObjectUseCases.markAsDeleted(user, cid);
+
+    res.sendStatus(200);
+  } catch (error: any) {
+    console.error("Error deleting object:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to delete object", details: error.message });
   }
 });
 
