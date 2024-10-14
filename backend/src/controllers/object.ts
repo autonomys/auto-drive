@@ -7,6 +7,7 @@ import {
   ObjectUseCases,
   UploadStatusUseCases,
 } from "../useCases/index.js";
+import { safeDownloadFilename } from "../utils/safe.js";
 
 const objectController = Router();
 
@@ -184,11 +185,7 @@ objectController.get("/:cid/download", async (req, res) => {
     console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
     const data = await FilesUseCases.downloadObject(cid);
 
-    const safeName = metadata.name
-      ? metadata.name
-          .replace(/[\x00-\x1F\x7F]/g, "")
-          .replace(/[()<>@,;:\\"\/\[\]?={} \t]/g, "_")
-      : "download";
+    const safeName = safeDownloadFilename(metadata.name);
 
     if (metadata.type === "file") {
       res.set("Content-Type", metadata.mimeType || "application/octet-stream");
