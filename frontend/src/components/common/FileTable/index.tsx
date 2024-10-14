@@ -11,7 +11,8 @@ import {
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
 import { Metadata } from "../../Files/Metadata";
-import { ObjectShareModal } from "./ShareModal";
+import { ObjectShareModal } from "../../Files/ShareModal";
+import bytes from "bytes";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -79,7 +80,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   }, []);
 
   const renderRow = useCallback(
-    (file: UploadedObjectMetadata, level: number = 0) => {
+    (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
 
       return (
@@ -130,7 +131,8 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                         onMouseEnter={(e) => e.currentTarget.click()}
                         onMouseLeave={(e) => e.currentTarget.click()}
                       >
-                        {file.metadata.dataCid}
+                        {file.metadata.name ??
+                          `No name (${file.metadata.dataCid.slice(0, 12)})`}
                       </span>
                     </PopoverButton>
                     <Transition
@@ -142,7 +144,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       leaveFrom="opacity-100 translate-y-0"
                       leaveTo="opacity-0 translate-y-1"
                     >
-                      <PopoverPanel className="absolute z-10 right-0">
+                      <PopoverPanel className="absolute z-10 left-0">
                         <div className="bg-white shadow-md rounded-lg">
                           <Metadata object={file} />
                         </div>
@@ -156,7 +158,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               {file.metadata.type}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {file.metadata.totalSize}
+              {bytes(file.metadata.totalSize)}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               {renderOwnerBadge("You")}
@@ -195,7 +197,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                           : ""
                       }`}
                     >
-                      {child.cid}
+                      {child.name ?? `No name (${child.cid.slice(0, 12)})`}
                     </span>
                   </div>
                 </td>
@@ -204,7 +206,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm text-gray-500">
-                    {child.totalSize}
+                    {bytes(child.totalSize)}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

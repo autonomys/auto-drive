@@ -1,13 +1,15 @@
 "use client";
 
+import bytes from "bytes";
 import { ApiService } from "@/services/api";
-import { CrossIcon, FileIcon, FolderIcon, TrashIcon, X } from "lucide-react";
+import { FileIcon, FolderIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useInterval, useLocalStorage, useTimeout } from "usehooks-ts";
+import { useInterval, useLocalStorage } from "usehooks-ts";
 import {
   UploadedObjectMetadata,
   UploadStatus,
 } from "../../models/UploadedObjectMetadata";
+import { ObjectShareModal } from "./ShareModal";
 
 export const UploadingObjects = () => {
   const [uploadingObjects] = useLocalStorage<string[]>("uploading-objects", []);
@@ -48,6 +50,7 @@ const UploadingObject = ({
     "uploading-objects",
     []
   );
+  const [shareCid, setShareCid] = useState<string | null>(null);
 
   const progress = useMemo(() => {
     return (uploadStatus.uploadedNodes / uploadStatus.totalNodes) * 100;
@@ -73,12 +76,20 @@ const UploadingObject = ({
     setIsClosed(true);
   }, [metadata.dataCid]);
 
+  const hasBeenUploaded =
+    uploadStatus.uploadedNodes === uploadStatus.totalNodes;
+
+  const onShare = useCallback(() => {
+    setShareCid(metadata.dataCid);
+  }, [metadata.dataCid]);
+
+  const onClose = useCallback(() => {
+    setShareCid(null);
+  }, []);
+
   if (isClosed) {
     return null;
   }
-
-  const hasBeenUploaded =
-    uploadStatus.uploadedNodes === uploadStatus.totalNodes;
 
   return (
     <div className="mx-auto p-4">
@@ -89,7 +100,9 @@ const UploadingObject = ({
           </div>
           <div>
             <p className="font-semibold">{metadata.name}</p>
-            <p className="text-sm text-gray-500">Size: {metadata.totalSize}</p>
+            <p className="text-sm text-gray-500">
+              Size: {bytes(metadata.totalSize)}
+            </p>
             <p className="text-sm text-gray-500">Fees: 0 ATC</p>
           </div>
         </div>
@@ -111,7 +124,11 @@ const UploadingObject = ({
           </div>
         </div>
         <div className="flex space-x-2">
-          <button className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded">
+          <ObjectShareModal closeModal={onClose} cid={shareCid} />
+          <button
+            className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded"
+            onClick={onShare}
+          >
             Share
           </button>
         </div>

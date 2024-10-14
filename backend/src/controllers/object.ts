@@ -207,6 +207,11 @@ objectController.get("/:cid", async (req, res) => {
   const { cid } = req.params;
 
   const objectInformation = await ObjectUseCases.getObjectInformation(cid);
+
+  if (!objectInformation) {
+    return res.status(404).json({ error: "Object not found" });
+  }
+
   res.json(objectInformation);
 });
 
