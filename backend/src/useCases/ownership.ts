@@ -18,10 +18,20 @@ const setUserAsAdmin = async (user: User, cid: string) => {
 };
 
 const setObjectAsDeleted = async (user: User, cid: string) => {
-  await ownershipRepository.setObjectAsDeleted(
+  await ownershipRepository.updateDeletedAt(
     user.oauthProvider,
     user.oauthUserId,
-    cid
+    cid,
+    new Date()
+  );
+};
+
+const restoreObject = async (user: User, cid: string) => {
+  await ownershipRepository.updateDeletedAt(
+    user.oauthProvider,
+    user.oauthUserId,
+    cid,
+    null
   );
 };
 
@@ -58,4 +68,5 @@ export const OwnershipUseCases = {
   setObjectAsDeleted,
   getOwners,
   getAdmins,
+  restoreObject,
 };

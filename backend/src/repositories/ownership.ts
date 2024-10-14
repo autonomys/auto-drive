@@ -34,16 +34,17 @@ const setUserAsAdmin = async (
   });
 };
 
-const setObjectAsDeleted = async (
+const updateDeletedAt = async (
   provider: string,
   userId: string,
-  cid: string
+  cid: string,
+  markedAsDeleted: Date | null
 ): Promise<void> => {
   const db = await getDatabase();
 
   await db.query({
     text: "UPDATE object_ownership SET marked_as_deleted = $1 WHERE cid = $2 AND oauth_provider = $3 AND oauth_user_id = $4",
-    values: [new Date(), cid, provider, userId],
+    values: [markedAsDeleted, cid, provider, userId],
   });
 };
 
@@ -72,7 +73,7 @@ const getAdmins = async (cid: string): Promise<Ownership[]> => {
 export const ownershipRepository = {
   setUserAsOwner,
   setUserAsAdmin,
-  setObjectAsDeleted,
+  updateDeletedAt,
   getOwnerships,
   getAdmins,
 };

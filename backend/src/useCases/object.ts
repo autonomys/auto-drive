@@ -1,7 +1,10 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { User } from "../models/index.js";
 import { ObjectInformation, Owner } from "../models/object.js";
-import { metadataRepository } from "../repositories/index.js";
+import {
+  metadataRepository,
+  ownershipRepository,
+} from "../repositories/index.js";
 import { UsersUseCases } from "./index.js";
 import { OwnershipUseCases } from "./ownership.js";
 import { UploadStatusUseCases } from "./uploadStatus.js";
@@ -61,6 +64,20 @@ const getRootObjects = async (
   return metadataRepository.getRootObjects();
 };
 
+const getSharedRoots = async (user: User) => {
+  return metadataRepository.getSharedRootObjectsByUser(
+    user.oauthProvider,
+    user.oauthUserId
+  );
+};
+
+const getMarkedAsDeletedRoots = async (user: User) => {
+  return metadataRepository.getMarkedAsDeletedRootObjectsByUser(
+    user.oauthProvider,
+    user.oauthUserId
+  );
+};
+
 const getObjectInformation = async (
   cid: string
 ): Promise<ObjectInformation | undefined> => {
@@ -70,7 +87,7 @@ const getObjectInformation = async (
   }
 
   const uploadStatus = await UploadStatusUseCases.getUploadStatus(cid);
-  const owners: Owner[] = [];
+  const owners: Owner[] = await OwnershipUseCases.getOwners(cid);
 
   return { cid, metadata, uploadStatus, owners };
 };
@@ -94,6 +111,36 @@ const shareObject = async (executor: User, cid: string, handle: string) => {
   await OwnershipUseCases.setUserAsOwner(user, cid);
 };
 
+const markAsDeleted = async (executor: User, cid: string) => {
+  const ownerships = await ownershipRepository.getOwnerships(cid);
+  const isUserOwner = ownerships.find(
+    (owner) =>
+      owner.oauth_provider === executor.oauthProvider &&
+      owner.oauth_user_id === executor.oauthUserId
+  );
+
+  if (!isUserOwner) {
+    throw new Error("User is not an owner of this object");
+  }
+
+  await OwnershipUseCases.setObjectAsDeleted(executor, cid);
+};
+
+const restoreObject = async (executor: User, cid: string) => {
+  const ownerships = await ownershipRepository.getOwnerships(cid);
+  const isUserOwner = ownerships.find(
+    (owner) =>
+      owner.oauth_provider === executor.oauthProvider &&
+      owner.oauth_user_id === executor.oauthUserId
+  );
+
+  if (!isUserOwner) {
+    throw new Error("User is not an owner of this object");
+  }
+
+  await OwnershipUseCases.restoreObject(executor, cid);
+};
+
 export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
@@ -101,5 +148,9 @@ export const ObjectUseCases = {
   searchMetadataByCID,
   getAllMetadata,
   getRootObjects,
+  getSharedRoots,
   shareObject,
+  getMarkedAsDeletedRoots,
+  markAsDeleted,
+  restoreObject,
 };
