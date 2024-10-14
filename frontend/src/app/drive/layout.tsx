@@ -6,6 +6,7 @@ import {
   ShareIcon,
   TrashIcon,
   UserIcon,
+  UsersIcon,
 } from "lucide-react";
 import { InternalLink } from "../../components/common/InternalLink";
 import "../globals.css";
@@ -37,34 +38,25 @@ export default function AppLayout({
           </div>
         </header>
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-16 md:w-64 space-y-4">
-            <InternalLink href="/drive">
-              <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">
+          <aside className="w-16 md:w-64">
+            <InternalLink className="contents" href="/drive">
+              <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
                 <HomeIcon className="w-5 h-5" />
                 <span className="hidden md:block">Files</span>
               </button>
             </InternalLink>
-            <button
-              disabled={true}
-              className="flex items-center space-x-2 text-gray-700 opacity-50"
-            >
-              <ShareIcon className="w-5 h-5" />
-              <span className="hidden md:block">Shared</span>
-            </button>
-            <button
-              disabled={true}
-              className="flex items-center space-x-2 text-gray-700 opacity-50"
-            >
-              <TrashIcon className="w-5 h-5" />
-              <span className="hidden md:block">Trash</span>
-            </button>
-            <button
-              disabled={true}
-              className="flex items-center space-x-2 text-gray-700 opacity-50"
-            >
-              <GlobeIcon className="w-5 h-5" />
-              <span className="hidden md:block">Global feed</span>
-            </button>
+            <InternalLink className="contents" href="/drive/shared">
+              <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                <UsersIcon className="w-5 h-5" />
+                <span className="hidden md:block">Shared with me</span>
+              </button>
+            </InternalLink>
+            <InternalLink className="contents" href="/drive/trash">
+              <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                <TrashIcon className="w-5 h-5" />
+                <span className="hidden md:block">Trash</span>
+              </button>
+            </InternalLink>
           </aside>
           <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>

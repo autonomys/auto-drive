@@ -5,13 +5,12 @@ import {
   Transition,
   TransitionChild,
 } from "@headlessui/react";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import toast from "react-hot-toast";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
 import { ApiService } from "../../services/api";
-import { HandleSelector } from "../HandleSearch";
+import toast from "react-hot-toast";
 
-export const ObjectShareModal = ({
+export const ObjectDeleteModal = ({
   cid,
   closeModal,
 }: {
@@ -19,7 +18,6 @@ export const ObjectShareModal = ({
   closeModal: () => void;
 }) => {
   const isOpen = cid !== null;
-  const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
 
   useEffect(() => {
@@ -28,33 +26,21 @@ export const ObjectShareModal = ({
     }
   }, [cid]);
 
-  const shareObject = useCallback(async () => {
-    if (!selectedHandle) {
+  const deleteObject = useCallback(() => {
+    if (!metadata) {
       return;
     }
 
-    if (!metadata?.metadata.dataCid) {
-      return;
-    }
-
-    await ApiService.shareObject(metadata?.metadata.dataCid, selectedHandle)
-      .then(async () => {
-        toast.success("Object shared successfully");
-        await new Promise((resolve) => setTimeout(resolve, 100));
+    ApiService.markObjectAsDeleted(metadata.metadata.dataCid)
+      .then(() => {
+        toast.success("Object deleted successfully");
         closeModal();
+        window.location.reload();
       })
       .catch(() => {
-        toast.error("Failed to share object");
+        toast.error("Failed to delete object");
       });
-  }, [metadata, selectedHandle]);
-
-  useEffect(() => {
-    setSelectedHandle(null);
-  }, [metadata]);
-
-  const isAlreadyOwnwer = useMemo(() => {
-    return !!metadata?.owners.some((owner) => owner.handle === selectedHandle);
-  }, [metadata, selectedHandle]);
+  }, [metadata, closeModal]);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -87,36 +73,22 @@ export const ObjectShareModal = ({
                   as="h3"
                   className="text-lg font-medium leading-6 text-gray-900"
                 >
-                  Share "{metadata?.metadata.name}"
+                  Delete "{metadata?.metadata.name}"
                 </DialogTitle>
                 <div className="mt-2">
                   <p className="text-sm text-gray-500">
-                    Enter the handle of the user you want to share with.
+                    Do you want to mark this object as deleted?
                   </p>
                 </div>
-                <HandleSelector
-                  selectedHandle={selectedHandle}
-                  setSelectedHandle={setSelectedHandle}
-                />
                 <div className="mt-4 flex justify-center">
                   <button
-                    disabled={!selectedHandle || isAlreadyOwnwer}
                     type="button"
-                    className={`inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
-                      selectedHandle && !isAlreadyOwnwer
-                        ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
-                        : "bg-gray-100 text-gray-900 opacity-50"
-                    }`}
-                    onClick={shareObject}
+                    className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-100 text-blue-900 hover:bg-blue-200"
+                    onClick={deleteObject}
                   >
-                    Share
+                    Delete
                   </button>
                 </div>
-                {isAlreadyOwnwer && (
-                  <p className="text-sm text-red-500 text-center mt-4">
-                    This user is already an owner of this object.
-                  </p>
-                )}
               </DialogPanel>
             </TransitionChild>
           </div>

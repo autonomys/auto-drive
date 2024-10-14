@@ -16,14 +16,14 @@ import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
 import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
-import { ObjectDeleteModal } from "../../Files/ObjectDeleteModal";
+import { ObjectRestoreModal } from "../../Files/ObjectRestoreModal";
 
-export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
+export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
-  const [deleteCID, setDeleteCID] = useState<string | null>(null);
+  const [restoreCID, setRestoreCID] = useState<string | null>(null);
 
   const toggleRow = useCallback(
     (id: string) => {
@@ -72,10 +72,10 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     []
   );
 
-  const shareFile = useCallback(
+  const openRestoreModal = useCallback(
     (event: MouseEvent<HTMLButtonElement>, cid: string) => {
       event.stopPropagation();
-      setShareCID(cid);
+      setRestoreCID(cid);
     },
     []
   );
@@ -178,15 +178,9 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               </button>
               <button
                 className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                onClick={(e) => shareFile(e, file.metadata.dataCid)}
+                onClick={(e) => openRestoreModal(e, file.metadata.dataCid)}
               >
-                Share
-              </button>
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded"
-                onClick={(e) => setDeleteCID(file.metadata.dataCid)}
-              >
-                Delete
+                Restore
               </button>
             </td>
           </tr>
@@ -246,15 +240,16 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       renderOwnerBadge,
       renderFileIcon,
       toggleRow,
+      openRestoreModal,
     ]
   );
 
   return (
     <div className="flex flex-col">
       <ObjectShareModal cid={shareCID} closeModal={() => setShareCID(null)} />
-      <ObjectDeleteModal
-        cid={deleteCID}
-        closeModal={() => setDeleteCID(null)}
+      <ObjectRestoreModal
+        cid={restoreCID}
+        closeModal={() => setRestoreCID(null)}
       />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
