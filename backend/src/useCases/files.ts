@@ -94,11 +94,15 @@ const processTree = async (
     throw new Error("Folder node not found");
   }
 
+  const directChildrenMetadata = childrenMetadata.filter((e) =>
+    folderNode.Links.some((link) => cidToString(link.Hash) === e.dataCid)
+  );
+
   const chunkNodes = Array.from(nodes.values());
 
   const metadata: OffchainFolderMetadata = folderMetadata(
     cidToString(cidOfNode(folderNode)),
-    childrenMetadata.map((e) => ({
+    directChildrenMetadata.map((e) => ({
       cid: e.dataCid,
       name: e.name,
       type: e.type,
@@ -172,7 +176,9 @@ const retrieveAndReassembleFolderAsZip = async (
       }),
     ...metadata.children
       .filter((e) => e.type === "folder")
-      .map((e) => retrieveAndReassembleFolderAsZip(parent, e.cid)),
+      .map(async (e) => {
+        return retrieveAndReassembleFolderAsZip(folder, e.cid);
+      }),
   ]);
 
   return folder;
