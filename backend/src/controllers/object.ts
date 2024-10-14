@@ -7,6 +7,7 @@ import {
   ObjectUseCases,
   UploadStatusUseCases,
 } from "../useCases/index.js";
+import { safeDownloadFilename } from "../utils/safe.js";
 
 const objectController = Router();
 
@@ -206,15 +207,14 @@ objectController.get("/:cid/download", async (req, res) => {
     console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
     const data = await FilesUseCases.downloadObject(cid);
 
+    const safeName = safeDownloadFilename(metadata.name);
+
     if (metadata.type === "file") {
       res.set("Content-Type", metadata.mimeType || "application/octet-stream");
-      res.set("Content-Disposition", `attachment; filename="${metadata.name}"`);
+      res.set("Content-Disposition", `attachment; filename="${safeName}"`);
     } else {
       res.set("Content-Type", "application/zip");
-      res.set(
-        "Content-Disposition",
-        `attachment; filename="${metadata.name}.zip"`
-      );
+      res.set("Content-Disposition", `attachment; filename="${safeName}.zip"`);
     }
     res.send(data);
   } catch (error: any) {
