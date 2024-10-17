@@ -5,7 +5,7 @@ import {
   SubscriptionWithUser,
 } from "../models/Subscriptions";
 import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
-import { User } from "../models/User";
+import { User, UserInfo } from "../models/User";
 import { getAuthSession } from "../utils/auth";
 import { uploadFileContent } from "../utils/file";
 
@@ -16,7 +16,7 @@ export interface UploadResponse {
 }
 
 export const ApiService = {
-  getMe: async (): Promise<User> => {
+  getMe: async (): Promise<UserInfo> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");

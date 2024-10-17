@@ -13,3 +13,8 @@ export type SubscriptionGranularity = "monthly";
 export type SubscriptionWithUser = Subscription & {
   user: User;
 };
+
+export type SubscriptionInfo = Subscription & {
+  pendingUploadCredits: number;
+  pendingDownloadCredits: number;
+};

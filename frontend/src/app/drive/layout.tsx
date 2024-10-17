@@ -1,3 +1,5 @@
+"use client";
+
 import { ScopeSwitch } from "@/components/common/ScopeSwitch";
 import { SearchBar } from "@/components/SearchBar";
 import {
@@ -12,12 +14,42 @@ import "../globals.css";
 import { UserEnsurer } from "../../components/UserEnsurer";
 import { RoleProtected } from "../../components/RoleProtected";
 import { UserRole } from "../../models/User";
+import { RemainingCreditTracker } from "../../components/RemainingCreditTracker";
+import { useMemo } from "react";
+import { useUserStore } from "../../states/user";
 
-export default async function AppLayout({
+export default function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { subscription } = useUserStore();
+
+  const startDate = useMemo(() => {
+    const date = new Date();
+    return new Date(date.getFullYear(), date.getMonth(), 1).toLocaleDateString(
+      "en-US",
+      {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }
+    );
+  }, []);
+
+  const endDate = useMemo(() => {
+    const date = new Date();
+    return new Date(
+      date.getFullYear(),
+      date.getMonth() + 1,
+      1
+    ).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }, []);
+
   return (
     <div className="min-h-screen bg-white px-8">
       <div className="flex h-screen flex-col bg-white rounded-lg p-6">
@@ -68,15 +100,27 @@ export default async function AppLayout({
                   </button>
                 </InternalLink>
               </RoleProtected>
+              {subscription && (
+                <RemainingCreditTracker
+                  uploadPending={subscription.pendingUploadCredits}
+                  uploadLimit={subscription.uploadLimit}
+                  downloadPending={subscription.pendingDownloadCredits}
+                  downloadLimit={subscription.downloadLimit}
+                  startDate={startDate}
+                  endDate={endDate}
+                />
+              )}
             </aside>
             <main className="flex-1 overflow-auto p-6">{children}</main>
           </UserEnsurer>
         </div>
-        <footer className="mt-8 flex justify-start">
-          <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">
-            <UserIcon className="w-5 h-5" />
-            <span className="hidden md:block">User</span>
-          </button>
+        <footer className="mt-8 flex justify-start w-16 md:w-64 flex-col gap-2">
+          <div className="flex">
+            <button className="flex space-x-2 text-gray-700 hover:text-blue-600">
+              <UserIcon className="w-5 h-5" />
+              <span className="hidden md:block">User</span>
+            </button>
+          </div>
         </footer>
       </div>
     </div>

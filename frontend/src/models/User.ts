@@ -1,3 +1,5 @@
+import { SubscriptionInfo } from "./Subscriptions";
+
 export type OAuthUser = {
   provider: string;
   email: string;
@@ -33,6 +35,11 @@ export type UnonboardedUser = UserBase & {
 };
 
 export type User = OnboardedUser | UnonboardedUser;
+
+export type UserInfo = {
+  user: User;
+  subscription: SubscriptionInfo;
+};
 
 export const userFromOAuth = (
   user: Omit<User, "onboarded" | "handle">
