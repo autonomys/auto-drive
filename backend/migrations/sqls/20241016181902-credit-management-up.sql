@@ -3,7 +3,37 @@ CREATE TABLE api_keys_users (
     user_id TEXT NOT NULL
 );
 
+
+CREATE TABLE organizations (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE users_organizations (
+    oauth_provider TEXT NOT NULL,
+    oauth_user_id TEXT NOT NULL,
+    organization_id TEXT NOT NULL,
+    CONSTRAINT fk_user_id FOREIGN KEY (oauth_provider, oauth_user_id) REFERENCES users(oauth_provider, oauth_user_id),
+    CONSTRAINT fk_organization_id FOREIGN KEY (organization_id) REFERENCES organizations(id)
+);
+
+CREATE TABLE subscriptions (
+    id TEXT NOT NULL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    granularity TEXT NOT NULL,
+    "limit" BIGINT NOT NULL,
+    CONSTRAINT fk_organization_id FOREIGN KEY (organization_id) REFERENCES organizations(id)
+);
+
+CREATE TABLE interactions (
+    id TEXT NOT NULL,
+    subscription_id TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "amount" BIGINT NOT NULL,
+    CONSTRAINT fk_subscription_id FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)
+);
+
+
 ALTER TABLE users
-ADD COLUMN "role" text NOT NULL DEFAULT 'User',
-ADD COLUMN download_credits BIGINT NOT NULL DEFAULT 0,
-ADD COLUMN upload_credits BIGINT NOT NULL DEFAULT 0;
+ADD COLUMN "role" text NOT NULL DEFAULT 'User';
+
