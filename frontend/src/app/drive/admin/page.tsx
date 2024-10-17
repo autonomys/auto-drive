@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { ApiService } from "../../../services/api";
-import { User } from "../../../models/User";
-import { UserTable } from "../../../components/UserTable";
+import { UserSubscriptionsTable } from "../../../components/UserTable";
+import { SubscriptionWithUser } from "../../../models/Subscriptions";
 
 export default function Page() {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<SubscriptionWithUser[]>([]);
 
   useEffect(() => {
     ApiService.getUserList().then(setUsers);
@@ -16,7 +16,7 @@ export default function Page() {
     <div>
       <h1 className="text-2xl font-bold mb-4">Users</h1>
       <div className="flex flex-col gap-2">
-        <UserTable users={users} />
+        <UserSubscriptionsTable users={users} />
       </div>
     </div>
   );

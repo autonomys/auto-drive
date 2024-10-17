@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { User } from "../../models/User";
 import { ApiKeyCreationModal } from "./ApiKeyCreationModal";
-import { UserTableRow } from "./UserTableRow";
+import { UserTableRow } from "./UserSubscriptions";
+import { SubscriptionWithUser } from "../../models/Subscriptions";
 
-export const UserTable = ({ users }: { users: User[] }) => {
+export const UserSubscriptionsTable = ({
+  users,
+}: {
+  users: SubscriptionWithUser[];
+}) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const closeModal = useCallback(() => setIsOpen(false), []);
@@ -46,6 +50,12 @@ export const UserTable = ({ users }: { users: User[] }) => {
                     scope="col"
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
+                    Granularity
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
                     Upload Credits
                   </th>
                   <th
@@ -64,7 +74,7 @@ export const UserTable = ({ users }: { users: User[] }) => {
               </thead>
               <tbody>
                 {users.map((user) => (
-                  <UserTableRow key={user.handle} user={user} />
+                  <UserTableRow key={user.id} subscriptionWithUser={user} />
                 ))}
               </tbody>
             </table>

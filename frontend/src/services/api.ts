@@ -1,5 +1,9 @@
 import { ApiKey } from "../models/ApiKey";
 import { FolderTree } from "../models/FileTree";
+import {
+  SubscriptionGranularity,
+  SubscriptionWithUser,
+} from "../models/Subscriptions";
 import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
 import { User } from "../models/User";
 import { getAuthSession } from "../utils/auth";
@@ -31,13 +35,13 @@ export const ApiService = {
 
     return response.json();
   },
-  getUserList: async (): Promise<User[]> => {
+  getUserList: async (): Promise<SubscriptionWithUser[]> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/list`, {
+    const response = await fetch(`${API_BASE_URL}/users/subscriptions/list`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         "X-Auth-Provider": "google",
@@ -285,7 +289,7 @@ export const ApiService = {
       throw new Error("No session");
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/@me/update`, {
+    const response = await fetch(`${API_BASE_URL}/users/@me/onboard`, {
       method: "POST",
       body: JSON.stringify({ handle }),
       headers: {
@@ -318,5 +322,35 @@ export const ApiService = {
     );
 
     return response.json().then((data) => data.isAvailable);
+  },
+  updateSubscription: async (
+    handle: string,
+    granularity: SubscriptionGranularity,
+    uploadLimit: number,
+    downloadLimit: number
+  ): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/subscriptions/update`, {
+      method: "POST",
+      body: JSON.stringify({
+        granularity,
+        uploadLimit,
+        downloadLimit,
+        handle,
+      }),
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
   },
 };
