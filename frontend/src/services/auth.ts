@@ -1,9 +1,9 @@
-import { User } from "../models/User";
+import { User, UserInfo } from "../models/User";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export const AuthService = {
-  checkAuth: async (token: string): Promise<User> => {
+  checkAuth: async (token: string): Promise<UserInfo> => {
     const response = await fetch(`${API_BASE_URL}/users/@me`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -15,6 +15,6 @@ export const AuthService = {
       throw new Error("Failed to fetch user");
     }
 
-    return response.json() as Promise<User>;
+    return response.json() as Promise<UserInfo>;
   },
 };

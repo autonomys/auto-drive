@@ -17,10 +17,14 @@ import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
 import { ObjectRestoreModal } from "../../Files/ObjectRestoreModal";
+import { handleFileDownload } from "../../../utils/file";
+import { OffchainMetadata } from "@autonomys/auto-drive";
+import { ObjectDownloadModal } from "../../Files/ObjectDownloadModal";
 
 export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
   const [restoreCID, setRestoreCID] = useState<string | null>(null);
@@ -65,9 +69,18 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   }, []);
 
   const downloadFile = useCallback(
-    (event: MouseEvent<HTMLButtonElement>, cid: string) => {
+    async (
+      event: MouseEvent<HTMLButtonElement>,
+      type: OffchainMetadata["type"],
+      cid: string,
+      name: string
+    ) => {
       event.stopPropagation();
-      window.open(ApiService.fetchDataURL(cid), "_blank");
+      setIsDownloadModalOpen(true);
+      const blob = await ApiService.downloadObject(cid).finally(() => {
+        setIsDownloadModalOpen(false);
+      });
+      handleFileDownload(blob, type, name);
     },
     []
   );
@@ -172,7 +185,14 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               <button
                 className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                onClick={(e) => downloadFile(e, file.metadata.dataCid)}
+                onClick={(e) =>
+                  downloadFile(
+                    e,
+                    file.metadata.type,
+                    file.metadata.dataCid,
+                    file.metadata.name!
+                  )
+                }
               >
                 Download
               </button>
@@ -222,7 +242,9 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   {child.type === "file" && (
                     <button
                       className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                      onClick={(e) => downloadFile(e, child.cid)}
+                      onClick={(e) =>
+                        downloadFile(e, child.type, child.cid, child.name!)
+                      }
                     >
                       Download
                     </button>
@@ -246,6 +268,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
   return (
     <div className="flex flex-col">
+      <ObjectDownloadModal isOpen={isDownloadModalOpen} onClose={() => {}} />
       <ObjectShareModal cid={shareCID} closeModal={() => setShareCID(null)} />
       <ObjectRestoreModal
         cid={restoreCID}

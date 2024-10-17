@@ -7,6 +7,9 @@ export const Disclaimer = () => {
         <li>Uploaded content will be visible and searchable by everyone</li>
         <li>Anyone can download your files</li>
         <li>Storage is permanent and irreversible</li>
+        <li>
+          Your uploads & downloads are limitted to <strong>10MB</strong> monthly
+        </li>
       </ul>
     </div>
   );

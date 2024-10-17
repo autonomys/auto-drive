@@ -1,6 +1,11 @@
+import { ApiKey } from "../models/ApiKey";
 import { FolderTree } from "../models/FileTree";
+import {
+  SubscriptionGranularity,
+  SubscriptionWithUser,
+} from "../models/Subscriptions";
 import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
-import { User } from "../models/User";
+import { User, UserInfo } from "../models/User";
 import { getAuthSession } from "../utils/auth";
 import { uploadFileContent } from "../utils/file";
 
@@ -11,6 +16,39 @@ export interface UploadResponse {
 }
 
 export const ApiService = {
+  getMe: async (): Promise<UserInfo> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/@me`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  getUserList: async (): Promise<SubscriptionWithUser[]> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/subscriptions/list`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+    return response.json();
+  },
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const session = await getAuthSession();
     if (!session) {
@@ -81,8 +119,24 @@ export const ApiService = {
 
     return response.json();
   },
-  fetchDataURL: (cid: string): string => {
-    return `${API_BASE_URL}/objects/${cid}/download`;
+  downloadObject: async (cid: string): Promise<Blob> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/objects/${cid}/download`, {
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.blob();
   },
   searchHeadCID: async (
     query: string,
@@ -160,6 +214,27 @@ export const ApiService = {
 
     return response.json();
   },
+  generateApiKey: async (): Promise<ApiKey> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/apiKey/create`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
   shareObject: async (dataCid: string, handle: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session) {
@@ -214,7 +289,7 @@ export const ApiService = {
       throw new Error("No session");
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/@me/update`, {
+    const response = await fetch(`${API_BASE_URL}/users/@me/onboard`, {
       method: "POST",
       body: JSON.stringify({ handle }),
       headers: {
@@ -247,5 +322,35 @@ export const ApiService = {
     );
 
     return response.json().then((data) => data.isAvailable);
+  },
+  updateSubscription: async (
+    handle: string,
+    granularity: SubscriptionGranularity,
+    uploadLimit: number,
+    downloadLimit: number
+  ): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/subscriptions/update`, {
+      method: "POST",
+      body: JSON.stringify({
+        granularity,
+        uploadLimit,
+        downloadLimit,
+        handle,
+      }),
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
   },
 };
