@@ -1,4 +1,4 @@
-CREATE TABLE api_keys (
+CREATE TABLE api_keys_users (
     api_key TEXT NOT NULL,
     user_id TEXT NOT NULL
 );
