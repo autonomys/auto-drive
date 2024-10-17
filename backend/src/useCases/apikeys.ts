@@ -2,6 +2,7 @@ import { v4 } from "uuid";
 import { apiKeysRepository, usersRepository } from "../repositories/index.js";
 import { User, UserRole } from "../models/index.js";
 import { UsersUseCases } from "./users.js";
+import { OrganizationsUseCases } from "./organizations.js";
 
 const createApiKey = async (executor: User) => {
   const isAdmin = await UsersUseCases.isAdminUser(executor);

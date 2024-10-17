@@ -5,8 +5,6 @@ export interface User {
   oauth_provider: string;
   oauth_user_id: string;
   role: UserRole;
-  download_credits: number;
-  upload_credits: number;
   handle: string;
 }
 
@@ -37,23 +35,16 @@ const createUser = async (
   oauth_provider: string,
   oauth_user_id: string,
   handle: string,
-  role: UserRole,
-  download_credits: number,
-  upload_credits: number
-): Promise<void> => {
+  role: UserRole
+): Promise<User | undefined> => {
   const db = await getDatabase();
 
-  await db.query(
-    "INSERT INTO users (oauth_provider, oauth_user_id, handle, role, download_credits, upload_credits) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-    [
-      oauth_provider,
-      oauth_user_id,
-      handle,
-      role,
-      download_credits,
-      upload_credits,
-    ]
+  const user = await db.query<User>(
+    "INSERT INTO users (oauth_provider, oauth_user_id, handle, role) VALUES ($1, $2, $3, $4) RETURNING *",
+    [oauth_provider, oauth_user_id, handle, role]
   );
+
+  return user.rows.at(0);
 };
 
 const updateHandle = async (
@@ -100,66 +91,6 @@ const updateRole = async (
   return updatedUser.rows.at(0);
 };
 
-const setDownloadCredits = async (
-  oauth_provider: string,
-  oauth_user_id: string,
-  credits: number
-): Promise<User> => {
-  const db = await getDatabase();
-
-  const updatedUser = await db.query(
-    "UPDATE users SET download_credits = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *",
-    [credits, oauth_provider, oauth_user_id]
-  );
-
-  return updatedUser.rows.at(0);
-};
-
-const setUploadCredits = async (
-  oauth_provider: string,
-  oauth_user_id: string,
-  credits: number
-): Promise<User> => {
-  const db = await getDatabase();
-
-  const updatedUser = await db.query(
-    "UPDATE users SET upload_credits = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *",
-    [credits, oauth_provider, oauth_user_id]
-  );
-
-  return updatedUser.rows.at(0);
-};
-
-const subtractDownloadCredits = async (
-  oauth_provider: string,
-  oauth_user_id: string,
-  credits: number
-): Promise<User> => {
-  const db = await getDatabase();
-
-  const updatedUser = await db.query(
-    "UPDATE users SET download_credits = download_credits - $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *",
-    [credits, oauth_provider, oauth_user_id]
-  );
-
-  return updatedUser.rows.at(0);
-};
-
-const subtractUploadCredits = async (
-  oauth_provider: string,
-  oauth_user_id: string,
-  credits: number
-): Promise<User> => {
-  const db = await getDatabase();
-
-  const updatedUser = await db.query(
-    "UPDATE users SET upload_credits = upload_credits - $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *",
-    [credits, oauth_provider, oauth_user_id]
-  );
-
-  return updatedUser.rows.at(0);
-};
-
 const getAllUsers = async (): Promise<User[]> => {
   // TODO: Paginate when table gets big
   const db = await getDatabase();
@@ -176,9 +107,5 @@ export const usersRepository = {
   getUserByOAuthInformation,
   searchUsersByHandle,
   updateRole,
-  setDownloadCredits,
-  setUploadCredits,
-  subtractDownloadCredits,
-  subtractUploadCredits,
   getAllUsers,
 };

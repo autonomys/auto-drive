@@ -7,7 +7,10 @@ import {
   UserOrHandle,
   UserRole,
 } from "../models/index.js";
+import { InteractionType } from "../models/interactions.js";
 import { usersRepository } from "../repositories/index.js";
+import { OrganizationsUseCases } from "./organizations.js";
+import { SubscriptionsUseCases } from "./subscriptions.js";
 
 const getUserByHandle = async (handle: string): Promise<User | undefined> => {
   const dbUser = await usersRepository.getUserByHandle(handle);
@@ -20,8 +23,6 @@ const getUserByHandle = async (handle: string): Promise<User | undefined> => {
     oauthUserId: dbUser.oauth_user_id,
     handle: dbUser.handle,
     role: dbUser.role,
-    downloadCredits: dbUser.download_credits,
-    uploadCredits: dbUser.upload_credits,
   });
 };
 
@@ -55,8 +56,6 @@ const updateUserHandle = async (
     oauthUserId: updatedUser.oauth_user_id,
     handle: updatedUser.handle,
     role: updatedUser.role,
-    downloadCredits: updatedUser.download_credits,
-    uploadCredits: updatedUser.upload_credits,
   });
 };
 
@@ -70,8 +69,6 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<User> => {
       oauthProvider: user.provider,
       oauthUserId: user.id,
       role: UserRole.User,
-      downloadCredits: 0,
-      uploadCredits: 0,
     });
   }
 
@@ -80,8 +77,6 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<User> => {
     oauthUserId: dbUser.oauth_user_id,
     handle: dbUser.handle,
     role: dbUser.role,
-    downloadCredits: dbUser.download_credits,
-    uploadCredits: dbUser.upload_credits,
   });
 };
 
@@ -118,89 +113,6 @@ const updateRole = async (
   return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role);
 };
 
-const setDownloadCreditsToUser = async (
-  executor: User,
-  userOrHandle: UserOrHandle,
-  credits: number
-): Promise<void> => {
-  const hasAdminPrivileges = await UsersUseCases.isAdminUser(executor);
-  if (!hasAdminPrivileges) {
-    throw new Error("User does not have admin privileges");
-  }
-  const user = await resolveUser(userOrHandle);
-
-  await usersRepository.setDownloadCredits(
-    user.oauthProvider,
-    user.oauthUserId,
-    credits
-  );
-};
-
-const setUploadCreditsToUser = async (
-  executor: User,
-  userOrHandle: UserOrHandle,
-  credits: number
-): Promise<void> => {
-  const hasAdminPrivileges = await UsersUseCases.isAdminUser(executor);
-  if (!hasAdminPrivileges) {
-    throw new Error("User does not have admin privileges");
-  }
-
-  const user = await resolveUser(userOrHandle);
-
-  await usersRepository.setUploadCredits(
-    user.oauthProvider,
-    user.oauthUserId,
-    credits
-  );
-};
-
-const subtractDownloadCreditsFromUser = async (
-  executor: User,
-  credits: number
-): Promise<void> => {
-  if (credits <= 0) {
-    throw new Error("Credits must be positive");
-  }
-
-  await usersRepository.subtractDownloadCredits(
-    executor.oauthProvider,
-    executor.oauthUserId,
-    credits
-  );
-};
-
-const subtractUploadCreditsFromUser = async (
-  executor: User,
-  credits: number
-): Promise<void> => {
-  if (credits <= 0) {
-    throw new Error("Credits must be positive");
-  }
-
-  await usersRepository.subtractUploadCredits(
-    executor.oauthProvider,
-    executor.oauthUserId,
-    credits
-  );
-};
-
-const getCreditsForUser = async (user: User): Promise<Credits> => {
-  const credits = await usersRepository.getUserByOAuthInformation(
-    user.oauthProvider,
-    user.oauthUserId
-  );
-
-  if (!credits) {
-    throw new Error("User not found");
-  }
-
-  return {
-    downloadCredits: credits.download_credits,
-    uploadCredits: credits.upload_credits,
-  };
-};
-
 const getUserList = async (reader: User): Promise<User[]> => {
   const isAdmin = await UsersUseCases.isAdminUser(reader);
   if (!isAdmin) {
@@ -214,8 +126,6 @@ const getUserList = async (reader: User): Promise<User[]> => {
       oauthUserId: e.oauth_user_id,
       handle: e.handle,
       role: e.role,
-      downloadCredits: e.download_credits,
-      uploadCredits: e.upload_credits,
     })
   );
 };
@@ -226,16 +136,37 @@ const initUser = async (
   handle: string,
   role: UserRole = UserRole.User
 ) => {
-  const INITIAL_DOWNLOAD_CREDITS = 10_000_000_000;
-  const INITIAL_UPLOAD_CREDITS = 10_000_000_000;
-
-  await usersRepository.createUser(
+  const user = await usersRepository.createUser(
     oauth_provider,
     oauth_user_id,
     handle,
-    role,
-    INITIAL_DOWNLOAD_CREDITS,
-    INITIAL_UPLOAD_CREDITS
+    role
+  );
+  if (!user) {
+    throw new Error("User creation failed");
+  }
+
+  await OrganizationsUseCases.initOrganization(
+    userFromTable({
+      oauthProvider: oauth_provider,
+      oauthUserId: oauth_user_id,
+      handle: handle,
+      role: role,
+    })
+  );
+};
+
+const getPendingCreditsByUserAndType = async (
+  userOrHandle: UserOrHandle,
+  type: InteractionType
+): Promise<number> => {
+  const subscription = await SubscriptionsUseCases.getSubscription(
+    userOrHandle
+  );
+
+  return SubscriptionsUseCases.getPendingCreditsBySubscriptionAndType(
+    subscription,
+    type
   );
 };
 
@@ -247,11 +178,7 @@ export const UsersUseCases = {
   isAdminUser,
   updateRole,
   resolveUser,
-  setDownloadCreditsToUser,
-  setUploadCreditsToUser,
-  getCreditsForUser,
-  subtractDownloadCreditsFromUser,
-  subtractUploadCreditsFromUser,
   getUserList,
+  getPendingCreditsByUserAndType,
   initUser,
 };

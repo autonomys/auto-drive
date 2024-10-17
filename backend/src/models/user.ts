@@ -17,8 +17,6 @@ type UserBase = {
   oauthProvider: string;
   oauthUserId: string;
   role: UserRole;
-  downloadCredits: number;
-  uploadCredits: number;
   handle: Handle;
 };
 

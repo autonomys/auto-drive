@@ -21,6 +21,8 @@ import {
   OwnershipUseCases,
   UsersUseCases,
 } from "../useCases/index.js";
+import { InteractionsUseCases } from "./interactions.js";
+import { InteractionType } from "../models/interactions.js";
 
 const processFile = async (
   data: Buffer,
@@ -195,8 +197,11 @@ const downloadObject = async (
     throw new Error(`Metadata with CID ${cid} not found`);
   }
 
-  const credits = await UsersUseCases.getCreditsForUser(reader);
-  if (credits.downloadCredits < metadata.totalSize) {
+  const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
+    reader,
+    InteractionType.Download
+  );
+  if (pendingCredits < metadata.totalSize) {
     throw new Error("Not enough download credits");
   }
 
@@ -212,8 +217,8 @@ const downloadObject = async (
   }
 
   const data = await retrieveAndReassembleFile(metadata);
-  await UsersUseCases.subtractDownloadCreditsFromUser(
-    reader,
+  InteractionsUseCases.createInteraction(
+    InteractionType.Download,
     metadata.totalSize
   );
 
@@ -226,8 +231,11 @@ const uploadFile = async (
   filename?: string,
   mimeType?: string
 ): Promise<string> => {
-  const credits = await UsersUseCases.getCreditsForUser(user);
-  if (credits.uploadCredits < data.length) {
+  const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
+    user,
+    InteractionType.Upload
+  );
+  if (pendingCredits < data.length) {
     throw new Error("Not enough upload credits");
   }
 
@@ -247,7 +255,7 @@ const uploadFile = async (
     metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
   );
 
-  await UsersUseCases.subtractUploadCreditsFromUser(user, data.length);
+  InteractionsUseCases.createInteraction(InteractionType.Upload, data.length);
 
   return rootCid;
 };
@@ -263,12 +271,15 @@ const uploadTree = async (
     metadata,
   } = await processTree(folderTree, files);
 
-  const credits = await UsersUseCases.getCreditsForUser(user);
+  const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
+    user,
+    InteractionType.Upload
+  );
   const rootMetadata = metadata.find((e) => e.dataCid === rootCid);
   if (!rootMetadata) {
     throw new Error(`Root metadata with CID ${rootCid} not found`);
   }
-  if (credits.uploadCredits < rootMetadata.totalSize) {
+  if (pendingCredits < rootMetadata.totalSize) {
     throw new Error("Not enough upload credits");
   }
 
@@ -282,8 +293,8 @@ const uploadTree = async (
     metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
   );
 
-  await UsersUseCases.subtractUploadCreditsFromUser(
-    user,
+  InteractionsUseCases.createInteraction(
+    InteractionType.Upload,
     rootMetadata.totalSize
   );
 

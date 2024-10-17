@@ -65,3 +65,18 @@ CREATE TRIGGER set_timestamp
 BEFORE UPDATE ON api_keys_users
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_set_timestamp();
+
+CREATE TRIGGER set_timestamp
+BEFORE UPDATE ON interactions
+FOR EACH ROW
+EXECUTE PROCEDURE trigger_set_timestamp();
+
+CREATE TRIGGER set_timestamp
+BEFORE UPDATE ON organizations
+FOR EACH ROW
+EXECUTE PROCEDURE trigger_set_timestamp();
+
+CREATE TRIGGER set_timestamp
+BEFORE UPDATE ON subscriptions
+FOR EACH ROW
+EXECUTE PROCEDURE trigger_set_timestamp();
