@@ -7,6 +7,7 @@ import {
   ObjectUseCases,
   UploadStatusUseCases,
 } from "../useCases/index.js";
+import { safeDownloadFilename } from "../utils/safe.js";
 
 const objectController = Router();
 
@@ -21,6 +22,28 @@ objectController.get("/roots", async (req, res) => {
     user && scope === "user" ? { user, scope } : { scope: "global" }
   );
   res.json(roots);
+});
+
+objectController.get("/roots/shared", async (req, res) => {
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  const sharedRoots = await ObjectUseCases.getSharedRoots(user);
+
+  res.json(sharedRoots);
+});
+
+objectController.get("/roots/deleted", async (req, res) => {
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  const deletedRoots = await ObjectUseCases.getMarkedAsDeletedRoots(user);
+
+  res.json(deletedRoots);
 });
 
 objectController.get("/search", async (req, res) => {
@@ -184,15 +207,14 @@ objectController.get("/:cid/download", async (req, res) => {
     console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
     const data = await FilesUseCases.downloadObject(cid);
 
+    const safeName = safeDownloadFilename(metadata.name);
+
     if (metadata.type === "file") {
       res.set("Content-Type", metadata.mimeType || "application/octet-stream");
-      res.set("Content-Disposition", `attachment; filename="${metadata.name}"`);
+      res.set("Content-Disposition", `attachment; filename="${safeName}"`);
     } else {
       res.set("Content-Type", "application/zip");
-      res.set(
-        "Content-Disposition",
-        `attachment; filename="${metadata.name}.zip"`
-      );
+      res.set("Content-Disposition", `attachment; filename="${safeName}.zip"`);
     }
     res.send(data);
   } catch (error: any) {
@@ -203,10 +225,55 @@ objectController.get("/:cid/download", async (req, res) => {
   }
 });
 
+objectController.post("/:cid/delete", async (req, res) => {
+  try {
+    const user = await handleAuth(req, res);
+    if (!user) {
+      return;
+    }
+
+    const { cid } = req.params;
+
+    await ObjectUseCases.markAsDeleted(user, cid);
+
+    res.sendStatus(200);
+  } catch (error: any) {
+    console.error("Error deleting object:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to delete object", details: error.message });
+  }
+});
+
+objectController.post("/:cid/restore", async (req, res) => {
+  try {
+    const user = await handleAuth(req, res);
+    if (!user) {
+      return;
+    }
+
+    const { cid } = req.params;
+
+    await ObjectUseCases.restoreObject(user, cid);
+
+    res.sendStatus(200);
+  } catch (error: any) {
+    console.error("Error deleting object:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to delete object", details: error.message });
+  }
+});
+
 objectController.get("/:cid", async (req, res) => {
   const { cid } = req.params;
 
   const objectInformation = await ObjectUseCases.getObjectInformation(cid);
+
+  if (!objectInformation) {
+    return res.status(404).json({ error: "Object not found" });
+  }
+
   res.json(objectInformation);
 });
 

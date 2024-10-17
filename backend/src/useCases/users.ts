@@ -44,8 +44,6 @@ const updateUserHandle = async (
   user: User,
   handle: string
 ): Promise<User | undefined> => {
-  console.log("Updating user handle", user, handle);
-
   const updatedUser = await usersRepository.updateHandle(
     user.oauthProvider,
     user.oauthUserId,

@@ -17,6 +17,9 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "Auto-Drive",
   description: "Autonomys Drive",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
