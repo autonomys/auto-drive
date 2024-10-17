@@ -33,6 +33,7 @@ export const RemainingCreditTracker = ({
                 <span className="text-gray-700">{bytes(uploadUsed)}</span>/
                 <span className="text-gray-500">{bytes(uploadLimit)}</span>
               </span>
+              <span>{bytes(uploadLimit)}</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
               <div
