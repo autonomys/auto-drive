@@ -1,17 +1,19 @@
 import { ScopeSwitch } from "@/components/common/ScopeSwitch";
 import { SearchBar } from "@/components/SearchBar";
 import {
-  GlobeIcon,
   HomeIcon,
-  ShareIcon,
+  SettingsIcon,
   TrashIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
 import { InternalLink } from "../../components/common/InternalLink";
 import "../globals.css";
+import { UserEnsurer } from "../../components/UserEnsurer";
+import { RoleProtected } from "../../components/RoleProtected";
+import { UserRole } from "../../models/User";
 
-export default function AppLayout({
+export default async function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -38,27 +40,37 @@ export default function AppLayout({
           </div>
         </header>
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-16 md:w-64">
-            <InternalLink className="contents" href="/drive">
-              <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
-                <HomeIcon className="w-5 h-5" />
-                <span className="hidden md:block">Files</span>
-              </button>
-            </InternalLink>
-            <InternalLink className="contents" href="/drive/shared">
-              <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
-                <UsersIcon className="w-5 h-5" />
-                <span className="hidden md:block">Shared with me</span>
-              </button>
-            </InternalLink>
-            <InternalLink className="contents" href="/drive/trash">
-              <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
-                <TrashIcon className="w-5 h-5" />
-                <span className="hidden md:block">Trash</span>
-              </button>
-            </InternalLink>
-          </aside>
-          <main className="flex-1 overflow-auto p-6">{children}</main>
+          <UserEnsurer>
+            <aside className="w-16 md:w-64">
+              <InternalLink className="contents" href="/drive">
+                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                  <HomeIcon className="w-5 h-5" />
+                  <span className="hidden md:block">Files</span>
+                </button>
+              </InternalLink>
+              <InternalLink className="contents" href="/drive/shared">
+                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                  <UsersIcon className="w-5 h-5" />
+                  <span className="hidden md:block">Shared with me</span>
+                </button>
+              </InternalLink>
+              <InternalLink className="contents" href="/drive/trash">
+                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                  <TrashIcon className="w-5 h-5" />
+                  <span className="hidden md:block">Trash</span>
+                </button>
+              </InternalLink>
+              <RoleProtected roles={[UserRole.Admin]}>
+                <InternalLink className="contents" href="/drive/admin">
+                  <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                    <SettingsIcon className="w-5 h-5" />
+                    <span className="hidden md:block">Admin</span>
+                  </button>
+                </InternalLink>
+              </RoleProtected>
+            </aside>
+            <main className="flex-1 overflow-auto p-6">{children}</main>
+          </UserEnsurer>
         </div>
         <footer className="mt-8 flex justify-start">
           <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">

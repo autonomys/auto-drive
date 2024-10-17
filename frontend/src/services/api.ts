@@ -1,3 +1,4 @@
+import { ApiKey } from "../models/ApiKey";
 import { FolderTree } from "../models/FileTree";
 import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
 import { User } from "../models/User";
@@ -11,6 +12,39 @@ export interface UploadResponse {
 }
 
 export const ApiService = {
+  getMe: async (): Promise<User> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/@me`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  getUserList: async (): Promise<User[]> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/list`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+    return response.json();
+  },
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const session = await getAuthSession();
     if (!session) {
@@ -167,6 +201,27 @@ export const ApiService = {
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
         "X-Auth-Provider": "google",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  generateApiKey: async (): Promise<ApiKey> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/apiKey/create`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+        "Content-Type": "application/json",
       },
     });
 
