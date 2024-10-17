@@ -14,8 +14,8 @@ export const RemainingCreditTracker = ({
   uploadLimit = 1000,
   downloadPending = 0,
   downloadLimit = 2000,
-  startDate = "Oct 16, 2024",
-  endDate = "Nov 16, 2024",
+  startDate,
+  endDate,
 }: CreditLimitsProps) => {
   const uploadPercentage = (uploadUsed / uploadLimit) * 100;
   const downloadPercentage = (downloadPending / downloadLimit) * 100;

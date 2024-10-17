@@ -30,7 +30,7 @@ export default function AppLayout({
     return new Date(date.getFullYear(), date.getMonth(), 1).toLocaleDateString(
       "en-US",
       {
-        month: "long",
+        month: "short",
         day: "numeric",
         year: "numeric",
       }
@@ -44,7 +44,7 @@ export default function AppLayout({
       date.getMonth() + 1,
       1
     ).toLocaleDateString("en-US", {
-      month: "long",
+      month: "short",
       day: "numeric",
       year: "numeric",
     });
@@ -73,7 +73,7 @@ export default function AppLayout({
         </header>
         <div className="flex flex-1 overflow-hidden">
           <UserEnsurer>
-            <aside className="w-16 md:w-64">
+            <aside className="w-12 md:w-48">
               <InternalLink className="contents" href="/drive">
                 <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
                   <HomeIcon className="w-5 h-5" />
