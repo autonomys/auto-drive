@@ -150,7 +150,7 @@ userController.post("/admin/remove", async (req, res) => {
   }
 });
 
-userController.post("/credit/add-download", async (req, res) => {
+userController.post("/credit/set-download", async (req, res) => {
   const user = await handleAuth(req, res);
   if (!user) {
     return;
@@ -171,7 +171,7 @@ userController.post("/credit/add-download", async (req, res) => {
   }
 
   try {
-    await UsersUseCases.addDownloadCreditsToUser(user, handle, amount);
+    await UsersUseCases.setDownloadCreditsToUser(user, handle, amount);
 
     res.sendStatus(200);
   } catch (error) {
@@ -180,7 +180,7 @@ userController.post("/credit/add-download", async (req, res) => {
   }
 });
 
-userController.post("/credit/add-upload", async (req, res) => {
+userController.post("/credit/set-upload", async (req, res) => {
   const user = await handleAuth(req, res);
   if (!user) {
     return;
@@ -201,7 +201,7 @@ userController.post("/credit/add-upload", async (req, res) => {
   }
 
   try {
-    await UsersUseCases.addUploadCreditsToUser(user, handle, amount);
+    await UsersUseCases.setUploadCreditsToUser(user, handle, amount);
 
     res.sendStatus(200);
   } catch (error) {

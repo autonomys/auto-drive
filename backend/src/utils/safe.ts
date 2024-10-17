@@ -9,11 +9,3 @@ export const safeCallback =
       console.error(error);
     }
   };
-
-export const safeDownloadFilename = (filename?: string) => {
-  return filename
-    ? filename
-        .replace(/[\x00-\x1F\x7F]/g, "")
-        .replace(/[()<>@,;:\\"\/\[\]?={} \t]/g, "_")
-    : "download";
-};

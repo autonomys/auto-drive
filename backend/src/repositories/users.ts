@@ -100,7 +100,7 @@ const updateRole = async (
   return updatedUser.rows.at(0);
 };
 
-const addDownloadCredits = async (
+const setDownloadCredits = async (
   oauth_provider: string,
   oauth_user_id: string,
   credits: number
@@ -108,14 +108,14 @@ const addDownloadCredits = async (
   const db = await getDatabase();
 
   const updatedUser = await db.query(
-    "UPDATE users SET download_credits = download_credits + $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *",
+    "UPDATE users SET download_credits = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *",
     [credits, oauth_provider, oauth_user_id]
   );
 
   return updatedUser.rows.at(0);
 };
 
-const addUploadCredits = async (
+const setUploadCredits = async (
   oauth_provider: string,
   oauth_user_id: string,
   credits: number
@@ -123,7 +123,7 @@ const addUploadCredits = async (
   const db = await getDatabase();
 
   const updatedUser = await db.query(
-    "UPDATE users SET upload_credits = upload_credits + $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *",
+    "UPDATE users SET upload_credits = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *",
     [credits, oauth_provider, oauth_user_id]
   );
 
@@ -176,8 +176,8 @@ export const usersRepository = {
   getUserByOAuthInformation,
   searchUsersByHandle,
   updateRole,
-  addDownloadCredits,
-  addUploadCredits,
+  setDownloadCredits,
+  setUploadCredits,
   subtractDownloadCredits,
   subtractUploadCredits,
   getAllUsers,

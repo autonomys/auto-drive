@@ -118,7 +118,7 @@ const updateRole = async (
   return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role);
 };
 
-const addDownloadCreditsToUser = async (
+const setDownloadCreditsToUser = async (
   executor: User,
   userOrHandle: UserOrHandle,
   credits: number
@@ -129,14 +129,14 @@ const addDownloadCreditsToUser = async (
   }
   const user = await resolveUser(userOrHandle);
 
-  await usersRepository.addDownloadCredits(
+  await usersRepository.setDownloadCredits(
     user.oauthProvider,
     user.oauthUserId,
     credits
   );
 };
 
-const addUploadCreditsToUser = async (
+const setUploadCreditsToUser = async (
   executor: User,
   userOrHandle: UserOrHandle,
   credits: number
@@ -148,7 +148,7 @@ const addUploadCreditsToUser = async (
 
   const user = await resolveUser(userOrHandle);
 
-  await usersRepository.addUploadCredits(
+  await usersRepository.setUploadCredits(
     user.oauthProvider,
     user.oauthUserId,
     credits
@@ -247,8 +247,8 @@ export const UsersUseCases = {
   isAdminUser,
   updateRole,
   resolveUser,
-  addDownloadCreditsToUser,
-  addUploadCreditsToUser,
+  setDownloadCreditsToUser,
+  setUploadCreditsToUser,
   getCreditsForUser,
   subtractDownloadCreditsFromUser,
   subtractUploadCreditsFromUser,
