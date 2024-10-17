@@ -81,8 +81,24 @@ export const ApiService = {
 
     return response.json();
   },
-  fetchDataURL: (cid: string): string => {
-    return `${API_BASE_URL}/objects/${cid}/download`;
+  downloadObject: async (cid: string): Promise<Blob> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/objects/${cid}/download`, {
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.blob();
   },
   searchHeadCID: async (
     query: string,

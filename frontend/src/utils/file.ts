@@ -1,3 +1,5 @@
+import { OffchainMetadata } from "@autonomys/auto-drive";
+
 export const uploadFileContent = (file: File) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -8,4 +10,21 @@ export const uploadFileContent = (file: File) => {
     };
     reader.readAsDataURL(file);
   });
+};
+
+export const handleFileDownload = (
+  blob: Blob,
+  type: OffchainMetadata["type"],
+  name: string
+) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.style.display = "none";
+  a.href = url;
+  a.download = type === "file" ? name : `${name}.zip`;
+  document.body.appendChild(a);
+  a.click();
+
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 };

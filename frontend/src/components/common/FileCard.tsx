@@ -15,8 +15,10 @@ import {
   Share2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
+import { handleFileDownload } from "../../utils/file";
+import { ObjectDownloadModal } from "../Files/ObjectDownloadModal";
 
 interface FileCardProps extends Partial<UploadedObjectMetadata> {
   icon?: React.ReactNode;
@@ -28,16 +30,20 @@ export function FileCard({
   icon,
 }: FileCardProps) {
   const router = useRouter();
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
   const onDownload = useCallback(
-    (
+    async (
       event: React.MouseEvent<HTMLButtonElement | HTMLSpanElement>,
       cid: string
     ) => {
       event.preventDefault();
       event.stopPropagation();
-      const url = ApiService.fetchDataURL(cid);
-      window.open(url, "_blank");
+      setIsDownloadModalOpen(true);
+      const blob = await ApiService.downloadObject(cid).finally(() => {
+        setIsDownloadModalOpen(false);
+      });
+      handleFileDownload(blob, type, name!);
     },
     []
   );
@@ -65,6 +71,10 @@ export function FileCard({
 
   return (
     <Popover className="flex flex-col flex-1">
+      <ObjectDownloadModal
+        isOpen={isDownloadModalOpen}
+        onClose={() => setIsDownloadModalOpen(false)}
+      />
       <div className="relative bg-white rounded-lg border border-gray-200 p-4 shadow-sm max-w-sm flex flex-col flex-1">
         <div className="flex justify-between items-start mb-4">
           {objectIcon}
