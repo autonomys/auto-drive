@@ -212,7 +212,7 @@ objectController.get("/:cid/download", async (req, res) => {
     console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
     const data = await FilesUseCases.downloadObject(user, cid);
 
-    const safeName = safeDownloadFilename(metadata.name);
+    const safeName = encodeURIComponent(metadata.name || "download");
 
     if (metadata.type === "file") {
       res.set("Content-Type", metadata.mimeType || "application/octet-stream");
