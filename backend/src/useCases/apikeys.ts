@@ -1,10 +1,10 @@
 import { v4 } from "uuid";
-import { apiKeysRepository } from "../repositories/index.js";
-import { User } from "../models/index.js";
+import { apiKeysRepository, usersRepository } from "../repositories/index.js";
+import { User, UserRole } from "../models/index.js";
 import { UsersUseCases } from "./users.js";
 
-const createApiKey = async (user: User) => {
-  const isAdmin = await UsersUseCases.isAdminUser(user);
+const createApiKey = async (executor: User) => {
+  const isAdmin = await UsersUseCases.isAdminUser(executor);
   if (!isAdmin) {
     throw new Error("User does not have admin privileges");
   }
@@ -13,6 +13,8 @@ const createApiKey = async (user: User) => {
   const userId = v4().replace(/-/g, "");
 
   const apiKeyObject = await apiKeysRepository.createApiKey(apiKey, userId);
+
+  await UsersUseCases.initUser("apikey", userId, userId);
 
   return apiKeyObject;
 };

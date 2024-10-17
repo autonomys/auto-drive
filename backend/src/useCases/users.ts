@@ -223,6 +223,25 @@ const getUserList = async (reader: User): Promise<User[]> => {
   );
 };
 
+const initUser = async (
+  oauth_provider: string,
+  oauth_user_id: string,
+  handle: string,
+  role: UserRole = UserRole.User
+) => {
+  const INITIAL_DOWNLOAD_CREDITS = 10_000_000_000;
+  const INITIAL_UPLOAD_CREDITS = 10_000_000_000;
+
+  await usersRepository.createUser(
+    oauth_provider,
+    oauth_user_id,
+    handle,
+    role,
+    INITIAL_DOWNLOAD_CREDITS,
+    INITIAL_UPLOAD_CREDITS
+  );
+};
+
 export const UsersUseCases = {
   updateUserHandle,
   getUserByOAuthUser,
@@ -237,4 +256,5 @@ export const UsersUseCases = {
   subtractDownloadCreditsFromUser,
   subtractUploadCreditsFromUser,
   getUserList,
+  initUser,
 };
