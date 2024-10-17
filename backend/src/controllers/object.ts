@@ -7,7 +7,6 @@ import {
   ObjectUseCases,
   UploadStatusUseCases,
 } from "../useCases/index.js";
-import { safeDownloadFilename } from "../utils/safe.js";
 
 const objectController = Router();
 

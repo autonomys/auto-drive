@@ -3,6 +3,7 @@ import { handleAuth } from "../services/authManager/express.js";
 import { UsersUseCases } from "../useCases/index.js";
 import { ApiKeysUseCases } from "../useCases/apikeys.js";
 import { UserRole } from "../models/index.js";
+import { SubscriptionsUseCases } from "../useCases/subscriptions.js";
 
 const userController = Router();
 
@@ -150,13 +151,13 @@ userController.post("/admin/remove", async (req, res) => {
   }
 });
 
-userController.post("/credit/set-download", async (req, res) => {
+userController.post("/subscriptions/update", async (req, res) => {
   const user = await handleAuth(req, res);
   if (!user) {
     return;
   }
 
-  const { handle, amount } = req.body;
+  const { handle, limit, granularity } = req.body;
 
   if (typeof handle !== "string") {
     return res
@@ -164,14 +165,24 @@ userController.post("/credit/set-download", async (req, res) => {
       .json({ error: "Missing or invalid attribute `handle` in body" });
   }
 
-  if (typeof amount !== "number") {
+  if (typeof limit !== "number") {
     return res
       .status(400)
       .json({ error: "Missing or invalid attribute `amount` in body" });
   }
 
+  if (granularity !== "monthly") {
+    // TODO: support other granularities
+    return res.status(400).json({ error: "Invalid granularity" });
+  }
+
   try {
-    await UsersUseCases.setDownloadCreditsToUser(user, handle, amount);
+    await SubscriptionsUseCases.updateSubscription(
+      user,
+      handle,
+      granularity,
+      limit
+    );
 
     res.sendStatus(200);
   } catch (error) {
@@ -180,37 +191,7 @@ userController.post("/credit/set-download", async (req, res) => {
   }
 });
 
-userController.post("/credit/set-upload", async (req, res) => {
-  const user = await handleAuth(req, res);
-  if (!user) {
-    return;
-  }
-
-  const { handle, amount } = req.body;
-
-  if (typeof handle !== "string") {
-    return res
-      .status(400)
-      .json({ error: "Missing or invalid attribute `handle` in body" });
-  }
-
-  if (typeof amount !== "number") {
-    return res
-      .status(400)
-      .json({ error: "Missing or invalid attribute `amount` in body" });
-  }
-
-  try {
-    await UsersUseCases.setUploadCreditsToUser(user, handle, amount);
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Failed to add credits" });
-  }
-});
-
-userController.get("/list", async (req, res) => {
+userController.get("/subscriptions/list", async (req, res) => {
   const user = await handleAuth(req, res);
   if (!user) {
     return;

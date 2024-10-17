@@ -22,7 +22,7 @@ const createApiKey = async (
   const db = await getDatabase();
 
   const result = await db.query<DBApiKey>(
-    "INSERT INTO api_keys (api_key, user_id) VALUES ($1, $2) RETURNING *",
+    "INSERT INTO api_keys_users (api_key, user_id) VALUES ($1, $2) RETURNING *",
     [apiKey, userId]
   );
 
@@ -33,7 +33,7 @@ const getApiKey = async (apiKey: string): Promise<ApiKey | null> => {
   const db = await getDatabase();
 
   const result = await db.query<DBApiKey>(
-    "SELECT * FROM api_keys WHERE api_key = $1",
+    "SELECT * FROM api_keys_users WHERE api_key = $1",
     [apiKey]
   );
 
