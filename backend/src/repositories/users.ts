@@ -1,8 +1,10 @@
 import { getDatabase } from "../drivers/pg.js";
+import { UserRole } from "../models/user.js";
 
 export interface User {
   oauth_provider: string;
   oauth_user_id: string;
+  role: UserRole;
   handle: string;
 }
 
@@ -32,29 +34,17 @@ const getUserByOAuthInformation = async (
 const createUser = async (
   oauth_provider: string,
   oauth_user_id: string,
-  handle: string
-): Promise<void> => {
+  handle: string,
+  role: UserRole
+): Promise<User | undefined> => {
   const db = await getDatabase();
 
-  await db.query(
-    "INSERT INTO users (oauth_provider, oauth_user_id, handle) VALUES ($1, $2, $3) RETURNING *",
-    [oauth_provider, oauth_user_id, handle]
-  );
-};
-
-const updateHandle = async (
-  oauth_provider: string,
-  oauth_user_id: string,
-  handle: string
-): Promise<User> => {
-  const db = await getDatabase();
-
-  const updatedUser = await db.query(
-    "INSERT INTO users (oauth_provider, oauth_user_id, handle) VALUES ($2, $3, $1) ON CONFLICT (oauth_provider, oauth_user_id) DO UPDATE SET handle = $1 RETURNING *",
-    [handle, oauth_provider, oauth_user_id]
+  const user = await db.query<User>(
+    "INSERT INTO users (oauth_provider, oauth_user_id, handle, role) VALUES ($1, $2, $3, $4) RETURNING *",
+    [oauth_provider, oauth_user_id, handle, role]
   );
 
-  return updatedUser.rows.at(0);
+  return user.rows.at(0);
 };
 
 const searchUsersByHandle = async (
@@ -71,10 +61,35 @@ const searchUsersByHandle = async (
   return users.rows;
 };
 
+const updateRole = async (
+  oauth_provider: string,
+  oauth_user_id: string,
+  role: UserRole
+): Promise<User> => {
+  const db = await getDatabase();
+
+  const updatedUser = await db.query(
+    "UPDATE users SET role = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *",
+    [role, oauth_provider, oauth_user_id]
+  );
+
+  return updatedUser.rows.at(0);
+};
+
+const getAllUsers = async (): Promise<User[]> => {
+  // TODO: Paginate when table gets big
+  const db = await getDatabase();
+
+  const users = await db.query("SELECT * FROM users");
+
+  return users.rows;
+};
+
 export const usersRepository = {
   getUserByHandle,
-  updateHandle,
   createUser,
   getUserByOAuthInformation,
   searchUsersByHandle,
+  updateRole,
+  getAllUsers,
 };

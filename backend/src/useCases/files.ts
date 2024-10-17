@@ -19,7 +19,10 @@ import {
   NodesUseCases,
   ObjectUseCases,
   OwnershipUseCases,
+  UsersUseCases,
 } from "../useCases/index.js";
+import { InteractionsUseCases } from "./interactions.js";
+import { InteractionType } from "../models/interactions.js";
 
 const processFile = async (
   data: Buffer,
@@ -146,6 +149,7 @@ const retrieveAndReassembleFile = async (
 };
 
 const retrieveAndReassembleFolderAsZip = async (
+  reader: User,
   parent: PizZip,
   cid: string
 ): Promise<PizZip> => {
@@ -167,7 +171,7 @@ const retrieveAndReassembleFolderAsZip = async (
     ...metadata.children
       .filter((e) => e.type === "file")
       .map(async (e) => {
-        const data = await downloadObject(e.cid);
+        const data = await downloadObject(reader, e.cid);
         if (!data) {
           throw new Error(`Data with CID ${e.cid} not found`);
         }
@@ -177,28 +181,51 @@ const retrieveAndReassembleFolderAsZip = async (
     ...metadata.children
       .filter((e) => e.type === "folder")
       .map(async (e) => {
-        return retrieveAndReassembleFolderAsZip(folder, e.cid);
+        return retrieveAndReassembleFolderAsZip(reader, folder, e.cid);
       }),
   ]);
 
   return folder;
 };
 
-const downloadObject = async (cid: string): Promise<Buffer | undefined> => {
+const downloadObject = async (
+  reader: User,
+  cid: string
+): Promise<Buffer | undefined> => {
   const metadata = await ObjectUseCases.getMetadata(cid);
-
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`);
   }
 
+  const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
+    reader,
+    InteractionType.Download
+  );
+  console.log("pendingCredits", pendingCredits);
+
+  if (pendingCredits < metadata.totalSize) {
+    throw new Error("Not enough download credits");
+  }
+
   if (metadata.type === "folder") {
-    const zip = await retrieveAndReassembleFolderAsZip(new PizZip(), cid);
+    const zip = await retrieveAndReassembleFolderAsZip(
+      reader,
+      new PizZip(),
+      cid
+    );
     return zip.generate({
       type: "nodebuffer",
     });
   }
 
-  return retrieveAndReassembleFile(metadata);
+  const data = await retrieveAndReassembleFile(metadata);
+  await UsersUseCases.registerInteraction(
+    reader,
+    InteractionType.Download,
+    metadata.totalSize
+  );
+
+  return data;
 };
 
 const uploadFile = async (
@@ -207,6 +234,14 @@ const uploadFile = async (
   filename?: string,
   mimeType?: string
 ): Promise<string> => {
+  const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
+    user,
+    InteractionType.Upload
+  );
+  if (pendingCredits < data.length) {
+    throw new Error("Not enough upload credits");
+  }
+
   const {
     cid: rootCid,
     nodesByCid,
@@ -223,6 +258,12 @@ const uploadFile = async (
     metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
   );
 
+  await UsersUseCases.registerInteraction(
+    user,
+    InteractionType.Upload,
+    data.length
+  );
+
   return rootCid;
 };
 
@@ -237,6 +278,18 @@ const uploadTree = async (
     metadata,
   } = await processTree(folderTree, files);
 
+  const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
+    user,
+    InteractionType.Upload
+  );
+  const rootMetadata = metadata.find((e) => e.dataCid === rootCid);
+  if (!rootMetadata) {
+    throw new Error(`Root metadata with CID ${rootCid} not found`);
+  }
+  if (pendingCredits < rootMetadata.totalSize) {
+    throw new Error("Not enough upload credits");
+  }
+
   await Promise.all(
     Object.keys(nodesByCid).map((cid) => {
       NodesUseCases.saveNodes(rootCid, cid, nodesByCid[cid]);
@@ -245,6 +298,12 @@ const uploadTree = async (
   await OwnershipUseCases.setUserAsAdmin(user, rootCid);
   await Promise.all(
     metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
+  );
+
+  await UsersUseCases.registerInteraction(
+    user,
+    InteractionType.Upload,
+    rootMetadata.totalSize
   );
 
   return rootCid;
