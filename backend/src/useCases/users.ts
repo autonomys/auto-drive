@@ -185,13 +185,10 @@ const subtractUploadCreditsFromUser = async (
   );
 };
 
-const getCreditsForUser = async (
-  oauthProvider: string,
-  oauthUserId: string
-): Promise<Credits> => {
+const getCreditsForUser = async (user: User): Promise<Credits> => {
   const credits = await usersRepository.getUserByOAuthInformation(
-    oauthProvider,
-    oauthUserId
+    user.oauthProvider,
+    user.oauthUserId
   );
 
   if (!credits) {

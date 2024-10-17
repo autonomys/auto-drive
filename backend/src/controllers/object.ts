@@ -199,13 +199,18 @@ objectController.get("/:cid/download", async (req, res) => {
   try {
     const { cid } = req.params;
 
+    const user = await handleAuth(req, res);
+    if (!user) {
+      return;
+    }
+
     const metadata = await ObjectUseCases.getMetadata(cid);
     if (!metadata) {
       return res.status(404).json({ error: "Metadata not found" });
     }
 
     console.log(`Attempting to retrieve data for metadataCid: ${cid}`);
-    const data = await FilesUseCases.downloadObject(cid);
+    const data = await FilesUseCases.downloadObject(user, cid);
 
     const safeName = safeDownloadFilename(metadata.name);
 
