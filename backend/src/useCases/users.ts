@@ -8,7 +8,9 @@ import {
   UserRole,
 } from "../models/index.js";
 import { InteractionType } from "../models/interactions.js";
+import { SubscriptionWithUser } from "../models/subscription.js";
 import { usersRepository } from "../repositories/index.js";
+import { InteractionsUseCases } from "./interactions.js";
 import { OrganizationsUseCases } from "./organizations.js";
 import { SubscriptionsUseCases } from "./subscriptions.js";
 
@@ -41,22 +43,17 @@ const resolveUser = async (userOrHandle: UserOrHandle): Promise<User> => {
   return user;
 };
 
-const updateUserHandle = async (
+const onboardUser = async (
   user: User,
   handle: string
 ): Promise<User | undefined> => {
-  const updatedUser = await usersRepository.updateHandle(
+  const updatedUser = await UsersUseCases.initUser(
     user.oauthProvider,
     user.oauthUserId,
     handle
   );
 
-  return userFromTable({
-    oauthProvider: updatedUser.oauth_provider,
-    oauthUserId: updatedUser.oauth_user_id,
-    handle: updatedUser.handle,
-    role: updatedUser.role,
-  });
+  return updatedUser;
 };
 
 const getUserByOAuthUser = async (user: OAuthUser): Promise<User> => {
@@ -113,19 +110,28 @@ const updateRole = async (
   return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role);
 };
 
-const getUserList = async (reader: User): Promise<User[]> => {
+const getUserList = async (reader: User): Promise<SubscriptionWithUser[]> => {
   const isAdmin = await UsersUseCases.isAdminUser(reader);
   if (!isAdmin) {
     throw new Error("User does not have admin privileges");
   }
 
-  const dbUsers = await usersRepository.getAllUsers();
-  return dbUsers.map((e) =>
-    userFromTable({
-      oauthProvider: e.oauth_provider,
-      oauthUserId: e.oauth_user_id,
-      handle: e.handle,
-      role: e.role,
+  const users = await usersRepository.getAllUsers();
+
+  return Promise.all(
+    users.map(async (user) => {
+      const subscription = await SubscriptionsUseCases.getSubscription(
+        user.handle
+      );
+      return {
+        ...subscription,
+        user: userFromTable({
+          oauthProvider: user.oauth_provider,
+          oauthUserId: user.oauth_user_id,
+          handle: user.handle,
+          role: user.role,
+        }),
+      };
     })
   );
 };
@@ -135,7 +141,7 @@ const initUser = async (
   oauth_user_id: string,
   handle: string,
   role: UserRole = UserRole.User
-) => {
+): Promise<User> => {
   const user = await usersRepository.createUser(
     oauth_provider,
     oauth_user_id,
@@ -154,6 +160,13 @@ const initUser = async (
       role: role,
     })
   );
+
+  return userFromTable({
+    oauthProvider: user.oauth_provider,
+    oauthUserId: user.oauth_user_id,
+    handle: user.handle,
+    role: user.role,
+  });
 };
 
 const getPendingCreditsByUserAndType = async (
@@ -170,8 +183,20 @@ const getPendingCreditsByUserAndType = async (
   );
 };
 
+const registerInteraction = async (
+  userOrHandle: UserOrHandle,
+  type: InteractionType,
+  size: number
+) => {
+  const subscription = await SubscriptionsUseCases.getSubscription(
+    userOrHandle
+  );
+
+  await InteractionsUseCases.createInteraction(subscription.id, type, size);
+};
+
 export const UsersUseCases = {
-  updateUserHandle,
+  onboardUser,
   getUserByOAuthUser,
   getUserByHandle,
   searchUsersByHandle,
@@ -181,4 +206,5 @@ export const UsersUseCases = {
   getUserList,
   getPendingCreditsByUserAndType,
   initUser,
+  registerInteraction,
 };

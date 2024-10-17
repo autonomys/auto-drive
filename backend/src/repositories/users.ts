@@ -47,21 +47,6 @@ const createUser = async (
   return user.rows.at(0);
 };
 
-const updateHandle = async (
-  oauth_provider: string,
-  oauth_user_id: string,
-  handle: string
-): Promise<User> => {
-  const db = await getDatabase();
-
-  const updatedUser = await db.query(
-    "INSERT INTO users (oauth_provider, oauth_user_id, handle) VALUES ($2, $3, $1) ON CONFLICT (oauth_provider, oauth_user_id) DO UPDATE SET handle = $1 RETURNING *",
-    [handle, oauth_provider, oauth_user_id]
-  );
-
-  return updatedUser.rows.at(0);
-};
-
 const searchUsersByHandle = async (
   handle: string,
   limit: number
@@ -102,7 +87,6 @@ const getAllUsers = async (): Promise<User[]> => {
 
 export const usersRepository = {
   getUserByHandle,
-  updateHandle,
   createUser,
   getUserByOAuthInformation,
   searchUsersByHandle,

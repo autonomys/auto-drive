@@ -201,6 +201,8 @@ const downloadObject = async (
     reader,
     InteractionType.Download
   );
+  console.log("pendingCredits", pendingCredits);
+
   if (pendingCredits < metadata.totalSize) {
     throw new Error("Not enough download credits");
   }
@@ -217,7 +219,8 @@ const downloadObject = async (
   }
 
   const data = await retrieveAndReassembleFile(metadata);
-  InteractionsUseCases.createInteraction(
+  await UsersUseCases.registerInteraction(
+    reader,
     InteractionType.Download,
     metadata.totalSize
   );
@@ -255,7 +258,11 @@ const uploadFile = async (
     metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
   );
 
-  InteractionsUseCases.createInteraction(InteractionType.Upload, data.length);
+  await UsersUseCases.registerInteraction(
+    user,
+    InteractionType.Upload,
+    data.length
+  );
 
   return rootCid;
 };
@@ -293,7 +300,8 @@ const uploadTree = async (
     metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
   );
 
-  InteractionsUseCases.createInteraction(
+  await UsersUseCases.registerInteraction(
+    user,
     InteractionType.Upload,
     rootMetadata.totalSize
   );
