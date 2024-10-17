@@ -1,7 +1,15 @@
+import { User } from "./user";
+
 export type Subscription = {
   id: string;
-  limit: number;
+  organizationId: string;
+  uploadLimit: number;
+  downloadLimit: number;
   granularity: SubscriptionGranularity;
 };
 
 export type SubscriptionGranularity = "monthly";
+
+export type SubscriptionWithUser = Subscription & {
+  user: User;
+};

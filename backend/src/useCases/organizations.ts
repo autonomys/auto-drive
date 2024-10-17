@@ -18,7 +18,9 @@ const getOrganizationByUser = async (user: User): Promise<Organization> => {
       : null;
 
   if (!organizationId) {
-    throw new Error("User is not a member of any organization");
+    throw new Error(
+      `User is not a member of any organization: (${user.oauthProvider}, ${user.oauthUserId})`
+    );
   }
 
   const organization = await organizationsRepository.getOrganizationById(

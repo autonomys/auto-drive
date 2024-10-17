@@ -7,7 +7,7 @@ import { SubscriptionsUseCases } from "../useCases/subscriptions.js";
 
 const userController = Router();
 
-userController.post("/@me/update", async (req, res) => {
+userController.post("/@me/onboard", async (req, res) => {
   const user = await handleAuth(req, res);
   if (!user) {
     return;
@@ -41,9 +41,9 @@ userController.post("/@me/update", async (req, res) => {
   }
 
   try {
-    const updatedUser = await UsersUseCases.updateUserHandle(user, handle);
+    const onboardedUser = await UsersUseCases.onboardUser(user, handle);
 
-    res.json(updatedUser);
+    res.json(onboardedUser);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to update user handle" });
@@ -157,7 +157,7 @@ userController.post("/subscriptions/update", async (req, res) => {
     return;
   }
 
-  const { handle, limit, granularity } = req.body;
+  const { handle, uploadLimit, downloadLimit, granularity } = req.body;
 
   if (typeof handle !== "string") {
     return res
@@ -165,10 +165,16 @@ userController.post("/subscriptions/update", async (req, res) => {
       .json({ error: "Missing or invalid attribute `handle` in body" });
   }
 
-  if (typeof limit !== "number") {
+  if (typeof uploadLimit !== "number") {
     return res
       .status(400)
-      .json({ error: "Missing or invalid attribute `amount` in body" });
+      .json({ error: "Missing or invalid attribute `uploadLimit` in body" });
+  }
+
+  if (typeof downloadLimit !== "number") {
+    return res
+      .status(400)
+      .json({ error: "Missing or invalid attribute `downloadLimit` in body" });
   }
 
   if (granularity !== "monthly") {
@@ -181,13 +187,14 @@ userController.post("/subscriptions/update", async (req, res) => {
       user,
       handle,
       granularity,
-      limit
+      uploadLimit,
+      downloadLimit
     );
 
     res.sendStatus(200);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "Failed to add credits" });
+    return res.status(500).json({ error: "Failed to update subscription" });
   }
 });
 

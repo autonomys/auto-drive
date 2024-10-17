@@ -14,7 +14,8 @@ const updateSubscription = async (
   executor: User,
   userOrHandle: UserOrHandle,
   granularity: SubscriptionGranularity,
-  limit: number
+  uploadLimit: number,
+  downloadLimit: number
 ): Promise<void> => {
   const isAdmin = await UsersUseCases.isAdminUser(executor);
   if (!isAdmin) {
@@ -36,7 +37,8 @@ const updateSubscription = async (
   await subscriptionsRepository.updateSubscription(
     subscription.id,
     granularity,
-    limit
+    uploadLimit,
+    downloadLimit
   );
 };
 
@@ -67,13 +69,14 @@ const initSubscription = async (organizationId: string): Promise<void> => {
   }
 
   const INITIAL_GRANULARITY: SubscriptionGranularity = "monthly";
-  const INITIAL_LIMIT: number = 1024 ** 2;
-
+  const INITIAL_UPLOAD_LIMIT: number = 1024 ** 2;
+  const INITIAL_DOWNLOAD_LIMIT: number = 1024 ** 2;
   await subscriptionsRepository.createSubscription(
     v4(),
     organizationId,
     INITIAL_GRANULARITY,
-    INITIAL_LIMIT
+    INITIAL_UPLOAD_LIMIT,
+    INITIAL_DOWNLOAD_LIMIT
   );
 };
 
@@ -95,7 +98,12 @@ const getPendingCreditsBySubscriptionAndType = async (
     return acc + interaction.size;
   }, 0);
 
-  return subscription.limit - spentCredits;
+  const limit =
+    type === InteractionType.Upload
+      ? subscription.uploadLimit
+      : subscription.downloadLimit;
+
+  return limit - spentCredits;
 };
 
 export const SubscriptionsUseCases = {

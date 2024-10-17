@@ -21,7 +21,8 @@ CREATE TABLE subscriptions (
     id TEXT NOT NULL PRIMARY KEY,
     organization_id TEXT NOT NULL,
     granularity TEXT NOT NULL,
-    "limit" BIGINT NOT NULL,
+    "upload_limit" BIGINT NOT NULL,
+    "download_limit" BIGINT NOT NULL,
     CONSTRAINT fk_organization_id FOREIGN KEY (organization_id) REFERENCES organizations(id)
 );
 
@@ -29,7 +30,7 @@ CREATE TABLE interactions (
     id TEXT NOT NULL,
     subscription_id TEXT NOT NULL,
     "type" TEXT NOT NULL,
-    "amount" BIGINT NOT NULL,
+    "size" BIGINT NOT NULL,
     CONSTRAINT fk_subscription_id FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)
 );
 
