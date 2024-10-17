@@ -4,11 +4,15 @@ import {
   User,
   userFromOAuth,
   userFromTable,
+  UserInfo,
   UserOrHandle,
   UserRole,
 } from "../models/index.js";
 import { InteractionType } from "../models/interactions.js";
-import { SubscriptionWithUser } from "../models/subscription.js";
+import {
+  SubscriptionInfo,
+  SubscriptionWithUser,
+} from "../models/subscription.js";
 import { usersRepository } from "../repositories/index.js";
 import { InteractionsUseCases } from "./interactions.js";
 import { OrganizationsUseCases } from "./organizations.js";
@@ -110,6 +114,13 @@ const updateRole = async (
   return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role);
 };
 
+const getUserInfo = async (userOrHandle: UserOrHandle): Promise<UserInfo> => {
+  const user = await resolveUser(userOrHandle);
+  const subscription = await SubscriptionsUseCases.getSubscriptionInfo(user);
+
+  return { user, subscription };
+};
+
 const getUserList = async (reader: User): Promise<SubscriptionWithUser[]> => {
   const isAdmin = await UsersUseCases.isAdminUser(reader);
   if (!isAdmin) {
@@ -205,6 +216,7 @@ export const UsersUseCases = {
   resolveUser,
   getUserList,
   getPendingCreditsByUserAndType,
+  getUserInfo,
   initUser,
   registerInteraction,
 };
