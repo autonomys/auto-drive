@@ -4,16 +4,30 @@ export type OAuthUser = {
   id: string;
 };
 
-export type OnboardedUser = {
+export enum UserRole {
+  User = "User",
+  Admin = "Admin",
+}
+
+export type Handle = string | null;
+
+export type UserOrHandle = User | Handle;
+
+type UserBase = {
   oauthProvider: string;
   oauthUserId: string;
+  role: UserRole;
+  downloadCredits: number;
+  uploadCredits: number;
+  handle: Handle;
+};
+
+export type OnboardedUser = UserBase & {
   handle: string;
   onboarded: true;
 };
 
-export type UnonboardedUser = {
-  oauthProvider: string;
-  oauthUserId: string;
+export type UnonboardedUser = UserBase & {
   handle: null;
   onboarded: false;
 };
