@@ -69,10 +69,9 @@ export const RemainingCreditTracker = ({
             </div>
           </div>
         </div>
-
-        <div className="flex flex-col gap-2">
-          <span className="text-sm text-gray-600">Period</span>
-          <div className="text-center text-sm text-gray-600 mt-4">
+        <div className="flex flex-col text-center mt-4">
+          <span className="text-sm text-gray-400">Period</span>
+          <div className="text-center text-sm text-gray-600">
             {startDate} - {endDate}
           </div>
         </div>
