@@ -3,6 +3,7 @@ import { User, UserOrHandle } from "../models/user.js";
 import {
   Subscription,
   SubscriptionGranularity,
+  SubscriptionInfo,
 } from "../models/subscription.js";
 import { subscriptionsRepository } from "../repositories/subscriptions.js";
 import { OrganizationsUseCases } from "./organizations.js";
@@ -106,9 +107,33 @@ const getPendingCreditsBySubscriptionAndType = async (
   return limit - spentCredits;
 };
 
+const getSubscriptionInfo = async (
+  userOrHandle: UserOrHandle
+): Promise<SubscriptionInfo> => {
+  const subscription = await SubscriptionsUseCases.getSubscription(
+    userOrHandle
+  );
+
+  const pendingUploadCredits = await getPendingCreditsBySubscriptionAndType(
+    subscription,
+    InteractionType.Upload
+  );
+  const pendingDownloadCredits = await getPendingCreditsBySubscriptionAndType(
+    subscription,
+    InteractionType.Download
+  );
+
+  return {
+    ...subscription,
+    pendingUploadCredits,
+    pendingDownloadCredits,
+  };
+};
+
 export const SubscriptionsUseCases = {
   updateSubscription,
   getSubscription,
   initSubscription,
   getPendingCreditsBySubscriptionAndType,
+  getSubscriptionInfo,
 };

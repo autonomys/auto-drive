@@ -56,7 +56,9 @@ userController.get("/@me", async (req, res) => {
     return;
   }
 
-  res.json(user);
+  const userInfo = await UsersUseCases.getUserInfo(user);
+
+  res.json(userInfo);
 });
 
 userController.get("/search", async (req, res) => {
