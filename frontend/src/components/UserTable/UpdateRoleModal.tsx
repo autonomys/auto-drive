@@ -74,8 +74,12 @@ export const UpdateRoleModal = ({
                         value={role}
                         onChange={(e) => setRole(e.target.value as UserRole)}
                       >
-                        <option value={UserRole.User}>User</option>
-                        <option value={UserRole.Admin}>Admin</option>
+                        <option value={UserRole.User}>
+                          User (Manage own files)
+                        </option>
+                        <option value={UserRole.Admin}>
+                          Admin (Manage user's subscriptions)
+                        </option>
                       </select>
                     </div>
                     <div className="flex justify-end">
