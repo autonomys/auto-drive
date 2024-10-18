@@ -53,7 +53,7 @@ export default function AppLayout({
   return (
     <div className="min-h-screen bg-white">
       <div className="flex h-screen flex-col bg-white rounded-lg">
-        <header className="flex flex-col w-full md:flex-row gap-4 md:gap-0 items-center justify-between mb-8 px-10 py-2 border-b border-[#000000]">
+        <header className="flex flex-col w-full md:flex-row gap-4 md:gap-0 items-center justify-between mb-8 px-10 py-2 border-b-[0.2px] border-[#000000]">
           <div className="flex items-center space-x-2">
             <img
               src="/autonomys.png"

@@ -5,7 +5,7 @@ import { Transition } from "@headlessui/react";
 import { SearchIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocalStorage } from "usehooks-ts";
+import { useScopeStore } from "../../states/scope";
 
 export const SearchBar = () => {
   const [query, setQuery] = useState("");
@@ -13,7 +13,7 @@ export const SearchBar = () => {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
-  const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
+  const { scope } = useScopeStore();
   const [recommendations, setRecommendations] = useState<string[] | null>(null);
   const router = useRouter();
 

@@ -1,23 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useLocalStorage } from "usehooks-ts";
 import { Toggle } from "./Toggle";
+import { useScopeStore } from "../../states/scope";
 
 export const ScopeSwitch = () => {
-  const [global, setGlobal] = useState(false);
-  const [scope, setScope] = useLocalStorage<"user" | "global">(
-    "search-scope",
-    "global"
+  const { scope, setScope } = useScopeStore();
+
+  return (
+    <Toggle
+      value={scope === "global"}
+      onUpdate={(isGlobal) => setScope(isGlobal ? "global" : "user")}
+    />
   );
-
-  useEffect(() => {
-    setScope(global ? "global" : "user");
-  }, [global]);
-
-  useEffect(() => {
-    setGlobal(scope === "global");
-  }, []);
-
-  return <Toggle value={global} onUpdate={setGlobal} />;
 };

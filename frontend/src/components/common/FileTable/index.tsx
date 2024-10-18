@@ -24,14 +24,17 @@ import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
 import { ObjectDeleteModal } from "../../Files/ObjectDeleteModal";
-import { handleFileDownload } from "../../../utils/file";
+import { getTypeFromMetadata, handleFileDownload } from "../../../utils/file";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { ObjectDownloadModal } from "../../Files/ObjectDownloadModal";
 import toast from "react-hot-toast";
+import { shortenString } from "../../../utils/misc";
+import { useUserStore } from "../../../states/user";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
+  const { user } = useUserStore();
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
@@ -145,6 +148,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
       const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.handle;
+      const isOwner = user?.handle === owner;
 
       return (
         <Fragment key={file.metadata.dataCid}>
@@ -205,8 +209,9 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                         onMouseEnter={(e) => e.currentTarget.click()}
                         onMouseLeave={(e) => e.currentTarget.click()}
                       >
-                        {file.metadata.name ??
-                          `No name (${file.metadata.dataCid.slice(0, 12)})`}
+                        {file.metadata.name
+                          ? shortenString(file.metadata.name, 30)
+                          : `No name (${file.metadata.dataCid.slice(0, 12)})`}
                       </span>
                     </PopoverButton>
                     <Transition
@@ -229,7 +234,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               </div>
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {file.metadata.type}
+              {getTypeFromMetadata(file.metadata)}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               {bytes(file.metadata.totalSize)}
@@ -252,7 +257,8 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 Download
               </button>
               <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+                disabled={!isOwner}
+                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2 disabled:hidden"
                 onClick={(e) => shareFile(e, file.metadata.dataCid)}
               >
                 Share
@@ -291,7 +297,9 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm text-gray-500">{child.type}</span>
+                  <span className="text-sm text-gray-500">
+                    {child.type === "file" ? "File" : "Folder"}
+                  </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm text-gray-500">
@@ -327,6 +335,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       toggleRow,
       toggleSelectFile,
       selectedFiles,
+      user?.handle,
     ]
   );
 

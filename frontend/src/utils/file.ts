@@ -28,3 +28,11 @@ export const handleFileDownload = (
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 };
+
+export const getTypeFromMetadata = (metadata: OffchainMetadata) => {
+  if (metadata.type === "file") {
+    return metadata.mimeType;
+  }
+
+  return "Folder";
+};

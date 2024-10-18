@@ -9,12 +9,13 @@ import { useLocalStorage } from "usehooks-ts";
 import { UploadingObjects } from "../../components/Files/UploadingObjects";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
 import { LoaderCircle } from "lucide-react";
+import { useScopeStore } from "../../states/scope";
 
 export default function Page() {
   const [rootObjectMetadata, setRootObjectMetadata] = useState<
     UploadedObjectMetadata[] | null
   >(null);
-  const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
+  const { scope } = useScopeStore();
 
   useEffect(() => {
     setRootObjectMetadata(null);

@@ -17,7 +17,7 @@ import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
 import { ObjectRestoreModal } from "../../Files/ObjectRestoreModal";
-import { handleFileDownload } from "../../../utils/file";
+import { getTypeFromMetadata, handleFileDownload } from "../../../utils/file";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { ObjectDownloadModal } from "../../Files/ObjectDownloadModal";
 
@@ -174,7 +174,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               </div>
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {file.metadata.type}
+              {getTypeFromMetadata(file.metadata)}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               {bytes(file.metadata.totalSize)}
@@ -228,7 +228,9 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm text-gray-500">{child.type}</span>
+                  <span className="text-sm text-gray-500">
+                    {child.type === "file" ? "File" : "Folder"}
+                  </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm text-gray-500">

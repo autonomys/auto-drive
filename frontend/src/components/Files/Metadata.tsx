@@ -1,5 +1,6 @@
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
 import bytes from "bytes";
+import { getTypeFromMetadata } from "../../utils/file";
 
 export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
   return (
@@ -18,11 +19,7 @@ export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
       <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-black font-light">
         <div className="flex">
           <span>Type:</span>
-          <span className="ml-[4px]">
-            {object.metadata.type === "folder"
-              ? "Folder"
-              : object.metadata.mimeType || "File"}
-          </span>
+          <span className="ml-[4px]">{getTypeFromMetadata(object.metadata)}</span>
         </div>
         <div className="flex">
           <span>{"Owner: "}</span>
