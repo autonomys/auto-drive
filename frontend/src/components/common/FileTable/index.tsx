@@ -12,7 +12,14 @@ import {
   Transition,
 } from "@headlessui/react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
+import {
+  ChangeEvent,
+  FC,
+  Fragment,
+  MouseEvent,
+  useCallback,
+  useState,
+} from "react";
 import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
@@ -20,6 +27,7 @@ import { ObjectDeleteModal } from "../../Files/ObjectDeleteModal";
 import { handleFileDownload } from "../../../utils/file";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { ObjectDownloadModal } from "../../Files/ObjectDownloadModal";
+import toast from "react-hot-toast";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -28,6 +36,14 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
   const [deleteCID, setDeleteCID] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<
+    {
+      type: "file" | "folder";
+      cid: string;
+      name?: string;
+      totalSize: number;
+    }[]
+  >([]);
 
   const toggleRow = useCallback(
     (id: string) => {
@@ -105,6 +121,26 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     window.location.assign(`/drive/fs/${cid}`);
   }, []);
 
+  const toggleSelectFile = useCallback(
+    (
+      event: ChangeEvent<HTMLInputElement>,
+      entry: {
+        type: "file" | "folder";
+        cid: string;
+        name?: string;
+        totalSize: number;
+      }
+    ) => {
+      event.stopPropagation();
+      if (selectedFiles.some((f) => f.cid === entry.cid)) {
+        setSelectedFiles(selectedFiles.filter((f) => f.cid !== entry.cid));
+      } else {
+        setSelectedFiles([...selectedFiles, entry]);
+      }
+    },
+    [selectedFiles]
+  );
+
   const renderRow = useCallback(
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
@@ -125,6 +161,17 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               <div className="flex items-center">
                 <input
                   type="checkbox"
+                  checked={selectedFiles.some(
+                    (f) => f.cid === file.metadata.dataCid
+                  )}
+                  onChange={(e) =>
+                    toggleSelectFile(e, {
+                      type: file.metadata.type,
+                      cid: file.metadata.dataCid,
+                      name: file.metadata.name,
+                      totalSize: file.metadata.totalSize,
+                    })
+                  }
                   className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 {file.metadata.type === "folder" && file.metadata.children && (
@@ -226,6 +273,8 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 <td className="px-6 py-4 whitespace-nowrap w-[50%]">
                   <div className="flex items-center">
                     <input
+                      onChange={(e) => toggleSelectFile(e, child)}
+                      checked={selectedFiles.some((f) => f.cid === child.cid)}
                       type="checkbox"
                       className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
@@ -276,8 +325,25 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       renderOwnerBadge,
       renderFileIcon,
       toggleRow,
+      toggleSelectFile,
+      selectedFiles,
     ]
   );
+
+  const batchedDownload = useCallback(async () => {
+    const downloads = selectedFiles.map(async (entry) => {
+      const blob = await ApiService.downloadObject(entry.cid);
+      handleFileDownload(blob, entry.type, entry.name!);
+    });
+
+    await Promise.all(downloads)
+      .then(() => {
+        setSelectedFiles([]);
+      })
+      .catch((error) => {
+        toast.error("Failed to download files");
+      });
+  }, [selectedFiles, downloadFile]);
 
   return (
     <div className="flex flex-col">
@@ -292,6 +358,24 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
+          <Transition
+            show={selectedFiles.length > 0}
+            enter="transition ease-out duration-100"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="transition ease-in duration-75"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="flex justify-start mb-4 gap-2 ml-2">
+              <button
+                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded font-[600]"
+                onClick={batchedDownload}
+              >
+                Download {selectedFiles.length} files
+              </button>
+            </div>
+          </Transition>
           <div className="shadow border-b border-gray-200 sm:rounded-lg">
             <table className="min-w-full">
               <thead className="bg-gray-50">

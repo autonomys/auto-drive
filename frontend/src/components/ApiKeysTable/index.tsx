@@ -74,6 +74,16 @@ export const ApiKeysTable = ({
                   </td>
                 </tr>
               ))}
+              {nonDeletedApiKeys.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"
+                  >
+                    No API keys found
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
