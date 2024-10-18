@@ -75,7 +75,7 @@ const submitTransaction = async (
             } else {
               console.log(`In block: ${status.asInBlock.toString()}`);
               const blockHash = status.asInBlock.toString();
-              const { block } = await api.rpc.chain.getBlock(blockHash);  
+              const { block } = await api.rpc.chain.getBlock(blockHash);
               resolve({
                 success: true,
                 batchTxHash: transaction.hash.toString(),

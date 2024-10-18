@@ -5,3 +5,4 @@ export * from "./ownership.js";
 export * from "./transactionResults.js";
 export * from "./uploadStatus.js";
 export * from "./users.js";
+export * from "./apikeys.js";
