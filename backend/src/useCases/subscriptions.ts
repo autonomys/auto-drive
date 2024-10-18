@@ -70,8 +70,10 @@ const initSubscription = async (organizationId: string): Promise<void> => {
   }
 
   const INITIAL_GRANULARITY: SubscriptionGranularity = "monthly";
-  const INITIAL_UPLOAD_LIMIT: number = 1024 ** 2;
-  const INITIAL_DOWNLOAD_LIMIT: number = 1024 ** 2;
+  const HUNDRED_MB = 1024 ** 2 * 100;
+  const FIVE_GB = 1024 ** 3 * 5;
+  const INITIAL_UPLOAD_LIMIT: number = HUNDRED_MB;
+  const INITIAL_DOWNLOAD_LIMIT: number = FIVE_GB;
   await subscriptionsRepository.createSubscription(
     v4(),
     organizationId,
