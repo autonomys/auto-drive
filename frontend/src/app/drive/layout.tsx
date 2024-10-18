@@ -75,26 +75,26 @@ export default function AppLayout({
           <UserEnsurer>
             <aside className="w-12 md:w-48">
               <InternalLink className="contents" href="/drive">
-                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
                   <HomeIcon className="w-5 h-5" />
                   <span className="hidden md:block">Files</span>
                 </button>
               </InternalLink>
               <InternalLink className="contents" href="/drive/shared">
-                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
                   <UsersIcon className="w-5 h-5" />
                   <span className="hidden md:block">Shared with me</span>
                 </button>
               </InternalLink>
               <InternalLink className="contents" href="/drive/trash">
-                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
                   <TrashIcon className="w-5 h-5" />
                   <span className="hidden md:block">Trash</span>
                 </button>
               </InternalLink>
               <RoleProtected roles={[UserRole.Admin]}>
                 <InternalLink className="contents" href="/drive/admin">
-                  <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                  <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
                     <SettingsIcon className="w-5 h-5" />
                     <span className="hidden md:block">Admin</span>
                   </button>

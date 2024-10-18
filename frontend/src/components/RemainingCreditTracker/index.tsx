@@ -1,4 +1,5 @@
 import bytes from "bytes";
+import { Download, Upload } from "lucide-react";
 
 interface CreditLimitsProps {
   uploadPending: number;
@@ -25,19 +26,18 @@ export const RemainingCreditTracker = ({
       <div className="py-4">
         <div className="space-y-6">
           <div>
-            <h2 className="text-sm text-gray-700 font-semibold mb-1">
-              Upload Credit Remaining
-            </h2>
             <div className="flex justify-between mb-1 text-sm text-gray-600">
               <span>
-                <span className="text-gray-700">{bytes(uploadUsed)}</span>/
+                <span className="text-primary">{bytes(uploadUsed)}</span>/
                 <span className="text-gray-500">{bytes(uploadLimit)}</span>
               </span>
-              <span>{bytes(uploadLimit)}</span>
+              <span className="text-secondary px-2">
+                <Upload className="w-4 h-4" />
+              </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
               <div
-                className="bg-slate-500 h-2.5 rounded-full w-32"
+                className="bg-primary h-2.5 rounded-full w-32"
                 style={{ width: `${uploadPercentage}%` }}
                 role="progressbar"
                 aria-valuenow={uploadUsed}
@@ -48,19 +48,18 @@ export const RemainingCreditTracker = ({
           </div>
 
           <div>
-            <h2 className="text-sm text-gray-700 font-semibold mb-1">
-              Download Credit Remaining
-            </h2>
             <div className="flex justify-between mb-1 text-sm text-gray-600">
               <span>
-                <span className="text-gray-700">{bytes(downloadPending)}</span>/
+                <span className="text-primary">{bytes(downloadPending)}</span>/
                 <span className="text-gray-500">{bytes(downloadLimit)}</span>
               </span>
-              <span>{bytes(downloadLimit)}</span>
+              <span className="text-secondary px-2">
+                <Download className="w-4 h-4" />
+              </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5 w-8">
               <div
-                className="bg-slate-500 h-2.5 rounded-full w-full"
+                className="bg-primary h-2.5 rounded-full w-full"
                 style={{ width: `${downloadPercentage}%` }}
                 role="progressbar"
                 aria-valuenow={downloadPending}
@@ -70,8 +69,8 @@ export const RemainingCreditTracker = ({
             </div>
           </div>
         </div>
-        <div className="flex flex-col text-center mt-4">
-          <span className="text-sm text-gray-400">Period</span>
+        <div className="flex flex-col text-center mt-2">
+          <span className="text-sm text-gray-400">Credit for period</span>
           <div className="text-center text-sm text-gray-600">
             {startDate} - {endDate}
           </div>
