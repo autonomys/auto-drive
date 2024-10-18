@@ -25,6 +25,7 @@ export const useUserStore = create<UserStore>()(
     }),
     {
       name: "user-dto-storage",
+      version: 1,
     }
   )
 );
