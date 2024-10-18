@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiKeyCreationModal } from "./ApiKeyCreationModal";
 import { UserTableRow } from "./UserSubscriptions";
 import { SubscriptionWithUser } from "../../models/Subscriptions";
 
@@ -15,7 +14,6 @@ export const UserSubscriptionsTable = ({
 
   return (
     <div>
-      <ApiKeyCreationModal isOpen={isOpen} onClose={closeModal} />
       <button
         className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2 mb-4"
         onClick={openModal}

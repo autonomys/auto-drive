@@ -116,10 +116,12 @@ export default function AppLayout({
         </div>
         <footer className="mt-8 flex justify-start w-16 md:w-64 flex-col gap-2">
           <div className="flex">
-            <button className="flex space-x-2 text-gray-700 hover:text-blue-600">
-              <UserIcon className="w-5 h-5" />
-              <span className="hidden md:block">User</span>
-            </button>
+            <InternalLink href="/drive/profile">
+              <button className="flex space-x-2 text-gray-700 hover:text-blue-600">
+                <UserIcon className="w-5 h-5" />
+                <span className="hidden md:block">User</span>
+              </button>
+            </InternalLink>
           </div>
         </footer>
       </div>

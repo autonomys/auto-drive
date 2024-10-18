@@ -11,7 +11,6 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { ApiService } from "../../services/api";
 import { ApiKey } from "../../models/ApiKey";
 import toast from "react-hot-toast";
-import { Copy } from "lucide-react";
 
 export const ApiKeyCreationModal = ({
   isOpen,
@@ -34,7 +33,7 @@ export const ApiKeyCreationModal = ({
 
   const copyApiKey = useCallback(() => {
     if (apiKey) {
-      copyToClipboard(apiKey.apiKey);
+      copyToClipboard(apiKey.secret);
       setHasBeenCopied(true);
     }
   }, [apiKey, copyToClipboard]);
@@ -89,7 +88,7 @@ export const ApiKeyCreationModal = ({
                           onClick={copyApiKey}
                           title="Click to copy"
                         >
-                          {apiKey.apiKey}
+                          {apiKey.secret}
                         </p>
                       </div>
                       <div className="flex items-center space-x-2 mt-2 w-full justify-center">
@@ -107,6 +106,9 @@ export const ApiKeyCreationModal = ({
                         You are about to create a new API key. This key will
                         allow you to access the API programmatically. Please
                         keep this key secure and do not share it with anyone.
+                        <br />
+                        <br />
+                        <strong>This key won't be shown again.</strong>
                       </p>
                       <button
                         type="button"

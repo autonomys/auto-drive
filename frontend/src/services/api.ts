@@ -1,4 +1,4 @@
-import { ApiKey } from "../models/ApiKey";
+import { ApiKey, ApiKeyWithoutSecret } from "../models/ApiKey";
 import { FolderTree } from "../models/FileTree";
 import {
   SubscriptionGranularity,
@@ -48,6 +48,42 @@ export const ApiService = {
       },
     });
     return response.json();
+  },
+  getApiKeysByUser: async (): Promise<ApiKeyWithoutSecret[]> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/@me/apiKeys`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Auth-Provider": "google",
+      },
+    });
+
+    return response.json();
+  },
+  deleteApiKey: async (apiKeyId: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/users/@me/apiKeys/${apiKeyId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          "X-Auth-Provider": "google",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
   },
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const session = await getAuthSession();
@@ -220,7 +256,7 @@ export const ApiService = {
       throw new Error("No session");
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/apiKey/create`, {
+    const response = await fetch(`${API_BASE_URL}/users/@me/apiKeys/create`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
