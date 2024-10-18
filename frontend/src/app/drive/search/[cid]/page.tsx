@@ -47,28 +47,13 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
       );
     }
 
-    return objectsMetadata.map(({ metadata, uploadStatus }) => {
-      switch (metadata.type) {
-        case "folder":
-          return (
-            <InternalLink
-              key={metadata.dataCid}
-              href={`/drive/fs/${metadata.dataCid}`}
-            >
-              <FileCard metadata={metadata} uploadStatus={uploadStatus} />
-            </InternalLink>
-          );
-        case "file":
-          return (
-            <InternalLink
-              key={metadata.dataCid}
-              href={`/drive/fs/${metadata.dataCid}`}
-            >
-              <FileCard metadata={metadata} uploadStatus={uploadStatus} />
-            </InternalLink>
-          );
-      }
-    });
+    return objectsMetadata.map(({ metadata, uploadStatus }) => (
+      <FileCard
+        key={metadata.dataCid}
+        metadata={metadata}
+        uploadStatus={uploadStatus}
+      />
+    ));
   }, [error, objectsMetadata]);
 
   return <div className="grid grid-cols-4 gap-4">{Content}</div>;
