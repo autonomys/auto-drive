@@ -8,7 +8,8 @@ export const Disclaimer = () => {
         <li>Anyone can download your files</li>
         <li>Storage is permanent and irreversible</li>
         <li>
-          Your uploads & downloads are limitted to <strong>10MB</strong> monthly
+          Your uploads & downloads are limitted to <strong>100MB</strong> and{" "}
+          <strong>5GB</strong> monthly respectively
         </li>
       </ul>
     </div>
