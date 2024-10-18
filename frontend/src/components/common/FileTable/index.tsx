@@ -30,6 +30,9 @@ import { ObjectDownloadModal } from "../../Files/ObjectDownloadModal";
 import toast from "react-hot-toast";
 import { shortenString } from "../../../utils/misc";
 import { useUserStore } from "../../../states/user";
+import { Table } from "../Table";
+import { TableHead, TableHeadCell, TableHeadRow } from "../Table/TableHead";
+import { TableBody, TableBodyCell, TableBodyRow } from "../Table/TableBody";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -152,16 +155,16 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
       return (
         <Fragment key={file.metadata.dataCid}>
-          <tr
-            className={`hover:bg-gray-100 relative ${
+          <TableBodyRow
+            className={
               file.metadata.type === "folder" ? "hover:cursor-pointer" : ""
-            }`}
+            }
             onClick={() =>
               file.metadata.type === "folder" &&
               navigateToFile(file.metadata.dataCid)
             }
           >
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            <TableBodyCell className="whitespace-nowrap text-sm text-gray-500">
               <div className="flex items-center">
                 <input
                   type="checkbox"
@@ -232,17 +235,13 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   </Popover>
                 </span>
               </div>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {getTypeFromMetadata(file.metadata)}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {bytes(file.metadata.totalSize)}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            </TableBodyCell>
+            <TableBodyCell>{getTypeFromMetadata(file.metadata)}</TableBodyCell>
+            <TableBodyCell>{bytes(file.metadata.totalSize)}</TableBodyCell>
+            <TableBodyCell>
               {owner ? renderOwnerBadge(owner) : "Unknown"}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            </TableBodyCell>
+            <TableBodyCell className="flex justify-end">
               <button
                 className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
                 onClick={(e) =>
@@ -269,14 +268,14 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               >
                 Delete
               </button>
-            </td>
-          </tr>
+            </TableBodyCell>
+          </TableBodyRow>
           {isExpanded &&
             file.metadata.type === "folder" &&
             file.metadata.children &&
             file.metadata.children.map((child) => (
-              <tr key={child.cid} className="bg-gray-200 ml-40">
-                <td className="px-6 py-4 whitespace-nowrap w-[50%]">
+              <TableBodyRow key={child.cid} className="bg-gray-200 ml-40">
+                <TableBodyCell className="w-[50%]">
                   <div className="flex items-center">
                     <input
                       onChange={(e) => toggleSelectFile(e, child)}
@@ -295,21 +294,17 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       {child.name ?? `No name (${child.cid.slice(0, 12)})`}
                     </span>
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm text-gray-500">
-                    {child.type === "file" ? "File" : "Folder"}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm text-gray-500">
-                    {bytes(child.totalSize)}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                </TableBodyCell>
+                <TableBodyCell>
+                  <span>{child.type === "file" ? "File" : "Folder"}</span>
+                </TableBodyCell>
+                <TableBodyCell>
+                  <span>{bytes(child.totalSize)}</span>
+                </TableBodyCell>
+                <TableBodyCell>
                   {owner ? renderOwnerBadge(owner) : "Unknown"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                </TableBodyCell>
+                <TableBodyCell>
                   {child.type === "file" && (
                     <button
                       className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
@@ -320,8 +315,8 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       Download
                     </button>
                   )}
-                </td>
-              </tr>
+                </TableBodyCell>
+              </TableBodyRow>
             ))}
         </Fragment>
       );
@@ -385,45 +380,18 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               </button>
             </div>
           </Transition>
-          <div className="shadow border-b border-gray-200 sm:rounded-lg">
-            <table className="min-w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Root CID
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Type
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Size
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Owner
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>{files.map((file) => renderRow(file))}</tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHead>
+              <TableHeadRow>
+                <TableHeadCell>Root CID</TableHeadCell>
+                <TableHeadCell>Type</TableHeadCell>
+                <TableHeadCell>Size</TableHeadCell>
+                <TableHeadCell>Owner</TableHeadCell>
+                <TableHeadCell className="text-right">Actions</TableHeadCell>
+              </TableHeadRow>
+            </TableHead>
+            <TableBody>{files.map((file) => renderRow(file))}</TableBody>
+          </Table>
         </div>
       </div>
     </div>

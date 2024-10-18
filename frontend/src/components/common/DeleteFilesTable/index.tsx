@@ -20,6 +20,10 @@ import { ObjectRestoreModal } from "../../Files/ObjectRestoreModal";
 import { getTypeFromMetadata, handleFileDownload } from "../../../utils/file";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { ObjectDownloadModal } from "../../Files/ObjectDownloadModal";
+import { TableBody, TableBodyCell, TableBodyRow } from "../Table/TableBody";
+import { shortenString } from "../../../utils/misc";
+import { Table } from "../Table";
+import { TableHead, TableHeadCell, TableHeadRow } from "../Table/TableHead";
 
 export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -104,7 +108,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
       return (
         <Fragment key={file.metadata.dataCid}>
-          <tr
+          <TableBodyRow
             className={`hover:bg-gray-100 relative ${
               file.metadata.type === "folder" ? "hover:cursor-pointer" : ""
             }`}
@@ -113,7 +117,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               navigateToFile(file.metadata.dataCid)
             }
           >
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            <TableBodyCell>
               <div className="flex items-center">
                 <input
                   type="checkbox"
@@ -150,8 +154,11 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                         onMouseEnter={(e) => e.currentTarget.click()}
                         onMouseLeave={(e) => e.currentTarget.click()}
                       >
-                        {file.metadata.name ??
-                          `No name (${file.metadata.dataCid.slice(0, 12)})`}
+                        {shortenString(
+                          file.metadata.name ??
+                            `No name (${file.metadata.dataCid.slice(0, 12)})`,
+                          35
+                        )}
                       </span>
                     </PopoverButton>
                     <Transition
@@ -172,17 +179,13 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   </Popover>
                 </span>
               </div>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {getTypeFromMetadata(file.metadata)}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {bytes(file.metadata.totalSize)}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            </TableBodyCell>
+            <TableBodyCell>{getTypeFromMetadata(file.metadata)}</TableBodyCell>
+            <TableBodyCell>{bytes(file.metadata.totalSize)}</TableBodyCell>
+            <TableBodyCell>
               {owner ? renderOwnerBadge(owner) : "Unknown"}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            </TableBodyCell>
+            <TableBodyCell className="text-right text-sm font-medium">
               <button
                 className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
                 onClick={(e) =>
@@ -202,14 +205,14 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               >
                 Restore
               </button>
-            </td>
-          </tr>
+            </TableBodyCell>
+          </TableBodyRow>
           {isExpanded &&
             file.metadata.type === "folder" &&
             file.metadata.children &&
             file.metadata.children.map((child) => (
-              <tr key={child.cid} className="bg-gray-200 ml-40">
-                <td className="px-6 py-4 whitespace-nowrap w-[50%]">
+              <TableBodyRow key={child.cid}>
+                <TableBodyCell className="px-6 py-4 whitespace-nowrap w-[50%]">
                   <div className="flex items-center">
                     <input
                       type="checkbox"
@@ -223,24 +226,27 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                           : ""
                       }`}
                     >
-                      {child.name ?? `No name (${child.cid.slice(0, 12)})`}
+                      {shortenString(
+                        child.name ?? `No name (${child.cid.slice(0, 12)})`,
+                        35
+                      )}
                     </span>
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                </TableBodyCell>
+                <TableBodyCell>
                   <span className="text-sm text-gray-500">
                     {child.type === "file" ? "File" : "Folder"}
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                </TableBodyCell>
+                <TableBodyCell>
                   <span className="text-sm text-gray-500">
                     {bytes(child.totalSize)}
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                </TableBodyCell>
+                <TableBodyCell>
                   {owner ? renderOwnerBadge(owner) : "Unknown"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                </TableBodyCell>
+                <TableBodyCell className="text-right text-sm font-medium">
                   {child.type === "file" && (
                     <button
                       className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
@@ -251,8 +257,8 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       Download
                     </button>
                   )}
-                </td>
-              </tr>
+                </TableBodyCell>
+              </TableBodyRow>
             ))}
         </Fragment>
       );
@@ -279,43 +285,18 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
           <div className="shadow border-b border-gray-200 sm:rounded-lg">
-            <table className="min-w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Root CID
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Type
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Size
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Owner
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>{files.map((file) => renderRow(file))}</tbody>
-            </table>
+            <Table className="min-w-full">
+              <TableHead>
+                <TableHeadRow>
+                  <TableHeadCell>Root CID</TableHeadCell>
+                  <TableHeadCell>Type</TableHeadCell>
+                  <TableHeadCell>Size</TableHeadCell>
+                  <TableHeadCell>Owner</TableHeadCell>
+                  <TableHeadCell>Actions</TableHeadCell>
+                </TableHeadRow>
+              </TableHead>
+              <TableBody>{files.map((file) => renderRow(file))}</TableBody>
+            </Table>
           </div>
         </div>
       </div>
