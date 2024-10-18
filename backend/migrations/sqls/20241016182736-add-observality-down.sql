@@ -3,7 +3,7 @@ DROP TRIGGER IF EXISTS set_timestamp ON nodes;
 DROP TRIGGER IF EXISTS set_timestamp ON transaction_results;
 DROP TRIGGER IF EXISTS set_timestamp ON users;
 DROP TRIGGER IF EXISTS set_timestamp ON object_ownership;
-DROP TRIGGER IF EXISTS set_timestamp ON api_keys_users;
+DROP TRIGGER IF EXISTS set_timestamp ON api_keys;
 DROP TRIGGER IF EXISTS set_timestamp ON interactions;
 DROP TRIGGER IF EXISTS set_timestamp ON organizations;
 DROP TRIGGER IF EXISTS set_timestamp ON subscriptions;
@@ -24,8 +24,8 @@ ALTER TABLE users DROP COLUMN updated_at;
 ALTER TABLE object_ownership DROP COLUMN created_at;
 ALTER TABLE object_ownership DROP COLUMN updated_at;
 
-ALTER TABLE api_keys_users DROP COLUMN created_at;
-ALTER TABLE api_keys_users DROP COLUMN updated_at;
+ALTER TABLE api_keys DROP COLUMN created_at;
+ALTER TABLE api_keys DROP COLUMN updated_at;
 
 ALTER TABLE interactions DROP COLUMN created_at;
 ALTER TABLE interactions DROP COLUMN updated_at;

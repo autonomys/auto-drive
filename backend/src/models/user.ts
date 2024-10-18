@@ -2,8 +2,8 @@ import { SubscriptionInfo } from "./subscription";
 
 export type OAuthUser = {
   provider: string;
-  email: string;
   id: string;
+  email?: string;
 };
 
 export enum UserRole {
@@ -35,8 +35,8 @@ export type UnonboardedUser = UserBase & {
 export type User = OnboardedUser | UnonboardedUser;
 
 export type UserInfo = {
-  subscription: SubscriptionInfo;
   user: User;
+  subscription?: SubscriptionInfo;
 };
 
 export const userFromOAuth = (

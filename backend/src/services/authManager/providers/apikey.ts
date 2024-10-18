@@ -1,13 +1,12 @@
 import { OAuthUser } from "../../../models/index.js";
 import { ApiKeysUseCases } from "../../../useCases/apikeys.js";
 
-const getUserFromApiKey = async (apiKey: string): Promise<OAuthUser> => {
-  const userId = await ApiKeysUseCases.getUserIdFromApiKey(apiKey);
+const getUserFromApiKey = async (secret: string): Promise<OAuthUser> => {
+  const apiKey = await ApiKeysUseCases.getApiKeyFromSecret(secret);
 
   return {
-    id: userId,
-    provider: "apikey",
-    email: "",
+    provider: apiKey.oauthProvider,
+    id: apiKey.oauthUserId,
   };
 };
 
