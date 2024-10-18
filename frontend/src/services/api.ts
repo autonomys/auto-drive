@@ -359,6 +359,46 @@ export const ApiService = {
 
     return response.json().then((data) => data.isAvailable);
   },
+  addAdmin: async (handle: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/admin/add`, {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+  },
+  removeAdmin: async (handle: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error("No session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/admin/remove`, {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        "X-Auth-Provider": "google",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+  },
   updateSubscription: async (
     handle: string,
     granularity: SubscriptionGranularity,
