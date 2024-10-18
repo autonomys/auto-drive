@@ -2,11 +2,12 @@ import { useCallback, useState } from "react";
 import { ApiKeyCreationModal } from "./ApiKeyCreationModal";
 import { ApiKeyWithoutSecret } from "../../models/ApiKey";
 import { DeleteApiKeyModal } from "./DeleteApiKeyModal";
+import { Loader } from "lucide-react";
 
 export const ApiKeysTable = ({
   apiKeys,
 }: {
-  apiKeys: ApiKeyWithoutSecret[];
+  apiKeys: ApiKeyWithoutSecret[] | undefined;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [apiKeyId, setApiKeyId] = useState<string | null>(null);
@@ -19,7 +20,7 @@ export const ApiKeysTable = ({
   }, []);
   const closeDeleteModal = useCallback(() => setApiKeyId(null), []);
 
-  const nonDeletedApiKeys = apiKeys.filter((apiKey) => !apiKey.deletedAt);
+  const nonDeletedApiKeys = apiKeys?.filter((apiKey) => !apiKey.deletedAt);
 
   return (
     <div className="flex flex-col">
@@ -53,34 +54,47 @@ export const ApiKeysTable = ({
               </tr>
             </thead>
             <tbody className="w-full">
-              {nonDeletedApiKeys.map((apiKey) => (
-                <tr className="w-full" key={apiKey.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {apiKey.id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {apiKey.oauthProvider}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {apiKey.oauthUserId}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-100 text-blue-900 hover:bg-blue-200"
-                      onClick={() => openDeleteModal(apiKey.id)}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {nonDeletedApiKeys.length === 0 && (
+              {nonDeletedApiKeys &&
+                nonDeletedApiKeys.map((apiKey) => (
+                  <tr className="w-full" key={apiKey.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {apiKey.id}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {apiKey.oauthProvider}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {apiKey.oauthUserId}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-100 text-blue-900 hover:bg-blue-200"
+                        onClick={() => openDeleteModal(apiKey.id)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              {nonDeletedApiKeys && nonDeletedApiKeys.length === 0 && (
                 <tr>
                   <td
                     colSpan={4}
                     className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"
                   >
                     No API keys found
+                  </td>
+                </tr>
+              )}
+              {!nonDeletedApiKeys && (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"
+                  >
+                    <span className="flex justify-center items-center">
+                      <Loader className="w-4 h-4 animate-spin" />
+                    </span>
                   </td>
                 </tr>
               )}
