@@ -1,6 +1,10 @@
-CREATE TABLE api_keys_users (
-    api_key TEXT NOT NULL,
-    user_id TEXT NOT NULL
+CREATE TABLE api_keys (
+    id TEXT NOT NULL PRIMARY KEY,
+    "secret" TEXT NOT NULL,
+    oauth_provider TEXT NOT NULL,
+    oauth_user_id TEXT NOT NULL,
+    deleted_at TIMESTAMP,
+    CONSTRAINT fk_user_id FOREIGN KEY (oauth_provider, oauth_user_id) REFERENCES users(oauth_provider, oauth_user_id)
 );
 
 

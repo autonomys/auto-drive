@@ -116,6 +116,11 @@ const updateRole = async (
 
 const getUserInfo = async (userOrHandle: UserOrHandle): Promise<UserInfo> => {
   const user = await resolveUser(userOrHandle);
+
+  if (!user.onboarded) {
+    return { user };
+  }
+
   const subscription = await SubscriptionsUseCases.getSubscriptionInfo(user);
 
   return { user, subscription };

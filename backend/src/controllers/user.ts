@@ -4,6 +4,7 @@ import { UsersUseCases } from "../useCases/index.js";
 import { ApiKeysUseCases } from "../useCases/apikeys.js";
 import { UserRole } from "../models/index.js";
 import { SubscriptionsUseCases } from "../useCases/subscriptions.js";
+import { ApiKeyWithoutSecret } from "../models/apiKey.js";
 
 const userController = Router();
 
@@ -56,9 +57,64 @@ userController.get("/@me", async (req, res) => {
     return;
   }
 
-  const userInfo = await UsersUseCases.getUserInfo(user);
+  try {
+    const userInfo = await UsersUseCases.getUserInfo(user);
 
-  res.json(userInfo);
+    res.json(userInfo);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to get user info" });
+  }
+});
+
+userController.get("/@me/apiKeys", async (req, res) => {
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  try {
+    const apiKeys = await ApiKeysUseCases.getApiKeysByUser(user);
+
+    res.json(apiKeys);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to get API keys" });
+  }
+});
+
+userController.post("/@me/apiKeys/create", async (req, res) => {
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  try {
+    const apiKey = await ApiKeysUseCases.createApiKey(user);
+
+    res.json(apiKey);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to create API key" });
+  }
+});
+
+userController.delete("/@me/apiKeys/:id", async (req, res) => {
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  const { id } = req.params;
+
+  try {
+    await ApiKeysUseCases.deleteApiKey(user, id);
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to delete API key" });
+  }
 });
 
 userController.get("/search", async (req, res) => {
@@ -87,22 +143,6 @@ userController.get("/checkHandleAvailability", async (req, res) => {
   const user = await UsersUseCases.getUserByHandle(handle);
 
   res.json({ isAvailable: !user });
-});
-
-userController.post("/apiKey/create", async (req, res) => {
-  const user = await handleAuth(req, res);
-  if (!user) {
-    return;
-  }
-
-  try {
-    const apiKey = await ApiKeysUseCases.createApiKey(user);
-
-    res.json(apiKey);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Failed to create API key" });
-  }
 });
 
 userController.post("/admin/add", async (req, res) => {

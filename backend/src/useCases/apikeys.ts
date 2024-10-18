@@ -1,36 +1,66 @@
 import { v4 } from "uuid";
-import { apiKeysRepository, usersRepository } from "../repositories/index.js";
-import { User, UserRole } from "../models/index.js";
-import { UsersUseCases } from "./users.js";
-import { OrganizationsUseCases } from "./organizations.js";
+import { apiKeysRepository } from "../repositories/index.js";
+import { User } from "../models/index.js";
+import { ApiKey, ApiKeyWithoutSecret } from "../models/apiKey.js";
 
 const createApiKey = async (executor: User) => {
-  const isAdmin = await UsersUseCases.isAdminUser(executor);
-  if (!isAdmin) {
-    throw new Error("User does not have admin privileges");
-  }
+  const secret = v4({}).replace(/-/g, "");
+  const id = v4().replace(/-/g, "");
 
-  const apiKey = v4({}).replace(/-/g, "");
-  const userId = v4().replace(/-/g, "");
-
-  const apiKeyObject = await apiKeysRepository.createApiKey(apiKey, userId);
-
-  await UsersUseCases.initUser("apikey", userId, userId);
+  const apiKeyObject = await apiKeysRepository.createApiKey(
+    id,
+    secret,
+    executor.oauthProvider,
+    executor.oauthUserId
+  );
 
   return apiKeyObject;
 };
 
-const getUserIdFromApiKey = async (apiKey: string): Promise<string> => {
-  const apiKeyObject = await apiKeysRepository.getApiKey(apiKey);
+const getApiKeyFromSecret = async (secret: string): Promise<ApiKey> => {
+  const apiKeyObject = await apiKeysRepository.getApiKeyBySecret(secret);
 
   if (!apiKeyObject) {
-    throw new Error("Invalid API key");
+    throw new Error("Api key not found");
+  }
+  if (apiKeyObject.deletedAt) {
+    throw new Error("Api key has been deleted");
   }
 
-  return apiKeyObject.userId;
+  return apiKeyObject;
+};
+
+const deleteApiKey = async (executor: User, id: string): Promise<void> => {
+  const apiKeyObject = await apiKeysRepository.getApiKeyById(id);
+  if (!apiKeyObject) {
+    throw new Error("Api key not found");
+  }
+
+  if (
+    apiKeyObject.oauthProvider !== executor.oauthProvider ||
+    apiKeyObject.oauthUserId !== executor.oauthUserId
+  ) {
+    throw new Error("User is not the owner of the API key");
+  }
+
+  await apiKeysRepository.deleteApiKey(id);
+};
+
+const getApiKeysByUser = async (user: User): Promise<ApiKeyWithoutSecret[]> => {
+  const apiKeys = await apiKeysRepository.getApiKeysByOAuthUser(
+    user.oauthProvider,
+    user.oauthUserId
+  );
+
+  return apiKeys.map((apiKey) => {
+    const { secret, ...apiKeyWithoutSecret } = apiKey;
+    return apiKeyWithoutSecret;
+  });
 };
 
 export const ApiKeysUseCases = {
   createApiKey,
-  getUserIdFromApiKey,
+  getApiKeyFromSecret,
+  deleteApiKey,
+  getApiKeysByUser,
 };
