@@ -24,6 +24,7 @@ import { TableBody, TableBodyCell, TableBodyRow } from "../Table/TableBody";
 import { shortenString } from "../../../utils/misc";
 import { Table } from "../Table";
 import { TableHead, TableHeadCell, TableHeadRow } from "../Table/TableHead";
+import { DisplayerIcon } from "../Triangle";
 
 export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -131,15 +132,13 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                     }}
                   >
                     {isExpanded ? (
-                      <ChevronDown size={16} />
+                      <DisplayerIcon className="text-accent rotate-90" />
                     ) : (
-                      <ChevronRight size={16} />
+                      <DisplayerIcon className="text-black" />
                     )}
                   </button>
                 )}
-                <span className="ml-2">
-                  {renderFileIcon(file.metadata.type)}
-                </span>
+                <span>{renderFileIcon(file.metadata.type)}</span>
                 <span
                   className={`relative ml-2 text-sm font-medium text-gray-900 ${
                     file.metadata.type === "folder"
@@ -150,7 +149,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   <Popover>
                     <PopoverButton as="span">
                       <span
-                        className="hover:cursor-pointer"
+                        className="hover:cursor-pointer text-accent font-semibold"
                         onMouseEnter={(e) => e.currentTarget.click()}
                         onMouseLeave={(e) => e.currentTarget.click()}
                       >
@@ -218,9 +217,9 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       type="checkbox"
                       className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
-
+                    -
                     <span
-                      className={`relative ml-2 text-sm font-medium text-gray-900 ${
+                      className={`relative ml-2 text-sm font-semibold text-accent ${
                         file.metadata.type === "folder"
                           ? "hover:underline hover:cursor-pointer"
                           : ""

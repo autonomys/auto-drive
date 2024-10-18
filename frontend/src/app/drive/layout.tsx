@@ -60,7 +60,7 @@ export default function AppLayout({
               alt="Auto Drive"
               className="w-[1rem] h-[1rem] rounded-full"
             />
-            <span className="text-xl font-semibold">Auto Drive</span>
+            <span className="text-md font-medium">Auto Drive</span>
           </div>
           <div className="flex items-center space-x-4">
             <span className="text-sm font-medium">Your Files</span>

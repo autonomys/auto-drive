@@ -33,6 +33,7 @@ import { useUserStore } from "../../../states/user";
 import { Table } from "../Table";
 import { TableHead, TableHeadCell, TableHeadRow } from "../Table/TableHead";
 import { TableBody, TableBodyCell, TableBodyRow } from "../Table/TableBody";
+import { DisplayerIcon } from "../Triangle";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -189,15 +190,13 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                     }}
                   >
                     {isExpanded ? (
-                      <ChevronDown size={16} />
+                      <DisplayerIcon className="text-accent rotate-90" />
                     ) : (
-                      <ChevronRight size={16} />
+                      <DisplayerIcon className="text-black" />
                     )}
                   </button>
                 )}
-                <span className="ml-2">
-                  {renderFileIcon(file.metadata.type)}
-                </span>
+                <span>{renderFileIcon(file.metadata.type)}</span>
                 <span
                   className={`relative ml-2 text-sm font-medium text-gray-900 ${
                     file.metadata.type === "folder"
@@ -208,7 +207,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   <Popover>
                     <PopoverButton as="span">
                       <span
-                        className="hover:cursor-pointer"
+                        className="hover:cursor-pointer text-accent font-semibold"
                         onMouseEnter={(e) => e.currentTarget.click()}
                         onMouseLeave={(e) => e.currentTarget.click()}
                       >
@@ -274,7 +273,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
             file.metadata.type === "folder" &&
             file.metadata.children &&
             file.metadata.children.map((child) => (
-              <TableBodyRow key={child.cid} className="bg-gray-200 ml-40">
+              <TableBodyRow key={child.cid}>
                 <TableBodyCell className="w-[50%]">
                   <div className="flex items-center">
                     <input
@@ -283,9 +282,9 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       type="checkbox"
                       className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
-
+                    -
                     <span
-                      className={`relative ml-2 text-sm font-medium text-gray-900 ${
+                      className={`relative ml-2 text-sm font-semibold text-accent ${
                         file.metadata.type === "folder"
                           ? "hover:underline hover:cursor-pointer"
                           : ""
