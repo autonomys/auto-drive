@@ -1,17 +1,22 @@
 import { UserTableRow } from "./UserTableRow";
 import { SubscriptionWithUser } from "../../models/Subscriptions";
-import { TableBody } from "../common/Table/TableBody";
+import {
+  TableBody,
+  TableBodyCell,
+  TableBodyRow,
+} from "../common/Table/TableBody";
 import { Table } from "../common/Table";
 import {
   TableHead,
   TableHeadRow,
   TableHeadCell,
 } from "../common/Table/TableHead";
+import { Loader } from "lucide-react";
 
 export const UserSubscriptionsTable = ({
   users,
 }: {
-  users: SubscriptionWithUser[];
+  users: SubscriptionWithUser[] | undefined;
 }) => {
   return (
     <div>
@@ -31,9 +36,21 @@ export const UserSubscriptionsTable = ({
                 </TableHeadRow>
               </TableHead>
               <TableBody>
-                {users.map((user) => (
+                {users?.map((user) => (
                   <UserTableRow key={user.id} subscriptionWithUser={user} />
                 ))}
+                {users === undefined && (
+                  <TableBodyRow>
+                    <TableBodyCell
+                      colSpan={7}
+                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"
+                    >
+                      <span className="flex justify-center items-center">
+                        <Loader className="w-4 h-4 animate-spin" />
+                      </span>
+                    </TableBodyCell>
+                  </TableBodyRow>
+                )}
               </TableBody>
             </Table>
           </div>
