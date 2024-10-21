@@ -9,13 +9,11 @@ export const Table = ({
 }) => {
   return (
     <div
-      className="rounded-lg border-separate border overflow-hidden"
+      className="rounded-lg border-separate border"
       style={{ borderSpacing: "0px" }}
     >
       <table
-        className={`min-w-full border-collapse overflow-hidden ${
-          className ?? ""
-        }`}
+        className={`min-w-full border-collapse rounded-lg ${className ?? ""}`}
       >
         {children}
       </table>
