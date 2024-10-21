@@ -6,12 +6,13 @@ import {
 } from "@/models/UploadedObjectMetadata";
 import { ApiService } from "@/services/api";
 import {
+  Checkbox,
   Popover,
   PopoverButton,
   PopoverPanel,
   Transition,
 } from "@headlessui/react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Square, SquareCheck } from "lucide-react";
 import {
   ChangeEvent,
   FC,
@@ -367,28 +368,48 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-          <Transition
-            show={selectedFiles.length > 0}
-            enter="transition ease-out duration-100"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="transition ease-in duration-75"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="flex justify-start items-center mb-4 gap-2 ml-2">
-              <span className="text-sm font-semibold">
-                {selectedFiles.length} files selected
-              </span>
-              <Button
-                className="text-xs"
-                variant="lightAccent"
-                onClick={batchedDownload}
-              >
-                Download
-              </Button>
-            </div>
-          </Transition>
+          <div className="flex justify-start items-center mb-4 gap-2 ml-2">
+            <Checkbox
+              className="hover:cursor-pointer hover:scale-105 transition-all duration-200"
+              checked={selectedFiles.length > 0}
+              onChange={() =>
+                selectedFiles.length > 0
+                  ? setSelectedFiles([])
+                  : setSelectedFiles(
+                      files.map((f) => ({
+                        type: f.metadata.type,
+                        cid: f.metadata.dataCid,
+                        name: f.metadata.name,
+                        totalSize: f.metadata.totalSize,
+                      }))
+                    )
+              }
+            >
+              {selectedFiles.length > 0 ? <SquareCheck /> : <Square />}
+            </Checkbox>
+            <Transition
+              show={selectedFiles.length > 0}
+              enter="transition ease-out duration-100"
+              enterFrom="opacity-0"
+              enterTo="opacity-100"
+              leave="transition ease-in duration-75"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <div className="contents">
+                <span className="text-sm font-semibold">
+                  {selectedFiles.length} files selected
+                </span>
+                <Button
+                  className="text-xs"
+                  variant="lightAccent"
+                  onClick={batchedDownload}
+                >
+                  Download
+                </Button>
+              </div>
+            </Transition>
+          </div>
           <Table>
             <TableHead>
               <TableHeadRow>
