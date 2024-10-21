@@ -14,6 +14,7 @@ import {
   TableBodyCell,
   TableBodyRow,
 } from "../common/Table/TableBody";
+import { Button } from "../common/Button";
 
 export const ApiKeysTable = ({
   apiKeys,
@@ -37,13 +38,14 @@ export const ApiKeysTable = ({
     <div className="flex flex-col">
       <ApiKeyCreationModal isOpen={isOpen} onClose={closeCreationModal} />
       <DeleteApiKeyModal apiKeyId={apiKeyId} closeModal={closeDeleteModal} />
-      <div className="">
-        <button
-          className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2 mb-4"
+      <div className="flex">
+        <Button
+          className="mb-4 text-sm"
+          variant="lightAccent"
           onClick={openCreationModal}
         >
           Create API Key
-        </button>
+        </Button>
       </div>
       <div className="mb-8">
         <div className="shadow border-b border-gray-200 sm:rounded-lg min-w-[fit-content] w-full">
@@ -64,12 +66,13 @@ export const ApiKeysTable = ({
                     <TableBodyCell>{apiKey.oauthProvider}</TableBodyCell>
                     <TableBodyCell>{apiKey.oauthUserId}</TableBodyCell>
                     <TableBodyCell>
-                      <button
-                        className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-100 text-blue-900 hover:bg-blue-200"
+                      <Button
+                        variant="lightDanger"
+                        className="text-sm"
                         onClick={() => openDeleteModal(apiKey.id)}
                       >
                         Delete
-                      </button>
+                      </Button>
                     </TableBodyCell>
                   </TableBodyRow>
                 ))}

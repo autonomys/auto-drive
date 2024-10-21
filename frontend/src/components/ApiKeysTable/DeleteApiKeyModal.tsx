@@ -8,6 +8,7 @@ import {
 import { Fragment, useCallback } from "react";
 import { ApiService } from "../../services/api";
 import toast from "react-hot-toast";
+import { Button } from "../common/Button";
 
 export const DeleteApiKeyModal = ({
   apiKeyId,
@@ -60,7 +61,7 @@ export const DeleteApiKeyModal = ({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+              <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all text-center">
                 <DialogTitle
                   as="h3"
                   className="text-lg font-medium leading-6 text-gray-900"
@@ -68,18 +69,20 @@ export const DeleteApiKeyModal = ({
                   Delete API Key
                 </DialogTitle>
                 <div className="mt-2">
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 text-center">
                     Do you want to delete this API key?
+                    <br />
+                    <strong>This action cannot be undone.</strong>
                   </p>
                 </div>
                 <div className="mt-4 flex justify-center">
-                  <button
-                    type="button"
-                    className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-100 text-blue-900 hover:bg-blue-200"
+                  <Button
+                    variant="danger"
+                    className="text-sm"
                     onClick={deleteApiKey}
                   >
                     Delete
-                  </button>
+                  </Button>
                 </div>
               </DialogPanel>
             </TransitionChild>

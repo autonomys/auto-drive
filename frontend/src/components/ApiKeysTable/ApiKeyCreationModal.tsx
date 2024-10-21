@@ -11,6 +11,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { ApiService } from "../../services/api";
 import { ApiKey } from "../../models/ApiKey";
 import toast from "react-hot-toast";
+import { Button } from "../common/Button";
 
 export const ApiKeyCreationModal = ({
   isOpen,
@@ -74,7 +75,7 @@ export const ApiKeyCreationModal = ({
               <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
                 <DialogTitle
                   as="h3"
-                  className="text-lg font-medium leading-6 text-gray-900"
+                  className="text-lg text-center font-medium leading-6 text-gray-900"
                 >
                   Create API Key
                 </DialogTitle>
@@ -91,18 +92,15 @@ export const ApiKeyCreationModal = ({
                           {apiKey.secret}
                         </p>
                       </div>
-                      <div className="flex items-center space-x-2 mt-2 w-full justify-center">
-                        <button
-                          className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-100 text-blue-900 hover:bg-blue-200"
-                          onClick={copyApiKey}
-                        >
+                      <div className="flex items-center space-x-2 mt-4 w-full justify-center">
+                        <Button variant="primary" onClick={copyApiKey}>
                           {hasBeenCopied ? "Copied!" : "Copy"}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ) : (
                     <Fragment>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-500 text-center">
                         You are about to create a new API key. This key will
                         allow you to access the API programmatically. Please
                         keep this key secure and do not share it with anyone.
@@ -110,13 +108,12 @@ export const ApiKeyCreationModal = ({
                         <br />
                         <strong>This key won't be shown again.</strong>
                       </p>
-                      <button
-                        type="button"
-                        className="mt-4 inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      <span
+                        className="flex justify-center mt-4"
                         onClick={createApiKey}
                       >
-                        Generate
-                      </button>
+                        <Button variant="primary">Generate</Button>
+                      </span>
                     </Fragment>
                   )}
                 </div>

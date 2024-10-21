@@ -34,6 +34,7 @@ import { Table } from "../Table";
 import { TableHead, TableHeadCell, TableHeadRow } from "../Table/TableHead";
 import { TableBody, TableBodyCell, TableBodyRow } from "../Table/TableBody";
 import { DisplayerIcon } from "../Triangle";
+import { Button } from "../Button";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
@@ -69,27 +70,30 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     return <span></span>;
   }, []);
 
-  const renderOwnerBadge = useCallback((owner: string) => {
-    if (owner === "You") {
-      return (
-        <span className="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">
-          You
-        </span>
-      );
-    } else if (owner.startsWith("@")) {
-      return (
-        <span className="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
-          {owner.slice(1)}
-        </span>
-      );
-    } else {
-      return (
-        <span className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-200 rounded-full">
-          {owner}
-        </span>
-      );
-    }
-  }, []);
+  const renderOwnerBadge = useCallback(
+    (owner: string) => {
+      if (owner === user?.handle) {
+        return (
+          <span className="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">
+            You
+          </span>
+        );
+      } else if (owner.startsWith("@")) {
+        return (
+          <span className="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
+            {owner.slice(1)}
+          </span>
+        );
+      } else {
+        return (
+          <span className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-200 rounded-full">
+            {owner}
+          </span>
+        );
+      }
+    },
+    [user?.handle]
+  );
 
   const downloadFile = useCallback(
     async (
@@ -241,8 +245,9 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               {owner ? renderOwnerBadge(owner) : "Unknown"}
             </TableBodyCell>
             <TableBodyCell className="flex justify-end">
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+              <Button
+                variant="lightAccent"
+                className="mr-2 text-xs"
                 onClick={(e) =>
                   downloadFile(
                     e,
@@ -253,20 +258,22 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 }
               >
                 Download
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="lightAccent"
+                className="mr-2 text-xs"
                 disabled={!isOwner}
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2 disabled:hidden"
                 onClick={(e) => shareFile(e, file.metadata.dataCid)}
               >
                 Share
-              </button>
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded"
+              </Button>
+              <Button
+                variant="lightDanger"
+                className="text-xs"
                 onClick={(e) => onDeleteFile(e, file.metadata.dataCid)}
               >
                 Delete
-              </button>
+              </Button>
             </TableBodyCell>
           </TableBodyRow>
           {isExpanded &&
@@ -304,16 +311,15 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   {owner ? renderOwnerBadge(owner) : "Unknown"}
                 </TableBodyCell>
                 <TableBodyCell>
-                  {child.type === "file" && (
-                    <button
-                      className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                      onClick={(e) =>
-                        downloadFile(e, child.type, child.cid, child.name!)
-                      }
-                    >
-                      Download
-                    </button>
-                  )}
+                  <Button
+                    variant="lightAccent"
+                    className="text-xs"
+                    onClick={(e) =>
+                      downloadFile(e, child.type, child.cid, child.name!)
+                    }
+                  >
+                    Download
+                  </Button>
                 </TableBodyCell>
               </TableBodyRow>
             ))}
@@ -370,13 +376,17 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <div className="flex justify-start mb-4 gap-2 ml-2">
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded font-[600]"
+            <div className="flex justify-start items-center mb-4 gap-2 ml-2">
+              <span className="text-sm font-semibold">
+                {selectedFiles.length} files selected
+              </span>
+              <Button
+                className="text-xs"
+                variant="lightAccent"
                 onClick={batchedDownload}
               >
-                Download {selectedFiles.length} files
-              </button>
+                Download
+              </Button>
             </div>
           </Transition>
           <Table>

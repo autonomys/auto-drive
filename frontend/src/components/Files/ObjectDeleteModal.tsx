@@ -9,6 +9,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
 import { ApiService } from "../../services/api";
 import toast from "react-hot-toast";
+import { Button } from "../common/Button";
 
 export const ObjectDeleteModal = ({
   cid,
@@ -81,13 +82,9 @@ export const ObjectDeleteModal = ({
                   </p>
                 </div>
                 <div className="mt-4 flex justify-center">
-                  <button
-                    type="button"
-                    className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-100 text-blue-900 hover:bg-blue-200"
-                    onClick={deleteObject}
-                  >
+                  <Button variant="danger" onClick={deleteObject}>
                     Delete
-                  </button>
+                  </Button>
                 </div>
               </DialogPanel>
             </TransitionChild>

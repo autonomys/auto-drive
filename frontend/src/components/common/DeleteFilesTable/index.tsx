@@ -25,11 +25,15 @@ import { shortenString } from "../../../utils/misc";
 import { Table } from "../Table";
 import { TableHead, TableHeadCell, TableHeadRow } from "../Table/TableHead";
 import { DisplayerIcon } from "../Triangle";
+import { Button } from "../Button";
 
 export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<UploadedObjectMetadata[]>(
+    []
+  );
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
   const [restoreCID, setRestoreCID] = useState<string | null>(null);
@@ -102,6 +106,21 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     window.location.assign(`/drive/fs/${cid}`);
   }, []);
 
+  const batchedDownload = useCallback(
+    (e: MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      selectedFiles.forEach((file) => {
+        downloadFile(
+          e,
+          file.metadata.type,
+          file.metadata.dataCid,
+          file.metadata.name!
+        );
+      });
+    },
+    [selectedFiles, downloadFile]
+  );
+
   const renderRow = useCallback(
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
@@ -123,6 +142,13 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 <input
                   type="checkbox"
                   className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedFiles([...selectedFiles, file]);
+                    } else {
+                      setSelectedFiles(selectedFiles.filter((f) => f !== file));
+                    }
+                  }}
                 />
                 {file.metadata.type === "folder" && file.metadata.children && (
                   <button
@@ -185,8 +211,9 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               {owner ? renderOwnerBadge(owner) : "Unknown"}
             </TableBodyCell>
             <TableBodyCell className="text-right text-sm font-medium">
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+              <Button
+                variant="lightAccent"
+                className="mr-2 text-xs"
                 onClick={(e) =>
                   downloadFile(
                     e,
@@ -197,13 +224,14 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 }
               >
                 Download
-              </button>
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+              </Button>
+              <Button
+                variant="lightAccent"
+                className="mr-2 text-xs"
                 onClick={(e) => openRestoreModal(e, file.metadata.dataCid)}
               >
                 Restore
-              </button>
+              </Button>
             </TableBodyCell>
           </TableBodyRow>
           {isExpanded &&
@@ -247,14 +275,15 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 </TableBodyCell>
                 <TableBodyCell className="text-right text-sm font-medium">
                   {child.type === "file" && (
-                    <button
-                      className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+                    <Button
+                      variant="lightAccent"
+                      className="text-xs"
                       onClick={(e) =>
                         downloadFile(e, child.type, child.cid, child.name!)
                       }
                     >
                       Download
-                    </button>
+                    </Button>
                   )}
                 </TableBodyCell>
               </TableBodyRow>
@@ -281,6 +310,28 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
         cid={restoreCID}
         closeModal={() => setRestoreCID(null)}
       />
+      <Transition
+        show={selectedFiles.length > 0}
+        enter="transition ease-out duration-100"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition ease-in duration-75"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <div className="flex justify-start items-center mb-4 gap-2 ml-2">
+          <span className="text-sm font-semibold">
+            {selectedFiles.length} files selected
+          </span>
+          <Button
+            className="text-xs"
+            variant="lightAccent"
+            onClick={batchedDownload}
+          >
+            Download
+          </Button>
+        </div>
+      </Transition>
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
           <div className="shadow border-b border-gray-200 sm:rounded-lg">
