@@ -369,24 +369,26 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
           <div className="flex justify-start items-center mb-4 gap-2 ml-2">
-            <Checkbox
-              className="hover:cursor-pointer hover:scale-105 transition-all duration-200"
-              checked={selectedFiles.length > 0}
-              onChange={() =>
-                selectedFiles.length > 0
-                  ? setSelectedFiles([])
-                  : setSelectedFiles(
-                      files.map((f) => ({
-                        type: f.metadata.type,
-                        cid: f.metadata.dataCid,
-                        name: f.metadata.name,
-                        totalSize: f.metadata.totalSize,
-                      }))
-                    )
-              }
-            >
-              {selectedFiles.length > 0 ? <SquareCheck /> : <Square />}
-            </Checkbox>
+            <div className="h-8 flex items-center">
+              <Checkbox
+                className="hover:cursor-pointer hover:scale-105 transition-all duration-200"
+                checked={selectedFiles.length > 0}
+                onChange={() =>
+                  selectedFiles.length > 0
+                    ? setSelectedFiles([])
+                    : setSelectedFiles(
+                        files.map((f) => ({
+                          type: f.metadata.type,
+                          cid: f.metadata.dataCid,
+                          name: f.metadata.name,
+                          totalSize: f.metadata.totalSize,
+                        }))
+                      )
+                }
+              >
+                {selectedFiles.length > 0 ? <SquareCheck /> : <Square />}
+              </Checkbox>
+            </div>
             <Transition
               show={selectedFiles.length > 0}
               enter="transition ease-out duration-100"
