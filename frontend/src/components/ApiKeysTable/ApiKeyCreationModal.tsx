@@ -82,10 +82,9 @@ export const ApiKeyCreationModal = ({
                 <div className="mt-2">
                   {apiKey ? (
                     <div>
-                      <div className="flex items-center space-x-2">
-                        <p className="text-sm font-medium">API Key:</p>
+                      <div className="flex justify-center items-center space-x-2">
                         <p
-                          className="text-sm font-mono bg-gray-100 px-2 py-1 rounded cursor-pointer flex items-center"
+                          className="text-sm font-mono bg-gray-100 px-2 py-1 rounded cursor-pointer flex items-center text-center"
                           onClick={copyApiKey}
                           title="Click to copy"
                         >
@@ -93,7 +92,7 @@ export const ApiKeyCreationModal = ({
                         </p>
                       </div>
                       <div className="flex items-center space-x-2 mt-4 w-full justify-center">
-                        <Button variant="primary" onClick={copyApiKey}>
+                        <Button variant="lightAccent" onClick={copyApiKey}>
                           {hasBeenCopied ? "Copied!" : "Copy"}
                         </Button>
                       </div>
@@ -112,7 +111,7 @@ export const ApiKeyCreationModal = ({
                         className="flex justify-center mt-4"
                         onClick={createApiKey}
                       >
-                        <Button variant="primary">Generate</Button>
+                        <Button variant="lightAccent">Generate</Button>
                       </span>
                     </Fragment>
                   )}
