@@ -92,6 +92,12 @@ export default function AppLayout({
                   <span className="hidden md:block">Trash</span>
                 </button>
               </InternalLink>
+              <InternalLink className="contents" href="/drive/profile">
+                <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
+                  <UserIcon className="w-5 h-5" />
+                  <span className="hidden md:block">Profile</span>
+                </button>
+              </InternalLink>
               <RoleProtected roles={[UserRole.Admin]}>
                 <InternalLink className="contents" href="/drive/admin">
                   <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
@@ -114,16 +120,6 @@ export default function AppLayout({
             <main className="flex-1 overflow-auto p-6">{children}</main>
           </UserEnsurer>
         </div>
-        <footer className="mt-8 flex justify-start w-16 md:w-64 flex-col gap-2 px-10 py-2">
-          <div className="flex">
-            <InternalLink href="/drive/profile">
-              <button className="flex space-x-2 text-gray-700 hover:text-blue-600">
-                <UserIcon className="w-5 h-5" />
-                <span className="hidden md:block">User</span>
-              </button>
-            </InternalLink>
-          </div>
-        </footer>
       </div>
     </div>
   );
