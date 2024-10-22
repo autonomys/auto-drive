@@ -117,7 +117,7 @@ export const SearchBar = () => {
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search by Root CID"
+            placeholder="Search by Name or CID"
           />
           <button
             type="button"
