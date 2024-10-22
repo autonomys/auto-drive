@@ -1,6 +1,10 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { User } from "../models/index.js";
-import { ObjectInformation, Owner } from "../models/object.js";
+import {
+  ObjectInformation,
+  ObjectSearchResult,
+  Owner,
+} from "../models/object.js";
 import {
   metadataRepository,
   ownershipRepository,
@@ -8,6 +12,7 @@ import {
 import { UsersUseCases } from "./index.js";
 import { OwnershipUseCases } from "./ownership.js";
 import { UploadStatusUseCases } from "./uploadStatus.js";
+import { MetadataEntry } from "../repositories/metadata.js";
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid);
@@ -30,7 +35,7 @@ const searchMetadataByCID = async (
   cid: string,
   limit: number = 5,
   filter: { scope: "user"; user: User } | { scope: "global" }
-) => {
+): Promise<MetadataEntry[]> => {
   if (filter.scope === "user") {
     return metadataRepository.searchMetadataByCIDAndUser(
       cid,
@@ -40,9 +45,44 @@ const searchMetadataByCID = async (
     );
   }
 
-  return metadataRepository
-    .searchMetadataByCID(cid, limit)
-    .then((e) => e.map((e) => e.cid));
+  return metadataRepository.searchMetadataByCID(cid, limit);
+};
+
+const searchMetadataByName = async (
+  query: string,
+  limit: number = 5,
+  filter: { scope: "user"; user: User } | { scope: "global" }
+): Promise<MetadataEntry[]> => {
+  if (filter.scope === "user") {
+    return metadataRepository.searchMetadataByNameAndUser(
+      query,
+      filter.user.oauthProvider,
+      filter.user.oauthUserId,
+      limit
+    );
+  }
+
+  return metadataRepository.searchMetadataByName(query, limit);
+};
+
+const searchByCIDOrName = async (
+  query: string,
+  limit: number = 5,
+  filter: { scope: "user"; user: User } | { scope: "global" }
+): Promise<ObjectSearchResult[]> => {
+  const names = await searchMetadataByName(query, limit, filter);
+  if (names.length >= limit) {
+    return names.slice(0, limit).map((e) => ({
+      cid: e.head_cid,
+      name: e.metadata.name!,
+    }));
+  }
+
+  const cids = await searchMetadataByCID(query, limit - names.length, filter);
+  return [...names, ...cids].slice(0, limit).map((e) => ({
+    cid: e.head_cid,
+    name: e.metadata.name!,
+  }));
 };
 
 const getAllMetadata = async () => {
@@ -146,6 +186,8 @@ export const ObjectUseCases = {
   getObjectInformation,
   saveMetadata,
   searchMetadataByCID,
+  searchMetadataByName,
+  searchByCIDOrName,
   getAllMetadata,
   getRootObjects,
   getSharedRoots,

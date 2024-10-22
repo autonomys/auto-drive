@@ -14,9 +14,9 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
   const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
 
   useEffect(() => {
-    ApiService.searchHeadCID(cid, scope)
+    ApiService.searchByCIDOrName(cid, scope)
       .then((e) =>
-        Promise.all(e.map((e) => ApiService.fetchUploadedObjectMetadata(e)))
+        Promise.all(e.map((e) => ApiService.fetchUploadedObjectMetadata(e.cid)))
       )
       .then(setObjectsMetadata)
       .catch(() => {

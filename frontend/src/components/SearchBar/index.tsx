@@ -6,6 +6,7 @@ import { SearchIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useScopeStore } from "../../states/scope";
+import { ObjectSearchResult } from "../../models/ObjectSearchResult";
 
 export const SearchBar = () => {
   const [query, setQuery] = useState("");
@@ -14,13 +15,15 @@ export const SearchBar = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
   const { scope } = useScopeStore();
-  const [recommendations, setRecommendations] = useState<string[] | null>(null);
+  const [recommendations, setRecommendations] = useState<
+    ObjectSearchResult[] | null
+  >(null);
   const router = useRouter();
 
   useEffect(() => {
     if (query.length > 2) {
       setError(null);
-      ApiService.searchHeadCID(query, scope)
+      ApiService.searchByCIDOrName(query, scope)
         .then(setRecommendations)
         .catch(() => setError("Error fetching recommendations"));
     } else {
@@ -91,11 +94,13 @@ export const SearchBar = () => {
 
     return recommendations.map((item) => (
       <li
-        key={item}
+        key={item.cid}
         className="relative cursor-pointer select-none px-4 py-2 text-gray-900 hover:bg-blue-600 hover:text-white overflow-hidden text-ellipsis font-semibold"
-        onClick={() => handleSelectItem(item)}
+        onClick={() => handleSelectItem(item.name)}
       >
-        {item}
+        {item.name.toLowerCase().includes(query.toLowerCase())
+          ? item.name
+          : item.cid}
       </li>
     ));
   }, [query, recommendations]);
@@ -112,7 +117,7 @@ export const SearchBar = () => {
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search by Root CID"
+            placeholder="Search by Name or CID"
           />
           <button
             type="button"
