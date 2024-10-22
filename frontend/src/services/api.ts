@@ -1,5 +1,6 @@
 import { ApiKey, ApiKeyWithoutSecret } from "../models/ApiKey";
 import { FolderTree } from "../models/FileTree";
+import { ObjectSearchResult } from "../models/ObjectSearchResult";
 import {
   SubscriptionGranularity,
   SubscriptionWithUser,
@@ -174,10 +175,10 @@ export const ApiService = {
 
     return response.blob();
   },
-  searchHeadCID: async (
+  searchByCIDOrName: async (
     query: string,
     scope: "user" | "global"
-  ): Promise<string[]> => {
+  ): Promise<ObjectSearchResult[]> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
@@ -192,6 +193,7 @@ export const ApiService = {
         },
       }
     );
+
     return response.json();
   },
   getRootObjects: async (scope: "user" | "global"): Promise<string[]> => {

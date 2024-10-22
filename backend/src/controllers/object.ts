@@ -61,7 +61,7 @@ objectController.get("/search", async (req, res) => {
     const limit = req.query.limit
       ? parseInt(req.query.limit as string)
       : undefined;
-    const results = await ObjectUseCases.searchMetadataByCID(
+    const results = await ObjectUseCases.searchByCIDOrName(
       cid,
       limit,
       user && scope === "user" ? { user, scope } : { scope: "global" }

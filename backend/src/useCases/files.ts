@@ -201,7 +201,6 @@ const downloadObject = async (
     reader,
     InteractionType.Download
   );
-  console.log("pendingCredits", pendingCredits);
 
   if (pendingCredits < metadata.totalSize) {
     throw new Error("Not enough download credits");

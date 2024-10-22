@@ -23,3 +23,8 @@ export enum OwnerRole {
   ADMIN = "admin",
   VIEWER = "viewer",
 }
+
+export type ObjectSearchResult = {
+  cid: string;
+  name: string;
+};

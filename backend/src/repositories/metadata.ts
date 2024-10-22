@@ -33,21 +33,18 @@ const setMetadata = async (
   });
 };
 
-const searchMetadataByCID = async (cid: string, limit: number | undefined) => {
+const searchMetadataByCID = async (
+  cid: string,
+  limit: number | undefined
+): Promise<MetadataEntry[]> => {
   const db = await getDatabase();
 
   return db
     .query<MetadataEntry>({
-      text: "SELECT metadata.head_cid FROM metadata join object_ownership on metadata.head_cid = object_ownership.cid WHERE metadata.head_cid LIKE $1 LIMIT $2",
+      text: "SELECT metadata.* FROM metadata join object_ownership on metadata.head_cid = object_ownership.cid WHERE metadata.head_cid LIKE $1 LIMIT $2",
       values: [`%${cid}%`, limit],
     })
-    .then((entries) => {
-      return entries.rows.map((entry) => {
-        return {
-          cid: entry.head_cid,
-        };
-      });
-    });
+    .then((entries) => entries.rows);
 };
 
 const searchMetadataByCIDAndUser = async (
@@ -55,7 +52,7 @@ const searchMetadataByCIDAndUser = async (
   limit: number | undefined,
   provider: string,
   userId: string
-): Promise<string[]> => {
+): Promise<MetadataEntry[]> => {
   const db = await getDatabase();
 
   return db
@@ -71,7 +68,41 @@ const searchMetadataByCIDAndUser = async (
     `,
       values: [provider, userId, `%${cid}%`, limit],
     })
-    .then((entries) => entries.rows.map((entry) => entry.head_cid));
+    .then((entries) => entries.rows);
+};
+
+const searchMetadataByNameAndUser = async (
+  query: string,
+  provider: string,
+  userId: string,
+  limit: number
+): Promise<MetadataEntry[]> => {
+  const db = await getDatabase();
+
+  return db
+    .query<MetadataEntry>({
+      text: `
+      SELECT m.* FROM metadata m
+    JOIN object_ownership oo ON m.head_cid = oo.cid
+    WHERE oo.oauth_provider = $1
+    AND oo.oauth_user_id = $2
+    AND oo.marked_as_deleted IS NULL
+    AND m.metadata->>'name' ILIKE $3
+    LIMIT $4`,
+      values: [provider, userId, `%${query}%`, limit],
+    })
+    .then((entries) => entries.rows);
+};
+
+const searchMetadataByName = async (query: string, limit: number) => {
+  const db = await getDatabase();
+
+  return db
+    .query<MetadataEntry>({
+      text: "SELECT * FROM metadata WHERE metadata->>'name' ILIKE $1 LIMIT $2",
+      values: [`%${query}%`, limit],
+    })
+    .then((entries) => entries.rows);
 };
 
 const getAllMetadata = async () => {
@@ -161,6 +192,8 @@ export const metadataRepository = {
   getAllMetadata,
   searchMetadataByCID,
   searchMetadataByCIDAndUser,
+  searchMetadataByNameAndUser,
+  searchMetadataByName,
   getRootObjects,
   getRootObjectsByUser,
   getMetadataByUser,
