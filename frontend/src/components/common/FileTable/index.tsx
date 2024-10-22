@@ -6,12 +6,13 @@ import {
 } from "@/models/UploadedObjectMetadata";
 import { ApiService } from "@/services/api";
 import {
+  Checkbox,
   Popover,
   PopoverButton,
   PopoverPanel,
   Transition,
 } from "@headlessui/react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Square, SquareCheck } from "lucide-react";
 import {
   ChangeEvent,
   FC,
@@ -24,14 +25,22 @@ import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
 import { ObjectDeleteModal } from "../../Files/ObjectDeleteModal";
-import { handleFileDownload } from "../../../utils/file";
+import { getTypeFromMetadata, handleFileDownload } from "../../../utils/file";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { ObjectDownloadModal } from "../../Files/ObjectDownloadModal";
 import toast from "react-hot-toast";
+import { shortenString } from "../../../utils/misc";
+import { useUserStore } from "../../../states/user";
+import { Table } from "../Table";
+import { TableHead, TableHeadCell, TableHeadRow } from "../Table/TableHead";
+import { TableBody, TableBodyCell, TableBodyRow } from "../Table/TableBody";
+import { DisplayerIcon } from "../Triangle";
+import { Button } from "../Button";
 
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
+  const { user } = useUserStore();
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
@@ -62,27 +71,30 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     return <span></span>;
   }, []);
 
-  const renderOwnerBadge = useCallback((owner: string) => {
-    if (owner === "You") {
-      return (
-        <span className="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">
-          You
-        </span>
-      );
-    } else if (owner.startsWith("@")) {
-      return (
-        <span className="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
-          {owner.slice(1)}
-        </span>
-      );
-    } else {
-      return (
-        <span className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-200 rounded-full">
-          {owner}
-        </span>
-      );
-    }
-  }, []);
+  const renderOwnerBadge = useCallback(
+    (owner: string) => {
+      if (owner === user?.handle) {
+        return (
+          <span className="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">
+            You
+          </span>
+        );
+      } else if (owner.startsWith("@")) {
+        return (
+          <span className="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
+            {owner.slice(1)}
+          </span>
+        );
+      } else {
+        return (
+          <span className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-200 rounded-full">
+            {owner}
+          </span>
+        );
+      }
+    },
+    [user?.handle]
+  );
 
   const downloadFile = useCallback(
     async (
@@ -145,19 +157,20 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
       const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.handle;
+      const isOwner = user?.handle === owner;
 
       return (
         <Fragment key={file.metadata.dataCid}>
-          <tr
-            className={`hover:bg-gray-100 relative ${
+          <TableBodyRow
+            className={
               file.metadata.type === "folder" ? "hover:cursor-pointer" : ""
-            }`}
+            }
             onClick={() =>
               file.metadata.type === "folder" &&
               navigateToFile(file.metadata.dataCid)
             }
           >
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            <TableBodyCell className="whitespace-nowrap text-sm text-gray-500">
               <div className="flex items-center">
                 <input
                   type="checkbox"
@@ -182,15 +195,13 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                     }}
                   >
                     {isExpanded ? (
-                      <ChevronDown size={16} />
+                      <DisplayerIcon className="text-accent rotate-90" />
                     ) : (
-                      <ChevronRight size={16} />
+                      <DisplayerIcon className="text-black" />
                     )}
                   </button>
                 )}
-                <span className="ml-2">
-                  {renderFileIcon(file.metadata.type)}
-                </span>
+                <span>{renderFileIcon(file.metadata.type)}</span>
                 <span
                   className={`relative ml-2 text-sm font-medium text-gray-900 ${
                     file.metadata.type === "folder"
@@ -201,12 +212,13 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   <Popover>
                     <PopoverButton as="span">
                       <span
-                        className="hover:cursor-pointer"
+                        className="hover:cursor-pointer text-accent font-semibold"
                         onMouseEnter={(e) => e.currentTarget.click()}
                         onMouseLeave={(e) => e.currentTarget.click()}
                       >
-                        {file.metadata.name ??
-                          `No name (${file.metadata.dataCid.slice(0, 12)})`}
+                        {file.metadata.name
+                          ? shortenString(file.metadata.name, 30)
+                          : `No name (${file.metadata.dataCid.slice(0, 12)})`}
                       </span>
                     </PopoverButton>
                     <Transition
@@ -227,19 +239,16 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   </Popover>
                 </span>
               </div>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {file.metadata.type}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {bytes(file.metadata.totalSize)}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            </TableBodyCell>
+            <TableBodyCell>{getTypeFromMetadata(file.metadata)}</TableBodyCell>
+            <TableBodyCell>{bytes(file.metadata.totalSize)}</TableBodyCell>
+            <TableBodyCell>
               {owner ? renderOwnerBadge(owner) : "Unknown"}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+            </TableBodyCell>
+            <TableBodyCell className="flex justify-end">
+              <Button
+                variant="lightAccent"
+                className="mr-2 text-xs"
                 onClick={(e) =>
                   downloadFile(
                     e,
@@ -250,27 +259,30 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 }
               >
                 Download
-              </button>
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+              </Button>
+              <Button
+                variant="lightAccent"
+                className="mr-2 text-xs"
+                disabled={!isOwner}
                 onClick={(e) => shareFile(e, file.metadata.dataCid)}
               >
                 Share
-              </button>
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded"
+              </Button>
+              <Button
+                variant="lightDanger"
+                className="text-xs"
                 onClick={(e) => onDeleteFile(e, file.metadata.dataCid)}
               >
                 Delete
-              </button>
-            </td>
-          </tr>
+              </Button>
+            </TableBodyCell>
+          </TableBodyRow>
           {isExpanded &&
             file.metadata.type === "folder" &&
             file.metadata.children &&
             file.metadata.children.map((child) => (
-              <tr key={child.cid} className="bg-gray-200 ml-40">
-                <td className="px-6 py-4 whitespace-nowrap w-[50%]">
+              <TableBodyRow key={child.cid}>
+                <TableBodyCell className="w-[50%]">
                   <div className="flex items-center">
                     <input
                       onChange={(e) => toggleSelectFile(e, child)}
@@ -278,9 +290,9 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       type="checkbox"
                       className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
-
+                    -
                     <span
-                      className={`relative ml-2 text-sm font-medium text-gray-900 ${
+                      className={`relative ml-2 text-sm font-semibold text-accent ${
                         file.metadata.type === "folder"
                           ? "hover:underline hover:cursor-pointer"
                           : ""
@@ -289,31 +301,28 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       {child.name ?? `No name (${child.cid.slice(0, 12)})`}
                     </span>
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm text-gray-500">{child.type}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm text-gray-500">
-                    {bytes(child.totalSize)}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                </TableBodyCell>
+                <TableBodyCell>
+                  <span>{child.type === "file" ? "File" : "Folder"}</span>
+                </TableBodyCell>
+                <TableBodyCell>
+                  <span>{bytes(child.totalSize)}</span>
+                </TableBodyCell>
+                <TableBodyCell>
                   {owner ? renderOwnerBadge(owner) : "Unknown"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  {child.type === "file" && (
-                    <button
-                      className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
-                      onClick={(e) =>
-                        downloadFile(e, child.type, child.cid, child.name!)
-                      }
-                    >
-                      Download
-                    </button>
-                  )}
-                </td>
-              </tr>
+                </TableBodyCell>
+                <TableBodyCell>
+                  <Button
+                    variant="lightAccent"
+                    className="text-xs"
+                    onClick={(e) =>
+                      downloadFile(e, child.type, child.cid, child.name!)
+                    }
+                  >
+                    Download
+                  </Button>
+                </TableBodyCell>
+              </TableBodyRow>
             ))}
         </Fragment>
       );
@@ -327,6 +336,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       toggleRow,
       toggleSelectFile,
       selectedFiles,
+      user?.handle,
     ]
   );
 
@@ -358,63 +368,62 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-          <Transition
-            show={selectedFiles.length > 0}
-            enter="transition ease-out duration-100"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="transition ease-in duration-75"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="flex justify-start mb-4 gap-2 ml-2">
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded font-[600]"
-                onClick={batchedDownload}
+          <div className="flex justify-start items-center mb-4 gap-2 ml-2">
+            <div className="h-8 flex items-center">
+              <Checkbox
+                className="hover:cursor-pointer hover:scale-105 transition-all duration-200"
+                checked={selectedFiles.length > 0}
+                onChange={() =>
+                  selectedFiles.length > 0
+                    ? setSelectedFiles([])
+                    : setSelectedFiles(
+                        files.map((f) => ({
+                          type: f.metadata.type,
+                          cid: f.metadata.dataCid,
+                          name: f.metadata.name,
+                          totalSize: f.metadata.totalSize,
+                        }))
+                      )
+                }
               >
-                Download {selectedFiles.length} files
-              </button>
+                {selectedFiles.length > 0 ? <SquareCheck /> : <Square />}
+              </Checkbox>
             </div>
-          </Transition>
-          <div className="shadow border-b border-gray-200 sm:rounded-lg">
-            <table className="min-w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Root CID
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Type
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Size
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Owner
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>{files.map((file) => renderRow(file))}</tbody>
-            </table>
+            <Transition
+              show={selectedFiles.length > 0}
+              enter="transition ease-out duration-100"
+              enterFrom="opacity-0"
+              enterTo="opacity-100"
+              leave="transition ease-in duration-75"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <div className="contents">
+                <span className="text-sm font-semibold">
+                  {selectedFiles.length} files selected
+                </span>
+                <Button
+                  className="text-xs"
+                  variant="lightAccent"
+                  onClick={batchedDownload}
+                >
+                  Download
+                </Button>
+              </div>
+            </Transition>
           </div>
+          <Table>
+            <TableHead>
+              <TableHeadRow>
+                <TableHeadCell>Root CID</TableHeadCell>
+                <TableHeadCell>Type</TableHeadCell>
+                <TableHeadCell>Size</TableHeadCell>
+                <TableHeadCell>Owner</TableHeadCell>
+                <TableHeadCell className="text-right">Actions</TableHeadCell>
+              </TableHeadRow>
+            </TableHead>
+            <TableBody>{files.map((file) => renderRow(file))}</TableBody>
+          </Table>
         </div>
       </div>
     </div>

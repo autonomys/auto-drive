@@ -6,7 +6,7 @@ import { ApiKeyWithoutSecret } from "../../../models/ApiKey";
 import { ApiKeysTable } from "../../../components/ApiKeysTable";
 
 export default function Page() {
-  const [apiKeys, setApiKeys] = useState<ApiKeyWithoutSecret[]>([]);
+  const [apiKeys, setApiKeys] = useState<ApiKeyWithoutSecret[]>();
 
   useEffect(() => {
     ApiService.getApiKeysByUser().then(setApiKeys);

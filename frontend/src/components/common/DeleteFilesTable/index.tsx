@@ -17,14 +17,23 @@ import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
 import { ObjectRestoreModal } from "../../Files/ObjectRestoreModal";
-import { handleFileDownload } from "../../../utils/file";
+import { getTypeFromMetadata, handleFileDownload } from "../../../utils/file";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { ObjectDownloadModal } from "../../Files/ObjectDownloadModal";
+import { TableBody, TableBodyCell, TableBodyRow } from "../Table/TableBody";
+import { shortenString } from "../../../utils/misc";
+import { Table } from "../Table";
+import { TableHead, TableHeadCell, TableHeadRow } from "../Table/TableHead";
+import { DisplayerIcon } from "../Triangle";
+import { Button } from "../Button";
 
 export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<UploadedObjectMetadata[]>(
+    []
+  );
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
   const [restoreCID, setRestoreCID] = useState<string | null>(null);
@@ -97,6 +106,21 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     window.location.assign(`/drive/fs/${cid}`);
   }, []);
 
+  const batchedDownload = useCallback(
+    (e: MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      selectedFiles.forEach((file) => {
+        downloadFile(
+          e,
+          file.metadata.type,
+          file.metadata.dataCid,
+          file.metadata.name!
+        );
+      });
+    },
+    [selectedFiles, downloadFile]
+  );
+
   const renderRow = useCallback(
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
@@ -104,7 +128,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
       return (
         <Fragment key={file.metadata.dataCid}>
-          <tr
+          <TableBodyRow
             className={`hover:bg-gray-100 relative ${
               file.metadata.type === "folder" ? "hover:cursor-pointer" : ""
             }`}
@@ -113,11 +137,18 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               navigateToFile(file.metadata.dataCid)
             }
           >
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            <TableBodyCell>
               <div className="flex items-center">
                 <input
                   type="checkbox"
                   className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedFiles([...selectedFiles, file]);
+                    } else {
+                      setSelectedFiles(selectedFiles.filter((f) => f !== file));
+                    }
+                  }}
                 />
                 {file.metadata.type === "folder" && file.metadata.children && (
                   <button
@@ -127,15 +158,13 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                     }}
                   >
                     {isExpanded ? (
-                      <ChevronDown size={16} />
+                      <DisplayerIcon className="text-accent rotate-90" />
                     ) : (
-                      <ChevronRight size={16} />
+                      <DisplayerIcon className="text-black" />
                     )}
                   </button>
                 )}
-                <span className="ml-2">
-                  {renderFileIcon(file.metadata.type)}
-                </span>
+                <span>{renderFileIcon(file.metadata.type)}</span>
                 <span
                   className={`relative ml-2 text-sm font-medium text-gray-900 ${
                     file.metadata.type === "folder"
@@ -146,12 +175,15 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   <Popover>
                     <PopoverButton as="span">
                       <span
-                        className="hover:cursor-pointer"
+                        className="hover:cursor-pointer text-accent font-semibold"
                         onMouseEnter={(e) => e.currentTarget.click()}
                         onMouseLeave={(e) => e.currentTarget.click()}
                       >
-                        {file.metadata.name ??
-                          `No name (${file.metadata.dataCid.slice(0, 12)})`}
+                        {shortenString(
+                          file.metadata.name ??
+                            `No name (${file.metadata.dataCid.slice(0, 12)})`,
+                          35
+                        )}
                       </span>
                     </PopoverButton>
                     <Transition
@@ -172,19 +204,16 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   </Popover>
                 </span>
               </div>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {file.metadata.type}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {bytes(file.metadata.totalSize)}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            </TableBodyCell>
+            <TableBodyCell>{getTypeFromMetadata(file.metadata)}</TableBodyCell>
+            <TableBodyCell>{bytes(file.metadata.totalSize)}</TableBodyCell>
+            <TableBodyCell>
               {owner ? renderOwnerBadge(owner) : "Unknown"}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+            </TableBodyCell>
+            <TableBodyCell className="text-right text-sm font-medium">
+              <Button
+                variant="lightAccent"
+                className="mr-2 text-xs"
                 onClick={(e) =>
                   downloadFile(
                     e,
@@ -195,62 +224,69 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 }
               >
                 Download
-              </button>
-              <button
-                className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+              </Button>
+              <Button
+                variant="lightAccent"
+                className="mr-2 text-xs"
                 onClick={(e) => openRestoreModal(e, file.metadata.dataCid)}
               >
                 Restore
-              </button>
-            </td>
-          </tr>
+              </Button>
+            </TableBodyCell>
+          </TableBodyRow>
           {isExpanded &&
             file.metadata.type === "folder" &&
             file.metadata.children &&
             file.metadata.children.map((child) => (
-              <tr key={child.cid} className="bg-gray-200 ml-40">
-                <td className="px-6 py-4 whitespace-nowrap w-[50%]">
+              <TableBodyRow key={child.cid}>
+                <TableBodyCell className="px-6 py-4 whitespace-nowrap w-[50%]">
                   <div className="flex items-center">
                     <input
                       type="checkbox"
                       className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
-
+                    -
                     <span
-                      className={`relative ml-2 text-sm font-medium text-gray-900 ${
+                      className={`relative ml-2 text-sm font-semibold text-accent ${
                         file.metadata.type === "folder"
                           ? "hover:underline hover:cursor-pointer"
                           : ""
                       }`}
                     >
-                      {child.name ?? `No name (${child.cid.slice(0, 12)})`}
+                      {shortenString(
+                        child.name ?? `No name (${child.cid.slice(0, 12)})`,
+                        35
+                      )}
                     </span>
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm text-gray-500">{child.type}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                </TableBodyCell>
+                <TableBodyCell>
+                  <span className="text-sm text-gray-500">
+                    {child.type === "file" ? "File" : "Folder"}
+                  </span>
+                </TableBodyCell>
+                <TableBodyCell>
                   <span className="text-sm text-gray-500">
                     {bytes(child.totalSize)}
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                </TableBodyCell>
+                <TableBodyCell>
                   {owner ? renderOwnerBadge(owner) : "Unknown"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                </TableBodyCell>
+                <TableBodyCell className="text-right text-sm font-medium">
                   {child.type === "file" && (
-                    <button
-                      className="text-white bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded mr-2"
+                    <Button
+                      variant="lightAccent"
+                      className="text-xs"
                       onClick={(e) =>
                         downloadFile(e, child.type, child.cid, child.name!)
                       }
                     >
                       Download
-                    </button>
+                    </Button>
                   )}
-                </td>
-              </tr>
+                </TableBodyCell>
+              </TableBodyRow>
             ))}
         </Fragment>
       );
@@ -274,46 +310,43 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
         cid={restoreCID}
         closeModal={() => setRestoreCID(null)}
       />
+      <Transition
+        show={selectedFiles.length > 0}
+        enter="transition ease-out duration-100"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition ease-in duration-75"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <div className="flex justify-start items-center mb-4 gap-2 ml-2">
+          <span className="text-sm font-semibold">
+            {selectedFiles.length} files selected
+          </span>
+          <Button
+            className="text-xs"
+            variant="lightAccent"
+            onClick={batchedDownload}
+          >
+            Download
+          </Button>
+        </div>
+      </Transition>
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
           <div className="shadow border-b border-gray-200 sm:rounded-lg">
-            <table className="min-w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Root CID
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Type
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Size
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Owner
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>{files.map((file) => renderRow(file))}</tbody>
-            </table>
+            <Table className="min-w-full">
+              <TableHead>
+                <TableHeadRow>
+                  <TableHeadCell>Root CID</TableHeadCell>
+                  <TableHeadCell>Type</TableHeadCell>
+                  <TableHeadCell>Size</TableHeadCell>
+                  <TableHeadCell>Owner</TableHeadCell>
+                  <TableHeadCell>Actions</TableHeadCell>
+                </TableHeadRow>
+              </TableHead>
+              <TableBody>{files.map((file) => renderRow(file))}</TableBody>
+            </Table>
           </div>
         </div>
       </div>

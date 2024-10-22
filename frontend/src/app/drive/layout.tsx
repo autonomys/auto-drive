@@ -51,16 +51,16 @@ export default function AppLayout({
   }, []);
 
   return (
-    <div className="min-h-screen bg-white px-8">
-      <div className="flex h-screen flex-col bg-white rounded-lg p-6">
-        <header className="flex flex-col md:flex-row gap-4 md:gap-0 items-center justify-between mb-8">
+    <div className="min-h-screen bg-white">
+      <div className="flex h-screen flex-col bg-white rounded-lg">
+        <header className="flex flex-col w-full md:flex-row gap-4 md:gap-0 items-center justify-between mb-8 px-16 py-2 border-b-[0.2px] border-[#000000]">
           <div className="flex items-center space-x-2">
             <img
               src="/autonomys.png"
               alt="Auto Drive"
-              className="w-[2rem] h-[2rem] rounded-full"
+              className="w-[1rem] h-[1rem] rounded-full"
             />
-            <span className="text-xl font-semibold">Auto Drive</span>
+            <span className="text-md font-medium">Auto Drive</span>
           </div>
           <div className="flex items-center space-x-4">
             <span className="text-sm font-medium">Your Files</span>
@@ -71,30 +71,30 @@ export default function AppLayout({
             </div>
           </div>
         </header>
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden px-10">
           <UserEnsurer>
             <aside className="w-12 md:w-48">
               <InternalLink className="contents" href="/drive">
-                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
                   <HomeIcon className="w-5 h-5" />
                   <span className="hidden md:block">Files</span>
                 </button>
               </InternalLink>
               <InternalLink className="contents" href="/drive/shared">
-                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
                   <UsersIcon className="w-5 h-5" />
                   <span className="hidden md:block">Shared with me</span>
                 </button>
               </InternalLink>
               <InternalLink className="contents" href="/drive/trash">
-                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
                   <TrashIcon className="w-5 h-5" />
                   <span className="hidden md:block">Trash</span>
                 </button>
               </InternalLink>
               <RoleProtected roles={[UserRole.Admin]}>
                 <InternalLink className="contents" href="/drive/admin">
-                  <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 mb-2">
+                  <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
                     <SettingsIcon className="w-5 h-5" />
                     <span className="hidden md:block">Admin</span>
                   </button>
@@ -114,7 +114,7 @@ export default function AppLayout({
             <main className="flex-1 overflow-auto p-6">{children}</main>
           </UserEnsurer>
         </div>
-        <footer className="mt-8 flex justify-start w-16 md:w-64 flex-col gap-2">
+        <footer className="mt-8 flex justify-start w-16 md:w-64 flex-col gap-2 px-10 py-2">
           <div className="flex">
             <InternalLink href="/drive/profile">
               <button className="flex space-x-2 text-gray-700 hover:text-blue-600">

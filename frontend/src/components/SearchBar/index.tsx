@@ -5,7 +5,7 @@ import { Transition } from "@headlessui/react";
 import { SearchIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocalStorage } from "usehooks-ts";
+import { useScopeStore } from "../../states/scope";
 
 export const SearchBar = () => {
   const [query, setQuery] = useState("");
@@ -13,7 +13,7 @@ export const SearchBar = () => {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
-  const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
+  const { scope } = useScopeStore();
   const [recommendations, setRecommendations] = useState<string[] | null>(null);
   const router = useRouter();
 
@@ -107,7 +107,7 @@ export const SearchBar = () => {
           <input
             ref={inputRef}
             type="text"
-            className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-lg border border-[#BCC1CA] bg-white py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-black placeholder:text-black"
             value={query}
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}

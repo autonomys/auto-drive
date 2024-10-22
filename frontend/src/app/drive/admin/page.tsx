@@ -6,7 +6,7 @@ import { UserSubscriptionsTable } from "../../../components/UserTable";
 import { SubscriptionWithUser } from "../../../models/Subscriptions";
 
 export default function Page() {
-  const [users, setUsers] = useState<SubscriptionWithUser[]>([]);
+  const [users, setUsers] = useState<SubscriptionWithUser[] | undefined>();
 
   useEffect(() => {
     ApiService.getUserList().then(setUsers);

@@ -7,12 +7,10 @@ import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
 import {
   Download,
   DownloadIcon,
-  Edit,
   File,
   Folder,
   FolderIcon,
   MoreVertical,
-  Share2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useMemo, useState } from "react";
@@ -25,10 +23,10 @@ interface FileCardProps extends Partial<UploadedObjectMetadata> {
   metadata: OffchainMetadata;
 }
 
-export function FileCard({
+export const FileCard = ({
   metadata: { type, name, totalSize, dataCid },
   icon,
-}: FileCardProps) {
+}: FileCardProps) => {
   const router = useRouter();
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
@@ -124,4 +122,4 @@ export function FileCard({
       </div>
     </Popover>
   );
-}
+};
