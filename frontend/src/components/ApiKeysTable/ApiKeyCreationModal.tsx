@@ -16,9 +16,11 @@ import { Button } from "../common/Button";
 export const ApiKeyCreationModal = ({
   isOpen,
   onClose,
+  onSuccess,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess: () => void;
 }) => {
   const [apiKey, setApiKey] = useState<ApiKey | null>(null);
   const [hasBeenCopied, setHasBeenCopied] = useState(false);
@@ -48,7 +50,11 @@ export const ApiKeyCreationModal = ({
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-10" onClose={onClose}>
+      <Dialog
+        as="div"
+        className="relative z-10"
+        onClose={hasBeenCopied ? onSuccess : onClose}
+      >
         <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"

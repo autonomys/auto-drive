@@ -34,9 +34,18 @@ export const ApiKeysTable = ({
 
   const nonDeletedApiKeys = apiKeys?.filter((apiKey) => !apiKey.deletedAt);
 
+  const onSuccess = useCallback(() => {
+    closeCreationModal();
+    window.location.reload();
+  }, [closeCreationModal]);
+
   return (
     <div className="flex flex-col">
-      <ApiKeyCreationModal isOpen={isOpen} onClose={closeCreationModal} />
+      <ApiKeyCreationModal
+        isOpen={isOpen}
+        onClose={closeCreationModal}
+        onSuccess={onSuccess}
+      />
       <DeleteApiKeyModal apiKeyId={apiKeyId} closeModal={closeDeleteModal} />
       <div className="flex">
         <Button
