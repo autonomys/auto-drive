@@ -158,6 +158,9 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       const isExpanded = expandedRows.has(file.metadata.dataCid);
       const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.handle;
       const isOwner = user?.handle === owner;
+      const hasFileOwnership = file.owners.find(
+        (e) => e.handle === user?.handle
+      );
 
       return (
         <Fragment key={file.metadata.dataCid}>
@@ -262,7 +265,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               </Button>
               <Button
                 variant="lightAccent"
-                className="mr-2 text-xs"
+                className="mr-2 text-xs disabled:hidden"
                 disabled={!isOwner}
                 onClick={(e) => shareFile(e, file.metadata.dataCid)}
               >
@@ -270,7 +273,8 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               </Button>
               <Button
                 variant="lightDanger"
-                className="text-xs"
+                className="text-xs disabled:hidden"
+                disabled={!hasFileOwnership}
                 onClick={(e) => onDeleteFile(e, file.metadata.dataCid)}
               >
                 Delete
