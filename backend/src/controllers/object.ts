@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { FolderTreeSchema } from "../models/index.js";
+import { FolderTreeSchema } from "../models/objects/index.js";
 import { handleAuth } from "../services/authManager/express.js";
 import {
   FilesUseCases,

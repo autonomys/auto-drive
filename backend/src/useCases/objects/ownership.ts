@@ -1,4 +1,5 @@
-import { Owner, OwnerRole, User } from "../../models/index.js";
+import { User } from "../../models/users/index.js";
+import { Owner, OwnerRole } from "../../models/objects/index.js";
 import {
   ownershipRepository,
   usersRepository,

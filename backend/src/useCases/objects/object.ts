@@ -1,10 +1,10 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import { User } from "../../models/index.js";
+import { User } from "../../models/users/index.js";
 import {
   ObjectInformation,
   ObjectSearchResult,
   Owner,
-} from "../../models/object.js";
+} from "../../models/objects/object.js";
 import {
   metadataRepository,
   ownershipRepository,

@@ -1,4 +1,4 @@
-import { UploadStatus } from "../../models/index.js";
+import { UploadStatus } from "../../models/objects/index.js";
 import {
   nodesRepository,
   transactionResultsRepository,

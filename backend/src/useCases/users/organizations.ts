@@ -1,6 +1,6 @@
 import { v4 } from "uuid";
-import { User } from "../../models/index.js";
-import { Organization } from "../../models/organization.js";
+import { User } from "../../models/users/index.js";
+import { Organization } from "../../models/users/organization.js";
 import { organizationMembersRepository } from "../../repositories/users/organizationMembers.js";
 import { organizationsRepository } from "../../repositories/users/organizations.js";
 import { SubscriptionsUseCases } from "./subscriptions.js";

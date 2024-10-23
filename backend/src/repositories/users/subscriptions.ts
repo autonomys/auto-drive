@@ -2,7 +2,7 @@ import { getDatabase } from "../../drivers/pg.js";
 import {
   Subscription,
   SubscriptionGranularity,
-} from "../../models/subscription.js";
+} from "../../models/users/subscription.js";
 
 type DBSubscription = {
   id: string;

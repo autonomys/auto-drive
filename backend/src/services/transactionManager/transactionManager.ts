@@ -7,7 +7,7 @@ import {
 import { KeyringPair } from "@polkadot/keyring/types";
 import { waitReady } from "@polkadot/wasm-crypto";
 import { createConnection } from "../../drivers/substrate.js";
-import { Transaction, TransactionResult } from "../../models/index.js";
+import { Transaction, TransactionResult } from "../../models/objects/index.js";
 import { initializeQueue, registerTransactionInQueue } from "./queue.js";
 
 const submitTransaction = async (

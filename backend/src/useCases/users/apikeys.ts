@@ -1,7 +1,7 @@
 import { v4 } from "uuid";
 import { apiKeysRepository } from "../../repositories/index.js";
-import { User } from "../../models/index.js";
-import { ApiKey, ApiKeyWithoutSecret } from "../../models/apiKey.js";
+import { User } from "../../models/users/index.js";
+import { ApiKey, ApiKeyWithoutSecret } from "../../models/users/apiKey.js";
 
 const createApiKey = async (executor: User) => {
   const secret = v4({}).replace(/-/g, "");

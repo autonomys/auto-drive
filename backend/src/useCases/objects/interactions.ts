@@ -1,5 +1,5 @@
 import { v4 } from "uuid";
-import { InteractionType } from "../../models/interactions.js";
+import { InteractionType } from "../../models/objects/interactions.js";
 import { interactionsRepository } from "../../repositories/objects/interactions.js";
 
 const createInteraction = async (
