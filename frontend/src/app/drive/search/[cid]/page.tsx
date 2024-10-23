@@ -6,12 +6,13 @@ import { UploadedObjectMetadata } from "@/models/UploadedObjectMetadata";
 import { ApiService } from "@/services/api";
 import { useEffect, useMemo, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
+import { useScopeStore } from "../../../../states/scope";
 
 export default function Page({ params: { cid } }: { params: { cid: string } }) {
   const [objectsMetadata, setObjectsMetadata] =
     useState<UploadedObjectMetadata[]>();
   const [error, setError] = useState<string>();
-  const [scope] = useLocalStorage<"user" | "global">("search-scope", "global");
+  const { scope } = useScopeStore();
 
   useEffect(() => {
     ApiService.searchByCIDOrName(cid, scope)
