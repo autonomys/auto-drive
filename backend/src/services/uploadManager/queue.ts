@@ -6,7 +6,7 @@ import {
   TransactionStatus,
 } from "../../models/objects/index.js";
 import { getOnChainNonce } from "../../utils/networkApi.js";
-import { getAccount, getAccounts } from "../accountManager/index.js";
+import { getAccount, getAccounts } from "./accounts.js";
 
 export const queue: Queue = {
   api: null,
