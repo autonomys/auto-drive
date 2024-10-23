@@ -219,7 +219,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
             <TableBodyCell>
               {owner ? renderOwnerBadge(owner) : "Unknown"}
             </TableBodyCell>
-            <TableBodyCell className="text-right text-sm font-medium">
+            <TableBodyCell className="text-right text-sm font-medium flex">
               <Button
                 variant="lightAccent"
                 className="mr-2 text-xs"
