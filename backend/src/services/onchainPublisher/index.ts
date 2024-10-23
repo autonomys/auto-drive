@@ -49,7 +49,7 @@ const processPendingUploads = safeCallback(async () => {
   }
 });
 
-export const uploadManager = {
+export const onchainPublisher = {
   start: (time: number = 10_000) => {
     state.time = time;
     setInterval(processPendingUploads, state.time);

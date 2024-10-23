@@ -1,3 +1,3 @@
-import { uploadManager } from "./services/uploadManager/index.js";
+import { onchainPublisher } from "./services/onchainPublisher/index.js";
 
-uploadManager.start();
+onchainPublisher.start();
