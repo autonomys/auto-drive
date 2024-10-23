@@ -1,5 +1,5 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import { getDatabase } from "../drivers/pg.js";
+import { getDatabase } from "../../drivers/pg.js";
 
 export interface MetadataEntry {
   root_cid: string;

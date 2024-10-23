@@ -1,5 +1,5 @@
-import { getDatabase } from "../drivers/pg.js";
-import { InteractionType } from "../models/interactions.js";
+import { getDatabase } from "../../drivers/pg.js";
+import { InteractionType } from "../../models/interactions.js";
 
 type DBInteraction = {
   id: string;

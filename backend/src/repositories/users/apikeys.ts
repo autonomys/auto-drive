@@ -1,5 +1,5 @@
-import { getDatabase } from "../drivers/pg.js";
-import { ApiKey } from "../models/apiKey.js";
+import { getDatabase } from "../../drivers/pg.js";
+import { ApiKey } from "../../models/apiKey.js";
 
 type DBApiKey = {
   id: string;

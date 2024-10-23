@@ -1,5 +1,5 @@
 import { MetadataType } from "@autonomys/auto-drive";
-import { getDatabase } from "../drivers/pg.js";
+import { getDatabase } from "../../drivers/pg.js";
 
 export interface Node {
   cid: string;

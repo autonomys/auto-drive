@@ -5,10 +5,10 @@ import {
   SubscriptionGranularity,
   SubscriptionInfo,
 } from "../../models/subscription.js";
-import { subscriptionsRepository } from "../../repositories/subscriptions.js";
+import { subscriptionsRepository } from "../../repositories/users/subscriptions.js";
 import { OrganizationsUseCases } from "./organizations.js";
 import { UsersUseCases } from "./users.js";
-import { interactionsRepository } from "../../repositories/interactions.js";
+import { interactionsRepository } from "../../repositories/objects/interactions.js";
 import { InteractionType } from "../../models/interactions.js";
 
 const updateSubscription = async (

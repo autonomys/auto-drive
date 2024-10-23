@@ -12,7 +12,7 @@ import {
 import { UsersUseCases } from "../index.js";
 import { OwnershipUseCases } from "./ownership.js";
 import { UploadStatusUseCases } from "./uploadStatus.js";
-import { MetadataEntry } from "../../repositories/metadata.js";
+import { MetadataEntry } from "../../repositories/objects/metadata.js";
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid);

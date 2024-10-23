@@ -1,4 +1,4 @@
-import { getDatabase } from "../drivers/pg.js";
+import { getDatabase } from "../../drivers/pg.js";
 
 type Ownership = {
   cid: string;

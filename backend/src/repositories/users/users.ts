@@ -1,5 +1,5 @@
-import { getDatabase } from "../drivers/pg.js";
-import { UserRole } from "../models/user.js";
+import { getDatabase } from "../../drivers/pg.js";
+import { UserRole } from "../../models/user.js";
 
 export interface User {
   oauth_provider: string;
