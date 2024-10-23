@@ -11,7 +11,6 @@ import {
   PopoverPanel,
   Transition,
 } from "@headlessui/react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { FC, Fragment, MouseEvent, useCallback, useRef, useState } from "react";
 import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
