@@ -55,6 +55,14 @@ export const UploadedObjectInformation = ({
     setDeleteModalCid(object?.metadata.dataCid ?? null);
   }, [object?.metadata.dataCid]);
 
+  if (!object) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <Loader className="animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <ObjectShareModal

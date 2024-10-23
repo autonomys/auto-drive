@@ -13,5 +13,5 @@ export default function Page({ params }: { params: { cid: string } }) {
     ApiService.fetchUploadedObjectMetadata(params.cid).then(setMetadata);
   }, [params.cid]);
 
-  return metadata && <UploadedObjectInformation object={metadata} />;
+  return <UploadedObjectInformation object={metadata} />;
 }
