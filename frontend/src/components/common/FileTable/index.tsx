@@ -19,6 +19,7 @@ import {
   Fragment,
   MouseEvent,
   useCallback,
+  useRef,
   useState,
 } from "react";
 import { Metadata } from "../../Files/Metadata";
@@ -157,6 +158,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
       const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.handle;
+      const popoverButtonRef = useRef<HTMLButtonElement>(null);
       const isOwner = user?.handle === owner;
       const hasFileOwnership = file.owners.find(
         (e) => e.handle === user?.handle
@@ -211,14 +213,14 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       ? "hover:underline hover:cursor-pointer"
                       : ""
                   }`}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <Popover>
-                    <PopoverButton as="span">
-                      <span
-                        className="hover:cursor-pointer text-accent font-semibold"
-                        onMouseEnter={(e) => e.currentTarget.click()}
-                        onMouseLeave={(e) => e.currentTarget.click()}
-                      >
+                  <Popover
+                    onMouseEnter={() => popoverButtonRef.current?.click()}
+                    onMouseLeave={() => popoverButtonRef.current?.click()}
+                  >
+                    <PopoverButton ref={popoverButtonRef} as="span">
+                      <span className="hover:cursor-pointer text-accent font-semibold">
                         {file.metadata.name
                           ? shortenString(file.metadata.name, 30)
                           : `No name (${file.metadata.dataCid.slice(0, 12)})`}

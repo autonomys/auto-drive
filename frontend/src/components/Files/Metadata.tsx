@@ -1,6 +1,7 @@
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
 import bytes from "bytes";
 import { getTypeFromMetadata } from "../../utils/file";
+import { InternalLink } from "../common/InternalLink";
 
 export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
   return (
@@ -19,7 +20,9 @@ export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
       <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-black font-light">
         <div className="flex">
           <span>Type:</span>
-          <span className="ml-[4px]">{getTypeFromMetadata(object.metadata)}</span>
+          <span className="ml-[4px]">
+            {getTypeFromMetadata(object.metadata)}
+          </span>
         </div>
         <div className="flex">
           <span>{"Owner: "}</span>
@@ -49,6 +52,13 @@ export const Metadata = ({ object }: { object: UploadedObjectMetadata }) => {
           <span>Archive blocks count:</span>
           <span className="ml-[4px]">0</span>
         </div>
+      </div>
+      <div className="flex justify-end">
+        <InternalLink href={`/drive/metadata/${object.metadata.dataCid}`}>
+          <span className="text-primary font-semibold hover:cursor-pointer mt-4">
+            See more
+          </span>
+        </InternalLink>
       </div>
     </div>
   );
