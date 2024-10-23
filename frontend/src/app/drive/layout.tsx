@@ -23,7 +23,7 @@ export default function AppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { subscription } = useUserStore();
+  const subscription = useUserStore(({ subscription }) => subscription);
 
   const startDate = useMemo(() => {
     const date = new Date();
