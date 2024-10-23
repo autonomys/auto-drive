@@ -128,7 +128,17 @@ const getRootObjects = async () => {
 
   return db
     .query<MetadataEntry>(
-      "SELECT m.* FROM metadata m where m.root_cid = m.head_cid"
+      `with root_objects as (
+        SELECT m.* 
+        FROM metadata m 
+        WHERE m.root_cid = m.head_cid 
+        GROUP BY m.head_cid
+      )
+      SELECT root_objects.head_cid 
+      FROM root_objects
+      INNER JOIN object_ownership oo ON root_objects.head_cid = oo.cid 
+      WHERE oo.marked_as_deleted IS NULL 
+      GROUP BY root_objects.head_cid`
     )
     .then((entries) => {
       return entries.rows.map((entry) => entry.head_cid);

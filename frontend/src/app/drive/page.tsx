@@ -15,7 +15,7 @@ export default function Page() {
   const [rootObjectMetadata, setRootObjectMetadata] = useState<
     UploadedObjectMetadata[] | null
   >(null);
-  const { scope } = useScopeStore();
+  const scope = useScopeStore(({ scope }) => scope);
 
   useEffect(() => {
     setRootObjectMetadata(null);

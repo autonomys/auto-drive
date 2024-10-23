@@ -52,7 +52,7 @@ const getOwnerships = async (cid: string): Promise<Ownership[]> => {
   const db = await getDatabase();
 
   const result = await db.query<Ownership>({
-    text: "SELECT * FROM object_ownership WHERE cid = $1",
+    text: "SELECT * FROM object_ownership WHERE cid = $1 AND marked_as_deleted IS NULL",
     values: [cid],
   });
 

@@ -10,6 +10,8 @@ import toast from "react-hot-toast";
 import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
 import { ApiService } from "../../services/api";
 import { HandleSelector } from "../HandleSearch";
+import { Button } from "../common/Button";
+import { Link } from "lucide-react";
 
 export const ObjectShareModal = ({
   cid,
@@ -57,6 +59,13 @@ export const ObjectShareModal = ({
     return !!metadata?.owners.some((owner) => owner.handle === selectedHandle);
   }, [metadata, selectedHandle]);
 
+  const copyLink = useCallback(() => {
+    navigator.clipboard.writeText(
+      `${window.location.origin}/drive/metadata/${metadata?.metadata.dataCid}`
+    );
+    toast.success("Link copied to clipboard");
+  }, [metadata?.metadata.dataCid]);
+
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-10" onClose={closeModal}>
@@ -99,7 +108,15 @@ export const ObjectShareModal = ({
                   selectedHandle={selectedHandle}
                   setSelectedHandle={setSelectedHandle}
                 />
-                <div className="mt-4 flex justify-center">
+                <div className="mt-4 flex justify-center gap-2">
+                  <Button
+                    variant="lightAccent"
+                    className="flex items-center gap-2"
+                    onClick={copyLink}
+                  >
+                    <Link className="w-4 h-4" />
+                    Share link
+                  </Button>
                   <button
                     disabled={!selectedHandle || isAlreadyOwnwer}
                     type="button"
@@ -110,7 +127,7 @@ export const ObjectShareModal = ({
                     }`}
                     onClick={shareObject}
                   >
-                    Share
+                    Share with handle
                   </button>
                 </div>
                 {isAlreadyOwnwer && (

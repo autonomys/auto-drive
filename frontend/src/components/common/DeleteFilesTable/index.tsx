@@ -11,8 +11,7 @@ import {
   PopoverPanel,
   Transition,
 } from "@headlessui/react";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { FC, Fragment, MouseEvent, useCallback, useState } from "react";
+import { FC, Fragment, MouseEvent, useCallback, useRef, useState } from "react";
 import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
@@ -125,6 +124,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
       const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.handle;
+      const popoverButtonRef = useRef<HTMLButtonElement>(null);
 
       return (
         <Fragment key={file.metadata.dataCid}>
@@ -171,14 +171,18 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       ? "hover:underline hover:cursor-pointer"
                       : ""
                   }`}
+                  onMouseEnter={(e) => {
+                    e.stopPropagation();
+                    popoverButtonRef.current?.click();
+                  }}
+                  onMouseLeave={(e) => {
+                    e.stopPropagation();
+                    popoverButtonRef.current?.click();
+                  }}
                 >
                   <Popover>
-                    <PopoverButton as="span">
-                      <span
-                        className="hover:cursor-pointer text-accent font-semibold"
-                        onMouseEnter={(e) => e.currentTarget.click()}
-                        onMouseLeave={(e) => e.currentTarget.click()}
-                      >
+                    <PopoverButton ref={popoverButtonRef} as="span">
+                      <span className="hover:cursor-pointer text-accent font-semibold">
                         {shortenString(
                           file.metadata.name ??
                             `No name (${file.metadata.dataCid.slice(0, 12)})`,
@@ -195,7 +199,11 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       leaveFrom="opacity-100 translate-y-0"
                       leaveTo="opacity-0 translate-y-1"
                     >
-                      <PopoverPanel className="absolute z-10 left-0">
+                      <PopoverPanel
+                        className="absolute z-10 left-0"
+                        onMouseEnter={(e) => e.currentTarget.click()}
+                        onMouseLeave={(e) => e.currentTarget.click()}
+                      >
                         <div className="bg-white shadow-md rounded-lg">
                           <Metadata object={file} />
                         </div>
@@ -210,7 +218,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
             <TableBodyCell>
               {owner ? renderOwnerBadge(owner) : "Unknown"}
             </TableBodyCell>
-            <TableBodyCell className="text-right text-sm font-medium">
+            <TableBodyCell className="text-right text-sm font-medium flex">
               <Button
                 variant="lightAccent"
                 className="mr-2 text-xs"

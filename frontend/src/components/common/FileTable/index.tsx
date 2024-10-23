@@ -19,6 +19,7 @@ import {
   Fragment,
   MouseEvent,
   useCallback,
+  useRef,
   useState,
 } from "react";
 import { Metadata } from "../../Files/Metadata";
@@ -40,7 +41,7 @@ import { Button } from "../Button";
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
-  const { user } = useUserStore();
+  const user = useUserStore(({ user }) => user);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
@@ -157,7 +158,11 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
       const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.handle;
+      const popoverButtonRef = useRef<HTMLButtonElement>(null);
       const isOwner = user?.handle === owner;
+      const hasFileOwnership = file.owners.find(
+        (e) => e.handle === user?.handle
+      );
 
       return (
         <Fragment key={file.metadata.dataCid}>
@@ -208,14 +213,14 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                       ? "hover:underline hover:cursor-pointer"
                       : ""
                   }`}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <Popover>
-                    <PopoverButton as="span">
-                      <span
-                        className="hover:cursor-pointer text-accent font-semibold"
-                        onMouseEnter={(e) => e.currentTarget.click()}
-                        onMouseLeave={(e) => e.currentTarget.click()}
-                      >
+                  <Popover
+                    onMouseEnter={() => popoverButtonRef.current?.click()}
+                    onMouseLeave={() => popoverButtonRef.current?.click()}
+                  >
+                    <PopoverButton ref={popoverButtonRef} as="span">
+                      <span className="hover:cursor-pointer text-accent font-semibold">
                         {file.metadata.name
                           ? shortenString(file.metadata.name, 30)
                           : `No name (${file.metadata.dataCid.slice(0, 12)})`}
@@ -262,7 +267,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               </Button>
               <Button
                 variant="lightAccent"
-                className="mr-2 text-xs"
+                className="mr-2 text-xs disabled:hidden"
                 disabled={!isOwner}
                 onClick={(e) => shareFile(e, file.metadata.dataCid)}
               >
@@ -270,7 +275,8 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               </Button>
               <Button
                 variant="lightDanger"
-                className="text-xs"
+                className="text-xs disabled:hidden"
+                disabled={!hasFileOwnership}
                 onClick={(e) => onDeleteFile(e, file.metadata.dataCid)}
               >
                 Delete
