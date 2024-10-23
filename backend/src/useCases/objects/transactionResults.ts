@@ -1,7 +1,7 @@
 import { cidToString } from "@autonomys/auto-drive";
 import { CID } from "multiformats";
 import { transactionResultsRepository } from "../../repositories/index.js";
-import { TransactionResult } from "../../services/transactionManager/index.js";
+import { TransactionResult } from "../../models/objects/index.js";
 
 const getNodeTransactionResult = async (cid: CID | string) => {
   let cidString = typeof cid === "string" ? cid : cidToString(cid);

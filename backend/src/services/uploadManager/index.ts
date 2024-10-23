@@ -1,6 +1,6 @@
 import { TransactionResultsUseCases } from "../../useCases/index.js";
 import { safeCallback } from "../../utils/safe.js";
-import { createTransactionManager } from "../transactionManager/index.js";
+import { createTransactionManager } from "./transactionManager.js";
 
 let state = {
   executing: false,

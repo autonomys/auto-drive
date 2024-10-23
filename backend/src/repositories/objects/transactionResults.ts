@@ -1,5 +1,5 @@
 import { getDatabase } from "../../drivers/pg.js";
-import { TransactionResult } from "../../services/transactionManager/index.js";
+import { TransactionResult } from "../../models/objects/transaction.js";
 import { Node } from "./nodes.js";
 
 export interface TransactionResultEntry {
