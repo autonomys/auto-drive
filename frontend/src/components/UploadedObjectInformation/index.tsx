@@ -65,14 +65,6 @@ export const UploadedObjectInformation = ({
         cid={deleteModalCid}
         closeModal={() => setDeleteModalCid(null)}
       />
-      <div className="flex items-center ml-2">
-        <button
-          className="bg-accent p-1 rounded-full text-white hover:bg-accent/80 hover:scale-105 transition-all"
-          onClick={() => window.history.back()}
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-      </div>
       <div className="flex gap-4">
         <Button variant="lightAccent" onClick={handleDownload}>
           Download
