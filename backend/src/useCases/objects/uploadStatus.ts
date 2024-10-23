@@ -1,8 +1,8 @@
-import { UploadStatus } from "../models/index.js";
+import { UploadStatus } from "../../models/index.js";
 import {
   nodesRepository,
   transactionResultsRepository,
-} from "../repositories/index.js";
+} from "../../repositories/index.js";
 
 const getUploadStatus = async (cid: string): Promise<UploadStatus> => {
   const totalNodes = await nodesRepository.getNodeCount({ rootCid: cid });

@@ -1,4 +1,4 @@
-import { Credits } from "../models/credits.js";
+import { Credits } from "../../models/credits.js";
 import {
   OAuthUser,
   User,
@@ -7,14 +7,14 @@ import {
   UserInfo,
   UserOrHandle,
   UserRole,
-} from "../models/index.js";
-import { InteractionType } from "../models/interactions.js";
+} from "../../models/index.js";
+import { InteractionType } from "../../models/interactions.js";
 import {
   SubscriptionInfo,
   SubscriptionWithUser,
-} from "../models/subscription.js";
-import { usersRepository } from "../repositories/index.js";
-import { InteractionsUseCases } from "./interactions.js";
+} from "../../models/subscription.js";
+import { usersRepository } from "../../repositories/index.js";
+import { InteractionsUseCases } from "../objects/interactions.js";
 import { OrganizationsUseCases } from "./organizations.js";
 import { SubscriptionsUseCases } from "./subscriptions.js";
 

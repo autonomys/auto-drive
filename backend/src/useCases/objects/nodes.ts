@@ -8,7 +8,7 @@ import {
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
 import { CID } from "multiformats";
-import { nodesRepository } from "../repositories/index.js";
+import { nodesRepository } from "../../repositories/index.js";
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   let cidString = typeof cid === "string" ? cid : cidToString(cid);

@@ -1,15 +1,15 @@
 import { v4 } from "uuid";
-import { User, UserOrHandle } from "../models/user.js";
+import { User, UserOrHandle } from "../../models/user.js";
 import {
   Subscription,
   SubscriptionGranularity,
   SubscriptionInfo,
-} from "../models/subscription.js";
-import { subscriptionsRepository } from "../repositories/subscriptions.js";
+} from "../../models/subscription.js";
+import { subscriptionsRepository } from "../../repositories/subscriptions.js";
 import { OrganizationsUseCases } from "./organizations.js";
 import { UsersUseCases } from "./users.js";
-import { interactionsRepository } from "../repositories/interactions.js";
-import { InteractionType } from "../models/interactions.js";
+import { interactionsRepository } from "../../repositories/interactions.js";
+import { InteractionType } from "../../models/interactions.js";
 
 const updateSubscription = async (
   executor: User,

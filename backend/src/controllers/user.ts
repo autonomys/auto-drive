@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { handleAuth } from "../services/authManager/express.js";
 import { UsersUseCases } from "../useCases/index.js";
-import { ApiKeysUseCases } from "../useCases/apikeys.js";
+import { ApiKeysUseCases } from "../useCases/users/apikeys.js";
 import { UserRole } from "../models/index.js";
-import { SubscriptionsUseCases } from "../useCases/subscriptions.js";
+import { SubscriptionsUseCases } from "../useCases/users/subscriptions.js";
 import { ApiKeyWithoutSecret } from "../models/apiKey.js";
 
 const userController = Router();

@@ -14,15 +14,14 @@ import {
 } from "@autonomys/auto-drive";
 import { PBNode } from "@ipld/dag-pb";
 import PizZip from "pizzip";
-import { FolderTree, User } from "../models/index.js";
+import { FolderTree, User } from "../../models/index.js";
 import {
   NodesUseCases,
   ObjectUseCases,
   OwnershipUseCases,
   UsersUseCases,
-} from "../useCases/index.js";
-import { InteractionsUseCases } from "./interactions.js";
-import { InteractionType } from "../models/interactions.js";
+} from "../index.js";
+import { InteractionType } from "../../models/interactions.js";
 
 const processFile = async (
   data: Buffer,

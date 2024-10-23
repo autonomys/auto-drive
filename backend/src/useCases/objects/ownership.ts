@@ -1,5 +1,8 @@
-import { Owner, OwnerRole, User } from "../models/index.js";
-import { ownershipRepository, usersRepository } from "../repositories/index.js";
+import { Owner, OwnerRole, User } from "../../models/index.js";
+import {
+  ownershipRepository,
+  usersRepository,
+} from "../../repositories/index.js";
 
 const setUserAsOwner = async (user: User, cid: string) => {
   await ownershipRepository.setUserAsOwner(

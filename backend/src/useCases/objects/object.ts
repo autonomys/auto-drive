@@ -1,18 +1,18 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import { User } from "../models/index.js";
+import { User } from "../../models/index.js";
 import {
   ObjectInformation,
   ObjectSearchResult,
   Owner,
-} from "../models/object.js";
+} from "../../models/object.js";
 import {
   metadataRepository,
   ownershipRepository,
-} from "../repositories/index.js";
-import { UsersUseCases } from "./index.js";
+} from "../../repositories/index.js";
+import { UsersUseCases } from "../index.js";
 import { OwnershipUseCases } from "./ownership.js";
 import { UploadStatusUseCases } from "./uploadStatus.js";
-import { MetadataEntry } from "../repositories/metadata.js";
+import { MetadataEntry } from "../../repositories/metadata.js";
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid);

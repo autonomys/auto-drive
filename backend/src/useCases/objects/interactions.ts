@@ -1,6 +1,6 @@
 import { v4 } from "uuid";
-import { InteractionType } from "../models/interactions.js";
-import { interactionsRepository } from "../repositories/interactions.js";
+import { InteractionType } from "../../models/interactions.js";
+import { interactionsRepository } from "../../repositories/interactions.js";
 
 const createInteraction = async (
   subscriptionId: string,

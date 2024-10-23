@@ -1,8 +1,8 @@
 import { v4 } from "uuid";
-import { User } from "../models";
-import { Organization } from "../models/organization.js";
-import { organizationMembersRepository } from "../repositories/organizationMembers.js";
-import { organizationsRepository } from "../repositories/organizations.js";
+import { User } from "../../models/index.js";
+import { Organization } from "../../models/organization.js";
+import { organizationMembersRepository } from "../../repositories/organizationMembers.js";
+import { organizationsRepository } from "../../repositories/organizations.js";
 import { SubscriptionsUseCases } from "./subscriptions.js";
 
 const getOrganizationByUser = async (user: User): Promise<Organization> => {
