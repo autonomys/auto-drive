@@ -22,7 +22,9 @@ export class MultiUploadBlockstore implements IPLDBlockstore {
       nodeType
     );
 
-    return blockstore.map((entry) => stringToCid(entry.cid));
+    for (const entry of blockstore) {
+      yield stringToCid(entry.cid);
+    }
   }
 
   async has(key: Pair["cid"], options?: AbortOptions): Promise<boolean> {

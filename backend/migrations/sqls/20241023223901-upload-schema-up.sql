@@ -44,7 +44,7 @@ CREATE INDEX "blockstore_upload_id_cid_index" ON uploads.blockstore ("upload_id"
 CREATE TABLE uploads.file_processing_info (
     "upload_id" TEXT PRIMARY KEY NOT NULL,
     "last_processed_part_index" INT,
-    "last_processed_part_offset" INT,
+    "pending_bytes" BYTEA,
     "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY ("upload_id") REFERENCES uploads.uploads("id") ON DELETE CASCADE

@@ -9,6 +9,13 @@ interface BlockstoreEntry {
   data: Buffer;
 }
 
+const parseEntry = (entry: BlockstoreEntry) => {
+  return {
+    ...entry,
+    node_size: Number(entry.node_size),
+  };
+};
+
 const addBlockstoreEntry = async (
   uploadId: string,
   cid: string,
@@ -45,7 +52,7 @@ const getBlockstoreEntries = async (uploadId: string) => {
     [uploadId]
   );
 
-  return result.rows;
+  return result.rows.map(parseEntry);
 };
 
 const getBatchBlockstoreEntries = async (uploadIds: string, cids: string[]) => {
@@ -56,7 +63,7 @@ const getBatchBlockstoreEntries = async (uploadIds: string, cids: string[]) => {
     [uploadIds, cids]
   );
 
-  return result.rows;
+  return result.rows.map(parseEntry);
 };
 
 const getBlockstoreEntriesWithoutData = async (uploadId: string) => {
@@ -67,7 +74,7 @@ const getBlockstoreEntriesWithoutData = async (uploadId: string) => {
     [uploadId]
   );
 
-  return result.rows;
+  return result.rows.map(parseEntry);
 };
 
 const getByType = async (uploadId: string, nodeType: MetadataType) => {
@@ -78,7 +85,7 @@ const getByType = async (uploadId: string, nodeType: MetadataType) => {
     [uploadId, nodeType]
   );
 
-  return result.rows;
+  return result.rows.map(parseEntry);
 };
 
 const getByCid = async (uploadId: string, cid: string) => {
@@ -89,7 +96,7 @@ const getByCid = async (uploadId: string, cid: string) => {
     [uploadId, cid]
   );
 
-  return result.rows.at(0) ?? null;
+  return result.rows.map(parseEntry).at(0) ?? null;
 };
 
 const getByCIDWithoutData = async (uploadId: string, cid: string) => {
@@ -100,7 +107,7 @@ const getByCIDWithoutData = async (uploadId: string, cid: string) => {
     [uploadId, cid]
   );
 
-  return result.rows.at(0) ?? null;
+  return result.rows.map(parseEntry).at(0) ?? null;
 };
 
 const deleteBlockstoreEntry = async (uploadId: string, cid: string) => {

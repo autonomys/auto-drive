@@ -1,5 +1,4 @@
 import { encode } from "@ipld/dag-pb";
-import { filePartsRepository } from "../../repositories/uploads/fileParts.js";
 import {
   FileProcessingInfo,
   fileProcessingInfoRepository,
@@ -25,23 +24,7 @@ import {
 const getUnprocessedChunkFromLatestFilePart = async (
   fileProcessingInfo: FileProcessingInfo
 ): Promise<Buffer> => {
-  if (
-    !fileProcessingInfo.last_processed_part_index ||
-    !fileProcessingInfo.last_processed_part_offset
-  ) {
-    return Buffer.alloc(0);
-  }
-
-  const filePart = await filePartsRepository.getChunkByUploadIdAndPartIndex(
-    fileProcessingInfo.upload_id,
-    fileProcessingInfo.last_processed_part_index
-  );
-
-  if (!filePart) {
-    throw new Error("File part not found");
-  }
-
-  return filePart.data.subarray(fileProcessingInfo.last_processed_part_offset);
+  return fileProcessingInfo.pending_bytes ?? Buffer.alloc(0);
 };
 
 const processChunk = async (
@@ -49,7 +32,6 @@ const processChunk = async (
   chunkData: Buffer,
   index: number
 ) => {
-  console.log(`Processing chunk ${index} of ${uploadId}`);
   const fileProcessingInfo =
     await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
       uploadId
@@ -72,21 +54,19 @@ const processChunk = async (
     fileProcessingInfo
   );
 
-  const bufferToProcess = Buffer.concat([latestPartLeftOver, chunkData]);
+  const dataToProcess = [latestPartLeftOver, chunkData];
 
   const leftOver = await processChunksToIPLDFormat(
     blockstore,
-    [bufferToProcess],
+    dataToProcess,
     fileBuilders,
     { maxChunkSize: DEFAULT_MAX_CHUNK_SIZE }
   );
 
-  const filePartOffset = chunkData.byteLength - leftOver.byteLength;
-
   await fileProcessingInfoRepository.updateFileProcessingInfo({
     ...fileProcessingInfo,
     last_processed_part_index: expectedPartIndex,
-    last_processed_part_offset: filePartOffset,
+    pending_bytes: leftOver,
   });
 };
 
