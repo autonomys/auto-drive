@@ -94,14 +94,7 @@ const migrateFromBlockstoreToNodesTable = async (
   const uploads = await uploadsRepository.getUploadsByRoot(uploadId);
   const uploadCID = await BlockstoreUseCases.getFileUploadIdCID(uploadId);
 
-  console.log(`Processing upload ${uploadId} with root ${uploadCID}`);
-
-  console.log(`Found ${uploads.length} uploads`);
-  console.log(JSON.stringify(uploads, null, 4));
-
   for (const upload of uploads) {
-    console.log(`Processing upload ${upload.id}`);
-
     const blockstore = await getUploadBlockstore(upload.id);
 
     const BATCH_SIZE = 100;

@@ -28,8 +28,6 @@ const saveNode = async (node: Node) => {
 const saveNodes = async (nodes: Node[]) => {
   const db = await getDatabase();
 
-  console.log(JSON.stringify(nodes.slice(0, 2), null, 4));
-
   return db.query({
     text: pgFormat(
       "INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES %L ON CONFLICT (cid) DO UPDATE SET head_cid = EXCLUDED.head_cid, type = EXCLUDED.type, encoded_node = EXCLUDED.encoded_node",

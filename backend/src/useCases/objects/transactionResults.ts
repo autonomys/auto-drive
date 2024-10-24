@@ -23,8 +23,6 @@ const setTransactionResults = async (
   cid: CID | string,
   transactionResults: TransactionResult
 ) => {
-  console.log("setTransactionResults", cid, transactionResults);
-
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
 
   return transactionResultsRepository.storeTransactionResult(
