@@ -101,7 +101,7 @@ uploadController.post("/folder/:uploadId/file", async (req, res) => {
 });
 
 uploadController.post(
-  "/:uploadId/chunk",
+  "/file/:uploadId/chunk",
   multer().single("file"),
   async (req, res) => {
     const user = await handleAuth(req, res);
