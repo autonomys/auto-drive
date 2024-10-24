@@ -92,6 +92,17 @@ const getByCid = async (uploadId: string, cid: string) => {
   return result.rows.at(0) ?? null;
 };
 
+const getByCIDWithoutData = async (uploadId: string, cid: string) => {
+  const db = await getDatabase();
+
+  const result = await db.query<BlockstoreEntry>(
+    `SELECT upload_id, cid, node_type, node_size FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2 ORDER BY sort_id ASC`,
+    [uploadId, cid]
+  );
+
+  return result.rows.at(0) ?? null;
+};
+
 const deleteBlockstoreEntry = async (uploadId: string, cid: string) => {
   const db = await getDatabase();
 
@@ -110,4 +121,5 @@ export const blockstoreRepository = {
   getByType,
   getByCid,
   deleteBlockstoreEntry,
+  getByCIDWithoutData,
 };

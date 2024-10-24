@@ -142,7 +142,14 @@ uploadController.post("/:uploadId/complete", async (req, res) => {
   }
   const { uploadId } = req.params;
 
-  throw new Error("Not implemented");
+  try {
+    await UploadsUseCases.completeUpload(user, uploadId);
+
+    return res.status(200).json({ message: "Upload completed" });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ error: "Failed to complete upload" });
+  }
 });
 
 uploadController.post("/:uploadId/cancel", async (req, res) => {

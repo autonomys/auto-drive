@@ -5,7 +5,7 @@ CREATE TABLE uploads.uploads (
     "id" TEXT PRIMARY KEY,
     "oauth_provider" TEXT NOT NULL,
     "oauth_user_id" TEXT NOT NULL,
-    "parent_id" TEXT,
+    "root_upload_id" TEXT,
     "relative_id" TEXT,
     "type" TEXT NOT NULL,
     "name" TEXT NOT NULL,

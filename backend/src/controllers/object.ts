@@ -1,6 +1,4 @@
 import { Router } from "express";
-import multer from "multer";
-import { FolderTreeSchema } from "../models/objects/index.js";
 import { handleAuth } from "../services/authManager/express.js";
 import {
   FilesUseCases,
@@ -72,77 +70,6 @@ objectController.get("/search", async (req, res) => {
     res
       .status(500)
       .json({ error: "Failed to search metadata", details: error.message });
-  }
-});
-
-objectController.post("/file", async (req, res) => {
-  try {
-    const { data, filename, mimeType } = req.body;
-    if (!data) {
-      return res.status(400).json({ error: "Field `data` is required" });
-    }
-
-    const user = await handleAuth(req, res);
-    if (!user) {
-      return;
-    }
-
-    const buffer = Buffer.from(data, "base64");
-    const cid = await FilesUseCases.uploadFile(
-      user,
-      buffer,
-      filename,
-      mimeType
-    );
-
-    res.json({ cid });
-  } catch (error) {
-    console.error("Error processing data:", error);
-    res.status(500).json({ error: "Failed to process and submit data" });
-  }
-});
-
-objectController.post("/folder", multer().any(), async (req, res) => {
-  try {
-    const user = await handleAuth(req, res);
-    if (!user) {
-      return;
-    }
-
-    const folderTreeString = req.body.folderTree;
-    if (!folderTreeString) {
-      return res
-        .status(400)
-        .json({ error: "Missing folderTree in request body" });
-    }
-
-    let parsedFolderTree;
-    try {
-      parsedFolderTree = JSON.parse(folderTreeString);
-    } catch (error) {
-      return res.status(400).json({ error: "Invalid JSON in folderTree" });
-    }
-
-    const validatedFolderTree = FolderTreeSchema.safeParse(parsedFolderTree);
-    if (!validatedFolderTree.success) {
-      return res.status(400).json({
-        error: "Invalid folder tree structure",
-        details: validatedFolderTree.error,
-      });
-    }
-
-    const cid = await FilesUseCases.uploadTree(
-      user,
-      validatedFolderTree.data,
-      (req.files || []) as Express.Multer.File[]
-    );
-
-    console.log(`Processed folder upload with cid: ${cid}`);
-
-    res.json({ cid });
-  } catch (error) {
-    console.error("Error processing folder upload:", error);
-    res.status(500).json({ error: "Failed to process folder upload" });
   }
 });
 

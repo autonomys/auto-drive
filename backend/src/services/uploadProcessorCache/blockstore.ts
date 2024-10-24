@@ -107,10 +107,23 @@ export class MultiUploadBlockstore implements IPLDBlockstore {
   }
 
   async *getAllKeys(options?: AbortOptions): AsyncIterable<Pair["cid"]> {
-    throw new Error("Method not implemented.");
+    const blocks = await blockstoreRepository.getBlockstoreEntriesWithoutData(
+      this.uploadId
+    );
+
+    console.log(`Found ${blocks.length} blocks in ${this.uploadId}`);
+
+    for (const block of blocks) {
+      yield stringToCid(block.cid);
+    }
   }
 
   async getSize(key: Pair["cid"]): Promise<number> {
-    throw new Error("Method not implemented.");
+    const block = await blockstoreRepository.getByCIDWithoutData(
+      this.uploadId,
+      cidToString(key)
+    );
+
+    return block!.node_size;
   }
 }

@@ -1,3 +1,4 @@
+import { encode } from "@ipld/dag-pb";
 import { filePartsRepository } from "../../repositories/uploads/fileParts.js";
 import {
   FileProcessingInfo,
@@ -5,10 +6,21 @@ import {
 } from "../../repositories/uploads/fileProcessingInfo.js";
 import { getUploadBlockstore } from "../../services/uploadProcessorCache/index.js";
 import {
+  cidOfNode,
+  createFileChunkIpldNode,
   DEFAULT_MAX_CHUNK_SIZE,
   fileBuilders,
+  MetadataType,
+  processBufferToIPLDFormatFromChunks,
   processChunksToIPLDFormat,
 } from "@autonomys/auto-drive";
+import { FolderUpload, UploadType } from "../../models/uploads/upload.js";
+import { BlockstoreUseCases } from "./blockstore.js";
+import { mapTableToModel } from "./uploads.js";
+import {
+  UploadEntry,
+  uploadsRepository,
+} from "../../repositories/uploads/uploads.js";
 
 const getUnprocessedChunkFromLatestFilePart = async (
   fileProcessingInfo: FileProcessingInfo
@@ -78,6 +90,47 @@ const processChunk = async (
   });
 };
 
+const completeFileProcessing = async (uploadId: string): Promise<void> => {
+  const fileProcessingInfo =
+    await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
+      uploadId
+    );
+
+  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+
+  if (!fileProcessingInfo) {
+    throw new Error("File processing info not found");
+  }
+
+  const blockstore = await getUploadBlockstore(uploadId);
+  const latestPartLeftOver = await getUnprocessedChunkFromLatestFilePart(
+    fileProcessingInfo
+  );
+
+  if (latestPartLeftOver.byteLength > 0) {
+    const fileChunk = createFileChunkIpldNode(latestPartLeftOver);
+    await blockstore.put(cidOfNode(fileChunk), encode(fileChunk));
+  }
+
+  await processBufferToIPLDFormatFromChunks(
+    blockstore,
+    blockstore.getFilteredMany(MetadataType.FileChunk),
+    upload?.name,
+    fileBuilders
+  );
+};
+
+const completeUploadProcessing = async (upload: UploadEntry): Promise<void> => {
+  if (upload.type === UploadType.FILE) {
+    await completeFileProcessing(upload.id);
+  } else if (upload.type === UploadType.FOLDER) {
+    await BlockstoreUseCases.processFolderUpload(
+      mapTableToModel(upload) as FolderUpload
+    );
+  }
+};
+
 export const FileProcessingUseCase = {
   processChunk,
+  completeUploadProcessing,
 };

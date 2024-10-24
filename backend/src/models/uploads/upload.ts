@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { FolderTreeFolderSchema, FolderTreeSchema } from "../objects/index.js";
 import { UploadEntry } from "../../repositories/uploads/uploads.js";
+import {
+  OffchainFileMetadata,
+  OffchainFolderMetadata,
+} from "@autonomys/auto-drive";
 
 export enum UploadType {
   FILE = "file",
@@ -16,7 +20,7 @@ export enum UploadStatus {
 
 export const fileUploadSchema = z.object({
   id: z.string(),
-  parentId: z.string().nullable(),
+  rootId: z.string().nullable(),
   relativeId: z.string().nullable(),
   type: z.nativeEnum(UploadType),
   status: z.nativeEnum(UploadStatus),
@@ -37,7 +41,7 @@ export const mapModelToTable = (upload: Upload): UploadEntry => {
     name: upload.name,
     file_tree: upload.fileTree,
     mime_type: upload.mimeType,
-    parent_id: upload.parentId,
+    root_upload_id: upload.rootId,
     relative_id: upload.relativeId,
     oauth_provider: upload.oauthProvider,
     oauth_user_id: upload.oauthUserId,
@@ -46,7 +50,7 @@ export const mapModelToTable = (upload: Upload): UploadEntry => {
 
 export const folderUploadSchema = z.object({
   id: z.string(),
-  parentId: z.null(),
+  rootId: z.null(),
   relativeId: z.null(),
   type: z.nativeEnum(UploadType),
   status: z.nativeEnum(UploadStatus),
@@ -60,3 +64,14 @@ export const folderUploadSchema = z.object({
 export type FolderUpload = z.infer<typeof folderUploadSchema>;
 
 export type Upload = FileUpload | FolderUpload;
+
+export type UploadArtifacts = FileArtifacts | FolderArtifacts;
+
+export type FileArtifacts = {
+  metadata: OffchainFileMetadata;
+};
+
+export type FolderArtifacts = {
+  metadata: OffchainFolderMetadata;
+  childrenArtifacts: UploadArtifacts[];
+};

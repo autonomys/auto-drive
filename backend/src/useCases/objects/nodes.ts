@@ -9,6 +9,14 @@ import {
 import { PBNode } from "@ipld/dag-pb";
 import { CID } from "multiformats";
 import { nodesRepository } from "../../repositories/index.js";
+import { uploadsRepository } from "../../repositories/uploads/uploads.js";
+import { getUploadBlockstore } from "../../services/uploadProcessorCache/index.js";
+import {
+  asyncIterableForEach,
+  asyncIterableToPromiseOfArray,
+} from "../../utils/async.js";
+import { BlockstoreUseCases } from "../uploads/blockstore.js";
+import { blockstoreRepository } from "../../repositories/uploads/blockstore.js";
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
@@ -80,9 +88,48 @@ const saveNodes = async (
   );
 };
 
+const migrateFromBlockstoreToNodesTable = async (
+  uploadId: string
+): Promise<void> => {
+  const uploads = await uploadsRepository.getUploadsByRoot(uploadId);
+  const uploadCID = await BlockstoreUseCases.getFileUploadIdCID(uploadId);
+
+  console.log(`Processing upload ${uploadId} with root ${uploadCID}`);
+
+  console.log(`Found ${uploads.length} uploads`);
+  console.log(JSON.stringify(uploads, null, 4));
+
+  for (const upload of uploads) {
+    console.log(`Processing upload ${upload.id}`);
+
+    const blockstore = await getUploadBlockstore(upload.id);
+
+    const BATCH_SIZE = 100;
+    await asyncIterableForEach(
+      blockstore.getAllKeys(),
+      async (batch) => {
+        const nodes = await asyncIterableToPromiseOfArray(
+          blockstore.getMany(batch)
+        );
+        await nodesRepository.saveNodes(
+          nodes.map((e) => ({
+            cid: cidToString(e.cid),
+            root_cid: cidToString(uploadCID),
+            head_cid: cidToString(uploadCID),
+            type: decodeIPLDNodeData(Buffer.from(e.block)).type,
+            encoded_node: Buffer.from(e.block).toString("base64"),
+          }))
+        );
+      },
+      BATCH_SIZE
+    );
+  }
+};
+
 export const NodesUseCases = {
   getNode,
   saveNode,
   getChunkData,
   saveNodes,
+  migrateFromBlockstoreToNodesTable,
 };

@@ -1,16 +1,12 @@
 import {
-  cidOfNode,
   cidToString,
+  fileMetadata,
   folderMetadata,
+  MetadataType,
   OffchainFileMetadata,
-  OffchainFolderMetadata,
-  OffchainMetadata,
-  stringToCid,
 } from "@autonomys/auto-drive";
-import { PBNode } from "@ipld/dag-pb";
 import PizZip from "pizzip";
 import { User } from "../../models/users/index.js";
-import { FolderTree } from "../../models/objects/folderTree.js";
 import {
   NodesUseCases,
   ObjectUseCases,
@@ -18,28 +14,83 @@ import {
   UsersUseCases,
 } from "../index.js";
 import { InteractionType } from "../../models/objects/interactions.js";
+import { uploadsRepository } from "../../repositories/uploads/uploads.js";
+import {
+  FileArtifacts,
+  FolderArtifacts,
+  UploadArtifacts,
+  UploadType,
+} from "../../models/uploads/upload.js";
+import { BlockstoreUseCases } from "../uploads/blockstore.js";
 
-const processFile = async (
-  data: Buffer,
-  filename?: string,
-  mimeType?: string
-): Promise<{
-  cid: string;
-  nodesByCid: { [headCid: string]: PBNode[] };
-  metadata: OffchainFileMetadata[];
-}> => {
-  throw new Error("Not implemented");
+const generateFileArtifacts = async (
+  uploadId: string
+): Promise<FileArtifacts> => {
+  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  if (!upload) {
+    throw new Error("Upload not found");
+  }
+  if (upload.type !== UploadType.FILE) {
+    throw new Error("Upload is not a file");
+  }
+
+  const cid = await BlockstoreUseCases.getFileUploadIdCID(uploadId);
+  const chunkCIDs = await BlockstoreUseCases.getChunksByNodeType(
+    uploadId,
+    MetadataType.FileChunk
+  );
+  const totalSize = chunkCIDs.reduce((acc, e) => acc + Number(e.size), 0);
+
+  const metadata = fileMetadata(
+    cid,
+    chunkCIDs,
+    totalSize,
+    upload.name,
+    upload.mime_type
+  );
+
+  return {
+    metadata,
+  };
 };
 
-const processTree = async (
-  folderTree: FolderTree,
-  files: Express.Multer.File[]
-): Promise<{
-  cid: string;
-  nodesByCid: { [headCid: string]: PBNode[] };
-  metadata: OffchainMetadata[];
-}> => {
-  throw new Error("Not implemented");
+const generateFolderArtifacts = async (
+  uploadId: string
+): Promise<FolderArtifacts> => {
+  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  if (!upload) {
+    throw new Error("Upload not found");
+  }
+  if (upload.type !== UploadType.FOLDER) {
+    throw new Error("Upload is not a folder");
+  }
+
+  const uploads = await uploadsRepository.getUploadsByRoot(uploadId);
+  const files = uploads.filter((e) => e.type === UploadType.FILE);
+  const folders = uploads.filter((e) => e.type === UploadType.FOLDER);
+  const childrenArtifacts: UploadArtifacts[] = await Promise.all(
+    files.map(async (e) => generateFileArtifacts(e.id))
+  );
+  const folderArtifacts: FolderArtifacts[] = await Promise.all(
+    folders.map(async (e) => generateFolderArtifacts(e.id))
+  );
+
+  const nodeCID = await BlockstoreUseCases.getFolderUploadIdCID(uploadId);
+
+  const metadata = folderMetadata(
+    cidToString(nodeCID),
+    childrenArtifacts.concat(folderArtifacts).map((e) => ({
+      type: e.metadata.type,
+      cid: e.metadata.dataCid,
+      totalSize: e.metadata.totalSize,
+    })),
+    upload.name
+  );
+
+  return {
+    metadata,
+    childrenArtifacts,
+  };
 };
 
 const retrieveAndReassembleFile = async (
@@ -143,55 +194,61 @@ const downloadObject = async (
   return data;
 };
 
-const uploadFile = async (
+const handleFileUploadFinalization = async (
   user: User,
-  data: Buffer,
-  filename?: string,
-  mimeType?: string
+  uploadId: string
 ): Promise<string> => {
   const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
     user,
     InteractionType.Upload
   );
-  if (pendingCredits < data.length) {
+  const { metadata } = await generateFileArtifacts(uploadId);
+  if (pendingCredits < metadata.totalSize) {
     throw new Error("Not enough upload credits");
   }
 
-  const {
-    cid: rootCid,
-    nodesByCid,
-    metadata,
-  } = await processFile(data, filename, mimeType);
-
-  await Promise.all(
-    Object.keys(nodesByCid).map((cid) => {
-      NodesUseCases.saveNodes(rootCid, cid, nodesByCid[cid]);
-    })
-  );
-  await OwnershipUseCases.setUserAsAdmin(user, rootCid);
-  await Promise.all(
-    metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
+  await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId);
+  await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid);
+  await ObjectUseCases.saveMetadata(
+    metadata.dataCid,
+    metadata.dataCid,
+    metadata
   );
 
   await UsersUseCases.registerInteraction(
     user,
     InteractionType.Upload,
-    data.length
+    metadata.totalSize
   );
 
-  return rootCid;
+  return metadata.dataCid;
 };
 
-const uploadTree = async (
+const handleFolderUploadFinalization = async (
   user: User,
-  folderTree: FolderTree,
-  files: Express.Multer.File[]
+  uploadId: string
 ): Promise<string> => {
-  throw new Error("Not implemented");
+  const { metadata, childrenArtifacts } = await generateFolderArtifacts(
+    uploadId
+  );
+
+  await Promise.all(
+    childrenArtifacts.map((artifact) =>
+      ObjectUseCases.saveMetadata(
+        metadata.dataCid,
+        artifact.metadata.dataCid,
+        artifact.metadata
+      )
+    )
+  );
+  await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId);
+  await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid);
+
+  return metadata.dataCid;
 };
 
 export const FilesUseCases = {
-  uploadFile,
-  uploadTree,
+  handleFileUploadFinalization,
+  handleFolderUploadFinalization,
   downloadObject,
 };

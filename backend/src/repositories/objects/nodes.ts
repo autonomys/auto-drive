@@ -1,5 +1,6 @@
 import { MetadataType } from "@autonomys/auto-drive";
 import { getDatabase } from "../../drivers/pg.js";
+import pgFormat from "pg-format";
 
 export interface Node {
   cid: string;
@@ -21,6 +22,25 @@ const saveNode = async (node: Node) => {
       node.type,
       node.encoded_node,
     ],
+  });
+};
+
+const saveNodes = async (nodes: Node[]) => {
+  const db = await getDatabase();
+
+  console.log(JSON.stringify(nodes.slice(0, 2), null, 4));
+
+  return db.query({
+    text: pgFormat(
+      "INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES %L ON CONFLICT (cid) DO UPDATE SET head_cid = EXCLUDED.head_cid, type = EXCLUDED.type, encoded_node = EXCLUDED.encoded_node",
+      nodes.map((node) => [
+        node.cid,
+        node.root_cid,
+        node.head_cid,
+        node.type,
+        node.encoded_node,
+      ])
+    ),
   });
 };
 
@@ -82,4 +102,5 @@ export const nodesRepository = {
   getNode,
   getNodeCount,
   saveNode,
+  saveNodes,
 };
