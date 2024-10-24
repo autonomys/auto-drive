@@ -8,7 +8,7 @@ import {
 import { Pair } from "interface-blockstore";
 import { AbortOptions, AwaitIterable } from "interface-store";
 import { CID } from "multiformats/cid";
-import { blockstoreRepository } from "../../repositories/uploads/blockstore";
+import { blockstoreRepository } from "../../repositories/uploads/index.js";
 
 export class MultiUploadBlockstore implements IPLDBlockstore {
   constructor(private uploadId: string) {}

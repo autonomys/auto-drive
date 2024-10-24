@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { handleAuth } from "../services/authManager/express.js";
 import { UploadsUseCases } from "../useCases/uploads/uploads.js";
+import multer from "multer";
 
 const uploadController = Router();
 
@@ -99,15 +100,40 @@ uploadController.post("/folder/:uploadId/file", async (req, res) => {
   }
 });
 
-uploadController.post("/:uploadId/chunk", async (req, res) => {
-  const user = await handleAuth(req, res);
-  if (!user) {
-    return;
-  }
-  const { uploadId } = req.params;
+uploadController.post(
+  "/:uploadId/chunk",
+  multer().single("file"),
+  async (req, res) => {
+    const user = await handleAuth(req, res);
+    if (!user) {
+      return;
+    }
+    const { uploadId } = req.params;
+    const chunk = req.file?.buffer;
+    let { index } = req.body;
 
-  throw new Error("Not implemented");
-});
+    if (!chunk) {
+      return res.status(400).json({
+        error: "Missing chunk: expected formData entry in field `file`",
+      });
+    }
+
+    index = parseInt(index);
+    if (isNaN(index)) {
+      return res.status(400).json({ error: "Invalid index" });
+    }
+
+    try {
+      await UploadsUseCases.uploadChunk(user, uploadId, index, chunk);
+
+      return res.status(200).json({ message: "Chunk uploaded" });
+    } catch (error) {
+      console.log(error);
+
+      return res.status(500).json({ error: "Failed to upload chunk" });
+    }
+  }
+);
 
 uploadController.post("/:uploadId/complete", async (req, res) => {
   const user = await handleAuth(req, res);

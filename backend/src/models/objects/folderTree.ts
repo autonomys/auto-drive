@@ -16,20 +16,21 @@ export type FolderTreeFile = {
 
 export type FolderTree = FolderTreeFolder | FolderTreeFile;
 
+export const FolderTreeFolderSchema = z.object({
+  name: z.string(),
+  type: z.literal("folder"),
+  children: z.array(z.lazy(() => FolderTreeSchema)),
+});
+
+export const FolderTreeFileSchema = z.object({
+  name: z.string(),
+  type: z.literal("file"),
+  id: z.string(),
+});
+
 export const FolderTreeSchema: z.ZodType<FolderTree> = z.discriminatedUnion(
   "type",
-  [
-    z.object({
-      name: z.string(),
-      type: z.literal("folder"),
-      children: z.array(z.lazy(() => FolderTreeSchema)),
-    }),
-    z.object({
-      name: z.string(),
-      type: z.literal("file"),
-      id: z.string(),
-    }),
-  ]
+  [FolderTreeFolderSchema, FolderTreeFileSchema]
 );
 
 const internalGetObjectById = (

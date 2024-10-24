@@ -8,12 +8,16 @@ import {
   fileUploadSchema,
   FolderUpload,
   folderUploadSchema,
+  mapModelToTable,
   Upload,
   UploadStatus,
   UploadType,
 } from "../../models/uploads/upload.js";
 import { FolderTreeFolder } from "../../models/objects/folderTree.js";
 import { User } from "../../models/users/user.js";
+import { filePartsRepository } from "../../repositories/uploads/fileParts.js";
+import { FileProcessingUseCase } from "./fileProcessing.js";
+import { fileProcessingInfoRepository } from "../../repositories/uploads/fileProcessingInfo.js";
 
 const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -28,6 +32,25 @@ const mapTableToModel = (upload: UploadEntry): Upload => {
     oauthProvider: upload.oauth_provider,
     oauthUserId: upload.oauth_user_id,
   } as Upload;
+};
+
+const checkPermissions = async (upload: UploadEntry, user: User) => {
+  if (
+    upload.oauth_provider !== user.oauthProvider ||
+    upload.oauth_user_id !== user.oauthUserId
+  ) {
+    throw new Error("User does not have permission to upload");
+  }
+};
+
+const initFileProcessing = async (upload: UploadEntry): Promise<void> => {
+  await fileProcessingInfoRepository.addFileProcessingInfo({
+    upload_id: upload.id,
+    last_processed_part_index: null,
+    last_processed_part_offset: null,
+    created_at: new Date(),
+    updated_at: new Date(),
+  });
 };
 
 const createFileUpload = async (
@@ -52,6 +75,8 @@ const createFileUpload = async (
     user.oauthProvider,
     user.oauthUserId
   );
+
+  await initFileProcessing(upload);
 
   return mapTableToModel(upload) as FileUpload;
 };
@@ -101,11 +126,37 @@ const createFileInFolder = async (
     relativeId
   );
 
+  await initFileProcessing(mapModelToTable(file));
+
   return file;
+};
+
+const uploadChunk = async (
+  user: User,
+  uploadId: string,
+  index: number,
+  chunkData: Buffer
+): Promise<void> => {
+  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  if (!upload) {
+    throw new Error("Upload not found");
+  }
+  await checkPermissions(upload, user);
+
+  await FileProcessingUseCase.processChunk(uploadId, chunkData, index);
+
+  await filePartsRepository.addChunk({
+    upload_id: uploadId,
+    part_index: index,
+    data: chunkData,
+    created_at: new Date(),
+    updated_at: new Date(),
+  });
 };
 
 export const UploadsUseCases = {
   createFileUpload,
   createFolderUpload,
   createFileInFolder,
+  uploadChunk,
 };

@@ -41,7 +41,7 @@ const getBlockstoreEntries = async (uploadId: string) => {
   const db = await getDatabase();
 
   const result = await db.query<BlockstoreEntry>(
-    `SELECT * FROM uploads.blockstore WHERE upload_id = $1`,
+    `SELECT * FROM uploads.blockstore WHERE upload_id = $1 ORDER BY sort_id ASC`,
     [uploadId]
   );
 
@@ -52,7 +52,7 @@ const getBatchBlockstoreEntries = async (uploadIds: string, cids: string[]) => {
   const db = await getDatabase();
 
   const result = await db.query<BlockstoreEntry>(
-    `SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND cid = ANY($2)`,
+    `SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND cid = ANY($2) ORDER BY sort_id ASC`,
     [uploadIds, cids]
   );
 
@@ -63,7 +63,7 @@ const getBlockstoreEntriesWithoutData = async (uploadId: string) => {
   const db = await getDatabase();
 
   const result = await db.query<BlockstoreEntry>(
-    `SELECT upload_id, cid, node_type, node_size FROM uploads.blockstore WHERE upload_id = $1`,
+    `SELECT upload_id, cid, node_type, node_size FROM uploads.blockstore WHERE upload_id = $1 ORDER BY sort_id ASC`,
     [uploadId]
   );
 
@@ -74,7 +74,7 @@ const getByType = async (uploadId: string, nodeType: MetadataType) => {
   const db = await getDatabase();
 
   const result = await db.query<BlockstoreEntry>(
-    `SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND node_type = $2`,
+    `SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND node_type = $2 ORDER BY sort_id ASC`,
     [uploadId, nodeType]
   );
 
@@ -85,7 +85,7 @@ const getByCid = async (uploadId: string, cid: string) => {
   const db = await getDatabase();
 
   const result = await db.query<BlockstoreEntry>(
-    `SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2`,
+    `SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2 ORDER BY sort_id ASC`,
     [uploadId, cid]
   );
 

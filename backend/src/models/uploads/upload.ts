@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { FolderTreeSchema } from "../objects/index.js";
+import { FolderTreeFolderSchema, FolderTreeSchema } from "../objects/index.js";
+import { UploadEntry } from "../../repositories/uploads/uploads.js";
 
 export enum UploadType {
   FILE = "file",
@@ -28,13 +29,28 @@ export const fileUploadSchema = z.object({
 
 export type FileUpload = z.infer<typeof fileUploadSchema>;
 
+export const mapModelToTable = (upload: Upload): UploadEntry => {
+  return {
+    id: upload.id,
+    type: upload.type,
+    status: upload.status,
+    name: upload.name,
+    file_tree: upload.fileTree,
+    mime_type: upload.mimeType,
+    parent_id: upload.parentId,
+    relative_id: upload.relativeId,
+    oauth_provider: upload.oauthProvider,
+    oauth_user_id: upload.oauthUserId,
+  };
+};
+
 export const folderUploadSchema = z.object({
   id: z.string(),
   parentId: z.null(),
   relativeId: z.null(),
   type: z.nativeEnum(UploadType),
   status: z.nativeEnum(UploadStatus),
-  fileTree: FolderTreeSchema,
+  fileTree: FolderTreeFolderSchema,
   name: z.string(),
   mimeType: z.null(),
   oauthProvider: z.string(),

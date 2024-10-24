@@ -1,11 +1,6 @@
 import {
   cidOfNode,
   cidToString,
-  createFileIPLDDag,
-  createFolderIPLDDag,
-  createMetadataIPLDDag,
-  createMetadataNode,
-  fileMetadata,
   folderMetadata,
   OffchainFileMetadata,
   OffchainFolderMetadata,
@@ -33,31 +28,7 @@ const processFile = async (
   nodesByCid: { [headCid: string]: PBNode[] };
   metadata: OffchainFileMetadata[];
 }> => {
-  const dag = createFileIPLDDag(data, filename);
-
-  const metadata: OffchainMetadata = fileMetadata(
-    dag,
-    data.length,
-    filename,
-    mimeType
-  );
-
-  const metadataDag = createMetadataIPLDDag(metadata);
-  const metadataNodes = Array.from(metadataDag.nodes.values());
-  const chunkNodes = Array.from(dag.nodes.values());
-
-  const nodes = [...metadataNodes, ...chunkNodes];
-
-  console.log("Processed file: ", filename);
-  const cid = cidToString(dag.headCID);
-
-  return {
-    cid,
-    nodesByCid: {
-      [cid]: nodes,
-    },
-    metadata: [metadata],
-  };
+  throw new Error("Not implemented");
 };
 
 const processTree = async (
@@ -68,62 +39,7 @@ const processTree = async (
   nodesByCid: { [headCid: string]: PBNode[] };
   metadata: OffchainMetadata[];
 }> => {
-  if (folderTree.type === "file") {
-    const file = files.find((e) => e.fieldname === folderTree.id);
-    if (!file) {
-      throw new Error(`File with fieldname ${folderTree.id} not found`);
-    }
-
-    return processFile(file.buffer, folderTree.name, file.mimetype);
-  }
-
-  const parsedChildren = [];
-  for (const child of folderTree.children) {
-    const result = await processTree(child, files);
-    parsedChildren.push(result);
-  }
-
-  const childrenMetadata = parsedChildren.map((e) => e.metadata).flat();
-
-  const { headCID, nodes } = createFolderIPLDDag(
-    parsedChildren.map((e) => stringToCid(e.cid)),
-    folderTree.name,
-    childrenMetadata.reduce((acc, e) => acc + e.totalSize, 0)
-  );
-  const cid = cidToString(headCID);
-
-  const folderNode = nodes.get(headCID);
-  if (!folderNode) {
-    throw new Error("Folder node not found");
-  }
-
-  const directChildrenMetadata = childrenMetadata.filter((e) =>
-    folderNode.Links.some((link) => cidToString(link.Hash) === e.dataCid)
-  );
-
-  const chunkNodes = Array.from(nodes.values());
-
-  const metadata: OffchainFolderMetadata = folderMetadata(
-    cidToString(cidOfNode(folderNode)),
-    directChildrenMetadata.map((e) => ({
-      cid: e.dataCid,
-      name: e.name,
-      type: e.type,
-      totalSize: e.totalSize,
-    })),
-    folderTree.name
-  );
-  const metadataDag = createMetadataIPLDDag(metadata);
-  const metadataNodes = Array.from(metadataDag.nodes.values());
-
-  return {
-    cid,
-    nodesByCid: {
-      [cid]: [...metadataNodes, ...chunkNodes],
-      ...parsedChildren.reduce((acc, e) => ({ ...acc, ...e.nodesByCid }), {}),
-    },
-    metadata: [metadata, ...childrenMetadata],
-  };
+  throw new Error("Not implemented");
 };
 
 const retrieveAndReassembleFile = async (
@@ -271,41 +187,7 @@ const uploadTree = async (
   folderTree: FolderTree,
   files: Express.Multer.File[]
 ): Promise<string> => {
-  const {
-    cid: rootCid,
-    nodesByCid,
-    metadata,
-  } = await processTree(folderTree, files);
-
-  const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
-    user,
-    InteractionType.Upload
-  );
-  const rootMetadata = metadata.find((e) => e.dataCid === rootCid);
-  if (!rootMetadata) {
-    throw new Error(`Root metadata with CID ${rootCid} not found`);
-  }
-  if (pendingCredits < rootMetadata.totalSize) {
-    throw new Error("Not enough upload credits");
-  }
-
-  await Promise.all(
-    Object.keys(nodesByCid).map((cid) => {
-      NodesUseCases.saveNodes(rootCid, cid, nodesByCid[cid]);
-    })
-  );
-  await OwnershipUseCases.setUserAsAdmin(user, rootCid);
-  await Promise.all(
-    metadata.map((e) => ObjectUseCases.saveMetadata(rootCid, e.dataCid, e))
-  );
-
-  await UsersUseCases.registerInteraction(
-    user,
-    InteractionType.Upload,
-    rootMetadata.totalSize
-  );
-
-  return rootCid;
+  throw new Error("Not implemented");
 };
 
 export const FilesUseCases = {
