@@ -1,4 +1,3 @@
-import bodyParser from "body-parser";
 import cors from "cors";
 import express from "express";
 
@@ -6,6 +5,7 @@ import "dotenv/config.js";
 import { objectController } from "./controllers/object.js";
 import { userController } from "./controllers/user.js";
 import { handleAuth } from "./services/authManager/express.js";
+import { uploadController } from "./controllers/upload.js";
 
 const createServer = async () => {
   const app = express();
@@ -19,8 +19,8 @@ const createServer = async () => {
     app.use(cors({ origin: process.env.CORS_ALLOW_ORIGINS }));
 
   app.use("/objects", objectController);
-
   app.use("/users", userController);
+  app.use("/uploads", uploadController);
 
   app.get("/auth/session", async (req, res) => {
     try {

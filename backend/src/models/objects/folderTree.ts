@@ -2,13 +2,13 @@ import { z } from "zod";
 
 export const FolderTreeType = z.enum(["folder", "file"]);
 
-type FolderTreeFolder = {
+export type FolderTreeFolder = {
   name: string;
   type: "folder";
   children: FolderTree[];
 };
 
-type FolderTreeFile = {
+export type FolderTreeFile = {
   name: string;
   type: "file";
   id: string;
@@ -29,31 +29,26 @@ export const FolderTreeSchema: z.ZodType<FolderTree> = z.discriminatedUnion(
       type: z.literal("file"),
       id: z.string(),
     }),
-  ],
+  ]
 );
 
 const internalGetObjectById = (
   folderTree: FolderTree,
-  path: string = "",
+  path: string = ""
 ): [PropertyKey, FolderTree][] => {
   if (folderTree.type === "file") {
     return [[folderTree.id, folderTree]];
   }
 
   return folderTree.children
-    .reduce(
-      (acc, e) => {
-        return acc.concat(
-          internalGetObjectById(e, path + "/" + folderTree.name),
-        );
-      },
-      [] as [PropertyKey, FolderTree][],
-    )
+    .reduce((acc, e) => {
+      return acc.concat(internalGetObjectById(e, path + "/" + folderTree.name));
+    }, [] as [PropertyKey, FolderTree][])
     .concat([[path + "/" + folderTree.name, folderTree]]);
 };
 
 export const getMapObjectById = (
-  folderTree: FolderTree,
+  folderTree: FolderTree
 ): Record<string, FolderTree> => {
   return Object.fromEntries(internalGetObjectById(folderTree));
 };
@@ -68,42 +63,36 @@ export const getFiles = (folderTree: FolderTree): FolderTreeFile[] => {
 
 const internalGetObjectToPathMap = (
   folderTree: FolderTree,
-  path: string = "",
+  path: string = ""
 ): [PropertyKey, string][] => {
   if (folderTree.type === "file") {
     return [[folderTree.id, path]];
   }
 
   return folderTree.children
-    .reduce(
-      (acc, e) => {
-        return acc.concat(
-          internalGetObjectToPathMap(e, path + "/" + folderTree.name),
-        );
-      },
-      [] as [PropertyKey, string][],
-    )
+    .reduce((acc, e) => {
+      return acc.concat(
+        internalGetObjectToPathMap(e, path + "/" + folderTree.name)
+      );
+    }, [] as [PropertyKey, string][])
     .concat([[path + "/" + folderTree.name, path]]);
 };
 
 export const getObjectToPathMap = (
-  folderTree: FolderTree,
+  folderTree: FolderTree
 ): Record<string, string> => {
   const obj = internalGetObjectToPathMap(folderTree);
   return Object.fromEntries(obj);
 };
 
 export const groupObjectIdsByPath = (
-  folderTree: FolderTree,
+  folderTree: FolderTree
 ): Record<string, string[]> => {
   const fileIdToPathMap = getObjectToPathMap(folderTree);
 
-  return Object.entries(fileIdToPathMap).reduce(
-    (acc, [id, path]) => {
-      acc[path] = acc[path] || [];
-      acc[path].push(id);
-      return acc;
-    },
-    {} as Record<string, string[]>,
-  );
+  return Object.entries(fileIdToPathMap).reduce((acc, [id, path]) => {
+    acc[path] = acc[path] || [];
+    acc[path].push(id);
+    return acc;
+  }, {} as Record<string, string[]>);
 };
