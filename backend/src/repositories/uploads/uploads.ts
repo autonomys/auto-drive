@@ -100,14 +100,14 @@ export const getUploadEntriesByrootId = async (
 };
 
 const getUploadEntriesByRelativeId = async (
-  upload_id: string,
+  root_upload_id: string,
   relative_id: string
 ): Promise<UploadEntry | null> => {
   const db = await getDatabase();
 
   const result = await db.query(
-    `SELECT * FROM uploads.uploads WHERE relative_id = $1 AND id = $2`,
-    [relative_id, upload_id]
+    `SELECT * FROM uploads.uploads WHERE relative_id = $1 AND root_upload_id = $2`,
+    [relative_id, root_upload_id]
   );
 
   return result.rows.at(0) ?? null;
@@ -131,7 +131,7 @@ const getUploadsByStatus = async (
   const db = await getDatabase();
 
   const result = await db.query(
-    `SELECT * FROM uploads.uploads WHERE status = $1 LIMIT $2`,
+    `SELECT * FROM uploads.uploads WHERE id = root_upload_id AND status = $1 LIMIT $2`,
     [status, limit]
   );
 
