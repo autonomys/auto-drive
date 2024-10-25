@@ -5,9 +5,7 @@ import {
 } from "../../repositories/uploads/uploads.js";
 import {
   FileUpload,
-  fileUploadSchema,
   FolderUpload,
-  folderUploadSchema,
   mapModelToTable,
   Upload,
   UploadStatus,
@@ -19,7 +17,6 @@ import { filePartsRepository } from "../../repositories/uploads/fileParts.js";
 import { FileProcessingUseCase as UploadingProcessingUseCase } from "./uploadProcessing.js";
 import { fileProcessingInfoRepository } from "../../repositories/uploads/fileProcessingInfo.js";
 import { FilesUseCases } from "../objects/files.js";
-import { BlockstoreUseCases } from "./blockstore.js";
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -49,7 +46,7 @@ const initFileProcessing = async (upload: UploadEntry): Promise<void> => {
   await fileProcessingInfoRepository.addFileProcessingInfo({
     upload_id: upload.id,
     last_processed_part_index: null,
-    last_processed_part_offset: null,
+    pending_bytes: null,
     created_at: new Date(),
     updated_at: new Date(),
   });
@@ -89,14 +86,15 @@ export const createFolderUpload = async (
   name: string,
   folderTree: FolderTreeFolder
 ): Promise<FolderUpload> => {
+  const uploadId = v4();
   const result = await uploadsRepository.createUploadEntry(
-    v4(),
+    uploadId,
     UploadType.FOLDER,
     UploadStatus.PENDING,
     name,
     folderTree,
     null,
-    null,
+    uploadId,
     null,
     user.oauthProvider,
     user.oauthUserId
@@ -166,13 +164,18 @@ const completeUpload = async (user: User, uploadId: string): Promise<void> => {
 
   await UploadingProcessingUseCase.completeUploadProcessing(upload);
 
+  if (upload.type === UploadType.FILE) {
+    await FilesUseCases.handleFileUploadFinalization(user, uploadId);
+  } else if (upload.type === UploadType.FOLDER) {
+    await FilesUseCases.handleFolderUploadFinalization(user, uploadId);
+  }
+
   const updatedUpload = {
     ...upload,
     status: UploadStatus.COMPLETED,
   };
 
   await uploadsRepository.updateUploadEntry(updatedUpload);
-  await FilesUseCases.handleFileUploadFinalization(user, uploadId);
 };
 
 const getFileFromFolderUpload = async (
