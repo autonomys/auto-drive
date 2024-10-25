@@ -101,7 +101,10 @@ const processFileTree = async (
 
 const processFolderUpload = async (upload: FolderUpload): Promise<void> => {
   const files = await UploadsUseCases.getFileFromFolderUpload(upload.id);
-  const allCompleted = files.every((f) => f.status === UploadStatus.COMPLETED);
+
+  const allCompleted = files.every((f) =>
+    [UploadStatus.COMPLETED, UploadStatus.MIGRATING].includes(f.status)
+  );
   if (!allCompleted) {
     throw new Error("Not all files are completed");
   }
