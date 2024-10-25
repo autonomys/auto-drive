@@ -121,8 +121,6 @@ export const ApiService = {
       throw new Error("No session");
     }
 
-    console.log("uploading folder", tree, files);
-
     const formData = new FormData();
 
     formData.append("folderTree", JSON.stringify(tree));

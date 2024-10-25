@@ -17,6 +17,7 @@ import {
 } from "../../utils/async.js";
 import { BlockstoreUseCases } from "../uploads/blockstore.js";
 import { UploadType } from "../../models/uploads/upload.js";
+import { ObjectUseCases } from "./object.js";
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
@@ -104,6 +105,11 @@ const migrateFromBlockstoreToNodesTable = async (
 ): Promise<void> => {
   const uploads = await uploadsRepository.getUploadsByRoot(uploadId);
   const uploadCID = await getUploadCID(uploadId);
+
+  const metadata = await ObjectUseCases.getMetadata(cidToString(uploadCID));
+  if (!metadata) {
+    return;
+  }
 
   for (const upload of uploads) {
     const blockstore = await getUploadBlockstore(upload.id);

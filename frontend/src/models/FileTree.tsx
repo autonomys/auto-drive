@@ -2,6 +2,7 @@ type FolderTreeFolder = {
   name: string;
   type: "folder";
   children: FolderTree[];
+  id: string;
 };
 
 type FolderTreeFile = {
@@ -23,6 +24,7 @@ export const constructFromFileSystemEntries = (
     name: "root",
     type: "folder",
     children: [],
+    id: "root",
   };
 
   const files: Record<string, File> = {};
@@ -54,6 +56,7 @@ export const constructFromFileSystemEntries = (
             name: part,
             type: "folder",
             children: [],
+            id: `${currentFolder.id.split("/").slice(1).join("/")}/${part}`,
           };
           currentFolder.children.push(folderNode);
           existingFolder = folderNode;

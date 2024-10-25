@@ -1,18 +1,17 @@
-import { constructFromFileSystemEntries } from "@/models/FileTree";
+import { constructFromFileSystemEntries, FolderTree } from "@/models/FileTree";
 import { ApiService } from "@/services/api";
 import {
-  Dialog,
-  DialogPanel,
-  DialogTitle,
   Popover,
   PopoverButton,
   PopoverPanel,
   Transition,
-  TransitionChild,
 } from "@headlessui/react";
 import { FileIcon, FolderIcon } from "lucide-react";
-import React, { Fragment, useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
+import { UploadingFileModal } from "./UploadingFileModal";
+import { UploadService } from "../../services/upload";
+import { UploadingFolderModal } from "./UploadingFolderModal";
 
 declare global {
   interface Window {}
@@ -26,7 +25,11 @@ export function FileDropZone() {
     "uploading-objects",
     []
   );
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState<File | null>(null);
+  const [uploadingFolder, setUploadingFolder] = useState<{
+    fileTree: FolderTree;
+    files: Record<string, File>;
+  } | null>(null);
 
   const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -68,13 +71,7 @@ export function FileDropZone() {
 
     const [tree, files] = constructFromFileSystemEntries(recursiveEntries);
 
-    setIsUploadModalOpen(true);
-    const { cid } = await ApiService.uploadFolder(tree, files);
-
-    handleUploadingCID(cid);
-    setIsUploadModalOpen(false);
-
-    window.location.reload();
+    setUploadingFolder({ fileTree: tree, files });
   }, []);
 
   const getRecursiveEntry = useCallback(
@@ -122,12 +119,7 @@ export function FileDropZone() {
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files) {
         const file = e.target.files[0];
-        setIsUploadModalOpen(true);
-        const { cid } = await ApiService.uploadFile(file);
-
-        handleUploadingCID(cid);
-        setIsUploadModalOpen(false);
-        window.location.reload();
+        setUploadingFile(file);
       }
     },
     []
@@ -138,23 +130,14 @@ export function FileDropZone() {
       if (e.target.files) {
         if (!e.target.files) return;
 
-        const [tree, files] = constructFromFileSystemEntries(
+        const [fileTree, files] = constructFromFileSystemEntries(
           Array.from(e.target.files).map((file) => ({
             file,
             path: file.webkitRelativePath,
           }))
         );
 
-        setIsUploadModalOpen(true);
-        const { cid } = await ApiService.uploadFolder(tree, files).catch(() => {
-          alert("Error uploading folder");
-          throw new Error("Error uploading folder");
-        });
-
-        handleUploadingCID(cid);
-        setIsUploadModalOpen(false);
-
-        window.location.reload();
+        setUploadingFolder({ fileTree, files });
       }
     },
     []
@@ -230,54 +213,14 @@ export function FileDropZone() {
           </PopoverPanel>
         </Transition>
       </Popover>
-
-      <Transition appear show={isUploadModalOpen} as={Fragment}>
-        <Dialog
-          as="div"
-          className="relative z-10"
-          onClose={() => setIsUploadModalOpen(false)}
-        >
-          <TransitionChild
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black bg-opacity-25" />
-          </TransitionChild>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <TransitionChild
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
-                  <DialogTitle
-                    as="h3"
-                    className="text-lg font-medium leading-6 text-gray-900"
-                  >
-                    Uploading...
-                  </DialogTitle>
-                  <div className="mt-2">
-                    <p className="text-sm text-gray-500">
-                      Please wait while your files are being uploaded.
-                    </p>
-                  </div>
-                </DialogPanel>
-              </TransitionChild>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
+      <UploadingFileModal
+        file={uploadingFile}
+        onClose={() => setUploadingFile(null)}
+      />
+      <UploadingFolderModal
+        data={uploadingFolder}
+        onClose={() => setUploadingFolder(null)}
+      />
     </div>
   );
 }

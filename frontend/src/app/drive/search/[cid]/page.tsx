@@ -49,7 +49,7 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
     }
 
     return objectsMetadata.map(({ metadata, uploadStatus }) => (
-      <FileCard
+      <FileCard 
         key={metadata.dataCid}
         metadata={metadata}
         uploadStatus={uploadStatus}
