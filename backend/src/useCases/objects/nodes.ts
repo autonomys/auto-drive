@@ -16,7 +16,7 @@ import {
   asyncIterableToPromiseOfArray,
 } from "../../utils/async.js";
 import { BlockstoreUseCases } from "../uploads/blockstore.js";
-import { blockstoreRepository } from "../../repositories/uploads/blockstore.js";
+import { UploadType } from "../../models/uploads/upload.js";
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   let cidString = typeof cid === "string" ? cid : cidToString(cid);
@@ -88,41 +88,9 @@ const saveNodes = async (
   );
 };
 
-const migrateFromBlockstoreToNodesTable = async (
-  uploadId: string
-): Promise<void> => {
-  const uploads = await uploadsRepository.getUploadsByRoot(uploadId);
-  const uploadCID = await BlockstoreUseCases.getFileUploadIdCID(uploadId);
-
-  for (const upload of uploads) {
-    const blockstore = await getUploadBlockstore(upload.id);
-
-    const BATCH_SIZE = 100;
-    await asyncIterableForEach(
-      blockstore.getAllKeys(),
-      async (batch) => {
-        const nodes = await asyncIterableToPromiseOfArray(
-          blockstore.getMany(batch)
-        );
-        await nodesRepository.saveNodes(
-          nodes.map((e) => ({
-            cid: cidToString(e.cid),
-            root_cid: cidToString(uploadCID),
-            head_cid: cidToString(uploadCID),
-            type: decodeIPLDNodeData(Buffer.from(e.block)).type,
-            encoded_node: Buffer.from(e.block).toString("base64"),
-          }))
-        );
-      },
-      BATCH_SIZE
-    );
-  }
-};
-
 export const NodesUseCases = {
   getNode,
   saveNode,
   getChunkData,
   saveNodes,
-  migrateFromBlockstoreToNodesTable,
 };

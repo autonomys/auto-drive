@@ -207,7 +207,6 @@ const handleFileUploadFinalization = async (
     throw new Error("Not enough upload credits");
   }
 
-  await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId);
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid);
   await ObjectUseCases.saveMetadata(
     metadata.dataCid,
@@ -232,16 +231,12 @@ const handleFolderUploadFinalization = async (
     uploadId
   );
 
+  const fullMetadata = [metadata, ...childrenArtifacts.map((e) => e.metadata)];
   await Promise.all(
-    childrenArtifacts.map((artifact) =>
-      ObjectUseCases.saveMetadata(
-        metadata.dataCid,
-        artifact.metadata.dataCid,
-        artifact.metadata
-      )
+    fullMetadata.map((metadata) =>
+      ObjectUseCases.saveMetadata(metadata.dataCid, metadata.dataCid, metadata)
     )
   );
-  await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId);
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid);
 
   return metadata.dataCid;
