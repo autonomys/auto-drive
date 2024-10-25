@@ -128,8 +128,6 @@ const createFileInFolder = async (
     relativeId
   );
 
-  await initFileProcessing(mapModelToTable(file));
-
   return file;
 };
 
