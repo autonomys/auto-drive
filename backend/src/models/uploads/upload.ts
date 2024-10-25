@@ -21,7 +21,7 @@ export enum UploadStatus {
 
 export const fileUploadSchema = z.object({
   id: z.string(),
-  rootId: z.string().nullable(),
+  rootId: z.string(),
   relativeId: z.string().nullable(),
   type: z.nativeEnum(UploadType),
   status: z.nativeEnum(UploadStatus),
@@ -51,8 +51,8 @@ export const mapModelToTable = (upload: Upload): UploadEntry => {
 
 export const folderUploadSchema = z.object({
   id: z.string(),
-  rootId: z.null(),
-  relativeId: z.null(),
+  rootId: z.string(),
+  relativeId: z.string().nullable(),
   type: z.nativeEnum(UploadType),
   status: z.nativeEnum(UploadStatus),
   fileTree: FolderTreeFolderSchema,

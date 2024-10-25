@@ -6,6 +6,7 @@ export type FolderTreeFolder = {
   name: string;
   type: "folder";
   children: FolderTree[];
+  id: string;
 };
 
 export type FolderTreeFile = {
@@ -20,6 +21,7 @@ export const FolderTreeFolderSchema = z.object({
   name: z.string(),
   type: z.literal("folder"),
   children: z.array(z.lazy(() => FolderTreeSchema)),
+  id: z.string(),
 });
 
 export const FolderTreeFileSchema = z.object({

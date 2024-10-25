@@ -9,7 +9,7 @@ export type UploadEntry = {
   name: string;
   file_tree: FolderTreeFolder | null;
   mime_type: string | null;
-  root_upload_id: string | null;
+  root_upload_id: string;
   relative_id: string | null;
   oauth_provider: string;
   oauth_user_id: string;

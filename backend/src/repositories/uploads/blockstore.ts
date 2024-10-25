@@ -110,6 +110,17 @@ const getByCIDWithoutData = async (uploadId: string, cid: string) => {
   return result.rows.map(parseEntry).at(0) ?? null;
 };
 
+const getByCIDAndRootUploadId = async (rootUploadId: string, cid: string) => {
+  const db = await getDatabase();
+
+  const result = await db.query<BlockstoreEntry>(
+    `SELECT uploads.blockstore.* FROM uploads.uploads inner join uploads.blockstore on uploads.uploads.id = uploads.blockstore.upload_id WHERE uploads.uploads.root_upload_id = $1 AND uploads.blockstore.cid = $2`,
+    [rootUploadId, cid]
+  );
+
+  return result.rows.map(parseEntry).at(0) ?? null;
+};
+
 const deleteBlockstoreEntry = async (uploadId: string, cid: string) => {
   const db = await getDatabase();
 
@@ -129,4 +140,5 @@ export const blockstoreRepository = {
   getByCid,
   deleteBlockstoreEntry,
   getByCIDWithoutData,
+  getByCIDAndRootUploadId,
 };

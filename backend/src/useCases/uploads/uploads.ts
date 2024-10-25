@@ -210,7 +210,7 @@ const createSubFolderUpload = async (
     fileTree,
     null,
     rootId,
-    null,
+    fileTree.id,
     parentUpload.oauth_provider,
     parentUpload.oauth_user_id
   );

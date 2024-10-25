@@ -1,5 +1,4 @@
 import {
-  cidToString,
   fileMetadata,
   folderMetadata,
   MetadataType,
@@ -64,33 +63,62 @@ const generateFolderArtifacts = async (
   if (upload.type !== UploadType.FOLDER) {
     throw new Error("Upload is not a folder");
   }
+  if (!upload.file_tree) {
+    throw new Error("Upload has no file tree");
+  }
 
-  const uploads = await uploadsRepository.getUploadsByRoot(uploadId);
-  const files = uploads.filter((e) => e.type === UploadType.FILE);
-  const folders = uploads.filter((e) => e.type === UploadType.FOLDER);
-  const childrenArtifacts: UploadArtifacts[] = await Promise.all(
-    files.map(async (e) => generateFileArtifacts(e.id))
-  );
-  const folderArtifacts: FolderArtifacts[] = await Promise.all(
-    folders.map(async (e) => generateFolderArtifacts(e.id))
+  const childrenUploads = await Promise.all(
+    upload.file_tree.children.map((e) =>
+      uploadsRepository
+        .getUploadEntriesByRelativeId(upload.root_upload_id, e.id)
+        .then((upload) => {
+          if (!upload) {
+            throw new Error(`Upload with relative ID ${e.id} not found`);
+          }
+          return upload;
+        })
+    )
   );
 
-  const nodeCID = await BlockstoreUseCases.getFolderUploadIdCID(uploadId);
+  const folderCID = await BlockstoreUseCases.getUploadCID(uploadId);
 
-  const metadata = folderMetadata(
-    cidToString(nodeCID),
-    childrenArtifacts.concat(folderArtifacts).map((e) => ({
-      type: e.metadata.type,
-      cid: e.metadata.dataCid,
-      totalSize: e.metadata.totalSize,
-    })),
-    upload.name
+  const childrenArtifacts = await Promise.all(
+    childrenUploads.map((e) => generateArtifacts(e.id))
   );
+
+  const childrenMetadata = childrenArtifacts.map((e) => ({
+    cid: e.metadata.dataCid,
+    name: e.metadata.name,
+    type: e.metadata.type,
+    totalSize: e.metadata.totalSize,
+  }));
+
+  console.log(
+    `For uploadID=${uploadId} children uploads ${childrenUploads.map(
+      (e) => e.id
+    )} childrenArtifacts ${childrenArtifacts.map(
+      (e) => e.metadata.dataCid
+    )} and CID=${folderCID}`
+  );
+
+  const metadata = folderMetadata(folderCID, childrenMetadata, upload.name);
 
   return {
     metadata,
     childrenArtifacts,
   };
+};
+
+const generateArtifacts = async (
+  uploadId: string
+): Promise<UploadArtifacts> => {
+  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  if (!upload) {
+    throw new Error("Upload not found");
+  }
+  return upload.type === UploadType.FILE
+    ? generateFileArtifacts(uploadId)
+    : generateFolderArtifacts(uploadId);
 };
 
 const retrieveAndReassembleFile = async (
@@ -227,16 +255,21 @@ const handleFolderUploadFinalization = async (
   user: User,
   uploadId: string
 ): Promise<string> => {
+  console.time("generateFolderArtifacts");
   const { metadata, childrenArtifacts } = await generateFolderArtifacts(
     uploadId
   );
+  console.timeEnd("generateFolderArtifacts");
 
   const fullMetadata = [metadata, ...childrenArtifacts.map((e) => e.metadata)];
+  console.time("saveMetadata");
   await Promise.all(
     fullMetadata.map((metadata) =>
       ObjectUseCases.saveMetadata(metadata.dataCid, metadata.dataCid, metadata)
     )
   );
+  console.timeEnd("saveMetadata");
+
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid);
 
   return metadata.dataCid;

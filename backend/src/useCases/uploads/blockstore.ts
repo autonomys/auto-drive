@@ -7,12 +7,16 @@ import {
 } from "@autonomys/auto-drive";
 import { blockstoreRepository } from "../../repositories/uploads/index.js";
 import { CID } from "multiformats";
-import { FolderUpload, UploadStatus } from "../../models/uploads/upload.js";
+import {
+  FolderUpload,
+  Upload,
+  UploadStatus,
+  UploadType,
+} from "../../models/uploads/upload.js";
 import { UploadsUseCases } from "./uploads.js";
-import { FolderTree } from "../../models/objects/index.js";
+import { FolderTreeFolder } from "../../models/objects/index.js";
 import { getUploadBlockstore } from "../../services/uploadProcessorCache/index.js";
 import { uploadsRepository } from "../../repositories/uploads/uploads.js";
-import { v4 } from "uuid";
 
 const getFileUploadIdCID = async (uploadId: string): Promise<CID> => {
   const blockstoreEntry = await blockstoreRepository.getByType(
@@ -40,6 +44,19 @@ const getFolderUploadIdCID = async (uploadId: string): Promise<CID> => {
   return stringToCid(cid);
 };
 
+const getUploadCID = async (uploadId: string): Promise<CID> => {
+  const uploadEntry = await uploadsRepository.getUploadEntryById(uploadId);
+  if (!uploadEntry) {
+    throw new Error("Upload not found");
+  }
+
+  if (uploadEntry.type === UploadType.FILE) {
+    return getFileUploadIdCID(uploadId);
+  } else {
+    return getFolderUploadIdCID(uploadId);
+  }
+};
+
 const getChunksByNodeType = async (
   uploadId: string,
   nodeType: MetadataType
@@ -57,39 +74,65 @@ const getChunksByNodeType = async (
 
 const processFileTree = async (
   rootUploadId: string,
-  uploadId: string,
-  fileTree: FolderTree
+  currentUpload: Upload,
+  fileTree: FolderTreeFolder
 ): Promise<CID> => {
-  if (fileTree.type === "file") {
-    const childUploadId = await uploadsRepository.getUploadEntriesByRelativeId(
-      rootUploadId,
-      fileTree.id
-    );
-    if (!childUploadId) {
-      throw new Error("Child upload not found");
-    }
-
-    const fileUpload = await BlockstoreUseCases.getFileUploadIdCID(
-      childUploadId.id
-    );
-    return fileUpload;
-  }
-
-  const blockstore = await getUploadBlockstore(uploadId);
-
   const childrenCids = await Promise.all(
-    fileTree.children.map((child) => processFileTree(rootUploadId, v4(), child))
+    fileTree.children.map(async (child) => {
+      if (child.type === "folder") {
+        const subfolderUpload = await UploadsUseCases.createSubFolderUpload(
+          rootUploadId,
+          child,
+        );
+        return processFileTree(rootUploadId, subfolderUpload, child);
+      } else {
+        const fileUpload = await uploadsRepository.getUploadEntriesByRelativeId(
+          rootUploadId,
+          child.id
+        );
+        if (!fileUpload) {
+          throw new Error(
+            `File upload not found (root_upload_id=${rootUploadId}, relative_id=${child.id})`
+          );
+        }
+
+        console.log(
+          `File upload found (root_upload_id=${rootUploadId}, relative_id=${child.id}): `
+        );
+
+        return getFileUploadIdCID(fileUpload.id);
+      }
+    })
   );
+
+  const blockstore = await getUploadBlockstore(currentUpload.id);
 
   const childrenNodesLengths = await Promise.all(
     childrenCids.map((cid) =>
       blockstoreRepository
-        .getByCid(rootUploadId, cidToString(cid))
-        .then((e) => e?.node_size ?? 0)
+        .getByCIDAndRootUploadId(rootUploadId, cidToString(cid))
+        .then((e) => {
+          if (!e) {
+            throw new Error(
+              `Blockstore entry not found (root_upload_id=${rootUploadId}, cid=${cidToString(
+                cid
+              )})`
+            );
+          }
+          return e.node_size;
+        })
     )
   );
 
   const totalSize = childrenNodesLengths.reduce((acc, curr) => acc + curr, 0);
+
+  console.log(
+    `Processing file tree (root_upload_id=${rootUploadId}, current_upload_id=${currentUpload.id})`
+  );
+
+  console.log(
+    `Children cids: ${childrenCids.map((cid) => cidToString(cid)).join(", ")}`
+  );
 
   return processFolderToIPLDFormat(
     blockstore,
@@ -106,16 +149,17 @@ const processFolderUpload = async (upload: FolderUpload): Promise<void> => {
     [UploadStatus.COMPLETED, UploadStatus.MIGRATING].includes(f.status)
   );
   if (!allCompleted) {
-    throw new Error("Not all files are completed");
+    throw new Error("Not all files are being uploaded");
   }
 
   const fileTree = upload.fileTree;
-  await processFileTree(upload.id, upload.id, fileTree);
+  await processFileTree(upload.id, upload, fileTree);
 };
 
 export const BlockstoreUseCases = {
   getFileUploadIdCID,
   getFolderUploadIdCID,
+  getUploadCID,
   getChunksByNodeType,
   processFolderUpload,
 };
