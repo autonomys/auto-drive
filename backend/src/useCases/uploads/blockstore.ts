@@ -82,7 +82,7 @@ const processFileTree = async (
       if (child.type === "folder") {
         const subfolderUpload = await UploadsUseCases.createSubFolderUpload(
           rootUploadId,
-          child,
+          child
         );
         return processFileTree(rootUploadId, subfolderUpload, child);
       } else {
@@ -95,10 +95,6 @@ const processFileTree = async (
             `File upload not found (root_upload_id=${rootUploadId}, relative_id=${child.id})`
           );
         }
-
-        console.log(
-          `File upload found (root_upload_id=${rootUploadId}, relative_id=${child.id}): `
-        );
 
         return getFileUploadIdCID(fileUpload.id);
       }
@@ -125,14 +121,6 @@ const processFileTree = async (
   );
 
   const totalSize = childrenNodesLengths.reduce((acc, curr) => acc + curr, 0);
-
-  console.log(
-    `Processing file tree (root_upload_id=${rootUploadId}, current_upload_id=${currentUpload.id})`
-  );
-
-  console.log(
-    `Children cids: ${childrenCids.map((cid) => cidToString(cid)).join(", ")}`
-  );
 
   return processFolderToIPLDFormat(
     blockstore,
