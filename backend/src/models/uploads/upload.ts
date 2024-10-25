@@ -14,6 +14,7 @@ export enum UploadType {
 export enum UploadStatus {
   PENDING = "pending",
   COMPLETED = "completed",
+  MIGRATING = "migrating",
   CANCELLED = "cancelled",
   FAILED = "failed",
 }

@@ -1,3 +1,4 @@
+import { nodeMigrator } from "./services/nodeMigrator/index.js";
 import { onchainPublisher } from "./services/onchainPublisher/index.js";
 
-onchainPublisher.start();
+nodeMigrator.start();

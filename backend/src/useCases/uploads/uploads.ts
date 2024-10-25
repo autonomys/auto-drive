@@ -17,6 +17,7 @@ import { filePartsRepository } from "../../repositories/uploads/fileParts.js";
 import { FileProcessingUseCase as UploadingProcessingUseCase } from "./uploadProcessing.js";
 import { fileProcessingInfoRepository } from "../../repositories/uploads/fileProcessingInfo.js";
 import { FilesUseCases } from "../objects/files.js";
+import { NodesUseCases } from "../objects/index.js";
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -172,7 +173,7 @@ const completeUpload = async (user: User, uploadId: string): Promise<void> => {
 
   const updatedUpload = {
     ...upload,
-    status: UploadStatus.COMPLETED,
+    status: UploadStatus.MIGRATING,
   };
 
   await uploadsRepository.updateUploadEntry(updatedUpload);
@@ -219,6 +220,29 @@ const createSubFolderUpload = async (
   return mapTableToModel(upload) as FolderUpload;
 };
 
+const getPendingMigrations = async (limit: number): Promise<UploadEntry[]> => {
+  const pendingMigrations = await uploadsRepository.getUploadsByStatus(
+    UploadStatus.MIGRATING,
+    limit
+  );
+
+  return pendingMigrations;
+};
+
+const processMigration = async (uploadId: string): Promise<void> => {
+  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  if (!upload) {
+    throw new Error("Upload not found");
+  }
+
+  await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId);
+
+  await uploadsRepository.updateUploadEntry({
+    ...upload,
+    status: UploadStatus.COMPLETED,
+  });
+};
+
 export const UploadsUseCases = {
   createFileUpload,
   createFolderUpload,
@@ -226,5 +250,7 @@ export const UploadsUseCases = {
   uploadChunk,
   completeUpload,
   getFileFromFolderUpload,
+  getPendingMigrations,
+  processMigration,
   createSubFolderUpload,
 };

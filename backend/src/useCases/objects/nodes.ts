@@ -88,9 +88,52 @@ const saveNodes = async (
   );
 };
 
+const getUploadCID = async (uploadId: string): Promise<CID> => {
+  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  if (!upload) {
+    throw new Error(`Upload object not found ${uploadId}`);
+  }
+
+  return upload.type === UploadType.FILE
+    ? BlockstoreUseCases.getFileUploadIdCID(uploadId)
+    : BlockstoreUseCases.getFolderUploadIdCID(uploadId);
+};
+
+const migrateFromBlockstoreToNodesTable = async (
+  uploadId: string
+): Promise<void> => {
+  const uploads = await uploadsRepository.getUploadsByRoot(uploadId);
+  const uploadCID = await getUploadCID(uploadId);
+
+  for (const upload of uploads) {
+    const blockstore = await getUploadBlockstore(upload.id);
+
+    const BATCH_SIZE = 100;
+    await asyncIterableForEach(
+      blockstore.getAllKeys(),
+      async (batch) => {
+        const nodes = await asyncIterableToPromiseOfArray(
+          blockstore.getMany(batch)
+        );
+        await nodesRepository.saveNodes(
+          nodes.map((e) => ({
+            cid: cidToString(e.cid),
+            root_cid: cidToString(uploadCID),
+            head_cid: cidToString(uploadCID),
+            type: decodeIPLDNodeData(Buffer.from(e.block)).type,
+            encoded_node: Buffer.from(e.block).toString("base64"),
+          }))
+        );
+      },
+      BATCH_SIZE
+    );
+  }
+};
+
 export const NodesUseCases = {
   getNode,
   saveNode,
   getChunkData,
   saveNodes,
+  migrateFromBlockstoreToNodesTable,
 };

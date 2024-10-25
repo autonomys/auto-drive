@@ -124,6 +124,20 @@ const getUploadsByRoot = async (uploadId: string): Promise<UploadEntry[]> => {
   return result.rows;
 };
 
+const getUploadsByStatus = async (
+  status: UploadStatus,
+  limit: number = 100
+): Promise<UploadEntry[]> => {
+  const db = await getDatabase();
+
+  const result = await db.query(
+    `SELECT * FROM uploads.uploads WHERE status = $1 LIMIT $2`,
+    [status, limit]
+  );
+
+  return result.rows;
+};
+
 export const uploadsRepository = {
   createUploadEntry,
   getUploadEntryById,
@@ -131,4 +145,5 @@ export const uploadsRepository = {
   deleteUploadEntry,
   getUploadsByRoot,
   getUploadEntriesByRelativeId,
+  getUploadsByStatus,
 };
