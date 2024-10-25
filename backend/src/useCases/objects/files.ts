@@ -21,6 +21,9 @@ import {
   UploadType,
 } from "../../models/uploads/upload.js";
 import { BlockstoreUseCases } from "../uploads/blockstore.js";
+import { blockstoreRepository } from "../../repositories/uploads/blockstore.js";
+import { getUploadBlockstore } from "../../services/uploadProcessorCache/index.js";
+import { decode } from "@ipld/dag-pb";
 
 const generateFileArtifacts = async (
   uploadId: string
@@ -34,15 +37,23 @@ const generateFileArtifacts = async (
   }
 
   const cid = await BlockstoreUseCases.getFileUploadIdCID(uploadId);
-  const chunkCIDs = await BlockstoreUseCases.getChunksByNodeType(
+
+  let chunks = await BlockstoreUseCases.getChunksByNodeType(
     uploadId,
     MetadataType.FileChunk
   );
-  const totalSize = chunkCIDs.reduce((acc, e) => acc + Number(e.size), 0);
+  if (chunks.length === 0) {
+    chunks = await BlockstoreUseCases.getChunksByNodeType(
+      uploadId,
+      MetadataType.File
+    );
+  }
+
+  const totalSize = chunks.reduce((acc, e) => acc + Number(e.size), 0);
 
   const metadata = fileMetadata(
     cid,
-    chunkCIDs,
+    chunks,
     totalSize,
     upload.name,
     upload.mime_type
@@ -92,14 +103,6 @@ const generateFolderArtifacts = async (
     type: e.metadata.type,
     totalSize: e.metadata.totalSize,
   }));
-
-  console.log(
-    `For uploadID=${uploadId} children uploads ${childrenUploads.map(
-      (e) => e.id
-    )} childrenArtifacts ${childrenArtifacts.map(
-      (e) => e.metadata.dataCid
-    )} and CID=${folderCID}`
-  );
 
   const metadata = folderMetadata(folderCID, childrenMetadata, upload.name);
 
@@ -262,13 +265,15 @@ const handleFolderUploadFinalization = async (
   console.timeEnd("generateFolderArtifacts");
 
   const fullMetadata = [metadata, ...childrenArtifacts.map((e) => e.metadata)];
-  console.time("saveMetadata");
   await Promise.all(
-    fullMetadata.map((metadata) =>
-      ObjectUseCases.saveMetadata(metadata.dataCid, metadata.dataCid, metadata)
+    fullMetadata.map((childMetadata) =>
+      ObjectUseCases.saveMetadata(
+        metadata.dataCid,
+        childMetadata.dataCid,
+        childMetadata
+      )
     )
   );
-  console.timeEnd("saveMetadata");
 
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid);
 
