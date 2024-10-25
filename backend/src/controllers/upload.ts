@@ -2,6 +2,7 @@ import { Router } from "express";
 import { handleAuth } from "../services/authManager/express.js";
 import { UploadsUseCases } from "../useCases/uploads/uploads.js";
 import multer from "multer";
+import { FolderTreeFolderSchema } from "../models/objects/folderTree.js";
 
 const uploadController = Router();
 
@@ -45,17 +46,22 @@ uploadController.post("/folder", async (req, res) => {
   if (!user) {
     return;
   }
-  const { fileTree, name } = req.body;
+  const { fileTree } = req.body;
+  const safeFileTree = FolderTreeFolderSchema.safeParse(fileTree);
+  if (!safeFileTree.success) {
+    return res.status(400).json({ error: "Invalid file tree" });
+  }
 
   try {
     const upload = await UploadsUseCases.createFolderUpload(
       user,
-      name,
-      fileTree
+      safeFileTree.data.name,
+      safeFileTree.data
     );
 
     return res.status(200).json(upload);
   } catch (error) {
+    console.log(error);
     return res.status(500).json({ error: "Failed to create upload" });
   }
 });
@@ -96,6 +102,7 @@ uploadController.post("/folder/:uploadId/file", async (req, res) => {
 
     return res.status(200).json(upload);
   } catch (error) {
+    console.log(error);
     return res.status(500).json({ error: "Failed to create file in folder" });
   }
 });
