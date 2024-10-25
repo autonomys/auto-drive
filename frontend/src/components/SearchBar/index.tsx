@@ -14,7 +14,7 @@ export const SearchBar = () => {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
-  const { scope } = useScopeStore();
+  const scope = useScopeStore(({ scope }) => scope);
   const [recommendations, setRecommendations] = useState<
     ObjectSearchResult[] | null
   >(null);

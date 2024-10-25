@@ -14,9 +14,12 @@ export default function Page() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">API Keys</h1>
+      <span className="text-2xl font-bold mb-4">API Keys</span>
       <div className="flex flex-col gap-2 p-2">
         <ApiKeysTable apiKeys={apiKeys} />
+      </div>
+      <div className="flex flex-col gap-2 p-2">
+        <span className="text-2xl font-bold mb-4">Encryption</span>
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ type UserTableRowProps = {
 };
 
 export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
-  const { user } = useUserStore();
+  const user = useUserStore(({ user }) => user);
   const [isUpdateRoleOpen, setIsUpdateRoleOpen] = useState(false);
   const [isCreditsUpdateModalOpen, setIsCreditsUpdateModalOpen] =
     useState(false);

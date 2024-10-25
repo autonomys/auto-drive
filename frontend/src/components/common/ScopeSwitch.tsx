@@ -4,7 +4,8 @@ import { Toggle } from "./Toggle";
 import { useScopeStore } from "../../states/scope";
 
 export const ScopeSwitch = () => {
-  const { scope, setScope } = useScopeStore();
+  const scope = useScopeStore(({ scope }) => scope);
+  const setScope = useScopeStore(({ setScope }) => setScope);
 
   return (
     <Toggle

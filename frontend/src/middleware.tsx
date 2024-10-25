@@ -2,46 +2,60 @@ import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthService } from "./services/auth";
 import { UserInfo } from "./models/User";
+import { cookies } from "next/headers";
 
 export async function middleware(req: NextRequest) {
   const session = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
   const { pathname } = req.nextUrl;
 
-  if (!session && pathname.startsWith("/drive")) {
-    console.log("redirecting to home: 1");
-    return NextResponse.redirect(new URL("/", req.url));
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next();
+  }
+
+  if (!session) {
+    return pathname.startsWith("/drive")
+      ? NextResponse.redirect(new URL("/", req.url), {
+          headers: {
+            "Set-Cookie": `redirect=${req.url}; Path=/; HttpOnly; SameSite=Strict`,
+          },
+        })
+      : NextResponse.next();
   }
 
   const userInfo: UserInfo | null = await AuthService.checkAuth(
     // @ts-ignore
     session?.accessToken
   ).catch((e) => {
-    console.log("error", e);
     return null;
   });
 
-  if (!userInfo?.user && pathname !== "/") {
+  if (!userInfo?.user) {
     console.log("redirecting to home: 2");
-    return NextResponse.redirect(new URL("/", req.url));
+    return pathname !== "/"
+      ? NextResponse.redirect(new URL("/", req.url))
+      : NextResponse.next();
   }
 
-  if (
-    userInfo?.user &&
-    userInfo.user.onboarded &&
-    !pathname.startsWith("/drive")
-  ) {
-    console.log("redirecting to drive");
-    return NextResponse.redirect(new URL("/drive", req.url));
-  }
-
-  if (
-    userInfo?.user &&
-    !userInfo.user.onboarded &&
-    !pathname.startsWith("/onboarding")
-  ) {
+  if (userInfo?.user && !userInfo.user.onboarded) {
     console.log("redirecting to onboarding");
-    return NextResponse.redirect(new URL("/onboarding", req.url));
+    return pathname.startsWith("/onboarding")
+      ? NextResponse.next()
+      : NextResponse.redirect(new URL("/onboarding", req.url));
+  }
+
+  if (userInfo?.user && userInfo.user.onboarded) {
+    const redirect = cookies().get("redirect");
+    if (redirect?.value) {
+      return NextResponse.redirect(new URL(redirect.value, req.url), {
+        headers: {
+          "Set-Cookie": `redirect=; Path=/; HttpOnly; SameSite=Strict`,
+        },
+      });
+    }
+    return pathname.startsWith("/drive")
+      ? NextResponse.next()
+      : NextResponse.redirect(new URL("/drive", req.url));
   }
 
   return NextResponse.next();
