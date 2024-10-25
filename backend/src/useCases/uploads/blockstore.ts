@@ -12,6 +12,7 @@ import { UploadsUseCases } from "./uploads.js";
 import { FolderTree } from "../../models/objects/index.js";
 import { getUploadBlockstore } from "../../services/uploadProcessorCache/index.js";
 import { uploadsRepository } from "../../repositories/uploads/uploads.js";
+import { v4 } from "uuid";
 
 const getFileUploadIdCID = async (uploadId: string): Promise<CID> => {
   const blockstoreEntry = await blockstoreRepository.getByType(
@@ -56,6 +57,7 @@ const getChunksByNodeType = async (
 
 const processFileTree = async (
   rootUploadId: string,
+  uploadId: string,
   fileTree: FolderTree
 ): Promise<CID> => {
   if (fileTree.type === "file") {
@@ -73,14 +75,10 @@ const processFileTree = async (
     return fileUpload;
   }
 
-  const upload = await UploadsUseCases.createSubFolderUpload(
-    rootUploadId,
-    fileTree
-  );
-  const blockstore = await getUploadBlockstore(upload.id);
+  const blockstore = await getUploadBlockstore(uploadId);
 
   const childrenCids = await Promise.all(
-    fileTree.children.map((child) => processFileTree(rootUploadId, child))
+    fileTree.children.map((child) => processFileTree(rootUploadId, v4(), child))
   );
 
   const childrenNodesLengths = await Promise.all(
@@ -109,7 +107,7 @@ const processFolderUpload = async (upload: FolderUpload): Promise<void> => {
   }
 
   const fileTree = upload.fileTree;
-  await processFileTree(upload.id, fileTree);
+  await processFileTree(upload.id, upload.id, fileTree);
 };
 
 export const BlockstoreUseCases = {
