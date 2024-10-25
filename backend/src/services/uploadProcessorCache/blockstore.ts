@@ -1,7 +1,6 @@
 import {
   cidToString,
   decodeIPLDNodeData,
-  IPLDBlockstore,
   MetadataType,
   stringToCid,
 } from "@autonomys/auto-drive";
@@ -9,8 +8,9 @@ import { Pair } from "interface-blockstore";
 import { AbortOptions, AwaitIterable } from "interface-store";
 import { CID } from "multiformats/cid";
 import { blockstoreRepository } from "../../repositories/uploads/index.js";
+import { BaseBlockstore } from "blockstore-core";
 
-export class MultiUploadBlockstore implements IPLDBlockstore {
+export class MultiUploadBlockstore implements BaseBlockstore {
   constructor(private uploadId: string) {}
 
   async *getFilteredMany(
