@@ -138,6 +138,16 @@ const getUploadsByStatus = async (
   return result.rows;
 };
 
+const getStatusByCID = async (cid: string): Promise<UploadStatus | null> => {
+  const db = await getDatabase();
+  const result = await db.query<{ status: UploadStatus }>(
+    `SELECT status FROM uploads.uploads LEFT JOIN blockstore.blocks ON uploads.uploads.id = blockstore.blocks.upload_id WHERE blockstore.blocks.cid = $1`,
+    [cid]
+  );
+
+  return result.rows.at(0)?.status ?? null;
+};
+
 export const uploadsRepository = {
   createUploadEntry,
   getUploadEntryById,
@@ -146,4 +156,5 @@ export const uploadsRepository = {
   getUploadsByRoot,
   getUploadEntriesByRelativeId,
   getUploadsByStatus,
+  getStatusByCID,
 };

@@ -8,8 +8,8 @@ export interface ObjectInformation {
 }
 
 export interface UploadStatus {
-  uploadedNodes: number;
-  totalNodes: number;
+  uploadedNodes: number | null;
+  totalNodes: number | null;
   minimumBlockDepth: number | null;
   maximumBlockDepth: number | null;
 }
