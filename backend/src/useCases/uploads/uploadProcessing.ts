@@ -20,6 +20,7 @@ import {
   UploadEntry,
   uploadsRepository,
 } from "../../repositories/uploads/uploads.js";
+import { filePartsRepository } from "../../repositories/uploads/fileParts.js";
 
 const getUnprocessedChunkFromLatestFilePart = async (
   fileProcessingInfo: FileProcessingInfo
@@ -92,10 +93,14 @@ const completeFileProcessing = async (uploadId: string): Promise<void> => {
     await blockstore.put(cidOfNode(fileChunk), encode(fileChunk));
   }
 
+  const uploadedSize =
+    (await filePartsRepository.getUploadFilePartsSize(uploadId)) ?? 0;
+
   await processBufferToIPLDFormatFromChunks(
     blockstore,
     blockstore.getFilteredMany(MetadataType.FileChunk),
     upload?.name,
+    uploadedSize,
     fileBuilders
   );
 };

@@ -21,9 +21,6 @@ import {
   UploadType,
 } from "../../models/uploads/upload.js";
 import { BlockstoreUseCases } from "../uploads/blockstore.js";
-import { blockstoreRepository } from "../../repositories/uploads/blockstore.js";
-import { getUploadBlockstore } from "../../services/uploadProcessorCache/index.js";
-import { decode } from "@ipld/dag-pb";
 
 const generateFileArtifacts = async (
   uploadId: string
