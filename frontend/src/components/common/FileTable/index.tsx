@@ -160,6 +160,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.handle;
       const popoverButtonRef = useRef<HTMLButtonElement>(null);
       const isOwner = user?.handle === owner;
+      const [showDownloadTooltip, setShowDownloadTooltip] = useState(false);
       const hasFileOwnership = file.owners.find(
         (e) => e.handle === user?.handle
       );
@@ -251,20 +252,47 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               {owner ? renderOwnerBadge(owner) : "Unknown"}
             </TableBodyCell>
             <TableBodyCell className="flex justify-end">
-              <Button
-                variant="lightAccent"
-                className="mr-2 text-xs"
-                onClick={(e) =>
-                  downloadFile(
-                    e,
-                    file.metadata.type,
-                    file.metadata.dataCid,
-                    file.metadata.name!
-                  )
-                }
+              <div
+                className="relative"
+                onMouseEnter={() => setShowDownloadTooltip(true)}
+                onMouseLeave={() => setShowDownloadTooltip(false)}
               >
-                Download
-              </Button>
+                <Button
+                  variant="lightAccent"
+                  className="mr-2 text-xs outline-none focus:ring-0"
+                  disabled={file.uploadStatus.totalNodes === null}
+                  onClick={(e) =>
+                    downloadFile(
+                      e,
+                      file.metadata.type,
+                      file.metadata.dataCid,
+                      file.metadata.name!
+                    )
+                  }
+                >
+                  Download
+                </Button>
+                <Transition
+                  show={showDownloadTooltip}
+                  as={Fragment}
+                  enter="transition ease-out delay-250"
+                  enterFrom="opacity-0 translate-y-1"
+                  enterTo="opacity-100 translate-y-0"
+                  leave="transition ease-in duration-300"
+                  leaveFrom="opacity-100 translate-y-0"
+                  leaveTo="opacity-0 translate-y-1"
+                >
+                  <div className="absolute z-10 left-0 bottom-0 translate-y-full">
+                    {file.uploadStatus.totalNodes === null && (
+                      <div className="bg-white shadow-md rounded-lg p-2">
+                        <span className="text-sm text-gray-700">
+                          Processing upload...
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </Transition>
+              </div>
               <Button
                 variant="lightAccent"
                 className="mr-2 text-xs disabled:hidden"
