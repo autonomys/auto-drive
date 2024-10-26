@@ -41,7 +41,7 @@ import { Button } from "../Button";
 export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
-  const { user } = useUserStore();
+  const user = useUserStore(({ user }) => user);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);

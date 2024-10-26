@@ -18,7 +18,7 @@ export const UploadedObjectInformation = ({
 }) => {
   const [shareModalCid, setShareModalCid] = useState<string | null>(null);
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
-  const { user } = useUserStore();
+  const user = useUserStore(({ user }) => user);
   const ownerHandle = object?.owners.find(
     (o) => o.role === OwnerRole.ADMIN
   )?.handle;

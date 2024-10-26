@@ -12,7 +12,7 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
   const [objectsMetadata, setObjectsMetadata] =
     useState<UploadedObjectMetadata[]>();
   const [error, setError] = useState<string>();
-  const { scope } = useScopeStore();
+  const scope = useScopeStore(({ scope }) => scope);
 
   useEffect(() => {
     ApiService.searchByCIDOrName(cid, scope)
