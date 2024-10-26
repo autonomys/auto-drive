@@ -740,6 +740,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/streamsaver@npm:^2":
+  version: 2.0.5
+  resolution: "@types/streamsaver@npm:2.0.5"
+  checksum: 10c0/3794ac120fa2e9e1a1067f7402516d44c05bac6b69b4ef101e63d84d03ef73b0a709fcbad2fd6a054bfc4b17f55ba47e913c8e4dc59dcccc6f8ebc982566eab8
+  languageName: node
+  linkType: hard
+
 "@typescript-eslint/eslint-plugin@npm:^5.4.2 || ^6.0.0 || 7.0.0 - 7.2.0":
   version: 7.2.0
   resolution: "@typescript-eslint/eslint-plugin@npm:7.2.0"
@@ -2219,6 +2226,7 @@ __metadata:
     "@types/node": "npm:^20"
     "@types/react": "npm:^18"
     "@types/react-dom": "npm:^18"
+    "@types/streamsaver": "npm:^2"
     "@uidotdev/usehooks": "npm:^2.4.1"
     bytes: "npm:^3.1.2"
     eslint: "npm:^8"
@@ -2231,6 +2239,7 @@ __metadata:
     react: "npm:^18"
     react-dom: "npm:^18"
     react-hot-toast: "npm:^2.4.1"
+    streamsaver: "npm:^2.0.6"
     tailwindcss: "npm:^3.4.1"
     typescript: "npm:^5"
     usehooks-ts: "npm:^3.1.0"
@@ -4562,6 +4571,13 @@ __metadata:
   dependencies:
     internal-slot: "npm:^1.0.4"
   checksum: 10c0/c4158d6188aac510d9e92925b58709207bd94699e9c31186a040c80932a687f84a51356b5895e6dc72710aad83addb9411c22171832c9ae0e6e11b7d61b0dfb9
+  languageName: node
+  linkType: hard
+
+"streamsaver@npm:^2.0.6":
+  version: 2.0.6
+  resolution: "streamsaver@npm:2.0.6"
+  checksum: 10c0/824ed3099a1a973f7c9622e2e6dbb760b9e635fd3af333ef75c1097308186c7bba3360be886eff3905972dac6a863d1f95101d23f500f720fd00e863ce4d1073
   languageName: node
   linkType: hard
 

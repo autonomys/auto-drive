@@ -20,7 +20,9 @@ import {
   UploadArtifacts,
   UploadType,
 } from "../../models/uploads/upload.js";
+import { AwaitIterable } from "interface-store";
 import { BlockstoreUseCases } from "../uploads/blockstore.js";
+import { asyncIterableToPromiseOfArray } from "../../utils/async.js";
 
 const generateFileArtifacts = async (
   uploadId: string
@@ -121,26 +123,26 @@ const generateArtifacts = async (
     : generateFolderArtifacts(uploadId);
 };
 
-const retrieveAndReassembleFile = async (
+const retrieveAndReassembleFile = async function* (
   metadata: OffchainFileMetadata
-): Promise<Buffer | undefined> => {
+): AsyncIterable<Buffer> {
   if (metadata.totalChunks === 1) {
     return NodesUseCases.getChunkData(metadata.chunks[0].cid);
   }
 
-  const chunks: Buffer[] = await Promise.all(
-    metadata.chunks
-      .filter((e) => e.cid !== metadata.dataCid)
-      .map(async (chunk) => {
-        const chunkData = await NodesUseCases.getChunkData(chunk.cid);
-        if (!chunkData) {
-          throw new Error(`Chunk with CID ${chunk.cid} not found`);
-        }
-        return chunkData;
-      })
-  );
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < metadata.chunks.length; i += CHUNK_SIZE) {
+    const chunks = metadata.chunks.slice(i, i + CHUNK_SIZE);
+    const chunkedData = await Promise.all(
+      chunks.map((chunk) => NodesUseCases.getChunkData(chunk.cid))
+    );
 
-  return Buffer.concat(chunks);
+    if (chunkedData.some((e) => e === undefined)) {
+      throw new Error("Chunk not found");
+    }
+
+    yield Buffer.concat(chunkedData.map((e) => e!));
+  }
 };
 
 const retrieveAndReassembleFolderAsZip = async (
@@ -166,7 +168,12 @@ const retrieveAndReassembleFolderAsZip = async (
     ...metadata.children
       .filter((e) => e.type === "file")
       .map(async (e) => {
-        const data = await downloadObject(reader, e.cid);
+        const data = Buffer.concat(
+          await asyncIterableToPromiseOfArray(
+            await downloadObject(reader, e.cid)
+          )
+        );
+
         if (!data) {
           throw new Error(`Data with CID ${e.cid} not found`);
         }
@@ -186,7 +193,7 @@ const retrieveAndReassembleFolderAsZip = async (
 const downloadObject = async (
   reader: User,
   cid: string
-): Promise<Buffer | undefined> => {
+): Promise<AwaitIterable<Buffer>> => {
   const metadata = await ObjectUseCases.getMetadata(cid);
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`);
@@ -207,12 +214,14 @@ const downloadObject = async (
       new PizZip(),
       cid
     );
-    return zip.generate({
-      type: "nodebuffer",
-    });
+    return [
+      zip.generate({
+        type: "nodebuffer",
+      }),
+    ];
   }
 
-  const data = await retrieveAndReassembleFile(metadata);
+  const data = retrieveAndReassembleFile(metadata);
   await UsersUseCases.registerInteraction(
     reader,
     InteractionType.Download,
