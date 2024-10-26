@@ -43,7 +43,7 @@ const getUploadStatus = async (cid: string): Promise<UploadStatus> => {
 
   return {
     uploadedNodes: uploadedNodes.length,
-    totalNodes: null,
+    totalNodes,
     minimumBlockDepth,
     maximumBlockDepth,
   };
