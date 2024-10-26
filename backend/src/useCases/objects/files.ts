@@ -127,7 +127,13 @@ const retrieveAndReassembleFile = async function* (
   metadata: OffchainFileMetadata
 ): AsyncIterable<Buffer> {
   if (metadata.totalChunks === 1) {
-    return NodesUseCases.getChunkData(metadata.chunks[0].cid);
+    const chunkData = await NodesUseCases.getChunkData(metadata.chunks[0].cid);
+    if (!chunkData) {
+      throw new Error("Chunk not found");
+    }
+
+    yield chunkData;
+    return;
   }
 
   const CHUNK_SIZE = 100;
@@ -142,6 +148,8 @@ const retrieveAndReassembleFile = async function* (
     }
 
     yield Buffer.concat(chunkedData.map((e) => e!));
+
+    console.log(`Retrieved ${chunks.length} chunks`);
   }
 };
 

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { pipeline } from "stream";
 import { handleAuth } from "../services/authManager/express.js";
 import {
   FilesUseCases,
@@ -143,11 +144,20 @@ objectController.get("/:cid/download", async (req, res) => {
     if (metadata.type === "file") {
       res.set("Content-Type", metadata.mimeType || "application/octet-stream");
       res.set("Content-Disposition", `attachment; filename="${safeName}"`);
+      res.set("Content-Length", metadata.totalSize.toString());
     } else {
       res.set("Content-Type", "application/zip");
       res.set("Content-Disposition", `attachment; filename="${safeName}.zip"`);
     }
-    res.send(data);
+
+    pipeline(data, res, (err) => {
+      if (err) {
+        console.error("Error streaming data:", err);
+        res
+          .status(500)
+          .json({ error: "Failed to stream data", details: err.message });
+      }
+    });
   } catch (error: any) {
     console.error("Error retrieving data:", error);
     res
