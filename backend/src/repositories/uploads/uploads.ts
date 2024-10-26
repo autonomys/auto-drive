@@ -80,6 +80,18 @@ export const updateUploadEntry = async (
   return result.rows[0];
 };
 
+export const updateUploadStatusByRootUploadId = async (
+  root_upload_id: string,
+  status: UploadStatus
+): Promise<void> => {
+  const db = await getDatabase();
+
+  await db.query(
+    `UPDATE uploads.uploads SET status = $2 WHERE root_upload_id = $1`,
+    [root_upload_id, status]
+  );
+};
+
 export const deleteUploadEntry = async (id: string): Promise<void> => {
   const db = await getDatabase();
 
@@ -141,7 +153,7 @@ const getUploadsByStatus = async (
 const getStatusByCID = async (cid: string): Promise<UploadStatus | null> => {
   const db = await getDatabase();
   const result = await db.query<{ status: UploadStatus }>(
-    `SELECT status FROM uploads.uploads LEFT JOIN blockstore.blocks ON uploads.uploads.id = blockstore.blocks.upload_id WHERE blockstore.blocks.cid = $1`,
+    `SELECT status FROM uploads.uploads LEFT JOIN uploads.blockstore ON uploads.uploads.id = uploads.blockstore.upload_id WHERE uploads.blockstore.cid = $1`,
     [cid]
   );
 
@@ -157,4 +169,5 @@ export const uploadsRepository = {
   getUploadEntriesByRelativeId,
   getUploadsByStatus,
   getStatusByCID,
+  updateUploadStatusByRootUploadId,
 };

@@ -235,10 +235,10 @@ const processMigration = async (uploadId: string): Promise<void> => {
 
   await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId);
 
-  await uploadsRepository.updateUploadEntry({
-    ...upload,
-    status: UploadStatus.COMPLETED,
-  });
+  await uploadsRepository.updateUploadStatusByRootUploadId(
+    uploadId,
+    UploadStatus.COMPLETED
+  );
 };
 
 export const UploadsUseCases = {
