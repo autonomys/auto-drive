@@ -104,14 +104,15 @@ const migrateFromBlockstoreToNodesTable = async (
   uploadId: string
 ): Promise<void> => {
   const uploads = await uploadsRepository.getUploadsByRoot(uploadId);
-  const uploadCID = await getUploadCID(uploadId);
+  const rootCID = await getUploadCID(uploadId);
 
-  const metadata = await ObjectUseCases.getMetadata(cidToString(uploadCID));
+  const metadata = await ObjectUseCases.getMetadata(cidToString(rootCID));
   if (!metadata) {
     return;
   }
 
   for (const upload of uploads) {
+    const rootCID = await getUploadCID(uploadId);
     const blockstore = await getUploadBlockstore(upload.id);
 
     const BATCH_SIZE = 100;
@@ -121,11 +122,15 @@ const migrateFromBlockstoreToNodesTable = async (
         const nodes = await asyncIterableToPromiseOfArray(
           blockstore.getMany(batch)
         );
+        const uniqueNodes = Array.from(
+          new Map(nodes.map((node) => [cidToString(node.cid), node])).values()
+        );
+
         await nodesRepository.saveNodes(
-          nodes.map((e) => ({
+          uniqueNodes.map((e) => ({
             cid: cidToString(e.cid),
-            root_cid: cidToString(uploadCID),
-            head_cid: cidToString(uploadCID),
+            root_cid: cidToString(rootCID),
+            head_cid: cidToString(rootCID),
             type: decodeIPLDNodeData(Buffer.from(e.block)).type,
             encoded_node: Buffer.from(e.block).toString("base64"),
           }))
