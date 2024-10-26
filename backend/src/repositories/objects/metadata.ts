@@ -28,7 +28,7 @@ const setMetadata = async (
   const db = await getDatabase();
 
   return db.query({
-    text: "INSERT INTO metadata (root_cid, head_cid, metadata) VALUES ($1, $2, $3) ON CONFLICT (head_cid) DO UPDATE SET metadata = EXCLUDED.metadata, root_cid = EXCLUDED.root_cid",
+    text: "INSERT INTO metadata (root_cid, head_cid, metadata) VALUES ($1, $2, $3) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata",
     values: [rootCid, headCid, JSON.stringify(metadata)],
   });
 };
@@ -131,8 +131,7 @@ const getRootObjects = async () => {
       `with root_objects as (
         SELECT m.* 
         FROM metadata m 
-        WHERE m.root_cid = m.head_cid 
-        GROUP BY m.head_cid
+        WHERE m.root_cid = m.head_cid
       )
       SELECT root_objects.head_cid 
       FROM root_objects
