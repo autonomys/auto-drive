@@ -83,7 +83,7 @@ const saveNodes = async (
         headCid,
         cid,
         type,
-        encodeNode(node).toString("base64")
+        Buffer.from(encodeNode(node)).toString("base64")
       );
     })
   );
