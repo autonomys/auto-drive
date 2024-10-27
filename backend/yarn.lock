@@ -15,9 +15,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^0.6.5":
-  version: 0.6.8
-  resolution: "@autonomys/auto-drive@npm:0.6.8"
+"@autonomys/auto-drive@npm:^0.7.2":
+  version: 0.7.2
+  resolution: "@autonomys/auto-drive@npm:0.7.2"
   dependencies:
     "@ipld/dag-pb": "npm:^4.1.2"
     blake3: "npm:1.1.0"
@@ -25,7 +25,7 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/e7e3ed82099fd0359cfc03254d23c89f381522698c8e85284d4ebfb6c99cefded7afea02184703f4d46ac9f2e4a3c4bc139ac6dd62ddbf3069fbcf023e5500ae
+  checksum: 10c0/2b60d86f2f55d270cd4d56a60661c4541d729a4bdf69ebce91d1190637d34b3a612ee1366b41d47b497e3138b108c7e515053623f5aa71a6390b0c3dbd0de547
   languageName: node
   linkType: hard
 
@@ -2670,7 +2670,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "data-access-layer@workspace:."
   dependencies:
-    "@autonomys/auto-drive": "npm:^0.6.5"
+    "@autonomys/auto-drive": "npm:^0.7.2"
     "@polkadot/api": "npm:^12.3.1"
     "@polkadot/types": "npm:^13.0.1"
     "@polkadot/util-crypto": "npm:^13.0.2"
