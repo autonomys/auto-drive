@@ -121,8 +121,6 @@ export const ApiService = {
       throw new Error("No session");
     }
 
-    console.log("uploading folder", tree, files);
-
     const formData = new FormData();
 
     formData.append("folderTree", JSON.stringify(tree));
@@ -156,7 +154,7 @@ export const ApiService = {
 
     return response.json();
   },
-  downloadObject: async (cid: string): Promise<Blob> => {
+  downloadObject: async (cid: string): Promise<ReadableStream<Uint8Array>> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
@@ -169,11 +167,11 @@ export const ApiService = {
       },
     });
 
-    if (!response.ok) {
+    if (!response.ok || !response.body) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return response.blob();
+    return response.body;
   },
   searchByCIDOrName: async (
     query: string,

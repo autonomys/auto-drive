@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { User } from "../../models/index.js";
+import { User } from "../../models/users/index.js";
 import { UsersUseCases } from "../../useCases/index.js";
 import { AuthManager } from "./index.js";
 

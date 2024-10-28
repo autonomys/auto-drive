@@ -12,21 +12,35 @@ export const uploadFileContent = (file: File) => {
   });
 };
 
-export const handleFileDownload = (
-  blob: Blob,
+export const handleFileDownload = async (
+  stream: ReadableStream<Uint8Array>,
   type: OffchainMetadata["type"],
   name: string
 ) => {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.style.display = "none";
-  a.href = url;
-  a.download = type === "file" ? name : `${name}.zip`;
-  document.body.appendChild(a);
-  a.click();
+  const StreamSaver = await import("streamsaver");
+  // Create a writable stream using StreamSaver
+  const fileStream = StreamSaver.createWriteStream(
+    type === "file" ? name : `${name}.zip`
+  );
+  const writer = fileStream.getWriter();
+  const reader = stream.getReader();
 
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+  // Stream data directly from the response to the file
+  try {
+    let done = false;
+    while (!done) {
+      const { value, done: streamDone } = await reader.read();
+      if (value) {
+        await writer.write(value);
+      }
+      done = streamDone;
+    }
+  } catch (error) {
+    console.error("Download failed:", error);
+  } finally {
+    // Close the writer when done
+    await writer.close();
+  }
 };
 
 export const getTypeFromMetadata = (metadata: OffchainMetadata) => {

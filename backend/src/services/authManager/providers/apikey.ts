@@ -1,5 +1,5 @@
-import { OAuthUser } from "../../../models/index.js";
-import { ApiKeysUseCases } from "../../../useCases/apikeys.js";
+import { OAuthUser } from "../../../models/users/index.js";
+import { ApiKeysUseCases } from "../../../useCases/users/apikeys.js";
 
 const getUserFromApiKey = async (secret: string): Promise<OAuthUser> => {
   const apiKey = await ApiKeysUseCases.getApiKeyFromSecret(secret);

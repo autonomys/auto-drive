@@ -1,4 +1,3 @@
-import { ArrowLeft, Loader } from "lucide-react";
 import {
   OwnerRole,
   UploadedObjectMetadata,
@@ -10,6 +9,7 @@ import { Button } from "../common/Button";
 import { ApiService } from "../../services/api";
 import { ObjectShareModal } from "../Files/ObjectShareModal";
 import { ObjectDeleteModal } from "../Files/ObjectDeleteModal";
+import { Loader } from "lucide-react";
 
 export const UploadedObjectInformation = ({
   object,
@@ -55,10 +55,13 @@ export const UploadedObjectInformation = ({
     setDeleteModalCid(object?.metadata.dataCid ?? null);
   }, [object?.metadata.dataCid]);
 
-  if (!object) {
+  const isLoading = object === null;
+  if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-full">
-        <Loader className="animate-spin" />
+      <div className="flex flex-col gap-4">
+        <div className="flex justify-center items-center">
+          <Loader className="w-4 h-4 animate-spin" />
+        </div>
       </div>
     );
   }
@@ -114,11 +117,15 @@ export const UploadedObjectInformation = ({
         </div>
         <div className="flex">
           <span>Total Nodes: </span>
-          <span className="ml-[4px]">{object.uploadStatus.totalNodes}</span>
+          <span className="ml-[4px]">
+            {object.uploadStatus.totalNodes ?? "Processing"}
+          </span>
         </div>
         <div className="flex">
           <span>Uploaded Nodes: </span>
-          <span className="ml-[4px]">{object.uploadStatus.uploadedNodes}</span>
+          <span className="ml-[4px]">
+            {object.uploadStatus.uploadedNodes ?? "N/A"}
+          </span>
         </div>
         <div className="flex">
           <span>Minimum block depth:</span>

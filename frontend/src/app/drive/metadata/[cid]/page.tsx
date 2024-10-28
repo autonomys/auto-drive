@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { ApiService } from "../../../../services/api";
 import { UploadedObjectMetadata } from "../../../../models/UploadedObjectMetadata";
-import { Metadata } from "../../../../components/Files/Metadata";
 import { UploadedObjectInformation } from "../../../../components/UploadedObjectInformation";
 
 export default function Page({ params }: { params: { cid: string } }) {

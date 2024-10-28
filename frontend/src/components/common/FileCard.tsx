@@ -24,7 +24,7 @@ interface FileCardProps extends Partial<UploadedObjectMetadata> {
 }
 
 export const FileCard = ({
-  metadata: { type, name, totalSize, dataCid },
+  metadata: { type, name, totalSize, dataCid, ...otherMetadata },
   icon,
 }: FileCardProps) => {
   const router = useRouter();
