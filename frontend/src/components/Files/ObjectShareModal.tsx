@@ -124,18 +124,18 @@ export const ObjectShareModal = ({
                     <Link className="w-4 h-4" />
                     Share link
                   </Button>
-                  <button
-                    disabled={!publicId || isAlreadyOwnwer}
-                    type="button"
+                  <Button
+                    variant="lightAccent"
+                    disabled={invalidPublicId || isAlreadyOwnwer}
+                    onClick={shareObject}
                     className={`inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                       publicId && !isAlreadyOwnwer
                         ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
                         : "bg-gray-100 text-gray-900 opacity-50"
                     }`}
-                    onClick={shareObject}
                   >
                     Share with public ID
-                  </button>
+                  </Button>
                 </div>
                 {isAlreadyOwnwer && (
                   <p className="text-sm text-red-500 text-center mt-4">
