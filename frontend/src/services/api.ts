@@ -271,7 +271,7 @@ export const ApiService = {
 
     return response.json();
   },
-  shareObject: async (dataCid: string, handle: string): Promise<void> => {
+  shareObject: async (dataCid: string, publicId: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
@@ -279,7 +279,7 @@ export const ApiService = {
 
     await fetch(`${API_BASE_URL}/objects/${dataCid}/share`, {
       method: "POST",
-      body: JSON.stringify({ handle }),
+      body: JSON.stringify({ publicId }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
         "X-Auth-Provider": "google",
@@ -319,7 +319,7 @@ export const ApiService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  updateUserHandle: async (handle: string): Promise<User> => {
+  onboardUser: async (): Promise<User> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
@@ -327,11 +327,9 @@ export const ApiService = {
 
     const response = await fetch(`${API_BASE_URL}/users/@me/onboard`, {
       method: "POST",
-      body: JSON.stringify({ handle }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
         "X-Auth-Provider": "google",
-        "Content-Type": "application/json",
       },
     });
 
@@ -341,25 +339,7 @@ export const ApiService = {
 
     return response.json();
   },
-  searchUserHandle: async (handle: string): Promise<string[]> => {
-    const response = await fetch(
-      `${API_BASE_URL}/users/search?handle=${handle}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
-  checkHandleAvailability: async (handle: string): Promise<boolean> => {
-    const response = await fetch(
-      `${API_BASE_URL}/users/checkHandleAvailability?handle=${handle}`
-    );
-
-    return response.json().then((data) => data.isAvailable);
-  },
-  addAdmin: async (handle: string): Promise<void> => {
+  addAdmin: async (publicId: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
@@ -367,7 +347,7 @@ export const ApiService = {
 
     const response = await fetch(`${API_BASE_URL}/users/admin/add`, {
       method: "POST",
-      body: JSON.stringify({ handle }),
+      body: JSON.stringify({ publicId }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
         "X-Auth-Provider": "google",
@@ -379,7 +359,7 @@ export const ApiService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  removeAdmin: async (handle: string): Promise<void> => {
+  removeAdmin: async (publicId: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
@@ -387,7 +367,7 @@ export const ApiService = {
 
     const response = await fetch(`${API_BASE_URL}/users/admin/remove`, {
       method: "POST",
-      body: JSON.stringify({ handle }),
+      body: JSON.stringify({ publicId }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
         "X-Auth-Provider": "google",
@@ -400,7 +380,7 @@ export const ApiService = {
     }
   },
   updateSubscription: async (
-    handle: string,
+    publicId: string,
     granularity: SubscriptionGranularity,
     uploadLimit: number,
     downloadLimit: number
@@ -416,7 +396,7 @@ export const ApiService = {
         granularity,
         uploadLimit,
         downloadLimit,
-        handle,
+        publicId,
       }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,

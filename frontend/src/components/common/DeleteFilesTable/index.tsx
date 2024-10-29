@@ -62,13 +62,13 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     } else if (owner.startsWith("@")) {
       return (
         <span className="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
-          {owner.slice(1)}
+          {shortenString(owner.slice(1), 15)}
         </span>
       );
     } else {
       return (
         <span className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-200 rounded-full">
-          {owner}
+          {shortenString(owner, 15)}
         </span>
       );
     }
@@ -107,7 +107,9 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   const renderRow = useCallback(
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
-      const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.handle;
+      const owner = file.owners.find(
+        (o) => o.role === OwnerRole.ADMIN
+      )?.publicId;
       const popoverButtonRef = useRef<HTMLButtonElement>(null);
 
       return (

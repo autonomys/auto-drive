@@ -23,17 +23,17 @@ export const UploadedObjectInformation = ({
   const user = useUserStore(({ user }) => user);
   const ownerHandle = object?.owners.find(
     (o) => o.role === OwnerRole.ADMIN
-  )?.handle;
+  )?.publicId;
 
   const owners = useMemo(() => {
     return object?.owners.sort((a, b) => a.role.localeCompare(b.role));
   }, [object?.owners]);
 
   const isOwner = owners?.some(
-    (o) => o.handle === user?.handle && o.role === OwnerRole.ADMIN
+    (o) => o.publicId === user?.publicId && o.role === OwnerRole.ADMIN
   );
   const hasFileOwnership = object?.owners.some(
-    (o) => o.handle === user?.handle
+    (o) => o.publicId === user?.publicId
   );
 
   const handleDownload = useCallback(async () => {
@@ -116,7 +116,7 @@ export const UploadedObjectInformation = ({
         <div className="flex">
           <span>{"Owner: "}</span>
           <span className="ml-[4px]">
-            {ownerHandle === user?.handle ? "You" : ownerHandle}
+            {ownerHandle === user?.publicId ? "You" : ownerHandle}
           </span>
         </div>
         <div className="flex">
@@ -180,7 +180,7 @@ export const UploadedObjectInformation = ({
         {owners?.map((o) => (
           <div className="flex">
             <span>{o.role.charAt(0).toUpperCase() + o.role.slice(1)}</span>
-            <span className="ml-[4px]">{o.handle}</span>
+            <span className="ml-[4px]">{o.publicId}</span>
           </div>
         ))}
       </div>
