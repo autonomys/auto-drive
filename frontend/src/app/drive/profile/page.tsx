@@ -6,11 +6,22 @@ import { ApiKeyWithoutSecret } from "../../../models/ApiKey";
 import { ApiKeysTable } from "../../../components/ApiKeysTable";
 import { Button } from "../../../components/common/Button";
 import { DefaultPasswordModal } from "../../../components/DefaultPasswordModal";
+import { useUserStore } from "../../../states/user";
+import { Loader } from "lucide-react";
+import toast from "react-hot-toast";
 
 export default function Page() {
   const [apiKeys, setApiKeys] = useState<ApiKeyWithoutSecret[]>();
   const [isDefaultPasswordModalOpen, setIsDefaultPasswordModalOpen] =
     useState<boolean>(false);
+
+  const publicId = useUserStore((s) => s.user?.publicId);
+
+  const copyPublicId = useCallback(() => {
+    if (!publicId) return;
+    navigator.clipboard.writeText(publicId);
+    toast.success("Copied to clipboard");
+  }, [publicId]);
 
   useEffect(() => {
     ApiService.getApiKeysByUser().then(setApiKeys);
@@ -35,7 +46,7 @@ export default function Page() {
         <ApiKeysTable apiKeys={apiKeys} />
       </div>
       <div className="flex flex-col gap-2 p-2">
-        <span className="text-2xl font-bold mb-4">Encryption</span>
+        <span className="text-2xl font-bold mb-4">My Account</span>
         <div className="flex gap-2">
           <span>
             <Button
@@ -44,6 +55,15 @@ export default function Page() {
               onClick={openDefaultPasswordModal}
             >
               Update default password
+            </Button>
+          </span>
+          <span>
+            <Button
+              variant="lightAccent"
+              className="text-sm"
+              onClick={copyPublicId}
+            >
+              Copy Public ID
             </Button>
           </span>
         </div>
