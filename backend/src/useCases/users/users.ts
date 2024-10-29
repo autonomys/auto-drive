@@ -17,7 +17,7 @@ import { usersRepository } from "../../repositories/index.js";
 import { InteractionsUseCases } from "../objects/interactions.js";
 import { OrganizationsUseCases } from "./organizations.js";
 import { SubscriptionsUseCases } from "./subscriptions.js";
-import { v4 } from "uuid";
+import { v4, v5 } from "uuid";
 
 const getUserByPublicId = async (
   publicId: string
@@ -51,10 +51,13 @@ const resolveUser = async (userOrPublicId: UserOrPublicId): Promise<User> => {
 };
 
 const onboardUser = async (user: User): Promise<User | undefined> => {
+  const input = `${user.oauthProvider}-${user.oauthUserId}`;
+  const publicId = v5(input, "user-public-id");
+
   const updatedUser = await UsersUseCases.initUser(
     user.oauthProvider,
     user.oauthUserId,
-    v4()
+    publicId
   );
 
   return updatedUser;
