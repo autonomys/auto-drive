@@ -95,7 +95,7 @@ export const FileCard = ({
           <div className="p-3 flex flex-col gap-2 w-40">
             <span
               className="flex items-center gap-2 font-semibold text-gray-800"
-              onClick={(event) => onDownload(event, dataCid)}
+              onClick={onDownload}
             >
               <DownloadIcon size={16} />
               <span>Download</span>
