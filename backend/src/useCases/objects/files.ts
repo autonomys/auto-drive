@@ -254,16 +254,21 @@ const handleFileUploadFinalization = async (
     InteractionType.Upload
   );
   const { metadata } = await generateFileArtifacts(uploadId);
+  const upload = await uploadsRepository.getUploadEntryById(uploadId);
   if (pendingCredits < metadata.totalSize) {
     throw new Error("Not enough upload credits");
   }
 
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid);
-  await ObjectUseCases.saveMetadata(
-    metadata.dataCid,
-    metadata.dataCid,
-    metadata
-  );
+
+  const isRootUpload = upload?.root_upload_id === uploadId;
+  if (isRootUpload) {
+    await ObjectUseCases.saveMetadata(
+      metadata.dataCid,
+      metadata.dataCid,
+      metadata
+    );
+  }
 
   await UsersUseCases.registerInteraction(
     user,
@@ -278,11 +283,9 @@ const handleFolderUploadFinalization = async (
   user: User,
   uploadId: string
 ): Promise<string> => {
-  console.time("generateFolderArtifacts");
   const { metadata, childrenArtifacts } = await generateFolderArtifacts(
     uploadId
   );
-  console.timeEnd("generateFolderArtifacts");
 
   const fullMetadata = [metadata, ...childrenArtifacts.map((e) => e.metadata)];
   await Promise.all(
