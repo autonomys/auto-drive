@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { UploadService } from "../../services/upload";
 import { Dialog, Transition } from "@headlessui/react";
 import { FolderTree } from "../../models/FileTree";
+import { OffchainMetadata } from "@autonomys/auto-drive";
+import { Button } from "../common/Button";
+import { shortenString } from "../../utils/misc";
 
 export const UploadingFolderModal = ({
   data,
@@ -10,26 +13,41 @@ export const UploadingFolderModal = ({
   data: { files: Record<string, File>; fileTree: FolderTree } | null;
   onClose: () => void;
 }) => {
-  const [progress, setProgress] = useState(50);
-
-  const manageUpload = useCallback(async () => {
-    if (!data) return;
-
-    const upload = UploadService.uploadFolder(data.fileTree, data.files);
-    for await (const chunkProgress of upload) {
-      console.log("chunkProgress", chunkProgress);
-      setProgress(chunkProgress);
-    }
-
-    onClose();
-    window.location.reload();
-  }, [data]);
-
-  useEffect(() => {
-    manageUpload();
-  }, [manageUpload]);
+  const [password, setPassword] = useState<string>();
+  const [passwordConfirmed, setPasswordConfirmed] = useState<boolean>();
+  const [progress, setProgress] = useState(0);
 
   const progressPercentage = Math.round(progress);
+
+  const handleUpload = useCallback(async () => {
+    if (!data) return;
+
+    const passwordToUse = password ? password : undefined;
+
+    const progressIterable = UploadService.uploadFolder(
+      data.fileTree,
+      data.files,
+      {
+        password: passwordToUse,
+        compress: true,
+      }
+    );
+
+    for await (const progress of progressIterable) {
+      setProgress(progress);
+    }
+
+    setPasswordConfirmed(false);
+    onClose();
+  }, [data, password]);
+
+  useEffect(() => {
+    if (!passwordConfirmed) return;
+
+    handleUpload().then(() => {
+      window.location.reload();
+    });
+  }, [passwordConfirmed]);
 
   return (
     <Transition show={!!data}>
@@ -37,22 +55,61 @@ export const UploadingFolderModal = ({
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-6 shadow-lg transition-transform transform min-w-[25%]">
             <h3 className="text-lg font-medium mb-4 text-center">
-              Uploading <strong>{data?.fileTree.name}</strong>
+              Uploading{" "}
+              <strong>{shortenString(data?.fileTree.name ?? "", 20)}</strong>
             </h3>
-            <div className="relative w-full h-2 bg-gray-200 rounded">
-              <div
-                className="absolute top-0 left-0 h-2 bg-green-500 rounded transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="flex justify-center mt-4 text-sm font-semibold">
-              <div>Uploading... {progressPercentage}%</div>
-            </div>
-            <div className="flex justify-between mt-2">
-              <div className="w-1 h-1 bg-gray-500 rounded-full animate-pulse" />
-              <div className="w-1 h-1 bg-gray-500 rounded-full animate-pulse" />
-              <div className="w-1 h-1 bg-gray-500 rounded-full animate-pulse" />
-            </div>
+            {passwordConfirmed ? (
+              <div>
+                <div className="relative w-full h-2 bg-gray-200 rounded">
+                  <div
+                    className="absolute top-0 left-0 h-2 bg-green-500 rounded transition-all duration-500"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <div className="flex justify-center mt-4 text-sm font-semibold">
+                  <div>Uploading... {progressPercentage}%</div>
+                </div>
+                <div className="flex justify-between mt-2">
+                  <div className="w-1 h-1 bg-gray-500 rounded-full animate-pulse" />
+                  <div className="w-1 h-1 bg-gray-500 rounded-full animate-pulse" />
+                  <div className="w-1 h-1 bg-gray-500 rounded-full animate-pulse" />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="flex flex-col gap-2 p-4">
+                  <span className="block text-md font-semibold text-gray-700 text-center">
+                    Enter Encrypting Password
+                  </span>
+                  <input
+                    type="password"
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    placeholder="Password"
+                  />
+                  <div className="flex gap-2 justify-center">
+                    <Button
+                      className="text-xs"
+                      variant="lightAccent"
+                      onClick={() => setPasswordConfirmed(true)}
+                    >
+                      {password
+                        ? "Confirm Password"
+                        : "Upload without encryption"}
+                    </Button>
+                    <Button
+                      className="text-xs"
+                      variant="lightDanger"
+                      onClick={onClose}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </Dialog>

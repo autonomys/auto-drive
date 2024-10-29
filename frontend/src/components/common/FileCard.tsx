@@ -70,7 +70,7 @@ export const FileCard = ({
   return (
     <Popover className="flex flex-col flex-1">
       <ObjectDownloadModal
-        isOpen={isDownloadModalOpen}
+        cid={dataCid}
         onClose={() => setIsDownloadModalOpen(false)}
       />
       <div className="relative bg-white rounded-lg border border-gray-200 p-4 shadow-sm max-w-sm flex flex-col flex-1">

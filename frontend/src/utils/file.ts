@@ -1,4 +1,7 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
+import { decryptFile } from "./encryption";
+import { streamToAsyncIterable } from "./stream";
+import { compressFileByChunks, decompressFileByChunks } from "./compression";
 
 export const uploadFileContent = (file: File) => {
   return new Promise((resolve) => {
@@ -15,7 +18,14 @@ export const uploadFileContent = (file: File) => {
 export const handleFileDownload = async (
   stream: ReadableStream<Uint8Array>,
   type: OffchainMetadata["type"],
-  name: string
+  name: string,
+  {
+    password,
+    compress,
+  }: {
+    password?: string;
+    compress?: boolean;
+  } = {}
 ) => {
   const StreamSaver = await import("streamsaver");
   // Create a writable stream using StreamSaver
@@ -23,17 +33,24 @@ export const handleFileDownload = async (
     type === "file" ? name : `${name}.zip`
   );
   const writer = fileStream.getWriter();
-  const reader = stream.getReader();
+
+  let mappers: ((file: AsyncIterable<Buffer>) => AsyncIterable<Buffer>)[] = [];
+  if (password) {
+    mappers.push((file) => decryptFile(file, password));
+  }
+  if (compress) {
+    mappers.push(decompressFileByChunks);
+  }
+
+  const reader = mappers.reduce(
+    (file, mapper) => mapper(file),
+    streamToAsyncIterable(stream.getReader())
+  );
 
   // Stream data directly from the response to the file
   try {
-    let done = false;
-    while (!done) {
-      const { value, done: streamDone } = await reader.read();
-      if (value) {
-        await writer.write(value);
-      }
-      done = streamDone;
+    for await (const chunk of reader) {
+      await writer.write(chunk);
     }
   } catch (error) {
     console.error("Download failed:", error);

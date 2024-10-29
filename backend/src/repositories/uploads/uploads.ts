@@ -1,3 +1,4 @@
+import { FileUploadOptions } from "@autonomys/auto-drive";
 import { getDatabase } from "../../drivers/pg.js";
 import { FolderTreeFolder } from "../../models/objects/folderTree.js";
 import { UploadStatus, UploadType } from "../../models/uploads/upload.js";
@@ -13,6 +14,7 @@ export type UploadEntry = {
   relative_id: string | null;
   oauth_provider: string;
   oauth_user_id: string;
+  upload_options: FileUploadOptions | null;
 };
 
 export const createUploadEntry = async (
@@ -25,12 +27,13 @@ export const createUploadEntry = async (
   root_upload_id: string | null,
   relative_id: string | null,
   oauth_provider: string,
-  oauth_user_id: string
+  oauth_user_id: string,
+  upload_options: FileUploadOptions | null
 ): Promise<UploadEntry> => {
   const db = await getDatabase();
 
   const result = await db.query(
-    `INSERT INTO uploads.uploads (id, type, status, name, file_tree, mime_type, root_upload_id, relative_id, oauth_provider, oauth_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    `INSERT INTO uploads.uploads (id, type, status, name, file_tree, mime_type, root_upload_id, relative_id, oauth_provider, oauth_user_id, upload_options) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
     [
       id,
       type,
@@ -42,6 +45,7 @@ export const createUploadEntry = async (
       relative_id,
       oauth_provider,
       oauth_user_id,
+      upload_options,
     ]
   );
 
@@ -66,7 +70,7 @@ export const updateUploadEntry = async (
   const db = await getDatabase();
 
   const result = await db.query(
-    `UPDATE uploads.uploads SET status = $2, file_tree = $3, mime_type = $4, root_upload_id = $5, relative_id = $6 WHERE id = $1 RETURNING *`,
+    `UPDATE uploads.uploads SET status = $2, file_tree = $3, mime_type = $4, root_upload_id = $5, relative_id = $6, upload_options = $7 WHERE id = $1 RETURNING *`,
     [
       upload.id,
       upload.status,
@@ -74,6 +78,7 @@ export const updateUploadEntry = async (
       upload.mime_type,
       upload.root_upload_id,
       upload.relative_id,
+      upload.upload_options,
     ]
   );
 

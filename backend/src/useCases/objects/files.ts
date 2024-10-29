@@ -55,7 +55,8 @@ const generateFileArtifacts = async (
     chunks,
     totalSize,
     upload.name,
-    upload.mime_type
+    upload.mime_type,
+    upload.upload_options ?? undefined
   );
 
   return {
@@ -103,7 +104,12 @@ const generateFolderArtifacts = async (
     totalSize: e.metadata.totalSize,
   }));
 
-  const metadata = folderMetadata(folderCID, childrenMetadata, upload.name);
+  const metadata = folderMetadata(
+    folderCID,
+    childrenMetadata,
+    upload.name,
+    upload.upload_options ?? undefined
+  );
 
   return {
     metadata,

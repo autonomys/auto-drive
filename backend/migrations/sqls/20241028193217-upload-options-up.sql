@@ -1,0 +1,1 @@
+ALTER TABLE uploads.uploads ADD COLUMN upload_options JSONB;

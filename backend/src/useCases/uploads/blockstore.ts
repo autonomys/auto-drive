@@ -10,6 +10,7 @@ import { CID } from "multiformats";
 import {
   FolderUpload,
   Upload,
+  UploadOptions,
   UploadStatus,
   UploadType,
 } from "../../models/uploads/upload.js";
@@ -122,11 +123,16 @@ const processFileTree = async (
 
   const totalSize = childrenNodesLengths.reduce((acc, curr) => acc + curr, 0);
 
+  const uploadOptions: Partial<UploadOptions> = {
+    ...currentUpload.uploadOptions,
+  };
+
   return processFolderToIPLDFormat(
     blockstore,
     childrenCids,
     fileTree.name,
-    totalSize
+    totalSize,
+    uploadOptions
   );
 };
 
