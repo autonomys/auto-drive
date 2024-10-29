@@ -1,8 +1,11 @@
 import { FolderTree } from "../models/FileTree";
 import { asyncByChunk, fileToIterable } from "../utils/async";
 import { getAuthSession } from "../utils/auth";
-import { compressFileByChunks } from "../utils/compression";
-import { encryptFile } from "../utils/encryption";
+import {
+  compressFileByChunks,
+  COMPRESSION_CHUNK_SIZE,
+} from "../utils/compression";
+import { ENCRYPTING_CHUNK_SIZE, encryptFile } from "../utils/encryption";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -28,12 +31,14 @@ const createFileUpload = async (
         encryption: encryption
           ? {
               algorithm: "AES_256_GCM",
+              chunkSize: ENCRYPTING_CHUNK_SIZE,
             }
           : undefined,
         compression: compression
           ? {
               algorithm: "ZLIB",
               level: 9,
+              chunkSize: COMPRESSION_CHUNK_SIZE,
             }
           : undefined,
       },
@@ -157,12 +162,14 @@ const createFileUploadWithinFolderUpload = async (
         encryption: encryption
           ? {
               algorithm: "AES_256_GCM",
+              chunkSize: ENCRYPTING_CHUNK_SIZE,
             }
           : undefined,
         compression: compression
           ? {
               algorithm: "ZLIB",
               level: 9,
+              chunkSize: COMPRESSION_CHUNK_SIZE,
             }
           : undefined,
       },

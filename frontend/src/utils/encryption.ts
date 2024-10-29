@@ -3,10 +3,10 @@ import { asyncByChunk } from "./async";
 
 const crypto = new Crypto();
 
-const CHUNK_SIZE = 1024 * 1024;
+export const ENCRYPTING_CHUNK_SIZE = 1024 * 1024;
 const IV_SIZE = 16;
 const TAG_SIZE = 16;
-const ENCRYPTED_CHUNK_SIZE = CHUNK_SIZE + IV_SIZE + TAG_SIZE;
+const ENCRYPTED_CHUNK_SIZE = ENCRYPTING_CHUNK_SIZE + IV_SIZE + TAG_SIZE;
 
 const getKeyFromPassword = async (password: string) => {
   const encoder = new TextEncoder();
@@ -30,7 +30,7 @@ export const encryptFile = async function* (
 ): AsyncIterable<Buffer> {
   const key = await getKeyFromPassword(password);
 
-  for await (const chunk of asyncByChunk(file, CHUNK_SIZE)) {
+  for await (const chunk of asyncByChunk(file, ENCRYPTING_CHUNK_SIZE)) {
     const iv = crypto.getRandomValues(new Uint8Array(IV_SIZE));
     const encrypted = await crypto.subtle.encrypt(
       { name: "AES-GCM", iv },

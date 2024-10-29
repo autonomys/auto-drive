@@ -26,11 +26,13 @@ export const uploadOptionsSchema = z.object({
   compression: z
     .object({
       algorithm: z.enum([CompressionAlgorithm.ZLIB]),
+      chunkSize: z.number().optional(),
     })
     .optional(),
   encryption: z
     .object({
       algorithm: z.enum([EncryptionAlgorithm.AES_256_GCM]),
+      chunkSize: z.number().optional(),
     })
     .optional(),
 });
