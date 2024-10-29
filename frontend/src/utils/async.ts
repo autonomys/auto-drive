@@ -2,7 +2,7 @@ export const asyncByChunk = async function* (
   iterable: AsyncIterable<Buffer>,
   chunkSize: number,
   ignoreLastChunk: boolean = false
-) {
+): AsyncIterable<Buffer> {
   let accumulated = Buffer.alloc(0);
   for await (const chunk of iterable) {
     accumulated = Buffer.concat([accumulated, chunk]);

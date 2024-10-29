@@ -356,21 +356,6 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     ]
   );
 
-  const batchedDownload = useCallback(async () => {
-    const downloads = selectedFiles.map(async (entry) => {
-      const blob = await ApiService.downloadObject(entry.cid);
-      handleFileDownload(blob, entry.type, entry.name!);
-    });
-
-    await Promise.all(downloads)
-      .then(() => {
-        setSelectedFiles([]);
-      })
-      .catch((error) => {
-        toast.error("Failed to download files");
-      });
-  }, [selectedFiles, downloadFile]);
-
   const onClose = useCallback(() => {
     setShareCID(null);
     setDeleteCID(null);
@@ -421,11 +406,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 <span className="text-sm font-semibold">
                   {selectedFiles.length} files selected
                 </span>
-                <Button
-                  className="text-xs"
-                  variant="lightAccent"
-                  onClick={batchedDownload}
-                >
+                <Button className="text-xs" variant="lightAccent">
                   Download
                 </Button>
               </div>

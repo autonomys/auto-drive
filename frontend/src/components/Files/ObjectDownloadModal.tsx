@@ -8,9 +8,10 @@ import {
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiService } from "../../services/api";
 import { OffchainMetadata } from "@autonomys/auto-drive";
-import { handleFileDownload } from "../../utils/file";
+import { handleFileDownload, InvalidDecryptKey } from "../../utils/file";
 import { Button } from "../common/Button";
 import { shortenString } from "../../utils/misc";
+import { useEncryptionStore } from "../../states/encryption";
 
 export const ObjectDownloadModal = ({
   cid,
@@ -23,6 +24,8 @@ export const ObjectDownloadModal = ({
   const [password, setPassword] = useState<string>();
   const [passwordConfirmed, setPasswordConfirmed] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [wrongPassword, setWrongPassword] = useState<boolean>(false);
+  const defaultPassword = useEncryptionStore((store) => store.password);
 
   useEffect(() => {
     if (!cid) {
@@ -36,9 +39,13 @@ export const ObjectDownloadModal = ({
         setPassword(undefined);
         setPasswordConfirmed(false);
         setIsDownloading(false);
+        if (defaultPassword && !wrongPassword) {
+          setPassword(defaultPassword);
+          setPasswordConfirmed(true);
+        }
       });
     }
-  }, [cid]);
+  }, [cid, defaultPassword, wrongPassword]);
 
   const onDownload = useCallback(async () => {
     if (!metadata) return;
@@ -48,9 +55,17 @@ export const ObjectDownloadModal = ({
       handleFileDownload(download, metadata?.type, metadata.name!, {
         password: passwordToUse,
         compress: !!metadata?.uploadOptions?.compression,
-      }).then(() => {
-        onClose();
-      });
+      })
+        .then(() => {
+          onClose();
+        })
+        .catch((e) => {
+          if (e instanceof InvalidDecryptKey) {
+            setPassword(undefined);
+            setPasswordConfirmed(false);
+            setWrongPassword(true);
+          }
+        });
     } else {
       handleFileDownload(download, metadata?.type, metadata.name!).then(() => {
         onClose();
@@ -83,7 +98,7 @@ export const ObjectDownloadModal = ({
     if (metadata.type === "file" && !passwordConfirmed) {
       return (
         <div>
-          <div>
+          <div className="flex flex-col items-center gap-2">
             <label
               htmlFor="password"
               className="block text-sm font-medium text-gray-700"
@@ -98,12 +113,18 @@ export const ObjectDownloadModal = ({
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
               placeholder="Password"
             />
-            <button
+            <Button
+              variant="primary"
+              className="text-xs w-[50%]"
               onClick={() => setPasswordConfirmed(true)}
-              className="mt-4 w-full bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600"
             >
               Confirm Password
-            </button>
+            </Button>
+            {wrongPassword && (
+              <div className="flex justify-center text-sm text-red-500">
+                Wrong password
+              </div>
+            )}
           </div>
         </div>
       );
@@ -122,7 +143,7 @@ export const ObjectDownloadModal = ({
         <Button onClick={() => setPasswordConfirmed(true)}>Download ZIP</Button>
       </div>
     );
-  }, [metadata]);
+  }, [metadata, wrongPassword, defaultPassword]);
 
   return (
     <Transition appear show={!!cid} as={Fragment}>

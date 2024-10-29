@@ -7,6 +7,7 @@ import {
   Transition,
 } from "@headlessui/react";
 import { Button } from "../common/Button";
+import { useEncryptionStore } from "../../states/encryption";
 
 export const UploadingFileModal = ({
   file,
@@ -56,6 +57,13 @@ export const UploadingFileModal = ({
 
   const progressPercentage = Math.round(progress);
 
+  const defaultPassword = useEncryptionStore((store) => store.password);
+
+  const setDefaultPassword = useCallback(() => {
+    setPassword(defaultPassword);
+    setPasswordConfirmed(true);
+  }, [defaultPassword]);
+
   return (
     <Transition show={!!file}>
       <Dialog as="div" onClose={onClose}>
@@ -63,12 +71,14 @@ export const UploadingFileModal = ({
           <div className="bg-white rounded-lg p-6 shadow-lg transition-transform transform min-w-[25%]">
             {passwordConfirmed ? (
               <div>
-                <DialogTitle>Uploading...</DialogTitle>
-                <div className="mt-4">
+                <div className="relative w-full h-2 bg-gray-200 rounded">
                   <div
                     className="absolute top-0 left-0 h-2 bg-green-500 rounded transition-all duration-500"
-                    style={{ width: `${progressPercentage}%` }}
+                    style={{ width: `${progress}%` }}
                   />
+                </div>
+                <div className="flex justify-center mt-4 text-sm font-semibold">
+                  <div>Uploading... {progressPercentage}%</div>
                 </div>
               </div>
             ) : (
@@ -86,6 +96,14 @@ export const UploadingFileModal = ({
                     placeholder="Password"
                   />
                   <div className="flex gap-2 justify-center">
+                    <Button
+                      disabled={!defaultPassword}
+                      className="text-xs"
+                      variant="lightAccent"
+                      onClick={setDefaultPassword}
+                    >
+                      Encrypt with default password
+                    </Button>
                     <Button
                       className="text-xs"
                       variant="lightAccent"
