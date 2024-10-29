@@ -15,7 +15,7 @@ export interface UploadStatus {
 }
 
 export interface Owner {
-  handle: string;
+  publicId: string;
   role: OwnerRole;
 }
 

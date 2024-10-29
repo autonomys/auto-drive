@@ -11,24 +11,24 @@ export enum UserRole {
   Admin = "Admin",
 }
 
-export type Handle = string | null;
+export type PublicId = string | null;
 
-export type UserOrHandle = User | Handle;
+export type UserOrPublicId = User | PublicId;
 
 type UserBase = {
   oauthProvider: string;
   oauthUserId: string;
   role: UserRole;
-  handle: Handle;
+  publicId: PublicId;
 };
 
 export type OnboardedUser = UserBase & {
-  handle: string;
+  publicId: string;
   onboarded: true;
 };
 
 export type UnonboardedUser = UserBase & {
-  handle: null;
+  publicId: null;
   onboarded: false;
 };
 
@@ -40,11 +40,11 @@ export type UserInfo = {
 };
 
 export const userFromOAuth = (
-  user: Omit<User, "onboarded" | "handle">
+  user: Omit<User, "onboarded" | "publicId">
 ): UnonboardedUser => {
   return {
     ...user,
-    handle: null,
+    publicId: null,
     onboarded: false,
   };
 };

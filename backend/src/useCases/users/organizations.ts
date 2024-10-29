@@ -37,7 +37,7 @@ const getOrganizationByUser = async (user: User): Promise<Organization> => {
 const initOrganization = async (user: User) => {
   const organization = await organizationsRepository.createOrganization(
     v4(),
-    user.handle ?? user.oauthUserId
+    user.publicId ?? user.oauthUserId
   );
 
   await organizationMembersRepository.addMemberToOrganization(

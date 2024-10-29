@@ -132,7 +132,7 @@ const getObjectInformation = async (
   return { cid, metadata, uploadStatus, owners };
 };
 
-const shareObject = async (executor: User, cid: string, handle: string) => {
+const shareObject = async (executor: User, cid: string, publicId: string) => {
   const admins = await OwnershipUseCases.getAdmins(cid);
   const isUserAdmin = admins.find(
     (admin) =>
@@ -143,7 +143,7 @@ const shareObject = async (executor: User, cid: string, handle: string) => {
     throw new Error("User is not an admin of this object");
   }
 
-  const user = await UsersUseCases.getUserByHandle(handle);
+  const user = await UsersUseCases.getUserByPublicId(publicId);
   if (!user) {
     throw new Error("User not found");
   }

@@ -1,5 +1,5 @@
 import { v4 } from "uuid";
-import { User, UserOrHandle } from "../../models/users/user.js";
+import { User, UserOrPublicId } from "../../models/users/user.js";
 import {
   Subscription,
   SubscriptionGranularity,
@@ -13,7 +13,7 @@ import { InteractionType } from "../../models/objects/interactions.js";
 
 const updateSubscription = async (
   executor: User,
-  userOrHandle: UserOrHandle,
+  userOrPublicId: UserOrPublicId,
   granularity: SubscriptionGranularity,
   uploadLimit: number,
   downloadLimit: number
@@ -23,7 +23,7 @@ const updateSubscription = async (
     throw new Error("User is not an admin");
   }
 
-  const user = await UsersUseCases.resolveUser(userOrHandle);
+  const user = await UsersUseCases.resolveUser(userOrPublicId);
 
   const organization = await OrganizationsUseCases.getOrganizationByUser(user);
 
@@ -44,9 +44,9 @@ const updateSubscription = async (
 };
 
 const getSubscription = async (
-  userOrHandle: UserOrHandle
+  userOrPublicId: UserOrPublicId
 ): Promise<Subscription> => {
-  const user = await UsersUseCases.resolveUser(userOrHandle);
+  const user = await UsersUseCases.resolveUser(userOrPublicId);
 
   const organization = await OrganizationsUseCases.getOrganizationByUser(user);
 
@@ -110,10 +110,10 @@ const getPendingCreditsBySubscriptionAndType = async (
 };
 
 const getSubscriptionInfo = async (
-  userOrHandle: UserOrHandle
+  userOrPublicId: UserOrPublicId
 ): Promise<SubscriptionInfo> => {
   const subscription = await SubscriptionsUseCases.getSubscription(
-    userOrHandle
+    userOrPublicId
   );
 
   const pendingUploadCredits = await getPendingCreditsBySubscriptionAndType(

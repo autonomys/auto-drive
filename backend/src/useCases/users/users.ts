@@ -5,7 +5,7 @@ import {
   userFromOAuth,
   userFromTable,
   UserInfo,
-  UserOrHandle,
+  UserOrPublicId,
   UserRole,
 } from "../../models/users/index.js";
 import { InteractionType } from "../../models/objects/interactions.js";
@@ -17,9 +17,12 @@ import { usersRepository } from "../../repositories/index.js";
 import { InteractionsUseCases } from "../objects/interactions.js";
 import { OrganizationsUseCases } from "./organizations.js";
 import { SubscriptionsUseCases } from "./subscriptions.js";
+import { v4 } from "uuid";
 
-const getUserByHandle = async (handle: string): Promise<User | undefined> => {
-  const dbUser = await usersRepository.getUserByHandle(handle);
+const getUserByPublicId = async (
+  publicId: string
+): Promise<User | undefined> => {
+  const dbUser = await usersRepository.getUserByPublicId(publicId);
   if (!dbUser) {
     return undefined;
   }
@@ -27,34 +30,31 @@ const getUserByHandle = async (handle: string): Promise<User | undefined> => {
   return userFromTable({
     oauthProvider: dbUser.oauth_provider,
     oauthUserId: dbUser.oauth_user_id,
-    handle: dbUser.handle,
+    publicId: dbUser.public_id,
     role: dbUser.role,
   });
 };
 
-const resolveUser = async (userOrHandle: UserOrHandle): Promise<User> => {
-  if (userOrHandle === null) {
-    throw new Error("User not found (handle=null)");
+const resolveUser = async (userOrPublicId: UserOrPublicId): Promise<User> => {
+  if (userOrPublicId === null) {
+    throw new Error("User not found (user=null)");
   }
 
-  const isHandle = typeof userOrHandle === "string";
-  let user: User | undefined = isHandle
-    ? await getUserByHandle(userOrHandle)
-    : userOrHandle;
+  const isPublicId = typeof userOrPublicId === "string";
+  let user: User | undefined = isPublicId
+    ? await getUserByPublicId(userOrPublicId)
+    : userOrPublicId;
   if (!user) {
     throw new Error("User not found");
   }
   return user;
 };
 
-const onboardUser = async (
-  user: User,
-  handle: string
-): Promise<User | undefined> => {
+const onboardUser = async (user: User): Promise<User | undefined> => {
   const updatedUser = await UsersUseCases.initUser(
     user.oauthProvider,
     user.oauthUserId,
-    handle
+    v4()
   );
 
   return updatedUser;
@@ -76,20 +76,25 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<User> => {
   return userFromTable({
     oauthProvider: dbUser.oauth_provider,
     oauthUserId: dbUser.oauth_user_id,
-    handle: dbUser.handle,
+    publicId: dbUser.public_id,
     role: dbUser.role,
   });
 };
 
-const searchUsersByHandle = async (handle: string): Promise<string[]> => {
+const searchUsersByPublicId = async (publicId: string): Promise<string[]> => {
   const maxResults = 10;
-  const dbUsers = await usersRepository.searchUsersByHandle(handle, maxResults);
+  const dbUsers = await usersRepository.searchUsersByPublicId(
+    publicId,
+    maxResults
+  );
 
-  return dbUsers.map((e) => e.handle);
+  return dbUsers.map((e) => e.public_id);
 };
 
-const isAdminUser = async (userOrHandle: UserOrHandle): Promise<boolean> => {
-  const user = await resolveUser(userOrHandle);
+const isAdminUser = async (
+  userOrPublicId: UserOrPublicId
+): Promise<boolean> => {
+  const user = await resolveUser(userOrPublicId);
 
   const adminUser = await usersRepository.getUserByOAuthInformation(
     user.oauthProvider,
@@ -101,7 +106,7 @@ const isAdminUser = async (userOrHandle: UserOrHandle): Promise<boolean> => {
 
 const updateRole = async (
   executor: User,
-  userOrHandle: UserOrHandle,
+  userOrPublicId: UserOrPublicId,
   role: UserRole
 ) => {
   const isAdmin = await isAdminUser(executor);
@@ -109,13 +114,15 @@ const updateRole = async (
     throw new Error("User does not have admin privileges");
   }
 
-  const user = await resolveUser(userOrHandle);
+  const user = await resolveUser(userOrPublicId);
 
   return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role);
 };
 
-const getUserInfo = async (userOrHandle: UserOrHandle): Promise<UserInfo> => {
-  const user = await resolveUser(userOrHandle);
+const getUserInfo = async (
+  userOrPublicId: UserOrPublicId
+): Promise<UserInfo> => {
+  const user = await resolveUser(userOrPublicId);
 
   if (!user.onboarded) {
     return { user };
@@ -137,14 +144,14 @@ const getUserList = async (reader: User): Promise<SubscriptionWithUser[]> => {
   return Promise.all(
     users.map(async (user) => {
       const subscription = await SubscriptionsUseCases.getSubscription(
-        user.handle
+        user.public_id
       );
       return {
         ...subscription,
         user: userFromTable({
           oauthProvider: user.oauth_provider,
           oauthUserId: user.oauth_user_id,
-          handle: user.handle,
+          publicId: user.public_id,
           role: user.role,
         }),
       };
@@ -155,13 +162,13 @@ const getUserList = async (reader: User): Promise<SubscriptionWithUser[]> => {
 const initUser = async (
   oauth_provider: string,
   oauth_user_id: string,
-  handle: string,
+  publicId: string,
   role: UserRole = UserRole.User
 ): Promise<User> => {
   const user = await usersRepository.createUser(
     oauth_provider,
     oauth_user_id,
-    handle,
+    publicId,
     role
   );
   if (!user) {
@@ -172,7 +179,7 @@ const initUser = async (
     userFromTable({
       oauthProvider: oauth_provider,
       oauthUserId: oauth_user_id,
-      handle: handle,
+      publicId: publicId,
       role: role,
     })
   );
@@ -180,17 +187,17 @@ const initUser = async (
   return userFromTable({
     oauthProvider: user.oauth_provider,
     oauthUserId: user.oauth_user_id,
-    handle: user.handle,
+    publicId: user.public_id,
     role: user.role,
   });
 };
 
 const getPendingCreditsByUserAndType = async (
-  userOrHandle: UserOrHandle,
+  userOrPublicId: UserOrPublicId,
   type: InteractionType
 ): Promise<number> => {
   const subscription = await SubscriptionsUseCases.getSubscription(
-    userOrHandle
+    userOrPublicId
   );
 
   return SubscriptionsUseCases.getPendingCreditsBySubscriptionAndType(
@@ -200,12 +207,12 @@ const getPendingCreditsByUserAndType = async (
 };
 
 const registerInteraction = async (
-  userOrHandle: UserOrHandle,
+  userOrPublicId: UserOrPublicId,
   type: InteractionType,
   size: number
 ) => {
   const subscription = await SubscriptionsUseCases.getSubscription(
-    userOrHandle
+    userOrPublicId
   );
 
   await InteractionsUseCases.createInteraction(subscription.id, type, size);
@@ -214,8 +221,8 @@ const registerInteraction = async (
 export const UsersUseCases = {
   onboardUser,
   getUserByOAuthUser,
-  getUserByHandle,
-  searchUsersByHandle,
+  getUserByPublicId,
+  searchUsersByPublicId,
   isAdminUser,
   updateRole,
   resolveUser,

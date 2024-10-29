@@ -13,40 +13,12 @@ userController.post("/@me/onboard", async (req, res) => {
     return;
   }
 
-  const { handle } = req.body;
-
-  if (!handle) {
-    return res
-      .status(400)
-      .json({ error: "Missing attribute `handle` in body" });
-  }
-
-  if (!/^@[A-Za-z0-9_\.]+$/.test(handle)) {
-    return res.status(400).json({
-      error:
-        "Invalid handle format. Handle must start with @ and can only contain letters, numbers, underscores and dots",
-    });
-  }
-
-  if (handle.length > 33) {
-    return res.status(400).json({
-      error: "Handle must be 32 characters or less",
-    });
-  }
-
-  if (handle.length < 2) {
-    return res.status(400).json({
-      error: "Handle must be 1 characters or more",
-    });
-  }
-
   try {
-    const onboardedUser = await UsersUseCases.onboardUser(user, handle);
-
+    const onboardedUser = await UsersUseCases.onboardUser(user);
     res.json(onboardedUser);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "Failed to update user handle" });
+    return res.status(500).json({ error: "Failed to onboard user" });
   }
 });
 
@@ -117,29 +89,29 @@ userController.delete("/@me/apiKeys/:id", async (req, res) => {
 });
 
 userController.get("/search", async (req, res) => {
-  const { handle } = req.query;
+  const { publicId } = req.query;
 
-  if (typeof handle !== "string") {
+  if (typeof publicId !== "string") {
     return res
       .status(400)
-      .json({ error: "Missing or invalid attribute `handle` in query" });
+      .json({ error: "Missing or invalid attribute `publicId` in query" });
   }
 
-  const users = await UsersUseCases.searchUsersByHandle(handle);
+  const users = await UsersUseCases.searchUsersByPublicId(publicId);
 
   res.json(users);
 });
 
 userController.get("/checkHandleAvailability", async (req, res) => {
-  const { handle } = req.query;
+  const { publicId } = req.query;
 
-  if (typeof handle !== "string") {
+  if (typeof publicId !== "string") {
     return res
       .status(400)
-      .json({ error: "Missing or invalid attribute `handle` in query" });
+      .json({ error: "Missing or invalid attribute `publicId` in query" });
   }
 
-  const user = await UsersUseCases.getUserByHandle(handle);
+  const user = await UsersUseCases.getUserByPublicId(publicId);
 
   res.json({ isAvailable: !user });
 });
@@ -150,16 +122,16 @@ userController.post("/admin/add", async (req, res) => {
     return;
   }
 
-  const { handle } = req.body;
+  const { publicId } = req.body;
 
-  if (typeof handle !== "string") {
+  if (typeof publicId !== "string") {
     return res
       .status(400)
-      .json({ error: "Missing or invalid attribute `handle` in body" });
+      .json({ error: "Missing or invalid attribute `publicId` in body" });
   }
 
   try {
-    await UsersUseCases.updateRole(user, handle, UserRole.Admin);
+    await UsersUseCases.updateRole(user, publicId, UserRole.Admin);
 
     res.sendStatus(200);
   } catch (error) {
@@ -174,16 +146,16 @@ userController.post("/admin/remove", async (req, res) => {
     return;
   }
 
-  const { handle } = req.body;
+  const { publicId } = req.body;
 
-  if (typeof handle !== "string") {
+  if (typeof publicId !== "string") {
     return res
       .status(400)
-      .json({ error: "Missing or invalid attribute `handle` in body" });
+      .json({ error: "Missing or invalid attribute `publicId` in body" });
   }
 
   try {
-    await UsersUseCases.updateRole(user, handle, UserRole.User);
+    await UsersUseCases.updateRole(user, publicId, UserRole.User);
 
     res.sendStatus(200);
   } catch (error) {
@@ -198,12 +170,12 @@ userController.post("/subscriptions/update", async (req, res) => {
     return;
   }
 
-  const { handle, uploadLimit, downloadLimit, granularity } = req.body;
+  const { publicId, uploadLimit, downloadLimit, granularity } = req.body;
 
-  if (typeof handle !== "string") {
+  if (typeof publicId !== "string") {
     return res
       .status(400)
-      .json({ error: "Missing or invalid attribute `handle` in body" });
+      .json({ error: "Missing or invalid attribute `publicId` in body" });
   }
 
   if (typeof uploadLimit !== "number") {
@@ -226,7 +198,7 @@ userController.post("/subscriptions/update", async (req, res) => {
   try {
     await SubscriptionsUseCases.updateSubscription(
       user,
-      handle,
+      publicId,
       granularity,
       uploadLimit,
       downloadLimit
