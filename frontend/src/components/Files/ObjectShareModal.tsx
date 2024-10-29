@@ -128,11 +128,6 @@ export const ObjectShareModal = ({
                     variant="lightAccent"
                     disabled={invalidPublicId || isAlreadyOwnwer}
                     onClick={shareObject}
-                    className={`inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
-                      publicId && !isAlreadyOwnwer
-                        ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
-                        : "bg-gray-100 text-gray-900 opacity-50"
-                    }`}
                   >
                     Share with public ID
                   </Button>

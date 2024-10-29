@@ -5,6 +5,6 @@ export const shortenString = (str: string, length: number) => {
 
 export const isValidUUID = (uuid: string | null) => {
   const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
   return uuid ? uuidRegex.test(uuid) : false;
 };
