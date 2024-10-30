@@ -1,4 +1,4 @@
-import { FolderTree } from "../models/FileTree";
+import { constructZipBlob, FolderTree } from "../models/FileTree";
 import { asyncByChunk, fileToIterable } from "../utils/async";
 import { getAuthSession } from "../utils/auth";
 import {
@@ -101,7 +101,7 @@ const completeUpload = async (uploadId: string) => {
 
 const createFolderUpload = async (
   fileTree: FolderTree,
-  { encryption, compression }: { encryption: boolean; compression: boolean }
+  { compression }: { compression: boolean }
 ) => {
   const session = await getAuthSession();
   if (!session) {
@@ -114,11 +114,7 @@ const createFolderUpload = async (
       fileTree,
       name: fileTree.name,
       uploadOptions: {
-        encryption: encryption
-          ? {
-              algorithm: "AES_256_GCM",
-            }
-          : undefined,
+        encryption: undefined,
         compression: compression
           ? {
               algorithm: "ZLIB",
@@ -139,6 +135,23 @@ const createFolderUpload = async (
 
     return e.json() as Promise<CreationUploadResponse>;
   });
+};
+
+const createEncryptedFolderUpload = async function* (
+  tree: FolderTree,
+  files: Record<string, File>,
+  password: string
+): AsyncIterable<number> {
+  const zip = await constructZipBlob(tree, files);
+
+  const iterable = uploadFile(new File([zip], `${tree.name}.zip`), {
+    password,
+    compress: false,
+  });
+
+  for await (const progress of iterable) {
+    yield progress;
+  }
 };
 
 const createFileUploadWithinFolderUpload = async (
@@ -227,7 +240,7 @@ const fileToParsedIterable = async function* (
 const uploadFile = async function* (
   file: File,
   { password, compress }: { password?: string; compress?: boolean } = {}
-) {
+): AsyncIterable<number> {
   const upload = await createFileUpload(file, {
     encryption: !!password,
     compression: !!compress,
@@ -250,11 +263,10 @@ const uploadFile = async function* (
 const uploadFolder = async function* (
   tree: FolderTree,
   files: Record<string, File>,
-  { password, compress }: { password?: string; compress?: boolean } = {}
+  { compress }: { compress?: boolean } = {}
 ): AsyncGenerator<number> {
   const totalSize = Object.values(files).reduce((acc, e) => acc + e.size, 0);
   const upload = await createFolderUpload(tree, {
-    encryption: !!password,
     compression: !!compress,
   });
   let uploadedSize = 0;
@@ -263,11 +275,10 @@ const uploadFolder = async function* (
       upload.id,
       relativeId,
       file,
-      { encryption: !!password, compression: !!compress }
+      { encryption: false, compression: !!compress }
     );
 
     const processedIterable = fileToParsedIterable(file, {
-      password,
       compress,
     });
     for await (const chunkProgress of uploadFileChunks(
@@ -286,4 +297,5 @@ const uploadFolder = async function* (
 export const UploadService = {
   uploadFile,
   uploadFolder,
+  createEncryptedFolderUpload,
 };

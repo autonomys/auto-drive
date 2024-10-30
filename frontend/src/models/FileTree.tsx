@@ -1,3 +1,5 @@
+import JSZip from "jszip";
+
 type FolderTreeFolder = {
   name: string;
   type: "folder";
@@ -67,4 +69,46 @@ export const constructFromFileSystemEntries = (
   }
 
   return [root.children.length === 1 ? root.children[0] : root, files];
+};
+
+const addFilesToZip = (
+  folder: JSZip,
+  folderNode: FolderTreeFolder,
+  files: Record<string, File>
+) => {
+  folderNode.children.forEach((child) => {
+    if (child.type === "file") {
+      folder.file(child.name, files[child.id]);
+    } else if (child.type === "folder") {
+      const subFolder = folder.folder(child.name);
+      if (!subFolder) {
+        throw new Error("Failed to create folder in zip");
+      }
+      addFilesToZip(subFolder, child as FolderTreeFolder, files);
+    }
+  });
+};
+
+export const constructZipBlob = (
+  tree: FolderTree,
+  files: Record<string, File>
+) => {
+  const zip = new JSZip();
+  if (tree.type === "file") {
+    throw new Error("Cannot construct zip from file");
+  }
+
+  tree.children.forEach((node) => {
+    if (node.type === "file") {
+      zip.file(node.name, files[node.id]);
+    } else if (node.type === "folder") {
+      const folder = zip.folder(node.name);
+      if (!folder) {
+        throw new Error("Failed to create folder in zip");
+      }
+      addFilesToZip(folder, node as FolderTreeFolder, files);
+    }
+  });
+
+  return zip.generateAsync({ type: "blob" });
 };

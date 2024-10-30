@@ -42,7 +42,6 @@ export const UploadingFileModal = ({
   const onConfirmPassword = useCallback(() => {
     if (passwordConfirmed) {
       const passwordToUse = password ?? undefined;
-      console.log("uploading file with password: ", passwordToUse);
       manageUpload(passwordToUse).then(() => {
         window.location.reload();
       });

@@ -17,6 +17,7 @@
     "@uidotdev/usehooks": "^2.4.1",
     "bytes": "^3.1.2",
     "fflate": "^0.8.2",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.439.0",
     "multiformats": "^13.2.3",
     "next": "^14.2.10",
