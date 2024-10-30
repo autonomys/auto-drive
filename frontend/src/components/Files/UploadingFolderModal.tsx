@@ -5,6 +5,8 @@ import { FolderTree } from "../../models/FileTree";
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { Button } from "../common/Button";
 import { shortenString } from "../../utils/misc";
+import { FileWarning } from "lucide-react";
+import { useEncryptionStore } from "../../states/encryption";
 
 export const UploadingFolderModal = ({
   data,
@@ -24,17 +26,26 @@ export const UploadingFolderModal = ({
 
     const passwordToUse = password ? password : undefined;
 
-    const progressIterable = UploadService.uploadFolder(
-      data.fileTree,
-      data.files,
-      {
-        password: passwordToUse,
-        compress: true,
+    if (passwordToUse) {
+      const progressIterable = UploadService.createEncryptedFolderUpload(
+        data.fileTree,
+        data.files,
+        passwordToUse
+      );
+      for await (const progress of progressIterable) {
+        setProgress(progress);
       }
-    );
-
-    for await (const progress of progressIterable) {
-      setProgress(progress);
+    } else {
+      const progressIterable = UploadService.uploadFolder(
+        data.fileTree,
+        data.files,
+        {
+          compress: true,
+        }
+      );
+      for await (const progress of progressIterable) {
+        setProgress(progress);
+      }
     }
 
     setPasswordConfirmed(false);
@@ -44,10 +55,15 @@ export const UploadingFolderModal = ({
   useEffect(() => {
     if (!passwordConfirmed) return;
 
-    handleUpload().then(() => {
-      window.location.reload();
-    });
+    handleUpload();
   }, [passwordConfirmed]);
+
+  const defaultPassword = useEncryptionStore((store) => store.password);
+
+  const setDefaultPassword = useCallback(() => {
+    setPassword(defaultPassword);
+    setPasswordConfirmed(true);
+  }, [defaultPassword]);
 
   return (
     <Transition show={!!data}>
@@ -91,6 +107,14 @@ export const UploadingFolderModal = ({
                   />
                   <div className="flex gap-2 justify-center">
                     <Button
+                      disabled={!defaultPassword}
+                      className="text-xs"
+                      variant="lightAccent"
+                      onClick={setDefaultPassword}
+                    >
+                      Encrypt with default password
+                    </Button>
+                    <Button
                       className="text-xs"
                       variant="lightAccent"
                       onClick={() => setPasswordConfirmed(true)}
@@ -106,6 +130,12 @@ export const UploadingFolderModal = ({
                     >
                       Cancel
                     </Button>
+                  </div>
+                  <div className="flex items-center gap-2 bg-yellow-50 p-2 rounded overflow-hidden mt-4">
+                    <FileWarning className="w-4 h-4 text-yellow-500" />
+                    <span className="text-sm text-gray-500 font-semibold">
+                      Encrypted folders will be uploaded as encrypted zip files.
+                    </span>
                   </div>
                 </div>
               </div>
