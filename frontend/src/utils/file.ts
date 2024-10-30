@@ -2,6 +2,7 @@ import { OffchainMetadata } from "@autonomys/auto-drive";
 import { decryptFile } from "./encryption";
 import { streamToAsyncIterable } from "./stream";
 import { decompressFileByChunks } from "./compression";
+import { ObjectSummary } from "../models/UploadedObjectMetadata";
 
 export class InvalidDecryptKey extends Error {
   constructor() {
@@ -70,7 +71,10 @@ export const handleFileDownload = async (
   }
 };
 
-export const getTypeFromMetadata = (metadata: OffchainMetadata) => {
+export const getTypeFromMetadata = (metadata: {
+  type: OffchainMetadata["type"];
+  mimeType?: string;
+}) => {
   if (metadata.type === "file") {
     return metadata.mimeType;
   }

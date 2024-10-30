@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  OwnerRole,
-  UploadedObjectMetadata,
-} from "@/models/UploadedObjectMetadata";
+import { ObjectSummary, OwnerRole } from "@/models/UploadedObjectMetadata";
 import {
   Popover,
   PopoverButton,
@@ -23,14 +20,26 @@ import { Table } from "../Table";
 import { TableHead, TableHeadCell, TableHeadRow } from "../Table/TableHead";
 import { DisplayerIcon } from "../Triangle";
 import { Button } from "../Button";
+import { TableFooter } from "../Table/TableFooter";
+import { TablePaginator } from "../TablePaginator";
 
-export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
+export const DeletedFilesTable: FC<{
+  files: ObjectSummary[];
+  pageSize: number;
+  setPageSize: (pageSize: number) => void;
+  currentPage: number;
+  setCurrentPage: (currentPage: number) => void;
+  totalItems: number;
+}> = ({
   files,
+  pageSize,
+  setPageSize,
+  currentPage,
+  setCurrentPage,
+  totalItems,
 }) => {
   const [cid, setCID] = useState<string | null>(null);
-  const [selectedFiles, setSelectedFiles] = useState<UploadedObjectMetadata[]>(
-    []
-  );
+  const [selectedFiles, setSelectedFiles] = useState<ObjectSummary[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
   const [restoreCID, setRestoreCID] = useState<string | null>(null);
@@ -98,29 +107,28 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     (e: MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       selectedFiles.forEach((file) => {
-        downloadFile(e, file.metadata.dataCid);
+        downloadFile(e, file.headCid);
       });
     },
     [selectedFiles, downloadFile]
   );
 
   const renderRow = useCallback(
-    (file: UploadedObjectMetadata) => {
-      const isExpanded = expandedRows.has(file.metadata.dataCid);
+    (file: ObjectSummary) => {
+      const isExpanded = expandedRows.has(file.headCid);
       const owner = file.owners.find(
         (o) => o.role === OwnerRole.ADMIN
       )?.publicId;
       const popoverButtonRef = useRef<HTMLButtonElement>(null);
 
       return (
-        <Fragment key={file.metadata.dataCid}>
+        <Fragment key={file.headCid}>
           <TableBodyRow
             className={`hover:bg-gray-100 relative ${
-              file.metadata.type === "folder" ? "hover:cursor-pointer" : ""
+              file.type === "folder" ? "hover:cursor-pointer" : ""
             }`}
             onClick={() =>
-              file.metadata.type === "folder" &&
-              navigateToFile(file.metadata.dataCid)
+              file.type === "folder" && navigateToFile(file.headCid)
             }
           >
             <TableBodyCell>
@@ -136,11 +144,11 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                     }
                   }}
                 />
-                {file.metadata.type === "folder" && file.metadata.children && (
+                {file.type === "folder" && file.children && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleRow(file.metadata.dataCid);
+                      toggleRow(file.headCid);
                     }}
                   >
                     {isExpanded ? (
@@ -150,10 +158,10 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                     )}
                   </button>
                 )}
-                <span>{renderFileIcon(file.metadata.type)}</span>
+                <span>{renderFileIcon(file.type)}</span>
                 <span
                   className={`relative ml-2 text-sm font-medium text-gray-900 ${
-                    file.metadata.type === "folder"
+                    file.type === "folder"
                       ? "hover:underline hover:cursor-pointer"
                       : ""
                   }`}
@@ -170,8 +178,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                     <PopoverButton ref={popoverButtonRef} as="span">
                       <span className="hover:cursor-pointer text-accent font-semibold">
                         {shortenString(
-                          file.metadata.name ??
-                            `No name (${file.metadata.dataCid.slice(0, 12)})`,
+                          file.name ?? `No name (${file.headCid.slice(0, 12)})`,
                           35
                         )}
                       </span>
@@ -199,8 +206,8 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 </span>
               </div>
             </TableBodyCell>
-            <TableBodyCell>{getTypeFromMetadata(file.metadata)}</TableBodyCell>
-            <TableBodyCell>{bytes(file.metadata.totalSize)}</TableBodyCell>
+            <TableBodyCell>{getTypeFromMetadata(file)}</TableBodyCell>
+            <TableBodyCell>{bytes(file.size)}</TableBodyCell>
             <TableBodyCell>
               {owner ? renderOwnerBadge(owner) : "Unknown"}
             </TableBodyCell>
@@ -208,23 +215,23 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               <Button
                 variant="lightAccent"
                 className="mr-2 text-xs"
-                onClick={(e) => downloadFile(e, file.metadata.dataCid)}
+                onClick={(e) => downloadFile(e, file.headCid)}
               >
                 Download
               </Button>
               <Button
                 variant="lightAccent"
                 className="mr-2 text-xs"
-                onClick={(e) => openRestoreModal(e, file.metadata.dataCid)}
+                onClick={(e) => openRestoreModal(e, file.headCid)}
               >
                 Restore
               </Button>
             </TableBodyCell>
           </TableBodyRow>
           {isExpanded &&
-            file.metadata.type === "folder" &&
-            file.metadata.children &&
-            file.metadata.children.map((child) => (
+            file.type === "folder" &&
+            file.children &&
+            file.children.map((child) => (
               <TableBodyRow key={child.cid}>
                 <TableBodyCell className="px-6 py-4 whitespace-nowrap w-[50%]">
                   <div className="flex items-center">
@@ -235,7 +242,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                     -
                     <span
                       className={`relative ml-2 text-sm font-semibold text-accent ${
-                        file.metadata.type === "folder"
+                        file.type === "folder"
                           ? "hover:underline hover:cursor-pointer"
                           : ""
                       }`}
@@ -334,6 +341,19 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 </TableHeadRow>
               </TableHead>
               <TableBody>{files.map((file) => renderRow(file))}</TableBody>
+              <TableFooter>
+                <tr className="w-full">
+                  <td colSpan={5}>
+                    <TablePaginator
+                      pageSize={pageSize}
+                      setPageSize={setPageSize}
+                      currentPage={currentPage}
+                      setCurrentPage={setCurrentPage}
+                      totalItems={totalItems}
+                    />
+                  </td>
+                </tr>
+              </TableFooter>
             </Table>
           </div>
         </div>

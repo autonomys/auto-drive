@@ -1,5 +1,8 @@
 import { LoaderCircle } from "lucide-react";
-import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
+import {
+  ObjectSummary,
+  UploadedObjectMetadata,
+} from "../../models/UploadedObjectMetadata";
 import { FileDropZone } from "../Files/FileDropZone";
 import { UploadingObjects } from "../Files/UploadingObjects";
 import { NoFilesInTrashPlaceholder } from "./NoFilesInTrashPlaceholder";
@@ -7,8 +10,18 @@ import { DeletedFilesTable } from "../common/DeleteFilesTable";
 
 export const TrashFiles = ({
   objects,
+  pageSize,
+  setPageSize,
+  currentPage,
+  setCurrentPage,
+  totalItems,
 }: {
-  objects: UploadedObjectMetadata[] | null;
+  objects: ObjectSummary[] | null;
+  pageSize: number;
+  setPageSize: (pageSize: number) => void;
+  currentPage: number;
+  setCurrentPage: (currentPage: number) => void;
+  totalItems: number;
 }) => {
   return (
     <div className="flex w-full">
@@ -22,7 +35,14 @@ export const TrashFiles = ({
             </div>
           )}
           {objects && objects.length > 0 && (
-            <DeletedFilesTable files={objects} />
+            <DeletedFilesTable
+              files={objects}
+              pageSize={pageSize}
+              setPageSize={setPageSize}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              totalItems={totalItems}
+            />
           )}
           {objects && objects.length === 0 && <NoFilesInTrashPlaceholder />}
         </div>

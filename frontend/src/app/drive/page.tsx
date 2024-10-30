@@ -4,26 +4,40 @@ import { FileTable } from "@/components/common/FileTable";
 import { FileDropZone } from "@/components/Files/FileDropZone";
 import { NoUploadsPlaceholder } from "@/components/Files/NoUploadsPlaceholder";
 import { ApiService } from "@/services/api";
-import { useEffect, useState } from "react";
-import { useLocalStorage } from "usehooks-ts";
+import { useCallback, useEffect, useState } from "react";
 import { UploadingObjects } from "../../components/Files/UploadingObjects";
-import { UploadedObjectMetadata } from "../../models/UploadedObjectMetadata";
+import { ObjectSummary } from "../../models/UploadedObjectMetadata";
 import { LoaderCircle } from "lucide-react";
 import { useScopeStore } from "../../states/scope";
+import { PaginatedResult } from "../../models/common";
 
 export default function Page() {
+  const [pageSize, setPageSize] = useState(5);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
+
   const [rootObjectMetadata, setRootObjectMetadata] = useState<
-    UploadedObjectMetadata[] | null
+    ObjectSummary[] | null
   >(null);
   const scope = useScopeStore(({ scope }) => scope);
 
+  const updateResult = useCallback((result: PaginatedResult<ObjectSummary>) => {
+    setRootObjectMetadata(result.rows);
+    setTotalItems(result.totalCount);
+  }, []);
+
   useEffect(() => {
-    setRootObjectMetadata(null);
-    ApiService.getRootObjects(scope).then((e) => {
-      const promises = e.map((e) => ApiService.fetchUploadedObjectMetadata(e));
-      Promise.all(promises).then(setRootObjectMetadata);
-    });
-  }, [scope]);
+    const offset = currentPage * pageSize;
+    ApiService.getRootObjects(scope, offset, pageSize).then(updateResult);
+  }, [scope, currentPage, pageSize, updateResult]);
+
+  const updateCurrentPage = useCallback((newPage: number) => {
+    setCurrentPage(newPage);
+  }, []);
+
+  const updatePageSize = useCallback((newPageSize: number) => {
+    setPageSize(newPageSize);
+  }, []);
 
   return (
     <div className="flex w-full">
@@ -37,7 +51,14 @@ export default function Page() {
             </div>
           )}
           {rootObjectMetadata && rootObjectMetadata.length > 0 && (
-            <FileTable files={rootObjectMetadata} />
+            <FileTable
+              files={rootObjectMetadata}
+              pageSize={pageSize}
+              setPageSize={updatePageSize}
+              currentPage={currentPage}
+              setCurrentPage={updateCurrentPage}
+              totalItems={totalItems}
+            />
           )}
           {rootObjectMetadata && rootObjectMetadata.length === 0 && (
             <NoUploadsPlaceholder />
