@@ -12,9 +12,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^0.5.3":
-  version: 0.5.3
-  resolution: "@autonomys/auto-drive@npm:0.5.3"
+"@autonomys/auto-drive@npm:^0.7.4":
+  version: 0.7.4
+  resolution: "@autonomys/auto-drive@npm:0.7.4"
   dependencies:
     "@ipld/dag-pb": "npm:^4.1.2"
     blake3: "npm:1.1.0"
@@ -22,7 +22,7 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/a58a49b1de033ccd1980f4839bf75ce4007fcf37175d5c05dc7a58af954e62d2322ec4085ae5a937dd3f24a33fb04af5f253b27b3fd14a1ba31c6fd814ebb60e
+  checksum: 10c0/5d7b8b9720ca70d626408c8b7b63767ed1e283024702fe935edf94d7b4b23d30319474f7c34f2892418aad6cd72b2a4092057ae0c5b50d7f6f6c1b1f72caaeb4
   languageName: node
   linkType: hard
 
@@ -2259,7 +2259,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "frontend@workspace:."
   dependencies:
-    "@autonomys/auto-drive": "npm:^0.5.3"
+    "@autonomys/auto-drive": "npm:^0.7.4"
     "@headlessui/react": "npm:^2.1.8"
     "@heroicons/react": "npm:^2.1.5"
     "@ipld/dag-pb": "npm:^4.1.2"
