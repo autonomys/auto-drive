@@ -9,12 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@autonomys/auto-drive": "^0.5.3",
+    "@autonomys/auto-drive": "^0.7.4",
     "@headlessui/react": "^2.1.8",
     "@heroicons/react": "^2.1.5",
     "@ipld/dag-pb": "^4.1.2",
+    "@peculiar/webcrypto": "^1.5.0",
     "@uidotdev/usehooks": "^2.4.1",
     "bytes": "^3.1.2",
+    "fflate": "^0.8.2",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.439.0",
     "multiformats": "^13.2.3",
     "next": "^14.2.10",

@@ -1,4 +1,13 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
+import { decryptFile } from "./encryption";
+import { streamToAsyncIterable } from "./stream";
+import { decompressFileByChunks } from "./compression";
+
+export class InvalidDecryptKey extends Error {
+  constructor() {
+    super("Invalid decrypt key");
+  }
+}
 
 export const uploadFileContent = (file: File) => {
   return new Promise((resolve) => {
@@ -15,31 +24,49 @@ export const uploadFileContent = (file: File) => {
 export const handleFileDownload = async (
   stream: ReadableStream<Uint8Array>,
   type: OffchainMetadata["type"],
-  name: string
+  name: string,
+  {
+    password,
+    compress,
+  }: {
+    password?: string;
+    compress?: boolean;
+  } = {}
 ) => {
   const StreamSaver = await import("streamsaver");
+  let writtenSize = 0;
   // Create a writable stream using StreamSaver
   const fileStream = StreamSaver.createWriteStream(
     type === "file" ? name : `${name}.zip`
   );
   const writer = fileStream.getWriter();
-  const reader = stream.getReader();
 
-  // Stream data directly from the response to the file
   try {
-    let done = false;
-    while (!done) {
-      const { value, done: streamDone } = await reader.read();
-      if (value) {
-        await writer.write(value);
-      }
-      done = streamDone;
+    let mappers: ((file: AsyncIterable<Buffer>) => AsyncIterable<Buffer>)[] =
+      [];
+    if (password) {
+      mappers.push((file) => decryptFile(file, password));
     }
-  } catch (error) {
-    console.error("Download failed:", error);
+    if (compress) {
+      mappers.push(decompressFileByChunks);
+    }
+
+    const reader = mappers.reduce(
+      (file, mapper) => mapper(file),
+      streamToAsyncIterable(stream.getReader())
+    );
+
+    for await (const chunk of reader) {
+      await writer.write(chunk);
+      writtenSize += chunk.length;
+    }
+  } catch (e) {
+    console.error(e);
   } finally {
-    // Close the writer when done
-    await writer.close();
+    if (writtenSize === 0) {
+      throw new InvalidDecryptKey();
+    }
+    writer.close();
   }
 };
 

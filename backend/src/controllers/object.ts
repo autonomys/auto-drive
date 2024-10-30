@@ -152,6 +152,7 @@ objectController.get("/:cid/download", async (req, res) => {
 
     pipeline(data, res, (err) => {
       if (err) {
+        if (res.headersSent) return;
         console.error("Error streaming data:", err);
         res
           .status(500)

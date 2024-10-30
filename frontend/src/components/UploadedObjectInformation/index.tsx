@@ -10,12 +10,14 @@ import { ApiService } from "../../services/api";
 import { ObjectShareModal } from "../Files/ObjectShareModal";
 import { ObjectDeleteModal } from "../Files/ObjectDeleteModal";
 import { Loader } from "lucide-react";
+import { ObjectDownloadModal } from "../Files/ObjectDownloadModal";
 
 export const UploadedObjectInformation = ({
   object,
 }: {
   object: UploadedObjectMetadata | null;
 }) => {
+  const [downloadModalCid, setDownloadModalCid] = useState<string | null>(null);
   const [shareModalCid, setShareModalCid] = useState<string | null>(null);
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
   const user = useUserStore(({ user }) => user);
@@ -38,14 +40,8 @@ export const UploadedObjectInformation = ({
     if (!object) {
       return;
     }
-
-    const blob = await ApiService.downloadObject(object.metadata.dataCid);
-    handleFileDownload(
-      blob,
-      object.metadata.type ?? "file",
-      object.metadata.name ?? "Unnamed"
-    );
-  }, [object?.metadata.dataCid, object?.metadata.type, object?.metadata.name]);
+    setDownloadModalCid(object.metadata.dataCid);
+  }, [object?.metadata.dataCid]);
 
   const handleShare = useCallback(() => {
     setShareModalCid(object?.metadata.dataCid ?? null);
@@ -68,6 +64,10 @@ export const UploadedObjectInformation = ({
 
   return (
     <div className="flex flex-col gap-4">
+      <ObjectDownloadModal
+        cid={downloadModalCid}
+        onClose={() => setDownloadModalCid(null)}
+      />
       <ObjectShareModal
         cid={shareModalCid}
         closeModal={() => setShareModalCid(null)}
@@ -77,7 +77,11 @@ export const UploadedObjectInformation = ({
         closeModal={() => setDeleteModalCid(null)}
       />
       <div className="flex gap-4">
-        <Button variant="lightAccent" onClick={handleDownload}>
+        <Button
+          variant="lightAccent"
+          className="text-sm"
+          onClick={handleDownload}
+        >
           Download
         </Button>
         <Button

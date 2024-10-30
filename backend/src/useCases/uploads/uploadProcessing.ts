@@ -101,7 +101,10 @@ const completeFileProcessing = async (uploadId: string): Promise<void> => {
     blockstore.getFilteredMany(MetadataType.FileChunk),
     upload?.name,
     uploadedSize,
-    fileBuilders
+    fileBuilders,
+    {
+      ...(upload?.upload_options ?? {}),
+    }
   );
 };
 

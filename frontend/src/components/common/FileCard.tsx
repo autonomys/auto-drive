@@ -24,24 +24,17 @@ interface FileCardProps extends Partial<UploadedObjectMetadata> {
 }
 
 export const FileCard = ({
-  metadata: { type, name, totalSize, dataCid, ...otherMetadata },
+  metadata: { type, name, totalSize, dataCid },
   icon,
 }: FileCardProps) => {
   const router = useRouter();
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
   const onDownload = useCallback(
-    async (
-      event: React.MouseEvent<HTMLButtonElement | HTMLSpanElement>,
-      cid: string
-    ) => {
+    async (event: React.MouseEvent<HTMLButtonElement | HTMLSpanElement>) => {
       event.preventDefault();
       event.stopPropagation();
       setIsDownloadModalOpen(true);
-      const blob = await ApiService.downloadObject(cid).finally(() => {
-        setIsDownloadModalOpen(false);
-      });
-      handleFileDownload(blob, type, name!);
     },
     []
   );
@@ -70,7 +63,7 @@ export const FileCard = ({
   return (
     <Popover className="flex flex-col flex-1">
       <ObjectDownloadModal
-        isOpen={isDownloadModalOpen}
+        cid={isDownloadModalOpen ? dataCid : null}
         onClose={() => setIsDownloadModalOpen(false)}
       />
       <div className="relative bg-white rounded-lg border border-gray-200 p-4 shadow-sm max-w-sm flex flex-col flex-1">
@@ -83,7 +76,7 @@ export const FileCard = ({
         <h2 className="text-lg font-semibold text-gray-800 mb-2">{name}</h2>
         <p className="text-gray-500 mb-4">Size: {bytes(totalSize)}</p>
         <button
-          onClick={(event) => onDownload(event, dataCid)}
+          onClick={onDownload}
           className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center"
         >
           <Download size={20} className="mr-2" />
@@ -102,7 +95,7 @@ export const FileCard = ({
           <div className="p-3 flex flex-col gap-2 w-40">
             <span
               className="flex items-center gap-2 font-semibold text-gray-800"
-              onClick={(event) => onDownload(event, dataCid)}
+              onClick={onDownload}
             >
               <DownloadIcon size={16} />
               <span>Download</span>

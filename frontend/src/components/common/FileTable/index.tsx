@@ -42,7 +42,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
   const user = useUserStore(({ user }) => user);
-  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [downloadingCID, setDownloadingCID] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
   const [deleteCID, setDeleteCID] = useState<string | null>(null);
@@ -98,18 +98,9 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   );
 
   const downloadFile = useCallback(
-    async (
-      event: MouseEvent<HTMLButtonElement>,
-      type: OffchainMetadata["type"],
-      cid: string,
-      name: string
-    ) => {
+    async (event: MouseEvent<HTMLButtonElement>, cid: string) => {
       event.stopPropagation();
-      setIsDownloadModalOpen(true);
-      const blob = await ApiService.downloadObject(cid).finally(() => {
-        setIsDownloadModalOpen(false);
-      });
-      handleFileDownload(blob, type, name);
+      setDownloadingCID(cid);
     },
     []
   );
@@ -261,14 +252,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   variant="lightAccent"
                   className="mr-2 text-xs outline-none focus:ring-0"
                   disabled={file.uploadStatus.totalNodes === null}
-                  onClick={(e) =>
-                    downloadFile(
-                      e,
-                      file.metadata.type,
-                      file.metadata.dataCid,
-                      file.metadata.name!
-                    )
-                  }
+                  onClick={(e) => downloadFile(e, file.metadata.dataCid)}
                 >
                   Download
                 </Button>
@@ -349,9 +333,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                   <Button
                     variant="lightAccent"
                     className="text-xs"
-                    onClick={(e) =>
-                      downloadFile(e, child.type, child.cid, child.name!)
-                    }
+                    onClick={(e) => downloadFile(e, child.cid)}
                   >
                     Download
                   </Button>
@@ -374,20 +356,11 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     ]
   );
 
-  const batchedDownload = useCallback(async () => {
-    const downloads = selectedFiles.map(async (entry) => {
-      const blob = await ApiService.downloadObject(entry.cid);
-      handleFileDownload(blob, entry.type, entry.name!);
-    });
-
-    await Promise.all(downloads)
-      .then(() => {
-        setSelectedFiles([]);
-      })
-      .catch((error) => {
-        toast.error("Failed to download files");
-      });
-  }, [selectedFiles, downloadFile]);
+  const onClose = useCallback(() => {
+    setShareCID(null);
+    setDeleteCID(null);
+    setDownloadingCID(null);
+  }, []);
 
   return (
     <div className="flex flex-col">
@@ -396,10 +369,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
         cid={deleteCID}
         closeModal={() => setDeleteCID(null)}
       />
-      <ObjectDownloadModal
-        isOpen={isDownloadModalOpen}
-        onClose={() => setIsDownloadModalOpen(false)}
-      />
+      <ObjectDownloadModal cid={downloadingCID} onClose={onClose} />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
           <div className="flex justify-start items-center mb-4 gap-2 ml-2">
@@ -436,11 +406,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                 <span className="text-sm font-semibold">
                   {selectedFiles.length} files selected
                 </span>
-                <Button
-                  className="text-xs"
-                  variant="lightAccent"
-                  onClick={batchedDownload}
-                >
+                <Button className="text-xs" variant="lightAccent">
                   Download
                 </Button>
               </div>

@@ -3,6 +3,8 @@ import { handleAuth } from "../services/authManager/express.js";
 import { UploadsUseCases } from "../useCases/uploads/uploads.js";
 import multer from "multer";
 import { FolderTreeFolderSchema } from "../models/objects/folderTree.js";
+import { uploadOptionsSchema } from "../models/uploads/upload.js";
+import { z } from "zod";
 
 const uploadController = Router();
 
@@ -12,7 +14,7 @@ uploadController.post("/file", async (req, res) => {
     return;
   }
 
-  const { mimeType, filename } = req.body;
+  const { mimeType, filename, uploadOptions } = req.body;
 
   if (typeof filename !== "string") {
     return res
@@ -26,11 +28,19 @@ uploadController.post("/file", async (req, res) => {
       .json({ error: "Missing or invalid field: mimeType" });
   }
 
+  const safeUploadOptions = z
+    .union([uploadOptionsSchema, z.null()])
+    .safeParse(uploadOptions);
+  if (!safeUploadOptions.success) {
+    return res.status(400).json({ error: "Invalid upload options" });
+  }
+
   try {
     const upload = await UploadsUseCases.createFileUpload(
       user,
       filename,
-      mimeType
+      mimeType,
+      safeUploadOptions.data
     );
 
     return res.status(200).json(upload);
@@ -46,17 +56,25 @@ uploadController.post("/folder", async (req, res) => {
   if (!user) {
     return;
   }
-  const { fileTree } = req.body;
+  const { fileTree, uploadOptions } = req.body;
   const safeFileTree = FolderTreeFolderSchema.safeParse(fileTree);
   if (!safeFileTree.success) {
     return res.status(400).json({ error: "Invalid file tree" });
+  }
+
+  const safeUploadOptions = z
+    .union([uploadOptionsSchema, z.null()])
+    .safeParse(uploadOptions);
+  if (!safeUploadOptions.success) {
+    return res.status(400).json({ error: "Invalid upload options" });
   }
 
   try {
     const upload = await UploadsUseCases.createFolderUpload(
       user,
       safeFileTree.data.name,
-      safeFileTree.data
+      safeFileTree.data,
+      safeUploadOptions.data
     );
 
     return res.status(200).json(upload);
@@ -73,7 +91,7 @@ uploadController.post("/folder/:uploadId/file", async (req, res) => {
   }
 
   const { uploadId } = req.params;
-  const { name, mimeType, relativeId } = req.body;
+  const { name, mimeType, relativeId, uploadOptions } = req.body;
 
   if (typeof name !== "string") {
     return res.status(400).json({ error: "Missing or invalid field: name" });
@@ -91,13 +109,21 @@ uploadController.post("/folder/:uploadId/file", async (req, res) => {
       .json({ error: "Missing or invalid field: relativeId" });
   }
 
+  const safeUploadOptions = z
+    .union([uploadOptionsSchema, z.null()])
+    .safeParse(uploadOptions);
+  if (!safeUploadOptions.success) {
+    return res.status(400).json({ error: "Invalid upload options" });
+  }
+
   try {
     const upload = await UploadsUseCases.createFileInFolder(
       user,
       uploadId,
       relativeId,
       name,
-      mimeType
+      mimeType,
+      safeUploadOptions.data
     );
 
     return res.status(200).json(upload);

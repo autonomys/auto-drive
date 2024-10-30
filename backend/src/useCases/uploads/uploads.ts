@@ -18,6 +18,7 @@ import { FileProcessingUseCase as UploadingProcessingUseCase } from "./uploadPro
 import { fileProcessingInfoRepository } from "../../repositories/uploads/fileProcessingInfo.js";
 import { FilesUseCases } from "../objects/files.js";
 import { NodesUseCases } from "../objects/index.js";
+import { FileUploadOptions } from "@autonomys/auto-drive";
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -31,6 +32,7 @@ export const mapTableToModel = (upload: UploadEntry): Upload => {
     mimeType: upload.mime_type,
     oauthProvider: upload.oauth_provider,
     oauthUserId: upload.oauth_user_id,
+    uploadOptions: upload.upload_options,
   } as Upload;
 };
 
@@ -57,6 +59,7 @@ const createFileUpload = async (
   user: User,
   name: string,
   mimeType: string,
+  uploadOptions: FileUploadOptions | null,
   rootId?: string | null,
   relativeId?: string | null
 ): Promise<FileUpload> => {
@@ -74,7 +77,8 @@ const createFileUpload = async (
     rootId ?? id,
     relativeId,
     user.oauthProvider,
-    user.oauthUserId
+    user.oauthUserId,
+    uploadOptions
   );
 
   await initFileProcessing(upload);
@@ -85,7 +89,8 @@ const createFileUpload = async (
 export const createFolderUpload = async (
   user: User,
   name: string,
-  folderTree: FolderTreeFolder
+  folderTree: FolderTreeFolder,
+  uploadOptions: FileUploadOptions | null
 ): Promise<FolderUpload> => {
   const uploadId = v4();
   const result = await uploadsRepository.createUploadEntry(
@@ -98,7 +103,8 @@ export const createFolderUpload = async (
     uploadId,
     null,
     user.oauthProvider,
-    user.oauthUserId
+    user.oauthUserId,
+    uploadOptions
   );
 
   return mapTableToModel(result) as FolderUpload;
@@ -109,7 +115,8 @@ const createFileInFolder = async (
   uploadId: string,
   relativeId: string,
   name: string,
-  mimeType: string
+  mimeType: string,
+  uploadOptions: FileUploadOptions | null
 ): Promise<FileUpload> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId);
   if (!upload) {
@@ -124,6 +131,7 @@ const createFileInFolder = async (
     user,
     name,
     mimeType,
+    uploadOptions,
     uploadId,
     relativeId
   );
@@ -212,7 +220,8 @@ const createSubFolderUpload = async (
     rootId,
     fileTree.id,
     parentUpload.oauth_provider,
-    parentUpload.oauth_user_id
+    parentUpload.oauth_user_id,
+    null
   );
 
   return mapTableToModel(upload) as FolderUpload;

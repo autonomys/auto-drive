@@ -1,5 +1,11 @@
-import { FolderTree } from "../models/FileTree";
+import { constructZipBlob, FolderTree } from "../models/FileTree";
+import { asyncByChunk, fileToIterable } from "../utils/async";
 import { getAuthSession } from "../utils/auth";
+import {
+  compressFileByChunks,
+  COMPRESSION_CHUNK_SIZE,
+} from "../utils/compression";
+import { ENCRYPTING_CHUNK_SIZE, encryptFile } from "../utils/encryption";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -8,7 +14,8 @@ type CreationUploadResponse = {
 };
 
 const createFileUpload = async (
-  file: File
+  file: File,
+  { encryption, compression }: { encryption: boolean; compression: boolean }
 ): Promise<CreationUploadResponse> => {
   const session = await getAuthSession();
   if (!session) {
@@ -17,7 +24,25 @@ const createFileUpload = async (
 
   return fetch(`${API_BASE_URL}/uploads/file`, {
     method: "POST",
-    body: JSON.stringify({ filename: file.name, mimeType: file.type }),
+    body: JSON.stringify({
+      filename: file.name,
+      mimeType: file.type,
+      uploadOptions: {
+        encryption: encryption
+          ? {
+              algorithm: "AES_256_GCM",
+              chunkSize: ENCRYPTING_CHUNK_SIZE,
+            }
+          : undefined,
+        compression: compression
+          ? {
+              algorithm: "ZLIB",
+              level: 9,
+              chunkSize: COMPRESSION_CHUNK_SIZE,
+            }
+          : undefined,
+      },
+    }),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.accessToken}`,
@@ -74,7 +99,10 @@ const completeUpload = async (uploadId: string) => {
   });
 };
 
-const createFolderUpload = async (fileTree: FolderTree) => {
+const createFolderUpload = async (
+  fileTree: FolderTree,
+  { compression }: { compression: boolean }
+) => {
   const session = await getAuthSession();
   if (!session) {
     throw new Error("No session");
@@ -82,7 +110,19 @@ const createFolderUpload = async (fileTree: FolderTree) => {
 
   return fetch(`${API_BASE_URL}/uploads/folder`, {
     method: "POST",
-    body: JSON.stringify({ fileTree, name: fileTree.name }),
+    body: JSON.stringify({
+      fileTree,
+      name: fileTree.name,
+      uploadOptions: {
+        encryption: undefined,
+        compression: compression
+          ? {
+              algorithm: "ZLIB",
+              level: 9,
+            }
+          : undefined,
+      },
+    }),
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
       "X-Auth-Provider": "google",
@@ -97,10 +137,28 @@ const createFolderUpload = async (fileTree: FolderTree) => {
   });
 };
 
+const createEncryptedFolderUpload = async function* (
+  tree: FolderTree,
+  files: Record<string, File>,
+  password: string
+): AsyncIterable<number> {
+  const zip = await constructZipBlob(tree, files);
+
+  const iterable = uploadFile(new File([zip], `${tree.name}.zip`), {
+    password,
+    compress: false,
+  });
+
+  for await (const progress of iterable) {
+    yield progress;
+  }
+};
+
 const createFileUploadWithinFolderUpload = async (
   rootUploadId: string,
   relativeId: string,
-  file: File
+  file: File,
+  { encryption, compression }: { encryption: boolean; compression: boolean }
 ) => {
   const session = await getAuthSession();
   if (!session) {
@@ -109,7 +167,26 @@ const createFileUploadWithinFolderUpload = async (
 
   return fetch(`${API_BASE_URL}/uploads/folder/${rootUploadId}/file`, {
     method: "POST",
-    body: JSON.stringify({ name: file.name, mimeType: file.type, relativeId }),
+    body: JSON.stringify({
+      name: file.name,
+      mimeType: file.type,
+      relativeId,
+      uploadOptions: {
+        encryption: encryption
+          ? {
+              algorithm: "AES_256_GCM",
+              chunkSize: ENCRYPTING_CHUNK_SIZE,
+            }
+          : undefined,
+        compression: compression
+          ? {
+              algorithm: "ZLIB",
+              level: 9,
+              chunkSize: COMPRESSION_CHUNK_SIZE,
+            }
+          : undefined,
+      },
+    }),
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
       "X-Auth-Provider": "google",
@@ -126,23 +203,55 @@ const createFileUploadWithinFolderUpload = async (
 
 const uploadFileChunks = async function* (
   uploadId: string,
-  file: File
+  file: AsyncIterable<Buffer>
 ): AsyncIterable<number> {
-  const chunkSize = 1024 * 1024;
-  for (let i = 0; i < file.size; i += chunkSize) {
-    await uploadFileChunk(
-      uploadId,
-      file.slice(i, i + chunkSize),
-      i / chunkSize
-    );
-    yield i;
+  let count = 0;
+  const chunkSize = 20 * 1024 * 1024;
+  for await (const chunk of asyncByChunk(file, chunkSize)) {
+    await uploadFileChunk(uploadId, new Blob([chunk]), count);
+
+    count += chunk.length;
+
+    yield count;
   }
 };
 
-const uploadFile = async function* (file: File) {
-  const upload = await createFileUpload(file);
+const fileToParsedIterable = async function* (
+  file: File,
+  { password, compress }: { password?: string; compress?: boolean }
+): AsyncIterable<Buffer> {
+  const fileIterable = fileToIterable(file);
+  let mappers: ((file: AsyncIterable<Buffer>) => AsyncIterable<Buffer>)[] = [];
+  if (compress) {
+    mappers.push(compressFileByChunks);
+  }
+  if (password) {
+    mappers.push((file) => encryptFile(file, password));
+  }
 
-  for await (const chunkProgress of uploadFileChunks(upload.id, file)) {
+  for await (const chunk of mappers.reduce(
+    (file, mapper) => mapper(file),
+    fileIterable
+  )) {
+    yield chunk;
+  }
+};
+
+const uploadFile = async function* (
+  file: File,
+  { password, compress }: { password?: string; compress?: boolean } = {}
+): AsyncIterable<number> {
+  const upload = await createFileUpload(file, {
+    encryption: !!password,
+    compression: !!compress,
+  });
+
+  const processedIterable = fileToParsedIterable(file, { password, compress });
+
+  for await (const chunkProgress of uploadFileChunks(
+    upload.id,
+    processedIterable
+  )) {
     yield (100 * chunkProgress) / file.size;
   }
 
@@ -153,18 +262,29 @@ const uploadFile = async function* (file: File) {
 
 const uploadFolder = async function* (
   tree: FolderTree,
-  files: Record<string, File>
+  files: Record<string, File>,
+  { compress }: { compress?: boolean } = {}
 ): AsyncGenerator<number> {
   const totalSize = Object.values(files).reduce((acc, e) => acc + e.size, 0);
-  const upload = await createFolderUpload(tree);
+  const upload = await createFolderUpload(tree, {
+    compression: !!compress,
+  });
   let uploadedSize = 0;
   for (const [relativeId, file] of Object.entries(files)) {
     const fileUpload = await createFileUploadWithinFolderUpload(
       upload.id,
       relativeId,
-      file
+      file,
+      { encryption: false, compression: !!compress }
     );
-    for await (const chunkProgress of uploadFileChunks(fileUpload.id, file)) {
+
+    const processedIterable = fileToParsedIterable(file, {
+      compress,
+    });
+    for await (const chunkProgress of uploadFileChunks(
+      fileUpload.id,
+      processedIterable
+    )) {
       yield (100 * (uploadedSize + chunkProgress)) / totalSize;
     }
     await completeUpload(fileUpload.id);
@@ -177,4 +297,5 @@ const uploadFolder = async function* (
 export const UploadService = {
   uploadFile,
   uploadFolder,
+  createEncryptedFolderUpload,
 };

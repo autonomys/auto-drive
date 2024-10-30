@@ -4,7 +4,6 @@ import {
   OwnerRole,
   UploadedObjectMetadata,
 } from "@/models/UploadedObjectMetadata";
-import { ApiService } from "@/services/api";
 import {
   Popover,
   PopoverButton,
@@ -16,8 +15,7 @@ import { Metadata } from "../../Files/Metadata";
 import { ObjectShareModal } from "../../Files/ObjectShareModal";
 import bytes from "bytes";
 import { ObjectRestoreModal } from "../../Files/ObjectRestoreModal";
-import { getTypeFromMetadata, handleFileDownload } from "../../../utils/file";
-import { OffchainMetadata } from "@autonomys/auto-drive";
+import { getTypeFromMetadata } from "../../../utils/file";
 import { ObjectDownloadModal } from "../../Files/ObjectDownloadModal";
 import { TableBody, TableBodyCell, TableBodyRow } from "../Table/TableBody";
 import { shortenString } from "../../../utils/misc";
@@ -29,7 +27,7 @@ import { Button } from "../Button";
 export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   files,
 }) => {
-  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [cid, setCID] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<UploadedObjectMetadata[]>(
     []
   );
@@ -77,18 +75,9 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   }, []);
 
   const downloadFile = useCallback(
-    async (
-      event: MouseEvent<HTMLButtonElement>,
-      type: OffchainMetadata["type"],
-      cid: string,
-      name: string
-    ) => {
+    async (event: MouseEvent<HTMLButtonElement>, cid: string) => {
       event.stopPropagation();
-      setIsDownloadModalOpen(true);
-      const blob = await ApiService.downloadObject(cid).finally(() => {
-        setIsDownloadModalOpen(false);
-      });
-      handleFileDownload(blob, type, name);
+      setCID(cid);
     },
     []
   );
@@ -109,12 +98,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     (e: MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       selectedFiles.forEach((file) => {
-        downloadFile(
-          e,
-          file.metadata.type,
-          file.metadata.dataCid,
-          file.metadata.name!
-        );
+        downloadFile(e, file.metadata.dataCid);
       });
     },
     [selectedFiles, downloadFile]
@@ -222,14 +206,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
               <Button
                 variant="lightAccent"
                 className="mr-2 text-xs"
-                onClick={(e) =>
-                  downloadFile(
-                    e,
-                    file.metadata.type,
-                    file.metadata.dataCid,
-                    file.metadata.name!
-                  )
-                }
+                onClick={(e) => downloadFile(e, file.metadata.dataCid)}
               >
                 Download
               </Button>
@@ -286,9 +263,7 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
                     <Button
                       variant="lightAccent"
                       className="text-xs"
-                      onClick={(e) =>
-                        downloadFile(e, child.type, child.cid, child.name!)
-                      }
+                      onClick={(e) => downloadFile(e, child.cid)}
                     >
                       Download
                     </Button>
@@ -310,14 +285,17 @@ export const DeletedFilesTable: FC<{ files: UploadedObjectMetadata[] }> = ({
     ]
   );
 
+  const onCloseModal = useCallback(() => {
+    setCID(null);
+    setShareCID(null);
+    setRestoreCID(null);
+  }, []);
+
   return (
     <div className="flex flex-col">
-      <ObjectDownloadModal isOpen={isDownloadModalOpen} onClose={() => {}} />
-      <ObjectShareModal cid={shareCID} closeModal={() => setShareCID(null)} />
-      <ObjectRestoreModal
-        cid={restoreCID}
-        closeModal={() => setRestoreCID(null)}
-      />
+      <ObjectDownloadModal cid={cid ?? null} onClose={onCloseModal} />
+      <ObjectShareModal cid={shareCID} closeModal={onCloseModal} />
+      <ObjectRestoreModal cid={restoreCID} closeModal={onCloseModal} />
       <Transition
         show={selectedFiles.length > 0}
         enter="transition ease-out duration-100"
