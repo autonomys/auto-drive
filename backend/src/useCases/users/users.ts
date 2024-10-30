@@ -50,9 +50,18 @@ const resolveUser = async (userOrPublicId: UserOrPublicId): Promise<User> => {
   return user;
 };
 
-const onboardUser = async (user: User): Promise<User | undefined> => {
+const generateUserPublicId = (user: User): string => {
+  const USER_PUBLIC_ID_NAMESPACE = "public-id-user-1";
+
   const input = `${user.oauthProvider}-${user.oauthUserId}`;
-  const publicId = v5(input, "user-public-id");
+  const namespaceArray = USER_PUBLIC_ID_NAMESPACE.split("").map((e) =>
+    e.charCodeAt(0)
+  );
+  return v5(input, namespaceArray);
+};
+
+const onboardUser = async (user: User): Promise<User | undefined> => {
+  const publicId = generateUserPublicId(user);
 
   const updatedUser = await UsersUseCases.initUser(
     user.oauthProvider,
