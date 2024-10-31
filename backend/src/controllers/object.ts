@@ -11,13 +11,18 @@ const objectController = Router();
 
 objectController.get("/roots", async (req, res) => {
   const user = await handleAuth(req, res);
-  const { scope } = req.query;
+  const { scope, limit, offset } = req.query;
   if (!user) {
     return;
   }
 
+  const limitNumber = limit ? parseInt(limit as string) : undefined;
+  const offsetNumber = offset ? parseInt(offset as string) : undefined;
+
   const roots = await ObjectUseCases.getRootObjects(
-    user && scope === "user" ? { user, scope } : { scope: "global" }
+    user && scope === "user" ? { user, scope } : { scope: "global" },
+    limitNumber,
+    offsetNumber
   );
   res.json(roots);
 });
@@ -28,7 +33,15 @@ objectController.get("/roots/shared", async (req, res) => {
     return;
   }
 
-  const sharedRoots = await ObjectUseCases.getSharedRoots(user);
+  const { limit, offset } = req.query;
+  const limitNumber = limit ? parseInt(limit as string) : undefined;
+  const offsetNumber = offset ? parseInt(offset as string) : undefined;
+
+  const sharedRoots = await ObjectUseCases.getSharedRoots(
+    user,
+    limitNumber,
+    offsetNumber
+  );
 
   res.json(sharedRoots);
 });
@@ -39,7 +52,15 @@ objectController.get("/roots/deleted", async (req, res) => {
     return;
   }
 
-  const deletedRoots = await ObjectUseCases.getMarkedAsDeletedRoots(user);
+  const { limit, offset } = req.query;
+  const limitNumber = limit ? parseInt(limit as string) : undefined;
+  const offsetNumber = offset ? parseInt(offset as string) : undefined;
+
+  const deletedRoots = await ObjectUseCases.getMarkedAsDeletedRoots(
+    user,
+    limitNumber,
+    offsetNumber
+  );
 
   res.json(deletedRoots);
 });

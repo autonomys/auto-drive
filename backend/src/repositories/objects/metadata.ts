@@ -1,11 +1,16 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { getDatabase } from "../../drivers/pg.js";
+import { PaginatedResult } from "../../useCases/objects/common.js";
 
 export interface MetadataEntry {
   root_cid: string;
   head_cid: string;
   metadata: OffchainMetadata;
 }
+
+type MetadataEntryWithTotalCount = MetadataEntry & {
+  total_count: number;
+};
 
 const getMetadata = async (cid: string): Promise<MetadataEntry | undefined> => {
   const db = await getDatabase();
@@ -123,66 +128,119 @@ const getMetadataByRootCid = async (rootCid: string) => {
     .then((entries) => entries.rows);
 };
 
-const getRootObjects = async () => {
+const getRootObjects = async (
+  limit: number = 100,
+  offset: number = 0
+): Promise<PaginatedResult<MetadataEntry["head_cid"]>> => {
   const db = await getDatabase();
 
   return db
-    .query<MetadataEntry>(
-      `with root_objects as (
+    .query<MetadataEntryWithTotalCount>({
+      text: `with root_objects as (
         SELECT m.* 
         FROM metadata m 
         WHERE m.root_cid = m.head_cid
       )
-      SELECT root_objects.head_cid 
+      SELECT root_objects.head_cid, COUNT(*) OVER() AS total_count
       FROM root_objects
       INNER JOIN object_ownership oo ON root_objects.head_cid = oo.cid 
       WHERE oo.marked_as_deleted IS NULL 
-      GROUP BY root_objects.head_cid`
-    )
-    .then((entries) => {
-      return entries.rows.map((entry) => entry.head_cid);
-    });
+      GROUP BY root_objects.head_cid
+      LIMIT $1 OFFSET $2`,
+      values: [limit, offset],
+    })
+    .then((entries) => ({
+      rows: entries.rows.map((entry) => entry.head_cid),
+      totalCount: entries.rows[0]?.total_count,
+    }));
 };
 
-const getRootObjectsByUser = async (provider: string, userId: string) => {
+const getRootObjectsByUser = async (
+  provider: string,
+  userId: string,
+  limit: number = 100,
+  offset: number = 0
+): Promise<PaginatedResult<MetadataEntry["head_cid"]>> => {
   const db = await getDatabase();
 
   return db
-    .query<MetadataEntry>({
-      text: "SELECT m.* FROM metadata m join object_ownership oo on m.root_cid = oo.cid where m.root_cid = m.head_cid and oo.oauth_provider = $1 and oo.oauth_user_id = $2 and oo.is_admin is true and oo.marked_as_deleted is null",
-      values: [provider, userId],
+    .query<MetadataEntryWithTotalCount>({
+      text: `
+        SELECT m.*, COUNT(*) OVER() AS total_count 
+        FROM metadata m 
+        JOIN object_ownership oo ON m.root_cid = oo.cid 
+        WHERE m.root_cid = m.head_cid 
+          AND oo.oauth_provider = $1 
+          AND oo.oauth_user_id = $2 
+          AND oo.is_admin IS TRUE 
+          AND oo.marked_as_deleted IS NULL 
+        LIMIT $3 OFFSET $4`,
+      values: [provider, userId, limit, offset],
     })
     .then((entries) => {
-      return entries.rows.map((entry) => entry.head_cid);
+      return {
+        rows: entries.rows.map((entry) => entry.root_cid),
+        totalCount: entries.rows[0]?.total_count,
+      };
     });
 };
 
-const getSharedRootObjectsByUser = async (provider: string, userId: string) => {
+const getSharedRootObjectsByUser = async (
+  provider: string,
+  userId: string,
+  limit: number = 100,
+  offset: number = 0
+): Promise<PaginatedResult<MetadataEntry["head_cid"]>> => {
   const db = await getDatabase();
 
   return db
-    .query<MetadataEntry>({
-      text: "SELECT m.* FROM metadata m join object_ownership oo on m.root_cid = oo.cid where m.root_cid = m.head_cid and oo.oauth_provider = $1 and oo.oauth_user_id = $2 and oo.is_admin is false and oo.marked_as_deleted is null",
-      values: [provider, userId],
+    .query<MetadataEntryWithTotalCount>({
+      text: `
+        SELECT m.*, COUNT(*) OVER() AS total_count 
+        FROM metadata m 
+        JOIN object_ownership oo ON m.root_cid = oo.cid 
+        WHERE m.root_cid = m.head_cid 
+          AND oo.oauth_provider = $1 
+          AND oo.oauth_user_id = $2 
+          AND oo.is_admin IS FALSE 
+          AND oo.marked_as_deleted IS NULL 
+        LIMIT $3 OFFSET $4`,
+      values: [provider, userId, limit, offset],
     })
     .then((entries) => {
-      return entries.rows.map((entry) => entry.head_cid);
+      return {
+        rows: entries.rows.map((entry) => entry.head_cid),
+        totalCount: entries.rows[0]?.total_count,
+      };
     });
 };
 
 const getMarkedAsDeletedRootObjectsByUser = async (
   provider: string,
-  userId: string
-) => {
+  userId: string,
+  limit: number = 100,
+  offset: number = 0
+): Promise<PaginatedResult<MetadataEntry["head_cid"]>> => {
   const db = await getDatabase();
 
   return db
-    .query<MetadataEntry>({
-      text: "SELECT m.* FROM metadata m join object_ownership oo on m.root_cid = oo.cid where m.root_cid = m.head_cid and oo.oauth_provider = $1 and oo.oauth_user_id = $2 and oo.marked_as_deleted is not null",
-      values: [provider, userId],
+    .query<MetadataEntryWithTotalCount>({
+      text: `
+        SELECT m.*, COUNT(*) OVER() AS total_count 
+        FROM metadata m 
+        JOIN object_ownership oo ON m.root_cid = oo.cid 
+        WHERE m.root_cid = m.head_cid 
+          AND oo.oauth_provider = $1 
+          AND oo.oauth_user_id = $2 
+          AND oo.marked_as_deleted IS NOT NULL 
+        LIMIT $3 OFFSET $4`,
+      values: [provider, userId, limit, offset],
     })
     .then((entries) => {
-      return entries.rows.map((entry) => entry.head_cid);
+      return {
+        rows: entries.rows.map((entry) => entry.head_cid),
+        totalCount: entries.rows[0].total_count,
+      };
     });
 };
 
