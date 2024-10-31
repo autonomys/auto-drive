@@ -28,6 +28,7 @@ export default function Page() {
 
   useEffect(() => {
     const offset = currentPage * pageSize;
+    setRootObjectMetadata(null);
     ApiService.getRootObjects(scope, offset, pageSize).then(updateResult);
   }, [scope, currentPage, pageSize, updateResult]);
 
