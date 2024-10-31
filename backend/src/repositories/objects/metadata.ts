@@ -151,7 +151,7 @@ const getRootObjects = async (
     })
     .then((entries) => ({
       rows: entries.rows.map((entry) => entry.head_cid),
-      totalCount: entries.rows[0]?.total_count,
+      totalCount: entries.rows.at(0)?.total_count ?? 0,
     }));
 };
 
@@ -180,7 +180,7 @@ const getRootObjectsByUser = async (
     .then((entries) => {
       return {
         rows: entries.rows.map((entry) => entry.root_cid),
-        totalCount: entries.rows[0]?.total_count,
+        totalCount: entries.rows.at(0)?.total_count ?? 0,
       };
     });
 };
@@ -210,7 +210,7 @@ const getSharedRootObjectsByUser = async (
     .then((entries) => {
       return {
         rows: entries.rows.map((entry) => entry.head_cid),
-        totalCount: entries.rows[0]?.total_count,
+        totalCount: entries.rows.at(0)?.total_count ?? 0,
       };
     });
 };
@@ -239,7 +239,7 @@ const getMarkedAsDeletedRootObjectsByUser = async (
     .then((entries) => {
       return {
         rows: entries.rows.map((entry) => entry.head_cid),
-        totalCount: entries.rows[0].total_count,
+        totalCount: entries.rows.at(0)?.total_count ?? 0,
       };
     });
 };
