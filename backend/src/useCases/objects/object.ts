@@ -1,9 +1,11 @@
 import { OffchainMetadata } from "@autonomys/auto-drive";
 import { User } from "../../models/users/index.js";
 import {
+  getObjectSummary,
   ObjectInformation,
   ObjectSearchResult,
   Owner,
+  ObjectSummary,
 } from "../../models/objects/object.js";
 import {
   metadataRepository,
@@ -13,6 +15,7 @@ import { UsersUseCases } from "../index.js";
 import { OwnershipUseCases } from "./ownership.js";
 import { UploadStatusUseCases } from "./uploadStatus.js";
 import { MetadataEntry } from "../../repositories/objects/metadata.js";
+import { PaginatedResult } from "./common.js";
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid);
@@ -92,30 +95,87 @@ const getAllMetadata = async () => {
 };
 
 const getRootObjects = async (
-  filter: { scope: "user"; user: User } | { scope: "global" }
-) => {
+  filter: { scope: "user"; user: User } | { scope: "global" },
+  limit: number = 100,
+  offset: number = 0
+): Promise<PaginatedResult<ObjectSummary>> => {
   if (filter.scope === "user") {
-    return metadataRepository.getRootObjectsByUser(
-      filter.user.oauthProvider,
-      filter.user.oauthUserId
-    );
+    return metadataRepository
+      .getRootObjectsByUser(
+        filter.user.oauthProvider,
+        filter.user.oauthUserId,
+        limit,
+        offset
+      )
+      .then(async (entries) => ({
+        rows: await Promise.all(
+          entries.rows.map((entry) => getObjectSummaryByCID(entry))
+        ),
+        totalCount: entries.totalCount,
+      }));
   }
 
-  return metadataRepository.getRootObjects();
+  return metadataRepository
+    .getRootObjects(limit, offset)
+    .then(async (entries) => ({
+      rows: await Promise.all(
+        entries.rows.map((entry) => getObjectSummaryByCID(entry))
+      ),
+      totalCount: entries.totalCount,
+    }));
 };
 
-const getSharedRoots = async (user: User) => {
-  return metadataRepository.getSharedRootObjectsByUser(
-    user.oauthProvider,
-    user.oauthUserId
-  );
+const getSharedRoots = async (
+  user: User,
+  limit: number = 100,
+  offset: number = 0
+): Promise<PaginatedResult<ObjectSummary>> => {
+  return metadataRepository
+    .getSharedRootObjectsByUser(
+      user.oauthProvider,
+      user.oauthUserId,
+      limit,
+      offset
+    )
+    .then(async (entries) => {
+      const summaries = await Promise.all(
+        entries.rows.map((entry) => getObjectSummaryByCID(entry))
+      );
+
+      return {
+        rows: summaries,
+        totalCount: entries.totalCount,
+      };
+    });
 };
 
-const getMarkedAsDeletedRoots = async (user: User) => {
-  return metadataRepository.getMarkedAsDeletedRootObjectsByUser(
-    user.oauthProvider,
-    user.oauthUserId
-  );
+const getMarkedAsDeletedRoots = async (
+  user: User,
+  limit: number = 100,
+  offset: number = 0
+): Promise<PaginatedResult<ObjectSummary>> => {
+  return metadataRepository
+    .getMarkedAsDeletedRootObjectsByUser(
+      user.oauthProvider,
+      user.oauthUserId,
+      limit,
+      offset
+    )
+    .then(async (entries) => ({
+      rows: await Promise.all(
+        entries.rows.map((entry) => getObjectSummaryByCID(entry))
+      ),
+      totalCount: entries.totalCount,
+    }));
+};
+
+const getObjectSummaryByCID = async (cid: string) => {
+  const info = await getObjectInformation(cid);
+  if (!info) {
+    throw new Error("Object not found");
+  }
+
+  return getObjectSummary(info);
 };
 
 const getObjectInformation = async (
