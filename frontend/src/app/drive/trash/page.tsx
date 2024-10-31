@@ -1,23 +1,47 @@
 "use client";
 
 import { ApiService } from "@/services/api";
-import { useEffect, useState } from "react";
-import { useLocalStorage } from "usehooks-ts";
-import { UploadedObjectMetadata } from "../../../models/UploadedObjectMetadata";
+import { useCallback, useEffect, useState } from "react";
+import { ObjectSummary } from "../../../models/UploadedObjectMetadata";
 import { TrashFiles } from "../../../components/TrashFiles";
+import { PaginatedResult } from "../../../models/common";
 
 export default function Page() {
   const [rootObjectMetadata, setRootObjectMetadata] = useState<
-    UploadedObjectMetadata[] | null
+    ObjectSummary[] | null
   >(null);
+  const [pageSize, setPageSize] = useState(5);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
+
+  const updateResult = useCallback((result: PaginatedResult<ObjectSummary>) => {
+    setRootObjectMetadata(result.rows);
+    setTotalItems(result.totalCount);
+  }, []);
 
   useEffect(() => {
     setRootObjectMetadata(null);
-    ApiService.getTrashObjects().then((e) => {
-      const promises = e.map((e) => ApiService.fetchUploadedObjectMetadata(e));
-      Promise.all(promises).then(setRootObjectMetadata);
-    });
+    ApiService.getTrashObjects(currentPage * pageSize, pageSize).then(
+      updateResult
+    );
+  }, [currentPage, pageSize, updateResult]);
+
+  const updatePageSize = useCallback((newPageSize: number) => {
+    setPageSize(newPageSize);
   }, []);
 
-  return <TrashFiles objects={rootObjectMetadata} />;
+  const updateCurrentPage = useCallback((newCurrentPage: number) => {
+    setCurrentPage(newCurrentPage);
+  }, []);
+
+  return (
+    <TrashFiles
+      objects={rootObjectMetadata}
+      pageSize={pageSize}
+      setPageSize={updatePageSize}
+      currentPage={currentPage}
+      setCurrentPage={updateCurrentPage}
+      totalItems={totalItems}
+    />
+  );
 }

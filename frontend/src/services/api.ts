@@ -1,11 +1,15 @@
 import { ApiKey, ApiKeyWithoutSecret } from "../models/ApiKey";
+import { PaginatedResult } from "../models/common";
 import { FolderTree } from "../models/FileTree";
 import { ObjectSearchResult } from "../models/ObjectSearchResult";
 import {
   SubscriptionGranularity,
   SubscriptionWithUser,
 } from "../models/Subscriptions";
-import { UploadedObjectMetadata } from "../models/UploadedObjectMetadata";
+import {
+  ObjectSummary,
+  UploadedObjectMetadata,
+} from "../models/UploadedObjectMetadata";
 import { User, UserInfo } from "../models/User";
 import { getAuthSession } from "../utils/auth";
 import { uploadFileContent } from "../utils/file";
@@ -194,14 +198,18 @@ export const ApiService = {
 
     return response.json();
   },
-  getRootObjects: async (scope: "user" | "global"): Promise<string[]> => {
+  getRootObjects: async (
+    scope: "user" | "global",
+    offset: number,
+    limit: number
+  ): Promise<PaginatedResult<ObjectSummary>> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/objects/roots?scope=${scope}`,
+      `${API_BASE_URL}/objects/roots?scope=${scope}&offset=${offset}&limit=${limit}`,
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
@@ -212,18 +220,24 @@ export const ApiService = {
 
     return response.json();
   },
-  getSharedRoots: async (): Promise<string[]> => {
+  getSharedRoots: async (
+    offset: number,
+    limit: number
+  ): Promise<PaginatedResult<ObjectSummary>> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
     }
 
-    const response = await fetch(`${API_BASE_URL}/objects/roots/shared`, {
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": "google",
-      },
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/objects/roots/shared?offset=${offset}&limit=${limit}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session?.accessToken}`,
+          "X-Auth-Provider": "google",
+        },
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
@@ -231,18 +245,24 @@ export const ApiService = {
 
     return response.json();
   },
-  getTrashObjects: async (): Promise<string[]> => {
+  getTrashObjects: async (
+    offset: number,
+    limit: number
+  ): Promise<PaginatedResult<ObjectSummary>> => {
     const session = await getAuthSession();
     if (!session) {
       throw new Error("No session");
     }
 
-    const response = await fetch(`${API_BASE_URL}/objects/roots/deleted`, {
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": "google",
-      },
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/objects/roots/deleted?offset=${offset}&limit=${limit}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session?.accessToken}`,
+          "X-Auth-Provider": "google",
+        },
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
