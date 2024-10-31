@@ -205,14 +205,16 @@ const uploadFileChunks = async function* (
   uploadId: string,
   file: AsyncIterable<Buffer>
 ): AsyncIterable<number> {
-  let count = 0;
+  let byteCount = 0;
+  let chunkCount = 0;
   const chunkSize = 20 * 1024 * 1024;
   for await (const chunk of asyncByChunk(file, chunkSize)) {
-    await uploadFileChunk(uploadId, new Blob([chunk]), count);
+    await uploadFileChunk(uploadId, new Blob([chunk]), chunkCount);
 
-    count += chunk.length;
+    byteCount += chunk.length;
+    chunkCount++;
 
-    yield count;
+    yield byteCount;
   }
 };
 
