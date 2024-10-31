@@ -5,10 +5,10 @@ import { Copy } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CreditsUpdateModal } from "./CreditsUpdateModal";
 import { SubscriptionWithUser } from "../../models/Subscriptions";
-import { shortenHandle } from "../../utils/misc";
 import { UpdateRoleModal } from "./UpdateRoleModal";
 import { useUserStore } from "../../states/user";
 import { TableBodyCell, TableBodyRow } from "../common/Table/TableBody";
+import { shortenString } from "../../utils/misc";
 
 type UserTableRowProps = {
   subscriptionWithUser: SubscriptionWithUser;
@@ -24,31 +24,34 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
     subscriptionWithUser.granularity.charAt(0).toUpperCase() +
     subscriptionWithUser.granularity.slice(1);
 
-  const myHandle = useMemo(() => user?.handle, [user?.handle]);
+  const myHandle = useMemo(() => user?.publicId, [user?.publicId]);
 
   return (
     <TableBodyRow>
       <CreditsUpdateModal
         onClose={() => setIsCreditsUpdateModalOpen(false)}
         userHandle={
-          isCreditsUpdateModalOpen ? subscriptionWithUser.user.handle : null
+          isCreditsUpdateModalOpen ? subscriptionWithUser.user.publicId : null
         }
       />
       <UpdateRoleModal
-        userHandle={isUpdateRoleOpen ? subscriptionWithUser.user.handle : null}
+        userHandle={
+          isUpdateRoleOpen ? subscriptionWithUser.user.publicId : null
+        }
         onClose={() => setIsUpdateRoleOpen(false)}
       />
       <TableBodyCell>
         <div
           className="text-sm text-gray-900 flex items-center gap-2 cursor-pointer hover:text-blue-500 transition-colors duration-200"
           onClick={() => {
-            if (!subscriptionWithUser.user.handle) return;
+            if (!subscriptionWithUser.user.publicId) return;
 
-            navigator.clipboard.writeText(subscriptionWithUser.user.handle);
+            navigator.clipboard.writeText(subscriptionWithUser.user.publicId);
             toast.success("Copied to clipboard");
           }}
         >
-          {shortenHandle(subscriptionWithUser.user.handle!)} <Copy size={16} />
+          {shortenString(subscriptionWithUser.user.publicId!, 16)}{" "}
+          <Copy size={16} />
         </div>
       </TableBodyCell>
       <TableBodyCell>
@@ -93,7 +96,7 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
             onClick={() => {
               setIsUpdateRoleOpen(true);
             }}
-            disabled={myHandle === subscriptionWithUser.user.handle}
+            disabled={myHandle === subscriptionWithUser.user.publicId}
           >
             Update role
           </button>

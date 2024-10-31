@@ -10,7 +10,7 @@ export const HandleSelector = ({
   setSelectedHandle,
 }: {
   selectedHandle: string | null;
-  setSelectedHandle: (handle: string | null) => void;
+  setSelectedHandle: (publicId: string | null) => void;
 }) => {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -18,17 +18,6 @@ export const HandleSelector = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
   const [recommendations, setRecommendations] = useState<string[] | null>(null);
-
-  useEffect(() => {
-    if (query.length >= 2) {
-      setError(null);
-      ApiService.searchUserHandle(query)
-        .then(setRecommendations)
-        .catch(() => setError("Error fetching recommendations"));
-    } else {
-      setRecommendations(null);
-    }
-  }, [query]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -112,7 +101,7 @@ export const HandleSelector = ({
             value={selectedHandle ?? query}
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}
-            placeholder="Search by handle"
+            placeholder="Public ID"
           />
           <button
             type="button"

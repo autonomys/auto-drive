@@ -1,0 +1,1 @@
+ALTER TABLE users RENAME COLUMN handle TO public_id;

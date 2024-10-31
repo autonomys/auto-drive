@@ -26,7 +26,7 @@ export const UserSubscriptionsTable = ({
             <Table className="min-w-full">
               <TableHead>
                 <TableHeadRow>
-                  <TableHeadCell>Handle</TableHeadCell>
+                  <TableHeadCell>Public ID</TableHeadCell>
                   <TableHeadCell>Provider</TableHeadCell>
                   <TableHeadCell>Role</TableHeadCell>
                   <TableHeadCell>Granularity</TableHeadCell>

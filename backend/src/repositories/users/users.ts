@@ -5,13 +5,13 @@ export interface User {
   oauth_provider: string;
   oauth_user_id: string;
   role: UserRole;
-  handle: string;
+  public_id: string;
 }
 
-const getUserByHandle = async (handle: string): Promise<User | null> => {
+const getUserByPublicId = async (publicId: string): Promise<User | null> => {
   const db = await getDatabase();
-  const user = await db.query("SELECT * FROM users WHERE handle = $1", [
-    handle,
+  const user = await db.query("SELECT * FROM users WHERE public_id = $1", [
+    publicId,
   ]);
 
   return user.rows.at(0) ?? null;
@@ -34,28 +34,28 @@ const getUserByOAuthInformation = async (
 const createUser = async (
   oauth_provider: string,
   oauth_user_id: string,
-  handle: string,
+  publicId: string,
   role: UserRole
 ): Promise<User | undefined> => {
   const db = await getDatabase();
 
   const user = await db.query<User>(
-    "INSERT INTO users (oauth_provider, oauth_user_id, handle, role) VALUES ($1, $2, $3, $4) RETURNING *",
-    [oauth_provider, oauth_user_id, handle, role]
+    "INSERT INTO users (oauth_provider, oauth_user_id, public_id, role) VALUES ($1, $2, $3, $4) RETURNING *",
+    [oauth_provider, oauth_user_id, publicId, role]
   );
 
   return user.rows.at(0);
 };
 
-const searchUsersByHandle = async (
-  handle: string,
+const searchUsersByPublicId = async (
+  publicId: string,
   limit: number
 ): Promise<User[]> => {
   const db = await getDatabase();
 
   const users = await db.query(
-    "SELECT * FROM users WHERE handle LIKE $1 limit $2",
-    [`%${handle}%`, limit]
+    "SELECT * FROM users WHERE publicId LIKE $1 limit $2",
+    [`%${publicId}%`, limit]
   );
 
   return users.rows;
@@ -86,10 +86,10 @@ const getAllUsers = async (): Promise<User[]> => {
 };
 
 export const usersRepository = {
-  getUserByHandle,
+  getUserByPublicId,
   createUser,
   getUserByOAuthInformation,
-  searchUsersByHandle,
+  searchUsersByPublicId,
   updateRole,
   getAllUsers,
 };

@@ -74,7 +74,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
 
   const renderOwnerBadge = useCallback(
     (owner: string) => {
-      if (owner === user?.handle) {
+      if (owner === user?.publicId) {
         return (
           <span className="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">
             You
@@ -83,18 +83,18 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       } else if (owner.startsWith("@")) {
         return (
           <span className="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
-            {owner.slice(1)}
+            {shortenString(owner.slice(1), 15)}
           </span>
         );
       } else {
         return (
           <span className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-200 rounded-full">
-            {owner}
+            {shortenString(owner.slice(1), 15)}
           </span>
         );
       }
     },
-    [user?.handle]
+    [user?.publicId]
   );
 
   const downloadFile = useCallback(
@@ -148,12 +148,14 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
   const renderRow = useCallback(
     (file: UploadedObjectMetadata) => {
       const isExpanded = expandedRows.has(file.metadata.dataCid);
-      const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.handle;
+      const owner = file.owners.find(
+        (o) => o.role === OwnerRole.ADMIN
+      )?.publicId;
       const popoverButtonRef = useRef<HTMLButtonElement>(null);
-      const isOwner = user?.handle === owner;
+      const isOwner = user?.publicId === owner;
       const [showDownloadTooltip, setShowDownloadTooltip] = useState(false);
       const hasFileOwnership = file.owners.find(
-        (e) => e.handle === user?.handle
+        (e) => e.publicId === user?.publicId
       );
 
       return (
@@ -352,7 +354,7 @@ export const FileTable: FC<{ files: UploadedObjectMetadata[] }> = ({
       toggleRow,
       toggleSelectFile,
       selectedFiles,
-      user?.handle,
+      user?.publicId,
     ]
   );
 

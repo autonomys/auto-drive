@@ -12,6 +12,8 @@ import { ApiService } from "../../services/api";
 import { HandleSelector } from "../HandleSearch";
 import { Button } from "../common/Button";
 import { Link } from "lucide-react";
+import { Input } from "../common/Input";
+import { isValidUUID } from "../../utils/misc";
 
 export const ObjectShareModal = ({
   cid,
@@ -21,7 +23,7 @@ export const ObjectShareModal = ({
   closeModal: () => void;
 }) => {
   const isOpen = cid !== null;
-  const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
+  const [publicId, setPublicId] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export const ObjectShareModal = ({
   }, [cid]);
 
   const shareObject = useCallback(async () => {
-    if (!selectedHandle) {
+    if (!publicId) {
       return;
     }
 
@@ -39,7 +41,7 @@ export const ObjectShareModal = ({
       return;
     }
 
-    await ApiService.shareObject(metadata?.metadata.dataCid, selectedHandle)
+    await ApiService.shareObject(metadata?.metadata.dataCid, publicId)
       .then(async () => {
         toast.success("Object shared successfully");
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -49,15 +51,15 @@ export const ObjectShareModal = ({
       .catch(() => {
         toast.error("Failed to share object");
       });
-  }, [metadata, selectedHandle]);
+  }, [metadata, publicId]);
 
   useEffect(() => {
-    setSelectedHandle(null);
+    setPublicId(null);
   }, [metadata]);
 
   const isAlreadyOwnwer = useMemo(() => {
-    return !!metadata?.owners.some((owner) => owner.handle === selectedHandle);
-  }, [metadata, selectedHandle]);
+    return !!metadata?.owners.some((owner) => owner.publicId === publicId);
+  }, [metadata, publicId]);
 
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(
@@ -65,6 +67,10 @@ export const ObjectShareModal = ({
     );
     toast.success("Link copied to clipboard");
   }, [metadata?.metadata.dataCid]);
+
+  const invalidPublicId = useMemo(() => {
+    return !isValidUUID(publicId);
+  }, [publicId]);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -101,12 +107,13 @@ export const ObjectShareModal = ({
                 </DialogTitle>
                 <div className="mt-2">
                   <p className="text-sm text-gray-500">
-                    Enter the handle of the user you want to share with.
+                    Enter the public ID of the user you want to share with.
                   </p>
                 </div>
-                <HandleSelector
-                  selectedHandle={selectedHandle}
-                  setSelectedHandle={setSelectedHandle}
+                <input
+                  className="border border-gray-300 rounded-md p-2 w-full"
+                  value={publicId ?? ""}
+                  onChange={(e) => setPublicId(e.target.value)}
                 />
                 <div className="mt-4 flex justify-center gap-2">
                   <Button
@@ -117,22 +124,22 @@ export const ObjectShareModal = ({
                     <Link className="w-4 h-4" />
                     Share link
                   </Button>
-                  <button
-                    disabled={!selectedHandle || isAlreadyOwnwer}
-                    type="button"
-                    className={`inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
-                      selectedHandle && !isAlreadyOwnwer
-                        ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
-                        : "bg-gray-100 text-gray-900 opacity-50"
-                    }`}
+                  <Button
+                    variant="lightAccent"
+                    disabled={invalidPublicId || isAlreadyOwnwer}
                     onClick={shareObject}
                   >
-                    Share with handle
-                  </button>
+                    Share with public ID
+                  </Button>
                 </div>
                 {isAlreadyOwnwer && (
                   <p className="text-sm text-red-500 text-center mt-4">
                     This user is already an owner of this object.
+                  </p>
+                )}
+                {publicId && invalidPublicId && (
+                  <p className="text-sm text-red-500 text-center mt-4">
+                    Invalid public ID.
                   </p>
                 )}
               </DialogPanel>

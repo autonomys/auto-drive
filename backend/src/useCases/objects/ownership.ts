@@ -57,7 +57,7 @@ const getOwners = async (cid: string): Promise<Owner[]> => {
   const safeUsers = users.map((user) => user!);
 
   return safeUsers.map((user, index) => ({
-    handle: user.handle,
+    publicId: user.public_id,
     role: ownerships[index].is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
   }));
 };

@@ -99,11 +99,13 @@ objectController.get("/:cid/status", async (req, res) => {
 });
 
 objectController.post("/:cid/share", async (req, res) => {
-  const { handle } = req.body;
+  const { publicId } = req.body;
   const { cid } = req.params;
 
-  if (!handle) {
-    return res.status(400).json({ error: "Missing `handle` in request body" });
+  if (!publicId) {
+    return res
+      .status(400)
+      .json({ error: "Missing `publicId` in request body" });
   }
 
   const user = await handleAuth(req, res);
@@ -112,7 +114,7 @@ objectController.post("/:cid/share", async (req, res) => {
   }
 
   try {
-    await ObjectUseCases.shareObject(user, cid, handle);
+    await ObjectUseCases.shareObject(user, cid, publicId);
     res.sendStatus(200);
   } catch (error: any) {
     console.error("Error sharing object:", error);
