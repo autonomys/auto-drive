@@ -68,6 +68,7 @@ const searchMetadataByCIDAndUser = async (
     WHERE oo.oauth_provider = $1
     AND oo.oauth_user_id = $2
     AND oo.marked_as_deleted IS NULL
+    AND oo.is_admin IS TRUE
     AND m.head_cid LIKE $3
     LIMIT $4
     `,
@@ -92,6 +93,7 @@ const searchMetadataByNameAndUser = async (
     WHERE oo.oauth_provider = $1
     AND oo.oauth_user_id = $2
     AND oo.marked_as_deleted IS NULL
+    AND oo.is_admin IS TRUE
     AND m.metadata->>'name' ILIKE $3
     LIMIT $4`,
       values: [provider, userId, `%${query}%`, limit],

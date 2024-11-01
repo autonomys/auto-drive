@@ -56,6 +56,7 @@ const searchMetadataByName = async (
   limit: number = 5,
   filter: { scope: "user"; user: User } | { scope: "global" }
 ): Promise<MetadataEntry[]> => {
+  console.log("filter", filter);
   if (filter.scope === "user") {
     return metadataRepository.searchMetadataByNameAndUser(
       query,
