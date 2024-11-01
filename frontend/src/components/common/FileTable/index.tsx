@@ -37,6 +37,15 @@ import { DisplayerIcon } from "../Triangle";
 import { Button } from "../Button";
 import { TableFooter } from "../Table/TableFooter";
 import { TablePaginator } from "../TablePaginator";
+import { ConditionalRender } from "../ConditionalRender";
+import { ObjectRestoreModal } from "../../Files/ObjectRestoreModal";
+
+export enum FileActionButtons {
+  DOWNLOAD = "download",
+  SHARE = "share",
+  DELETE = "delete",
+  RESTORE = "restore",
+}
 
 export const FileTable: FC<{
   files: ObjectSummary[];
@@ -45,6 +54,7 @@ export const FileTable: FC<{
   currentPage: number;
   setCurrentPage: (currentPage: number) => void;
   totalItems: number;
+  actionButtons: FileActionButtons[];
 }> = ({
   files,
   pageSize,
@@ -52,11 +62,13 @@ export const FileTable: FC<{
   currentPage,
   setCurrentPage,
   totalItems,
+  actionButtons,
 }) => {
   const user = useUserStore(({ user }) => user);
   const [downloadingCID, setDownloadingCID] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
+  const [restoreCID, setRestoreCID] = useState<string | null>(null);
   const [deleteCID, setDeleteCID] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<
     {
@@ -157,6 +169,14 @@ export const FileTable: FC<{
     [selectedFiles]
   );
 
+  const openRestoreModal = useCallback(
+    (event: MouseEvent<HTMLButtonElement>, cid: string) => {
+      event.stopPropagation();
+      setRestoreCID(cid);
+    },
+    []
+  );
+
   const renderRow = useCallback(
     (file: ObjectSummary) => {
       const isExpanded = expandedRows.has(file.headCid);
@@ -252,56 +272,79 @@ export const FileTable: FC<{
               {owner ? renderOwnerBadge(owner) : "Unknown"}
             </TableBodyCell>
             <TableBodyCell className="flex justify-end">
-              <div
-                className="relative"
-                onMouseEnter={() => setShowDownloadTooltip(true)}
-                onMouseLeave={() => setShowDownloadTooltip(false)}
+              <ConditionalRender
+                condition={actionButtons.includes(FileActionButtons.DOWNLOAD)}
+              >
+                <div
+                  className="relative"
+                  onMouseEnter={() => setShowDownloadTooltip(true)}
+                  onMouseLeave={() => setShowDownloadTooltip(false)}
+                >
+                  <Button
+                    variant="lightAccent"
+                    className="mr-2 text-xs outline-none focus:ring-0"
+                    disabled={file.uploadStatus.totalNodes === null}
+                    onClick={(e) => downloadFile(e, file.headCid)}
+                  >
+                    Download
+                  </Button>
+                  <Transition
+                    show={showDownloadTooltip}
+                    as={Fragment}
+                    enter="transition ease-out delay-250"
+                    enterFrom="opacity-0 translate-y-1"
+                    enterTo="opacity-100 translate-y-0"
+                    leave="transition ease-in duration-300"
+                    leaveFrom="opacity-100 translate-y-0"
+                    leaveTo="opacity-0 translate-y-1"
+                  >
+                    <div className="absolute z-10 left-0 bottom-0 translate-y-full">
+                      {file.uploadStatus.totalNodes === null && (
+                        <div className="bg-white shadow-md rounded-lg p-2">
+                          <span className="text-sm text-gray-700">
+                            Processing upload...
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </Transition>
+                </div>
+              </ConditionalRender>
+              <ConditionalRender
+                condition={actionButtons.includes(FileActionButtons.SHARE)}
               >
                 <Button
                   variant="lightAccent"
-                  className="mr-2 text-xs outline-none focus:ring-0"
-                  disabled={file.uploadStatus.totalNodes === null}
-                  onClick={(e) => downloadFile(e, file.headCid)}
+                  className="mr-2 text-xs disabled:hidden"
+                  disabled={!isOwner}
+                  onClick={(e) => shareFile(e, file.headCid)}
                 >
-                  Download
+                  Share
                 </Button>
-                <Transition
-                  show={showDownloadTooltip}
-                  as={Fragment}
-                  enter="transition ease-out delay-250"
-                  enterFrom="opacity-0 translate-y-1"
-                  enterTo="opacity-100 translate-y-0"
-                  leave="transition ease-in duration-300"
-                  leaveFrom="opacity-100 translate-y-0"
-                  leaveTo="opacity-0 translate-y-1"
+              </ConditionalRender>
+              <ConditionalRender
+                condition={actionButtons.includes(FileActionButtons.DELETE)}
+              >
+                <Button
+                  variant="lightDanger"
+                  className="text-xs disabled:hidden"
+                  disabled={!hasFileOwnership}
+                  onClick={(e) => onDeleteFile(e, file.headCid)}
                 >
-                  <div className="absolute z-10 left-0 bottom-0 translate-y-full">
-                    {file.uploadStatus.totalNodes === null && (
-                      <div className="bg-white shadow-md rounded-lg p-2">
-                        <span className="text-sm text-gray-700">
-                          Processing upload...
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </Transition>
-              </div>
-              <Button
-                variant="lightAccent"
-                className="mr-2 text-xs disabled:hidden"
-                disabled={!isOwner}
-                onClick={(e) => shareFile(e, file.headCid)}
+                  Remove
+                </Button>
+              </ConditionalRender>
+              <ConditionalRender
+                condition={actionButtons.includes(FileActionButtons.RESTORE)}
               >
-                Share
-              </Button>
-              <Button
-                variant="lightDanger"
-                className="text-xs disabled:hidden"
-                disabled={!hasFileOwnership}
-                onClick={(e) => onDeleteFile(e, file.headCid)}
-              >
-                Delete
-              </Button>
+                <Button
+                  variant="lightAccent"
+                  className="text-xs disabled:hidden"
+                  onClick={(e) => openRestoreModal(e, file.headCid)}
+                >
+                  Restore
+                </Button>
+              </ConditionalRender>
             </TableBodyCell>
           </TableBodyRow>
           {isExpanded &&
@@ -369,6 +412,7 @@ export const FileTable: FC<{
     setShareCID(null);
     setDeleteCID(null);
     setDownloadingCID(null);
+    setRestoreCID(null);
   }, []);
 
   return (
@@ -379,6 +423,7 @@ export const FileTable: FC<{
         closeModal={() => setDeleteCID(null)}
       />
       <ObjectDownloadModal cid={downloadingCID} onClose={onClose} />
+      <ObjectRestoreModal cid={restoreCID} closeModal={onClose} />
       <div className="-my-2 sm:-mx-6 lg:-mx-8">
         <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
           <div className="flex justify-start items-center mb-4 gap-2 ml-2">

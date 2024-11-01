@@ -8,6 +8,7 @@ import {
   TrashIcon,
   UserIcon,
   UsersIcon,
+  Earth,
 } from "lucide-react";
 import { InternalLink } from "../../components/common/InternalLink";
 import "../globals.css";
@@ -62,14 +63,6 @@ export default function AppLayout({
             />
             <span className="text-md font-medium">Auto Drive</span>
           </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-medium">Your Files</span>
-            <ScopeSwitch />
-            <span className="text-sm font-medium">Global</span>
-            <div className="md:w-80">
-              <SearchBar />
-            </div>
-          </div>
         </header>
         <div className="flex flex-1 overflow-hidden px-10">
           <UserEnsurer>
@@ -78,6 +71,12 @@ export default function AppLayout({
                 <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
                   <HomeIcon className="w-5 h-5" />
                   <span className="hidden md:block">Files</span>
+                </button>
+              </InternalLink>
+              <InternalLink className="contents" href="/drive/global">
+                <button className="flex items-center space-x-2 text-black hover:text-blue-600 mb-2">
+                  <Earth className="w-5 h-5" />
+                  <span className="hidden md:block">Global Feed</span>
                 </button>
               </InternalLink>
               <InternalLink className="contents" href="/drive/shared">

@@ -7,6 +7,7 @@ import { FileDropZone } from "../Files/FileDropZone";
 import { UploadingObjects } from "../Files/UploadingObjects";
 import { NoFilesInTrashPlaceholder } from "./NoFilesInTrashPlaceholder";
 import { DeletedFilesTable } from "../common/DeleteFilesTable";
+import { FileActionButtons, FileTable } from "../common/FileTable";
 
 export const TrashFiles = ({
   objects,
@@ -26,7 +27,6 @@ export const TrashFiles = ({
   return (
     <div className="flex w-full">
       <div className="w-full flex flex-col gap-4">
-        <FileDropZone />
         <div className="">
           <UploadingObjects />
           {objects === null && (
@@ -35,13 +35,17 @@ export const TrashFiles = ({
             </div>
           )}
           {objects && objects.length > 0 && (
-            <DeletedFilesTable
+            <FileTable
               files={objects}
               pageSize={pageSize}
               setPageSize={setPageSize}
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
               totalItems={totalItems}
+              actionButtons={[
+                FileActionButtons.DOWNLOAD,
+                FileActionButtons.RESTORE,
+              ]}
             />
           )}
           {objects && objects.length === 0 && <NoFilesInTrashPlaceholder />}

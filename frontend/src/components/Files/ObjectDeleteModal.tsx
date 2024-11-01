@@ -74,16 +74,17 @@ export const ObjectDeleteModal = ({
                   as="h3"
                   className="text-lg font-medium leading-6 text-gray-900"
                 >
-                  Delete "{metadata?.metadata.name}"
+                  Remove "{metadata?.metadata.name}"
                 </DialogTitle>
                 <div className="mt-2">
                   <p className="text-sm text-gray-500">
-                    Do you want to mark this object as deleted?
+                    This action doesn't delete the object, it just removes it
+                    from your this view and moves it to the Trash.
                   </p>
                 </div>
                 <div className="mt-4 flex justify-center">
                   <Button variant="danger" onClick={deleteObject}>
-                    Delete
+                    Remove
                   </Button>
                 </div>
               </DialogPanel>
