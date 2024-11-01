@@ -43,7 +43,7 @@ export default function OnboardingPage() {
         className={`bg-black font-semibold text-white rounded px-4 py-1 transition-all duration-300 opacity-100 hover:bg-gray-800 hover:scale-105`}
         onClick={nextStep}
       >
-        Start
+        Accept
       </Button>
     </div>,
     <div className="flex flex-col gap-4 items-center">

@@ -11,15 +11,18 @@ interface CreditLimitsProps {
 }
 
 export const RemainingCreditTracker = ({
-  uploadPending: uploadUsed = 0,
+  uploadPending = 0,
   uploadLimit = 1000,
   downloadPending = 0,
   downloadLimit = 2000,
   startDate,
   endDate,
 }: CreditLimitsProps) => {
+  const uploadUsed = uploadLimit - uploadPending;
+  const downloadUsed = downloadLimit - downloadPending;
+
   const uploadPercentage = (uploadUsed / uploadLimit) * 100;
-  const downloadPercentage = (downloadPending / downloadLimit) * 100;
+  const downloadPercentage = (downloadUsed / downloadLimit) * 100;
 
   return (
     <div className="w-full max-w-sm mx-auto bg-white rounded-lg overflow-hidden">
@@ -50,7 +53,7 @@ export const RemainingCreditTracker = ({
           <div>
             <div className="flex justify-between mb-1 text-sm text-gray-600">
               <span>
-                <span className="text-primary">{bytes(downloadPending)}</span>/
+                <span className="text-primary">{bytes(downloadUsed)}</span>/
                 <span className="text-gray-500">{bytes(downloadLimit)}</span>
               </span>
               <span className="text-secondary px-2">
@@ -62,7 +65,7 @@ export const RemainingCreditTracker = ({
                 className="bg-primary h-2.5 rounded-full w-full"
                 style={{ width: `${downloadPercentage}%` }}
                 role="progressbar"
-                aria-valuenow={downloadPending}
+                aria-valuenow={downloadUsed}
                 aria-valuemin={0}
                 aria-valuemax={downloadLimit}
               ></div>

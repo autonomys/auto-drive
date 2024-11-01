@@ -42,7 +42,7 @@ export default function AppLayout({
     return new Date(
       date.getFullYear(),
       date.getMonth() + 1,
-      1
+      0
     ).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
