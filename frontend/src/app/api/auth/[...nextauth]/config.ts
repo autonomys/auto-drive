@@ -39,25 +39,3 @@ export const authOptions: AuthOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET,
 };
-
-declare module "next-auth" {
-  interface Session {
-    error?: "RefreshTokenError";
-    accessToken?: string;
-    provider?: string;
-  }
-
-  interface Account {
-    expires_in: number;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    accessToken?: string;
-    expires_at: number;
-    refresh_token?: string;
-    error?: "RefreshTokenError";
-    provider?: string;
-  }
-}
