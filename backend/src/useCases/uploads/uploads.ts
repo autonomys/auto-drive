@@ -19,6 +19,7 @@ import { fileProcessingInfoRepository } from "../../repositories/uploads/filePro
 import { FilesUseCases } from "../objects/files.js";
 import { NodesUseCases } from "../objects/index.js";
 import { FileUploadOptions } from "@autonomys/auto-drive";
+import { CID } from "multiformats";
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -162,14 +163,14 @@ const uploadChunk = async (
   });
 };
 
-const completeUpload = async (user: User, uploadId: string): Promise<void> => {
+const completeUpload = async (user: User, uploadId: string): Promise<CID> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId);
   if (!upload) {
     throw new Error("Upload not found");
   }
   await checkPermissions(upload, user);
 
-  await UploadingProcessingUseCase.completeUploadProcessing(upload);
+  const cid = await UploadingProcessingUseCase.completeUploadProcessing(upload);
 
   if (upload.type === UploadType.FILE) {
     await FilesUseCases.handleFileUploadFinalization(user, uploadId);
@@ -183,6 +184,8 @@ const completeUpload = async (user: User, uploadId: string): Promise<void> => {
   };
 
   await uploadsRepository.updateUploadEntry(updatedUpload);
+
+  return cid;
 };
 
 const getFileFromFolderUpload = async (

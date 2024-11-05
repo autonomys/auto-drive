@@ -176,9 +176,9 @@ uploadController.post("/:uploadId/complete", async (req, res) => {
   const { uploadId } = req.params;
 
   try {
-    await UploadsUseCases.completeUpload(user, uploadId);
+    const cid = await UploadsUseCases.completeUpload(user, uploadId);
 
-    return res.status(200).json({ message: "Upload completed" });
+    return res.status(200).json({ cid });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ error: "Failed to complete upload" });
