@@ -161,7 +161,7 @@ const createFileUploadWithinFolderUpload = async (
   { encryption, compression }: { encryption: boolean; compression: boolean }
 ) => {
   const session = await getAuthSession();
-  if (!session) {
+  if (!session?.provider || !session.accessToken) {
     throw new Error("No session");
   }
 
