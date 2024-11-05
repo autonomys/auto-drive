@@ -26,7 +26,6 @@ export const SharedFiles = ({
   return (
     <div className="flex w-full">
       <div className="w-full flex flex-col gap-4">
-        <FileDropZone />
         <div className="">
           <UploadingObjects />
           {objects === null && (
