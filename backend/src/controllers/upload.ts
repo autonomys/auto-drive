@@ -5,6 +5,7 @@ import multer from "multer";
 import { FolderTreeFolderSchema } from "../models/objects/folderTree.js";
 import { uploadOptionsSchema } from "../models/uploads/upload.js";
 import { z } from "zod";
+import { cidToString } from "@autonomys/auto-drive";
 
 const uploadController = Router();
 
