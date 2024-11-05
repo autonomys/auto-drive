@@ -28,6 +28,14 @@ export const authOptions: AuthOptions = {
       session.provider = token.provider;
       return session;
     },
+    async redirect({ url: _url, baseUrl: _baseUrl }) {
+      const baseUrl = process.env.URL || _baseUrl;
+      const url = _url.startsWith("/")
+        ? `${baseUrl}${_url}`
+        : _url.replace(_baseUrl, baseUrl);
+
+      return url;
+    },
   },
   secret: process.env.NEXTAUTH_SECRET,
 };
