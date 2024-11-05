@@ -18,7 +18,7 @@ const createFileUpload = async (
   { encryption, compression }: { encryption: boolean; compression: boolean }
 ): Promise<CreationUploadResponse> => {
   const session = await getAuthSession();
-  if (!session) {
+  if (!session?.provider || !session.accessToken) {
     throw new Error("No session");
   }
 
@@ -46,7 +46,7 @@ const createFileUpload = async (
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.accessToken}`,
-      "X-Auth-Provider": "google",
+      "X-Auth-Provider": session.provider,
     },
   }).then((e) => {
     if (!e.ok) {
@@ -63,7 +63,7 @@ const uploadFileChunk = async (
   index: number
 ) => {
   const session = await getAuthSession();
-  if (!session) {
+  if (!session?.provider || !session.accessToken) {
     throw new Error("No session");
   }
 
@@ -75,14 +75,14 @@ const uploadFileChunk = async (
     body: formData,
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
-      "X-Auth-Provider": "google",
+      "X-Auth-Provider": session.provider,
     },
   });
 };
 
 const completeUpload = async (uploadId: string) => {
   const session = await getAuthSession();
-  if (!session) {
+  if (!session?.provider || !session.accessToken) {
     throw new Error("No session");
   }
 
@@ -90,7 +90,7 @@ const completeUpload = async (uploadId: string) => {
     method: "POST",
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
-      "X-Auth-Provider": "google",
+      "X-Auth-Provider": session.provider,
     },
   }).then((e) => {
     if (!e.ok) {
@@ -104,7 +104,7 @@ const createFolderUpload = async (
   { compression }: { compression: boolean }
 ) => {
   const session = await getAuthSession();
-  if (!session) {
+  if (!session?.provider || !session.accessToken) {
     throw new Error("No session");
   }
 
@@ -125,7 +125,7 @@ const createFolderUpload = async (
     }),
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
-      "X-Auth-Provider": "google",
+      "X-Auth-Provider": session.provider,
       "Content-Type": "application/json",
     },
   }).then((e) => {
@@ -189,7 +189,7 @@ const createFileUploadWithinFolderUpload = async (
     }),
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
-      "X-Auth-Provider": "google",
+      "X-Auth-Provider": session.provider,
       "Content-Type": "application/json",
     },
   }).then((e) => {

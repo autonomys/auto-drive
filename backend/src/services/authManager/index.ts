@@ -1,6 +1,6 @@
 import { OAuthUser } from "../../models/users/index.js";
 import { ApiKeyAuth } from "./providers/apikey.js";
-import { GoogleAuth } from "./providers/index.js";
+import { DiscordAuth, GoogleAuth } from "./providers/index.js";
 
 const getUserFromAccessToken = async (
   provider: string,
@@ -9,6 +9,8 @@ const getUserFromAccessToken = async (
   switch (provider) {
     case "google":
       return GoogleAuth.getUserFromAccessToken(accessToken);
+    case "discord":
+      return DiscordAuth.getUserFromAccessToken(accessToken);
     case "apikey":
       return ApiKeyAuth.getUserFromApiKey(accessToken);
     default:

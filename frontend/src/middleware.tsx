@@ -24,11 +24,9 @@ export async function middleware(req: NextRequest) {
   }
 
   const userInfo: UserInfo | null = await AuthService.checkAuth(
-    // @ts-ignore
-    session?.accessToken
-  ).catch((e) => {
-    return null;
-  });
+    session.provider,
+    session.accessToken
+  ).catch(() => null);
 
   if (!userInfo?.user) {
     console.log("redirecting to home: 2");
