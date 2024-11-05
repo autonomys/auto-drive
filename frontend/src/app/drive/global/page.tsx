@@ -5,11 +5,11 @@ import { FileDropZone } from "@/components/Files/FileDropZone";
 import { NoUploadsPlaceholder } from "@/components/Files/NoUploadsPlaceholder";
 import { ApiService } from "@/services/api";
 import { useCallback, useEffect, useState } from "react";
-import { UploadingObjects } from "../../components/Files/UploadingObjects";
-import { ObjectSummary } from "../../models/UploadedObjectMetadata";
+import { UploadingObjects } from "../../../components/Files/UploadingObjects";
+import { ObjectSummary } from "../../../models/UploadedObjectMetadata";
 import { LoaderCircle } from "lucide-react";
-import { PaginatedResult } from "../../models/common";
-import { SearchBar } from "../../components/SearchBar";
+import { PaginatedResult } from "../../../models/common";
+import { SearchBar } from "../../../components/SearchBar";
 
 export default function Page() {
   const [pageSize, setPageSize] = useState(5);
@@ -28,7 +28,7 @@ export default function Page() {
   useEffect(() => {
     const offset = currentPage * pageSize;
     setRootObjectMetadata(null);
-    ApiService.getRootObjects("user", offset, pageSize).then(updateResult);
+    ApiService.getRootObjects("global", offset, pageSize).then(updateResult);
   }, [currentPage, pageSize, updateResult]);
 
   const updateCurrentPage = useCallback((newPage: number) => {
@@ -46,7 +46,7 @@ export default function Page() {
           <div className="flex-1">
             <FileDropZone />
           </div>
-          <SearchBar scope="user" />
+          <SearchBar scope="global" />
         </div>
         <div className="">
           <UploadingObjects />
@@ -63,11 +63,7 @@ export default function Page() {
               currentPage={currentPage}
               setCurrentPage={updateCurrentPage}
               totalItems={totalItems}
-              actionButtons={[
-                FileActionButtons.DOWNLOAD,
-                FileActionButtons.SHARE,
-                FileActionButtons.DELETE,
-              ]}
+              actionButtons={[FileActionButtons.DOWNLOAD]}
             />
           )}
           {rootObjectMetadata && rootObjectMetadata.length === 0 && (

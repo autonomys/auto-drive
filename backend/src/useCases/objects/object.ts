@@ -227,8 +227,8 @@ const markAsDeleted = async (executor: User, cid: string) => {
 };
 
 const restoreObject = async (executor: User, cid: string) => {
-  const ownerships = await ownershipRepository.getOwnerships(cid);
-  const isUserOwner = ownerships.find(
+  const deletedOwnerships = await ownershipRepository.getDeletedOwnerships(cid);
+  const isUserOwner = deletedOwnerships.find(
     (owner) =>
       owner.oauth_provider === executor.oauthProvider &&
       owner.oauth_user_id === executor.oauthUserId

@@ -4,7 +4,7 @@ import {
   UploadedObjectMetadata,
 } from "../../models/UploadedObjectMetadata";
 import { FileDropZone } from "../Files/FileDropZone";
-import { FileTable } from "../common/FileTable";
+import { FileActionButtons, FileTable } from "../common/FileTable";
 import { UploadingObjects } from "../Files/UploadingObjects";
 import { NoSharedFilesPlaceholder } from "./NoSharedFilesPlaceholder";
 
@@ -42,6 +42,10 @@ export const SharedFiles = ({
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
               totalItems={totalItems}
+              actionButtons={[
+                FileActionButtons.DOWNLOAD,
+                FileActionButtons.DELETE,
+              ]}
             />
           )}
           {objects && objects.length === 0 && <NoSharedFilesPlaceholder />}

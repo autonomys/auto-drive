@@ -170,15 +170,15 @@ export function FileDropZone() {
       <Popover as="div" className="relative">
         <PopoverButton as="div">
           <div
-            className={`w-full h-32 border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors cursor-pointer ${
-              isDragging ? "border-green-500 bg-green-50" : "border-green-300"
+            className={`w-full h-10 border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors cursor-pointer ${
+              isDragging ? "border-green-800 bg-green-50" : "border-green-700"
             }`}
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            <p className="text-green-600 text-center mb-2">
+            <p className="text-green-600 text-center">
               Add or drop files / folders here
             </p>
           </div>
@@ -191,7 +191,7 @@ export function FileDropZone() {
           leaveFrom="transform scale-100 opacity-100"
           leaveTo="transform scale-95 opacity-0"
         >
-          <PopoverPanel className="absolute z-10 w-full mt-2">
+          <PopoverPanel className="absolute z-10 w-full">
             <div className="bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5">
               <div className="p-4">
                 <button
@@ -203,7 +203,7 @@ export function FileDropZone() {
                 </button>
                 <button
                   onClick={openFolderDialog}
-                  className="flex items-center w-full px-4 py-2 mt-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
                 >
                   <FolderIcon className="w-5 h-5 mr-3 text-gray-400" />
                   Select Folder

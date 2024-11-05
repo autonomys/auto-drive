@@ -8,13 +8,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useScopeStore } from "../../states/scope";
 import { ObjectSearchResult } from "../../models/ObjectSearchResult";
 
-export const SearchBar = () => {
+export const SearchBar = ({ scope }: { scope: "global" | "user" }) => {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
-  const scope = useScopeStore(({ scope }) => scope);
   const [recommendations, setRecommendations] = useState<
     ObjectSearchResult[] | null
   >(null);
