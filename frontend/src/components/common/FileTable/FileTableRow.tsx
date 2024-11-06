@@ -11,6 +11,7 @@ import { ConditionalRender } from '../ConditionalRender';
 import { FileActionButtons } from '../FileTable';
 import bytes from 'bytes';
 import { Button } from '../Button';
+import { handleEnterOrSpace } from '../../../utils/eventHandler';
 
 export const FileTableRow = ({
   file,
@@ -75,10 +76,6 @@ export const FileTableRow = ({
         (e) => e.publicId === user?.publicId,
       );
 
-      const handleDownload = useMemo(
-        () => () => onDownloadFile(file.headCid),
-        [onDownloadFile, file.headCid],
-      );
       const handleShare = useMemo(
         () => () => onShareFile(file.headCid),
         [onShareFile, file.headCid],
@@ -130,6 +127,9 @@ export const FileTableRow = ({
                   </button>
                 )}
                 <span
+                role='button'
+                tabIndex={0}
+                onKeyDown={handleEnterOrSpace(toggleExpand)}
                   className={`relative ml-2 text-sm font-medium text-gray-900 ${
                     file.type === 'folder'
                       ? 'hover:cursor-pointer hover:underline'
@@ -185,7 +185,7 @@ export const FileTableRow = ({
                     variant='lightAccent'
                     className='mr-2 text-xs outline-none focus:ring-0'
                     disabled={file.uploadStatus.totalNodes === null}
-                    onClick={handleDownload}
+                    onClick={() => onDownloadFile(file.headCid)}
                   >
                     Download
                   </Button>
@@ -286,7 +286,7 @@ export const FileTableRow = ({
                   <Button
                     variant='lightAccent'
                     className='text-xs'
-                    onClick={handleDownload}
+                    onClick={() => onDownloadFile(child.cid)}
                   >
                     Download
                   </Button>

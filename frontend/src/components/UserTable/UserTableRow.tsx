@@ -1,13 +1,14 @@
 import bytes from 'bytes';
 import toast from 'react-hot-toast';
 import { Copy } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { CreditsUpdateModal } from './CreditsUpdateModal';
 import { SubscriptionWithUser } from '../../models/Subscriptions';
 import { UpdateRoleModal } from './UpdateRoleModal';
 import { useUserStore } from '../../states/user';
 import { TableBodyCell, TableBodyRow } from '../common/Table/TableBody';
 import { shortenString } from '../../utils/misc';
+import { handleEnterOrSpace } from '../../utils/eventHandler';
 
 type UserTableRowProps = {
   subscriptionWithUser: SubscriptionWithUser;
@@ -25,6 +26,13 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
 
   const myHandle = useMemo(() => user?.publicId, [user?.publicId]);
 
+  const copyToClipboard = useCallback(() => {
+    if (!subscriptionWithUser.user.publicId) return;
+
+    navigator.clipboard.writeText(subscriptionWithUser.user.publicId);
+    toast.success('Copied to clipboard');
+  }, [subscriptionWithUser.user.publicId]);
+
   return (
     <TableBodyRow>
       <CreditsUpdateModal
@@ -41,13 +49,11 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
       />
       <TableBodyCell>
         <div
+          role='button'
+          tabIndex={0}
+          onKeyDown={handleEnterOrSpace(copyToClipboard)}
           className='flex cursor-pointer items-center gap-2 text-sm text-gray-900 transition-colors duration-200 hover:text-blue-500'
-          onClick={() => {
-            if (!subscriptionWithUser.user.publicId) return;
-
-            navigator.clipboard.writeText(subscriptionWithUser.user.publicId);
-            toast.success('Copied to clipboard');
-          }}
+          onClick={copyToClipboard}
         >
           {shortenString(subscriptionWithUser.user.publicId!, 16)}{' '}
           <Copy size={16} />

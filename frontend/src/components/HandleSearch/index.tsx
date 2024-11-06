@@ -3,6 +3,7 @@
 import { Transition } from '@headlessui/react';
 import { SearchIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { handleEnterOrSpace } from '../../utils/eventHandler';
 
 export const HandleSelector = ({
   selectedHandle,
@@ -66,13 +67,16 @@ export const HandleSelector = ({
     }
 
     return recommendations.map((item) => (
-      <li
+      <div
         key={item}
+        role='button'
+        tabIndex={0}
+        onKeyDown={handleEnterOrSpace(() => handleSelectItem(item))}
         className='relative cursor-pointer select-none overflow-hidden text-ellipsis px-4 py-2 font-semibold text-gray-900 hover:bg-blue-600 hover:text-white'
         onClick={() => handleSelectItem(item)}
       >
         {item}
-      </li>
+      </div>
     ));
   }, [handleSelectItem, query.length, recommendations]);
 

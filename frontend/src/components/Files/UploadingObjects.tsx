@@ -10,6 +10,7 @@ import {
   UploadStatus,
 } from '../../models/UploadedObjectMetadata';
 import { ObjectShareModal } from './ObjectShareModal';
+import { handleEscape } from '../../utils/eventHandler';
 
 export const UploadingObjects = () => {
   const [uploadingObjects] = useLocalStorage<string[]>('uploading-objects', []);
@@ -140,6 +141,9 @@ const UploadingObject = ({
           </button>
         </div>
         <div
+          role='button'
+          tabIndex={0}
+          onKeyDown={handleEscape(handleClose)}
           className='absolute right-2 top-2 cursor-pointer'
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}

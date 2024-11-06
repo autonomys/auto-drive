@@ -1,39 +1,26 @@
 'use client';
 
-import { ObjectSummary, OwnerRole } from '@/models/UploadedObjectMetadata';
+import { ObjectSummary } from '@/models/UploadedObjectMetadata';
 import {
   Checkbox,
-  Popover,
-  PopoverButton,
-  PopoverPanel,
   Transition,
 } from '@headlessui/react';
 import { Square, SquareCheck } from 'lucide-react';
 import {
-  ChangeEvent,
   FC,
-  Fragment,
-  MouseEvent,
   useCallback,
-  useRef,
   useState,
 } from 'react';
-import { Metadata } from '../../Files/Metadata';
 import { ObjectShareModal } from '../../Files/ObjectShareModal';
-import bytes from 'bytes';
 import { ObjectDeleteModal } from '../../Files/ObjectDeleteModal';
-import { getTypeFromMetadata } from '../../../utils/file';
 import { ObjectDownloadModal } from '../../Files/ObjectDownloadModal';
-import { shortenString } from '../../../utils/misc';
 import { useUserStore } from '../../../states/user';
 import { Table } from '../Table';
 import { TableHead, TableHeadCell, TableHeadRow } from '../Table/TableHead';
-import { TableBody, TableBodyCell, TableBodyRow } from '../Table/TableBody';
-import { DisplayerIcon } from '../Triangle';
+import { TableBody } from '../Table/TableBody';
 import { Button } from '../Button';
 import { TableFooter } from '../Table/TableFooter';
 import { TablePaginator } from '../TablePaginator';
-import { ConditionalRender } from '../ConditionalRender';
 import { ObjectRestoreModal } from '../../Files/ObjectRestoreModal';
 import { FileTableRow } from './FileTableRow';
 
@@ -63,7 +50,6 @@ export const FileTable: FC<{
 }) => {
   const user = useUserStore(({ user }) => user);
   const [downloadingCID, setDownloadingCID] = useState<string | null>(null);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [shareCID, setShareCID] = useState<string | null>(null);
   const [restoreCID, setRestoreCID] = useState<string | null>(null);
   const [deleteCID, setDeleteCID] = useState<string | null>(null);
@@ -146,7 +132,6 @@ export const FileTable: FC<{
                   key={file.headCid}
                   file={file}
                   user={user!}
-                  isRowExpanded={expandedRows.has(file.headCid)}
                   selectedFiles={selectedFiles}
                   toggleSelectFile={toggleSelectFile}
                   actionButtons={actionButtons}

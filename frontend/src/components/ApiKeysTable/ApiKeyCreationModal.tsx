@@ -12,6 +12,7 @@ import { ApiService } from '../../services/api';
 import { ApiKey } from '../../models/ApiKey';
 import toast from 'react-hot-toast';
 import { Button } from '../common/Button';
+import { handleEnterOrSpace } from '../../utils/eventHandler';
 
 export const ApiKeyCreationModal = ({
   isOpen,
@@ -89,13 +90,15 @@ export const ApiKeyCreationModal = ({
                   {apiKey ? (
                     <div>
                       <div className='flex items-center justify-center space-x-2'>
-                        <p
+                        <button
+                          tabIndex={0}
+                          onKeyDown={handleEnterOrSpace(copyApiKey)}
                           className='flex cursor-pointer items-center rounded bg-gray-100 px-2 py-1 text-center font-mono text-sm'
                           onClick={copyApiKey}
                           title='Click to copy'
                         >
                           {apiKey.secret}
-                        </p>
+                        </button>
                       </div>
                       <div className='mt-4 flex w-full items-center justify-center space-x-2'>
                         <Button variant='lightAccent' onClick={copyApiKey}>
@@ -116,6 +119,9 @@ export const ApiKeyCreationModal = ({
                       <span
                         className='mt-4 flex justify-center'
                         onClick={createApiKey}
+                        onKeyDown={handleEnterOrSpace(createApiKey)}
+                        role='button'
+                        tabIndex={0}
                       >
                         <Button variant='lightAccent'>Generate</Button>
                       </span>

@@ -35,6 +35,7 @@ export const UploadingFolderModal = ({
         setProgress(progress);
       }
     } else {
+      console.log('Uploading folder without encryption'); 
       const progressIterable = UploadService.uploadFolder(
         data.fileTree,
         data.files,

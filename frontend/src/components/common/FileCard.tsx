@@ -15,6 +15,7 @@ import { useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
 import { UploadedObjectMetadata } from '../../models/UploadedObjectMetadata';
 import { ObjectDownloadModal } from '../Files/ObjectDownloadModal';
+import { handleClick, handleEnterOrSpace } from '../../utils/eventHandler';
 
 interface FileCardProps extends Partial<UploadedObjectMetadata> {
   icon?: React.ReactNode;
@@ -28,25 +29,18 @@ export const FileCard = ({
   const router = useRouter();
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
-  const onDownload = useCallback(
-    async (event: React.MouseEvent<HTMLButtonElement | HTMLSpanElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
+  const download = useCallback(
+    () => {
       setIsDownloadModalOpen(true);
     },
     [],
   );
 
-  const onNavigate = useCallback(
-    (
-      event: React.MouseEvent<HTMLButtonElement | HTMLSpanElement>,
-      cid: string,
-    ) => {
-      event.stopPropagation();
-      event.preventDefault();
-      router.push(`/drive/fs/${cid}`);
+  const navigate = useCallback(
+    () => {
+      router.push(`/drive/fs/${dataCid}`);
     },
-    [router],
+    [dataCid, router],
   );
 
   const objectIcon = useMemo(() => {
@@ -57,6 +51,26 @@ export const FileCard = ({
       <File className='h-8 w-8 text-gray-500' />
     );
   }, [icon, type]);
+
+  const handleNavigateClick = useMemo(
+    () => handleClick(navigate, { stopPropagation: true, preventDefault: true }),
+    [navigate],
+  );
+
+  const handleNavigateKeyDown = useMemo(
+    () => handleEnterOrSpace(navigate, { stopPropagation: true, preventDefault: true }),
+    [navigate],
+  );
+
+  const handleDownloadClick = useMemo(
+    () => handleClick(download, { stopPropagation: true, preventDefault: true }),
+    [download],
+  );
+
+  const handleDownloadKeyDown = useMemo(
+    () => handleEnterOrSpace(download, { stopPropagation: true, preventDefault: true }),
+    [download],
+  );
 
   return (
     <Popover className='flex flex-1 flex-col'>
@@ -74,7 +88,7 @@ export const FileCard = ({
         <h2 className='mb-2 text-lg font-semibold text-gray-800'>{name}</h2>
         <p className='mb-4 text-gray-500'>Size: {bytes(totalSize)}</p>
         <button
-          onClick={onDownload}
+          onClick={handleDownloadClick}
           className='flex w-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600'
         >
           <Download size={20} className='mr-2' />
@@ -82,7 +96,7 @@ export const FileCard = ({
         </button>
         {type === 'folder' && (
           <button
-            onClick={(event) => onNavigate(event, dataCid)}
+            onClick={handleNavigateClick}
             className='mt-2 flex w-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600'
           >
             <FolderIcon size={20} className='mr-2' />
@@ -93,7 +107,10 @@ export const FileCard = ({
           <div className='flex w-40 flex-col gap-2 p-3'>
             <span
               className='flex items-center gap-2 font-semibold text-gray-800'
-              onClick={onDownload}
+              onClick={handleDownloadClick}
+              role='button'
+              tabIndex={0}
+              onKeyDown={handleDownloadKeyDown}
             >
               <DownloadIcon size={16} />
               <span>Download</span>
@@ -101,8 +118,11 @@ export const FileCard = ({
 
             {type === 'folder' && (
               <span
+                role='button'
+                tabIndex={0}
+                onKeyDown={handleNavigateKeyDown}
                 className='flex items-center gap-2 font-semibold text-gray-800'
-                onClick={(event) => onNavigate(event, dataCid)}
+                onClick={handleNavigateClick}
               >
                 <FolderIcon size={16} />
                 <span>Open</span>

@@ -6,6 +6,7 @@ import { SearchIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ObjectSearchResult } from '../../models/ObjectSearchResult';
+import { handleEnterOrSpace } from '../../utils/eventHandler';
 
 export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   const [query, setQuery] = useState('');
@@ -100,15 +101,18 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
     }
 
     return recommendations.map((item) => (
-      <li
+      <div
+        role='button'
+        tabIndex={0}
         key={item.cid}
+        onKeyDown={handleEnterOrSpace(() => handleSelectItem(item.name))}
         className='relative cursor-pointer select-none overflow-hidden text-ellipsis px-4 py-2 font-semibold text-gray-900 hover:bg-blue-600 hover:text-white'
         onClick={() => handleSelectItem(item.name)}
       >
         {item.name.toLowerCase().includes(query.toLowerCase())
           ? item.name
           : item.cid}
-      </li>
+      </div>
     ));
   }, [query, recommendations, error, handleSelectItem]);
 
