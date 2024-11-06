@@ -16,7 +16,7 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    name: Build specific package and run tests
+    name: Build frontend
     steps:
       - name: Checkout 🛎️
         uses: actions/checkout@v3
@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: "18"
 
+      - name: Set working directory
+        run: cd frontend
+
       - name: Enable Corepack
         run: corepack enable
 
@@ -33,7 +36,7 @@ jobs:
         run: corepack prepare yarn@4.2.2 --activate
 
       - name: Install dependencies
-        run: yarn install --cwd frontend
+        run: yarn install
 
-      - name: Build specific package 🔧
-        run: yarn build --cwd frontend
+      - name: Build frontend 🔧
+        run: yarn build
