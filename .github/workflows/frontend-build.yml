@@ -29,9 +29,11 @@ jobs:
           node-version: "18"
 
       - name: Enable Corepack
+        working-directory: ./frontend
         run: corepack enable
 
       - name: Set Yarn version to Berry
+        working-directory: ./frontend
         run: corepack prepare yarn@4.2.2 --activate
 
       - name: Install dependencies
