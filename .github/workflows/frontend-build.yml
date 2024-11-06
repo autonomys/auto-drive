@@ -6,13 +6,11 @@ on:
       - main
     paths:
       - "frontend/**" # Only trigger on changes within this folder
-    paths-ignore:
-      - "**.md"
+      - ".github/**"
   pull_request:
     paths:
       - "frontend/**" # Only trigger on changes within this folder
-    paths-ignore:
-      - "**.md"
+      - ".github/**"
   workflow_dispatch:
 
 jobs:
