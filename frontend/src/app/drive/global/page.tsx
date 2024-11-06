@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import { FileActionButtons, FileTable } from "@/components/common/FileTable";
-import { FileDropZone } from "@/components/Files/FileDropZone";
-import { NoUploadsPlaceholder } from "@/components/Files/NoUploadsPlaceholder";
-import { ApiService } from "@/services/api";
-import { useCallback, useEffect, useState } from "react";
-import { UploadingObjects } from "../../../components/Files/UploadingObjects";
-import { ObjectSummary } from "../../../models/UploadedObjectMetadata";
-import { LoaderCircle } from "lucide-react";
-import { PaginatedResult } from "../../../models/common";
-import { SearchBar } from "../../../components/SearchBar";
+import { FileActionButtons, FileTable } from '@/components/common/FileTable';
+import { FileDropZone } from '@/components/Files/FileDropZone';
+import { NoUploadsPlaceholder } from '@/components/Files/NoUploadsPlaceholder';
+import { ApiService } from '@/services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { UploadingObjects } from '../../../components/Files/UploadingObjects';
+import { ObjectSummary } from '../../../models/UploadedObjectMetadata';
+import { LoaderCircle } from 'lucide-react';
+import { PaginatedResult } from '../../../models/common';
+import { SearchBar } from '../../../components/SearchBar';
 
 export default function Page() {
   const [pageSize, setPageSize] = useState(5);
@@ -28,7 +28,7 @@ export default function Page() {
   useEffect(() => {
     const offset = currentPage * pageSize;
     setRootObjectMetadata(null);
-    ApiService.getRootObjects("global", offset, pageSize).then(updateResult);
+    ApiService.getRootObjects('global', offset, pageSize).then(updateResult);
   }, [currentPage, pageSize, updateResult]);
 
   const updateCurrentPage = useCallback((newPage: number) => {
@@ -40,19 +40,19 @@ export default function Page() {
   }, []);
 
   return (
-    <div className="flex w-full">
-      <div className="w-full flex flex-col gap-4">
-        <div className="flex justify-between items-center gap-4">
-          <div className="flex-1">
+    <div className='flex w-full'>
+      <div className='flex w-full flex-col gap-4'>
+        <div className='flex items-center justify-between gap-4'>
+          <div className='flex-1'>
             <FileDropZone />
           </div>
-          <SearchBar scope="global" />
+          <SearchBar scope='global' />
         </div>
-        <div className="">
+        <div className=''>
           <UploadingObjects />
           {rootObjectMetadata === null && (
-            <div className="flex min-h-[50vh] justify-center items-center">
-              <LoaderCircle className="w-10 h-10 animate-spin" />
+            <div className='flex min-h-[50vh] items-center justify-center'>
+              <LoaderCircle className='h-10 w-10 animate-spin' />
             </div>
           )}
           {rootObjectMetadata && rootObjectMetadata.length > 0 && (

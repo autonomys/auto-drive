@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useRouter } from "next/navigation";
+import { useRouter } from 'next/navigation';
 
 export const InternalLink = ({
   children,
@@ -14,13 +14,13 @@ export const InternalLink = ({
   const router = useRouter();
 
   return (
-    <a
+    <button
       onClick={() => {
         router.push(href);
       }}
       className={`contents ${className}`}
     >
       {children}
-    </a>
+    </button>
   );
 };

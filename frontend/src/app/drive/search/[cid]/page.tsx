@@ -1,12 +1,10 @@
-"use client";
+'use client';
 
-import { FileCard } from "@/components/common/FileCard";
-import { InternalLink } from "@/components/common/InternalLink";
-import { UploadedObjectMetadata } from "@/models/UploadedObjectMetadata";
-import { ApiService } from "@/services/api";
-import { useEffect, useMemo, useState } from "react";
-import { useLocalStorage } from "usehooks-ts";
-import { useScopeStore } from "../../../../states/scope";
+import { FileCard } from '@/components/common/FileCard';
+import { UploadedObjectMetadata } from '@/models/UploadedObjectMetadata';
+import { ApiService } from '@/services/api';
+import { useEffect, useMemo, useState } from 'react';
+import { useScopeStore } from '../../../../states/scope';
 
 export default function Page({ params: { cid } }: { params: { cid: string } }) {
   const [objectsMetadata, setObjectsMetadata] =
@@ -17,18 +15,20 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
   useEffect(() => {
     ApiService.searchByCIDOrName(cid, scope)
       .then((e) =>
-        Promise.all(e.map((e) => ApiService.fetchUploadedObjectMetadata(e.cid)))
+        Promise.all(
+          e.map((e) => ApiService.fetchUploadedObjectMetadata(e.cid)),
+        ),
       )
       .then(setObjectsMetadata)
       .catch(() => {
-        setError("Error searching for objects");
+        setError('Error searching for objects');
       });
   }, [cid, scope]);
 
   const Content = useMemo(() => {
     if (error) {
       return (
-        <div className="text-center text-red-500 flex flex-col items-center justify-center h-[50%] w-full text-xl">
+        <div className='flex h-[50%] w-full flex-col items-center justify-center text-center text-xl text-red-500'>
           {error}
         </div>
       );
@@ -36,20 +36,20 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
 
     if (!objectsMetadata) {
       return (
-        <div className="text-center text-gray-500 flex flex-col items-center justify-center h-[50%] w-full text-xl"></div>
+        <div className='flex h-[50%] w-full flex-col items-center justify-center text-center text-xl text-gray-500'></div>
       );
     }
 
     if (objectsMetadata.length === 0) {
       return (
-        <div className="text-center text-gray-500 flex flex-col items-center justify-center h-[50%] w-full text-xl">
+        <div className='flex h-[50%] w-full flex-col items-center justify-center text-center text-xl text-gray-500'>
           No root objects, upload some!
         </div>
       );
     }
 
     return objectsMetadata.map(({ metadata, uploadStatus }) => (
-      <FileCard 
+      <FileCard
         key={metadata.dataCid}
         metadata={metadata}
         uploadStatus={uploadStatus}
@@ -57,5 +57,5 @@ export default function Page({ params: { cid } }: { params: { cid: string } }) {
     ));
   }, [error, objectsMetadata]);
 
-  return <div className="grid grid-cols-4 gap-4">{Content}</div>;
+  return <div className='grid grid-cols-4 gap-4'>{Content}</div>;
 }

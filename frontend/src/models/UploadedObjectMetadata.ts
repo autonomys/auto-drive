@@ -1,4 +1,4 @@
-import { OffchainMetadata } from "@autonomys/auto-drive";
+import { OffchainMetadata } from '@autonomys/auto-drive';
 
 export interface UploadedObjectMetadata {
   metadata: OffchainMetadata;
@@ -19,8 +19,8 @@ export interface Owner {
 }
 
 export enum OwnerRole {
-  ADMIN = "admin",
-  VIEWER = "viewer",
+  ADMIN = 'admin',
+  VIEWER = 'viewer',
 }
 
 export type ObjectSummary = {
@@ -31,11 +31,11 @@ export type ObjectSummary = {
   uploadStatus: UploadStatus;
 } & (
   | {
-      type: "file";
+      type: 'file';
       mimeType?: string;
     }
   | {
-      type: "folder";
-      children: (OffchainMetadata & { type: "folder" })["children"];
+      type: 'folder';
+      children: (OffchainMetadata & { type: 'folder' })['children'];
     }
 );

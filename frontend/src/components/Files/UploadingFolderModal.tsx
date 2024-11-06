@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
-import { UploadService } from "../../services/upload";
-import { Dialog, Transition } from "@headlessui/react";
-import { FolderTree } from "../../models/FileTree";
-import { OffchainMetadata } from "@autonomys/auto-drive";
-import { Button } from "../common/Button";
-import { shortenString } from "../../utils/misc";
-import { FileWarning } from "lucide-react";
-import { useEncryptionStore } from "../../states/encryption";
+import { useCallback, useEffect, useState } from 'react';
+import { UploadService } from '../../services/upload';
+import { Dialog, Transition } from '@headlessui/react';
+import { FolderTree } from '../../models/FileTree';
+import { Button } from '../common/Button';
+import { shortenString } from '../../utils/misc';
+import { FileWarning } from 'lucide-react';
+import { useEncryptionStore } from '../../states/encryption';
 
 export const UploadingFolderModal = ({
   data,
@@ -30,7 +29,7 @@ export const UploadingFolderModal = ({
       const progressIterable = UploadService.createEncryptedFolderUpload(
         data.fileTree,
         data.files,
-        passwordToUse
+        passwordToUse,
       );
       for await (const progress of progressIterable) {
         setProgress(progress);
@@ -41,7 +40,7 @@ export const UploadingFolderModal = ({
         data.files,
         {
           compress: true,
-        }
+        },
       );
       for await (const progress of progressIterable) {
         setProgress(progress);
@@ -50,13 +49,13 @@ export const UploadingFolderModal = ({
 
     setPasswordConfirmed(false);
     onClose();
-  }, [data, password]);
+  }, [data, password, onClose]);
 
   useEffect(() => {
     if (!passwordConfirmed) return;
 
     handleUpload();
-  }, [passwordConfirmed]);
+  }, [passwordConfirmed, handleUpload, onClose]);
 
   const defaultPassword = useEncryptionStore((store) => store.password);
 
@@ -67,73 +66,73 @@ export const UploadingFolderModal = ({
 
   return (
     <Transition show={!!data}>
-      <Dialog as="div" onClose={onClose}>
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 shadow-lg transition-transform transform min-w-[25%]">
-            <h3 className="text-lg font-medium mb-4 text-center">
-              Uploading{" "}
-              <strong>{shortenString(data?.fileTree.name ?? "", 20)}</strong>
+      <Dialog as='div' onClose={onClose}>
+        <div className='fixed inset-0 flex items-center justify-center bg-black bg-opacity-50'>
+          <div className='min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform'>
+            <h3 className='mb-4 text-center text-lg font-medium'>
+              Uploading{' '}
+              <strong>{shortenString(data?.fileTree.name ?? '', 20)}</strong>
             </h3>
             {passwordConfirmed ? (
               <div>
-                <div className="relative w-full h-2 bg-gray-200 rounded">
+                <div className='relative h-2 w-full rounded bg-gray-200'>
                   <div
-                    className="absolute top-0 left-0 h-2 bg-green-500 rounded transition-all duration-500"
+                    className='absolute left-0 top-0 h-2 rounded bg-green-500 transition-all duration-500'
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <div className="flex justify-center mt-4 text-sm font-semibold">
+                <div className='mt-4 flex justify-center text-sm font-semibold'>
                   <div>Uploading... {progressPercentage}%</div>
                 </div>
-                <div className="flex justify-between mt-2">
-                  <div className="w-1 h-1 bg-gray-500 rounded-full animate-pulse" />
-                  <div className="w-1 h-1 bg-gray-500 rounded-full animate-pulse" />
-                  <div className="w-1 h-1 bg-gray-500 rounded-full animate-pulse" />
+                <div className='mt-2 flex justify-between'>
+                  <div className='h-1 w-1 animate-pulse rounded-full bg-gray-500' />
+                  <div className='h-1 w-1 animate-pulse rounded-full bg-gray-500' />
+                  <div className='h-1 w-1 animate-pulse rounded-full bg-gray-500' />
                 </div>
               </div>
             ) : (
               <div>
-                <div className="flex flex-col gap-2 p-4">
-                  <span className="block text-md font-semibold text-gray-700 text-center">
+                <div className='flex flex-col gap-2 p-4'>
+                  <span className='text-md block text-center font-semibold text-gray-700'>
                     Enter Encrypting Password
                   </span>
                   <input
-                    type="password"
-                    id="password"
+                    type='password'
+                    id='password'
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                    placeholder="Password"
+                    className='mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm'
+                    placeholder='Password'
                   />
-                  <div className="flex gap-2 justify-center">
+                  <div className='flex justify-center gap-2'>
                     <Button
                       disabled={!defaultPassword}
-                      className="text-xs"
-                      variant="lightAccent"
+                      className='text-xs'
+                      variant='lightAccent'
                       onClick={setDefaultPassword}
                     >
                       Encrypt with default password
                     </Button>
                     <Button
-                      className="text-xs"
-                      variant="lightAccent"
+                      className='text-xs'
+                      variant='lightAccent'
                       onClick={() => setPasswordConfirmed(true)}
                     >
                       {password
-                        ? "Confirm Password"
-                        : "Upload without encryption"}
+                        ? 'Confirm Password'
+                        : 'Upload without encryption'}
                     </Button>
                     <Button
-                      className="text-xs"
-                      variant="lightDanger"
+                      className='text-xs'
+                      variant='lightDanger'
                       onClick={onClose}
                     >
                       Cancel
                     </Button>
                   </div>
-                  <div className="flex items-center gap-2 bg-yellow-50 p-2 rounded overflow-hidden mt-4">
-                    <FileWarning className="w-4 h-4 text-yellow-500" />
-                    <span className="text-sm text-gray-500 font-semibold">
+                  <div className='mt-4 flex items-center gap-2 overflow-hidden rounded bg-yellow-50 p-2'>
+                    <FileWarning className='h-4 w-4 text-yellow-500' />
+                    <span className='text-sm font-semibold text-gray-500'>
                       Encrypted folders will be uploaded as encrypted zip files.
                     </span>
                   </div>

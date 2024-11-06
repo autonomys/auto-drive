@@ -1,14 +1,14 @@
-import React from "react";
+import React from 'react';
 
 interface Activity {
   user: string;
-  action: "uploaded" | "shared";
+  action: 'uploaded' | 'shared';
   fileId: string;
 }
 
 const recentActivities: Activity[] = [
-  { user: "John", action: "uploaded", fileId: "h89433043894320448" },
-  { user: "Anna", action: "shared", fileId: "h734895349547389284" },
+  { user: 'John', action: 'uploaded', fileId: 'h89433043894320448' },
+  { user: 'Anna', action: 'shared', fileId: 'h734895349547389284' },
 ];
 
 export const RecentActivities = ({
@@ -17,14 +17,14 @@ export const RecentActivities = ({
   activities?: Activity[];
 }) => {
   return (
-    <div className="bg-white p-6 rounded-lg max-w-md">
-      <h2 className="text-xl font-semibold mb-4">Recent Global Activities:</h2>
-      <ul className="space-y-2">
+    <div className='max-w-md rounded-lg bg-white p-6'>
+      <h2 className='mb-4 text-xl font-semibold'>Recent Global Activities:</h2>
+      <ul className='space-y-2'>
         {activities.map((activity, index) => (
-          <li key={index} className="text-sm">
-            <span className="font-medium">{activity.user}</span>{" "}
-            <span className="text-gray-600">{activity.action}</span>{" "}
-            <span className="font-mono text-xs break-all">{`'${activity.fileId}'`}</span>
+          <li key={index} className='text-sm'>
+            <span className='font-medium'>{activity.user}</span>{' '}
+            <span className='text-gray-600'>{activity.action}</span>{' '}
+            <span className='break-all font-mono text-xs'>{`'${activity.fileId}'`}</span>
           </li>
         ))}
       </ul>

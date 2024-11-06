@@ -21,8 +21,8 @@ cd auto-drive/frontend
 
 Once the repository is cloned, you need to setup your enviroment.
 
-
 Execute this command for creating the enviroment file and then fulfill every missing entry.
+
 ```
 cp .env.sample .env.local
 ```

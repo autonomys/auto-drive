@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { ApiService } from "@/services/api";
-import { useCallback, useEffect, useState } from "react";
-import { ObjectSummary } from "../../../models/UploadedObjectMetadata";
-import { SharedFiles } from "../../../components/SharedFiles";
-import { PaginatedResult } from "../../../models/common";
+import { ApiService } from '@/services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ObjectSummary } from '../../../models/UploadedObjectMetadata';
+import { SharedFiles } from '../../../components/SharedFiles';
+import { PaginatedResult } from '../../../models/common';
 
 export default function Page() {
   const [pageSize, setPageSize] = useState(5);

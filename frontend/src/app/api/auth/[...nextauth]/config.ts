@@ -1,6 +1,6 @@
-import { AuthOptions } from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import DiscordProvider from "next-auth/providers/discord";
+import { AuthOptions } from 'next-auth';
+import GoogleProvider from 'next-auth/providers/google';
+import DiscordProvider from 'next-auth/providers/discord';
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
@@ -19,7 +19,7 @@ export const authOptions: AuthOptions = {
         token.accessToken = account?.access_token;
         token.provider = account?.provider;
       } else {
-        console.warn("No account found");
+        console.warn('No account found');
       }
       return token;
     },
@@ -30,7 +30,7 @@ export const authOptions: AuthOptions = {
     },
     async redirect({ url: _url, baseUrl: _baseUrl }) {
       const baseUrl = process.env.URL || _baseUrl;
-      const url = _url.startsWith("/")
+      const url = _url.startsWith('/')
         ? `${baseUrl}${_url}`
         : _url.replace(_baseUrl, baseUrl);
 

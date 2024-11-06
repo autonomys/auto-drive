@@ -1,20 +1,20 @@
-import { useCallback, useState } from "react";
-import { ApiKeyCreationModal } from "./ApiKeyCreationModal";
-import { ApiKeyWithoutSecret } from "../../models/ApiKey";
-import { DeleteApiKeyModal } from "./DeleteApiKeyModal";
-import { Loader } from "lucide-react";
-import { Table } from "../common/Table";
+import { useCallback, useState } from 'react';
+import { ApiKeyCreationModal } from './ApiKeyCreationModal';
+import { ApiKeyWithoutSecret } from '../../models/ApiKey';
+import { DeleteApiKeyModal } from './DeleteApiKeyModal';
+import { Loader } from 'lucide-react';
+import { Table } from '../common/Table';
 import {
   TableHead,
   TableHeadCell,
   TableHeadRow,
-} from "../common/Table/TableHead";
+} from '../common/Table/TableHead';
 import {
   TableBody,
   TableBodyCell,
   TableBodyRow,
-} from "../common/Table/TableBody";
-import { Button } from "../common/Button";
+} from '../common/Table/TableBody';
+import { Button } from '../common/Button';
 
 export const ApiKeysTable = ({
   apiKeys,
@@ -40,24 +40,24 @@ export const ApiKeysTable = ({
   }, [closeCreationModal]);
 
   return (
-    <div className="flex flex-col">
+    <div className='flex flex-col'>
       <ApiKeyCreationModal
         isOpen={isOpen}
         onClose={closeCreationModal}
         onSuccess={onSuccess}
       />
       <DeleteApiKeyModal apiKeyId={apiKeyId} closeModal={closeDeleteModal} />
-      <div className="flex">
+      <div className='flex'>
         <Button
-          className="mb-4 text-sm"
-          variant="lightAccent"
+          className='mb-4 text-sm'
+          variant='lightAccent'
           onClick={openCreationModal}
         >
           Create API Key
         </Button>
       </div>
-      <div className="mb-8">
-        <div className="shadow border-b border-gray-200 sm:rounded-lg min-w-[fit-content] w-full">
+      <div className='mb-8'>
+        <div className='w-full min-w-[fit-content] border-b border-gray-200 shadow sm:rounded-lg'>
           <Table>
             <TableHead>
               <TableHeadRow>
@@ -76,8 +76,8 @@ export const ApiKeysTable = ({
                     <TableBodyCell>{apiKey.oauthUserId}</TableBodyCell>
                     <TableBodyCell>
                       <Button
-                        variant="lightDanger"
-                        className="text-sm"
+                        variant='lightDanger'
+                        className='text-sm'
                         onClick={() => openDeleteModal(apiKey.id)}
                       >
                         Delete
@@ -89,7 +89,7 @@ export const ApiKeysTable = ({
                 <TableBodyRow>
                   <TableBodyCell
                     colSpan={4}
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"
+                    className='whitespace-nowrap px-6 py-4 text-center text-sm text-gray-500'
                   >
                     No API keys found
                   </TableBodyCell>
@@ -99,10 +99,10 @@ export const ApiKeysTable = ({
                 <TableBodyRow>
                   <TableBodyCell
                     colSpan={4}
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"
+                    className='whitespace-nowrap px-6 py-4 text-center text-sm text-gray-500'
                   >
-                    <span className="flex justify-center items-center">
-                      <Loader className="w-4 h-4 animate-spin" />
+                    <span className='flex items-center justify-center'>
+                      <Loader className='h-4 w-4 animate-spin' />
                     </span>
                   </TableBodyCell>
                 </TableBodyRow>

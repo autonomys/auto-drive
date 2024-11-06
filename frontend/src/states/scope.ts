@@ -1,17 +1,17 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface ScopeStore {
-  scope: "user" | "global";
-  setScope: (scope: "user" | "global") => void;
+  scope: 'user' | 'global';
+  setScope: (scope: 'user' | 'global') => void;
 }
 
 export const useScopeStore = create<ScopeStore>()(
   persist(
     (set) => ({
-      scope: "global",
-      setScope: (scope: "user" | "global") => set({ scope }),
+      scope: 'global',
+      setScope: (scope: 'user' | 'global') => set({ scope }),
     }),
-    { name: "scope-storage", version: 1 }
-  )
+    { name: 'scope-storage', version: 1 },
+  ),
 );

@@ -1,17 +1,17 @@
-import { UserTableRow } from "./UserTableRow";
-import { SubscriptionWithUser } from "../../models/Subscriptions";
+import { UserTableRow } from './UserTableRow';
+import { SubscriptionWithUser } from '../../models/Subscriptions';
 import {
   TableBody,
   TableBodyCell,
   TableBodyRow,
-} from "../common/Table/TableBody";
-import { Table } from "../common/Table";
+} from '../common/Table/TableBody';
+import { Table } from '../common/Table';
 import {
   TableHead,
   TableHeadRow,
   TableHeadCell,
-} from "../common/Table/TableHead";
-import { Loader } from "lucide-react";
+} from '../common/Table/TableHead';
+import { Loader } from 'lucide-react';
 
 export const UserSubscriptionsTable = ({
   users,
@@ -20,10 +20,10 @@ export const UserSubscriptionsTable = ({
 }) => {
   return (
     <div>
-      <div className="-my-2 sm:-mx-6 lg:-mx-8">
-        <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-          <div className="shadow border-b border-gray-200 sm:rounded-lg">
-            <Table className="min-w-full">
+      <div className='-my-2 sm:-mx-6 lg:-mx-8'>
+        <div className='inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8'>
+          <div className='border-b border-gray-200 shadow sm:rounded-lg'>
+            <Table className='min-w-full'>
               <TableHead>
                 <TableHeadRow>
                   <TableHeadCell>Public ID</TableHeadCell>
@@ -43,10 +43,10 @@ export const UserSubscriptionsTable = ({
                   <TableBodyRow>
                     <TableBodyCell
                       colSpan={7}
-                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"
+                      className='whitespace-nowrap px-6 py-4 text-center text-sm text-gray-500'
                     >
-                      <span className="flex justify-center items-center">
-                        <Loader className="w-4 h-4 animate-spin" />
+                      <span className='flex items-center justify-center'>
+                        <Loader className='h-4 w-4 animate-spin' />
                       </span>
                     </TableBodyCell>
                   </TableBodyRow>

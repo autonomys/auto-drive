@@ -1,13 +1,13 @@
-import React, { MouseEventHandler, ReactNode } from "react";
+import React, { MouseEventHandler, ReactNode } from 'react';
 
 type ButtonVariant =
-  | "primary"
-  | "accent"
-  | "outline"
-  | "grayscale"
-  | "danger"
-  | "lightAccent"
-  | "lightDanger";
+  | 'primary'
+  | 'accent'
+  | 'outline'
+  | 'grayscale'
+  | 'danger'
+  | 'lightAccent'
+  | 'lightDanger';
 
 export interface ButtonProps {
   children: ReactNode;
@@ -18,7 +18,7 @@ export interface ButtonProps {
 }
 
 const baseClasses =
-  "px-4 py-2 rounded-lg shadow-sm focus:outline-none transition-colors duration-200";
+  'px-4 py-2 rounded-lg shadow-sm focus:outline-none transition-colors duration-200';
 
 export const buttonVariantClasses: Record<ButtonVariant, string> = {
   primary: `${baseClasses} bg-primary text-white hover:opacity-80 disabled:opacity-50 disabled:hover:opacity-50 disabled:hover:cursor-default`,
@@ -33,8 +33,8 @@ export const buttonVariantClasses: Record<ButtonVariant, string> = {
 export function Button({
   children,
   onClick,
-  className = "",
-  variant = "primary",
+  className = '',
+  variant = 'primary',
   disabled = false,
 }: ButtonProps) {
   return (

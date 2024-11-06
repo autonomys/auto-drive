@@ -1,12 +1,9 @@
-import { LoaderCircle } from "lucide-react";
-import {
-  ObjectSummary,
-  UploadedObjectMetadata,
-} from "../../models/UploadedObjectMetadata";
-import { FileDropZone } from "../Files/FileDropZone";
-import { FileActionButtons, FileTable } from "../common/FileTable";
-import { UploadingObjects } from "../Files/UploadingObjects";
-import { NoSharedFilesPlaceholder } from "./NoSharedFilesPlaceholder";
+import { LoaderCircle } from 'lucide-react';
+import { ObjectSummary } from '../../models/UploadedObjectMetadata';
+import { FileDropZone } from '../Files/FileDropZone';
+import { FileActionButtons, FileTable } from '../common/FileTable';
+import { UploadingObjects } from '../Files/UploadingObjects';
+import { NoSharedFilesPlaceholder } from './NoSharedFilesPlaceholder';
 
 export const SharedFiles = ({
   objects,
@@ -24,14 +21,14 @@ export const SharedFiles = ({
   totalItems: number;
 }) => {
   return (
-    <div className="flex w-full">
-      <div className="w-full flex flex-col gap-4">
+    <div className='flex w-full'>
+      <div className='flex w-full flex-col gap-4'>
         <FileDropZone />
-        <div className="">
+        <div className=''>
           <UploadingObjects />
           {objects === null && (
-            <div className="flex min-h-[50vh] justify-center items-center">
-              <LoaderCircle className="w-10 h-10 animate-spin" />
+            <div className='flex min-h-[50vh] items-center justify-center'>
+              <LoaderCircle className='h-10 w-10 animate-spin' />
             </div>
           )}
           {objects && objects.length > 0 && (

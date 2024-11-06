@@ -1,30 +1,19 @@
-import { constructFromFileSystemEntries, FolderTree } from "@/models/FileTree";
-import { ApiService } from "@/services/api";
+import { constructFromFileSystemEntries, FolderTree } from '@/models/FileTree';
 import {
   Popover,
   PopoverButton,
   PopoverPanel,
   Transition,
-} from "@headlessui/react";
-import { FileIcon, FolderIcon } from "lucide-react";
-import React, { useCallback, useRef, useState } from "react";
-import { useLocalStorage } from "usehooks-ts";
-import { UploadingFileModal } from "./UploadingFileModal";
-import { UploadService } from "../../services/upload";
-import { UploadingFolderModal } from "./UploadingFolderModal";
-
-declare global {
-  interface Window {}
-}
+} from '@headlessui/react';
+import { FileIcon, FolderIcon } from 'lucide-react';
+import React, { useCallback, useRef, useState } from 'react';
+import { UploadingFileModal } from './UploadingFileModal';
+import { UploadingFolderModal } from './UploadingFolderModal';
 
 export function FileDropZone() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-  const [, setUploadingObjects] = useLocalStorage<string[]>(
-    "uploading-objects",
-    []
-  );
   const [uploadingFile, setUploadingFile] = useState<File | null>(null);
   const [uploadingFolder, setUploadingFolder] = useState<{
     fileTree: FolderTree;
@@ -48,35 +37,24 @@ export function FileDropZone() {
     e.stopPropagation();
   }, []);
 
-  const handleUploadingCID = useCallback((cid: string) => {
-    setUploadingObjects((prev) => [...prev.filter((i) => i !== cid), cid]);
-  }, []);
+  const readEntriesPromise = useCallback(
+    (reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> => {
+      return new Promise((resolve) => {
+        reader.readEntries((entries) => resolve(entries));
+      });
+    },
+    [],
+  );
 
-  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const items = Array.from(e.dataTransfer.items)
-      .map((item) => item.webkitGetAsEntry()!)
-      .filter((item) => item !== null);
-
-    const recursiveEntries = await Promise.all(
-      items.map((item) => getRecursiveEntry(item))
-    ).then((entries) =>
-      entries
-        .flat()
-        .map(({ entry, file }) => ({ file, path: entry.fullPath.slice(1) }))
-    );
-
-    const [tree, files] = constructFromFileSystemEntries(recursiveEntries);
-
-    setUploadingFolder({ fileTree: tree, files });
+  const readEntryAsFile = useCallback((entry: FileSystemFileEntry) => {
+    return new Promise<File>((resolve) => {
+      entry.file((file) => resolve(file));
+    });
   }, []);
 
   const getRecursiveEntry = useCallback(
     async (
-      entry: FileSystemEntry
+      entry: FileSystemEntry,
     ): Promise<{ entry: FileSystemEntry; file: File }[]> => {
       if (entry.isFile) {
         return [
@@ -90,30 +68,40 @@ export function FileDropZone() {
         const subentries = await readEntriesPromise(directoryReader);
 
         return Promise.all(
-          subentries.map((subentry) => getRecursiveEntry(subentry))
+          subentries.map((subentry) => getRecursiveEntry(subentry)),
         ).then((entries) => [...entries.flat()]);
       } else {
-        console.log("entry is not a file or directory", entry);
+        console.log('entry is not a file or directory', entry);
         return [];
       }
     },
-    []
+    [readEntryAsFile, readEntriesPromise],
   );
 
-  const readEntriesPromise = useCallback(
-    (reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> => {
-      return new Promise((resolve) => {
-        reader.readEntries((entries) => resolve(entries));
-      });
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+
+      const items = Array.from(e.dataTransfer.items)
+        .map((item) => item.webkitGetAsEntry()!)
+        .filter((item) => item !== null);
+
+      const recursiveEntries = await Promise.all(
+        items.map((item) => getRecursiveEntry(item)),
+      ).then((entries) =>
+        entries
+          .flat()
+          .map(({ entry, file }) => ({ file, path: entry.fullPath.slice(1) })),
+      );
+
+      const [tree, files] = constructFromFileSystemEntries(recursiveEntries);
+
+      setUploadingFolder({ fileTree: tree, files });
     },
-    []
+    [getRecursiveEntry],
   );
-
-  const readEntryAsFile = useCallback((entry: FileSystemFileEntry) => {
-    return new Promise<File>((resolve) => {
-      entry.file((file) => resolve(file));
-    });
-  }, []);
 
   const handleFileInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,7 +110,7 @@ export function FileDropZone() {
         setUploadingFile(file);
       }
     },
-    []
+    [],
   );
 
   const handleFolderInputChange = useCallback(
@@ -134,13 +122,13 @@ export function FileDropZone() {
           Array.from(e.target.files).map((file) => ({
             file,
             path: file.webkitRelativePath,
-          }))
+          })),
         );
 
         setUploadingFolder({ fileTree, files });
       }
     },
-    []
+    [],
   );
 
   const openFolderDialog = useCallback(() => {
@@ -152,60 +140,60 @@ export function FileDropZone() {
   }, []);
 
   return (
-    <div className="max-w-full flex flex-col gap-4">
+    <div className='flex max-w-full flex-col gap-4'>
       <input
-        type="file"
+        type='file'
         ref={fileInputRef}
         onChange={handleFileInputChange}
-        className="hidden"
+        className='hidden'
         multiple
       />
       <input
-        type="file"
+        type='file'
         ref={folderInputRef}
         onChange={handleFolderInputChange}
-        className="hidden"
-        {...{ webkitdirectory: "true" }}
+        className='hidden'
+        {...{ webkitdirectory: 'true' }}
       />
-      <Popover as="div" className="relative">
-        <PopoverButton as="div">
+      <Popover as='div' className='relative'>
+        <PopoverButton as='div'>
           <div
-            className={`w-full h-10 border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors cursor-pointer ${
-              isDragging ? "border-green-800 bg-green-50" : "border-green-700"
+            className={`flex h-10 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed transition-colors ${
+              isDragging ? 'border-green-800 bg-green-50' : 'border-green-700'
             }`}
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            <p className="text-green-600 text-center">
+            <p className='text-center text-green-600'>
               Add or drop files / folders here
             </p>
           </div>
         </PopoverButton>
         <Transition
-          enter="transition duration-100 ease-out"
-          enterFrom="transform scale-95 opacity-0"
-          enterTo="transform scale-100 opacity-100"
-          leave="transition duration-75 ease-out"
-          leaveFrom="transform scale-100 opacity-100"
-          leaveTo="transform scale-95 opacity-0"
+          enter='transition duration-100 ease-out'
+          enterFrom='transform scale-95 opacity-0'
+          enterTo='transform scale-100 opacity-100'
+          leave='transition duration-75 ease-out'
+          leaveFrom='transform scale-100 opacity-100'
+          leaveTo='transform scale-95 opacity-0'
         >
-          <PopoverPanel className="absolute z-10 w-full">
-            <div className="bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5">
-              <div className="p-4">
+          <PopoverPanel className='absolute z-10 w-full'>
+            <div className='rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5'>
+              <div className='p-4'>
                 <button
                   onClick={openFileDialog}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
+                  className='flex w-full items-center rounded-md px-4 py-2 text-sm text-gray-700 hover:bg-gray-100'
                 >
-                  <FileIcon className="w-5 h-5 mr-3 text-gray-400" />
+                  <FileIcon className='mr-3 h-5 w-5 text-gray-400' />
                   Select Files
                 </button>
                 <button
                   onClick={openFolderDialog}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
+                  className='flex w-full items-center rounded-md px-4 py-2 text-sm text-gray-700 hover:bg-gray-100'
                 >
-                  <FolderIcon className="w-5 h-5 mr-3 text-gray-400" />
+                  <FolderIcon className='mr-3 h-5 w-5 text-gray-400' />
                   Select Folder
                 </button>
               </div>

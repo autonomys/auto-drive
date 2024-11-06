@@ -1,5 +1,5 @@
 export async function* streamToAsyncIterable(
-  reader: ReadableStreamDefaultReader<Uint8Array | Buffer>
+  reader: ReadableStreamDefaultReader<Uint8Array | Buffer>,
 ): AsyncIterable<Buffer> {
   try {
     while (true) {

@@ -1,4 +1,4 @@
-import { User } from "./User";
+import { User } from './User';
 
 export type Subscription = {
   id: string;
@@ -8,7 +8,7 @@ export type Subscription = {
   granularity: SubscriptionGranularity;
 };
 
-export type SubscriptionGranularity = "monthly";
+export type SubscriptionGranularity = 'monthly';
 
 export type SubscriptionWithUser = Subscription & {
   user: User;

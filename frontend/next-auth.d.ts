@@ -1,8 +1,8 @@
-import type * as nextAuth from "next-auth";
+import type * as nextAuth from 'next-auth';
 
-declare module "next-auth" {
+declare module 'next-auth' {
   interface Session {
-    error?: "RefreshTokenError";
+    error?: 'RefreshTokenError';
     accessToken?: string;
     provider?: string;
   }
@@ -12,12 +12,12 @@ declare module "next-auth" {
   }
 }
 
-declare module "next-auth/jwt" {
+declare module 'next-auth/jwt' {
   interface JWT {
     accessToken?: string;
     expires_at: number;
     refresh_token?: string;
-    error?: "RefreshTokenError";
+    error?: 'RefreshTokenError';
     provider?: string;
   }
 }

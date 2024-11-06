@@ -1,7 +1,7 @@
 export const asyncByChunk = async function* (
   iterable: AsyncIterable<Buffer>,
   chunkSize: number,
-  ignoreLastChunk: boolean = false
+  ignoreLastChunk: boolean = false,
 ): AsyncIterable<Buffer> {
   let accumulated = Buffer.alloc(0);
   for await (const chunk of iterable) {
@@ -18,7 +18,7 @@ export const asyncByChunk = async function* (
 };
 
 export const fileToIterable = async function* (
-  file: File
+  file: File,
 ): AsyncIterable<Buffer> {
   const chunkSize = 1024 * 1024;
   for (let i = 0; i < file.size; i += chunkSize) {
