@@ -22,12 +22,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    "next-auth",
-    "next"
-  ],
+  "include": ["**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "next-auth.d.ts"],
   "exclude": ["node_modules"]
 }
