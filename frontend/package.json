@@ -31,6 +31,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@next/eslint-plugin-next": "^15.0.2",
     "@types/bytes": "^3",
     "@types/eslint-plugin-jsx-a11y": "^6",
     "@types/node": "^20",
@@ -39,12 +40,13 @@
     "@types/streamsaver": "^2",
     "@typescript-eslint/eslint-plugin": "^8.13.0",
     "@typescript-eslint/parser": "^8.13.0",
-    "eslint": "^8",
+    "eslint": "^9.14.0",
     "eslint-config-next": "14.2.9",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-prettier": "^5.2.1",
     "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
     "postcss": "^8",
     "prettier": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.6.8",
