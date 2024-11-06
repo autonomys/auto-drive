@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { handleEnterOrSpace } from '../../utils/eventHandler';
 
 export const InternalLink = ({
   children,
@@ -14,13 +15,13 @@ export const InternalLink = ({
   const router = useRouter();
 
   return (
-    <button
-      onClick={() => {
-        router.push(href);
-      }}
+    <span
+      role='button'
+      tabIndex={0}
+      onKeyDown={handleEnterOrSpace(() => router.push(href))}
       className={`contents ${className}`}
     >
       {children}
-    </button>
+    </span>
   );
 };
