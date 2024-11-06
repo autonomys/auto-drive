@@ -27,6 +27,18 @@ Execute this command for creating the enviroment file and then fulfill every mis
 cp .env.sample .env.local
 ```
 
+Install dependencies with this command:
+
+```bash
+npm install
+# or
+yarn install
+# or
+pnpm install
+# or
+bun install
+```
+
 Once, all this is setup you can launch it with:
 
 ```bash
