@@ -35,6 +35,7 @@ import { TableFooter } from '../Table/TableFooter';
 import { TablePaginator } from '../TablePaginator';
 import { ConditionalRender } from '../ConditionalRender';
 import { ObjectRestoreModal } from '../../Files/ObjectRestoreModal';
+import { FileTableRow } from './FileTableRow';
 
 export enum FileActionButtons {
   DOWNLOAD = 'download',
@@ -66,347 +67,21 @@ export const FileTable: FC<{
   const [shareCID, setShareCID] = useState<string | null>(null);
   const [restoreCID, setRestoreCID] = useState<string | null>(null);
   const [deleteCID, setDeleteCID] = useState<string | null>(null);
-  const [selectedFiles, setSelectedFiles] = useState<
-    {
-      type: 'file' | 'folder';
-      cid: string;
-      name?: string;
-      totalSize: number;
-    }[]
-  >([]);
-
-  const toggleRow = useCallback(
-    (id: string) => {
-      const newExpandedRows = new Set(expandedRows);
-      if (newExpandedRows.has(id)) {
-        newExpandedRows.delete(id);
-      } else {
-        newExpandedRows.add(id);
-      }
-      setExpandedRows(newExpandedRows);
-    },
-    [expandedRows],
-  );
-
-  const renderOwnerBadge = useCallback(
-    (owner: string) => {
-      if (owner === user?.publicId) {
-        return (
-          <span className='rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800'>
-            You
-          </span>
-        );
-      } else if (owner.startsWith('@')) {
-        return (
-          <span className='rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800'>
-            {shortenString(owner.slice(1), 15)}
-          </span>
-        );
-      } else {
-        return (
-          <span className='rounded-full bg-gray-200 px-2 py-1 text-xs font-semibold text-gray-800'>
-            {shortenString(owner.slice(1), 15)}
-          </span>
-        );
-      }
-    },
-    [user?.publicId],
-  );
-
-  const downloadFile = useCallback(
-    async (event: MouseEvent<HTMLButtonElement>, cid: string) => {
-      event.stopPropagation();
-      setDownloadingCID(cid);
-    },
-    [],
-  );
-
-  const onDeleteFile = useCallback(
-    (event: MouseEvent<HTMLButtonElement>, cid: string) => {
-      event.stopPropagation();
-      setDeleteCID(cid);
-    },
-    [],
-  );
-
-  const shareFile = useCallback(
-    (event: MouseEvent<HTMLButtonElement>, cid: string) => {
-      event.stopPropagation();
-      setShareCID(cid);
-    },
-    [],
-  );
-
-  const navigateToFile = useCallback((cid: string) => {
-    window.location.assign(`/drive/fs/${cid}`);
-  }, []);
-
-  const toggleSelectFile = useCallback(
-    (
-      event: ChangeEvent<HTMLInputElement>,
-      entry: {
-        type: 'file' | 'folder';
-        cid: string;
-        name?: string;
-        totalSize: number;
-      },
-    ) => {
-      event.stopPropagation();
-      if (selectedFiles.some((f) => f.cid === entry.cid)) {
-        setSelectedFiles(selectedFiles.filter((f) => f.cid !== entry.cid));
-      } else {
-        setSelectedFiles([...selectedFiles, entry]);
-      }
-    },
-    [selectedFiles],
-  );
-
-  const openRestoreModal = useCallback(
-    (event: MouseEvent<HTMLButtonElement>, cid: string) => {
-      event.stopPropagation();
-      setRestoreCID(cid);
-    },
-    [],
-  );
-
-  const renderRow = useCallback(
-    (file: ObjectSummary) => {
-      const isExpanded = expandedRows.has(file.headCid);
-      const owner = file.owners.find(
-        (o) => o.role === OwnerRole.ADMIN,
-      )?.publicId;
-      const popoverButtonRef = useRef<HTMLButtonElement>(null);
-      const isOwner = user?.publicId === owner;
-      const [showDownloadTooltip, setShowDownloadTooltip] = useState(false);
-      const hasFileOwnership = file.owners.find(
-        (e) => e.publicId === user?.publicId,
-      );
-
-      return (
-        <Fragment key={file.headCid}>
-          <TableBodyRow
-            className={file.type === 'folder' ? 'hover:cursor-pointer' : ''}
-            onClick={() =>
-              file.type === 'folder' && navigateToFile(file.headCid)
-            }
-          >
-            <TableBodyCell className='whitespace-nowrap text-sm text-gray-500'>
-              <div className='flex items-center'>
-                <input
-                  type='checkbox'
-                  checked={selectedFiles.some((f) => f.cid === file.headCid)}
-                  onChange={(e) =>
-                    toggleSelectFile(e, {
-                      totalSize: file.size,
-                      type: file.type,
-                      cid: file.headCid,
-                      name: file.name,
-                    })
-                  }
-                  className='mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500'
-                />
-                {file.type === 'folder' && file.children && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleRow(file.headCid);
-                    }}
-                  >
-                    {isExpanded ? (
-                      <DisplayerIcon className='rotate-90 text-accent' />
-                    ) : (
-                      <DisplayerIcon className='text-black' />
-                    )}
-                  </button>
-                )}
-                <span
-                  className={`relative ml-2 text-sm font-medium text-gray-900 ${
-                    file.type === 'folder'
-                      ? 'hover:cursor-pointer hover:underline'
-                      : ''
-                  }`}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Popover
-                    onMouseEnter={() => popoverButtonRef.current?.click()}
-                    onMouseLeave={() => popoverButtonRef.current?.click()}
-                  >
-                    <PopoverButton ref={popoverButtonRef} as='span'>
-                      <span className='font-semibold text-accent hover:cursor-pointer'>
-                        {file.name
-                          ? shortenString(file.name, 30)
-                          : `No name (${file.headCid.slice(0, 12)})`}
-                      </span>
-                    </PopoverButton>
-                    <Transition
-                      as={Fragment}
-                      enter='transition ease-out delay-250'
-                      enterFrom='opacity-0 translate-y-1'
-                      enterTo='opacity-100 translate-y-0'
-                      leave='transition ease-in duration-300'
-                      leaveFrom='opacity-100 translate-y-0'
-                      leaveTo='opacity-0 translate-y-1'
-                    >
-                      <PopoverPanel className='absolute left-0 z-10'>
-                        <div className='rounded-lg bg-white shadow-md'>
-                          <Metadata object={file} />
-                        </div>
-                      </PopoverPanel>
-                    </Transition>
-                  </Popover>
-                </span>
-              </div>
-            </TableBodyCell>
-            <TableBodyCell>{getTypeFromMetadata(file)}</TableBodyCell>
-            <TableBodyCell>{bytes(file.size)}</TableBodyCell>
-            <TableBodyCell>
-              {owner ? renderOwnerBadge(owner) : 'Unknown'}
-            </TableBodyCell>
-            <TableBodyCell className='flex justify-end'>
-              <ConditionalRender
-                condition={actionButtons.includes(FileActionButtons.DOWNLOAD)}
-              >
-                <div
-                  className='relative'
-                  onMouseEnter={() => setShowDownloadTooltip(true)}
-                  onMouseLeave={() => setShowDownloadTooltip(false)}
-                >
-                  <Button
-                    variant='lightAccent'
-                    className='mr-2 text-xs outline-none focus:ring-0'
-                    disabled={file.uploadStatus.totalNodes === null}
-                    onClick={(e) => downloadFile(e, file.headCid)}
-                  >
-                    Download
-                  </Button>
-                  <Transition
-                    show={showDownloadTooltip}
-                    as={Fragment}
-                    enter='transition ease-out delay-250'
-                    enterFrom='opacity-0 translate-y-1'
-                    enterTo='opacity-100 translate-y-0'
-                    leave='transition ease-in duration-300'
-                    leaveFrom='opacity-100 translate-y-0'
-                    leaveTo='opacity-0 translate-y-1'
-                  >
-                    <div className='absolute bottom-0 left-0 z-10 translate-y-full'>
-                      {file.uploadStatus.totalNodes === null && (
-                        <div className='rounded-lg bg-white p-2 shadow-md'>
-                          <span className='text-sm text-gray-700'>
-                            Processing upload...
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </Transition>
-                </div>
-              </ConditionalRender>
-              <ConditionalRender
-                condition={actionButtons.includes(FileActionButtons.SHARE)}
-              >
-                <Button
-                  variant='lightAccent'
-                  className='mr-2 text-xs disabled:hidden'
-                  disabled={!isOwner}
-                  onClick={(e) => shareFile(e, file.headCid)}
-                >
-                  Share
-                </Button>
-              </ConditionalRender>
-              <ConditionalRender
-                condition={actionButtons.includes(FileActionButtons.DELETE)}
-              >
-                <Button
-                  variant='lightDanger'
-                  className='text-xs disabled:hidden'
-                  disabled={!hasFileOwnership}
-                  onClick={(e) => onDeleteFile(e, file.headCid)}
-                >
-                  Remove
-                </Button>
-              </ConditionalRender>
-              <ConditionalRender
-                condition={actionButtons.includes(FileActionButtons.RESTORE)}
-              >
-                <Button
-                  variant='lightAccent'
-                  className='text-xs disabled:hidden'
-                  onClick={(e) => openRestoreModal(e, file.headCid)}
-                >
-                  Restore
-                </Button>
-              </ConditionalRender>
-            </TableBodyCell>
-          </TableBodyRow>
-          {isExpanded &&
-            file.type === 'folder' &&
-            file.children &&
-            file.children.map((child) => (
-              <TableBodyRow key={child.cid}>
-                <TableBodyCell className='w-[50%]'>
-                  <div className='flex items-center'>
-                    <input
-                      onChange={(e) => toggleSelectFile(e, child)}
-                      checked={selectedFiles.some((f) => f.cid === child.cid)}
-                      type='checkbox'
-                      className='mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500'
-                    />
-                    -
-                    <span
-                      className={`relative ml-2 text-sm font-semibold text-accent ${
-                        file.type === 'folder'
-                          ? 'hover:cursor-pointer hover:underline'
-                          : ''
-                      }`}
-                    >
-                      {child.name ?? `No name (${child.cid.slice(0, 12)})`}
-                    </span>
-                  </div>
-                </TableBodyCell>
-                <TableBodyCell>
-                  <span>{child.type === 'file' ? 'File' : 'Folder'}</span>
-                </TableBodyCell>
-                <TableBodyCell>
-                  <span>{bytes(child.totalSize)}</span>
-                </TableBodyCell>
-                <TableBodyCell>
-                  {owner ? renderOwnerBadge(owner) : 'Unknown'}
-                </TableBodyCell>
-                <TableBodyCell>
-                  <Button
-                    variant='lightAccent'
-                    className='text-xs'
-                    onClick={(e) => downloadFile(e, child.cid)}
-                  >
-                    Download
-                  </Button>
-                </TableBodyCell>
-              </TableBodyRow>
-            ))}
-        </Fragment>
-      );
-    },
-    [
-      expandedRows,
-      navigateToFile,
-      downloadFile,
-      renderOwnerBadge,
-      toggleRow,
-      toggleSelectFile,
-      selectedFiles,
-      user?.publicId,
-      actionButtons,
-      onDeleteFile,
-      shareFile,
-      openRestoreModal,
-    ],
-  );
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
 
   const onClose = useCallback(() => {
     setShareCID(null);
     setDeleteCID(null);
     setDownloadingCID(null);
     setRestoreCID(null);
+  }, []);
+
+  const toggleSelectFile = useCallback((cid: string) => {
+    setSelectedFiles((prev) =>
+      prev.some((f) => f === cid)
+        ? prev.filter((f) => f !== cid)
+        : [...prev, cid],
+    );
   }, []);
 
   return (
@@ -429,12 +104,7 @@ export const FileTable: FC<{
                   selectedFiles.length > 0
                     ? setSelectedFiles([])
                     : setSelectedFiles(
-                        files.map((f) => ({
-                          type: f.type,
-                          cid: f.headCid,
-                          name: f.name,
-                          totalSize: f.size,
-                        })),
+                        files.map((f) => f.headCid),
                       )
                 }
               >
@@ -470,7 +140,23 @@ export const FileTable: FC<{
                 <TableHeadCell className='text-right'>Actions</TableHeadCell>
               </TableHeadRow>
             </TableHead>
-            <TableBody>{files.map((file) => renderRow(file))}</TableBody>
+            <TableBody>
+              {files.map((file) => (
+                <FileTableRow
+                  key={file.headCid}
+                  file={file}
+                  user={user!}
+                  isRowExpanded={expandedRows.has(file.headCid)}
+                  selectedFiles={selectedFiles}
+                  toggleSelectFile={toggleSelectFile}
+                  actionButtons={actionButtons}
+                  onDownloadFile={setDownloadingCID}
+                  onShareFile={setShareCID}
+                  onDeleteFile={setDeleteCID}
+                  onRestoreFile={setRestoreCID}
+                />
+              ))}
+            </TableBody>
             <TableFooter>
               <tr className='w-full'>
                 <td colSpan={5}>
