@@ -18,6 +18,7 @@ export const InternalLink = ({
     <span
       role='button'
       tabIndex={0}
+      onClick={() => router.push(href)}
       onKeyDown={handleEnterOrSpace(() => router.push(href))}
       className={`contents ${className}`}
     >
