@@ -4,12 +4,12 @@ import DiscordProvider from "next-auth/providers/discord";
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.NEXT_PUBLIC_GOOGLE_AUTH_CLIENT_ID as string,
+      clientId: process.env.GOOGLE_AUTH_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_AUTH_CLIENT_SECRET as string,
       checks: [],
     }),
     DiscordProvider({
-      clientId: process.env.NEXT_PUBLIC_DISCORD_AUTH_CLIENT_ID as string,
+      clientId: process.env.DISCORD_AUTH_CLIENT_ID as string,
       clientSecret: process.env.DISCORD_AUTH_CLIENT_SECRET as string,
     }),
   ],
