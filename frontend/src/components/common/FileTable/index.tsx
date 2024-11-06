@@ -1,16 +1,9 @@
 'use client';
 
 import { ObjectSummary } from '@/models/UploadedObjectMetadata';
-import {
-  Checkbox,
-  Transition,
-} from '@headlessui/react';
+import { Checkbox, Transition } from '@headlessui/react';
 import { Square, SquareCheck } from 'lucide-react';
-import {
-  FC,
-  useCallback,
-  useState,
-} from 'react';
+import { FC, useCallback, useState } from 'react';
 import { ObjectShareModal } from '../../Files/ObjectShareModal';
 import { ObjectDeleteModal } from '../../Files/ObjectDeleteModal';
 import { ObjectDownloadModal } from '../../Files/ObjectDownloadModal';
@@ -89,9 +82,7 @@ export const FileTable: FC<{
                 onChange={() =>
                   selectedFiles.length > 0
                     ? setSelectedFiles([])
-                    : setSelectedFiles(
-                        files.map((f) => f.headCid),
-                      )
+                    : setSelectedFiles(files.map((f) => f.headCid))
                 }
               >
                 {selectedFiles.length > 0 ? <SquareCheck /> : <Square />}

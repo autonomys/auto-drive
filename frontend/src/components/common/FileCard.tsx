@@ -29,19 +29,13 @@ export const FileCard = ({
   const router = useRouter();
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
-  const download = useCallback(
-    () => {
-      setIsDownloadModalOpen(true);
-    },
-    [],
-  );
+  const download = useCallback(() => {
+    setIsDownloadModalOpen(true);
+  }, []);
 
-  const navigate = useCallback(
-    () => {
-      router.push(`/drive/fs/${dataCid}`);
-    },
-    [dataCid, router],
-  );
+  const navigate = useCallback(() => {
+    router.push(`/drive/fs/${dataCid}`);
+  }, [dataCid, router]);
 
   const objectIcon = useMemo(() => {
     if (icon) return icon;
@@ -53,22 +47,32 @@ export const FileCard = ({
   }, [icon, type]);
 
   const handleNavigateClick = useMemo(
-    () => handleClick(navigate, { stopPropagation: true, preventDefault: true }),
+    () =>
+      handleClick(navigate, { stopPropagation: true, preventDefault: true }),
     [navigate],
   );
 
   const handleNavigateKeyDown = useMemo(
-    () => handleEnterOrSpace(navigate, { stopPropagation: true, preventDefault: true }),
+    () =>
+      handleEnterOrSpace(navigate, {
+        stopPropagation: true,
+        preventDefault: true,
+      }),
     [navigate],
   );
 
   const handleDownloadClick = useMemo(
-    () => handleClick(download, { stopPropagation: true, preventDefault: true }),
+    () =>
+      handleClick(download, { stopPropagation: true, preventDefault: true }),
     [download],
   );
 
   const handleDownloadKeyDown = useMemo(
-    () => handleEnterOrSpace(download, { stopPropagation: true, preventDefault: true }),
+    () =>
+      handleEnterOrSpace(download, {
+        stopPropagation: true,
+        preventDefault: true,
+      }),
     [download],
   );
 

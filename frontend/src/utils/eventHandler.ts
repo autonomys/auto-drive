@@ -12,14 +12,15 @@ export const handleEnterOrSpace =
     }
     if (e.key === 'Enter' || e.key === ' ') {
       callback();
-  }
-};
+    }
+  };
 
-export const handleEscape = (callback: () => void) => (e: React.KeyboardEvent<HTMLElement>) => {
-  if (e.key === 'Escape') {
-    callback();
-  }
-};
+export const handleEscape =
+  (callback: () => void) => (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key === 'Escape') {
+      callback();
+    }
+  };
 
 export const handleClick =
   (
