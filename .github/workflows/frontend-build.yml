@@ -1,0 +1,41 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**" # Only trigger on changes within this folder
+    paths-ignore:
+      - "**.md"
+  pull_request:
+    paths:
+      - "frontend/**" # Only trigger on changes within this folder
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    name: Build specific package and run tests
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18"
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set Yarn version to Berry
+        run: corepack prepare yarn@4.2.2 --activate
+
+      - name: Install dependencies
+        run: yarn install --cwd frontend
+
+      - name: Build specific package 🔧
+        run: yarn build --cwd frontend
