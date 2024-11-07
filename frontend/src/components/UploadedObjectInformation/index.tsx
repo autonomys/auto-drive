@@ -2,11 +2,10 @@ import {
   OwnerRole,
   UploadedObjectMetadata,
 } from "../../models/UploadedObjectMetadata";
-import { getTypeFromMetadata, handleFileDownload } from "../../utils/file";
+import { getTypeFromMetadata } from "../../utils/file";
 import { useUserStore } from "../../states/user";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "../common/Button";
-import { ApiService } from "../../services/api";
 import { ObjectShareModal } from "../Files/ObjectShareModal";
 import { ObjectDeleteModal } from "../Files/ObjectDeleteModal";
 import { Loader } from "lucide-react";
@@ -98,7 +97,7 @@ export const UploadedObjectInformation = ({
           onClick={handleDelete}
           disabled={!hasFileOwnership}
         >
-          Delete
+          Remove
         </Button>
       </div>
       <span className="text-xl font-semibold ml-2">Metadata</span>
@@ -179,7 +178,6 @@ export const UploadedObjectInformation = ({
       <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-primary font-medium bg-gray-50 p-4 rounded-lg">
         {owners?.map((o) => (
           <div className="flex">
-            <span>{o.role.charAt(0).toUpperCase() + o.role.slice(1)}</span>
             <span className="ml-[4px]">{o.publicId}</span>
           </div>
         ))}
