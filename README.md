@@ -1,4 +1,6 @@
-# Auto Drive: Autonomys Network's Data Acess Layer
+# Auto Drive: Autonomys Network's Data Access Layer
+
+![Autonomys Banner](https://github.com/autonomys/auto-drive/blob/main/.github/images/autonomys-banner.webp)
 
 Auto Drive is a decentralized content-addressed storage solution built on the Autonomys Network, leveraging its underlying permanent storage layer known as the Autonomys Distributed Storage Network (DSN). It provides users with a secure and efficient way to store, share, and manage digital assets with the assurance of long-term data persistence. 
 
