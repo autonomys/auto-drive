@@ -1,21 +1,21 @@
-name: Frontend Build Check
+name: Backend Build Check
 
 on:
   push:
     branches:
       - main
     paths:
-      - "frontend/**" # Only trigger on changes within this folder
+      - "backend/**" # Only trigger on changes within this folder
       - ".github/**"
   pull_request:
     paths:
-      - "frontend/**" # Only trigger on changes within this folder
+      - "backend/**" # Only trigger on changes within this folder
       - ".github/**"
   workflow_dispatch:
 
 jobs:
-  frontend-build-check:
-    name: Frontend Build Check
+  backend-build-check:
+    name: Backend Build Check
     runs-on: ubuntu-latest
 
     # Cache dependencies to speed up the workflow
@@ -32,9 +32,13 @@ jobs:
         run: npm install --global yarn
 
       - name: Install dependencies
-        working-directory: ./frontend
+        working-directory: ./backend
         run: yarn install
 
+      - name: Run lint
+        working-directory: ./backend
+        run: yarn lint
+
       - name: Run build
-        working-directory: ./frontend
+        working-directory: ./backend
         run: yarn build --debug
