@@ -190,10 +190,10 @@ const initUser = async (
 
   await OrganizationsUseCases.initOrganization(
     userFromTable({
-      oauthProvider: oauthProvider,
-      oauthUserId: oauth_user_id,
-      publicId: publicId,
-      role: role,
+      oauthProvider,
+      oauthUserId,
+      publicId,
+      role,
     }),
   )
 
