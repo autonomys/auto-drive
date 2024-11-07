@@ -41,4 +41,4 @@ jobs:
 
       - name: Run build
         working-directory: ./backend
-        run: yarn build --debug
+        run: yarn build
