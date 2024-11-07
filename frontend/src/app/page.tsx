@@ -1,17 +1,25 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
-import { signIn } from "next-auth/react";
-import { useCallback, useState } from "react";
+import { type LiteralUnion, signIn } from "next-auth/react";
+import { useCallback, useMemo, useState } from "react";
 import { GoogleIcon } from "../components/common/GoogleIcon";
+import { DiscordIcon } from "../components/common/DiscordIcon";
+import type { BuiltInProviderType } from "next-auth/providers/index";
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleAuth = useCallback(() => {
-    setIsLoading(true);
-    signIn("google");
-  }, []);
+  const handleAuth = useCallback(
+    (provider: LiteralUnion<BuiltInProviderType>) => () => {
+      setIsLoading(true);
+      signIn(provider);
+    },
+    []
+  );
+
+  const handleGoogleAuth = useMemo(() => handleAuth("google"), []);
+  const handleDiscordAuth = useMemo(() => handleAuth("discord"), []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600">
@@ -23,9 +31,9 @@ export default function App() {
           Sign in with your Google account to start using our decentralized
           storage service
         </p>
-        <div className="flex justify-center">
+        <div className="flex flex-col gap-4 justify-center items-center">
           <button
-            onClick={handleAuth}
+            onClick={handleGoogleAuth}
             disabled={isLoading}
             className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-6 rounded-full 
                        border-2 border-transparent hover:border-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900
@@ -42,6 +50,27 @@ export default function App() {
               <>
                 <GoogleIcon />
                 Sign in with Google
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleDiscordAuth}
+            disabled={isLoading}
+            className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-6 rounded-full 
+                       border-2 border-transparent hover:border-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900
+                       transition duration-300 ease-in-out transform hover:-translate-y-1 hover:scale-105
+                       flex items-center justify-center w-full max-w-xs"
+            aria-label="Sign in with Google"
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center">
+                <LoaderCircle className="w-4 h-4 mr-2 animate-spin" />
+                Redirecting...
+              </div>
+            ) : (
+              <>
+                <DiscordIcon />
+                Sign in with Discord
               </>
             )}
           </button>

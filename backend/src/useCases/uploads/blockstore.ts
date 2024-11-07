@@ -136,7 +136,7 @@ const processFileTree = async (
   );
 };
 
-const processFolderUpload = async (upload: FolderUpload): Promise<void> => {
+const processFolderUpload = async (upload: FolderUpload): Promise<CID> => {
   const files = await UploadsUseCases.getFileFromFolderUpload(upload.id);
 
   const allCompleted = files.every((f) =>
@@ -147,7 +147,7 @@ const processFolderUpload = async (upload: FolderUpload): Promise<void> => {
   }
 
   const fileTree = upload.fileTree;
-  await processFileTree(upload.id, upload, fileTree);
+  return processFileTree(upload.id, upload, fileTree);
 };
 
 export const BlockstoreUseCases = {
