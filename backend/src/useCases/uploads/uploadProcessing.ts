@@ -21,6 +21,7 @@ import {
   uploadsRepository,
 } from "../../repositories/uploads/uploads.js";
 import { filePartsRepository } from "../../repositories/uploads/fileParts.js";
+import { CID } from "multiformats";
 
 const getUnprocessedChunkFromLatestFilePart = async (
   fileProcessingInfo: FileProcessingInfo
@@ -71,7 +72,7 @@ const processChunk = async (
   });
 };
 
-const completeFileProcessing = async (uploadId: string): Promise<void> => {
+const completeFileProcessing = async (uploadId: string): Promise<CID> => {
   const fileProcessingInfo =
     await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
       uploadId
@@ -96,7 +97,7 @@ const completeFileProcessing = async (uploadId: string): Promise<void> => {
   const uploadedSize =
     (await filePartsRepository.getUploadFilePartsSize(uploadId)) ?? 0;
 
-  await processBufferToIPLDFormatFromChunks(
+  return processBufferToIPLDFormatFromChunks(
     blockstore,
     blockstore.getFilteredMany(MetadataType.FileChunk),
     upload?.name,
@@ -108,13 +109,15 @@ const completeFileProcessing = async (uploadId: string): Promise<void> => {
   );
 };
 
-const completeUploadProcessing = async (upload: UploadEntry): Promise<void> => {
+const completeUploadProcessing = async (upload: UploadEntry): Promise<CID> => {
   if (upload.type === UploadType.FILE) {
-    await completeFileProcessing(upload.id);
+    return completeFileProcessing(upload.id);
   } else if (upload.type === UploadType.FOLDER) {
-    await BlockstoreUseCases.processFolderUpload(
+    return BlockstoreUseCases.processFolderUpload(
       mapTableToModel(upload) as FolderUpload
     );
+  } else {
+    throw new Error("Invalid upload type");
   }
 };
 

@@ -5,6 +5,7 @@ import multer from "multer";
 import { FolderTreeFolderSchema } from "../models/objects/folderTree.js";
 import { uploadOptionsSchema } from "../models/uploads/upload.js";
 import { z } from "zod";
+import { cidToString } from "@autonomys/auto-drive";
 
 const uploadController = Router();
 
@@ -176,9 +177,9 @@ uploadController.post("/:uploadId/complete", async (req, res) => {
   const { uploadId } = req.params;
 
   try {
-    await UploadsUseCases.completeUpload(user, uploadId);
+    const cid = await UploadsUseCases.completeUpload(user, uploadId);
 
-    return res.status(200).json({ message: "Upload completed" });
+    return res.status(200).json({ cid });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ error: "Failed to complete upload" });
