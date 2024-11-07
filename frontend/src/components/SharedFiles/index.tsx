@@ -1,6 +1,5 @@
 import { LoaderCircle } from 'lucide-react';
 import { ObjectSummary } from '../../models/UploadedObjectMetadata';
-import { FileDropZone } from '../Files/FileDropZone';
 import { FileActionButtons, FileTable } from '../common/FileTable';
 import { UploadingObjects } from '../Files/UploadingObjects';
 import { NoSharedFilesPlaceholder } from './NoSharedFilesPlaceholder';
@@ -23,7 +22,6 @@ export const SharedFiles = ({
   return (
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
-        <FileDropZone />
         <div className=''>
           <UploadingObjects />
           {objects === null && (

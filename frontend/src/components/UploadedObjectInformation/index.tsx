@@ -97,7 +97,7 @@ export const UploadedObjectInformation = ({
           onClick={handleDelete}
           disabled={!hasFileOwnership}
         >
-          Delete
+          Remove
         </Button>
       </div>
       <span className='ml-2 text-xl font-semibold'>Metadata</span>
@@ -178,7 +178,6 @@ export const UploadedObjectInformation = ({
       <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
         {owners?.map((o) => (
           <div className='flex' key={o.publicId}>
-            <span>{o.role.charAt(0).toUpperCase() + o.role.slice(1)}</span>
             <span className='ml-[4px]'>{o.publicId}</span>
           </div>
         ))}

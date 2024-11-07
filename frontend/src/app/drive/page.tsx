@@ -40,13 +40,13 @@ export default function Page() {
   }, []);
 
   return (
-    <div className='flex w-full'>
-      <div className='flex w-full flex-col gap-4'>
-        <div className='flex items-center justify-between gap-4'>
-          <div className='flex-1'>
+    <div className="flex w-full">
+      <div className="w-full flex flex-col gap-4">
+        <div className="flex justify-between items-center gap-4">
+          <SearchBar scope="user" />
+          <div className="flex-1">
             <FileDropZone />
           </div>
-          <SearchBar scope='user' />
         </div>
         <div className=''>
           <UploadingObjects />

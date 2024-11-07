@@ -1,7 +1,6 @@
 'use client';
 
 import { FileActionButtons, FileTable } from '@/components/common/FileTable';
-import { FileDropZone } from '@/components/Files/FileDropZone';
 import { NoUploadsPlaceholder } from '@/components/Files/NoUploadsPlaceholder';
 import { ApiService } from '@/services/api';
 import { useCallback, useEffect, useState } from 'react';
@@ -42,11 +41,10 @@ export default function Page() {
   return (
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
-        <div className='flex items-center justify-between gap-4'>
-          <div className='flex-1'>
-            <FileDropZone />
+        <div className='flex w-full items-center justify-start gap-4'>
+          <div className='w-full max-w-md'>
+            <SearchBar scope='global' />
           </div>
-          <SearchBar scope='global' />
         </div>
         <div className=''>
           <UploadingObjects />
