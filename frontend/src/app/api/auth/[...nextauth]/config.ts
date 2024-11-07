@@ -1,6 +1,7 @@
 import { AuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import DiscordProvider from 'next-auth/providers/discord';
+
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
