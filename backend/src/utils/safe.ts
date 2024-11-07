@@ -1,11 +1,9 @@
 export const safeCallback =
-  <A extends any[], R>(
-    callback: (...args: A) => R
-  ): ((...args: A) => R | undefined) =>
-  (...args: A) => {
+  <T, R>(callback: (...args: T[]) => R): ((...args: T[]) => R | undefined) =>
+  (...args: T[]) => {
     try {
-      return callback(...args);
+      return callback(...args)
     } catch (error) {
-      console.error(error);
+      console.error(error)
     }
-  };
+  }

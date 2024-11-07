@@ -1,57 +1,57 @@
-import { TransactionResultsUseCases } from "../../useCases/index.js";
-import { safeCallback } from "../../utils/safe.js";
-import { createTransactionManager } from "./transactionManager.js";
+import { TransactionResultsUseCases } from '../../useCases/index.js'
+import { safeCallback } from '../../utils/safe.js'
+import { createTransactionManager } from './transactionManager.js'
 
-let state = {
+const state = {
   executing: false,
   time: 10_000,
-};
+}
 
-const transactionManager = createTransactionManager();
+const transactionManager = createTransactionManager()
 
 const processPendingUploads = safeCallback(async () => {
   try {
     if (state.executing) {
-      return;
+      return
     }
-    state.executing = true;
+    state.executing = true
 
     const pendingUploads =
-      await TransactionResultsUseCases.getPendingTransactionResults(20);
+      await TransactionResultsUseCases.getPendingTransactionResults(20)
 
-    console.log(`${pendingUploads.length} pending uploads`);
+    console.log(`${pendingUploads.length} pending uploads`)
     if (pendingUploads.length === 0) {
-      return;
+      return
     }
 
     const transactions = pendingUploads.map((upload) => {
       return {
-        module: "system",
-        method: "remark",
+        module: 'system',
+        method: 'remark',
         params: [upload.encoded_node],
-      };
-    });
+      }
+    })
 
-    const results = await transactionManager.submit(transactions);
+    const results = await transactionManager.submit(transactions)
 
     await Promise.all(
       pendingUploads.map((upload, index) =>
         TransactionResultsUseCases.setTransactionResults(
           upload.cid,
-          results[index]
-        )
-      )
-    );
+          results[index],
+        ),
+      ),
+    )
   } catch (error) {
-    console.error(error);
+    console.error(error)
   } finally {
-    state.executing = false;
+    state.executing = false
   }
-});
+})
 
 export const onchainPublisher = {
   start: (time: number = 10_000) => {
-    state.time = time;
-    setInterval(processPendingUploads, state.time);
+    state.time = time
+    setInterval(processPendingUploads, state.time)
   },
-};
+}

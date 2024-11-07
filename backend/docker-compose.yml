@@ -1,4 +1,4 @@
-version: "3.8"
+version: '3.8'
 
 services:
   app:
@@ -8,5 +8,5 @@ services:
     volumes:
       - .:/usr/src/app
     ports:
-      - "3000:3000"
-    entrypoint: ["bash", "start-server.sh"]
+      - '3000:3000'
+    entrypoint: ['bash', 'start-server.sh']

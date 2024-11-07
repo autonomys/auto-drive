@@ -1,245 +1,278 @@
-import { OffchainMetadata } from "@autonomys/auto-drive";
-import { User } from "../../models/users/index.js";
+import { OffchainMetadata } from '@autonomys/auto-drive'
+import { User } from '../../models/users/index.js'
 import {
   getObjectSummary,
   ObjectInformation,
   ObjectSearchResult,
   Owner,
   ObjectSummary,
-} from "../../models/objects/object.js";
+} from '../../models/objects/object.js'
 import {
   metadataRepository,
   ownershipRepository,
-} from "../../repositories/index.js";
-import { UsersUseCases } from "../index.js";
-import { OwnershipUseCases } from "./ownership.js";
-import { UploadStatusUseCases } from "./uploadStatus.js";
-import { MetadataEntry } from "../../repositories/objects/metadata.js";
-import { PaginatedResult } from "./common.js";
+} from '../../repositories/index.js'
+import { UsersUseCases } from '../index.js'
+import { OwnershipUseCases } from './ownership.js'
+import { UploadStatusUseCases } from './uploadStatus.js'
+import { MetadataEntry } from '../../repositories/objects/metadata.js'
+import { PaginatedResult } from './common.js'
 
 const getMetadata = async (cid: string) => {
-  const entry = await metadataRepository.getMetadata(cid);
+  const entry = await metadataRepository.getMetadata(cid)
   if (!entry) {
-    return undefined;
+    return undefined
   }
 
-  return entry.metadata;
-};
+  return entry.metadata
+}
 
 const saveMetadata = async (
   rootCid: string,
   cid: string,
-  metadata: OffchainMetadata
+  metadata: OffchainMetadata,
 ) => {
-  return metadataRepository.setMetadata(rootCid, cid, metadata);
-};
+  return metadataRepository.setMetadata(rootCid, cid, metadata)
+}
 
 const searchMetadataByCID = async (
   cid: string,
   limit: number = 5,
-  filter: { scope: "user"; user: User } | { scope: "global" }
+  filter:
+    | {
+        scope: 'user'
+        user: User
+      }
+    | {
+        scope: 'global'
+      },
 ): Promise<MetadataEntry[]> => {
-  if (filter.scope === "user") {
+  if (filter.scope === 'user') {
     return metadataRepository.searchMetadataByCIDAndUser(
       cid,
       limit,
       filter.user.oauthProvider,
-      filter.user.oauthUserId
-    );
+      filter.user.oauthUserId,
+    )
   }
 
-  return metadataRepository.searchMetadataByCID(cid, limit);
-};
+  return metadataRepository.searchMetadataByCID(cid, limit)
+}
 
 const searchMetadataByName = async (
   query: string,
   limit: number = 5,
-  filter: { scope: "user"; user: User } | { scope: "global" }
+  filter:
+    | {
+        scope: 'user'
+        user: User
+      }
+    | {
+        scope: 'global'
+      },
 ): Promise<MetadataEntry[]> => {
-  if (filter.scope === "user") {
+  if (filter.scope === 'user') {
     return metadataRepository.searchMetadataByNameAndUser(
       query,
       filter.user.oauthProvider,
       filter.user.oauthUserId,
-      limit
-    );
+      limit,
+    )
   }
 
-  return metadataRepository.searchMetadataByName(query, limit);
-};
+  return metadataRepository.searchMetadataByName(query, limit)
+}
 
 const searchByCIDOrName = async (
   query: string,
   limit: number = 5,
-  filter: { scope: "user"; user: User } | { scope: "global" }
+  filter:
+    | {
+        scope: 'user'
+        user: User
+      }
+    | {
+        scope: 'global'
+      },
 ): Promise<ObjectSearchResult[]> => {
-  const names = await searchMetadataByName(query, limit, filter);
+  const names = await searchMetadataByName(query, limit, filter)
   if (names.length >= limit) {
     return names.slice(0, limit).map((e) => ({
       cid: e.head_cid,
       name: e.metadata.name!,
-    }));
+    }))
   }
 
-  const cids = await searchMetadataByCID(query, limit - names.length, filter);
+  const cids = await searchMetadataByCID(query, limit - names.length, filter)
   return [...names, ...cids].slice(0, limit).map((e) => ({
     cid: e.head_cid,
     name: e.metadata.name!,
-  }));
-};
+  }))
+}
 
 const getAllMetadata = async () => {
   return metadataRepository
     .getAllMetadata()
-    .then((metadata) => metadata.map((entry) => entry.metadata));
-};
+    .then((metadata) => metadata.map((entry) => entry.metadata))
+}
 
 const getRootObjects = async (
-  filter: { scope: "user"; user: User } | { scope: "global" },
+  filter:
+    | {
+        scope: 'user'
+        user: User
+      }
+    | {
+        scope: 'global'
+      },
   limit: number = 100,
-  offset: number = 0
+  offset: number = 0,
 ): Promise<PaginatedResult<ObjectSummary>> => {
-  if (filter.scope === "user") {
+  if (filter.scope === 'user') {
     return metadataRepository
       .getRootObjectsByUser(
         filter.user.oauthProvider,
         filter.user.oauthUserId,
         limit,
-        offset
+        offset,
       )
       .then(async (entries) => ({
         rows: await Promise.all(
-          entries.rows.map((entry) => getObjectSummaryByCID(entry))
+          entries.rows.map((entry) => getObjectSummaryByCID(entry)),
         ),
         totalCount: entries.totalCount,
-      }));
+      }))
   }
 
   return metadataRepository
     .getRootObjects(limit, offset)
     .then(async (entries) => ({
       rows: await Promise.all(
-        entries.rows.map((entry) => getObjectSummaryByCID(entry))
+        entries.rows.map((entry) => getObjectSummaryByCID(entry)),
       ),
       totalCount: entries.totalCount,
-    }));
-};
+    }))
+}
 
 const getSharedRoots = async (
   user: User,
   limit: number = 100,
-  offset: number = 0
+  offset: number = 0,
 ): Promise<PaginatedResult<ObjectSummary>> => {
   return metadataRepository
     .getSharedRootObjectsByUser(
       user.oauthProvider,
       user.oauthUserId,
       limit,
-      offset
+      offset,
     )
     .then(async (entries) => {
       const summaries = await Promise.all(
-        entries.rows.map((entry) => getObjectSummaryByCID(entry))
-      );
+        entries.rows.map((entry) => getObjectSummaryByCID(entry)),
+      )
 
       return {
         rows: summaries,
         totalCount: entries.totalCount,
-      };
-    });
-};
+      }
+    })
+}
 
 const getMarkedAsDeletedRoots = async (
   user: User,
   limit: number = 100,
-  offset: number = 0
+  offset: number = 0,
 ): Promise<PaginatedResult<ObjectSummary>> => {
   return metadataRepository
     .getMarkedAsDeletedRootObjectsByUser(
       user.oauthProvider,
       user.oauthUserId,
       limit,
-      offset
+      offset,
     )
     .then(async (entries) => ({
       rows: await Promise.all(
-        entries.rows.map((entry) => getObjectSummaryByCID(entry))
+        entries.rows.map((entry) => getObjectSummaryByCID(entry)),
       ),
       totalCount: entries.totalCount,
-    }));
-};
+    }))
+}
 
 const getObjectSummaryByCID = async (cid: string) => {
-  const info = await getObjectInformation(cid);
+  const info = await getObjectInformation(cid)
   if (!info) {
-    throw new Error("Object not found");
+    throw new Error('Object not found')
   }
 
-  return getObjectSummary(info);
-};
+  return getObjectSummary(info)
+}
 
 const getObjectInformation = async (
-  cid: string
+  cid: string,
 ): Promise<ObjectInformation | undefined> => {
-  const metadata = await getMetadata(cid);
+  const metadata = await getMetadata(cid)
   if (!metadata) {
-    return undefined;
+    return undefined
   }
 
-  const uploadStatus = await UploadStatusUseCases.getUploadStatus(cid);
-  const owners: Owner[] = await OwnershipUseCases.getOwners(cid);
+  const uploadStatus = await UploadStatusUseCases.getUploadStatus(cid)
+  const owners: Owner[] = await OwnershipUseCases.getOwners(cid)
 
-  return { cid, metadata, uploadStatus, owners };
-};
+  return {
+    cid,
+    metadata,
+    uploadStatus,
+    owners,
+  }
+}
 
 const shareObject = async (executor: User, cid: string, publicId: string) => {
-  const admins = await OwnershipUseCases.getAdmins(cid);
+  const admins = await OwnershipUseCases.getAdmins(cid)
   const isUserAdmin = admins.find(
     (admin) =>
       admin.oauth_provider === executor.oauthProvider &&
-      admin.oauth_user_id === executor.oauthUserId
-  );
+      admin.oauth_user_id === executor.oauthUserId,
+  )
   if (!isUserAdmin) {
-    throw new Error("User is not an admin of this object");
+    throw new Error('User is not an admin of this object')
   }
 
-  const user = await UsersUseCases.getUserByPublicId(publicId);
+  const user = await UsersUseCases.getUserByPublicId(publicId)
   if (!user) {
-    throw new Error("User not found");
+    throw new Error('User not found')
   }
 
-  await OwnershipUseCases.setUserAsOwner(user, cid);
-};
+  await OwnershipUseCases.setUserAsOwner(user, cid)
+}
 
 const markAsDeleted = async (executor: User, cid: string) => {
-  const ownerships = await ownershipRepository.getOwnerships(cid);
+  const ownerships = await ownershipRepository.getOwnerships(cid)
   const isUserOwner = ownerships.find(
     (owner) =>
       owner.oauth_provider === executor.oauthProvider &&
-      owner.oauth_user_id === executor.oauthUserId
-  );
+      owner.oauth_user_id === executor.oauthUserId,
+  )
 
   if (!isUserOwner) {
-    throw new Error("User is not an owner of this object");
+    throw new Error('User is not an owner of this object')
   }
 
-  await OwnershipUseCases.setObjectAsDeleted(executor, cid);
-};
+  await OwnershipUseCases.setObjectAsDeleted(executor, cid)
+}
 
 const restoreObject = async (executor: User, cid: string) => {
-  const deletedOwnerships = await ownershipRepository.getDeletedOwnerships(cid);
+  const deletedOwnerships = await ownershipRepository.getDeletedOwnerships(cid)
   const isUserOwner = deletedOwnerships.find(
     (owner) =>
       owner.oauth_provider === executor.oauthProvider &&
-      owner.oauth_user_id === executor.oauthUserId
-  );
+      owner.oauth_user_id === executor.oauthUserId,
+  )
 
   if (!isUserOwner) {
-    throw new Error("User is not an owner of this object");
+    throw new Error('User is not an owner of this object')
   }
 
-  await OwnershipUseCases.restoreObject(executor, cid);
-};
+  await OwnershipUseCases.restoreObject(executor, cid)
+}
 
 export const ObjectUseCases = {
   getMetadata,
@@ -255,4 +288,4 @@ export const ObjectUseCases = {
   getMarkedAsDeletedRoots,
   markAsDeleted,
   restoreObject,
-};
+}

@@ -3,52 +3,52 @@ import {
   folderMetadata,
   MetadataType,
   OffchainFileMetadata,
-} from "@autonomys/auto-drive";
-import PizZip from "pizzip";
-import { User } from "../../models/users/index.js";
+} from '@autonomys/auto-drive'
+import PizZip from 'pizzip'
+import { User } from '../../models/users/index.js'
 import {
   NodesUseCases,
   ObjectUseCases,
   OwnershipUseCases,
   UsersUseCases,
-} from "../index.js";
-import { InteractionType } from "../../models/objects/interactions.js";
-import { uploadsRepository } from "../../repositories/uploads/uploads.js";
+} from '../index.js'
+import { InteractionType } from '../../models/objects/interactions.js'
+import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 import {
   FileArtifacts,
   FolderArtifacts,
   UploadArtifacts,
   UploadType,
-} from "../../models/uploads/upload.js";
-import { AwaitIterable } from "interface-store";
-import { BlockstoreUseCases } from "../uploads/blockstore.js";
-import { asyncIterableToPromiseOfArray } from "../../utils/async.js";
+} from '../../models/uploads/upload.js'
+import { AwaitIterable } from 'interface-store'
+import { BlockstoreUseCases } from '../uploads/blockstore.js'
+import { asyncIterableToPromiseOfArray } from '../../utils/async.js'
 
 const generateFileArtifacts = async (
-  uploadId: string
+  uploadId: string,
 ): Promise<FileArtifacts> => {
-  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
-    throw new Error("Upload not found");
+    throw new Error('Upload not found')
   }
   if (upload.type !== UploadType.FILE) {
-    throw new Error("Upload is not a file");
+    throw new Error('Upload is not a file')
   }
 
-  const cid = await BlockstoreUseCases.getFileUploadIdCID(uploadId);
+  const cid = await BlockstoreUseCases.getFileUploadIdCID(uploadId)
 
   let chunks = await BlockstoreUseCases.getChunksByNodeType(
     uploadId,
-    MetadataType.FileChunk
-  );
+    MetadataType.FileChunk,
+  )
   if (chunks.length === 0) {
     chunks = await BlockstoreUseCases.getChunksByNodeType(
       uploadId,
-      MetadataType.File
-    );
+      MetadataType.File,
+    )
   }
 
-  const totalSize = chunks.reduce((acc, e) => acc + Number(e.size), 0);
+  const totalSize = chunks.reduce((acc, e) => acc + Number(e.size), 0)
 
   const metadata = fileMetadata(
     cid,
@@ -56,26 +56,26 @@ const generateFileArtifacts = async (
     totalSize,
     upload.name,
     upload.mime_type,
-    upload.upload_options ?? undefined
-  );
+    upload.upload_options ?? undefined,
+  )
 
   return {
     metadata,
-  };
-};
+  }
+}
 
 const generateFolderArtifacts = async (
-  uploadId: string
+  uploadId: string,
 ): Promise<FolderArtifacts> => {
-  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
-    throw new Error("Upload not found");
+    throw new Error('Upload not found')
   }
   if (upload.type !== UploadType.FOLDER) {
-    throw new Error("Upload is not a folder");
+    throw new Error('Upload is not a folder')
   }
   if (!upload.file_tree) {
-    throw new Error("Upload has no file tree");
+    throw new Error('Upload has no file tree')
   }
 
   const childrenUploads = await Promise.all(
@@ -84,227 +84,226 @@ const generateFolderArtifacts = async (
         .getUploadEntriesByRelativeId(upload.root_upload_id, e.id)
         .then((upload) => {
           if (!upload) {
-            throw new Error(`Upload with relative ID ${e.id} not found`);
+            throw new Error(`Upload with relative ID ${e.id} not found`)
           }
-          return upload;
-        })
-    )
-  );
+          return upload
+        }),
+    ),
+  )
 
-  const folderCID = await BlockstoreUseCases.getUploadCID(uploadId);
+  const folderCID = await BlockstoreUseCases.getUploadCID(uploadId)
 
   const childrenArtifacts = await Promise.all(
-    childrenUploads.map((e) => generateArtifacts(e.id))
-  );
+    childrenUploads.map((e) => generateArtifacts(e.id)),
+  )
 
   const childrenMetadata = childrenArtifacts.map((e) => ({
     cid: e.metadata.dataCid,
     name: e.metadata.name,
     type: e.metadata.type,
     totalSize: e.metadata.totalSize,
-  }));
+  }))
 
   const metadata = folderMetadata(
     folderCID,
     childrenMetadata,
     upload.name,
-    upload.upload_options ?? undefined
-  );
+    upload.upload_options ?? undefined,
+  )
 
   return {
     metadata,
     childrenArtifacts,
-  };
-};
+  }
+}
 
 const generateArtifacts = async (
-  uploadId: string
+  uploadId: string,
 ): Promise<UploadArtifacts> => {
-  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
-    throw new Error("Upload not found");
+    throw new Error('Upload not found')
   }
   return upload.type === UploadType.FILE
     ? generateFileArtifacts(uploadId)
-    : generateFolderArtifacts(uploadId);
-};
+    : generateFolderArtifacts(uploadId)
+}
 
 const retrieveAndReassembleFile = async function* (
-  metadata: OffchainFileMetadata
+  metadata: OffchainFileMetadata,
 ): AsyncIterable<Buffer> {
   if (metadata.totalChunks === 1) {
-    const chunkData = await NodesUseCases.getChunkData(metadata.chunks[0].cid);
+    const chunkData = await NodesUseCases.getChunkData(metadata.chunks[0].cid)
     if (!chunkData) {
-      throw new Error("Chunk not found");
+      throw new Error('Chunk not found')
     }
 
-    yield chunkData;
-    return;
+    yield chunkData
+    return
   }
 
-  const CHUNK_SIZE = 100;
+  const CHUNK_SIZE = 100
   for (let i = 0; i < metadata.chunks.length; i += CHUNK_SIZE) {
-    const chunks = metadata.chunks.slice(i, i + CHUNK_SIZE);
+    const chunks = metadata.chunks.slice(i, i + CHUNK_SIZE)
     const chunkedData = await Promise.all(
-      chunks.map((chunk) => NodesUseCases.getChunkData(chunk.cid))
-    );
+      chunks.map((chunk) => NodesUseCases.getChunkData(chunk.cid)),
+    )
 
     if (chunkedData.some((e) => e === undefined)) {
-      throw new Error("Chunk not found");
+      throw new Error('Chunk not found')
     }
 
-    yield Buffer.concat(chunkedData.map((e) => e!));
+    yield Buffer.concat(chunkedData.map((e) => e!))
 
-    console.log(`Retrieved ${chunks.length} chunks`);
+    console.log(`Retrieved ${chunks.length} chunks`)
   }
-};
+}
 
 const retrieveAndReassembleFolderAsZip = async (
   reader: User,
   parent: PizZip,
-  cid: string
+  cid: string,
 ): Promise<PizZip> => {
-  const metadata = await ObjectUseCases.getMetadata(cid);
+  const metadata = await ObjectUseCases.getMetadata(cid)
   if (!metadata) {
-    throw new Error(`Metadata with CID ${cid} not found`);
+    throw new Error(`Metadata with CID ${cid} not found`)
   }
   if (!metadata.name) {
-    throw new Error(`Metadata with CID ${cid} has no name`);
+    throw new Error(`Metadata with CID ${cid} has no name`)
   }
 
-  if (metadata.type !== "folder") {
-    throw new Error(`Metadata with CID ${cid} is not a folder`);
+  if (metadata.type !== 'folder') {
+    throw new Error(`Metadata with CID ${cid} is not a folder`)
   }
 
-  const folder = parent.folder(metadata.name);
+  const folder = parent.folder(metadata.name)
 
   await Promise.all([
     ...metadata.children
-      .filter((e) => e.type === "file")
+      .filter((e) => e.type === 'file')
       .map(async (e) => {
         const data = Buffer.concat(
           await asyncIterableToPromiseOfArray(
-            await downloadObject(reader, e.cid)
-          )
-        );
+            await downloadObject(reader, e.cid),
+          ),
+        )
 
         if (!data) {
-          throw new Error(`Data with CID ${e.cid} not found`);
+          throw new Error(`Data with CID ${e.cid} not found`)
         }
 
-        return folder.file(e.name!, data);
+        return folder.file(e.name!, data)
       }),
     ...metadata.children
-      .filter((e) => e.type === "folder")
+      .filter((e) => e.type === 'folder')
       .map(async (e) => {
-        return retrieveAndReassembleFolderAsZip(reader, folder, e.cid);
+        return retrieveAndReassembleFolderAsZip(reader, folder, e.cid)
       }),
-  ]);
+  ])
 
-  return folder;
-};
+  return folder
+}
 
 const downloadObject = async (
   reader: User,
-  cid: string
+  cid: string,
 ): Promise<AwaitIterable<Buffer>> => {
-  const metadata = await ObjectUseCases.getMetadata(cid);
+  const metadata = await ObjectUseCases.getMetadata(cid)
   if (!metadata) {
-    throw new Error(`Metadata with CID ${cid} not found`);
+    throw new Error(`Metadata with CID ${cid} not found`)
   }
 
   const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
     reader,
-    InteractionType.Download
-  );
+    InteractionType.Download,
+  )
 
   if (pendingCredits < metadata.totalSize) {
-    throw new Error("Not enough download credits");
+    throw new Error('Not enough download credits')
   }
 
-  if (metadata.type === "folder") {
+  if (metadata.type === 'folder') {
     const zip = await retrieveAndReassembleFolderAsZip(
       reader,
       new PizZip(),
-      cid
-    );
+      cid,
+    )
     return [
       zip.generate({
-        type: "nodebuffer",
+        type: 'nodebuffer',
       }),
-    ];
+    ]
   }
 
-  const data = retrieveAndReassembleFile(metadata);
+  const data = retrieveAndReassembleFile(metadata)
   await UsersUseCases.registerInteraction(
     reader,
     InteractionType.Download,
-    metadata.totalSize
-  );
+    metadata.totalSize,
+  )
 
-  return data;
-};
+  return data
+}
 
 const handleFileUploadFinalization = async (
   user: User,
-  uploadId: string
+  uploadId: string,
 ): Promise<string> => {
   const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
     user,
-    InteractionType.Upload
-  );
-  const { metadata } = await generateFileArtifacts(uploadId);
-  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+    InteractionType.Upload,
+  )
+  const { metadata } = await generateFileArtifacts(uploadId)
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (pendingCredits < metadata.totalSize) {
-    throw new Error("Not enough upload credits");
+    throw new Error('Not enough upload credits')
   }
 
-  await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid);
+  await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid)
 
-  const isRootUpload = upload?.root_upload_id === uploadId;
+  const isRootUpload = upload?.root_upload_id === uploadId
   if (isRootUpload) {
     await ObjectUseCases.saveMetadata(
       metadata.dataCid,
       metadata.dataCid,
-      metadata
-    );
+      metadata,
+    )
   }
 
   await UsersUseCases.registerInteraction(
     user,
     InteractionType.Upload,
-    metadata.totalSize
-  );
+    metadata.totalSize,
+  )
 
-  return metadata.dataCid;
-};
+  return metadata.dataCid
+}
 
 const handleFolderUploadFinalization = async (
   user: User,
-  uploadId: string
+  uploadId: string,
 ): Promise<string> => {
-  const { metadata, childrenArtifacts } = await generateFolderArtifacts(
-    uploadId
-  );
+  const { metadata, childrenArtifacts } =
+    await generateFolderArtifacts(uploadId)
 
-  const fullMetadata = [metadata, ...childrenArtifacts.map((e) => e.metadata)];
+  const fullMetadata = [metadata, ...childrenArtifacts.map((e) => e.metadata)]
   await Promise.all(
     fullMetadata.map((childMetadata) =>
       ObjectUseCases.saveMetadata(
         metadata.dataCid,
         childMetadata.dataCid,
-        childMetadata
-      )
-    )
-  );
+        childMetadata,
+      ),
+    ),
+  )
 
-  await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid);
+  await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid)
 
-  return metadata.dataCid;
-};
+  return metadata.dataCid
+}
 
 export const FilesUseCases = {
   handleFileUploadFinalization,
   handleFolderUploadFinalization,
   downloadObject,
-};
+}

@@ -1,39 +1,40 @@
-import { Router } from "express";
-import { handleAuth } from "../services/authManager/express.js";
-import { UploadsUseCases } from "../useCases/uploads/uploads.js";
-import multer from "multer";
-import { FolderTreeFolderSchema } from "../models/objects/folderTree.js";
-import { uploadOptionsSchema } from "../models/uploads/upload.js";
-import { z } from "zod";
-import { cidToString } from "@autonomys/auto-drive";
+import { Router } from 'express'
+import { handleAuth } from '../services/authManager/express.js'
+import { UploadsUseCases } from '../useCases/uploads/uploads.js'
+import multer from 'multer'
+import { FolderTreeFolderSchema } from '../models/objects/folderTree.js'
+import { uploadOptionsSchema } from '../models/uploads/upload.js'
+import { z } from 'zod'
 
-const uploadController = Router();
+const uploadController = Router()
 
-uploadController.post("/file", async (req, res) => {
-  const user = await handleAuth(req, res);
+uploadController.post('/file', async (req, res) => {
+  const user = await handleAuth(req, res)
   if (!user) {
-    return;
+    return
   }
 
-  const { mimeType, filename, uploadOptions } = req.body;
+  const { mimeType, filename, uploadOptions } = req.body
 
-  if (typeof filename !== "string") {
-    return res
-      .status(400)
-      .json({ error: "Missing or invalid field: filename" });
+  if (typeof filename !== 'string') {
+    return res.status(400).json({
+      error: 'Missing or invalid field: filename',
+    })
   }
 
-  if (typeof mimeType !== "string") {
-    return res
-      .status(400)
-      .json({ error: "Missing or invalid field: mimeType" });
+  if (typeof mimeType !== 'string') {
+    return res.status(400).json({
+      error: 'Missing or invalid field: mimeType',
+    })
   }
 
   const safeUploadOptions = z
     .union([uploadOptionsSchema, z.null()])
-    .safeParse(uploadOptions);
+    .safeParse(uploadOptions)
   if (!safeUploadOptions.success) {
-    return res.status(400).json({ error: "Invalid upload options" });
+    return res.status(400).json({
+      error: 'Invalid upload options',
+    })
   }
 
   try {
@@ -41,33 +42,39 @@ uploadController.post("/file", async (req, res) => {
       user,
       filename,
       mimeType,
-      safeUploadOptions.data
-    );
+      safeUploadOptions.data,
+    )
 
-    return res.status(200).json(upload);
+    return res.status(200).json(upload)
   } catch (error) {
-    console.log(error);
+    console.log(error)
 
-    return res.status(500).json({ error: "Failed to create upload" });
+    return res.status(500).json({
+      error: 'Failed to create upload',
+    })
   }
-});
+})
 
-uploadController.post("/folder", async (req, res) => {
-  const user = await handleAuth(req, res);
+uploadController.post('/folder', async (req, res) => {
+  const user = await handleAuth(req, res)
   if (!user) {
-    return;
+    return
   }
-  const { fileTree, uploadOptions } = req.body;
-  const safeFileTree = FolderTreeFolderSchema.safeParse(fileTree);
+  const { fileTree, uploadOptions } = req.body
+  const safeFileTree = FolderTreeFolderSchema.safeParse(fileTree)
   if (!safeFileTree.success) {
-    return res.status(400).json({ error: "Invalid file tree" });
+    return res.status(400).json({
+      error: 'Invalid file tree',
+    })
   }
 
   const safeUploadOptions = z
     .union([uploadOptionsSchema, z.null()])
-    .safeParse(uploadOptions);
+    .safeParse(uploadOptions)
   if (!safeUploadOptions.success) {
-    return res.status(400).json({ error: "Invalid upload options" });
+    return res.status(400).json({
+      error: 'Invalid upload options',
+    })
   }
 
   try {
@@ -75,46 +82,52 @@ uploadController.post("/folder", async (req, res) => {
       user,
       safeFileTree.data.name,
       safeFileTree.data,
-      safeUploadOptions.data
-    );
+      safeUploadOptions.data,
+    )
 
-    return res.status(200).json(upload);
+    return res.status(200).json(upload)
   } catch (error) {
-    console.log(error);
-    return res.status(500).json({ error: "Failed to create upload" });
+    console.log(error)
+    return res.status(500).json({
+      error: 'Failed to create upload',
+    })
   }
-});
+})
 
-uploadController.post("/folder/:uploadId/file", async (req, res) => {
-  const user = await handleAuth(req, res);
+uploadController.post('/folder/:uploadId/file', async (req, res) => {
+  const user = await handleAuth(req, res)
   if (!user) {
-    return;
+    return
   }
 
-  const { uploadId } = req.params;
-  const { name, mimeType, relativeId, uploadOptions } = req.body;
+  const { uploadId } = req.params
+  const { name, mimeType, relativeId, uploadOptions } = req.body
 
-  if (typeof name !== "string") {
-    return res.status(400).json({ error: "Missing or invalid field: name" });
+  if (typeof name !== 'string') {
+    return res.status(400).json({
+      error: 'Missing or invalid field: name',
+    })
   }
 
-  if (typeof mimeType !== "string") {
-    return res
-      .status(400)
-      .json({ error: "Missing or invalid field: mimeType" });
+  if (typeof mimeType !== 'string') {
+    return res.status(400).json({
+      error: 'Missing or invalid field: mimeType',
+    })
   }
 
-  if (typeof relativeId !== "string") {
-    return res
-      .status(400)
-      .json({ error: "Missing or invalid field: relativeId" });
+  if (typeof relativeId !== 'string') {
+    return res.status(400).json({
+      error: 'Missing or invalid field: relativeId',
+    })
   }
 
   const safeUploadOptions = z
     .union([uploadOptionsSchema, z.null()])
-    .safeParse(uploadOptions);
+    .safeParse(uploadOptions)
   if (!safeUploadOptions.success) {
-    return res.status(400).json({ error: "Invalid upload options" });
+    return res.status(400).json({
+      error: 'Invalid upload options',
+    })
   }
 
   try {
@@ -124,85 +137,96 @@ uploadController.post("/folder/:uploadId/file", async (req, res) => {
       relativeId,
       name,
       mimeType,
-      safeUploadOptions.data
-    );
+      safeUploadOptions.data,
+    )
 
-    return res.status(200).json(upload);
+    return res.status(200).json(upload)
   } catch (error) {
-    console.log(error);
-    return res.status(500).json({ error: "Failed to create file in folder" });
+    console.log(error)
+    return res.status(500).json({
+      error: 'Failed to create file in folder',
+    })
   }
-});
+})
 
 uploadController.post(
-  "/file/:uploadId/chunk",
-  multer().single("file"),
+  '/file/:uploadId/chunk',
+  multer().single('file'),
   async (req, res) => {
-    const user = await handleAuth(req, res);
+    const user = await handleAuth(req, res)
     if (!user) {
-      return;
+      return
     }
-    const { uploadId } = req.params;
-    const chunk = req.file?.buffer;
-    let { index } = req.body;
+    const { uploadId } = req.params
+    const chunk = req.file?.buffer
+    let { index } = req.body
 
     if (!chunk) {
       return res.status(400).json({
-        error: "Missing chunk: expected formData entry in field `file`",
-      });
+        error: 'Missing chunk: expected formData entry in field `file`',
+      })
     }
 
-    index = parseInt(index);
+    index = parseInt(index)
     if (isNaN(index)) {
-      return res.status(400).json({ error: "Invalid index" });
+      return res.status(400).json({
+        error: 'Invalid index',
+      })
     }
 
     try {
-      await UploadsUseCases.uploadChunk(user, uploadId, index, chunk);
+      await UploadsUseCases.uploadChunk(user, uploadId, index, chunk)
 
-      return res.status(200).json({ message: "Chunk uploaded" });
+      return res.status(200).json({
+        message: 'Chunk uploaded',
+      })
     } catch (error) {
-      console.log(error);
+      console.log(error)
 
-      return res.status(500).json({ error: "Failed to upload chunk" });
+      return res.status(500).json({
+        error: 'Failed to upload chunk',
+      })
     }
-  }
-);
+  },
+)
 
-uploadController.post("/:uploadId/complete", async (req, res) => {
-  const user = await handleAuth(req, res);
+uploadController.post('/:uploadId/complete', async (req, res) => {
+  const user = await handleAuth(req, res)
   if (!user) {
-    return;
+    return
   }
-  const { uploadId } = req.params;
+  const { uploadId } = req.params
 
   try {
-    const cid = await UploadsUseCases.completeUpload(user, uploadId);
+    const cid = await UploadsUseCases.completeUpload(user, uploadId)
 
-    return res.status(200).json({ cid });
+    return res.status(200).json({
+      cid,
+    })
   } catch (error) {
-    console.log(error);
-    return res.status(500).json({ error: "Failed to complete upload" });
+    console.log(error)
+    return res.status(500).json({
+      error: 'Failed to complete upload',
+    })
   }
-});
+})
 
-uploadController.post("/:uploadId/cancel", async (req, res) => {
-  const user = await handleAuth(req, res);
+uploadController.post('/:uploadId/cancel', async (req, res) => {
+  const user = await handleAuth(req, res)
   if (!user) {
-    return;
+    return
   }
-  const { uploadId } = req.params;
 
-  throw new Error("Not implemented");
-});
+  throw new Error('Not implemented')
+})
 
-uploadController.get("/:uploadId", async (req, res) => {
-  const user = await handleAuth(req, res);
+uploadController.get('/:uploadId', async (req, res) => {
+  const user = await handleAuth(req, res)
   if (!user) {
-    return;
+    return
   }
 
-  throw new Error("Not implemented");
-});
+  throw new Error('Not implemented')
+})
 
-export { uploadController };
+export { uploadController }

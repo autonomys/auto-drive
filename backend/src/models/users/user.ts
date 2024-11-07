@@ -1,59 +1,59 @@
-import { SubscriptionInfo } from "./subscription";
+import { SubscriptionInfo } from './subscription'
 
 export type OAuthUser = {
-  provider: string;
-  id: string;
-  email?: string;
-};
-
-export enum UserRole {
-  User = "User",
-  Admin = "Admin",
+  provider: string
+  id: string
+  email?: string
 }
 
-export type PublicId = string | null;
+export enum UserRole {
+  User = 'User',
+  Admin = 'Admin',
+}
 
-export type UserOrPublicId = User | PublicId;
+export type PublicId = string | null
+
+export type UserOrPublicId = User | PublicId
 
 type UserBase = {
-  oauthProvider: string;
-  oauthUserId: string;
-  role: UserRole;
-  publicId: PublicId;
-};
+  oauthProvider: string
+  oauthUserId: string
+  role: UserRole
+  publicId: PublicId
+}
 
 export type OnboardedUser = UserBase & {
-  publicId: string;
-  onboarded: true;
-};
+  publicId: string
+  onboarded: true
+}
 
 export type UnonboardedUser = UserBase & {
-  publicId: null;
-  onboarded: false;
-};
+  publicId: null
+  onboarded: false
+}
 
-export type User = OnboardedUser | UnonboardedUser;
+export type User = OnboardedUser | UnonboardedUser
 
 export type UserInfo = {
-  user: User;
-  subscription?: SubscriptionInfo;
-};
+  user: User
+  subscription?: SubscriptionInfo
+}
 
 export const userFromOAuth = (
-  user: Omit<User, "onboarded" | "publicId">
+  user: Omit<User, 'onboarded' | 'publicId'>,
 ): UnonboardedUser => {
   return {
     ...user,
     publicId: null,
     onboarded: false,
-  };
-};
+  }
+}
 
 export const userFromTable = (
-  user: Omit<OnboardedUser, "onboarded">
+  user: Omit<OnboardedUser, 'onboarded'>,
 ): OnboardedUser => {
   return {
     ...user,
     onboarded: true,
-  };
-};
+  }
+}
