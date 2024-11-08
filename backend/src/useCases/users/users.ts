@@ -1,4 +1,3 @@
-import { Credits } from "../../models/users/credits.js";
 import {
   OAuthUser,
   User,
@@ -7,24 +6,21 @@ import {
   UserInfo,
   UserOrPublicId,
   UserRole,
-} from "../../models/users/index.js";
-import { InteractionType } from "../../models/objects/interactions.js";
-import {
-  SubscriptionInfo,
-  SubscriptionWithUser,
-} from "../../models/users/subscription.js";
-import { usersRepository } from "../../repositories/index.js";
-import { InteractionsUseCases } from "../objects/interactions.js";
-import { OrganizationsUseCases } from "./organizations.js";
-import { SubscriptionsUseCases } from "./subscriptions.js";
-import { v4, v5 } from "uuid";
+} from '../../models/users/index.js'
+import { InteractionType } from '../../models/objects/interactions.js'
+import { SubscriptionWithUser } from '../../models/users/subscription.js'
+import { usersRepository } from '../../repositories/index.js'
+import { InteractionsUseCases } from '../objects/interactions.js'
+import { OrganizationsUseCases } from './organizations.js'
+import { SubscriptionsUseCases } from './subscriptions.js'
+import { v5 } from 'uuid'
 
 const getUserByPublicId = async (
-  publicId: string
+  publicId: string,
 ): Promise<User | undefined> => {
-  const dbUser = await usersRepository.getUserByPublicId(publicId);
+  const dbUser = await usersRepository.getUserByPublicId(publicId)
   if (!dbUser) {
-    return undefined;
+    return undefined
   }
 
   return userFromTable({
@@ -32,57 +28,57 @@ const getUserByPublicId = async (
     oauthUserId: dbUser.oauth_user_id,
     publicId: dbUser.public_id,
     role: dbUser.role,
-  });
-};
+  })
+}
 
 const resolveUser = async (userOrPublicId: UserOrPublicId): Promise<User> => {
   if (userOrPublicId === null) {
-    throw new Error("User not found (user=null)");
+    throw new Error('User not found (user=null)')
   }
 
-  const isPublicId = typeof userOrPublicId === "string";
-  let user: User | undefined = isPublicId
+  const isPublicId = typeof userOrPublicId === 'string'
+  const user: User | undefined = isPublicId
     ? await getUserByPublicId(userOrPublicId)
-    : userOrPublicId;
+    : userOrPublicId
   if (!user) {
-    throw new Error("User not found");
+    throw new Error('User not found')
   }
-  return user;
-};
+  return user
+}
 
 const generateUserPublicId = (user: User): string => {
-  const USER_PUBLIC_ID_NAMESPACE = "public-id-user-1";
+  const USER_PUBLIC_ID_NAMESPACE = 'public-id-user-1'
 
-  const input = `${user.oauthProvider}-${user.oauthUserId}`;
-  const namespaceArray = USER_PUBLIC_ID_NAMESPACE.split("").map((e) =>
-    e.charCodeAt(0)
-  );
-  return v5(input, namespaceArray);
-};
+  const input = `${user.oauthProvider}-${user.oauthUserId}`
+  const namespaceArray = USER_PUBLIC_ID_NAMESPACE.split('').map((e) =>
+    e.charCodeAt(0),
+  )
+  return v5(input, namespaceArray)
+}
 
 const onboardUser = async (user: User): Promise<User | undefined> => {
-  const publicId = generateUserPublicId(user);
+  const publicId = generateUserPublicId(user)
 
   const updatedUser = await UsersUseCases.initUser(
     user.oauthProvider,
     user.oauthUserId,
-    publicId
-  );
+    publicId,
+  )
 
-  return updatedUser;
-};
+  return updatedUser
+}
 
 const getUserByOAuthUser = async (user: OAuthUser): Promise<User> => {
   const dbUser = await usersRepository.getUserByOAuthInformation(
     user.provider,
-    user.id
-  );
+    user.id,
+  )
   if (!dbUser) {
     return userFromOAuth({
       oauthProvider: user.provider,
       oauthUserId: user.id,
       role: UserRole.User,
-    });
+    })
   }
 
   return userFromTable({
@@ -90,74 +86,79 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<User> => {
     oauthUserId: dbUser.oauth_user_id,
     publicId: dbUser.public_id,
     role: dbUser.role,
-  });
-};
+  })
+}
 
 const searchUsersByPublicId = async (publicId: string): Promise<string[]> => {
-  const maxResults = 10;
+  const maxResults = 10
   const dbUsers = await usersRepository.searchUsersByPublicId(
     publicId,
-    maxResults
-  );
+    maxResults,
+  )
 
-  return dbUsers.map((e) => e.public_id);
-};
+  return dbUsers.map((e) => e.public_id)
+}
 
 const isAdminUser = async (
-  userOrPublicId: UserOrPublicId
+  userOrPublicId: UserOrPublicId,
 ): Promise<boolean> => {
-  const user = await resolveUser(userOrPublicId);
+  const user = await resolveUser(userOrPublicId)
 
   const adminUser = await usersRepository.getUserByOAuthInformation(
     user.oauthProvider,
-    user.oauthUserId
-  );
+    user.oauthUserId,
+  )
 
-  return adminUser?.role === UserRole.Admin;
-};
+  return adminUser?.role === UserRole.Admin
+}
 
 const updateRole = async (
   executor: User,
   userOrPublicId: UserOrPublicId,
-  role: UserRole
+  role: UserRole,
 ) => {
-  const isAdmin = await isAdminUser(executor);
+  const isAdmin = await isAdminUser(executor)
   if (!isAdmin) {
-    throw new Error("User does not have admin privileges");
+    throw new Error('User does not have admin privileges')
   }
 
-  const user = await resolveUser(userOrPublicId);
+  const user = await resolveUser(userOrPublicId)
 
-  return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role);
-};
+  return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role)
+}
 
 const getUserInfo = async (
-  userOrPublicId: UserOrPublicId
+  userOrPublicId: UserOrPublicId,
 ): Promise<UserInfo> => {
-  const user = await resolveUser(userOrPublicId);
+  const user = await resolveUser(userOrPublicId)
 
   if (!user.onboarded) {
-    return { user };
+    return {
+      user,
+    }
   }
 
-  const subscription = await SubscriptionsUseCases.getSubscriptionInfo(user);
+  const subscription = await SubscriptionsUseCases.getSubscriptionInfo(user)
 
-  return { user, subscription };
-};
+  return {
+    user,
+    subscription,
+  }
+}
 
 const getUserList = async (reader: User): Promise<SubscriptionWithUser[]> => {
-  const isAdmin = await UsersUseCases.isAdminUser(reader);
+  const isAdmin = await UsersUseCases.isAdminUser(reader)
   if (!isAdmin) {
-    throw new Error("User does not have admin privileges");
+    throw new Error('User does not have admin privileges')
   }
 
-  const users = await usersRepository.getAllUsers();
+  const users = await usersRepository.getAllUsers()
 
   return Promise.all(
     users.map(async (user) => {
       const subscription = await SubscriptionsUseCases.getSubscription(
-        user.public_id
-      );
+        user.public_id,
+      )
       return {
         ...subscription,
         user: userFromTable({
@@ -166,69 +167,67 @@ const getUserList = async (reader: User): Promise<SubscriptionWithUser[]> => {
           publicId: user.public_id,
           role: user.role,
         }),
-      };
-    })
-  );
-};
+      }
+    }),
+  )
+}
 
 const initUser = async (
-  oauth_provider: string,
-  oauth_user_id: string,
+  oauthProvider: string,
+  oauthUserId: string,
   publicId: string,
-  role: UserRole = UserRole.User
+  role: UserRole = UserRole.User,
 ): Promise<User> => {
   const user = await usersRepository.createUser(
-    oauth_provider,
-    oauth_user_id,
+    oauthProvider,
+    oauthUserId,
     publicId,
-    role
-  );
+    role,
+  )
   if (!user) {
-    throw new Error("User creation failed");
+    throw new Error('User creation failed')
   }
 
   await OrganizationsUseCases.initOrganization(
     userFromTable({
-      oauthProvider: oauth_provider,
-      oauthUserId: oauth_user_id,
-      publicId: publicId,
-      role: role,
-    })
-  );
+      oauthProvider,
+      oauthUserId,
+      publicId,
+      role,
+    }),
+  )
 
   return userFromTable({
     oauthProvider: user.oauth_provider,
     oauthUserId: user.oauth_user_id,
     publicId: user.public_id,
     role: user.role,
-  });
-};
+  })
+}
 
 const getPendingCreditsByUserAndType = async (
   userOrPublicId: UserOrPublicId,
-  type: InteractionType
+  type: InteractionType,
 ): Promise<number> => {
-  const subscription = await SubscriptionsUseCases.getSubscription(
-    userOrPublicId
-  );
+  const subscription =
+    await SubscriptionsUseCases.getSubscription(userOrPublicId)
 
   return SubscriptionsUseCases.getPendingCreditsBySubscriptionAndType(
     subscription,
-    type
-  );
-};
+    type,
+  )
+}
 
 const registerInteraction = async (
   userOrPublicId: UserOrPublicId,
   type: InteractionType,
-  size: number
+  size: number,
 ) => {
-  const subscription = await SubscriptionsUseCases.getSubscription(
-    userOrPublicId
-  );
+  const subscription =
+    await SubscriptionsUseCases.getSubscription(userOrPublicId)
 
-  await InteractionsUseCases.createInteraction(subscription.id, type, size);
-};
+  await InteractionsUseCases.createInteraction(subscription.id, type, size)
+}
 
 export const UsersUseCases = {
   onboardUser,
@@ -243,4 +242,4 @@ export const UsersUseCases = {
   getUserInfo,
   initUser,
   registerInteraction,
-};
+}

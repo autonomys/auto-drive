@@ -1,5 +1,5 @@
-import { Unzlib, Zlib } from "fflate";
-import { asyncByChunk } from "./async";
+import { Unzlib, Zlib } from 'fflate';
+import { asyncByChunk } from './async';
 
 export const COMPRESSION_CHUNK_SIZE = 1024 * 1024;
 type CompressionLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
@@ -7,7 +7,7 @@ type CompressionLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 export async function* compressFileByChunks(
   file: AsyncIterable<Buffer>,
   chunkSize = COMPRESSION_CHUNK_SIZE, // Default chunk size of 1 MB
-  level: CompressionLevel = 9
+  level: CompressionLevel = 9,
 ): AsyncIterable<Buffer> {
   const zlib = new Zlib({ level });
   const compressedChunks: Buffer[] = [];
@@ -31,7 +31,7 @@ export async function* compressFileByChunks(
 
 export async function* decompressFileByChunks(
   compressedFile: AsyncIterable<Buffer>,
-  chunkSize = 1024 * 1024 // Default chunk size of 1 MB
+  chunkSize = 1024 * 1024, // Default chunk size of 1 MB
 ): AsyncIterable<Buffer> {
   const unzlib = new Unzlib();
   const decompressedChunks: Buffer[] = [];

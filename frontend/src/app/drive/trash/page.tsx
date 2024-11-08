@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { ApiService } from "@/services/api";
-import { useCallback, useEffect, useState } from "react";
-import { ObjectSummary } from "../../../models/UploadedObjectMetadata";
-import { TrashFiles } from "../../../components/TrashFiles";
-import { PaginatedResult } from "../../../models/common";
+import { ApiService } from '@/services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ObjectSummary } from '../../../models/UploadedObjectMetadata';
+import { TrashFiles } from '../../../components/TrashFiles';
+import { PaginatedResult } from '../../../models/common';
 
 export default function Page() {
   const [rootObjectMetadata, setRootObjectMetadata] = useState<
@@ -22,7 +22,7 @@ export default function Page() {
   useEffect(() => {
     setRootObjectMetadata(null);
     ApiService.getTrashObjects(currentPage * pageSize, pageSize).then(
-      updateResult
+      updateResult,
     );
   }, [currentPage, pageSize, updateResult]);
 

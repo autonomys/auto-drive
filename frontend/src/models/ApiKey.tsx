@@ -7,6 +7,6 @@ export type ApiKey = {
   created_at: PropertyKey;
 };
 
-export type ApiKeyWithoutSecret = Omit<ApiKey, "secret"> & {
+export type ApiKeyWithoutSecret = Omit<ApiKey, 'secret'> & {
   secret?: never;
 };

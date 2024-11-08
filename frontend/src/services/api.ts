@@ -1,20 +1,20 @@
-import { ApiKey, ApiKeyWithoutSecret } from "../models/ApiKey";
-import { PaginatedResult } from "../models/common";
-import { FolderTree } from "../models/FileTree";
-import { ObjectSearchResult } from "../models/ObjectSearchResult";
+import { ApiKey, ApiKeyWithoutSecret } from '../models/ApiKey';
+import { PaginatedResult } from '../models/common';
+import { FolderTree } from '../models/FileTree';
+import { ObjectSearchResult } from '../models/ObjectSearchResult';
 import {
   SubscriptionGranularity,
   SubscriptionWithUser,
-} from "../models/Subscriptions";
+} from '../models/Subscriptions';
 import {
   ObjectSummary,
   UploadedObjectMetadata,
-} from "../models/UploadedObjectMetadata";
-import { User, UserInfo } from "../models/User";
-import { getAuthSession } from "../utils/auth";
-import { uploadFileContent } from "../utils/file";
+} from '../models/UploadedObjectMetadata';
+import { User, UserInfo } from '../models/User';
+import { getAuthSession } from '../utils/auth';
+import { uploadFileContent } from '../utils/file';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export interface UploadResponse {
   cid: string;
@@ -24,13 +24,13 @@ export const ApiService = {
   getMe: async (): Promise<UserInfo> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/@me`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
-        "X-Auth-Provider": session.provider,
+        'X-Auth-Provider': session.provider,
       },
     });
 
@@ -43,13 +43,13 @@ export const ApiService = {
   getUserList: async (): Promise<SubscriptionWithUser[]> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/subscriptions/list`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
-        "X-Auth-Provider": session.provider,
+        'X-Auth-Provider': session.provider,
       },
     });
     return response.json();
@@ -57,13 +57,13 @@ export const ApiService = {
   getApiKeysByUser: async (): Promise<ApiKeyWithoutSecret[]> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/@me/apiKeys`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
-        "X-Auth-Provider": session.provider,
+        'X-Auth-Provider': session.provider,
       },
     });
 
@@ -72,18 +72,18 @@ export const ApiService = {
   deleteApiKey: async (apiKeyId: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(
       `${API_BASE_URL}/users/@me/apiKeys/${apiKeyId}`,
       {
-        method: "DELETE",
+        method: 'DELETE',
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
-          "X-Auth-Provider": session.provider,
+          'X-Auth-Provider': session.provider,
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -93,20 +93,20 @@ export const ApiService = {
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/objects/file`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({
         data: await uploadFileContent(file),
         filename: file.name,
         mimeType: file.type,
       }),
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${session.accessToken}`,
-        "X-Auth-Provider": session.provider,
+        'X-Auth-Provider': session.provider,
       },
     });
 
@@ -118,26 +118,26 @@ export const ApiService = {
   },
   uploadFolder: async (
     tree: FolderTree,
-    files: Record<string, File>
+    files: Record<string, File>,
   ): Promise<UploadResponse> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const formData = new FormData();
 
-    formData.append("folderTree", JSON.stringify(tree));
+    formData.append('folderTree', JSON.stringify(tree));
     Object.entries(files).forEach(([fileId, file]) => {
       formData.append(fileId, file);
     });
 
     const response = await fetch(`${API_BASE_URL}/objects/folder`, {
-      method: "POST",
+      method: 'POST',
       body: formData,
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
-        "X-Auth-Provider": session.provider,
+        'X-Auth-Provider': session.provider,
       },
     });
 
@@ -148,7 +148,7 @@ export const ApiService = {
     return response.json();
   },
   fetchUploadedObjectMetadata: async (
-    cid: string
+    cid: string,
   ): Promise<UploadedObjectMetadata> => {
     const response = await fetch(`${API_BASE_URL}/objects/${cid}`);
 
@@ -161,13 +161,13 @@ export const ApiService = {
   downloadObject: async (cid: string): Promise<ReadableStream<Uint8Array>> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/objects/${cid}/download`, {
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": session.provider,
+        'X-Auth-Provider': session.provider,
       },
     });
 
@@ -179,11 +179,11 @@ export const ApiService = {
   },
   searchByCIDOrName: async (
     query: string,
-    scope: "user" | "global"
+    scope: 'user' | 'global',
   ): Promise<ObjectSearchResult[]> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(
@@ -191,21 +191,21 @@ export const ApiService = {
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
-          "X-Auth-Provider": session.provider,
+          'X-Auth-Provider': session.provider,
         },
-      }
+      },
     );
 
     return response.json();
   },
   getRootObjects: async (
-    scope: "user" | "global",
+    scope: 'user' | 'global',
     offset: number,
-    limit: number
+    limit: number,
   ): Promise<PaginatedResult<ObjectSummary>> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(
@@ -213,20 +213,20 @@ export const ApiService = {
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
-          "X-Auth-Provider": session.provider,
+          'X-Auth-Provider': session.provider,
         },
-      }
+      },
     );
 
     return response.json();
   },
   getSharedRoots: async (
     offset: number,
-    limit: number
+    limit: number,
   ): Promise<PaginatedResult<ObjectSummary>> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(
@@ -234,9 +234,9 @@ export const ApiService = {
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
-          "X-Auth-Provider": session.provider,
+          'X-Auth-Provider': session.provider,
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -247,11 +247,11 @@ export const ApiService = {
   },
   getTrashObjects: async (
     offset: number,
-    limit: number
+    limit: number,
   ): Promise<PaginatedResult<ObjectSummary>> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(
@@ -259,9 +259,9 @@ export const ApiService = {
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
-          "X-Auth-Provider": session.provider,
+          'X-Auth-Provider': session.provider,
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -273,15 +273,15 @@ export const ApiService = {
   generateApiKey: async (): Promise<ApiKey> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/@me/apiKeys/create`, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": session.provider,
-        "Content-Type": "application/json",
+        'X-Auth-Provider': session.provider,
+        'Content-Type': 'application/json',
       },
     });
 
@@ -294,44 +294,44 @@ export const ApiService = {
   shareObject: async (dataCid: string, publicId: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     await fetch(`${API_BASE_URL}/objects/${dataCid}/share`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({ publicId }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": session.provider,
-        "Content-Type": "application/json",
+        'X-Auth-Provider': session.provider,
+        'Content-Type': 'application/json',
       },
     });
   },
   markObjectAsDeleted: async (cid: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     await fetch(`${API_BASE_URL}/objects/${cid}/delete`, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": session.provider,
+        'X-Auth-Provider': session.provider,
       },
     });
   },
   restoreObject: async (cid: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/objects/${cid}/restore`, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": session.provider,
+        'X-Auth-Provider': session.provider,
       },
     });
 
@@ -342,14 +342,14 @@ export const ApiService = {
   onboardUser: async (): Promise<User> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/@me/onboard`, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": session.provider,
+        'X-Auth-Provider': session.provider,
       },
     });
 
@@ -362,16 +362,16 @@ export const ApiService = {
   addAdmin: async (publicId: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/admin/add`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({ publicId }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": session.provider,
-        "Content-Type": "application/json",
+        'X-Auth-Provider': session.provider,
+        'Content-Type': 'application/json',
       },
     });
 
@@ -382,16 +382,16 @@ export const ApiService = {
   removeAdmin: async (publicId: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/admin/remove`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({ publicId }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": session.provider,
-        "Content-Type": "application/json",
+        'X-Auth-Provider': session.provider,
+        'Content-Type': 'application/json',
       },
     });
 
@@ -403,15 +403,15 @@ export const ApiService = {
     publicId: string,
     granularity: SubscriptionGranularity,
     uploadLimit: number,
-    downloadLimit: number
+    downloadLimit: number,
   ): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
-      throw new Error("No session");
+      throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/subscriptions/update`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({
         granularity,
         uploadLimit,
@@ -420,8 +420,8 @@ export const ApiService = {
       }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        "X-Auth-Provider": session.provider,
-        "Content-Type": "application/json",
+        'X-Auth-Provider': session.provider,
+        'Content-Type': 'application/json',
       },
     });
 

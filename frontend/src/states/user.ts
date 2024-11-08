@@ -1,8 +1,9 @@
-import { ApiService } from "../services/api";
-import { User, UserInfo } from "../models/User.js";
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { SubscriptionInfo } from "../models/Subscriptions";
+import { ApiService } from '../services/api';
+import { User, UserInfo } from '../models/User.js';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+import { SubscriptionInfo } from '../models/Subscriptions';
 
 interface UserStore {
   user: User | null;
@@ -24,8 +25,8 @@ export const useUserStore = create<UserStore>()(
       },
     }),
     {
-      name: "user-dto-storage",
+      name: 'user-dto-storage',
       version: 1,
-    }
-  )
+    },
+  ),
 );

@@ -8,9 +8,9 @@ The Data Access Gateway serves as the entry point for external interactions with
 
 ## Objectives
 
--   Demonstrate basic data upload and retrieval functionality
--   Provide a simple, secure entry point for data operations
--   Route requests to appropriate internal services
+- Demonstrate basic data upload and retrieval functionality
+- Provide a simple, secure entry point for data operations
+- Route requests to appropriate internal services
 
 ## Architecture
 
@@ -24,16 +24,16 @@ The Data Access Gateway serves as the entry point for external interactions with
 
 ### 1. Request Handler
 
--   Accepts incoming HTTP requests
--   Performs basic request validation
+- Accepts incoming HTTP requests
+- Performs basic request validation
 
 ### 2. Basic Authentication Module
 
--   Verifies user credentials using a simple API key mechanism
+- Verifies user credentials using a simple API key mechanism
 
 ### 3. Request Router
 
--   Routes requests to the appropriate internal service (Upload or Retrieval)
+- Routes requests to the appropriate internal service (Upload or Retrieval)
 
 ## Key Processes
 
@@ -44,10 +44,10 @@ The Data Access Gateway serves as the entry point for external interactions with
 3. Basic validation (file size, format)
 4. Route to Data Upload Service
 5. Return upload status to client
-    1. Track status of upload through process
-        1. Metadata and file chunking info
-        2. Upload transactions
-        3. Data archived
+   1. Track status of upload through process
+      1. Metadata and file chunking info
+      2. Upload transactions
+      3. Data archived
 
 ### Data Retrieval Process
 
@@ -57,8 +57,8 @@ The Data Access Gateway serves as the entry point for external interactions with
 
 ## Future Considerations
 
--   Caching
--   Load balancing
+- Caching
+- Load balancing
 
 # Data Chunking and Metadata Manager Service
 
@@ -78,32 +78,32 @@ This service handles the chunking of large data sets and manages associated meta
 
 ### 1. Data Chunker
 
--   Breaks data larger than 1 MB into smaller chunks
--   Ensures each chunk is within the block size limit
+- Breaks data larger than 1 MB into smaller chunks
+- Ensures each chunk is within the block size limit
 
 ### 2. CID Generator
 
--   Generates a CID for the entire data set based on its content
--   Generates CIDs for individual chunks
+- Generates a CID for the entire data set based on its content
+- Generates CIDs for individual chunks
 
 ### 3. Metadata Manager
 
--   Creates and manages metadata for each data set, including:
-    -   Data CID
-    -   Total size
-    -   Number of chunks
-    -   List of chunk CIDs and their order
-    -   Custom metadata (if any)
+- Creates and manages metadata for each data set, including:
+  - Data CID
+  - Total size
+  - Number of chunks
+  - List of chunk CIDs and their order
+  - Custom metadata (if any)
 
 ### 4. Chunk Tracker
 
--   Maintains a record of all chunks for each data set
--   Tracks the storage location of each chunk in the DSN
+- Maintains a record of all chunks for each data set
+- Tracks the storage location of each chunk in the DSN
 
 ### 5. Data Reassembler
 
--   Retrieves chunks based on metadata
--   Reassembles the data in the correct order
+- Retrieves chunks based on metadata
+- Reassembles the data in the correct order
 
 ## Data Structures
 
@@ -111,27 +111,27 @@ This service handles the chunking of large data sets and manages associated meta
 
 ```json
 {
-    "dataCid": "content_identifier_of_entire_dataset",
-    "dataType": "file", // or "raw"
-    "name": "example.pdf", // optional, for files
-    "mimeType": "application/pdf",
-    "totalSize": 15000000,
-    "totalChunks": 4,
-    "chunks": [
-        {
-            "cid": "content_identifier_of_chunk_1",
-            "order": 1,
-            "size": 4000000,
-            "dsnLocation": {
-                "pieceIndex": 1,
-                "offset": 20
-            }
-        }
-        // ... other chunks ...
-    ],
-    "customMetadata": {
-        // Any additional user-defined metadata
+  "dataCid": "content_identifier_of_entire_dataset",
+  "dataType": "file", // or "raw"
+  "name": "example.pdf", // optional, for files
+  "mimeType": "application/pdf",
+  "totalSize": 15000000,
+  "totalChunks": 4,
+  "chunks": [
+    {
+      "cid": "content_identifier_of_chunk_1",
+      "order": 1,
+      "size": 4000000,
+      "dsnLocation": {
+        "pieceIndex": 1,
+        "offset": 20
+      }
     }
+    // ... other chunks ...
+  ],
+  "customMetadata": {
+    // Any additional user-defined metadata
+  }
 }
 ```
 
@@ -161,12 +161,12 @@ This service handles the chunking of large data sets and manages associated meta
 
 ### With Blockchain Transaction Manager
 
--   Send: Chunks and their CIDs for storage
--   Receive: Confirmation of chunk storage
+- Send: Chunks and their CIDs for storage
+- Receive: Confirmation of chunk storage
 
 ### With Off-Chain Storage (for metadata)
 
--   Store and retrieve metadata using data CID as key
+- Store and retrieve metadata using data CID as key
 
 # Transaction Manager Design and Implementation Plan
 
@@ -176,10 +176,10 @@ The Transaction Manager is responsible for submitting data chunks to the Autonom
 
 ## Objectives
 
--   Efficiently submit data chunks to the blockchain
--   Utilize transaction batching for improved performance
--   Handle potential failures and retries
--   Provide status updates on transaction submissions
+- Efficiently submit data chunks to the blockchain
+- Utilize transaction batching for improved performance
+- Handle potential failures and retries
+- Provide status updates on transaction submissions
 
 ## Architecture
 
@@ -195,28 +195,28 @@ The Transaction Manager is responsible for submitting data chunks to the Autonom
 
 ### 1. Transaction Queue
 
--   Maintains a queue of pending chunk submissions
--   Prioritizes transactions based on predefined criteria (e.g., time of submission, size)
+- Maintains a queue of pending chunk submissions
+- Prioritizes transactions based on predefined criteria (e.g., time of submission, size)
 
 ### 2. Batch Builder
 
--   Constructs batches of transactions from the queue
--   Ensures batches are within size and weight limits of the blockchain
+- Constructs batches of transactions from the queue
+- Ensures batches are within size and weight limits of the blockchain
 
 ### 3. Submission Handler
 
--   Interfaces with the Autonomys Network's blockchain API
--   Submits batched transactions to the blockchain
+- Interfaces with the Autonomys Network's blockchain API
+- Submits batched transactions to the blockchain
 
 ### 4. Status Tracker
 
--   Monitors the status of submitted transactions
--   Updates the status of individual chunks and overall data uploads
+- Monitors the status of submitted transactions
+- Updates the status of individual chunks and overall data uploads
 
 ### 5. Retry Mechanism
 
--   Handles failed submissions
--   Implements exponential backoff for retries
+- Handles failed submissions
+- Implements exponential backoff for retries
 
 ## Key Processes
 
@@ -255,6 +255,6 @@ The Transaction Manager is responsible for submitting data chunks to the Autonom
 
 ## Error Handling
 
--   Implement robust error handling for network issues, blockchain errors, and unexpected failures
--   Log errors with appropriate context for debugging
--   Provide clear error messages to the calling service
+- Implement robust error handling for network issues, blockchain errors, and unexpected failures
+- Log errors with appropriate context for debugging
+- Provide clear error messages to the calling service

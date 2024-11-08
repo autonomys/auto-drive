@@ -1,1 +1,1 @@
-export { createConnection } from "./substrate.js";
+export { createConnection } from './substrate.js'

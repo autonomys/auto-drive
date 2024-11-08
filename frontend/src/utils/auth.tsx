@@ -1,8 +1,8 @@
-import { getServerSession, type Session } from "next-auth";
-import { getSession } from "next-auth/react";
+import { getServerSession, type Session } from 'next-auth';
+import { getSession } from 'next-auth/react';
 
 export const getAuthSession = async (): Promise<Session | null> => {
-  const internalSession = await (typeof window === "undefined"
+  const internalSession = await (typeof window === 'undefined'
     ? getServerSession()
     : getSession());
 
@@ -14,7 +14,7 @@ export const getAuthSession = async (): Promise<Session | null> => {
 };
 
 export const isAuthenticated = async (): Promise<boolean> => {
-  const internalSession = await (typeof window === "undefined"
+  const internalSession = await (typeof window === 'undefined'
     ? getServerSession()
     : getSession());
 

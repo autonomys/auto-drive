@@ -1,25 +1,23 @@
-import { v4 } from "uuid";
+import { v4 } from 'uuid'
 import {
   UploadEntry,
   uploadsRepository,
-} from "../../repositories/uploads/uploads.js";
+} from '../../repositories/uploads/uploads.js'
 import {
   FileUpload,
   FolderUpload,
-  mapModelToTable,
   Upload,
   UploadStatus,
   UploadType,
-} from "../../models/uploads/upload.js";
-import { FolderTreeFolder } from "../../models/objects/folderTree.js";
-import { User } from "../../models/users/user.js";
-import { filePartsRepository } from "../../repositories/uploads/fileParts.js";
-import { FileProcessingUseCase as UploadingProcessingUseCase } from "./uploadProcessing.js";
-import { fileProcessingInfoRepository } from "../../repositories/uploads/fileProcessingInfo.js";
-import { FilesUseCases } from "../objects/files.js";
-import { NodesUseCases } from "../objects/index.js";
-import { cidToString, FileUploadOptions } from "@autonomys/auto-drive";
-import { CID } from "multiformats";
+} from '../../models/uploads/upload.js'
+import { FolderTreeFolder } from '../../models/objects/folderTree.js'
+import { User } from '../../models/users/user.js'
+import { filePartsRepository } from '../../repositories/uploads/fileParts.js'
+import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadProcessing.js'
+import { fileProcessingInfoRepository } from '../../repositories/uploads/fileProcessingInfo.js'
+import { FilesUseCases } from '../objects/files.js'
+import { NodesUseCases } from '../objects/index.js'
+import { cidToString, FileUploadOptions } from '@autonomys/auto-drive'
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -34,17 +32,17 @@ export const mapTableToModel = (upload: UploadEntry): Upload => {
     oauthProvider: upload.oauth_provider,
     oauthUserId: upload.oauth_user_id,
     uploadOptions: upload.upload_options,
-  } as Upload;
-};
+  } as Upload
+}
 
 const checkPermissions = async (upload: UploadEntry, user: User) => {
   if (
     upload.oauth_provider !== user.oauthProvider ||
     upload.oauth_user_id !== user.oauthUserId
   ) {
-    throw new Error("User does not have permission to upload");
+    throw new Error('User does not have permission to upload')
   }
-};
+}
 
 const initFileProcessing = async (upload: UploadEntry): Promise<void> => {
   await fileProcessingInfoRepository.addFileProcessingInfo({
@@ -53,8 +51,8 @@ const initFileProcessing = async (upload: UploadEntry): Promise<void> => {
     pending_bytes: null,
     created_at: new Date(),
     updated_at: new Date(),
-  });
-};
+  })
+}
 
 const createFileUpload = async (
   user: User,
@@ -62,12 +60,12 @@ const createFileUpload = async (
   mimeType: string,
   uploadOptions: FileUploadOptions | null,
   rootId?: string | null,
-  relativeId?: string | null
+  relativeId?: string | null,
 ): Promise<FileUpload> => {
-  rootId = rootId ?? null;
-  relativeId = relativeId ?? null;
+  rootId = rootId ?? null
+  relativeId = relativeId ?? null
 
-  const id = v4();
+  const id = v4()
   const upload = await uploadsRepository.createUploadEntry(
     id,
     UploadType.FILE,
@@ -79,21 +77,21 @@ const createFileUpload = async (
     relativeId,
     user.oauthProvider,
     user.oauthUserId,
-    uploadOptions
-  );
+    uploadOptions,
+  )
 
-  await initFileProcessing(upload);
+  await initFileProcessing(upload)
 
-  return mapTableToModel(upload) as FileUpload;
-};
+  return mapTableToModel(upload) as FileUpload
+}
 
 export const createFolderUpload = async (
   user: User,
   name: string,
   folderTree: FolderTreeFolder,
-  uploadOptions: FileUploadOptions | null
+  uploadOptions: FileUploadOptions | null,
 ): Promise<FolderUpload> => {
-  const uploadId = v4();
+  const uploadId = v4()
   const result = await uploadsRepository.createUploadEntry(
     uploadId,
     UploadType.FOLDER,
@@ -105,11 +103,11 @@ export const createFolderUpload = async (
     null,
     user.oauthProvider,
     user.oauthUserId,
-    uploadOptions
-  );
+    uploadOptions,
+  )
 
-  return mapTableToModel(result) as FolderUpload;
-};
+  return mapTableToModel(result) as FolderUpload
+}
 
 const createFileInFolder = async (
   user: User,
@@ -117,15 +115,15 @@ const createFileInFolder = async (
   relativeId: string,
   name: string,
   mimeType: string,
-  uploadOptions: FileUploadOptions | null
+  uploadOptions: FileUploadOptions | null,
 ): Promise<FileUpload> => {
-  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
-    throw new Error("Upload not found");
+    throw new Error('Upload not found')
   }
 
   if (upload.type !== UploadType.FOLDER) {
-    throw new Error("Upload is not a folder");
+    throw new Error('Upload is not a folder')
   }
 
   const file = await createFileUpload(
@@ -134,25 +132,25 @@ const createFileInFolder = async (
     mimeType,
     uploadOptions,
     uploadId,
-    relativeId
-  );
+    relativeId,
+  )
 
-  return file;
-};
+  return file
+}
 
 const uploadChunk = async (
   user: User,
   uploadId: string,
   index: number,
-  chunkData: Buffer
+  chunkData: Buffer,
 ): Promise<void> => {
-  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
-    throw new Error("Upload not found");
+    throw new Error('Upload not found')
   }
-  await checkPermissions(upload, user);
+  await checkPermissions(upload, user)
 
-  await UploadingProcessingUseCase.processChunk(uploadId, chunkData, index);
+  await UploadingProcessingUseCase.processChunk(uploadId, chunkData, index)
 
   await filePartsRepository.addChunk({
     upload_id: uploadId,
@@ -160,60 +158,60 @@ const uploadChunk = async (
     data: chunkData,
     created_at: new Date(),
     updated_at: new Date(),
-  });
-};
+  })
+}
 
 const completeUpload = async (
   user: User,
-  uploadId: string
+  uploadId: string,
 ): Promise<string> => {
-  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
-    throw new Error("Upload not found");
+    throw new Error('Upload not found')
   }
-  await checkPermissions(upload, user);
+  await checkPermissions(upload, user)
 
-  const cid = await UploadingProcessingUseCase.completeUploadProcessing(upload);
+  const cid = await UploadingProcessingUseCase.completeUploadProcessing(upload)
 
   if (upload.type === UploadType.FILE) {
-    await FilesUseCases.handleFileUploadFinalization(user, uploadId);
+    await FilesUseCases.handleFileUploadFinalization(user, uploadId)
   } else if (upload.type === UploadType.FOLDER) {
-    await FilesUseCases.handleFolderUploadFinalization(user, uploadId);
+    await FilesUseCases.handleFolderUploadFinalization(user, uploadId)
   }
 
   const updatedUpload = {
     ...upload,
     status: UploadStatus.MIGRATING,
-  };
+  }
 
-  await uploadsRepository.updateUploadEntry(updatedUpload);
+  await uploadsRepository.updateUploadEntry(updatedUpload)
 
-  return cidToString(cid);
-};
+  return cidToString(cid)
+}
 
 const getFileFromFolderUpload = async (
-  uploadId: string
+  uploadId: string,
 ): Promise<UploadEntry[]> => {
-  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
-    throw new Error("Upload not found");
+    throw new Error('Upload not found')
   }
   if (upload.type !== UploadType.FOLDER) {
-    throw new Error("Upload is not a folder");
+    throw new Error('Upload is not a folder')
   }
 
-  const folderWithFiles = await uploadsRepository.getUploadsByRoot(uploadId);
+  const folderWithFiles = await uploadsRepository.getUploadsByRoot(uploadId)
 
-  return folderWithFiles.filter((e) => e.type === UploadType.FILE);
-};
+  return folderWithFiles.filter((e) => e.type === UploadType.FILE)
+}
 
 const createSubFolderUpload = async (
   rootId: string,
-  fileTree: FolderTreeFolder
+  fileTree: FolderTreeFolder,
 ): Promise<FolderUpload> => {
-  const parentUpload = await uploadsRepository.getUploadEntryById(rootId);
+  const parentUpload = await uploadsRepository.getUploadEntryById(rootId)
   if (!parentUpload) {
-    throw new Error("Parent upload not found");
+    throw new Error('Parent upload not found')
   }
 
   const upload = await uploadsRepository.createUploadEntry(
@@ -227,34 +225,34 @@ const createSubFolderUpload = async (
     fileTree.id,
     parentUpload.oauth_provider,
     parentUpload.oauth_user_id,
-    null
-  );
+    null,
+  )
 
-  return mapTableToModel(upload) as FolderUpload;
-};
+  return mapTableToModel(upload) as FolderUpload
+}
 
 const getPendingMigrations = async (limit: number): Promise<UploadEntry[]> => {
   const pendingMigrations = await uploadsRepository.getUploadsByStatus(
     UploadStatus.MIGRATING,
-    limit
-  );
+    limit,
+  )
 
-  return pendingMigrations;
-};
+  return pendingMigrations
+}
 
 const processMigration = async (uploadId: string): Promise<void> => {
-  const upload = await uploadsRepository.getUploadEntryById(uploadId);
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
-    throw new Error("Upload not found");
+    throw new Error('Upload not found')
   }
 
-  await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId);
+  await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId)
 
   await uploadsRepository.updateUploadStatusByRootUploadId(
     uploadId,
-    UploadStatus.COMPLETED
-  );
-};
+    UploadStatus.COMPLETED,
+  )
+}
 
 export const UploadsUseCases = {
   createFileUpload,
@@ -266,4 +264,4 @@ export const UploadsUseCases = {
   getPendingMigrations,
   processMigration,
   createSubFolderUpload,
-};
+}

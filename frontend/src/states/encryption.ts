@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface EncryptionStore {
   password: string;
@@ -9,12 +9,12 @@ interface EncryptionStore {
 export const useEncryptionStore = create<EncryptionStore>()(
   persist(
     (set) => ({
-      password: "",
+      password: '',
       setPassword: (password) => set({ password }),
     }),
     {
-      name: "encryption-storage",
+      name: 'encryption-storage',
       version: 1,
-    }
-  )
+    },
+  ),
 );

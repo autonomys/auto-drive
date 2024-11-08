@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode } from 'react';
 
 export const Table = ({
   children,
@@ -9,11 +9,11 @@ export const Table = ({
 }) => {
   return (
     <div
-      className="rounded-lg border-separate border"
-      style={{ borderSpacing: "0px" }}
+      className='border-separate rounded-lg border'
+      style={{ borderSpacing: '0px' }}
     >
       <table
-        className={`min-w-full border-collapse rounded-lg ${className ?? ""}`}
+        className={`min-w-full border-collapse rounded-lg ${className ?? ''}`}
       >
         {children}
       </table>

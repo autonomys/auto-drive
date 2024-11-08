@@ -1,13 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { UploadService } from "../../services/upload";
-import {
-  Dialog,
-  DialogPanel,
-  DialogTitle,
-  Transition,
-} from "@headlessui/react";
-import { Button } from "../common/Button";
-import { useEncryptionStore } from "../../states/encryption";
+import { useCallback, useEffect, useState } from 'react';
+import { UploadService } from '../../services/upload';
+import { Dialog, Transition } from '@headlessui/react';
+import { Button } from '../common/Button';
+import { useEncryptionStore } from '../../states/encryption';
 
 export const UploadingFileModal = ({
   file,
@@ -36,7 +31,7 @@ export const UploadingFileModal = ({
       onClose();
       setPasswordConfirmed(false);
     },
-    [file, onClose]
+    [file, onClose],
   );
 
   const onConfirmPassword = useCallback(() => {
@@ -65,56 +60,56 @@ export const UploadingFileModal = ({
 
   return (
     <Transition show={!!file}>
-      <Dialog as="div" onClose={onClose}>
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 shadow-lg transition-transform transform min-w-[25%]">
+      <Dialog as='div' onClose={onClose}>
+        <div className='fixed inset-0 flex items-center justify-center bg-black bg-opacity-50'>
+          <div className='min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform'>
             {passwordConfirmed ? (
               <div>
-                <div className="relative w-full h-2 bg-gray-200 rounded">
+                <div className='relative h-2 w-full rounded bg-gray-200'>
                   <div
-                    className="absolute top-0 left-0 h-2 bg-green-500 rounded transition-all duration-500"
+                    className='absolute left-0 top-0 h-2 rounded bg-green-500 transition-all duration-500'
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <div className="flex justify-center mt-4 text-sm font-semibold">
+                <div className='mt-4 flex justify-center text-sm font-semibold'>
                   <div>Uploading... {progressPercentage}%</div>
                 </div>
               </div>
             ) : (
               <div>
-                <div className="flex flex-col gap-2 p-4">
-                  <span className="block text-md font-semibold text-gray-700 text-center">
+                <div className='flex flex-col gap-2 p-4'>
+                  <span className='text-md block text-center font-semibold text-gray-700'>
                     Enter Encrypting Password
                   </span>
                   <input
-                    type="password"
-                    id="password"
+                    type='password'
+                    id='password'
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                    placeholder="Password"
+                    className='mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm'
+                    placeholder='Password'
                   />
-                  <div className="flex gap-2 justify-center">
+                  <div className='flex justify-center gap-2'>
                     <Button
                       disabled={!defaultPassword}
-                      className="text-xs"
-                      variant="lightAccent"
+                      className='text-xs'
+                      variant='lightAccent'
                       onClick={setDefaultPassword}
                     >
                       Encrypt with default password
                     </Button>
                     <Button
-                      className="text-xs"
-                      variant="lightAccent"
+                      className='text-xs'
+                      variant='lightAccent'
                       onClick={() => setPasswordConfirmed(true)}
                     >
                       {password
-                        ? "Confirm Password"
-                        : "Upload without encryption"}
+                        ? 'Confirm Password'
+                        : 'Upload without encryption'}
                     </Button>
                     <Button
-                      className="text-xs"
-                      variant="lightDanger"
+                      className='text-xs'
+                      variant='lightDanger'
                       onClick={onClose}
                     >
                       Cancel

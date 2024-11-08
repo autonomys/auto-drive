@@ -1,21 +1,21 @@
-import pg from "pg";
+import pg from 'pg'
 
-let db: pg.Client;
+let db: pg.Client
 
 const createDB = async (): Promise<pg.Client> => {
   const client = new pg.Client({
     connectionString: process.env.DATABASE_URL,
-  });
+  })
 
-  await client.connect();
+  await client.connect()
 
-  return client;
-};
+  return client
+}
 
 export const getDatabase = async () => {
   if (!db) {
-    db = await createDB();
+    db = await createDB()
   }
 
-  return db;
-};
+  return db
+}

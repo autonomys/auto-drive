@@ -40,5 +40,5 @@
       "typescript": {}
     }
   },
-  "ignorePatterns": ["tailwind.config.js"]
+  "ignorePatterns": ["tailwind.config.js", "next-env.d.ts"]
 }

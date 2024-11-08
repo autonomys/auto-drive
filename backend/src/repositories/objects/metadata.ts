@@ -1,64 +1,64 @@
-import { OffchainMetadata } from "@autonomys/auto-drive";
-import { getDatabase } from "../../drivers/pg.js";
-import { PaginatedResult } from "../../useCases/objects/common.js";
+import { OffchainMetadata } from '@autonomys/auto-drive'
+import { getDatabase } from '../../drivers/pg.js'
+import { PaginatedResult } from '../../useCases/objects/common.js'
 
 export interface MetadataEntry {
-  root_cid: string;
-  head_cid: string;
-  metadata: OffchainMetadata;
+  root_cid: string
+  head_cid: string
+  metadata: OffchainMetadata
 }
 
 type MetadataEntryWithTotalCount = MetadataEntry & {
-  total_count: number;
-};
+  total_count: number
+}
 
 const getMetadata = async (cid: string): Promise<MetadataEntry | undefined> => {
-  const db = await getDatabase();
+  const db = await getDatabase()
 
   return db
     .query<MetadataEntry>({
-      text: "SELECT * FROM metadata WHERE head_cid = $1",
+      text: 'SELECT * FROM metadata WHERE head_cid = $1',
       values: [cid],
     })
     .then((entry) => {
-      return entry.rows.length > 0 ? entry.rows[0] : undefined;
-    });
-};
+      return entry.rows.length > 0 ? entry.rows[0] : undefined
+    })
+}
 
 const setMetadata = async (
   rootCid: string,
   headCid: string,
-  metadata: OffchainMetadata
+  metadata: OffchainMetadata,
 ) => {
-  const db = await getDatabase();
+  const db = await getDatabase()
 
   return db.query({
-    text: "INSERT INTO metadata (root_cid, head_cid, metadata) VALUES ($1, $2, $3) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata",
+    text: 'INSERT INTO metadata (root_cid, head_cid, metadata) VALUES ($1, $2, $3) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata',
     values: [rootCid, headCid, JSON.stringify(metadata)],
-  });
-};
+  })
+}
 
 const searchMetadataByCID = async (
   cid: string,
-  limit: number | undefined
+  limit: number | undefined,
 ): Promise<MetadataEntry[]> => {
-  const db = await getDatabase();
+  const db = await getDatabase()
 
   return db
     .query<MetadataEntry>({
-      text: "SELECT metadata.* FROM metadata join object_ownership on metadata.head_cid = object_ownership.cid WHERE metadata.head_cid LIKE $1 LIMIT $2",
+      text: 'SELECT metadata.* FROM metadata join object_ownership on metadata.head_cid = object_ownership.cid WHERE metadata.head_cid LIKE $1 LIMIT $2',
       values: [`%${cid}%`, limit],
     })
-    .then((entries) => entries.rows);
-};
+    .then((entries) => entries.rows)
+}
 
 const searchMetadataByCIDAndUser = async (
   cid: string,
   limit: number | undefined,
   provider: string,
-  userId: string
+  userId: string,
 ): Promise<MetadataEntry[]> => {
-  const db = await getDatabase();
+  const db = await getDatabase()
 
   return db
     .query<MetadataEntry>({
@@ -74,16 +74,16 @@ const searchMetadataByCIDAndUser = async (
     `,
       values: [provider, userId, `%${cid}%`, limit],
     })
-    .then((entries) => entries.rows);
-};
+    .then((entries) => entries.rows)
+}
 
 const searchMetadataByNameAndUser = async (
   query: string,
   provider: string,
   userId: string,
-  limit: number
+  limit: number,
 ): Promise<MetadataEntry[]> => {
-  const db = await getDatabase();
+  const db = await getDatabase()
 
   return db
     .query<MetadataEntry>({
@@ -98,43 +98,44 @@ const searchMetadataByNameAndUser = async (
     LIMIT $4`,
       values: [provider, userId, `%${query}%`, limit],
     })
-    .then((entries) => entries.rows);
-};
+    .then((entries) => entries.rows)
+}
 
 const searchMetadataByName = async (query: string, limit: number) => {
-  const db = await getDatabase();
+  const db = await getDatabase()
 
   return db
     .query<MetadataEntry>({
-      text: "SELECT * FROM metadata WHERE metadata->>'name' ILIKE $1 LIMIT $2",
+      // eslint-disable-next-line quotes
+      text: `SELECT * FROM metadata WHERE metadata->>'name' ILIKE $1 LIMIT $2`,
       values: [`%${query}%`, limit],
     })
-    .then((entries) => entries.rows);
-};
+    .then((entries) => entries.rows)
+}
 
 const getAllMetadata = async () => {
-  const db = await getDatabase();
+  const db = await getDatabase()
 
   return db
-    .query<MetadataEntry>("SELECT * FROM metadata")
-    .then((entries) => entries.rows);
-};
+    .query<MetadataEntry>('SELECT * FROM metadata')
+    .then((entries) => entries.rows)
+}
 
 const getMetadataByRootCid = async (rootCid: string) => {
-  const db = await getDatabase();
+  const db = await getDatabase()
 
   return db
-    .query<MetadataEntry>("SELECT * FROM metadata WHERE root_cid = $1", [
+    .query<MetadataEntry>('SELECT * FROM metadata WHERE root_cid = $1', [
       rootCid,
     ])
-    .then((entries) => entries.rows);
-};
+    .then((entries) => entries.rows)
+}
 
 const getRootObjects = async (
   limit: number = 100,
-  offset: number = 0
-): Promise<PaginatedResult<MetadataEntry["head_cid"]>> => {
-  const db = await getDatabase();
+  offset: number = 0,
+): Promise<PaginatedResult<MetadataEntry['head_cid']>> => {
+  const db = await getDatabase()
 
   return db
     .query<MetadataEntryWithTotalCount>({
@@ -154,16 +155,16 @@ const getRootObjects = async (
     .then((entries) => ({
       rows: entries.rows.map((entry) => entry.head_cid),
       totalCount: entries.rows.at(0)?.total_count ?? 0,
-    }));
-};
+    }))
+}
 
 const getRootObjectsByUser = async (
   provider: string,
   userId: string,
   limit: number = 100,
-  offset: number = 0
-): Promise<PaginatedResult<MetadataEntry["head_cid"]>> => {
-  const db = await getDatabase();
+  offset: number = 0,
+): Promise<PaginatedResult<MetadataEntry['head_cid']>> => {
+  const db = await getDatabase()
 
   return db
     .query<MetadataEntryWithTotalCount>({
@@ -183,17 +184,17 @@ const getRootObjectsByUser = async (
       return {
         rows: entries.rows.map((entry) => entry.root_cid),
         totalCount: entries.rows.at(0)?.total_count ?? 0,
-      };
-    });
-};
+      }
+    })
+}
 
 const getSharedRootObjectsByUser = async (
   provider: string,
   userId: string,
   limit: number = 100,
-  offset: number = 0
-): Promise<PaginatedResult<MetadataEntry["head_cid"]>> => {
-  const db = await getDatabase();
+  offset: number = 0,
+): Promise<PaginatedResult<MetadataEntry['head_cid']>> => {
+  const db = await getDatabase()
 
   return db
     .query<MetadataEntryWithTotalCount>({
@@ -213,17 +214,17 @@ const getSharedRootObjectsByUser = async (
       return {
         rows: entries.rows.map((entry) => entry.head_cid),
         totalCount: entries.rows.at(0)?.total_count ?? 0,
-      };
-    });
-};
+      }
+    })
+}
 
 const getMarkedAsDeletedRootObjectsByUser = async (
   provider: string,
   userId: string,
   limit: number = 100,
-  offset: number = 0
-): Promise<PaginatedResult<MetadataEntry["head_cid"]>> => {
-  const db = await getDatabase();
+  offset: number = 0,
+): Promise<PaginatedResult<MetadataEntry['head_cid']>> => {
+  const db = await getDatabase()
 
   return db
     .query<MetadataEntryWithTotalCount>({
@@ -242,18 +243,18 @@ const getMarkedAsDeletedRootObjectsByUser = async (
       return {
         rows: entries.rows.map((entry) => entry.head_cid),
         totalCount: entries.rows.at(0)?.total_count ?? 0,
-      };
-    });
-};
+      }
+    })
+}
 
 const getMetadataByUser = async (provider: string, userId: string) => {
-  const db = await getDatabase();
+  const db = await getDatabase()
 
   return db.query<MetadataEntry>({
-    text: "SELECT * FROM metadata JOIN object_ownership ON metadata.root_cid = object_ownership.cid WHERE object_ownership.marked_as_deleted IS NULL AND object_ownership.oauth_provider = $1 AND object_ownership.oauth_user_id = $2",
+    text: 'SELECT * FROM metadata JOIN object_ownership ON metadata.root_cid = object_ownership.cid WHERE object_ownership.marked_as_deleted IS NULL AND object_ownership.oauth_provider = $1 AND object_ownership.oauth_user_id = $2',
     values: [provider, userId],
-  });
-};
+  })
+}
 
 export const metadataRepository = {
   getMetadata,
@@ -269,4 +270,4 @@ export const metadataRepository = {
   getMetadataByRootCid,
   getSharedRootObjectsByUser,
   getMarkedAsDeletedRootObjectsByUser,
-};
+}

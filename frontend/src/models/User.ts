@@ -1,4 +1,4 @@
-import { SubscriptionInfo } from "./Subscriptions";
+import { SubscriptionInfo } from './Subscriptions';
 
 export type OAuthUser = {
   provider: string;
@@ -7,8 +7,8 @@ export type OAuthUser = {
 };
 
 export enum UserRole {
-  User = "User",
-  Admin = "Admin",
+  User = 'User',
+  Admin = 'Admin',
 }
 
 export type PublicId = string | null;
@@ -42,7 +42,7 @@ export type UserInfo = {
 };
 
 export const userFromOAuth = (
-  user: Omit<User, "onboarded" | "publicId">
+  user: Omit<User, 'onboarded' | 'publicId'>,
 ): UnonboardedUser => {
   return {
     ...user,
@@ -52,7 +52,7 @@ export const userFromOAuth = (
 };
 
 export const userFromTable = (
-  user: Omit<OnboardedUser, "onboarded">
+  user: Omit<OnboardedUser, 'onboarded'>,
 ): OnboardedUser => {
   return {
     ...user,

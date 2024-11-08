@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { ApiService } from "../../../../services/api";
-import { UploadedObjectMetadata } from "../../../../models/UploadedObjectMetadata";
-import { UploadedObjectInformation } from "../../../../components/UploadedObjectInformation";
+import { useEffect, useState } from 'react';
+import { ApiService } from '../../../../services/api';
+import { UploadedObjectMetadata } from '../../../../models/UploadedObjectMetadata';
+import { UploadedObjectInformation } from '../../../../components/UploadedObjectInformation';
 
 export default function Page({ params }: { params: { cid: string } }) {
   const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);

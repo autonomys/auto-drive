@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { Toggle } from "./Toggle";
-import { useScopeStore } from "../../states/scope";
+import { Toggle } from './Toggle';
+import { useScopeStore } from '../../states/scope';
 
 export const ScopeSwitch = () => {
   const scope = useScopeStore(({ scope }) => scope);
@@ -9,8 +9,8 @@ export const ScopeSwitch = () => {
 
   return (
     <Toggle
-      value={scope === "global"}
-      onUpdate={(isGlobal) => setScope(isGlobal ? "global" : "user")}
+      value={scope === 'global'}
+      onUpdate={(isGlobal) => setScope(isGlobal ? 'global' : 'user')}
     />
   );
 };

@@ -1,0 +1,40 @@
+name: Frontend Build Check
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**" # Only trigger on changes within this folder
+      - ".github/**"
+  pull_request:
+    paths:
+      - "frontend/**" # Only trigger on changes within this folder
+      - ".github/**"
+  workflow_dispatch:
+
+jobs:
+  frontend-build-check:
+    name: Frontend Build Check
+    runs-on: ubuntu-latest
+
+    # Cache dependencies to speed up the workflow
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Install Yarn
+        run: npm install --global yarn
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: yarn install
+
+      - name: Run build
+        working-directory: ./frontend
+        run: yarn build

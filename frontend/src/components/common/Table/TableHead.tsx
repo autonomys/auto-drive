@@ -1,15 +1,15 @@
-import { ReactNode } from "react";
+import { ReactNode } from 'react';
 
 export const TableHead = ({ children }: { children: ReactNode }) => {
   return (
-    <thead className="bg-white text-primary font-semibold rounded-lg">
+    <thead className='rounded-lg bg-white font-semibold text-primary'>
       {children}
     </thead>
   );
 };
 
 export const TableHeadRow = ({ children }: { children: ReactNode }) => {
-  return <tr className="border-b border-gray-200 rounded-lg">{children}</tr>;
+  return <tr className='rounded-lg border-b border-gray-200'>{children}</tr>;
 };
 
 export const TableHeadCell = ({
@@ -21,9 +21,9 @@ export const TableHeadCell = ({
 }) => {
   return (
     <th
-      scope="col"
-      className={`px-6 py-3 text-left text-xs uppercase tracking-wider rounded-lg ${
-        className ?? ""
+      scope='col'
+      className={`rounded-lg px-6 py-3 text-left text-xs uppercase tracking-wider ${
+        className ?? ''
       }`}
     >
       {children}

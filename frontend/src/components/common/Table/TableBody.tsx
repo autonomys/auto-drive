@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode } from 'react';
 
 export const TableBody = ({ children }: { children: ReactNode }) => {
   return <tbody>{children}</tbody>;
@@ -15,7 +15,7 @@ export const TableBodyRow = ({
 }) => {
   return (
     <tr
-      className={`hover:bg-gray-100 border border-gray-200 ${className ?? ""}`}
+      className={`border border-gray-200 hover:bg-gray-100 ${className ?? ''}`}
       onClick={onClick}
     >
       {children}
@@ -34,7 +34,7 @@ export const TableBodyCell = ({
 }) => {
   return (
     <td
-      className={`px-6 py-4 text-sm text-primary ${className ?? ""}`}
+      className={`px-6 py-4 text-sm text-primary ${className ?? ''}`}
       colSpan={colSpan}
     >
       {children}

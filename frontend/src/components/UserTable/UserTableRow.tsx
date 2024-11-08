@@ -1,14 +1,14 @@
-import bytes from "bytes";
-import { User, UserRole } from "../../models/User";
-import toast from "react-hot-toast";
-import { Copy } from "lucide-react";
-import { useMemo, useState } from "react";
-import { CreditsUpdateModal } from "./CreditsUpdateModal";
-import { SubscriptionWithUser } from "../../models/Subscriptions";
-import { UpdateRoleModal } from "./UpdateRoleModal";
-import { useUserStore } from "../../states/user";
-import { TableBodyCell, TableBodyRow } from "../common/Table/TableBody";
-import { shortenString } from "../../utils/misc";
+import bytes from 'bytes';
+import toast from 'react-hot-toast';
+import { Copy } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { CreditsUpdateModal } from './CreditsUpdateModal';
+import { SubscriptionWithUser } from '../../models/Subscriptions';
+import { UpdateRoleModal } from './UpdateRoleModal';
+import { useUserStore } from '../../states/user';
+import { TableBodyCell, TableBodyRow } from '../common/Table/TableBody';
+import { shortenString } from '../../utils/misc';
+import { handleEnterOrSpace } from '../../utils/eventHandler';
 
 type UserTableRowProps = {
   subscriptionWithUser: SubscriptionWithUser;
@@ -26,6 +26,13 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
 
   const myHandle = useMemo(() => user?.publicId, [user?.publicId]);
 
+  const copyToClipboard = useCallback(() => {
+    if (!subscriptionWithUser.user.publicId) return;
+
+    navigator.clipboard.writeText(subscriptionWithUser.user.publicId);
+    toast.success('Copied to clipboard');
+  }, [subscriptionWithUser.user.publicId]);
+
   return (
     <TableBodyRow>
       <CreditsUpdateModal
@@ -42,49 +49,47 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
       />
       <TableBodyCell>
         <div
-          className="text-sm text-gray-900 flex items-center gap-2 cursor-pointer hover:text-blue-500 transition-colors duration-200"
-          onClick={() => {
-            if (!subscriptionWithUser.user.publicId) return;
-
-            navigator.clipboard.writeText(subscriptionWithUser.user.publicId);
-            toast.success("Copied to clipboard");
-          }}
+          role='button'
+          tabIndex={0}
+          onKeyDown={handleEnterOrSpace(copyToClipboard)}
+          className='flex cursor-pointer items-center gap-2 text-sm text-gray-900 transition-colors duration-200 hover:text-blue-500'
+          onClick={copyToClipboard}
         >
-          {shortenString(subscriptionWithUser.user.publicId!, 16)}{" "}
+          {shortenString(subscriptionWithUser.user.publicId!, 16)}{' '}
           <Copy size={16} />
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className="text-sm text-gray-900">
+        <div className='text-sm text-gray-900'>
           {subscriptionWithUser.user.oauthProvider}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className="text-sm text-gray-900 flex items-center gap-2">
+        <div className='flex items-center gap-2 text-sm text-gray-900'>
           {subscriptionWithUser.user.role}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className="text-sm text-gray-900">{granularity}</div>
+        <div className='text-sm text-gray-900'>{granularity}</div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className="text-sm text-gray-900">
+        <div className='text-sm text-gray-900'>
           {bytes(Number(subscriptionWithUser.uploadLimit), {
-            unitSeparator: " ",
+            unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className="text-sm text-gray-900">
+        <div className='text-sm text-gray-900'>
           {bytes(Number(subscriptionWithUser.downloadLimit), {
-            unitSeparator: " ",
+            unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className="flex flex-col justify-end gap-2">
+        <div className='flex flex-col justify-end gap-2'>
           <button
-            className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-100 text-blue-900 hover:bg-blue-200"
+            className='inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2'
             onClick={() => {
               setIsCreditsUpdateModalOpen(true);
             }}
@@ -92,7 +97,7 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
             Update plan
           </button>
           <button
-            className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-100 text-blue-900 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className='inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
             onClick={() => {
               setIsUpdateRoleOpen(true);
             }}

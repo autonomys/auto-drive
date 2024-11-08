@@ -1,54 +1,55 @@
-import { ChunkInfo, OffchainMetadata } from "@autonomys/auto-drive";
-import { MetadataEntry } from "../../repositories";
+import { OffchainMetadata } from '@autonomys/auto-drive'
 
 export interface ObjectInformation {
-  cid: string;
-  metadata: OffchainMetadata;
-  uploadStatus: UploadStatus;
-  owners: Owner[];
+  cid: string
+  metadata: OffchainMetadata
+  uploadStatus: UploadStatus
+  owners: Owner[]
 }
 
 export interface UploadStatus {
-  uploadedNodes: number | null;
-  totalNodes: number | null;
-  minimumBlockDepth: number | null;
-  maximumBlockDepth: number | null;
+  uploadedNodes: number | null
+  totalNodes: number | null
+  minimumBlockDepth: number | null
+  maximumBlockDepth: number | null
 }
 
 export interface Owner {
-  publicId: string;
-  role: OwnerRole;
+  publicId: string
+  role: OwnerRole
 }
 
 export enum OwnerRole {
-  ADMIN = "admin",
-  VIEWER = "viewer",
+  ADMIN = 'admin',
+  VIEWER = 'viewer',
 }
 
 export type ObjectSearchResult = {
-  cid: string;
-  name: string;
-};
+  cid: string
+  name: string
+}
 
 export type ObjectSummary = {
-  headCid: string;
-  name?: string;
-  size: number;
-  owners: Owner[];
-  uploadStatus: UploadStatus;
+  headCid: string
+  name?: string
+  size: number
+  owners: Owner[]
+  uploadStatus: UploadStatus
 } & (
   | {
-      type: "file";
-      mimeType?: string;
+      type: 'file'
+      mimeType?: string
     }
   | {
-      type: "folder";
-      children: (OffchainMetadata & { type: "folder" })["children"];
+      type: 'folder'
+      children: (OffchainMetadata & {
+        type: 'folder'
+      })['children']
     }
-);
+)
 
 export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
-  return object.metadata.type === "folder"
+  return object.metadata.type === 'folder'
     ? {
         headCid: object.metadata.dataCid,
         name: object.metadata.name,
@@ -66,5 +67,5 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
         mimeType: object.metadata.mimeType,
         uploadStatus: object.uploadStatus,
         owners: object.owners,
-      };
-};
+      }
+}

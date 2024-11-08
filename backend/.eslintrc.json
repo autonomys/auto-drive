@@ -4,29 +4,36 @@
     "es2021": true,
     "node": true
   },
-  "plugins": ["eslint-plugin", "@typescript-eslint"],
+  "plugins": ["@typescript-eslint", "prettier"],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/eslint-recommended",
-    "plugin:@typescript-eslint/recommended"
+    "plugin:@typescript-eslint/recommended",
+    "prettier"
   ],
-  "overrides": [
-    {
-      "files": ["*.ts", "*.tsx"],
-      "parserOptions": {
-        "project": "tsconfig.json",
-        "tsconfigRootDir": "./"
-      }
-    }
-  ],
+  "parserOptions": {
+    "ecmaFeatures": {
+      "jsx": true
+    },
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
   "parser": "@typescript-eslint/parser",
   "rules": {
-    "semi": 1,
-    "@typescript-eslint/prefer-readonly": [
-      1,
-      {
-        "onlyInlineLambdas": true
-      }
-    ]
+    "react/react-in-jsx-scope": "off",
+    "spaced-comment": "error",
+    "quotes": ["error", "single"],
+    "no-duplicate-imports": "error"
+  },
+  "ignorePatterns": [
+    "dist/**/*",
+    "node_modules/**/*",
+    "migrations/**/*",
+    "jest.config.ts"
+  ],
+  "settings": {
+    "import/resolver": {
+      "typescript": {}
+    }
   }
 }
