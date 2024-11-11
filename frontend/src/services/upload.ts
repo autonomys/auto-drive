@@ -2,12 +2,9 @@ import {
   AuthProvider,
   createAutoDriveApi,
   uploadFileFromInput,
-  UploadFileStatus,
   uploadFolderFromInput,
-  UploadFolderStatus,
 } from '@autonomys/auto-drive';
 import { getAuthSession } from '../utils/auth';
-import { PromisedObservable } from '@autonomys/auto-drive/dist/utils/observable';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -27,7 +24,7 @@ const getApi = async () => {
 const uploadFile = async (
   file: File,
   { password }: { password?: string } = {},
-): Promise<PromisedObservable<UploadFileStatus>> => {
+) => {
   const api = await getApi();
 
   return uploadFileFromInput(api, file, {
@@ -39,7 +36,7 @@ const uploadFile = async (
 const uploadFolder = async (
   files: FileList,
   { password }: { password?: string } = {},
-): Promise<PromisedObservable<UploadFileStatus | UploadFolderStatus>> => {
+) => {
   const api = await getApi();
 
   const folderUploadObserver = await uploadFolderFromInput(api, files, {
