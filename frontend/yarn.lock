@@ -27,14 +27,32 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.0.4":
-  version: 1.0.4
-  resolution: "@autonomys/auto-drive@npm:1.0.4"
+"@autonomys/auto-dag-data@npm:^1.0.5":
+  version: 1.0.5
+  resolution: "@autonomys/auto-dag-data@npm:1.0.5"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.0.4"
+    "@ipld/dag-pb": "npm:^4.1.2"
+    "@webbuf/blake3": "npm:^3.0.26"
+    "@webbuf/fixedbuf": "npm:^3.0.26"
+    "@webbuf/webbuf": "npm:^3.0.26"
+    fflate: "npm:^0.8.2"
+    multiformats: "npm:^13.2.2"
+    protobufjs: "npm:^7.4.0"
+    protons: "npm:^7.6.0"
+    protons-runtime: "npm:^5.5.0"
+  checksum: 10c0/f5008da92c88adf1aacff196d7ebc47fee6b04d52ce34bec26f0fdb6bf0e0f665d1a1fbd1c7b3a8e37ffd3f12c44214f8ae8f5b232000fd514fda5ec191fd03c
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-drive@npm:^1.0.5":
+  version: 1.0.5
+  resolution: "@autonomys/auto-drive@npm:1.0.5"
+  dependencies:
+    "@autonomys/auto-dag-data": "npm:^1.0.5"
+    jszip: "npm:^3.10.1"
     mime-types: "npm:^2.1.35"
     zod: "npm:^3.23.8"
-  checksum: 10c0/6984f594876c944cdc590a5e131ab2182188188b903210414a2d1fc4c00710090bfd03ac9031483051c93bedc15d49e826e4128d19356b24130a7572d319229d
+  checksum: 10c0/65553dab901fc1d54364b3a7a0586a4456b1c45b101c1d7b86e5a2f6d84223b704f29d7a8b147cb652d0332c9c558ba6cafec92cd9a458a4487a03eff6e30ef6
   languageName: node
   linkType: hard
 
@@ -1068,6 +1086,32 @@ __metadata:
   version: 1.2.0
   resolution: "@ungap/structured-clone@npm:1.2.0"
   checksum: 10c0/8209c937cb39119f44eb63cf90c0b73e7c754209a6411c707be08e50e29ee81356dca1a848a405c8bdeebfe2f5e4f831ad310ae1689eeef65e7445c090c6657d
+  languageName: node
+  linkType: hard
+
+"@webbuf/blake3@npm:^3.0.26":
+  version: 3.0.26
+  resolution: "@webbuf/blake3@npm:3.0.26"
+  peerDependencies:
+    "@webbuf/fixedbuf": ^3.0.26
+    "@webbuf/webbuf": ^3.0.26
+  checksum: 10c0/2c50bdede8d2ba278409f41c465d4891a08b16e60b0e67e1be5310b94a98540aaaac6d2280bcb77780f165aba49883ffd7dbcc204779c813c62f314f9cb5589e
+  languageName: node
+  linkType: hard
+
+"@webbuf/fixedbuf@npm:^3.0.26":
+  version: 3.0.26
+  resolution: "@webbuf/fixedbuf@npm:3.0.26"
+  peerDependencies:
+    "@webbuf/webbuf": ^3.0.26
+  checksum: 10c0/5dd6031dd223b06f4f384e69dd3be3bd824b6edd4f9e11d6bff5dfbeae6e862da8d9d8a77578e91697be91455e7910bd1f5a8e4890d9f03e10af59000e446120
+  languageName: node
+  linkType: hard
+
+"@webbuf/webbuf@npm:^3.0.26":
+  version: 3.0.26
+  resolution: "@webbuf/webbuf@npm:3.0.26"
+  checksum: 10c0/3f9ef7078c220a46250ab5ad0ce249f63b05b949291d88a42113355d60de6c3ddb705b960d57912f2631f8aa6ce3c36b42fca5dd5d8401ebf71b6cf4fa629ca8
   languageName: node
   linkType: hard
 
@@ -2443,7 +2487,7 @@ __metadata:
   resolution: "frontend@workspace:."
   dependencies:
     "@autonomys/auto-dag-data": "npm:^1.0.4"
-    "@autonomys/auto-drive": "npm:^1.0.4"
+    "@autonomys/auto-drive": "npm:^1.0.5"
     "@headlessui/react": "npm:^2.1.8"
     "@heroicons/react": "npm:^2.1.5"
     "@ipld/dag-pb": "npm:^4.1.2"
