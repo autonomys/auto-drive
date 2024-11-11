@@ -7,7 +7,6 @@ import {
   UploadFolderStatus,
 } from '@autonomys/auto-drive';
 import { getAuthSession } from '../utils/auth';
-import { cidToString } from '@autonomys/auto-dag-data';
 import { PromisedObservable } from '@autonomys/auto-drive/dist/utils/observable';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
