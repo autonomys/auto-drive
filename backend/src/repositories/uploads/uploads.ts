@@ -1,4 +1,4 @@
-import { FileUploadOptions } from '@autonomys/auto-drive'
+import { FileUploadOptions } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import { FolderTreeFolder } from '../../models/objects/folderTree.js'
 import { UploadStatus, UploadType } from '../../models/uploads/upload.js'

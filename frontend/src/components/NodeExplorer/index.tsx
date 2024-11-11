@@ -1,6 +1,6 @@
 'use client';
 
-import type { IPLDNodeData } from '@autonomys/auto-drive';
+import type { IPLDNodeData } from '@autonomys/auto-dag-data';
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { FC, useState } from 'react';
 import { InternalLink } from '../common/InternalLink';

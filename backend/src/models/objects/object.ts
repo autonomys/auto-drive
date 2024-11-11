@@ -1,4 +1,4 @@
-import { OffchainMetadata } from '@autonomys/auto-drive'
+import { OffchainMetadata } from '@autonomys/auto-dag-data'
 
 export interface ObjectInformation {
   cid: string

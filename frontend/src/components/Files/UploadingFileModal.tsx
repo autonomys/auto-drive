@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { UploadService } from '../../services/upload';
 import { Dialog, Transition } from '@headlessui/react';
 import { Button } from '../common/Button';
 import { useEncryptionStore } from '../../states/encryption';
+import { UploadService } from '../../services/upload';
 
 export const UploadingFileModal = ({
   file,
@@ -21,13 +21,14 @@ export const UploadingFileModal = ({
     async (password: string | undefined) => {
       if (!file) return;
 
-      const upload = UploadService.uploadFile(file, {
+      await UploadService.uploadFile(file, {
         password,
-        compress: true,
-      });
-      for await (const chunkProgress of upload) {
-        setProgress(chunkProgress);
-      }
+      }).then((observer) =>
+        observer.forEach((status) => {
+          setProgress(status.progress);
+        }),
+      );
+
       onClose();
       setPasswordConfirmed(false);
     },

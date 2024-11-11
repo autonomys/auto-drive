@@ -22,12 +22,6 @@ uploadController.post('/file', async (req, res) => {
     })
   }
 
-  if (typeof mimeType !== 'string') {
-    return res.status(400).json({
-      error: 'Missing or invalid field: mimeType',
-    })
-  }
-
   const safeUploadOptions = z
     .union([uploadOptionsSchema, z.null()])
     .safeParse(uploadOptions)
@@ -41,7 +35,7 @@ uploadController.post('/file', async (req, res) => {
     const upload = await UploadsUseCases.createFileUpload(
       user,
       filename,
-      mimeType,
+      mimeType ?? null,
       safeUploadOptions.data,
     )
 
@@ -109,12 +103,6 @@ uploadController.post('/folder/:uploadId/file', async (req, res) => {
     })
   }
 
-  if (typeof mimeType !== 'string') {
-    return res.status(400).json({
-      error: 'Missing or invalid field: mimeType',
-    })
-  }
-
   if (typeof relativeId !== 'string') {
     return res.status(400).json({
       error: 'Missing or invalid field: relativeId',
@@ -136,7 +124,7 @@ uploadController.post('/folder/:uploadId/file', async (req, res) => {
       uploadId,
       relativeId,
       name,
-      mimeType,
+      mimeType ?? null,
       safeUploadOptions.data,
     )
 

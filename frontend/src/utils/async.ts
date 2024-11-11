@@ -16,12 +16,3 @@ export const asyncByChunk = async function* (
     yield accumulated;
   }
 };
-
-export const fileToIterable = async function* (
-  file: File,
-): AsyncIterable<Buffer> {
-  const chunkSize = 1024 * 1024;
-  for (let i = 0; i < file.size; i += chunkSize) {
-    yield Buffer.from(await file.slice(i, i + chunkSize).arrayBuffer());
-  }
-};

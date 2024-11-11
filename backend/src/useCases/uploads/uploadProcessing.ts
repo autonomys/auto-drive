@@ -8,11 +8,12 @@ import {
   cidOfNode,
   createFileChunkIpldNode,
   DEFAULT_MAX_CHUNK_SIZE,
+  DEFAULT_MAX_LINK_PER_NODE,
   fileBuilders,
   MetadataType,
   processBufferToIPLDFormatFromChunks,
   processChunksToIPLDFormat,
-} from '@autonomys/auto-drive'
+} from '@autonomys/auto-dag-data'
 import { FolderUpload, UploadType } from '../../models/uploads/upload.js'
 import { BlockstoreUseCases } from './blockstore.js'
 import { mapTableToModel } from './uploads.js'
@@ -93,15 +94,19 @@ const completeFileProcessing = async (uploadId: string): Promise<CID> => {
   const uploadedSize =
     (await filePartsRepository.getUploadFilePartsSize(uploadId)) ?? 0
 
+  const uploadOptions = {
+    maxLinkPerNode: DEFAULT_MAX_LINK_PER_NODE,
+    maxChunkSize: DEFAULT_MAX_CHUNK_SIZE,
+    ...(upload?.upload_options ?? {}),
+  }
+
   return processBufferToIPLDFormatFromChunks(
     blockstore,
     blockstore.getFilteredMany(MetadataType.FileChunk),
     upload?.name,
     uploadedSize,
     fileBuilders,
-    {
-      ...(upload?.upload_options ?? {}),
-    },
+    uploadOptions,
   )
 }
 

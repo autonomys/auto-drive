@@ -1,4 +1,4 @@
-import { OffchainMetadata } from '@autonomys/auto-drive'
+import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { User } from '../../models/users/index.js'
 import {
   getObjectSummary,

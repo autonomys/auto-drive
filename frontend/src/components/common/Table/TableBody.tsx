@@ -10,7 +10,7 @@ export const TableBodyRow = ({
   className,
 }: {
   children: ReactNode;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent<HTMLTableRowElement>) => void;
   className?: string;
 }) => {
   return (

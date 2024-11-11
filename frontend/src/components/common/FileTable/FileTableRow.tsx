@@ -44,10 +44,6 @@ export const FileTableRow = ({
 }) => {
   const [isRowExpanded, setIsRowExpanded] = useState(false);
 
-  const navigateToFile = useCallback((cid: string) => {
-    window.location.assign(`/drive/fs/${cid}`);
-  }, []);
-
   const renderOwnerBadge = useCallback(
     (owner: string) => {
       if (owner === user?.publicId) {
@@ -82,47 +78,75 @@ export const FileTableRow = ({
     (e) => e.publicId === user?.publicId,
   );
 
+  const stopEventPropagation = useCallback(function <
+    E extends
+      | React.MouseEvent<HTMLButtonElement | HTMLInputElement>
+      | React.KeyboardEvent<HTMLButtonElement>,
+  >(callback: () => void) {
+    return (e: E) => {
+      e.preventDefault();
+      if (e instanceof MouseEvent) {
+        e.stopImmediatePropagation();
+      } else {
+        e.stopPropagation();
+      }
+      callback();
+    };
+  }, []);
+
   const handleShare = useMemo(
-    () => () => onShareFile(file.headCid),
-    [onShareFile, file.headCid],
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() =>
+        onShareFile(file.headCid),
+      ),
+    [onShareFile, file.headCid, stopEventPropagation],
   );
   const handleDelete = useMemo(
-    () => () => onDeleteFile(file.headCid),
-    [onDeleteFile, file.headCid],
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() =>
+        onDeleteFile(file.headCid),
+      ),
+    [onDeleteFile, file.headCid, stopEventPropagation],
   );
   const handleRestore = useMemo(
-    () => () => onRestoreFile(file.headCid),
-    [onRestoreFile, file.headCid],
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() =>
+        onRestoreFile(file.headCid),
+      ),
+    [onRestoreFile, file.headCid, stopEventPropagation],
   );
   const handleToggleSelectFile = useMemo(
-    () => () => toggleSelectFile(file.headCid),
-    [toggleSelectFile, file.headCid],
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLInputElement>>(() =>
+        toggleSelectFile(file.headCid),
+      ),
+    [toggleSelectFile, file.headCid, stopEventPropagation],
   );
-  const toggleExpand = useCallback(() => {
-    setIsRowExpanded((prev) => !prev);
-  }, []);
+
+  const toggleExpand = useCallback(() => setIsRowExpanded((prev) => !prev), []);
+
+  const toggleExpandClickHandler = useMemo(
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(toggleExpand),
+    [toggleExpand, stopEventPropagation],
+  );
 
   return (
     <Fragment key={file.headCid}>
       <TableBodyRow
         className={file.type === 'folder' ? 'hover:cursor-pointer' : ''}
-        onClick={() => file.type === 'folder' && navigateToFile(file.headCid)}
       >
         <TableBodyCell className='whitespace-nowrap text-sm text-gray-500'>
           <div className='flex items-center'>
             <input
               type='checkbox'
+              readOnly={true}
               checked={selectedFiles.some((cid) => cid === file.headCid)}
-              onChange={handleToggleSelectFile}
+              onClick={handleToggleSelectFile}
               className='mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500'
             />
             {file.type === 'folder' && file.children && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleExpand();
-                }}
-              >
+              <button onClick={toggleExpandClickHandler}>
                 {isRowExpanded ? (
                   <DisplayerIcon className='rotate-90 text-accent' />
                 ) : (
@@ -260,7 +284,10 @@ export const FileTableRow = ({
             <TableBodyCell className='w-[50%]'>
               <div className='flex items-center'>
                 <input
-                  onChange={handleToggleSelectFile}
+                  onClick={stopEventPropagation(() =>
+                    toggleSelectFile(child.cid),
+                  )}
+                  readOnly={true}
                   checked={selectedFiles.some((f) => f === child.cid)}
                   type='checkbox'
                   className='mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500'

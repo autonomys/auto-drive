@@ -12,7 +12,7 @@
     "lint": "eslint . "
   },
   "dependencies": {
-    "@autonomys/auto-drive": "^0.7.4",
+    "@autonomys/auto-dag-data": "^1.0.4",
     "@polkadot/api": "^12.3.1",
     "@polkadot/types": "^13.0.1",
     "@polkadot/util-crypto": "^13.0.2",

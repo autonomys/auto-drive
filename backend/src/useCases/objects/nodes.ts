@@ -5,7 +5,7 @@ import {
   encodeNode,
   IPLDNodeData,
   MetadataType,
-} from '@autonomys/auto-drive'
+} from '@autonomys/auto-dag-data'
 import { PBNode } from '@ipld/dag-pb'
 import { CID } from 'multiformats'
 import { nodesRepository } from '../../repositories/index.js'

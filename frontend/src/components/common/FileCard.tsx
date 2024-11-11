@@ -1,7 +1,7 @@
 'use client';
 
 import bytes from 'bytes';
-import { OffchainMetadata } from '@autonomys/auto-drive';
+import { OffchainMetadata } from '@autonomys/auto-dag-data';
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
 import {
   Download,

@@ -17,7 +17,7 @@ import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadPro
 import { fileProcessingInfoRepository } from '../../repositories/uploads/fileProcessingInfo.js'
 import { FilesUseCases } from '../objects/files.js'
 import { NodesUseCases } from '../objects/index.js'
-import { cidToString, FileUploadOptions } from '@autonomys/auto-drive'
+import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -57,7 +57,7 @@ const initFileProcessing = async (upload: UploadEntry): Promise<void> => {
 const createFileUpload = async (
   user: User,
   name: string,
-  mimeType: string,
+  mimeType: string | null,
   uploadOptions: FileUploadOptions | null,
   rootId?: string | null,
   relativeId?: string | null,
@@ -114,7 +114,7 @@ const createFileInFolder = async (
   uploadId: string,
   relativeId: string,
   name: string,
-  mimeType: string,
+  mimeType: string | null,
   uploadOptions: FileUploadOptions | null,
 ): Promise<FileUpload> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId)

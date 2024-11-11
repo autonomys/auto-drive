@@ -3,7 +3,7 @@ import {
   folderMetadata,
   MetadataType,
   OffchainFileMetadata,
-} from '@autonomys/auto-drive'
+} from '@autonomys/auto-dag-data'
 import PizZip from 'pizzip'
 import { User } from '../../models/users/index.js'
 import {

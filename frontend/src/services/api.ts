@@ -1,6 +1,10 @@
+import {
+  AuthProvider,
+  createAutoDriveApi,
+  downloadFile,
+} from '@autonomys/auto-drive';
 import { ApiKey, ApiKeyWithoutSecret } from '../models/ApiKey';
 import { PaginatedResult } from '../models/common';
-import { FolderTree } from '../models/FileTree';
 import { ObjectSearchResult } from '../models/ObjectSearchResult';
 import {
   SubscriptionGranularity,
@@ -116,37 +120,6 @@ export const ApiService = {
 
     return response.json();
   },
-  uploadFolder: async (
-    tree: FolderTree,
-    files: Record<string, File>,
-  ): Promise<UploadResponse> => {
-    const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const formData = new FormData();
-
-    formData.append('folderTree', JSON.stringify(tree));
-    Object.entries(files).forEach(([fileId, file]) => {
-      formData.append(fileId, file);
-    });
-
-    const response = await fetch(`${API_BASE_URL}/objects/folder`, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        'X-Auth-Provider': session.provider,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
   fetchUploadedObjectMetadata: async (
     cid: string,
   ): Promise<UploadedObjectMetadata> => {
@@ -158,24 +131,22 @@ export const ApiService = {
 
     return response.json();
   },
-  downloadObject: async (cid: string): Promise<ReadableStream<Uint8Array>> => {
+  downloadObject: async (
+    cid: string,
+    password?: string,
+  ): Promise<AsyncIterable<Buffer>> => {
     const session = await getAuthSession();
     if (!session?.provider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/objects/${cid}/download`, {
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.provider,
-      },
+    const api = createAutoDriveApi({
+      url: API_BASE_URL,
+      provider: session.provider as AuthProvider,
+      apiKey: session.accessToken,
     });
 
-    if (!response.ok || !response.body) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.body;
+    return downloadFile(api, cid, password);
   },
   searchByCIDOrName: async (
     query: string,
