@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   app:
-    image: node:18
+    image: node:20
     container_name: node_app
     working_dir: /usr/src/app
     volumes:
