@@ -8,10 +8,11 @@ import {
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiService } from '../../services/api';
 import { OffchainMetadata } from '@autonomys/auto-dag-data';
-import { handleFileDownload, InvalidDecryptKey } from '../../utils/file';
+import { InvalidDecryptKey } from '../../utils/file';
 import { Button } from '../common/Button';
 import { shortenString } from '../../utils/misc';
 import { useEncryptionStore } from '../../states/encryption';
+import { fetchFile } from '../../services/download';
 
 export const ObjectDownloadModal = ({
   cid,
@@ -52,17 +53,7 @@ export const ObjectDownloadModal = ({
     const passwordToUse = password ?? undefined;
 
     try {
-      const download = await ApiService.downloadObject(
-        metadata.dataCid,
-        passwordToUse,
-      );
-
-      await handleFileDownload(
-        download,
-        metadata?.type,
-        metadata.name!,
-        metadata.totalSize,
-      );
+      fetchFile(metadata.dataCid, passwordToUse);
       onClose();
     } catch (e) {
       if (e instanceof InvalidDecryptKey) {
