@@ -16,3 +16,8 @@ export const asyncByChunk = async function* (
     yield accumulated;
   }
 };
+export const bufferToIterable = (buffer: Buffer): AsyncIterable<Buffer> => {
+  return (async function* () {
+    yield buffer;
+  })();
+};
