@@ -1,4 +1,4 @@
-import { cidToString } from '@autonomys/auto-drive'
+import { cidToString } from '@autonomys/auto-dag-data'
 import { CID } from 'multiformats'
 import { transactionResultsRepository } from '../../repositories/index.js'
 import { TransactionResult } from '../../models/objects/index.js'

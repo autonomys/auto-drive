@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@autonomys/auto-drive": "^0.7.4",
+    "@autonomys/auto-drive": "^1.0.5",
     "@headlessui/react": "^2.1.8",
     "@heroicons/react": "^2.1.5",
     "@ipld/dag-pb": "^4.1.2",
@@ -25,12 +25,14 @@
     "react": "^18",
     "react-dom": "^18",
     "react-hot-toast": "^2.4.1",
+    "rxjs": "^7.8.1",
     "streamsaver": "^2.0.6",
     "usehooks-ts": "^3.1.0",
     "util-browser": "^0.0.2",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@autonomys/auto-dag-data": "^1.0.4",
     "@next/eslint-plugin-next": "^15.0.2",
     "@types/bytes": "^3",
     "@types/eslint-plugin-jsx-a11y": "^6",

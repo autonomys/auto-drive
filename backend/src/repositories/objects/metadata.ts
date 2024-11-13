@@ -1,4 +1,4 @@
-import { OffchainMetadata } from '@autonomys/auto-drive'
+import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import { PaginatedResult } from '../../useCases/objects/common.js'
 

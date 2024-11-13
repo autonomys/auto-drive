@@ -11,3 +11,14 @@ export async function* streamToAsyncIterable(
     reader.releaseLock();
   }
 }
+
+export const fileStreamToAsyncIterable = async function* (
+  stream: ReadableStream,
+): AsyncIterable<Buffer> {
+  const reader = stream.getReader();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    yield Buffer.from(value);
+  }
+};

@@ -1,4 +1,3 @@
-import { constructFromFileSystemEntries, FolderTree } from '@/models/FileTree';
 import {
   Popover,
   PopoverButton,
@@ -9,16 +8,14 @@ import { FileIcon, FolderIcon } from 'lucide-react';
 import React, { useCallback, useRef, useState } from 'react';
 import { UploadingFileModal } from './UploadingFileModal';
 import { UploadingFolderModal } from './UploadingFolderModal';
+import toast from 'react-hot-toast';
 
 export function FileDropZone() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFile, setUploadingFile] = useState<File | null>(null);
-  const [uploadingFolder, setUploadingFolder] = useState<{
-    fileTree: FolderTree;
-    files: Record<string, File>;
-  } | null>(null);
+  const [uploadingFolder, setUploadingFolder] = useState<FileList | null>(null);
 
   const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -78,30 +75,35 @@ export function FileDropZone() {
     [readEntryAsFile, readEntriesPromise],
   );
 
-  const handleDrop = useCallback(
-    async (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(false);
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
 
-      const items = Array.from(e.dataTransfer.items)
-        .map((item) => item.webkitGetAsEntry()!)
-        .filter((item) => item !== null);
+    if (e.dataTransfer.items.length === 0) {
+      toast.error('No files selected');
+      return;
+    }
+    if (e.dataTransfer.items.length > 1) {
+      toast.error('Only one file can be uploaded at a time');
+      return;
+    }
 
-      const recursiveEntries = await Promise.all(
-        items.map((item) => getRecursiveEntry(item)),
-      ).then((entries) =>
-        entries
-          .flat()
-          .map(({ entry, file }) => ({ file, path: entry.fullPath.slice(1) })),
-      );
+    const item = e.dataTransfer.items[0];
 
-      const [tree, files] = constructFromFileSystemEntries(recursiveEntries);
+    const entry = item.webkitGetAsEntry();
 
-      setUploadingFolder({ fileTree: tree, files });
-    },
-    [getRecursiveEntry],
-  );
+    if (entry?.isFile) {
+      if (e.dataTransfer.files && fileInputRef.current) {
+        fileInputRef.current.files = e.dataTransfer.files;
+        fileInputRef.current.dispatchEvent(
+          new Event('change', { bubbles: true }),
+        );
+      }
+    } else if (entry?.isDirectory) {
+      toast.error('Use select folder instead of dragging');
+    }
+  }, []);
 
   const handleFileInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,15 +119,7 @@ export function FileDropZone() {
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files) {
         if (!e.target.files) return;
-
-        const [fileTree, files] = constructFromFileSystemEntries(
-          Array.from(e.target.files).map((file) => ({
-            file,
-            path: file.webkitRelativePath,
-          })),
-        );
-
-        setUploadingFolder({ fileTree, files });
+        setUploadingFolder(e.target.files);
       }
     },
     [],
@@ -153,12 +147,12 @@ export function FileDropZone() {
         ref={folderInputRef}
         onChange={handleFolderInputChange}
         className='hidden'
-        {...{ webkitdirectory: 'true' }}
+        webkitdirectory='true'
       />
       <Popover as='div' className='relative'>
         <PopoverButton as='div'>
           <div
-            className={`flex h-10 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed transition-colors ${
+            className={`flex h-20 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed transition-colors ${
               isDragging ? 'border-green-800 bg-green-50' : 'border-green-700'
             }`}
             onDragEnter={handleDragEnter}

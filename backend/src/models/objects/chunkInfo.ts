@@ -1,4 +1,4 @@
-import { cidOfNode, cidToString } from '@autonomys/auto-drive'
+import { cidOfNode, cidToString } from '@autonomys/auto-dag-data'
 import { encode, PBNode } from '@ipld/dag-pb'
 
 export interface ChunkInfo {

@@ -1,4 +1,4 @@
-import { MetadataType } from '@autonomys/auto-drive'
+import { MetadataType } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import pgFormat from 'pg-format'
 

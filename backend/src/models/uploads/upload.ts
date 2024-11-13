@@ -7,7 +7,7 @@ import {
   FileUploadOptions,
   OffchainFileMetadata,
   OffchainFolderMetadata,
-} from '@autonomys/auto-drive'
+} from '@autonomys/auto-dag-data'
 
 export enum UploadType {
   FILE = 'file',

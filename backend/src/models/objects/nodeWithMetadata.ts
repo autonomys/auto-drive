@@ -1,4 +1,4 @@
-import { IPLDNodeData } from '@autonomys/auto-drive'
+import { IPLDNodeData } from '@autonomys/auto-dag-data'
 
 export interface NodeWithMetadata {
   cid: string

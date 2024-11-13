@@ -1,7 +1,4 @@
-import { OffchainMetadata } from '@autonomys/auto-drive';
-import { decryptFile } from './encryption';
-import { streamToAsyncIterable } from './stream';
-import { decompressFileByChunks } from './compression';
+import { OffchainMetadata } from '@autonomys/auto-dag-data';
 
 export class InvalidDecryptKey extends Error {
   constructor() {
@@ -22,51 +19,33 @@ export const uploadFileContent = (file: File) => {
 };
 
 export const handleFileDownload = async (
-  stream: ReadableStream<Uint8Array>,
+  stream: AsyncIterable<Buffer>,
   type: OffchainMetadata['type'],
   name: string,
-  {
-    password,
-    compress,
-  }: {
-    password?: string;
-    compress?: boolean;
-  } = {},
-) => {
+  size: number,
+): Promise<void> => {
   const StreamSaver = await import('streamsaver');
   let writtenSize = 0;
   // Create a writable stream using StreamSaver
   const fileStream = StreamSaver.createWriteStream(
     type === 'file' ? name : `${name}.zip`,
+    { size },
   );
   const writer = fileStream.getWriter();
 
   try {
-    const mappers: ((file: AsyncIterable<Buffer>) => AsyncIterable<Buffer>)[] =
-      [];
-    if (password) {
-      mappers.push((file) => decryptFile(file, password));
-    }
-    if (compress) {
-      mappers.push(decompressFileByChunks);
-    }
-
-    const reader = mappers.reduce(
-      (file, mapper) => mapper(file),
-      streamToAsyncIterable(stream.getReader()),
-    );
-
-    for await (const chunk of reader) {
+    for await (const chunk of stream) {
       await writer.write(chunk);
       writtenSize += chunk.length;
     }
-    if (writtenSize === 0) {
-      throw new InvalidDecryptKey();
-    }
-  } catch (e) {
-    console.error(e);
-  } finally {
     writer.close();
+  } catch {
+    if (writtenSize === 0) {
+      writer.abort();
+      throw new InvalidDecryptKey();
+    } else {
+      writer.close();
+    }
   }
 };
 

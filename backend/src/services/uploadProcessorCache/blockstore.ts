@@ -3,7 +3,7 @@ import {
   decodeIPLDNodeData,
   MetadataType,
   stringToCid,
-} from '@autonomys/auto-drive'
+} from '@autonomys/auto-dag-data'
 import { Pair } from 'interface-blockstore'
 import { AwaitIterable } from 'interface-store'
 import { CID } from 'multiformats/cid'

@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { UploadService } from '../../services/upload';
 import { Dialog, Transition } from '@headlessui/react';
-import { FolderTree } from '../../models/FileTree';
 import { Button } from '../common/Button';
-import { shortenString } from '../../utils/misc';
 import { FileWarning } from 'lucide-react';
 import { useEncryptionStore } from '../../states/encryption';
 
@@ -11,7 +9,7 @@ export const UploadingFolderModal = ({
   data,
   onClose,
 }: {
-  data: { files: Record<string, File>; fileTree: FolderTree } | null;
+  data: FileList | null;
   onClose: () => void;
 }) => {
   const [password, setPassword] = useState<string>();
@@ -25,31 +23,15 @@ export const UploadingFolderModal = ({
 
     const passwordToUse = password ? password : undefined;
 
-    if (passwordToUse) {
-      const progressIterable = UploadService.createEncryptedFolderUpload(
-        data.fileTree,
-        data.files,
-        passwordToUse,
-      );
-      for await (const progress of progressIterable) {
-        setProgress(progress);
-      }
-    } else {
-      console.log('Uploading folder without encryption');
-      const progressIterable = UploadService.uploadFolder(
-        data.fileTree,
-        data.files,
-        {
-          compress: true,
-        },
-      );
-      for await (const progress of progressIterable) {
-        setProgress(progress);
-      }
-    }
+    await (
+      await UploadService.uploadFolder(data, { password: passwordToUse })
+    ).forEach((status) => {
+      setProgress(status.progress);
+    });
 
     setPasswordConfirmed(false);
     onClose();
+    window.location.reload();
   }, [data, password, onClose]);
 
   useEffect(() => {
@@ -71,8 +53,7 @@ export const UploadingFolderModal = ({
         <div className='fixed inset-0 flex items-center justify-center bg-black bg-opacity-50'>
           <div className='min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform'>
             <h3 className='mb-4 text-center text-lg font-medium'>
-              Uploading{' '}
-              <strong>{shortenString(data?.fileTree.name ?? '', 20)}</strong>
+              Uploading Folder
             </h3>
             {passwordConfirmed ? (
               <div>
