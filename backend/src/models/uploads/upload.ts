@@ -15,11 +15,11 @@ export enum UploadType {
 }
 
 export enum UploadStatus {
-  PENDING = 'pending',
+  UPLOADING = 'uploading',
+  UPLOADED = 'uploaded',
+  PUBLISHING = 'publishing',
+  ARCHIVING = 'archiving',
   COMPLETED = 'completed',
-  MIGRATING = 'migrating',
-  CANCELLED = 'cancelled',
-  FAILED = 'failed',
 }
 
 export const uploadOptionsSchema = z.object({
