@@ -1,6 +1,7 @@
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import { PaginatedResult } from '../../useCases/objects/common.js'
+import { stringify } from '../../utils/misc.js'
 
 export interface MetadataEntry {
   root_cid: string
@@ -34,7 +35,7 @@ const setMetadata = async (
 
   return db.query({
     text: 'INSERT INTO metadata (root_cid, head_cid, metadata) VALUES ($1, $2, $3) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata',
-    values: [rootCid, headCid, JSON.stringify(metadata)],
+    values: [rootCid, headCid, stringify(metadata)],
   })
 }
 

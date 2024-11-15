@@ -61,7 +61,7 @@ const processChunk = async (
     dataToProcess,
     fileBuilders,
     {
-      maxChunkSize: DEFAULT_MAX_CHUNK_SIZE,
+      maxNodeSize: DEFAULT_MAX_CHUNK_SIZE,
     },
   )
 
@@ -92,7 +92,8 @@ const completeFileProcessing = async (uploadId: string): Promise<CID> => {
   }
 
   const uploadedSize =
-    (await filePartsRepository.getUploadFilePartsSize(uploadId)) ?? 0
+    (await filePartsRepository.getUploadFilePartsSize(uploadId)) ??
+    BigInt(0).valueOf()
 
   const uploadOptions = {
     maxLinkPerNode: DEFAULT_MAX_LINK_PER_NODE,

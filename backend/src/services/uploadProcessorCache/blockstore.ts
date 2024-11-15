@@ -35,7 +35,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
 
   async put(cid: Pair['cid'], data: Uint8Array): Promise<Pair['cid']> {
     const decodedData = decodeIPLDNodeData(data)
-    const size = decodedData.size ?? 0
+    const size = decodedData.size ?? BigInt(0).valueOf()
 
     await blockstoreRepository.addBlockstoreEntry(
       this.uploadId,
@@ -111,12 +111,12 @@ export class MultiUploadBlockstore implements BaseBlockstore {
     }
   }
 
-  async getSize(key: Pair['cid']): Promise<number> {
+  async getSize(key: Pair['cid']): Promise<bigint> {
     const block = await blockstoreRepository.getByCIDWithoutData(
       this.uploadId,
       cidToString(key),
     )
 
-    return block!.node_size
+    return BigInt(block!.node_size).valueOf()
   }
 }

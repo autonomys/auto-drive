@@ -66,7 +66,8 @@ const getNodeCount = async ({
 }) => {
   const db = await getDatabase()
 
-  let query = 'SELECT count(*) FROM nodes'
+  let query =
+    'SELECT count(*) as total_count, count(piece_index) as archived_count FROM nodes'
   const params = []
   const conditions = []
 
@@ -96,12 +97,16 @@ const getNodeCount = async ({
 
   return db
     .query<{
-      count: string
+      total_count: string
+      archived_count: string
     }>({
       text: query,
       values: params,
     })
-    .then((e) => Number(e.rows[0].count))
+    .then((e) => ({
+      totalCount: Number(e.rows[0].total_count),
+      archivedCount: Number(e.rows[0].archived_count),
+    }))
 }
 
 const getArchivingNodesCID = async () => {

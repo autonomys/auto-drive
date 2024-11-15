@@ -18,12 +18,13 @@ const getUploadStatus = async (cid: string): Promise<UploadStatus> => {
     return {
       uploadedNodes: null,
       totalNodes: null,
+      archivedNodes: null,
       minimumBlockDepth: null,
       maximumBlockDepth: null,
     }
   }
 
-  const totalNodes = await nodesRepository.getNodeCount({
+  const { totalCount, archivedCount } = await nodesRepository.getNodeCount({
     rootCid: cid,
   })
   const uploadedNodes =
@@ -39,13 +40,14 @@ const getUploadStatus = async (cid: string): Promise<UploadStatus> => {
     .map((e) => e.transaction_result.blockNumber!)
     .reduce((a, b) => (a === null ? b : Math.max(a, b)), null as number | null)
 
-  const isFullyUploaded = uploadedNodes.length === totalNodes
+  const isFullyUploaded = uploadedNodes.length === totalCount
 
   const maximumBlockDepth = isFullyUploaded ? maxSeenBlockDepth : null
 
   return {
     uploadedNodes: uploadedNodes.length,
-    totalNodes,
+    totalNodes: totalCount,
+    archivedNodes: archivedCount,
     minimumBlockDepth,
     maximumBlockDepth,
   }

@@ -1,5 +1,6 @@
 import { getDatabase } from '../../drivers/pg.js'
 import { TransactionResult } from '../../models/objects/transaction.js'
+import { stringify } from '../../utils/misc.js'
 import { Node } from './nodes.js'
 
 export interface TransactionResultEntry {
@@ -15,7 +16,7 @@ const storeTransactionResult = async (
 
   await db.query({
     text: 'INSERT INTO transaction_results (cid, transaction_result) VALUES ($1, $2) ON CONFLICT (cid) DO UPDATE SET transaction_result = EXCLUDED.transaction_result',
-    values: [cid, JSON.stringify(transaction_result)],
+    values: [cid, stringify(transaction_result)],
   })
 }
 
@@ -87,6 +88,20 @@ const getUploadedNodesByRootCid = async (rootCid: string) => {
   return result
 }
 
+const getFirstNotArchivedNode = async () => {
+  const db = await getDatabase()
+
+  const result = await db
+    .query<{ block_number: number }>({
+      text: `SELECT MIN(transaction_results.transaction_result->>'blockNumber') as block_number FROM transaction_results inner join nodes 
+      on transaction_results.cid = nodes.cid 
+      where nodes.piece_index is null`,
+    })
+    .then(({ rows }) => rows.at(0)?.block_number ?? null)
+
+  return result
+}
+
 export const transactionResultsRepository = {
   storeTransactionResult,
   getTransactionResult,
@@ -94,4 +109,5 @@ export const transactionResultsRepository = {
   getHeadTransactionResults,
   getPendingUploadsByHeadCid,
   getUploadedNodesByRootCid,
+  getFirstNotArchivedNode,
 }

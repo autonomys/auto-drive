@@ -10,6 +10,7 @@ export interface ObjectInformation {
 export interface UploadStatus {
   uploadedNodes: number | null
   totalNodes: number | null
+  archivedNodes: number | null
   minimumBlockDepth: number | null
   maximumBlockDepth: number | null
 }
@@ -32,7 +33,7 @@ export type ObjectSearchResult = {
 export type ObjectSummary = {
   headCid: string
   name?: string
-  size: number
+  size: string
   owners: Owner[]
   uploadStatus: UploadStatus
 } & (
@@ -54,7 +55,7 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
         headCid: object.metadata.dataCid,
         name: object.metadata.name,
         type: object.metadata.type,
-        size: object.metadata.totalSize,
+        size: object.metadata.totalSize.toString(),
         owners: object.owners,
         children: object.metadata.children,
         uploadStatus: object.uploadStatus,
@@ -63,7 +64,7 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
         headCid: object.metadata.dataCid,
         name: object.metadata.name,
         type: object.metadata.type,
-        size: object.metadata.totalSize,
+        size: object.metadata.totalSize.toString(),
         mimeType: object.metadata.mimeType,
         uploadStatus: object.uploadStatus,
         owners: object.owners,

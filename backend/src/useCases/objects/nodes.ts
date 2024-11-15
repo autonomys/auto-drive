@@ -12,7 +12,7 @@ import { CID } from 'multiformats'
 import { nodesRepository } from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 import { getUploadBlockstore } from '../../services/uploadProcessorCache/index.js'
-import { ObjectMappingListEntry } from '../../models/objects/ObjectMapping.js'
+import { ObjectMappingListEntry } from '../../models/objects/objectMappings.js'
 import {
   asyncIterableForEach,
   asyncIterableToPromiseOfArray,
@@ -148,18 +148,25 @@ export const processNodeArchived = async (
 ) => {
   const nodes = await nodesRepository.getArchivingNodesCID()
 
-  const objects = objectMappings.v0.objects.filter((e) => {
+  console.log(`Archiving ${nodes.length} nodes`)
+
+  const objects = objectMappings.v0.objects.map((e) => {
     const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
 
     return nodes.includes(cid)
+      ? {
+          cid,
+          pieceIndex: e[1],
+          pieceOffset: e[2],
+        }
+      : undefined
   })
 
   const promises = objects.map((e) => {
-    nodesRepository.setNodeArchivingData({
-      cid: e[0],
-      pieceIndex: e[1],
-      pieceOffset: e[2],
-    })
+    if (!e) {
+      return
+    }
+    return nodesRepository.setNodeArchivingData(e)
   })
 
   await Promise.all(promises)

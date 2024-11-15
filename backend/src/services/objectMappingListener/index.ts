@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { createWS } from '../../drivers/ws.js'
-import { ObjectMappingListEntrySchema } from '../../models/objects/ObjectMapping.js'
+import { ObjectMappingListEntrySchema } from '../../models/objects/objectMappings.js'
 import { NodesUseCases } from '../../useCases/index.js'
+import { transactionResultsRepository } from '../../repositories/index.js'
 
 const start = async () => {
   const url = process.env.OBJECT_MAPPING_ARCHIVER_URL
@@ -10,6 +11,26 @@ const start = async () => {
   }
 
   const ws = createWS(url)
+
+  const blockNumber =
+    await transactionResultsRepository.getFirstNotArchivedNode()
+
+  if (!blockNumber) {
+    console.log('Subscribing to object mappings')
+    await ws.send({
+      jsonrpc: '2.0',
+      method: 'subscribe_object_mappings',
+    })
+  } else {
+    console.log('Subscribing to recover object mappings')
+    await ws.send({
+      jsonrpc: '2.0',
+      method: 'subscribe_recover_object_mappings',
+      params: {
+        blockNumber,
+      },
+    })
+  }
 
   ws.on(async (message) => {
     const { data, success } = z
@@ -30,14 +51,6 @@ const start = async () => {
       )
       await NodesUseCases.processNodeArchived(data.result)
     }
-  })
-
-  await ws.send({
-    jsonrpc: '2.0',
-    method: 'subscribe_recover_object_mappings',
-    params: {
-      blockNumber: 0,
-    },
   })
 }
 

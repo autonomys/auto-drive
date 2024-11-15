@@ -1,9 +1,10 @@
 import Websocket from 'websocket'
+import { stringify } from '../utils/misc.js'
 
 type RPCMessage = {
   jsonrpc: string
   method: string
-  params: unknown
+  params?: unknown
   id: number
 }
 
@@ -77,7 +78,7 @@ export const createWS = (endpoint: string): WS => {
       }
       on(cb)
 
-      ws.send(JSON.stringify(messageWithID))
+      ws.send(stringify(messageWithID))
     })
   }
 

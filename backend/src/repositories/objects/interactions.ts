@@ -23,13 +23,13 @@ const createInteraction = async (
   id: string,
   subscription_id: string,
   type: InteractionType,
-  size: number,
+  size: bigint,
 ): Promise<Interaction> => {
   const db = await getDatabase()
 
   const interaction = await db.query<DBInteraction>(
     'INSERT INTO interactions (id, subscription_id, type, size) VALUES ($1, $2, $3, $4) RETURNING *',
-    [id, subscription_id, type, size],
+    [id, subscription_id, type, size.toString()],
   )
 
   return mapRows(interaction.rows)[0]
