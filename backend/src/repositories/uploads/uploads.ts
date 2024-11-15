@@ -167,6 +167,17 @@ const getStatusByCID = async (cid: string): Promise<UploadStatus | null> => {
   return result.rows.at(0)?.status ?? null
 }
 
+const getUploadEntryByHeadCID = async (
+  cid: string,
+): Promise<UploadEntry | undefined> => {
+  const db = await getDatabase()
+  const result = await db.query(
+    'SELECT * FROM uploads.uploads inner join uploads.blockstore on uploads.uploads.id = uploads.blockstore.upload_id WHERE uploads.blockstore.cid = $1 and uploads.uploads.root_upload_id = uploads.uploads.id',
+    [cid],
+  )
+  return result.rows.at(0) ?? undefined
+}
+
 export const uploadsRepository = {
   createUploadEntry,
   getUploadEntryById,
@@ -177,4 +188,5 @@ export const uploadsRepository = {
   getUploadsByStatus,
   getStatusByCID,
   updateUploadStatusByRootUploadId,
+  getUploadEntryByHeadCID,
 }

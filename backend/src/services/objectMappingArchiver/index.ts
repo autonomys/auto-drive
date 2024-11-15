@@ -16,7 +16,7 @@ const start = () => {
 
   ws.send({
     jsonrpc: '2.0',
-    method: 'recover_object_mappings',
+    method: 'subscribe_object_mappings',
     params: {
       blockNumber: 0,
     },

@@ -1,13 +1,17 @@
 import { UploadStatus } from '../../models/objects/index.js'
-import {
-  nodesRepository,
-  transactionResultsRepository,
-} from '../../repositories/index.js'
+import { transactionResultsRepository } from '../../repositories/index.js'
+import { blockstoreRepository } from '../../repositories/uploads/blockstore.js'
+import { UploadsUseCases } from '../uploads/uploads.js'
 
 const getUploadStatus = async (cid: string): Promise<UploadStatus> => {
-  const totalNodes = await nodesRepository.getNodeCount({
-    rootCid: cid,
-  })
+  const upload = await UploadsUseCases.getUploadByCID(cid)
+  if (!upload) {
+    throw new Error(`Upload object not found ${cid}`)
+  }
+
+  const totalNodes = await blockstoreRepository
+    .getBlockstoreEntries(upload.id)
+    .then((e) => e.length)
   const uploadedNodes =
     await transactionResultsRepository.getUploadedNodesByRootCid(cid)
 

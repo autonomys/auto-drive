@@ -25,7 +25,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async has(key: Pair['cid']): Promise<boolean> {
-    const block = await blockstoreRepository.getByCid(
+    const block = await blockstoreRepository.getByUploadIdAndCid(
       this.uploadId,
       cidToString(key),
     )
@@ -55,7 +55,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async get(key: Pair['cid']): Promise<Uint8Array> {
-    const block = await blockstoreRepository.getByCid(
+    const block = await blockstoreRepository.getByUploadIdAndCid(
       this.uploadId,
       cidToString(key),
     )
@@ -112,7 +112,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async getSize(key: Pair['cid']): Promise<number> {
-    const block = await blockstoreRepository.getByCIDWithoutData(
+    const block = await blockstoreRepository.getByCIDAndUploadIdWithoutData(
       this.uploadId,
       cidToString(key),
     )

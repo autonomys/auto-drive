@@ -1,6 +1,7 @@
 import {
   ChunkInfo,
   cidToString,
+  decodeIPLDNodeData,
   DEFAULT_MAX_LINK_PER_NODE,
   MetadataType,
   processFolderToIPLDFormat,
@@ -148,10 +149,38 @@ const processFolderUpload = async (upload: FolderUpload): Promise<CID> => {
   return processFileTree(upload.id, upload, fileTree)
 }
 
+const getNode = async (cid: string | CID): Promise<Buffer | undefined> => {
+  const cidString = typeof cid === 'string' ? cid : cidToString(cid)
+  const node = await blockstoreRepository.getByCID(cidString)
+  if (!node) {
+    return undefined
+  }
+
+  return node.data
+}
+
+const getChunkData = async (cid: string | CID): Promise<Buffer | undefined> => {
+  const cidString = typeof cid === 'string' ? cid : cidToString(cid)
+  const node = await getNode(cidString)
+  if (!node) {
+    return undefined
+  }
+
+  const chunkData = decodeIPLDNodeData(node).data
+
+  if (!chunkData) {
+    return undefined
+  }
+
+  return Buffer.from(chunkData)
+}
+
 export const BlockstoreUseCases = {
   getFileUploadIdCID,
   getFolderUploadIdCID,
   getUploadCID,
   getChunksByNodeType,
   processFolderUpload,
+  getNode,
+  getChunkData,
 }

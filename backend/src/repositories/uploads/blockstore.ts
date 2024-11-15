@@ -1,7 +1,7 @@
 import { MetadataType } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 
-interface BlockstoreEntry {
+export interface BlockstoreEntry {
   upload_id: string
   cid: string
   node_type: MetadataType
@@ -88,7 +88,7 @@ const getByType = async (uploadId: string, nodeType: MetadataType) => {
   return result.rows.map(parseEntry)
 }
 
-const getByCid = async (uploadId: string, cid: string) => {
+const getByUploadIdAndCid = async (uploadId: string, cid: string) => {
   const db = await getDatabase()
 
   const result = await db.query<BlockstoreEntry>(
@@ -99,7 +99,21 @@ const getByCid = async (uploadId: string, cid: string) => {
   return result.rows.map(parseEntry).at(0) ?? null
 }
 
-const getByCIDWithoutData = async (uploadId: string, cid: string) => {
+const getByCID = async (cid: string) => {
+  const db = await getDatabase()
+
+  const result = await db.query<BlockstoreEntry>(
+    'SELECT * FROM uploads.blockstore WHERE cid = $1 ORDER BY sort_id ASC',
+    [cid],
+  )
+
+  return result.rows.map(parseEntry).at(0) ?? null
+}
+
+const getByCIDAndUploadIdWithoutData = async (
+  uploadId: string,
+  cid: string,
+) => {
   const db = await getDatabase()
 
   const result = await db.query<BlockstoreEntry>(
@@ -130,6 +144,17 @@ const deleteBlockstoreEntry = async (uploadId: string, cid: string) => {
   )
 }
 
+const getUploadEntryByHeadCID = async (
+  cid: string,
+): Promise<BlockstoreEntry | undefined> => {
+  const db = await getDatabase()
+  const result = await db.query(
+    'SELECT * FROM uploads.uploads WHERE cid = $1 and root_upload_id = id',
+    [cid],
+  )
+  return result.rows.at(0) ?? undefined
+}
+
 export const blockstoreRepository = {
   addBlockstoreEntry,
   addBatchBlockstoreEntries,
@@ -137,8 +162,10 @@ export const blockstoreRepository = {
   getBatchBlockstoreEntries,
   getBlockstoreEntriesWithoutData,
   getByType,
-  getByCid,
+  getByUploadIdAndCid,
+  getByCID,
   deleteBlockstoreEntry,
-  getByCIDWithoutData,
+  getByCIDAndUploadIdWithoutData,
   getByCIDAndRootUploadId,
+  getUploadEntryByHeadCID,
 }

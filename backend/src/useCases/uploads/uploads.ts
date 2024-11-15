@@ -16,7 +16,8 @@ import { filePartsRepository } from '../../repositories/uploads/fileParts.js'
 import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../repositories/uploads/fileProcessingInfo.js'
 import { FilesUseCases } from '../objects/files.js'
-import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
+import { CID, cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
+import { BlockstoreUseCases } from './blockstore.js'
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -230,6 +231,26 @@ const createSubFolderUpload = async (
   return mapTableToModel(upload) as FolderUpload
 }
 
+const getUploadCID = async (uploadId: string): Promise<CID> => {
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
+  if (!upload) {
+    throw new Error(`Upload object not found ${uploadId}`)
+  }
+
+  return upload.type === UploadType.FILE
+    ? BlockstoreUseCases.getFileUploadIdCID(uploadId)
+    : BlockstoreUseCases.getFolderUploadIdCID(uploadId)
+}
+
+const getUploadByCID = async (cid: string): Promise<Upload | undefined> => {
+  const upload = await uploadsRepository.getUploadEntryByHeadCID(cid)
+  if (!upload) {
+    return undefined
+  }
+
+  return mapTableToModel(upload)
+}
+
 export const UploadsUseCases = {
   createFileUpload,
   createFolderUpload,
@@ -238,4 +259,6 @@ export const UploadsUseCases = {
   completeUpload,
   getFileFromFolderUpload,
   createSubFolderUpload,
+  getUploadCID,
+  getUploadByCID,
 }

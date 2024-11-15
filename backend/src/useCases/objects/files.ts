@@ -6,12 +6,7 @@ import {
 } from '@autonomys/auto-dag-data'
 import PizZip from 'pizzip'
 import { User } from '../../models/users/index.js'
-import {
-  NodesUseCases,
-  ObjectUseCases,
-  OwnershipUseCases,
-  UsersUseCases,
-} from '../index.js'
+import { ObjectUseCases, OwnershipUseCases, UsersUseCases } from '../index.js'
 import { InteractionType } from '../../models/objects/interactions.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 import {
@@ -133,7 +128,9 @@ const retrieveAndReassembleFile = async function* (
   metadata: OffchainFileMetadata,
 ): AsyncIterable<Buffer> {
   if (metadata.totalChunks === 1) {
-    const chunkData = await NodesUseCases.getChunkData(metadata.chunks[0].cid)
+    const chunkData = await BlockstoreUseCases.getChunkData(
+      metadata.chunks[0].cid,
+    )
     if (!chunkData) {
       throw new Error('Chunk not found')
     }
@@ -146,7 +143,7 @@ const retrieveAndReassembleFile = async function* (
   for (let i = 0; i < metadata.chunks.length; i += CHUNK_SIZE) {
     const chunks = metadata.chunks.slice(i, i + CHUNK_SIZE)
     const chunkedData = await Promise.all(
-      chunks.map((chunk) => NodesUseCases.getChunkData(chunk.cid)),
+      chunks.map((chunk) => BlockstoreUseCases.getChunkData(chunk.cid)),
     )
 
     if (chunkedData.some((e) => e === undefined)) {
