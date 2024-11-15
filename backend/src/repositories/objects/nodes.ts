@@ -104,9 +104,38 @@ const getNodeCount = async ({
     .then((e) => Number(e.rows[0].count))
 }
 
+const getArchivingNodesCID = async () => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT cid FROM nodes WHERE piece_index IS NULL and piece_offset IS NULL',
+    })
+    .then((e) => e.rows.map((e) => e.cid))
+}
+
+const setNodeArchivingData = async ({
+  cid,
+  pieceIndex,
+  pieceOffset,
+}: {
+  cid: string
+  pieceIndex: number
+  pieceOffset: number
+}) => {
+  const db = await getDatabase()
+
+  return db.query({
+    text: 'UPDATE nodes SET piece_index = $1, piece_offset = $2 WHERE cid = $3',
+    values: [pieceIndex, pieceOffset, cid],
+  })
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
   saveNode,
   saveNodes,
+  getArchivingNodesCID,
+  setNodeArchivingData,
 }
