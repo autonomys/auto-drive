@@ -1,6 +1,7 @@
 import { TransactionResultsUseCases } from '../../useCases/index.js'
 import { safeCallback } from '../../utils/safe.js'
 import { createTransactionManager } from './transactionManager.js'
+import { Bytes } from '@polkadot/types'
 
 const state = {
   executing: false,
@@ -28,7 +29,7 @@ const processPendingUploads = safeCallback(async () => {
       return {
         module: 'system',
         method: 'remark',
-        params: [upload.encoded_node],
+        params: [Bytes.from(Buffer.from(upload.encoded_node, 'base64'))],
       }
     })
 
