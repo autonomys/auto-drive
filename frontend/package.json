@@ -30,6 +30,7 @@
     "streamsaver": "^2.0.6",
     "usehooks-ts": "^3.1.0",
     "util-browser": "^0.0.2",
+    "zod": "^3.23.8",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
