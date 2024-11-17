@@ -12,22 +12,23 @@ const start = async () => {
 
   const ws = createWS(url)
 
+  const SAFE_BLOCK_NUMBER_THRESHOLD = 100
   const blockNumber =
     await transactionResultsRepository.getFirstNotArchivedNode()
 
   if (!blockNumber) {
-    console.log('Subscribing to object mappings')
+    console.log('Subscribing to real time object mappings')
     await ws.send({
       jsonrpc: '2.0',
       method: 'subscribe_object_mappings',
     })
   } else {
-    console.log('Subscribing to recover object mappings')
+    console.log(`Subscribing to recover object mappings from ${blockNumber}`)
     await ws.send({
       jsonrpc: '2.0',
       method: 'subscribe_recover_object_mappings',
       params: {
-        blockNumber,
+        blockNumber: blockNumber - SAFE_BLOCK_NUMBER_THRESHOLD,
       },
     })
   }
