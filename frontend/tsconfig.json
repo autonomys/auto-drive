@@ -29,7 +29,7 @@
     ".next/types/**/*.ts",
     "next-auth.d.ts",
     "react-overrides.d.ts",
-    "../backend/src/models/objects/objectMappings.ts"
+    "../backend/src/models/objects/objectMappingsEntries.ts"
   ],
   "exclude": ["node_modules"]
 }
