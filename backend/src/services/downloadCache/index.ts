@@ -1,10 +1,16 @@
 import { LRUCache } from 'lru-cache'
+import { bufferToAsyncIterable } from '../../utils/async.js'
+
+const ONE_GB = 1024 ** 3
 
 const cache = new LRUCache<string, Buffer>({
-  maxSize: Number(process.env.MAX_CACHE_SIZE),
+  maxSize: Number(process.env.MAX_CACHE_SIZE ?? ONE_GB),
 })
 
-const has = (cid: string) => cache.has(cid)
+const has = (cid: string) => {
+  const has = cache.has(cid)
+  return has
+}
 
 const get = (cid: string) => {
   const value = cache.get(cid)
@@ -12,9 +18,7 @@ const get = (cid: string) => {
     return null
   }
 
-  return async function* () {
-    yield value
-  }
+  return bufferToAsyncIterable(value)
 }
 
 const set = async function* (
@@ -26,7 +30,9 @@ const set = async function* (
     buffer = Buffer.concat([buffer, chunk])
     yield chunk
   }
-  cache.set(cid, buffer)
+  cache.set(cid, buffer, {
+    sizeCalculation: (value) => value.length,
+  })
 }
 
 export const downloadCache = {

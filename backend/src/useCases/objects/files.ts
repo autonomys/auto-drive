@@ -22,7 +22,11 @@ import {
 } from '../../models/uploads/upload.js'
 import { AwaitIterable } from 'interface-store'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
-import { asyncIterableToPromiseOfArray } from '../../utils/async.js'
+import {
+  asyncIterableToPromiseOfArray,
+  bufferToAsyncIterable,
+} from '../../utils/async.js'
+import { downloadCache } from '../../services/downloadCache/index.js'
 
 const generateFileArtifacts = async (
   uploadId: string,
@@ -215,6 +219,7 @@ const downloadObject = async (
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`)
   }
+  const CACHE_THRESHOLD = 150 * 1024 * 1024
 
   const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
     reader,
@@ -224,6 +229,9 @@ const downloadObject = async (
   if (pendingCredits < metadata.totalSize) {
     throw new Error('Not enough download credits')
   }
+  if (downloadCache.has(cid)) {
+    return downloadCache.get(cid)!
+  }
 
   if (metadata.type === 'folder') {
     const zip = await retrieveAndReassembleFolderAsZip(
@@ -231,19 +239,27 @@ const downloadObject = async (
       new PizZip(),
       cid,
     )
-    return [
-      zip.generate({
-        type: 'nodebuffer',
-      }),
-    ]
+    const downloadedBuffer = zip.generate({ type: 'nodebuffer' })
+    if (metadata.totalSize < CACHE_THRESHOLD) {
+      downloadCache.set(cid, bufferToAsyncIterable(downloadedBuffer))
+    }
+    return bufferToAsyncIterable(downloadedBuffer)
   }
 
-  const data = retrieveAndReassembleFile(metadata)
+  if (downloadCache.has(cid)) {
+    return downloadCache.get(cid)!
+  }
+
+  let data = retrieveAndReassembleFile(metadata)
   await UsersUseCases.registerInteraction(
     reader,
     InteractionType.Download,
     metadata.totalSize,
   )
+
+  if (metadata.totalSize < CACHE_THRESHOLD) {
+    data = downloadCache.set(cid, data)
+  }
 
   return data
 }
