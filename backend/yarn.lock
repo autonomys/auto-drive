@@ -1942,6 +1942,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/lru-cache@npm:^7.10.10":
+  version: 7.10.10
+  resolution: "@types/lru-cache@npm:7.10.10"
+  dependencies:
+    lru-cache: "npm:*"
+  checksum: 10c0/ab85558867cb059bebd42074c1cd517eb41efb1db22b9d26dfdc58df01c83ff9c212a562b4ec3d5936418ffb03e626a0f30463026aa5fb5ced41e3b4b4af057f
+  languageName: node
+  linkType: hard
+
 "@types/markdown-it@npm:^14.1.1":
   version: 14.1.2
   resolution: "@types/markdown-it@npm:14.1.2"
@@ -3012,6 +3021,7 @@ __metadata:
     "@types/cors": "npm:^2.8.17"
     "@types/express": "npm:^4.17.21"
     "@types/jest": "npm:^29.5.12"
+    "@types/lru-cache": "npm:^7.10.10"
     "@types/multer": "npm:^1"
     "@types/node": "npm:^22.3.0"
     "@types/pg": "npm:^8.11.10"
@@ -5345,6 +5355,13 @@ __metadata:
   version: 5.2.3
   resolution: "long@npm:5.2.3"
   checksum: 10c0/6a0da658f5ef683b90330b1af76f06790c623e148222da9d75b60e266bbf88f803232dd21464575681638894a84091616e7f89557aa087fd14116c0f4e0e43d9
+  languageName: node
+  linkType: hard
+
+"lru-cache@npm:*":
+  version: 11.0.2
+  resolution: "lru-cache@npm:11.0.2"
+  checksum: 10c0/c993b8e06ead0b24b969c1dbb5b301716aed66e320e9014a80012f5febe280b438f28ff50046b2c55ff404e889351ccb332ff91f8dd175a21f5eae80e3fb155f
   languageName: node
   linkType: hard
 
