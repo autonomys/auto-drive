@@ -18,7 +18,7 @@ export const Metadata = ({ object }: { object: ObjectSummary }) => {
             </span>
           )}
         </div>
-        <p className='text-gray-500'>Size: {bytes(object.size)}</p>
+        <p className='text-gray-500'>Size: {bytes(Number(object.size))}</p>
         <p>
           CID: <span className='text-blue-500'>{object.headCid}</span>
         </p>
