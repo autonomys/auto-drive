@@ -53,7 +53,7 @@ export const ObjectDownloadModal = ({
     const passwordToUse = password ?? undefined;
 
     try {
-      fetchFile(metadata.dataCid, passwordToUse);
+      await fetchFile(metadata.dataCid, passwordToUse);
       onClose();
     } catch (e) {
       if (e instanceof InvalidDecryptKey) {
