@@ -109,7 +109,7 @@ const UploadingObject = ({
           <div>
             <p className='font-semibold'>{metadata.name}</p>
             <p className='text-sm text-gray-500'>
-              Size: {bytes(metadata.totalSize)}
+              Size: {bytes(Number(metadata.totalSize))}
             </p>
             <p className='text-sm text-gray-500'>Fees: 0 ATC</p>
           </div>
