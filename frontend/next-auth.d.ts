@@ -15,8 +15,9 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
   interface JWT {
     accessToken?: string;
-    expires_at: number;
-    refresh_token?: string;
+    exp: number;
+    iat: number;
+    refreshToken?: string;
     error?: 'RefreshTokenError';
     provider?: string;
   }

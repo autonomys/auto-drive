@@ -1,13 +1,15 @@
 import { AuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import DiscordProvider from 'next-auth/providers/discord';
+import { refreshGoogleToken } from './refreshers';
 
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_AUTH_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_AUTH_CLIENT_SECRET as string,
-      checks: [],
+      // eslint-disable-next-line camelcase
+      authorization: { params: { access_type: 'offline', prompt: 'consent' } },
     }),
     DiscordProvider({
       clientId: process.env.DISCORD_AUTH_CLIENT_ID as string,
@@ -17,11 +19,16 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async jwt({ token, account }) {
       if (account) {
-        token.accessToken = account?.access_token;
         token.provider = account?.provider;
+        token.refreshToken = account?.refresh_token;
       } else {
         console.warn('No account found');
       }
+
+      if (token.provider === 'google') {
+        return refreshGoogleToken(token);
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -36,6 +43,14 @@ export const authOptions: AuthOptions = {
         : _url.replace(_baseUrl, baseUrl);
 
       return url;
+    },
+    signIn: async ({ account }) => {
+      if (account) {
+        // eslint-disable-next-line camelcase
+        account.expires_at = Math.floor(Date.now() / 1000) + 10;
+      }
+
+      return true;
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
