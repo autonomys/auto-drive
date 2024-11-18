@@ -39,3 +39,11 @@ export const asyncIterableToPromiseOfArray = async <T>(
   }
   return result
 }
+
+export const bufferToAsyncIterable = (
+  buffer: Buffer,
+): AsyncIterable<Buffer> => {
+  return (async function* () {
+    yield buffer
+  })()
+}
