@@ -60,9 +60,6 @@ const processChunk = async (
     blockstore,
     dataToProcess,
     fileBuilders,
-    {
-      maxNodeSize: DEFAULT_MAX_CHUNK_SIZE,
-    },
   )
 
   await fileProcessingInfoRepository.updateFileProcessingInfo({

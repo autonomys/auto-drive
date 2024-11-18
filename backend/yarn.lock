@@ -32,9 +32,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.0.7":
-  version: 1.0.7
-  resolution: "@autonomys/auto-dag-data@npm:1.0.7"
+"@autonomys/auto-dag-data@npm:^1.0.8":
+  version: 1.0.8
+  resolution: "@autonomys/auto-dag-data@npm:1.0.8"
   dependencies:
     "@ipld/dag-pb": "npm:^4.1.2"
     "@peculiar/webcrypto": "npm:^1.5.0"
@@ -46,7 +46,7 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/6e11e11db4af0cefddb6fc5c11185c2cd03e29d48c33d13bec9c835f11653aca5932a7fd9f358df07134aad91a71c167c800afc83280b0439b7a861f453fe81f
+  checksum: 10c0/97b92114afa667aadccacabed0241b3e486854bd2e091e36b2d859bfd842e6f0aa4720138ba6ef9d9d3aaca8fc1d00ece0cfdf659fcb852867bcfd9dd05b771f
   languageName: node
   linkType: hard
 
@@ -3013,7 +3013,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "data-access-layer@workspace:."
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.0.7"
+    "@autonomys/auto-dag-data": "npm:^1.0.8"
     "@autonomys/auto-drive": "npm:^1.0.5"
     "@polkadot/api": "npm:^12.3.1"
     "@polkadot/types": "npm:^13.0.1"
