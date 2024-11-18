@@ -1,9 +1,10 @@
 CREATE SCHEMA IF NOT EXISTS download_cache;
 
 CREATE TABLE IF NOT EXISTS download_cache.file_parts (
-    "cid" TEXT PRIMARY KEY,
+    "cid" TEXT,
     "index" INTEGER NOT NULL,
-    "data" TEXT NOT NULL
+    "data" BYTEA NOT NULL,
+    PRIMARY KEY (cid, index)
 );
 
 CREATE TABLE IF NOT EXISTS download_cache.registry (

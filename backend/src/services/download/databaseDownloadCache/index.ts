@@ -1,3 +1,4 @@
+import { AwaitIterable } from 'interface-store'
 import { downloadCacheFilePartsRepository } from '../../../repositories/cache/fileParts.js'
 import { registryRepository } from '../../../repositories/cache/registry.js'
 import { asyncByChunk } from '../../../utils/async.js'
@@ -16,7 +17,7 @@ const config = {
 
 const internalSet = async function* (
   cid: string,
-  data: AsyncIterable<Buffer>,
+  data: AwaitIterable<Buffer>,
   size: bigint,
 ): AsyncIterable<Buffer> {
   await registryRepository.addEntry({
@@ -43,23 +44,26 @@ const updateCacheSize = async (size: bigint) => {
   if (newSize > config.maxCacheSize) {
     const entries = await registryRepository.getEntriesSortedByLastAccessedAt()
     for (const entry of entries) {
-      await registryRepository.removeEntries([entry.cid])
-      currentSize -= BigInt(entry.size)
       if (currentSize <= config.maxCacheSize) {
         break
       }
+      await registryRepository.removeEntries([entry.cid])
+      currentSize -= BigInt(entry.size)
     }
   }
 }
 
-const set = async (cid: string, data: AsyncIterable<Buffer>, size: bigint) => {
+const set = async (
+  cid: string,
+  data: AwaitIterable<Buffer>,
+  size: bigint,
+): Promise<AwaitIterable<Buffer>> => {
   if (await has(cid)) {
-    return
+    return data
   }
 
   await updateCacheSize(size)
-  const result = internalSet(cid, data, size)
-  return result
+  return internalSet(cid, data, size)
 }
 
 const get = async function* (cid: string): AsyncIterable<Buffer> {

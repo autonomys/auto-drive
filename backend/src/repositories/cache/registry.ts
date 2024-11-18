@@ -41,10 +41,10 @@ const getEntriesSortedByLastAccessedAt = async () => {
 const getTotalSize = async () => {
   const db = await getDatabase()
   return db
-    .query<{ size: string }>({
+    .query<{ size: string | null }>({
       text: 'SELECT SUM(size) as size FROM download_cache.registry',
     })
-    .then((result) => BigInt(result.rows[0].size).valueOf())
+    .then((result) => BigInt(result.rows[0].size ?? '0').valueOf())
 }
 
 const getEntry = async (cid: string) => {

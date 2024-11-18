@@ -3,6 +3,7 @@ import {
   folderMetadata,
   MetadataType,
   OffchainFileMetadata,
+  OffchainMetadata,
 } from '@autonomys/auto-dag-data'
 import PizZip from 'pizzip'
 import { User } from '../../models/users/index.js'
@@ -138,7 +139,7 @@ const generateArtifacts = async (
 
 const retrieveAndReassembleFile = async function* (
   metadata: OffchainFileMetadata,
-): AsyncIterable<Buffer> {
+): AwaitIterable<Buffer> {
   if (metadata.totalChunks === 1) {
     const chunkData = await NodesUseCases.getChunkData(metadata.chunks[0].cid)
     if (!chunkData) {
@@ -161,8 +162,6 @@ const retrieveAndReassembleFile = async function* (
     }
 
     yield Buffer.concat(chunkedData.map((e) => e!))
-
-    console.log(`Retrieved ${chunks.length} chunks`)
   }
 }
 
@@ -296,10 +295,17 @@ const handleFolderUploadFinalization = async (
   return metadata.dataCid
 }
 
+const retrieveObject = async (
+  metadata: OffchainMetadata,
+): Promise<AwaitIterable<Buffer>> => {
+  return metadata.type === 'folder'
+    ? await retrieveAndReassembleFolderAsZip(new PizZip(), metadata.dataCid)
+    : retrieveAndReassembleFile(metadata)
+}
+
 export const FilesUseCases = {
   handleFileUploadFinalization,
   handleFolderUploadFinalization,
   downloadObject,
-  retrieveAndReassembleFolderAsZip,
-  retrieveAndReassembleFile,
+  retrieveObject,
 }

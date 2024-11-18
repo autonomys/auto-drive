@@ -1,5 +1,6 @@
 import { LRUCache } from 'lru-cache'
 import { bufferToAsyncIterable } from '../../../utils/async.js'
+import { AwaitIterable } from 'interface-store'
 
 const ONE_GB = 1024 ** 3
 
@@ -23,7 +24,7 @@ const get = (cid: string) => {
 
 const set = async function* (
   cid: string,
-  value: AsyncIterable<Buffer>,
+  value: AwaitIterable<Buffer>,
 ): AsyncIterable<Buffer> {
   let buffer = Buffer.alloc(0)
   for await (const chunk of value) {
