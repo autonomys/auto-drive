@@ -1,4 +1,5 @@
 import {
+  cidFromBlakeHash,
   cidOfNode,
   cidToString,
   decodeIPLDNodeData,
@@ -11,6 +12,7 @@ import { CID } from 'multiformats'
 import { nodesRepository } from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 import { getUploadBlockstore } from '../../services/uploadProcessorCache/index.js'
+import { ObjectMappingListEntry } from '../../models/objects/objectMappings.js'
 import {
   asyncIterableForEach,
   asyncIterableToPromiseOfArray,
@@ -141,10 +143,42 @@ const migrateFromBlockstoreToNodesTable = async (
   }
 }
 
+export const processNodeArchived = async (
+  objectMappings: ObjectMappingListEntry,
+) => {
+  const nodes = await nodesRepository.getArchivingNodesCID()
+
+  console.log(`Archiving ${nodes.length} nodes`)
+
+  const objects = objectMappings.v0.objects.map((e) => {
+    const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
+
+    return nodes.includes(cid)
+      ? {
+          cid,
+          pieceIndex: e[1],
+          pieceOffset: e[2],
+        }
+      : undefined
+  })
+
+  const promises = objects.map((e) => {
+    if (!e) {
+      return
+    }
+    return nodesRepository.setNodeArchivingData(e)
+  })
+
+  await Promise.all(promises)
+
+  return objects
+}
+
 export const NodesUseCases = {
   getNode,
   saveNode,
   getChunkData,
   saveNodes,
   migrateFromBlockstoreToNodesTable,
+  processNodeArchived,
 }

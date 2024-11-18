@@ -66,7 +66,8 @@ const getNodeCount = async ({
 }) => {
   const db = await getDatabase()
 
-  let query = 'SELECT count(*) FROM nodes'
+  let query =
+    'SELECT count(*) as total_count, count(piece_index) as archived_count FROM nodes'
   const params = []
   const conditions = []
 
@@ -96,12 +97,43 @@ const getNodeCount = async ({
 
   return db
     .query<{
-      count: string
+      total_count: string
+      archived_count: string
     }>({
       text: query,
       values: params,
     })
-    .then((e) => Number(e.rows[0].count))
+    .then((e) => ({
+      totalCount: Number(e.rows[0].total_count),
+      archivedCount: Number(e.rows[0].archived_count),
+    }))
+}
+
+const getArchivingNodesCID = async () => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT cid FROM nodes WHERE piece_index IS NULL and piece_offset IS NULL',
+    })
+    .then((e) => e.rows.map((e) => e.cid))
+}
+
+const setNodeArchivingData = async ({
+  cid,
+  pieceIndex,
+  pieceOffset,
+}: {
+  cid: string
+  pieceIndex: number
+  pieceOffset: number
+}) => {
+  const db = await getDatabase()
+
+  return db.query({
+    text: 'UPDATE nodes SET piece_index = $1, piece_offset = $2 WHERE cid = $3',
+    values: [pieceIndex, pieceOffset, cid],
+  })
 }
 
 export const nodesRepository = {
@@ -109,4 +141,6 @@ export const nodesRepository = {
   getNodeCount,
   saveNode,
   saveNodes,
+  getArchivingNodesCID,
+  setNodeArchivingData,
 }

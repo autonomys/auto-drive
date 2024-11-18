@@ -221,7 +221,7 @@ const getPendingCreditsByUserAndType = async (
 const registerInteraction = async (
   userOrPublicId: UserOrPublicId,
   type: InteractionType,
-  size: number,
+  size: bigint,
 ) => {
   const subscription =
     await SubscriptionsUseCases.getSubscription(userOrPublicId)

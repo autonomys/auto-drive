@@ -28,7 +28,8 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     "next-auth.d.ts",
-    "react-overrides.d.ts"
+    "react-overrides.d.ts",
+    "../backend/src/models/objects/objectMappingsEntries.ts"
   ],
   "exclude": ["node_modules"]
 }

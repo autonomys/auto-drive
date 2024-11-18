@@ -12,7 +12,7 @@
     "lint": "eslint . "
   },
   "dependencies": {
-    "@autonomys/auto-dag-data": "^1.0.5",
+    "@autonomys/auto-dag-data": "^1.0.7",
     "@autonomys/auto-drive": "^1.0.5",
     "@polkadot/api": "^12.3.1",
     "@polkadot/types": "^13.0.1",
@@ -30,6 +30,7 @@
     "pg-format": "^1.0.4",
     "pizzip": "^3.1.7",
     "uuid": "^10.0.0",
+    "websocket": "^1.0.35",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -40,6 +41,7 @@
     "@types/pg": "^8.11.10",
     "@types/pg-format": "^1",
     "@types/uuid": "^10",
+    "@types/websocket": "^1",
     "@typescript-eslint/eslint-plugin": "^8.13.0",
     "@typescript-eslint/parser": "^8.13.0",
     "blockstore-core": "^5.0.2",

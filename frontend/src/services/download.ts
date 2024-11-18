@@ -79,7 +79,7 @@ const fetchFromApi = async (cid: string, password?: string) => {
     download,
     metadata?.type,
     metadata.name!,
-    metadata.totalSize,
+    Number(metadata.totalSize),
   );
 };
 
@@ -100,6 +100,6 @@ const fetchFromCache = async (cid: string) => {
     bufferToIterable(buffer),
     metadata.type,
     metadata.name!,
-    metadata.totalSize,
+    Number(metadata.totalSize),
   );
 };

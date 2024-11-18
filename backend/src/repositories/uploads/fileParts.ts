@@ -45,17 +45,17 @@ const getChunkByUploadIdAndPartIndex = async (
 
 const getUploadFilePartsSize = async (
   uploadId: string,
-): Promise<number | null> => {
+): Promise<bigint | null> => {
   const db = await getDatabase()
 
   return db
     .query<{
-      total_size: number
+      total_size: string
     }>(
       'SELECT SUM(LENGTH(data)) AS total_size FROM uploads.file_parts WHERE upload_id = $1',
       [uploadId],
     )
-    .then((result) => result.rows.at(0)?.total_size ?? 0)
+    .then((result) => BigInt(result.rows.at(0)?.total_size ?? '0').valueOf())
 }
 
 export const filePartsRepository = {

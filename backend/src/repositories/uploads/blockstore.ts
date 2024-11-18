@@ -5,14 +5,14 @@ interface BlockstoreEntry {
   upload_id: string
   cid: string
   node_type: MetadataType
-  node_size: number
+  node_size: bigint
   data: Buffer
 }
 
 const parseEntry = (entry: BlockstoreEntry) => {
   return {
     ...entry,
-    node_size: Number(entry.node_size),
+    node_size: entry.node_size.toString(),
   }
 }
 
@@ -20,7 +20,7 @@ const addBlockstoreEntry = async (
   uploadId: string,
   cid: string,
   nodeType: MetadataType,
-  nodeSize: number,
+  nodeSize: bigint,
   data: Buffer,
 ) => {
   const db = await getDatabase()

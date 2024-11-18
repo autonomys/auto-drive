@@ -196,7 +196,7 @@ export const FileTableRow = ({
           </div>
         </TableBodyCell>
         <TableBodyCell>{getTypeFromMetadata(file)}</TableBodyCell>
-        <TableBodyCell>{bytes(file.size)}</TableBodyCell>
+        <TableBodyCell>{bytes(Number(file.size))}</TableBodyCell>
         <TableBodyCell>
           {owner ? renderOwnerBadge(owner) : 'Unknown'}
         </TableBodyCell>
@@ -308,7 +308,7 @@ export const FileTableRow = ({
               <span>{child.type === 'file' ? 'File' : 'Folder'}</span>
             </TableBodyCell>
             <TableBodyCell>
-              <span>{bytes(child.totalSize)}</span>
+              <span>{bytes(Number(child.totalSize))}</span>
             </TableBodyCell>
             <TableBodyCell>
               {owner ? renderOwnerBadge(owner) : 'Unknown'}

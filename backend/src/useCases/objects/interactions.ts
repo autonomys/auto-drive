@@ -5,7 +5,7 @@ import { interactionsRepository } from '../../repositories/objects/interactions.
 const createInteraction = async (
   subscriptionId: string,
   type: InteractionType,
-  size: number,
+  size: bigint,
 ): Promise<void> => {
   await interactionsRepository.createInteraction(
     v4(),

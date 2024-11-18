@@ -90,7 +90,7 @@ export const FileCard = ({
           </PopoverButton>
         </div>
         <h2 className='mb-2 text-lg font-semibold text-gray-800'>{name}</h2>
-        <p className='mb-4 text-gray-500'>Size: {bytes(totalSize)}</p>
+        <p className='mb-4 text-gray-500'>Size: {bytes(Number(totalSize))}</p>
         <button
           onClick={handleDownloadClick}
           className='flex w-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600'

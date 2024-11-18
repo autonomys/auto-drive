@@ -9,6 +9,7 @@ export interface UploadedObjectMetadata {
 export interface UploadStatus {
   uploadedNodes: number;
   totalNodes: number;
+  archivedNodes: number | null;
   minimumBlockDepth: number | null;
   maximumBlockDepth: number | null;
 }

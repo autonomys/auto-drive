@@ -9,12 +9,13 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@autonomys/auto-drive": "^1.0.5",
+    "@autonomys/auto-drive": "^1.0.7",
     "@headlessui/react": "^2.1.8",
     "@heroicons/react": "^2.1.5",
     "@ipld/dag-pb": "^4.1.2",
     "@peculiar/webcrypto": "^1.5.0",
     "@uidotdev/usehooks": "^2.4.1",
+    "byte-size": "^9.0.0",
     "bytes": "^3.1.2",
     "fflate": "^0.8.2",
     "jszip": "^3.10.1",
@@ -29,11 +30,13 @@
     "streamsaver": "^2.0.6",
     "usehooks-ts": "^3.1.0",
     "util-browser": "^0.0.2",
+    "zod": "^3.23.8",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@autonomys/auto-dag-data": "^1.0.4",
+    "@autonomys/auto-dag-data": "^1.0.7",
     "@next/eslint-plugin-next": "^15.0.2",
+    "@types/byte-size": "^8.1.2",
     "@types/bytes": "^3",
     "@types/eslint-plugin-jsx-a11y": "^6",
     "@types/node": "^20",

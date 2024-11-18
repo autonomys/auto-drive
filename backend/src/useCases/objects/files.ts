@@ -48,7 +48,10 @@ const generateFileArtifacts = async (
     )
   }
 
-  const totalSize = chunks.reduce((acc, e) => acc + Number(e.size), 0)
+  const totalSize = chunks.reduce(
+    (acc, e) => acc + e.size.valueOf(),
+    BigInt(0).valueOf(),
+  )
 
   const metadata = fileMetadata(
     cid,
@@ -273,7 +276,7 @@ const handleFileUploadFinalization = async (
   await UsersUseCases.registerInteraction(
     user,
     InteractionType.Upload,
-    metadata.totalSize,
+    metadata.totalSize.valueOf(),
   )
 
   return metadata.dataCid

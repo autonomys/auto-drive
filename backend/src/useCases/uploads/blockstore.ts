@@ -68,7 +68,7 @@ const getChunksByNodeType = async (
   return blockstoreEntries
     .filter((e) => e.node_type === nodeType)
     .map((block) => ({
-      size: block.node_size,
+      size: BigInt(block.node_size).valueOf(),
       cid: block.cid,
     }))
 }
@@ -121,7 +121,10 @@ const processFileTree = async (
     ),
   )
 
-  const totalSize = childrenNodesLengths.reduce((acc, curr) => acc + curr, 0)
+  const totalSize = childrenNodesLengths.reduce(
+    (acc, curr) => acc + BigInt(curr).valueOf(),
+    BigInt(0).valueOf(),
+  )
 
   return processFolderToIPLDFormat(
     blockstore,

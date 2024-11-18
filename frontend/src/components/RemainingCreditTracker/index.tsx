@@ -31,8 +31,13 @@ export const RemainingCreditTracker = ({
           <div>
             <div className='mb-1 flex justify-between text-sm text-gray-600'>
               <span>
-                <span className='text-primary'>{bytes(uploadUsed)}</span>/
-                <span className='text-gray-500'>{bytes(uploadLimit)}</span>
+                <span className='text-primary'>
+                  {bytes(Number(uploadUsed))}
+                </span>
+                /
+                <span className='text-gray-500'>
+                  {bytes(Number(uploadLimit))}
+                </span>
               </span>
               <span className='text-secondary px-2'>
                 <Upload className='h-4 w-4' />

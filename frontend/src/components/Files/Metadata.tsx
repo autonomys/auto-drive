@@ -7,10 +7,18 @@ export const Metadata = ({ object }: { object: ObjectSummary }) => {
   return (
     <div className='rounded-lg border border-[#202124] border-opacity-20 bg-white p-4 text-xs'>
       <div className='mb-4 flex flex-col'>
-        <h4 className='text-wrap text-sm font-medium text-black'>
-          {object.name}
-        </h4>
-        <p className='text-gray-500'>Size: {bytes(object.size)}</p>
+        <div className='flex justify-between'>
+          <h4 className='text-wrap text-sm font-medium text-black'>
+            {object.name}
+          </h4>
+          {object.uploadStatus.archivedNodes ===
+            object.uploadStatus.totalNodes && (
+            <span className='rounded-md bg-green-100 px-2 py-1 font-semibold text-black'>
+              ARCHIVED
+            </span>
+          )}
+        </div>
+        <p className='text-gray-500'>Size: {bytes(Number(object.size))}</p>
         <p>
           CID: <span className='text-blue-500'>{object.headCid}</span>
         </p>
@@ -46,7 +54,9 @@ export const Metadata = ({ object }: { object: ObjectSummary }) => {
         </div>
         <div className='flex'>
           <span>Archive blocks count:</span>
-          <span className='ml-[4px]'>0</span>
+          <span className='ml-[4px]'>
+            {object.uploadStatus.archivedNodes ?? 'N/A'}
+          </span>
         </div>
       </div>
       <div className='flex justify-end'>
