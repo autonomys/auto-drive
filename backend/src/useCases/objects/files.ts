@@ -26,7 +26,7 @@ import {
   asyncIterableToPromiseOfArray,
   bufferToAsyncIterable,
 } from '../../utils/async.js'
-import { downloadCache } from '../../services/downloadCache/index.js'
+import { downloadService } from '../../services/download/index.js'
 
 const generateFileArtifacts = async (
   uploadId: string,
@@ -167,10 +167,9 @@ const retrieveAndReassembleFile = async function* (
 }
 
 const retrieveAndReassembleFolderAsZip = async (
-  reader: User,
   parent: PizZip,
   cid: string,
-): Promise<PizZip> => {
+): Promise<AwaitIterable<Buffer>> => {
   const metadata = await ObjectUseCases.getMetadata(cid)
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`)
@@ -191,7 +190,7 @@ const retrieveAndReassembleFolderAsZip = async (
       .map(async (e) => {
         const data = Buffer.concat(
           await asyncIterableToPromiseOfArray(
-            await downloadObject(reader, e.cid),
+            await downloadService.download(e.cid),
           ),
         )
 
@@ -204,11 +203,11 @@ const retrieveAndReassembleFolderAsZip = async (
     ...metadata.children
       .filter((e) => e.type === 'folder')
       .map(async (e) => {
-        return retrieveAndReassembleFolderAsZip(reader, folder, e.cid)
+        return retrieveAndReassembleFolderAsZip(folder, e.cid)
       }),
   ])
 
-  return folder
+  return bufferToAsyncIterable(folder.generate({ type: 'nodebuffer' }))
 }
 
 const downloadObject = async (
@@ -219,7 +218,6 @@ const downloadObject = async (
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`)
   }
-  const CACHE_THRESHOLD = 150 * 1024 * 1024
 
   const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
     reader,
@@ -229,39 +227,16 @@ const downloadObject = async (
   if (pendingCredits < metadata.totalSize) {
     throw new Error('Not enough download credits')
   }
-  if (downloadCache.has(cid)) {
-    return downloadCache.get(cid)!
-  }
 
-  if (metadata.type === 'folder') {
-    const zip = await retrieveAndReassembleFolderAsZip(
-      reader,
-      new PizZip(),
-      cid,
-    )
-    const downloadedBuffer = zip.generate({ type: 'nodebuffer' })
-    if (metadata.totalSize < CACHE_THRESHOLD) {
-      downloadCache.set(cid, bufferToAsyncIterable(downloadedBuffer))
-    }
-    return bufferToAsyncIterable(downloadedBuffer)
-  }
+  const download = await downloadService.download(cid)
 
-  if (downloadCache.has(cid)) {
-    return downloadCache.get(cid)!
-  }
-
-  let data = retrieveAndReassembleFile(metadata)
   await UsersUseCases.registerInteraction(
     reader,
     InteractionType.Download,
     metadata.totalSize,
   )
 
-  if (metadata.totalSize < CACHE_THRESHOLD) {
-    data = downloadCache.set(cid, data)
-  }
-
-  return data
+  return download
 }
 
 const handleFileUploadFinalization = async (
@@ -325,4 +300,6 @@ export const FilesUseCases = {
   handleFileUploadFinalization,
   handleFolderUploadFinalization,
   downloadObject,
+  retrieveAndReassembleFolderAsZip,
+  retrieveAndReassembleFile,
 }

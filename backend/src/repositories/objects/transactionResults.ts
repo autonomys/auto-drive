@@ -61,20 +61,6 @@ const getPendingUploads = async (limit: number = 100) => {
   return result
 }
 
-const getPendingUploadsByHeadCid = async (headCid: string) => {
-  const db = await getDatabase()
-  const result = await db
-    .query<Node>({
-      text: `
-    select tr.* from transaction_results tr join nodes n on tr.cid = n.cid where n.head_cid = $1 and tr.transaction_result->>'blockNumber' is not null order by tr.transaction_result->>'blockNumber' asc
-  `,
-      values: [headCid],
-    })
-    .then(({ rows }) => rows)
-
-  return result
-}
-
 const getUploadedNodesByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
   const result = await db
@@ -107,7 +93,6 @@ export const transactionResultsRepository = {
   getTransactionResult,
   getPendingUploads,
   getHeadTransactionResults,
-  getPendingUploadsByHeadCid,
   getUploadedNodesByRootCid,
   getFirstNotArchivedNode,
 }

@@ -1,5 +1,5 @@
 import { LRUCache } from 'lru-cache'
-import { bufferToAsyncIterable } from '../../utils/async.js'
+import { bufferToAsyncIterable } from '../../../utils/async.js'
 
 const ONE_GB = 1024 ** 3
 
@@ -35,7 +35,7 @@ const set = async function* (
   })
 }
 
-export const downloadCache = {
+export const memoryDownloadCache = {
   has,
   get,
   set,
