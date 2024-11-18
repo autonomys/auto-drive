@@ -31,7 +31,5 @@ export const refreshGoogleToken = async (token: JWT) => {
   token.accessToken = newTokens.access_token;
   token.expires_at = Math.floor(Date.now() / 1000 + newTokens.expires_in);
 
-  console.log(`Refreshed Google token, expires at ${token.expires_at}`);
-
   return token;
 };
