@@ -25,10 +25,7 @@ export const authOptions: AuthOptions = {
         console.warn('No account found');
       }
 
-      if (
-        token.provider === 'google' &&
-        (Date.now() >= token.exp * 1000 || !token.exp)
-      ) {
+      if (token.provider === 'google') {
         return refreshGoogleToken(token);
       }
 
@@ -48,8 +45,6 @@ export const authOptions: AuthOptions = {
       return url;
     },
     signIn: async ({ account }) => {
-      console.log('Sign in callback', account);
-
       if (account) {
         // eslint-disable-next-line camelcase
         account.expires_at = Math.floor(Date.now() / 1000) + 10;

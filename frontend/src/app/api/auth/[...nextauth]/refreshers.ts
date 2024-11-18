@@ -29,7 +29,8 @@ export const refreshGoogleToken = async (token: JWT) => {
   };
 
   token.accessToken = newTokens.access_token;
-  token.expires_at = Math.floor(Date.now() / 1000 + newTokens.expires_in);
+
+  token.exp = Math.floor(Date.now() / 1000 + newTokens.expires_in);
 
   return token;
 };
