@@ -39,8 +39,8 @@ const internalSet = async function* (
 }
 
 const updateCacheSize = async (size: bigint) => {
-  let currentSize = await registryRepository.getTotalSize()
-  const newSize = currentSize + size
+  let currentSize = BigInt(await registryRepository.getTotalSize())
+  const newSize = currentSize + BigInt(size)
   if (newSize > config.maxCacheSize) {
     const entries = await registryRepository.getEntriesSortedByLastAccessedAt()
     for (const entry of entries) {
