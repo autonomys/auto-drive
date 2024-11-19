@@ -67,6 +67,16 @@ const MAX_CACHEABLE_FILE_SIZE = 150 * MB;
 const fetchFromApi = async (cid: string, password?: string) => {
   const { metadata } = await ApiService.fetchUploadedObjectMetadata(cid);
 
+  const StreamSaver = await import('streamsaver');
+
+  // Create a writable stream using StreamSaver
+  const fileStream = StreamSaver.createWriteStream(
+    metadata.type === 'file' ? metadata.name! : `${metadata.name!}.zip`,
+    { size: Number(metadata.totalSize) },
+  );
+  const writer = fileStream.getWriter();
+  writer.write(Buffer.alloc(0));
+
   let download = await ApiService.downloadObject(metadata.dataCid, password);
 
   if (metadata.totalSize < MAX_CACHEABLE_FILE_SIZE) {
@@ -75,12 +85,7 @@ const fetchFromApi = async (cid: string, password?: string) => {
     }).then((buffer) => saveFileToCache(cid, buffer));
   }
 
-  await handleFileDownload(
-    download,
-    metadata?.type,
-    metadata.name!,
-    Number(metadata.totalSize),
-  );
+  await handleFileDownload(download, writer);
 };
 
 const fetchFromCache = async (cid: string) => {
@@ -96,10 +101,15 @@ const fetchFromCache = async (cid: string) => {
 
   const { metadata } = await ApiService.fetchUploadedObjectMetadata(cid);
 
-  await handleFileDownload(
-    bufferToIterable(buffer),
-    metadata.type,
-    metadata.name!,
-    Number(metadata.totalSize),
+  const StreamSaver = await import('streamsaver');
+
+  // Create a writable stream using StreamSaver
+  const fileStream = StreamSaver.createWriteStream(
+    metadata.type === 'file' ? metadata.name! : `${metadata.name!}.zip`,
+    { size: Number(metadata.totalSize) },
   );
+  const writer = fileStream.getWriter();
+  writer.write(Buffer.alloc(0));
+
+  await handleFileDownload(bufferToIterable(buffer), writer);
 };
