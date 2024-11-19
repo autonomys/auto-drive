@@ -76,7 +76,9 @@ export const ObjectDownloadModal = ({
   }, [passwordOrNotEncrypted, onDownload, isDownloading]);
 
   const view = useMemo(() => {
-    if (!metadata) return <></>;
+    if (!metadata) {
+      return <DialogTitle>Fetching metadata...</DialogTitle>;
+    }
 
     if (passwordOrNotEncrypted) {
       return <DialogTitle>Download starting...</DialogTitle>;
