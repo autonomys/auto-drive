@@ -21,11 +21,12 @@ export const authOptions: AuthOptions = {
       if (account) {
         token.provider = account?.provider;
         token.refreshToken = account?.refresh_token;
+        token.accessToken = account?.access_token;
       } else {
         console.warn('No account found');
       }
 
-      if (token.provider === 'google') {
+      if (token.provider === 'google' && Date.now() >= token.exp * 1000) {
         return refreshGoogleToken(token);
       }
 
