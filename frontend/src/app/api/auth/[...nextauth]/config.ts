@@ -37,22 +37,6 @@ export const authOptions: AuthOptions = {
       session.provider = token.provider;
       return session;
     },
-    async redirect({ url: _url, baseUrl: _baseUrl }) {
-      const baseUrl = process.env.URL || _baseUrl;
-      const url = _url.startsWith('/')
-        ? `${baseUrl}${_url}`
-        : _url.replace(_baseUrl, baseUrl);
-
-      return url;
-    },
-    signIn: async ({ account }) => {
-      if (account) {
-        // eslint-disable-next-line camelcase
-        account.expires_at = Math.floor(Date.now() / 1000) + 10;
-      }
-
-      return true;
-    },
   },
   secret: process.env.NEXTAUTH_SECRET,
 };
