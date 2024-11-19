@@ -13,7 +13,7 @@ export const Metadata = ({ object }: { object: ObjectSummary }) => {
           </h4>
           {object.uploadStatus.archivedNodes ===
             object.uploadStatus.totalNodes && (
-            <span className='rounded-md bg-green-100 px-2 py-1 font-semibold text-black'>
+            <span className='h-fit rounded-md bg-green-100 px-2 py-1 font-semibold text-black'>
               ARCHIVED
             </span>
           )}
