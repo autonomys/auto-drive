@@ -1,6 +1,6 @@
 import pg from 'pg'
 
-let db: pg.Client
+let db: pg.Client | undefined
 
 const createDB = async (): Promise<pg.Client> => {
   const client = new pg.Client({
@@ -18,4 +18,11 @@ export const getDatabase = async () => {
   }
 
   return db
+}
+
+export const closeDatabase = async () => {
+  if (db) {
+    await db.end()
+    db = undefined
+  }
 }

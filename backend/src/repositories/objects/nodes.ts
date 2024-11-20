@@ -53,6 +53,28 @@ const getNode = async (cid: string) => {
     .then((e) => (e.rows.length > 0 ? e.rows[0] : undefined))
 }
 
+const getNodesByHeadCid = async (headCid: string) => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT * FROM nodes WHERE head_cid = $1',
+      values: [headCid],
+    })
+    .then((e) => e.rows)
+}
+
+const getNodesByRootCid = async (rootCid: string) => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT * FROM nodes WHERE root_cid = $1',
+      values: [rootCid],
+    })
+    .then((e) => e.rows)
+}
+
 const getNodeCount = async ({
   type,
   cid,
@@ -143,4 +165,6 @@ export const nodesRepository = {
   saveNodes,
   getArchivingNodesCID,
   setNodeArchivingData,
+  getNodesByHeadCid,
+  getNodesByRootCid,
 }
