@@ -31,9 +31,12 @@ const set = async function* (
     buffer = Buffer.concat([buffer, chunk])
     yield chunk
   }
-  cache.set(cid, buffer, {
-    sizeCalculation: (value) => value.length,
-  })
+
+  if (buffer.length > 0) {
+    cache.set(cid, buffer, {
+      sizeCalculation: (value) => value.length,
+    })
+  }
 }
 
 export const memoryDownloadCache = {

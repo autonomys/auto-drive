@@ -37,6 +37,7 @@ export const ObjectDownloadModal = ({
       setPassword(undefined);
       setPasswordConfirmed(false);
       setIsDownloading(false);
+      setWrongPassword(false);
     } else {
       ApiService.fetchUploadedObjectMetadata(cid).then(({ metadata }) => {
         setMetadata(metadata);

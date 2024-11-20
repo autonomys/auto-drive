@@ -20,12 +20,6 @@ const internalSet = async function* (
   data: AwaitIterable<Buffer>,
   size: bigint,
 ): AsyncIterable<Buffer> {
-  await registryRepository.addEntry({
-    cid,
-    size: size.toString(),
-    last_accessed_at: new Date(),
-  })
-
   let i = 0
   for await (const chunk of asyncByChunk(data, config.chunkSize)) {
     await downloadCacheFilePartsRepository.addFilePart({
@@ -35,6 +29,14 @@ const internalSet = async function* (
     })
     yield chunk
     i++
+  }
+
+  if (i > 0) {
+    await registryRepository.addEntry({
+      cid,
+      size: size.toString(),
+      last_accessed_at: new Date(),
+    })
   }
 }
 
