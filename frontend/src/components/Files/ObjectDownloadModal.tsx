@@ -83,6 +83,12 @@ export const ObjectDownloadModal = ({
     }
   }, [passwordOrNotEncrypted, onDownload, isDownloading]);
 
+  useEffect(() => {
+    if (wrongPassword) {
+      toast.dismiss(toastId);
+    }
+  }, [wrongPassword]);
+
   const view = useMemo(() => {
     if (!metadata) {
       return null;
