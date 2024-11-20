@@ -8,7 +8,7 @@
     "build": "tsc",
     "start:server": "node --loader ts-node/esm src/server.ts",
     "start": "node --loader ts-node/esm",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --coverage",
     "lint": "eslint . "
   },
   "dependencies": {
