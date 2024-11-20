@@ -18,7 +18,6 @@ import {
   cidToString,
 } from '@autonomys/auto-dag-data'
 import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
-import { randomBytes } from 'crypto'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
 import { asyncIterableToPromiseOfArray } from '../../../src/utils/async.js'
 import {
