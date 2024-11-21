@@ -29,13 +29,6 @@ const processPendingUploads = safeCallback(async () => {
     const transactions = pendingUploads.map((upload) => {
       const buffer = Buffer.from(upload.encoded_node, 'base64')
 
-      console.log(
-        buffer.toString('hex') ==
-          Buffer.from(Bytes.from(compactAddLength(buffer)).buffer).toString(
-            'hex',
-          ),
-      )
-
       return {
         module: 'system',
         method: 'remark',

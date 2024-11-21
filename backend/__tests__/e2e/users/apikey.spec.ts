@@ -3,10 +3,10 @@ import { ApiKeysUseCases } from '../../../src/useCases/users/apikeys'
 import { UsersUseCases } from '../../../src/useCases/users/users'
 import { PreconditionError } from '../../utils/error'
 import { closeDatabase, getDatabase } from '../../../src/drivers/pg'
-import { MOCK_UNONBOARDED_USER } from './user.spec'
 import { apiKeysRepository } from '../../../src/repositories'
 import { ApiKeyAuth } from '../../../src/services/authManager/providers/apikey'
 import { dbMigration } from '../../utils/dbMigrate'
+import { MOCK_UNONBOARDED_USER } from '../../utils/mocks'
 
 describe('ApiKeyUseCases', () => {
   let user: User

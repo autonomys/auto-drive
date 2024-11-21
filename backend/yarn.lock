@@ -512,6 +512,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@faker-js/faker@npm:^9.2.0":
+  version: 9.2.0
+  resolution: "@faker-js/faker@npm:9.2.0"
+  checksum: 10c0/d711a5d206558f90e3ce9ecafe366e236fbe190b4df9d3968b512ccb87ec625843c919d16050beade88b790ed3df6332f6a837e41fba6de33e7a2f8daa67f08d
+  languageName: node
+  linkType: hard
+
 "@fastify/busboy@npm:^2.0.0":
   version: 2.1.1
   resolution: "@fastify/busboy@npm:2.1.1"
@@ -3438,6 +3445,7 @@ __metadata:
   dependencies:
     "@autonomys/auto-dag-data": "npm:^1.0.8"
     "@autonomys/auto-drive": "npm:^1.0.5"
+    "@faker-js/faker": "npm:^9.2.0"
     "@polkadot/api": "npm:^12.3.1"
     "@polkadot/types": "npm:^13.0.1"
     "@polkadot/util-crypto": "npm:^13.0.2"
