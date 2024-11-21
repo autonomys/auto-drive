@@ -37,7 +37,7 @@ import {
   TransactionStatus,
 } from '../../../src/models/objects/index.js'
 
-describe('File Uploads', () => {
+describe('File Upload', () => {
   let user: User
 
   beforeAll(async () => {
