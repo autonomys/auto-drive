@@ -1,10 +1,6 @@
 import { v4 } from 'uuid'
 import { TransactionResult } from '../../../src/models/objects'
-import {
-  NodesUseCases,
-  TransactionResultsUseCases,
-} from '../../../src/useCases'
-import { cidOfNode, createSingleFileIpldNode } from '@autonomys/auto-dag-data'
+import { TransactionResultsUseCases } from '../../../src/useCases'
 import { dbMigration } from '../../utils/dbMigrate'
 
 describe('Transaction Results', () => {
