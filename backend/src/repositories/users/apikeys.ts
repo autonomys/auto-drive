@@ -61,7 +61,6 @@ const deleteApiKey = async (id: string): Promise<void> => {
     'UPDATE api_keys SET deleted_at = $1 WHERE id = $2',
     [new Date(), id],
   )
-  console.log('API key matched with: ', result.rowCount)
   if (result.rowCount === 0) {
     throw new Error('API key not found')
   }

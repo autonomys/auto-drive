@@ -1,9 +1,26 @@
+const { createDefaultEsmPreset } = require('ts-jest')
+
 module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
-  testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
+  ...createDefaultEsmPreset(),
+  globalSetup: './global-setup.ts',
+  globalTeardown: './global-teardown.ts',
+  testMatch: ['**/__tests__/**/*.spec.ts'],
+  extensionsToTreatAsEsm: ['.ts'],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
+  coveragePathIgnorePatterns: [
+    './__tests__/utils/',
+    './node_modules/',
+    './migrations/',
+  ],
   transform: {
-    '^.+\\.ts$': 'ts-jest',
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        useESM: true,
+        tsconfig: 'tsconfig.test.json',
+      },
+    ],
   },
 }

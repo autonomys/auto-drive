@@ -109,12 +109,6 @@ const searchByCIDOrName = async (
   }))
 }
 
-const getAllMetadata = async () => {
-  return metadataRepository
-    .getAllMetadata()
-    .then((metadata) => metadata.map((entry) => entry.metadata))
-}
-
 const getRootObjects = async (
   filter:
     | {
@@ -281,11 +275,11 @@ export const ObjectUseCases = {
   searchMetadataByCID,
   searchMetadataByName,
   searchByCIDOrName,
-  getAllMetadata,
   getRootObjects,
   getSharedRoots,
   shareObject,
   getMarkedAsDeletedRoots,
   markAsDeleted,
   restoreObject,
+  getObjectSummaryByCID,
 }

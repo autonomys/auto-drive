@@ -121,6 +121,9 @@ const updateRole = async (
   if (!isAdmin) {
     throw new Error('User does not have admin privileges')
   }
+  if (!Object.values(UserRole).includes(role)) {
+    throw new Error('Invalid role')
+  }
 
   const user = await resolveUser(userOrPublicId)
 
