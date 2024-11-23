@@ -20,18 +20,9 @@ export const uploadFileContent = (file: File) => {
 
 export const handleFileDownload = async (
   stream: AsyncIterable<Buffer>,
-  type: OffchainMetadata['type'],
-  name: string,
-  estimatedSize: number,
+  writer: WritableStreamDefaultWriter<Buffer>,
 ): Promise<void> => {
-  const StreamSaver = await import('streamsaver');
   let writtenSize = 0;
-  // Create a writable stream using StreamSaver
-  const fileStream = StreamSaver.createWriteStream(
-    type === 'file' ? name : `${name}.zip`,
-    { size: estimatedSize },
-  );
-  const writer = fileStream.getWriter();
 
   try {
     for await (const chunk of stream) {

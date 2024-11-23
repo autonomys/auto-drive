@@ -13,6 +13,9 @@ import { Button } from '../common/Button';
 import { shortenString } from '../../utils/misc';
 import { useEncryptionStore } from '../../states/encryption';
 import { fetchFile } from '../../services/download';
+import toast from 'react-hot-toast';
+
+const toastId = 'object-download-modal';
 
 export const ObjectDownloadModal = ({
   cid,
@@ -34,6 +37,7 @@ export const ObjectDownloadModal = ({
       setPassword(undefined);
       setPasswordConfirmed(false);
       setIsDownloading(false);
+      setWrongPassword(false);
     } else {
       ApiService.fetchUploadedObjectMetadata(cid).then(({ metadata }) => {
         setMetadata(metadata);
@@ -49,11 +53,15 @@ export const ObjectDownloadModal = ({
   }, [cid, defaultPassword, wrongPassword]);
 
   const onDownload = useCallback(async () => {
-    if (!metadata) return;
+    if (!metadata) return <DialogTitle>Fetching metadata...</DialogTitle>;
     const passwordToUse = password ?? undefined;
 
     try {
       await fetchFile(metadata.dataCid, passwordToUse);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      toast.success('Download completed', {
+        id: toastId,
+      });
       onClose();
     } catch (e) {
       if (e instanceof InvalidDecryptKey) {
@@ -75,11 +83,19 @@ export const ObjectDownloadModal = ({
     }
   }, [passwordOrNotEncrypted, onDownload, isDownloading]);
 
+  useEffect(() => {
+    if (wrongPassword) {
+      toast.dismiss(toastId);
+    }
+  }, [wrongPassword]);
+
   const view = useMemo(() => {
-    if (!metadata) return <></>;
+    if (!metadata) {
+      return null;
+    }
 
     if (passwordOrNotEncrypted) {
-      return <DialogTitle>Download starting...</DialogTitle>;
+      return null;
     }
 
     if (metadata.type === 'file' && !passwordConfirmed) {
@@ -137,6 +153,16 @@ export const ObjectDownloadModal = ({
     password,
     wrongPassword,
   ]);
+
+  useEffect(() => {
+    if (isDownloading) {
+      toast.loading('Downloading...', {
+        id: toastId,
+      });
+    }
+  }, [isDownloading]);
+
+  if (!view) return <></>;
 
   return (
     <Transition appear show={!!cid} as={Fragment}>
