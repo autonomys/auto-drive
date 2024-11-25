@@ -7,8 +7,6 @@ import { cookies } from 'next/headers';
 export async function middleware(req: NextRequest) {
   const session = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
-  console.log('session', session);
-
   const { pathname } = req.nextUrl;
 
   if (pathname.startsWith('/api')) {
