@@ -25,6 +25,7 @@
     "db-migrate-pg": "^1.5.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "multiformats": "^13.2.2",
     "pg": "^8.13.0",
@@ -37,6 +38,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/jest": "^29.5.12",
+    "@types/jsonwebtoken": "^9",
     "@types/multer": "^1",
     "@types/node": "^22.3.0",
     "@types/pg": "^8.11.10",

@@ -1,9 +1,13 @@
 import { Router } from 'express'
-import { handleAuth } from '../services/authManager/express.js'
+import {
+  handleAuth,
+  refreshAccessToken,
+} from '../services/authManager/express.js'
 import { UsersUseCases } from '../useCases/index.js'
 import { ApiKeysUseCases } from '../useCases/users/apikeys.js'
 import { UserRole } from '../models/users/index.js'
 import { SubscriptionsUseCases } from '../useCases/users/subscriptions.js'
+import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
 
 const userController = Router()
 
@@ -22,6 +26,41 @@ userController.post('/@me/onboard', async (req, res) => {
       error: 'Failed to onboard user',
     })
   }
+})
+
+userController.post('/@me/accessToken', async (req, res) => {
+  const user = await handleAuth(req, res)
+  if (!user) {
+    return
+  }
+
+  const { accessToken, refreshToken } = await CustomJWTAuth.createSessionTokens(
+    {
+      provider: user.oauthProvider,
+      id: user.oauthUserId,
+    },
+  )
+
+  res
+    .cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    })
+    .json({ accessToken })
+})
+
+userController.post('/@me/refreshToken', async (req, res) => {
+  const refreshToken = req.headers.cookie?.match(/refreshToken=([^;]+)/)?.[1]
+  if (!refreshToken) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+    })
+  }
+
+  const accessToken = await refreshAccessToken(refreshToken)
+
+  res.json({ accessToken })
 })
 
 userController.get('/@me', async (req, res) => {

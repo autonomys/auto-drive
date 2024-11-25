@@ -1,5 +1,6 @@
 import { OAuthUser } from '../../models/users/index.js'
 import { ApiKeyAuth } from './providers/apikey.js'
+import { CustomJWTAuth } from './providers/custom.js'
 import { DiscordAuth, GoogleAuth } from './providers/index.js'
 
 const getUserFromAccessToken = async (
@@ -13,6 +14,8 @@ const getUserFromAccessToken = async (
       return DiscordAuth.getUserFromAccessToken(accessToken)
     case 'apikey':
       return ApiKeyAuth.getUserFromApiKey(accessToken)
+    case 'custom-jwt':
+      return CustomJWTAuth.getUserFromAccessToken(accessToken)
     default:
       throw new Error('Invalid provider')
   }
