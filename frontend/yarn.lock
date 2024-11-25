@@ -30,15 +30,33 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.0.7":
-  version: 1.0.7
-  resolution: "@autonomys/auto-drive@npm:1.0.7"
+"@autonomys/auto-dag-data@npm:^1.0.8":
+  version: 1.0.8
+  resolution: "@autonomys/auto-dag-data@npm:1.0.8"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.0.7"
+    "@ipld/dag-pb": "npm:^4.1.2"
+    "@peculiar/webcrypto": "npm:^1.5.0"
+    "@webbuf/blake3": "npm:^3.0.26"
+    "@webbuf/fixedbuf": "npm:^3.0.26"
+    "@webbuf/webbuf": "npm:^3.0.26"
+    fflate: "npm:^0.8.2"
+    multiformats: "npm:^13.2.2"
+    protobufjs: "npm:^7.4.0"
+    protons: "npm:^7.6.0"
+    protons-runtime: "npm:^5.5.0"
+  checksum: 10c0/97b92114afa667aadccacabed0241b3e486854bd2e091e36b2d859bfd842e6f0aa4720138ba6ef9d9d3aaca8fc1d00ece0cfdf659fcb852867bcfd9dd05b771f
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-drive@npm:^1.0.8":
+  version: 1.0.8
+  resolution: "@autonomys/auto-drive@npm:1.0.8"
+  dependencies:
+    "@autonomys/auto-dag-data": "npm:^1.0.8"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^2.1.35"
     zod: "npm:^3.23.8"
-  checksum: 10c0/b12af9c2ef8b48bf8791ebb7794269864d9c874964448743178fb2acd4da17241ef1c31f276928979ce7673d04912a248fc32a3585f42062cd177c36bb9e1427
+  checksum: 10c0/084b44703abb637698df3c7ac773795c50af32649b3060fbdf21d6803f1a0107b6b81c9c06f098bb637314fbf1ef240a54d5dab98da18d78e968ee08de08c124
   languageName: node
   linkType: hard
 
@@ -2514,7 +2532,7 @@ __metadata:
   resolution: "frontend@workspace:."
   dependencies:
     "@autonomys/auto-dag-data": "npm:^1.0.7"
-    "@autonomys/auto-drive": "npm:^1.0.7"
+    "@autonomys/auto-drive": "npm:^1.0.8"
     "@headlessui/react": "npm:^2.1.8"
     "@heroicons/react": "npm:^2.1.5"
     "@ipld/dag-pb": "npm:^4.1.2"

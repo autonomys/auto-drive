@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@autonomys/auto-drive": "^1.0.7",
+    "@autonomys/auto-drive": "^1.0.8",
     "@headlessui/react": "^2.1.8",
     "@heroicons/react": "^2.1.5",
     "@ipld/dag-pb": "^4.1.2",

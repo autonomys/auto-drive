@@ -32,7 +32,6 @@ exports.up = function (db) {
       },
       function (err, data) {
         if (err) return reject(err)
-        console.log('received data: ' + data)
 
         resolve(data)
       },
@@ -56,7 +55,6 @@ exports.down = function (db) {
       },
       function (err, data) {
         if (err) return reject(err)
-        console.log('received data: ' + data)
 
         resolve(data)
       },

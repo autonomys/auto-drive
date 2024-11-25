@@ -35,18 +35,6 @@ const getTransactionResult = async (cid: string) => {
   return result
 }
 
-const getHeadTransactionResults = async (head_cid: string) => {
-  const db = await getDatabase()
-  const result = await db
-    .query<TransactionResultEntry>({
-      text: 'SELECT * FROM transaction_results WHERE head_cid = $1',
-      values: [head_cid],
-    })
-    .then(({ rows }) => rows)
-
-  return result
-}
-
 const getPendingUploads = async (limit: number = 100) => {
   const db = await getDatabase()
   const result = await db
@@ -92,7 +80,6 @@ export const transactionResultsRepository = {
   storeTransactionResult,
   getTransactionResult,
   getPendingUploads,
-  getHeadTransactionResults,
   getUploadedNodesByRootCid,
   getFirstNotArchivedNode,
 }

@@ -20,7 +20,7 @@ const updateSubscription = async (
 ): Promise<void> => {
   const isAdmin = await UsersUseCases.isAdminUser(executor)
   if (!isAdmin) {
-    throw new Error('User is not an admin')
+    throw new Error('User does not have admin privileges')
   }
 
   const user = await UsersUseCases.resolveUser(userOrPublicId)

@@ -115,7 +115,7 @@ const createFileInFolder = async (
   relativeId: string,
   name: string,
   mimeType: string | null,
-  uploadOptions: FileUploadOptions | null,
+  uploadOptions: FileUploadOptions | null = null,
 ): Promise<FileUpload> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
@@ -217,7 +217,7 @@ const createSubFolderUpload = async (
   const upload = await uploadsRepository.createUploadEntry(
     v4(),
     UploadType.FOLDER,
-    UploadStatus.PENDING,
+    UploadStatus.MIGRATING,
     fileTree.name,
     fileTree,
     null,

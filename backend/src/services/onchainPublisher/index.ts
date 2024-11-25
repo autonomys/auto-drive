@@ -27,6 +27,7 @@ const processPendingUploads = safeCallback(async () => {
 
     const transactions = pendingUploads.map((upload) => {
       const buffer = Buffer.from(upload.encoded_node, 'base64')
+
       return {
         module: 'system',
         method: 'remark',

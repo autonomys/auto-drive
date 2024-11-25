@@ -30,7 +30,7 @@ const getOrganizationByUser = async (user: User): Promise<Organization> => {
     throw new Error('Organization not found')
   }
 
-  return organization
+  return { id: organization.id, name: organization.name }
 }
 
 const initOrganization = async (user: User) => {

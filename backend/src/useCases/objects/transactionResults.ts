@@ -11,14 +11,6 @@ const getNodeTransactionResult = async (cid: CID | string) => {
     .then((result) => (result ? result.transaction_result : undefined))
 }
 
-const getHeadTransactionResults = async (cid: CID | string) => {
-  const cidString = typeof cid === 'string' ? cid : cidToString(cid)
-
-  return transactionResultsRepository
-    .getHeadTransactionResults(cidString)
-    .then((rows) => rows.map((_) => _.transaction_result))
-}
-
 const setTransactionResults = async (
   cid: CID | string,
   transactionResults: TransactionResult,
@@ -37,7 +29,6 @@ const getPendingTransactionResults = async (limit: number = 100) => {
 
 export const TransactionResultsUseCases = {
   getNodeTransactionResult,
-  getHeadTransactionResults,
   setTransactionResults,
   getPendingTransactionResults,
 }
