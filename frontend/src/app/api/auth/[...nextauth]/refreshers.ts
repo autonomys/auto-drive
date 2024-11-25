@@ -43,7 +43,7 @@ export const generateAccessToken = async ({
 }: {
   provider: string;
   oauthAccessToken: string;
-}) => {
+}): Promise<JWT> => {
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_API_URL}/users/@me/accessToken`,
     {
@@ -77,7 +77,7 @@ export const refreshAccessToken = async ({
   refreshToken,
 }: {
   refreshToken: string;
-}) => {
+}): Promise<JWT> => {
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_API_URL}/users/@me/refreshToken`,
     {
@@ -91,7 +91,7 @@ export const refreshAccessToken = async ({
   const newTokens = await response.json();
   const accessToken = newTokens.accessToken;
   if (accessToken === null) {
-    return null;
+    throw new Error('No access token found');
   }
 
   const token = ensureCorrectTokenFormation(jwt.decode(accessToken));
