@@ -5,6 +5,13 @@ import { env } from '../../../utils/misc.js'
 type CustomAccessTokenPayload = {
   provider: string
   id: string
+  isRefreshToken: false
+}
+
+type CustomRefreshTokenPayload = {
+  isRefreshToken: true
+  provider: string
+  id: string
 }
 
 const JWT_SECRET = env('JWT_SECRET')
@@ -26,8 +33,9 @@ const getUserFromAccessToken = async (
   }
 }
 
-const createAccessToken = async (user: OAuthUser) => {
+const createAccessToken = (user: OAuthUser) => {
   const payload: CustomAccessTokenPayload = {
+    isRefreshToken: false,
     provider: user.provider,
     id: user.id,
   }
@@ -37,19 +45,21 @@ const createAccessToken = async (user: OAuthUser) => {
   })
 }
 
-const createSessionTokens = async (user: OAuthUser) => {
-  const payload: CustomAccessTokenPayload = {
+const createRefreshToken = (user: OAuthUser) => {
+  const payload: CustomRefreshTokenPayload = {
+    isRefreshToken: true,
     provider: user.provider,
     id: user.id,
   }
 
-  const accessToken = jwt.sign(payload, 'secret', {
-    expiresIn: '1h',
-  })
-
-  const refreshToken = jwt.sign(payload, 'secret', {
+  return jwt.sign(payload, JWT_SECRET, {
     expiresIn: '7d',
   })
+}
+
+const createSessionTokens = async (user: OAuthUser) => {
+  const accessToken = createAccessToken(user)
+  const refreshToken = createRefreshToken(user)
 
   return { accessToken, refreshToken }
 }
@@ -62,6 +72,9 @@ const getUserFromRefreshToken = async (
     JWT_SECRET,
   ) as CustomAccessTokenPayload
   if (typeof decoded === 'string') {
+    throw new Error('Invalid refresh token')
+  }
+  if (!decoded.isRefreshToken) {
     throw new Error('Invalid refresh token')
   }
 
