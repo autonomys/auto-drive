@@ -57,9 +57,16 @@ const createRefreshToken = async (user: OAuthUser) => {
   })
 }
 
+const getIdFromRefreshToken = (refreshToken: string) => {
+  const decoded = jwt.decode(refreshToken) as CustomRefreshTokenPayload
+  return decoded.id
+}
+
 const createSessionTokens = async (user: OAuthUser) => {
   const refreshToken = await createRefreshToken(user)
-  const accessToken = createAccessToken(user, refreshToken)
+  const refreshTokenId = getIdFromRefreshToken(refreshToken)
+
+  const accessToken = createAccessToken(user, refreshTokenId)
 
   return { accessToken, refreshToken }
 }
@@ -91,13 +98,13 @@ const getUserFromRefreshToken = async (
   }
 }
 
-const refreshAccessToken = async (refreshToken: string) => {
+const refreshAccessToken = async (refreshToken: string): Promise<string> => {
   const decoded = jwt.verify(
     refreshToken,
     JWT_SECRET,
   ) as CustomRefreshTokenPayload
   if (typeof decoded === 'string') {
-    return null
+    throw new Error('Invalid refresh token')
   }
 
   const user = await getUserFromRefreshToken(refreshToken)
