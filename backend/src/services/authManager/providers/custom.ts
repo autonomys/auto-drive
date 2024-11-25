@@ -44,7 +44,7 @@ const createAccessToken = (user: OAuthUser, refreshTokenId: string) => {
     refreshTokenId,
   }
 
-  return jwt.sign(payload, 'secret', {
+  return jwt.sign(payload, JWT_SECRET, {
     expiresIn: '1h',
   })
 }
