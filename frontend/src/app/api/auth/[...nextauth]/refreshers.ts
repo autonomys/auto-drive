@@ -1,36 +1,96 @@
 /* eslint-disable camelcase */
 import { JWT } from 'next-auth/jwt';
+import jwt from 'jsonwebtoken';
 
-export const refreshGoogleToken = async (token: JWT) => {
-  if (!token.refreshToken) {
-    throw new Error('No refresh token');
+const ensureCorrectTokenFormation = (token: unknown) => {
+  if (typeof token !== 'object' || token === null) {
+    throw new Error('Token is not an object');
   }
 
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    body: new URLSearchParams({
-      client_id: process.env.GOOGLE_AUTH_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_AUTH_CLIENT_SECRET!,
-      grant_type: 'refresh_token',
-      refresh_token: token.refreshToken!,
-    }),
-  });
+  const typedToken = token as JWT;
 
-  const tokensOrError = await response.json();
-  if (!response.ok) {
-    console.log(response.statusText);
-    throw new Error('Failed to refresh Google token');
+  if (!typedToken.exp || !typedToken.iat) {
+    throw new Error('Token has no expiration or issue date');
   }
 
-  const newTokens = tokensOrError as {
-    access_token: string;
-    expires_in: number;
-    refresh_token?: string;
-  };
+  if (!typedToken.id || !typedToken.provider) {
+    throw new Error('Token is not setup and refreshable');
+  }
 
-  token.accessToken = newTokens.access_token;
+  return typedToken;
+};
 
-  token.exp = Math.floor(Date.now() / 1000 + newTokens.expires_in);
+const getRefreshTokenFromResponse = (response: Response): string => {
+  const token = response.headers
+    .get('set-cookie')
+    ?.match(/refreshToken=([^;]+)/)?.[1];
+
+  if (!token) {
+    throw new Error('No refresh token found');
+  }
 
   return token;
+};
+
+export const generateAccessToken = async ({
+  provider,
+  oauthAccessToken,
+}: {
+  provider: string;
+  oauthAccessToken: string;
+}) => {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/users/@me/accessToken`,
+    {
+      method: 'POST',
+      headers: {
+        'x-auth-provider': provider,
+        Authorization: `Bearer ${oauthAccessToken}`,
+      },
+    },
+  );
+
+  const newTokens = await response.json();
+  const accessToken = newTokens.accessToken;
+
+  const token = ensureCorrectTokenFormation(jwt.decode(accessToken));
+  const refreshToken = getRefreshTokenFromResponse(response);
+
+  const nextJWT: JWT = {
+    ...token,
+    provider: 'custom-jwt',
+    accessToken,
+    refreshToken,
+  };
+
+  return nextJWT;
+};
+
+export const refreshAccessToken = async ({
+  refreshToken,
+}: {
+  refreshToken: string;
+}) => {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/users/@me/refreshToken`,
+    {
+      method: 'POST',
+      headers: {
+        Cookie: `refreshToken=${refreshToken};`,
+      },
+    },
+  );
+
+  const newTokens = await response.json();
+  const accessToken = newTokens.accessToken;
+  const token = ensureCorrectTokenFormation(jwt.decode(accessToken));
+
+  const nextJWT: JWT = {
+    ...token,
+    provider: 'custom-jwt',
+    accessToken,
+    refreshToken,
+  };
+
+  return nextJWT;
 };

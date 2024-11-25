@@ -52,6 +52,7 @@ export const ApiService = {
 
     const response = await fetch(`${API_BASE_URL}/users/subscriptions/list`, {
       headers: {
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.provider,
       },

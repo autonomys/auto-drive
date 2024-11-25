@@ -1,7 +1,7 @@
 import { AuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import DiscordProvider from 'next-auth/providers/discord';
-import { refreshGoogleToken } from './refreshers';
+import { generateAccessToken, refreshAccessToken } from './refreshers';
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -17,20 +17,24 @@ export const authOptions: AuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, account }) {
-      if (account) {
-        token.provider = account?.provider;
-        token.refreshToken = account?.refresh_token;
-        token.accessToken = account?.access_token;
-      } else {
-        console.warn('No account found');
+    async jwt({ account, token }) {
+      const isTokenSetupAndRefreshable =
+        token.accessToken && token.provider && token.refreshToken;
+      if (isTokenSetupAndRefreshable) {
+        return refreshAccessToken({
+          refreshToken: token.refreshToken!,
+        });
       }
 
-      if (token.provider === 'google' && Date.now() >= token.exp * 1000) {
-        return refreshGoogleToken(token);
+      const isOAuthSuccessfullyLoggedIn = account && account.access_token;
+      if (isOAuthSuccessfullyLoggedIn) {
+        return generateAccessToken({
+          provider: account.provider,
+          oauthAccessToken: account.access_token!,
+        });
       }
 
-      return token;
+      throw new Error('No account or token found');
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken;
@@ -44,14 +48,6 @@ export const authOptions: AuthOptions = {
         : _url.replace(_baseUrl, baseUrl);
 
       return url;
-    },
-    signIn: async ({ account }) => {
-      if (account) {
-        // eslint-disable-next-line camelcase
-        account.expires_at = Math.floor(Date.now() / 1000) + 10;
-      }
-
-      return true;
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
