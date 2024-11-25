@@ -22,6 +22,13 @@ const getUserFromAccessToken = async (
     throw new Error('Invalid access token')
   }
 
+  const isPresent = await jwtTokenRegistry.isPresentOnRegistry(
+    decoded.refreshTokenId,
+  )
+  if (!isPresent) {
+    throw new Error('Invalid access token')
+  }
+
   return {
     provider: decoded.oauthProvider,
     id: decoded.oauthUserId,

@@ -115,4 +115,12 @@ describe('JWT', () => {
       CustomJWTAuth.refreshAccessToken(refreshTokenString),
     ).rejects.toThrow('Invalid refresh token')
   })
+
+  it('should not be able to authenticate with the access token after invalidating the refresh token', async () => {
+    await CustomJWTAuth.invalidateRefreshToken(refreshTokenString)
+
+    await expect(
+      AuthManager.getUserFromAccessToken('custom-jwt', accessTokenString),
+    ).rejects.toThrow('Invalid access token')
+  })
 })
