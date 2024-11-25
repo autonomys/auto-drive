@@ -42,7 +42,5 @@ export const handleAuth = async (
 export const refreshAccessToken = async (
   refreshToken: string,
 ): Promise<string> => {
-  const user = await CustomJWTAuth.getUserFromRefreshToken(refreshToken)
-
-  return CustomJWTAuth.createAccessToken(user)
+  return CustomJWTAuth.refreshAccessToken(refreshToken)
 }

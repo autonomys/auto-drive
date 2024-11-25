@@ -13,7 +13,7 @@ const ensureCorrectTokenFormation = (token: unknown) => {
     throw new Error('Token has no expiration or issue date');
   }
 
-  if (!typedToken.id || !typedToken.provider) {
+  if (!typedToken.oauthProvider || !typedToken.oauthUserId) {
     throw new Error('Token is not setup and refreshable');
   }
 
