@@ -1,0 +1,16 @@
+kind: AuthConfig
+version: v2
+definition:
+  mode:
+    jwt:
+      claimsConfig:
+        namespace:
+          claimsFormat: Json
+          location: /claims.jwt.hasura.io
+      tokenLocation:
+        type: BearerAuthorization
+      key:
+        fixed:
+          key:
+            algorithm: HS256
+            fromEnv: HASURA_GRAPHQL_JWT_SECRET

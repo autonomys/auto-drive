@@ -1,0 +1,73 @@
+volumes:
+  node-data: {}
+  postgres_db: {}
+  redis_db: {}
+  caddy_config: {}
+  caddy_data: {}
+
+services:
+  # Hasura GraphQL Engine
+  hasura:
+    image: hasura/graphql-engine:v2.40.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./hasura/metadata:/hasura-metadata
+    restart: unless-stopped
+    environment:
+      # Essential Environment Variables
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DB_DATABASE}
+      HASURA_GRAPHQL_DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DB_DATABASE} # Main database connection
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET} # Admin access secret
+      HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET} # JWT authentication secret
+
+      # Console and Development Mode
+      HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE} # Disable console in production
+      HASURA_GRAPHQL_DEV_MODE: "true" # Disable development mode features
+
+      # Role and CORS Settings
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: user # Default role for unauthenticated users
+      HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN} # Allowed domains for CORS
+      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: "true"
+
+      # Performance and Connection Settings
+      HASURA_GRAPHQL_MAX_CONNECTIONS: 100 # Maximum number of database connections
+      HASURA_GRAPHQL_STRIPES: 2 # Number of connection pool stripes
+      HASURA_GRAPHQL_CONNECTIONS_PER_STRIPE: 50 # Connections per stripe
+      HASURA_GRAPHQL_IDLE_TIMEOUT: 180 # Idle connection timeout in seconds
+      HASURA_GRAPHQL_TIMEOUT: 60 # Request timeout in seconds
+
+      # Logging Settings
+      HASURA_GRAPHQL_LOG_LEVEL: "debug" # Log verbosity level
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: "startup,http-log,webhook-log,websocket-log,query-log" # Enabled log types
+
+      # Security and Authorization
+      HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false" # Disable query allowlisting
+
+      # Hasura Migrations and Metadata
+      HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
+    ports:
+      - "${HASURA_GRAPHQL_PORT}:8080"
+    command:
+      - graphql-engine
+      - serve
+  postgres:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_db:/var/lib/postgresql/data
+      - ./hasura/docker-entrypoint-initdb.d/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: unless-stopped
+    hostname: postgres
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_MAX_CONNECTIONS: 500
+    ports:
+      - "${DB_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

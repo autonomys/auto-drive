@@ -1,0 +1,3 @@
+- "!include metadata.yaml"
+- "!include nodes.yaml"
+- "!include object_ownership.yaml"

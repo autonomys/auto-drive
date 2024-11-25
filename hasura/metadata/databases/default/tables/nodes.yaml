@@ -1,0 +1,24 @@
+table:
+  name: nodes
+  schema: public
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - root_cid
+        - head_cid
+        - cid
+        - encoded_node
+        - type
+      filter: {}
+    comment: ""
+object_relationships:
+  - name: root
+    using:
+      manual_configuration:
+        column_mapping:
+          head_cid: root_cid
+        insertion_order: null
+        remote_table:
+          name: nodes
+          schema: public

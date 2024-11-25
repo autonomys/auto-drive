@@ -1,0 +1,16 @@
+table:
+  name: object_ownership
+  schema: public
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - cid
+        - oauth_provider
+        - oauth_user_id
+        - is_admin
+        - marked_as_deleted
+        - created_at
+        - updated_at
+      filter: {}
+    comment: ""
