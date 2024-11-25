@@ -22,7 +22,8 @@ userController.post('/@me/onboard', async (req, res) => {
     res.json(onboardedUser)
   } catch (error) {
     console.error(error)
-    return res.status(500).json({
+
+    res.status(500).json({
       error: 'Failed to onboard user',
     })
   }
@@ -54,21 +55,30 @@ userController.post('/@me/refreshToken', async (req, res) => {
   try {
     const refreshToken = req.headers.cookie?.match(/refreshToken=([^;]+)/)?.[1]
     if (!refreshToken) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Unauthorized',
       })
+      return
     }
 
     const accessToken = await refreshAccessToken(refreshToken)
 
     res.json({ accessToken })
   } catch {
-    return res.status(401).json({ error: 'Unauthorized' })
+    res.status(401).json({ error: 'Unauthorized' })
+    return
   }
 })
 
 userController.delete('/@me/invalidateToken', async (req, res) => {
   const token = req.body.token
+
+  if (typeof token !== 'string') {
+    res.status(400).json({
+      error: 'Missing or invalid attribute `token` in body',
+    })
+    return
+  }
 
   await CustomJWTAuth.invalidateRefreshToken(token)
 
@@ -87,9 +97,10 @@ userController.get('/@me', async (req, res) => {
     res.json(userInfo)
   } catch (error) {
     console.error(error)
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Failed to get user info',
     })
+    return
   }
 })
 
@@ -105,9 +116,10 @@ userController.get('/@me/apiKeys', async (req, res) => {
     res.json(apiKeys)
   } catch (error) {
     console.error(error)
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Failed to get API keys',
     })
+    return
   }
 })
 
@@ -123,9 +135,10 @@ userController.post('/@me/apiKeys/create', async (req, res) => {
     res.json(apiKey)
   } catch (error) {
     console.error(error)
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Failed to create API key',
     })
+    return
   }
 })
 
@@ -143,9 +156,10 @@ userController.delete('/@me/apiKeys/:id', async (req, res) => {
     res.sendStatus(200)
   } catch (error) {
     console.error(error)
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Failed to delete API key',
     })
+    return
   }
 })
 
@@ -153,9 +167,10 @@ userController.get('/search', async (req, res) => {
   const { publicId } = req.query
 
   if (typeof publicId !== 'string') {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing or invalid attribute `publicId` in query',
     })
+    return
   }
 
   const users = await UsersUseCases.searchUsersByPublicId(publicId)
@@ -167,9 +182,10 @@ userController.get('/checkHandleAvailability', async (req, res) => {
   const { publicId } = req.query
 
   if (typeof publicId !== 'string') {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing or invalid attribute `publicId` in query',
     })
+    return
   }
 
   const user = await UsersUseCases.getUserByPublicId(publicId)
@@ -188,9 +204,10 @@ userController.post('/admin/add', async (req, res) => {
   const { publicId } = req.body
 
   if (typeof publicId !== 'string') {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing or invalid attribute `publicId` in body',
     })
+    return
   }
 
   try {
@@ -199,9 +216,10 @@ userController.post('/admin/add', async (req, res) => {
     res.sendStatus(200)
   } catch (error) {
     console.error(error)
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Failed to add user to admins',
     })
+    return
   }
 })
 
@@ -214,9 +232,10 @@ userController.post('/admin/remove', async (req, res) => {
   const { publicId } = req.body
 
   if (typeof publicId !== 'string') {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing or invalid attribute `publicId` in body',
     })
+    return
   }
 
   try {
@@ -225,9 +244,10 @@ userController.post('/admin/remove', async (req, res) => {
     res.sendStatus(200)
   } catch (error) {
     console.error(error)
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Failed to remove user from admins',
     })
+    return
   }
 })
 
@@ -240,28 +260,32 @@ userController.post('/subscriptions/update', async (req, res) => {
   const { publicId, uploadLimit, downloadLimit, granularity } = req.body
 
   if (typeof publicId !== 'string') {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing or invalid attribute `publicId` in body',
     })
+    return
   }
 
   if (typeof uploadLimit !== 'number') {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing or invalid attribute `uploadLimit` in body',
     })
+    return
   }
 
   if (typeof downloadLimit !== 'number') {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing or invalid attribute `downloadLimit` in body',
     })
+    return
   }
 
   if (granularity !== 'monthly') {
     // TODO: support other granularities
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Invalid granularity',
     })
+    return
   }
 
   try {
@@ -276,9 +300,10 @@ userController.post('/subscriptions/update', async (req, res) => {
     res.sendStatus(200)
   } catch (error) {
     console.error(error)
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Failed to update subscription',
     })
+    return
   }
 })
 
@@ -294,9 +319,10 @@ userController.get('/subscriptions/list', async (req, res) => {
     res.json(users)
   } catch (error) {
     console.error(error)
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Failed to get user list',
     })
+    return
   }
 })
 
