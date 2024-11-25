@@ -1,7 +1,11 @@
 import { AuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import DiscordProvider from 'next-auth/providers/discord';
-import { generateAccessToken, refreshAccessToken } from './refreshers';
+import {
+  generateAccessToken,
+  invalidateRefreshToken,
+  refreshAccessToken,
+} from './refreshers';
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -42,6 +46,13 @@ export const authOptions: AuthOptions = {
       session.authProvider = token.authProvider;
       session.authUserId = token.authUserId;
       return session;
+    },
+  },
+  events: {
+    async signOut({ token }) {
+      if (token.refreshToken) {
+        await invalidateRefreshToken({ refreshToken: token.refreshToken });
+      }
     },
   },
   secret: process.env.NEXTAUTH_SECRET,

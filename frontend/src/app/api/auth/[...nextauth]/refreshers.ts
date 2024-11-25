@@ -106,3 +106,28 @@ export const refreshAccessToken = async ({
 
   return nextJWT;
 };
+
+export const invalidateRefreshToken = async ({
+  refreshToken,
+}: {
+  refreshToken: string;
+}): Promise<void> => {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/users/@me/invalidateToken`,
+    {
+      method: 'DELETE',
+      body: JSON.stringify({
+        token: refreshToken,
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to invalidate refresh token: ${response.statusText}`,
+    );
+  }
+};
