@@ -51,16 +51,28 @@ userController.post('/@me/accessToken', async (req, res) => {
 })
 
 userController.post('/@me/refreshToken', async (req, res) => {
-  const refreshToken = req.headers.cookie?.match(/refreshToken=([^;]+)/)?.[1]
-  if (!refreshToken) {
-    return res.status(401).json({
-      error: 'Unauthorized',
-    })
+  try {
+    const refreshToken = req.headers.cookie?.match(/refreshToken=([^;]+)/)?.[1]
+    if (!refreshToken) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+      })
+    }
+
+    const accessToken = await refreshAccessToken(refreshToken)
+
+    res.json({ accessToken })
+  } catch {
+    return res.status(401).json({ error: 'Unauthorized' })
   }
+})
 
-  const accessToken = await refreshAccessToken(refreshToken)
+userController.delete('/@me/invalidateToken', async (req, res) => {
+  const token = req.body.token
 
-  res.json({ accessToken })
+  await CustomJWTAuth.invalidateRefreshToken(token)
+
+  res.sendStatus(200)
 })
 
 userController.get('/@me', async (req, res) => {

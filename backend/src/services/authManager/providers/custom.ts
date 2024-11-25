@@ -4,8 +4,10 @@ import { env } from '../../../utils/misc.js'
 import {
   CustomAccessTokenPayload,
   CustomRefreshTokenPayload,
+  CustomTokenPayload,
 } from '../../../models/users/jwt.js'
 import { v4 } from 'uuid'
+import { jwtTokenRegistry } from '../../../repositories/users/jwt.js'
 
 const JWT_SECRET = env('JWT_SECRET')
 
@@ -22,7 +24,7 @@ const getUserFromAccessToken = async (
 
   return {
     provider: decoded.oauthProvider,
-    id: decoded.id,
+    id: decoded.oauthUserId,
   }
 }
 
@@ -40,7 +42,7 @@ const createAccessToken = (user: OAuthUser, refreshTokenId: string) => {
   })
 }
 
-const createRefreshToken = (user: OAuthUser) => {
+const createRefreshToken = async (user: OAuthUser) => {
   const payload: CustomRefreshTokenPayload = {
     isRefreshToken: true,
     oauthProvider: user.provider,
@@ -48,13 +50,15 @@ const createRefreshToken = (user: OAuthUser) => {
     id: v4(),
   }
 
+  await jwtTokenRegistry.addTokenToRegistry(payload.id)
+
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: '7d',
   })
 }
 
 const createSessionTokens = async (user: OAuthUser) => {
-  const refreshToken = createRefreshToken(user)
+  const refreshToken = await createRefreshToken(user)
   const accessToken = createAccessToken(user, refreshToken)
 
   return { accessToken, refreshToken }
@@ -74,6 +78,13 @@ const getUserFromRefreshToken = async (
     throw new Error('Invalid refresh token')
   }
 
+  const isPresentOnRegistry = await jwtTokenRegistry.isPresentOnRegistry(
+    decoded.id,
+  )
+  if (!isPresentOnRegistry) {
+    throw new Error('Invalid refresh token')
+  }
+
   return {
     provider: decoded.oauthProvider,
     id: decoded.oauthUserId,
@@ -86,13 +97,25 @@ const refreshAccessToken = async (refreshToken: string) => {
     JWT_SECRET,
   ) as CustomRefreshTokenPayload
   if (typeof decoded === 'string') {
-    throw new Error('Invalid refresh token')
+    return null
   }
 
-  return createAccessToken(
-    { provider: decoded.oauthProvider, id: decoded.oauthUserId },
-    decoded.id,
-  )
+  const user = await getUserFromRefreshToken(refreshToken)
+
+  return createAccessToken(user, decoded.id)
+}
+
+const invalidateRefreshToken = async (refreshOrAccessToken: string) => {
+  const decoded = jwt.verify(
+    refreshOrAccessToken,
+    JWT_SECRET,
+  ) as CustomTokenPayload
+  if (typeof decoded === 'string') {
+    throw new Error('Invalid refresh token')
+  }
+  const id = decoded.isRefreshToken ? decoded.id : decoded.refreshTokenId
+
+  await jwtTokenRegistry.removeTokenFromRegistry(id)
 }
 
 export const CustomJWTAuth = {
@@ -101,4 +124,5 @@ export const CustomJWTAuth = {
   createSessionTokens,
   createAccessToken,
   refreshAccessToken,
+  invalidateRefreshToken,
 }

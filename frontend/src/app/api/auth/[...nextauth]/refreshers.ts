@@ -7,7 +7,12 @@ const ensureCorrectTokenFormation = (token: unknown) => {
     throw new Error('Token is not an object');
   }
 
-  const typedToken = token as JWT;
+  const typedToken = token as {
+    oauthProvider: string;
+    oauthUserId: string;
+    exp: number;
+    iat: number;
+  };
 
   if (!typedToken.exp || !typedToken.iat) {
     throw new Error('Token has no expiration or issue date');
@@ -58,7 +63,9 @@ export const generateAccessToken = async ({
 
   const nextJWT: JWT = {
     ...token,
-    provider: 'custom-jwt',
+    authProvider: 'custom-jwt',
+    authUserId: token.oauthUserId,
+    id: token.oauthUserId,
     accessToken,
     refreshToken,
   };
@@ -83,11 +90,16 @@ export const refreshAccessToken = async ({
 
   const newTokens = await response.json();
   const accessToken = newTokens.accessToken;
+  if (accessToken === null) {
+    return null;
+  }
+
   const token = ensureCorrectTokenFormation(jwt.decode(accessToken));
 
   const nextJWT: JWT = {
     ...token,
-    provider: 'custom-jwt',
+    authProvider: 'custom-jwt',
+    authUserId: token.oauthUserId,
     accessToken,
     refreshToken,
   };

@@ -13,3 +13,7 @@ export type CustomAccessTokenPayload = BaseTokenPayload & {
 export type CustomRefreshTokenPayload = BaseTokenPayload & {
   isRefreshToken: true
 }
+
+export type CustomTokenPayload =
+  | CustomAccessTokenPayload
+  | CustomRefreshTokenPayload

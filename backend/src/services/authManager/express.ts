@@ -41,6 +41,6 @@ export const handleAuth = async (
 
 export const refreshAccessToken = async (
   refreshToken: string,
-): Promise<string> => {
+): Promise<string | null> => {
   return CustomJWTAuth.refreshAccessToken(refreshToken)
 }

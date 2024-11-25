@@ -19,11 +19,12 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async jwt({ account, token }) {
       const isTokenSetupAndRefreshable =
-        token.accessToken && token.provider && token.refreshToken;
+        token.accessToken && token.authProvider && token.refreshToken;
       if (isTokenSetupAndRefreshable) {
-        return refreshAccessToken({
+        const accessToken = await refreshAccessToken({
           refreshToken: token.refreshToken!,
         });
+        return accessToken;
       }
 
       const isOAuthSuccessfullyLoggedIn = account && account.access_token;
@@ -38,7 +39,8 @@ export const authOptions: AuthOptions = {
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken;
-      session.provider = token.provider;
+      session.authProvider = token.authProvider;
+      session.authUserId = token.authUserId;
       return session;
     },
     async redirect({ url: _url, baseUrl: _baseUrl }) {

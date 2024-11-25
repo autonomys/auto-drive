@@ -27,14 +27,14 @@ export interface UploadResponse {
 export const ApiService = {
   getMe: async (): Promise<UserInfo> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/@me`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
       },
     });
 
@@ -46,7 +46,7 @@ export const ApiService = {
   },
   getUserList: async (): Promise<SubscriptionWithUser[]> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -54,21 +54,21 @@ export const ApiService = {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
       },
     });
     return response.json();
   },
   getApiKeysByUser: async (): Promise<ApiKeyWithoutSecret[]> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
     const response = await fetch(`${API_BASE_URL}/users/@me/apiKeys`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
       },
     });
 
@@ -76,7 +76,7 @@ export const ApiService = {
   },
   deleteApiKey: async (apiKeyId: string): Promise<void> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -86,7 +86,7 @@ export const ApiService = {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
-          'X-Auth-Provider': session.provider,
+          'X-Auth-Provider': session.authProvider,
         },
       },
     );
@@ -97,7 +97,7 @@ export const ApiService = {
   },
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -111,7 +111,7 @@ export const ApiService = {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
       },
     });
 
@@ -137,13 +137,13 @@ export const ApiService = {
     password?: string,
   ): Promise<AsyncIterable<Buffer>> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
     const api = createAutoDriveApi({
       url: API_BASE_URL,
-      provider: session.provider as AuthProvider,
+      provider: session.authProvider as AuthProvider,
       apiKey: session.accessToken,
     });
 
@@ -154,7 +154,7 @@ export const ApiService = {
     scope: 'user' | 'global',
   ): Promise<ObjectSearchResult[]> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -163,7 +163,7 @@ export const ApiService = {
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
-          'X-Auth-Provider': session.provider,
+          'X-Auth-Provider': session.authProvider,
         },
       },
     );
@@ -176,7 +176,7 @@ export const ApiService = {
     limit: number,
   ): Promise<PaginatedResult<ObjectSummary>> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -185,7 +185,7 @@ export const ApiService = {
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
-          'X-Auth-Provider': session.provider,
+          'X-Auth-Provider': session.authProvider,
         },
       },
     );
@@ -197,7 +197,7 @@ export const ApiService = {
     limit: number,
   ): Promise<PaginatedResult<ObjectSummary>> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -206,7 +206,7 @@ export const ApiService = {
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
-          'X-Auth-Provider': session.provider,
+          'X-Auth-Provider': session.authProvider,
         },
       },
     );
@@ -222,7 +222,7 @@ export const ApiService = {
     limit: number,
   ): Promise<PaginatedResult<ObjectSummary>> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -231,7 +231,7 @@ export const ApiService = {
       {
         headers: {
           Authorization: `Bearer ${session?.accessToken}`,
-          'X-Auth-Provider': session.provider,
+          'X-Auth-Provider': session.authProvider,
         },
       },
     );
@@ -244,7 +244,7 @@ export const ApiService = {
   },
   generateApiKey: async (): Promise<ApiKey> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -252,7 +252,7 @@ export const ApiService = {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
         'Content-Type': 'application/json',
       },
     });
@@ -265,7 +265,7 @@ export const ApiService = {
   },
   shareObject: async (dataCid: string, publicId: string): Promise<void> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -274,14 +274,14 @@ export const ApiService = {
       body: JSON.stringify({ publicId }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
         'Content-Type': 'application/json',
       },
     });
   },
   markObjectAsDeleted: async (cid: string): Promise<void> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -289,13 +289,13 @@ export const ApiService = {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
       },
     });
   },
   restoreObject: async (cid: string): Promise<void> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -303,7 +303,7 @@ export const ApiService = {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
       },
     });
 
@@ -313,7 +313,7 @@ export const ApiService = {
   },
   onboardUser: async (): Promise<User> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -321,7 +321,7 @@ export const ApiService = {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
       },
     });
 
@@ -333,7 +333,7 @@ export const ApiService = {
   },
   addAdmin: async (publicId: string): Promise<void> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -342,7 +342,7 @@ export const ApiService = {
       body: JSON.stringify({ publicId }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
         'Content-Type': 'application/json',
       },
     });
@@ -353,7 +353,7 @@ export const ApiService = {
   },
   removeAdmin: async (publicId: string): Promise<void> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -362,7 +362,7 @@ export const ApiService = {
       body: JSON.stringify({ publicId }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
         'Content-Type': 'application/json',
       },
     });
@@ -378,7 +378,7 @@ export const ApiService = {
     downloadLimit: number,
   ): Promise<void> => {
     const session = await getAuthSession();
-    if (!session?.provider || !session.accessToken) {
+    if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
@@ -392,7 +392,7 @@ export const ApiService = {
       }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.provider,
+        'X-Auth-Provider': session.authProvider,
         'Content-Type': 'application/json',
       },
     });
