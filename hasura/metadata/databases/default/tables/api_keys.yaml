@@ -6,7 +6,6 @@ select_permissions:
     permission:
       columns:
         - id
-        - secret
         - oauth_provider
         - oauth_user_id
         - deleted_at

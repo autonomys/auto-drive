@@ -1,25 +1,31 @@
-import { ApiService } from '@/services/api';
 import { FileCard } from '../../../../components/common/FileCard';
+import { getServerSession } from 'next-auth/next';
+import { apiv2Client } from '../../../../services/gql';
+import { GetMetadataByHeadCidDocument } from '../../../../../gql/graphql';
+import { authOptions } from '../../../api/auth/[...nextauth]/config';
+import { mapObjectInformationFromQueryResult } from '../../../../services/gql/utils';
 
 export default async function Page({ params }: { params: { cid: string } }) {
-  const { cid } = params;
+  const session = await getServerSession(authOptions);
+  const { data } = await apiv2Client.query({
+    query: GetMetadataByHeadCidDocument,
+    variables: { headCid: params.cid },
+    context: {
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+      },
+    },
+  });
 
-  const objMetadata = await ApiService.fetchUploadedObjectMetadata(cid);
-
-  if (objMetadata.metadata.type === 'file') {
+  const metadata = mapObjectInformationFromQueryResult(data);
+  if (metadata.metadata.type === 'file') {
     throw new Error('File type not supported');
   }
 
-  const childrenMetadata = await Promise.all(
-    objMetadata.metadata.children.map((e) =>
-      ApiService.fetchUploadedObjectMetadata(e.cid),
-    ),
-  );
-
   return (
     <div className='grid grid-cols-4 gap-4'>
-      {childrenMetadata.map(({ metadata }) => {
-        return <FileCard key={metadata.dataCid} metadata={metadata} />;
+      {metadata.metadata.children.map((metadata) => {
+        return <FileCard key={metadata.cid} metadata={metadata} />;
       })}
     </div>
   );

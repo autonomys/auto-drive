@@ -18,7 +18,7 @@ import { useMemo } from 'react';
 import Image from 'next/image';
 import { useUserStore } from '../../states/user';
 import { ApolloProvider } from '@apollo/client';
-import { apiv2Client } from '../../services/apiv2';
+import { apiv2Client } from '../../services/gql';
 import { SessionProvider } from 'next-auth/react';
 
 export default function AppLayout({
