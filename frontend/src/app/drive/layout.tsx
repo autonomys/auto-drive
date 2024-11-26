@@ -17,6 +17,9 @@ import { RemainingCreditTracker } from '../../components/RemainingCreditTracker'
 import { useMemo } from 'react';
 import Image from 'next/image';
 import { useUserStore } from '../../states/user';
+import { ApolloProvider } from '@apollo/client';
+import { apiv2Client } from '../../services/apiv2';
+import { SessionProvider } from 'next-auth/react';
 
 export default function AppLayout({
   children,
@@ -116,7 +119,11 @@ export default function AppLayout({
                 />
               )}
             </aside>
-            <main className='flex-1 overflow-auto p-6'>{children}</main>
+            <main className='flex-1 overflow-auto p-6'>
+              <SessionProvider>
+                <ApolloProvider client={apiv2Client}>{children}</ApolloProvider>
+              </SessionProvider>
+            </main>
           </UserEnsurer>
         </div>
       </div>

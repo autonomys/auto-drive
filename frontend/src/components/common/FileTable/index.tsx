@@ -1,6 +1,6 @@
 'use client';
 
-import { ObjectSummary } from '@/models/UploadedObjectMetadata';
+import { ObjectSummary } from '../../../models/UploadedObjectMetadata';
 import { Checkbox, Transition } from '@headlessui/react';
 import { Square, SquareCheck } from 'lucide-react';
 import { FC, useCallback, useState } from 'react';
