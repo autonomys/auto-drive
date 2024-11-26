@@ -87,7 +87,6 @@ export type Api_Keys = {
   id: Scalars['String']['output'];
   oauth_provider: Scalars['String']['output'];
   oauth_user_id: Scalars['String']['output'];
-  secret: Scalars['String']['output'];
   updated_at: Scalars['timestamp']['output'];
 };
 
@@ -96,6 +95,17 @@ export type Api_Keys_Aggregate = {
   __typename?: 'api_keys_aggregate';
   aggregate?: Maybe<Api_Keys_Aggregate_Fields>;
   nodes: Array<Api_Keys>;
+};
+
+export type Api_Keys_Aggregate_Bool_Exp = {
+  count?: InputMaybe<Api_Keys_Aggregate_Bool_Exp_Count>;
+};
+
+export type Api_Keys_Aggregate_Bool_Exp_Count = {
+  arguments?: InputMaybe<Array<Api_Keys_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+  filter?: InputMaybe<Api_Keys_Bool_Exp>;
+  predicate: Int_Comparison_Exp;
 };
 
 /** aggregate fields of "api_keys" */
@@ -113,6 +123,13 @@ export type Api_Keys_Aggregate_FieldsCountArgs = {
   distinct?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
+/** order by aggregate values of table "api_keys" */
+export type Api_Keys_Aggregate_Order_By = {
+  count?: InputMaybe<Order_By>;
+  max?: InputMaybe<Api_Keys_Max_Order_By>;
+  min?: InputMaybe<Api_Keys_Min_Order_By>;
+};
+
 /** Boolean expression to filter rows from the table "api_keys". All fields are combined with a logical 'AND'. */
 export type Api_Keys_Bool_Exp = {
   _and?: InputMaybe<Array<Api_Keys_Bool_Exp>>;
@@ -123,7 +140,6 @@ export type Api_Keys_Bool_Exp = {
   id?: InputMaybe<String_Comparison_Exp>;
   oauth_provider?: InputMaybe<String_Comparison_Exp>;
   oauth_user_id?: InputMaybe<String_Comparison_Exp>;
-  secret?: InputMaybe<String_Comparison_Exp>;
   updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
 };
 
@@ -135,8 +151,17 @@ export type Api_Keys_Max_Fields = {
   id?: Maybe<Scalars['String']['output']>;
   oauth_provider?: Maybe<Scalars['String']['output']>;
   oauth_user_id?: Maybe<Scalars['String']['output']>;
-  secret?: Maybe<Scalars['String']['output']>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
+};
+
+/** order by max() on columns of table "api_keys" */
+export type Api_Keys_Max_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  deleted_at?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  oauth_provider?: InputMaybe<Order_By>;
+  oauth_user_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
 };
 
 /** aggregate min on columns */
@@ -147,8 +172,17 @@ export type Api_Keys_Min_Fields = {
   id?: Maybe<Scalars['String']['output']>;
   oauth_provider?: Maybe<Scalars['String']['output']>;
   oauth_user_id?: Maybe<Scalars['String']['output']>;
-  secret?: Maybe<Scalars['String']['output']>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
+};
+
+/** order by min() on columns of table "api_keys" */
+export type Api_Keys_Min_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  deleted_at?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  oauth_provider?: InputMaybe<Order_By>;
+  oauth_user_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
 };
 
 /** Ordering options when selecting data from "api_keys". */
@@ -158,7 +192,6 @@ export type Api_Keys_Order_By = {
   id?: InputMaybe<Order_By>;
   oauth_provider?: InputMaybe<Order_By>;
   oauth_user_id?: InputMaybe<Order_By>;
-  secret?: InputMaybe<Order_By>;
   updated_at?: InputMaybe<Order_By>;
 };
 
@@ -174,8 +207,6 @@ export enum Api_Keys_Select_Column {
   OauthProvider = 'oauth_provider',
   /** column name */
   OauthUserId = 'oauth_user_id',
-  /** column name */
-  Secret = 'secret',
   /** column name */
   UpdatedAt = 'updated_at'
 }
@@ -195,7 +226,6 @@ export type Api_Keys_Stream_Cursor_Value_Input = {
   id?: InputMaybe<Scalars['String']['input']>;
   oauth_provider?: InputMaybe<Scalars['String']['input']>;
   oauth_user_id?: InputMaybe<Scalars['String']['input']>;
-  secret?: InputMaybe<Scalars['String']['input']>;
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
 
@@ -1268,9 +1298,9 @@ export type Organizations_Stream_Cursor_Value_Input = {
 
 export type Query_Root = {
   __typename?: 'query_root';
-  /** fetch data from the table: "api_keys" */
+  /** An array relationship */
   api_keys: Array<Api_Keys>;
-  /** fetch aggregated fields from the table: "api_keys" */
+  /** An aggregate relationship */
   api_keys_aggregate: Api_Keys_Aggregate;
   /** fetch data from the table: "api_keys" using primary key columns */
   api_keys_by_pk?: Maybe<Api_Keys>;
@@ -1552,9 +1582,9 @@ export type Query_RootUsers_Organizations_AggregateArgs = {
 
 export type Subscription_Root = {
   __typename?: 'subscription_root';
-  /** fetch data from the table: "api_keys" */
+  /** An array relationship */
   api_keys: Array<Api_Keys>;
-  /** fetch aggregated fields from the table: "api_keys" */
+  /** An aggregate relationship */
   api_keys_aggregate: Api_Keys_Aggregate;
   /** fetch data from the table: "api_keys" using primary key columns */
   api_keys_by_pk?: Maybe<Api_Keys>;
@@ -2228,12 +2258,36 @@ export type Transaction_Results_Stream_Cursor_Value_Input = {
 /** columns and relationships of "users" */
 export type Users = {
   __typename?: 'users';
+  /** An array relationship */
+  api_keys: Array<Api_Keys>;
+  /** An aggregate relationship */
+  api_keys_aggregate: Api_Keys_Aggregate;
   created_at?: Maybe<Scalars['timestamp']['output']>;
   oauth_provider: Scalars['String']['output'];
   oauth_user_id: Scalars['String']['output'];
   public_id?: Maybe<Scalars['String']['output']>;
   role: Scalars['String']['output'];
   updated_at: Scalars['timestamp']['output'];
+};
+
+
+/** columns and relationships of "users" */
+export type UsersApi_KeysArgs = {
+  distinct_on?: InputMaybe<Array<Api_Keys_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Api_Keys_Order_By>>;
+  where?: InputMaybe<Api_Keys_Bool_Exp>;
+};
+
+
+/** columns and relationships of "users" */
+export type UsersApi_Keys_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Api_Keys_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Api_Keys_Order_By>>;
+  where?: InputMaybe<Api_Keys_Bool_Exp>;
 };
 
 /** aggregated selection of "users" */
@@ -2263,6 +2317,8 @@ export type Users_Bool_Exp = {
   _and?: InputMaybe<Array<Users_Bool_Exp>>;
   _not?: InputMaybe<Users_Bool_Exp>;
   _or?: InputMaybe<Array<Users_Bool_Exp>>;
+  api_keys?: InputMaybe<Api_Keys_Bool_Exp>;
+  api_keys_aggregate?: InputMaybe<Api_Keys_Aggregate_Bool_Exp>;
   created_at?: InputMaybe<Timestamp_Comparison_Exp>;
   oauth_provider?: InputMaybe<String_Comparison_Exp>;
   oauth_user_id?: InputMaybe<String_Comparison_Exp>;
@@ -2295,6 +2351,7 @@ export type Users_Min_Fields = {
 
 /** Ordering options when selecting data from "users". */
 export type Users_Order_By = {
+  api_keys_aggregate?: InputMaybe<Api_Keys_Aggregate_Order_By>;
   created_at?: InputMaybe<Order_By>;
   oauth_provider?: InputMaybe<Order_By>;
   oauth_user_id?: InputMaybe<Order_By>;
@@ -2455,6 +2512,11 @@ export type GetGlobalFilesQueryVariables = Exact<{
 
 
 export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, user?: { __typename?: 'users', public_id?: string | null } | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
+
+export type GetProfileQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type GetProfileQuery = { __typename?: 'query_root', users: Array<{ __typename?: 'users', public_id?: string | null, oauth_user_id: string, oauth_provider: string, api_keys: Array<{ __typename?: 'api_keys', id: string, oauth_user_id: string, oauth_provider: string, created_at?: any | null, deleted_at?: any | null }> }> };
 
 export type GetSharedFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -2666,6 +2728,54 @@ export type GetGlobalFilesQueryHookResult = ReturnType<typeof useGetGlobalFilesQ
 export type GetGlobalFilesLazyQueryHookResult = ReturnType<typeof useGetGlobalFilesLazyQuery>;
 export type GetGlobalFilesSuspenseQueryHookResult = ReturnType<typeof useGetGlobalFilesSuspenseQuery>;
 export type GetGlobalFilesQueryResult = Apollo.QueryResult<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>;
+export const GetProfileDocument = gql`
+    query GetProfile {
+  users {
+    public_id
+    oauth_user_id
+    oauth_provider
+    api_keys(where: {deleted_at: {_is_null: true}}) {
+      id
+      oauth_user_id
+      oauth_provider
+      created_at
+      deleted_at
+    }
+  }
+}
+    `;
+
+/**
+ * __useGetProfileQuery__
+ *
+ * To run a query within a React component, call `useGetProfileQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetProfileQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetProfileQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useGetProfileQuery(baseOptions?: Apollo.QueryHookOptions<GetProfileQuery, GetProfileQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetProfileQuery, GetProfileQueryVariables>(GetProfileDocument, options);
+      }
+export function useGetProfileLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetProfileQuery, GetProfileQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetProfileQuery, GetProfileQueryVariables>(GetProfileDocument, options);
+        }
+export function useGetProfileSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetProfileQuery, GetProfileQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetProfileQuery, GetProfileQueryVariables>(GetProfileDocument, options);
+        }
+export type GetProfileQueryHookResult = ReturnType<typeof useGetProfileQuery>;
+export type GetProfileLazyQueryHookResult = ReturnType<typeof useGetProfileLazyQuery>;
+export type GetProfileSuspenseQueryHookResult = ReturnType<typeof useGetProfileSuspenseQuery>;
+export type GetProfileQueryResult = Apollo.QueryResult<GetProfileQuery, GetProfileQueryVariables>;
 export const GetSharedFilesDocument = gql`
     query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!) {
   metadata(

@@ -4,7 +4,7 @@ export type ApiKey = {
   oauthProvider: string;
   oauthUserId: string;
   deletedAt?: Date | null;
-  created_at: PropertyKey;
+  createdAt: Date;
 };
 
 export type ApiKeyWithoutSecret = Omit<ApiKey, 'secret'> & {
