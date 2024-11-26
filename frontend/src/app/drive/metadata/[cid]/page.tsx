@@ -1,16 +1,23 @@
-'use client';
+import { GetMetadataByHeadCidDocument } from '../../../../../gql/graphql';
+import { ObjectDetails } from '../../../../views/ObjectDetails';
+import { apiv2Client } from '../../../../services/apiv2';
+import { authOptions } from '../../../api/auth/[...nextauth]/config';
+import { getServerSession } from 'next-auth/next';
+import { mapObjectInformationFromQueryResult } from './query';
 
-import { useEffect, useState } from 'react';
-import { ApiService } from '../../../../services/api';
-import { UploadedObjectMetadata } from '../../../../models/UploadedObjectMetadata';
-import { UploadedObjectInformation } from '../../../../components/UploadedObjectInformation';
+export default async function Page({ params }: { params: { cid: string } }) {
+  const session = await getServerSession(authOptions);
+  const { data } = await apiv2Client.query({
+    query: GetMetadataByHeadCidDocument,
+    variables: { headCid: params.cid },
+    context: {
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+      },
+    },
+  });
 
-export default function Page({ params }: { params: { cid: string } }) {
-  const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
+  const metadata = mapObjectInformationFromQueryResult(data);
 
-  useEffect(() => {
-    ApiService.fetchUploadedObjectMetadata(params.cid).then(setMetadata);
-  }, [params.cid]);
-
-  return <UploadedObjectInformation object={metadata} />;
+  return <ObjectDetails metadata={metadata} />;
 }

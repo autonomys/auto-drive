@@ -13,4 +13,25 @@ select_permissions:
         - created_at
         - updated_at
       filter: {}
+      allow_aggregations: true
     comment: ""
+object_relationships:
+  - name: metadata
+    using:
+      manual_configuration:
+        column_mapping:
+          cid: head_cid
+        insertion_order: null
+        remote_table:
+          name: metadata
+      schema: public
+  - name: user
+    using:
+      manual_configuration:
+        column_mapping:
+          oauth_provider: oauth_provider
+          oauth_user_id: oauth_user_id
+        insertion_order: null
+        remote_table:
+          name: users
+          schema: public

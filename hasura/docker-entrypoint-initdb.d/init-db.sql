@@ -432,7 +432,7 @@ ALTER TABLE uploads.uploads ADD CONSTRAINT uploads_oauth_provider_oauth_user_id_
 
 -- jwt_token_registry definition
 
-CREATE TABLE jwt_token_registry (
+CREATE TABLE public.jwt_token_registry (
     id TEXT PRIMARY KEY,
     createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

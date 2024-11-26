@@ -1,0 +1,16 @@
+table:
+  name: interactions
+  schema: public
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - subscription_id
+        - type
+        - size
+        - created_at
+        - updated_at
+      filter: {}
+      allow_aggregations: true
+    comment: ""

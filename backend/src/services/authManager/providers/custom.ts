@@ -42,6 +42,12 @@ const createAccessToken = (user: OAuthUser, refreshTokenId: string) => {
     oauthProvider: user.provider,
     oauthUserId: user.id,
     refreshTokenId,
+    'https://hasura.io/jwt/claims': {
+      'x-hasura-default-role': 'user',
+      'x-hasura-allowed-roles': ['user'],
+      'x-hasura-oauth-provider': user.provider,
+      'x-hasura-oauth-user-id': user.id,
+    },
   }
 
   return jwt.sign(payload, JWT_SECRET, {

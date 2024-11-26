@@ -2441,6 +2441,13 @@ export type Users_Stream_Cursor_Value_Input = {
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
 
+export type GetMetadataByHeadCidQueryVariables = Exact<{
+  headCid: Scalars['String']['input'];
+}>;
+
+
+export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, user?: { __typename?: 'users', public_id?: string | null } | null }> }> };
+
 export type GetGlobalFilesQueryVariables = Exact<{
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
@@ -2480,6 +2487,85 @@ export type GetMyFilesQueryVariables = Exact<{
 export type GetMyFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, user?: { __typename?: 'users', public_id?: string | null } | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
 
 
+export const GetMetadataByHeadCidDocument = gql`
+    query GetMetadataByHeadCID($headCid: String!) {
+  metadata(distinct_on: root_cid, where: {_and: {head_cid: {_eq: $headCid}}}) {
+    metadata
+    maximumBlockDepth: nodes(
+      order_by: {transaction_result: {created_at: desc_nulls_first}}
+      limit: 1
+    ) {
+      transaction_result {
+        blockNumber: transaction_result(path: "blockNumber")
+      }
+    }
+    minimumBlockDepth: nodes(
+      order_by: {transaction_result: {created_at: asc}}
+      limit: 1
+    ) {
+      transaction_result {
+        blockNumber: transaction_result(path: "blockNumber")
+      }
+    }
+    publishedNodes: nodes_aggregate(
+      where: {transaction_result: {transaction_result: {_is_null: false}}}
+    ) {
+      aggregate {
+        count
+      }
+    }
+    archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
+      aggregate {
+        count
+      }
+    }
+    totalNodes: nodes_aggregate {
+      aggregate {
+        count
+      }
+    }
+    object_ownership {
+      user {
+        public_id
+      }
+      is_admin
+    }
+  }
+}
+    `;
+
+/**
+ * __useGetMetadataByHeadCidQuery__
+ *
+ * To run a query within a React component, call `useGetMetadataByHeadCidQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetMetadataByHeadCidQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetMetadataByHeadCidQuery({
+ *   variables: {
+ *      headCid: // value for 'headCid'
+ *   },
+ * });
+ */
+export function useGetMetadataByHeadCidQuery(baseOptions: Apollo.QueryHookOptions<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables> & ({ variables: GetMetadataByHeadCidQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>(GetMetadataByHeadCidDocument, options);
+      }
+export function useGetMetadataByHeadCidLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>(GetMetadataByHeadCidDocument, options);
+        }
+export function useGetMetadataByHeadCidSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>(GetMetadataByHeadCidDocument, options);
+        }
+export type GetMetadataByHeadCidQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidQuery>;
+export type GetMetadataByHeadCidLazyQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidLazyQuery>;
+export type GetMetadataByHeadCidSuspenseQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidSuspenseQuery>;
+export type GetMetadataByHeadCidQueryResult = Apollo.QueryResult<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>;
 export const GetGlobalFilesDocument = gql`
     query GetGlobalFiles($limit: Int!, $offset: Int!) {
   metadata(

@@ -48,6 +48,9 @@ export const authOptions: AuthOptions = {
       return session;
     },
   },
+  session: {
+    strategy: 'jwt',  
+  },
   events: {
     async signOut({ token }) {
       if (token.refreshToken) {
