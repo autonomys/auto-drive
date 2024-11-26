@@ -58,7 +58,6 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
 
   const handleSelectItem = useCallback(
     (item: string) => {
-      setQuery(item);
       setIsOpen(false);
       router.push(`/drive/search/${item}`);
       inputRef.current?.focus();
@@ -100,20 +99,24 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
       );
     }
 
-    return recommendations.map((item) => (
-      <div
-        role='button'
-        tabIndex={0}
-        key={item.cid}
-        onKeyDown={handleEnterOrSpace(() => handleSelectItem(item.name))}
-        className='relative cursor-pointer select-none overflow-hidden text-ellipsis px-4 py-2 font-semibold text-gray-900 hover:bg-blue-600 hover:text-white'
-        onClick={() => handleSelectItem(item.name)}
-      >
-        {item.name.toLowerCase().includes(query.toLowerCase())
-          ? item.name
-          : item.cid}
-      </div>
-    ));
+    return recommendations.map((item) => {
+      const displayText = item.name.toLowerCase().includes(query.toLowerCase())
+        ? item.name
+        : item.cid;
+
+      return (
+        <div
+          role='button'
+          tabIndex={0}
+          key={item.cid}
+          onKeyDown={handleEnterOrSpace(() => handleSelectItem(displayText))}
+          className='relative cursor-pointer select-none overflow-hidden text-ellipsis px-4 py-2 font-semibold text-gray-900 hover:bg-blue-600 hover:text-white'
+          onClick={() => handleSelectItem(displayText)}
+        >
+          {displayText}
+        </div>
+      );
+    });
   }, [query, recommendations, error, handleSelectItem]);
 
   return (
