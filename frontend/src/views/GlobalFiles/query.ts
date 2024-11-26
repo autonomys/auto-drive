@@ -1,22 +1,12 @@
 import { gql } from '@apollo/client';
-export const GET_TRASHED_FILES = gql`
-  query GetTrashedFiles(
-    $oauthUserId: String!
-    $oauthProvider: String!
-    $limit: Int!
-    $offset: Int!
-  ) {
+
+export const GET_GLOBAL_FILES = gql`
+  query GetGlobalFiles($limit: Int!, $offset: Int!) {
     metadata(
       distinct_on: root_cid
       where: {
         root_metadata: {
-          object_ownership: {
-            _and: {
-              oauth_user_id: { _eq: $oauthUserId }
-              oauth_provider: { _eq: $oauthProvider }
-              marked_as_deleted: { _is_null: false }
-            }
-          }
+          object_ownership: { _and: { is_admin: { _eq: true } } }
         }
       }
       limit: $limit
@@ -78,13 +68,7 @@ export const GET_TRASHED_FILES = gql`
       distinct_on: root_cid
       where: {
         root_metadata: {
-          object_ownership: {
-            _and: {
-              oauth_user_id: { _eq: $oauthUserId }
-              oauth_provider: { _eq: $oauthProvider }
-              marked_as_deleted: { _is_null: false }
-            }
-          }
+          object_ownership: { _and: { is_admin: { _eq: true } } }
         }
       }
     ) {

@@ -2441,6 +2441,14 @@ export type Users_Stream_Cursor_Value_Input = {
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
 
+export type GetGlobalFilesQueryVariables = Exact<{
+  limit: Scalars['Int']['input'];
+  offset: Scalars['Int']['input'];
+}>;
+
+
+export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, user?: { __typename?: 'users', public_id?: string | null } | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
+
 export type GetSharedFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
   oauthProvider: Scalars['String']['input'];
@@ -2472,6 +2480,106 @@ export type GetMyFilesQueryVariables = Exact<{
 export type GetMyFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, user?: { __typename?: 'users', public_id?: string | null } | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
 
 
+export const GetGlobalFilesDocument = gql`
+    query GetGlobalFiles($limit: Int!, $offset: Int!) {
+  metadata(
+    distinct_on: root_cid
+    where: {root_metadata: {object_ownership: {_and: {is_admin: {_eq: true}}}}}
+    limit: $limit
+    offset: $offset
+  ) {
+    root_metadata {
+      cid: head_cid
+      type: metadata(path: "type")
+      name: metadata(path: "name")
+      mimeType: metadata(path: "mimeType")
+      size: metadata(path: "totalSize")
+      children: metadata(path: "children")
+      maximumBlockDepth: nodes(
+        order_by: {transaction_result: {created_at: desc_nulls_first}}
+        limit: 1
+      ) {
+        transaction_result {
+          blockNumber: transaction_result(path: "blockNumber")
+        }
+      }
+      minimumBlockDepth: nodes(
+        order_by: {transaction_result: {created_at: asc}}
+        limit: 1
+      ) {
+        transaction_result {
+          blockNumber: transaction_result(path: "blockNumber")
+        }
+      }
+      publishedNodes: nodes_aggregate(
+        where: {transaction_result: {transaction_result: {_is_null: false}}}
+      ) {
+        aggregate {
+          count
+        }
+      }
+      archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
+        aggregate {
+          count
+        }
+      }
+      totalNodes: nodes_aggregate {
+        aggregate {
+          count
+        }
+      }
+      object_ownership {
+        user {
+          public_id
+        }
+        is_admin
+      }
+    }
+  }
+  metadata_aggregate(
+    distinct_on: root_cid
+    where: {root_metadata: {object_ownership: {_and: {is_admin: {_eq: true}}}}}
+  ) {
+    aggregate {
+      count
+    }
+  }
+}
+    `;
+
+/**
+ * __useGetGlobalFilesQuery__
+ *
+ * To run a query within a React component, call `useGetGlobalFilesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetGlobalFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetGlobalFilesQuery({
+ *   variables: {
+ *      limit: // value for 'limit'
+ *      offset: // value for 'offset'
+ *   },
+ * });
+ */
+export function useGetGlobalFilesQuery(baseOptions: Apollo.QueryHookOptions<GetGlobalFilesQuery, GetGlobalFilesQueryVariables> & ({ variables: GetGlobalFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>(GetGlobalFilesDocument, options);
+      }
+export function useGetGlobalFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>(GetGlobalFilesDocument, options);
+        }
+export function useGetGlobalFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>(GetGlobalFilesDocument, options);
+        }
+export type GetGlobalFilesQueryHookResult = ReturnType<typeof useGetGlobalFilesQuery>;
+export type GetGlobalFilesLazyQueryHookResult = ReturnType<typeof useGetGlobalFilesLazyQuery>;
+export type GetGlobalFilesSuspenseQueryHookResult = ReturnType<typeof useGetGlobalFilesSuspenseQuery>;
+export type GetGlobalFilesQueryResult = Apollo.QueryResult<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>;
 export const GetSharedFilesDocument = gql`
     query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!) {
   metadata(

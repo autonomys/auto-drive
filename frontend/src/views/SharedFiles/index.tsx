@@ -1,5 +1,5 @@
 import { LoaderCircle } from 'lucide-react';
-import { ObjectSummary, OwnerRole } from '../../models/UploadedObjectMetadata';
+import { ObjectSummary } from '../../models/UploadedObjectMetadata';
 import {
   FileActionButtons,
   FileTable,
@@ -8,12 +8,10 @@ import { UploadingObjects } from '../../components/Files/UploadingObjects';
 import { NoSharedFilesPlaceholder } from './NoSharedFilesPlaceholder';
 import { useCallback, useState } from 'react';
 import { PaginatedResult } from '../../models/common';
-import {
-  GetSharedFilesQuery,
-  useGetSharedFilesQuery,
-} from '../../../gql/graphql';
+import { useGetSharedFilesQuery } from '../../../gql/graphql';
 import { useSession } from 'next-auth/react';
 import { useUserStore } from '../../states/user';
+import { objectSummaryFromSharedFilesQuery } from './utils';
 
 export const SharedFiles = () => {
   const user = useUserStore(({ user }) => user);
@@ -28,38 +26,9 @@ export const SharedFiles = () => {
     setTotalItems(result.totalCount);
   }, []);
 
-  const parseQueryResultIntoFileSummaries = useCallback(
-    (e: GetSharedFilesQuery): ObjectSummary[] => {
-      return e.metadata.map((m) => ({
-        headCid: m.root_metadata!.cid,
-        size: m.root_metadata?.size ?? 0,
-        owners: m.root_metadata!.object_ownership.map((o) => ({
-          publicId: o.user?.public_id ?? '',
-          role: o.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
-        })),
-        type: m.root_metadata?.type,
-        name: m.root_metadata?.name,
-        mimeType: m.root_metadata?.mimeType,
-        children: m.root_metadata?.children,
-        uploadStatus: {
-          uploadedNodes: m.root_metadata!.publishedNodes.aggregate?.count ?? 0,
-          archivedNodes: m.root_metadata!.archivedNodes.aggregate?.count ?? 0,
-          totalNodes: m.root_metadata!.totalNodes.aggregate?.count ?? 0,
-          minimumBlockDepth:
-            m.root_metadata!.minimumBlockDepth[0].transaction_result
-              ?.blockNumber ?? null,
-          maximumBlockDepth:
-            m.root_metadata!.maximumBlockDepth[0].transaction_result
-              ?.blockNumber ?? null,
-        },
-      }));
-    },
-    [],
-  );
-
   const session = useSession();
 
-  const { loading } = useGetSharedFilesQuery({
+  useGetSharedFilesQuery({
     variables: {
       oauthUserId: user?.oauthUserId ?? '',
       oauthProvider: user?.oauthProvider ?? '',
@@ -74,7 +43,7 @@ export const SharedFiles = () => {
     },
     onCompleted(data) {
       updateResult({
-        rows: parseQueryResultIntoFileSummaries(data),
+        rows: objectSummaryFromSharedFilesQuery(data),
         totalCount: data.metadata_aggregate.aggregate?.count ?? 0,
       });
     },
