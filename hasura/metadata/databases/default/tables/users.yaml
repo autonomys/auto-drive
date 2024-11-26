@@ -19,3 +19,13 @@ select_permissions:
         }
       allow_aggregations: true
     comment: ""
+array_relationships:
+  - name: api_keys
+    using:
+      foreign_key_constraint_on:
+        columns:
+          - oauth_provider
+          - oauth_user_id
+        table:
+            schema: public
+            name: api_keys
