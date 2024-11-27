@@ -18,7 +18,7 @@ import { useMemo } from 'react';
 import Image from 'next/image';
 import { useUserStore } from '../../states/user';
 import { ApolloProvider } from '@apollo/client';
-import { gqlCSRClient } from '../../services/gql';
+import { gqlClient } from '../../services/gql';
 import { SessionProvider } from 'next-auth/react';
 
 export default function AppLayout({
@@ -121,9 +121,7 @@ export default function AppLayout({
             </aside>
             <main className='flex-1 overflow-auto p-6'>
               <SessionProvider>
-                <ApolloProvider client={gqlCSRClient}>
-                  {children}
-                </ApolloProvider>
+                <ApolloProvider client={gqlClient}>{children}</ApolloProvider>
               </SessionProvider>
             </main>
           </UserEnsurer>
