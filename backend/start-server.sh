@@ -1,2 +1,4 @@
 yarn install
-yarn start:server
+yarn build
+yarn db-migrate up
+node dist/server.js

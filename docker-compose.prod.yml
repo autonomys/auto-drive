@@ -7,21 +7,21 @@ services:
   hasura:
     image: hasura/graphql-engine:v2.40.0
     depends_on:
-      postgres:
+      app:
         condition: service_healthy
     volumes:
       - ./hasura/metadata:/hasura-metadata
     restart: unless-stopped
     environment:
       # Essential Environment Variables
-      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DB_DATABASE}
-      HASURA_GRAPHQL_DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DB_DATABASE} # Main database connection
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: ${DATABASE_URL}
+      HASURA_GRAPHQL_DATABASE_URL: ${DATABASE_URL}
       HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET} # Admin access secret
       HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET} # JWT authentication secret
 
       # Console and Development Mode
       HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE} # Disable console in production
-      HASURA_GRAPHQL_DEV_MODE: "true" # Disable development mode features
+      HASURA_GRAPHQL_DEV_MODE: "false" # Disable development mode features
 
       # Role and CORS Settings
       HASURA_GRAPHQL_UNAUTHORIZED_ROLE: user # Default role for unauthenticated users
@@ -36,7 +36,7 @@ services:
       HASURA_GRAPHQL_TIMEOUT: 60 # Request timeout in seconds
 
       # Logging Settings
-      HASURA_GRAPHQL_LOG_LEVEL: "debug" # Log verbosity level
+      HASURA_GRAPHQL_LOG_LEVEL: "warn" # Log verbosity level
       HASURA_GRAPHQL_ENABLED_LOG_TYPES: "startup,http-log,webhook-log,websocket-log,query-log" # Enabled log types
 
       # Security and Authorization
@@ -49,22 +49,18 @@ services:
     command:
       - graphql-engine
       - serve
-  postgres:
-    image: postgres:16-alpine
+  app:
+    image: node:20
+    container_name: node_app
+    working_dir: /usr/src/app
     volumes:
-      - postgres_db:/var/lib/postgresql/data
-      - ./hasura/docker-entrypoint-initdb.d/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    restart: unless-stopped
-    hostname: postgres
-    environment:
-      POSTGRES_DB: ${DB_DATABASE}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_MAX_CONNECTIONS: 500
+      - ./backend:/usr/src/app
     ports:
-      - "${DB_PORT}:5432"
+      - "3000:3000"
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
       retries: 5
+    entrypoint: ["bash", "start-server.sh"]

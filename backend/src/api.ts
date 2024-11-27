@@ -36,6 +36,10 @@ const createServer = async () => {
   app.use('/users', userController)
   app.use('/uploads', uploadController)
 
+  app.get('/health', (_req, res) => {
+    res.sendStatus(204)
+  })
+
   app.get('/auth/session', async (req, res) => {
     try {
       const user = await handleAuth(req, res)
