@@ -1,9 +1,6 @@
 volumes:
   node-data: {}
   postgres_db: {}
-  redis_db: {}
-  caddy_config: {}
-  caddy_data: {}
 
 services:
   # Hasura GraphQL Engine
