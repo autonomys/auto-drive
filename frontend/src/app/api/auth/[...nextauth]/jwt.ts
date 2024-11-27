@@ -71,10 +71,6 @@ export const generateAccessToken = async ({
     underlyingUserId: userId,
     accessToken,
     refreshToken,
-    oauthUser: {
-      oauthProvider: provider,
-      oauthUserId: userId,
-    },
   };
 
   return nextJWT;
