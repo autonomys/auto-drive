@@ -3,6 +3,8 @@ import { SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME } from '../../../../services/gql/
 import { gqlClient } from '../../../../services/gql';
 import { SearchGlobalMetadataByCidOrNameQuery } from '../../../../../gql/graphql';
 
+export const dynamic = 'force-dynamic';
+
 export default async function Page({
   params: { cid },
 }: {

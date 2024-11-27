@@ -6,6 +6,8 @@ import {
 } from '../../../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../../../services/gql/utils';
 
+export const dynamic = 'force-dynamic';
+
 export default async function Page({ params }: { params: { cid: string } }) {
   const { data } = await gqlClient.query<GetMetadataByHeadCidQuery>({
     query: GetMetadataByHeadCidDocument,

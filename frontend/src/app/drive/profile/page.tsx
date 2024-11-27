@@ -12,6 +12,8 @@ const getApiKeysFromResult = (user: GetProfileQuery['users'][number]) => {
   }));
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function Page() {
   const { data } = await gqlClient.query<GetProfileQuery>({
     query: GetProfileQueryText,
