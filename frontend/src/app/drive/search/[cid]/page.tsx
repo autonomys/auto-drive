@@ -1,6 +1,4 @@
 import { SearchResult } from '../../../../views/SearchResult';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../api/auth/[...nextauth]/config';
 import { SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME } from '../../../../services/gql/common/query';
 import { apiv2Client } from '../../../../services/gql';
 import { SearchGlobalMetadataByCidOrNameQuery } from '../../../../../gql/graphql';
@@ -10,19 +8,12 @@ export default async function Page({
 }: {
   params: { cid: string };
 }) {
-  const session = await getServerSession(authOptions);
-
   const { data } =
     await apiv2Client.query<SearchGlobalMetadataByCidOrNameQuery>({
       query: SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
       variables: {
         search: cid,
         limit: 100,
-      },
-      context: {
-        headers: {
-          Authorization: `Bearer ${session?.accessToken}`,
-        },
       },
     });
 
