@@ -1,7 +1,6 @@
 'use client';
 
 import bytes from 'bytes';
-import { OffchainMetadata } from '@autonomys/auto-dag-data';
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
 import {
   Download,
@@ -16,13 +15,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ObjectDownloadModal } from '../Files/ObjectDownloadModal';
 import { handleClick, handleEnterOrSpace } from '../../utils/eventHandler';
 import { shortenString } from '../../utils/misc';
-
-type BaseMetadata = {
-  type: OffchainMetadata['type'];
-  name?: string;
-  totalSize: bigint;
-  cid: string;
-};
+import { BaseMetadata } from '../../models/UploadedObjectMetadata';
 
 interface FileCardProps {
   icon?: React.ReactNode;
@@ -30,7 +23,7 @@ interface FileCardProps {
 }
 
 export const FileCard = ({
-  metadata: { type, name, totalSize, cid },
+  metadata: { type, name, size, cid },
   icon,
 }: FileCardProps) => {
   const router = useRouter();
@@ -99,7 +92,7 @@ export const FileCard = ({
         <h2 className='mb-2 text-lg font-semibold text-gray-800'>
           {name ? shortenString(name, 20) : shortenString(cid, 20)}
         </h2>
-        <p className='mb-4 text-gray-500'>Size: {bytes(Number(totalSize))}</p>
+        <p className='mb-4 text-gray-500'>Size: {bytes(Number(size))}</p>
         <button
           onClick={handleDownloadClick}
           className='flex w-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600'

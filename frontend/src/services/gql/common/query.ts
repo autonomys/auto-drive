@@ -4,7 +4,12 @@ export const GET_METADATA_BY_HEAD_CID = gql`
   query GetMetadataByHeadCID($headCid: String!) {
     metadata(
       distinct_on: root_cid
-      where: { _and: { head_cid: { _eq: $headCid } } }
+      where: {
+        _or: [
+          { head_cid: { _ilike: $headCid } }
+          { name: { _ilike: $headCid } }
+        ]
+      }
     ) {
       metadata
       maximumBlockDepth: nodes(
@@ -50,6 +55,60 @@ export const GET_METADATA_BY_HEAD_CID = gql`
         }
         is_admin
       }
+    }
+  }
+`;
+
+export const SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME = gql`
+  query SearchGlobalMetadataByCIDOrName($search: String!, $limit: Int!) {
+    metadata(
+      distinct_on: root_cid
+      where: {
+        _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]
+      }
+      limit: $limit
+    ) {
+      type: metadata(path: "type")
+      name
+      size: metadata(path: "totalSize")
+      cid: head_cid
+    }
+  }
+`;
+
+export const SEARCH_USER_METADATA_BY_CID_OR_NAME = gql`
+  query SearchUserMetadataByCIDOrName(
+    $search: String!
+    $oauthUserId: String!
+    $oauthProvider: String!
+    $limit: Int!
+  ) {
+    metadata(
+      distinct_on: root_cid
+      where: {
+        _and: [
+          {
+            _or: [
+              { head_cid: { _ilike: $search } }
+              { name: { _ilike: $search } }
+            ]
+          }
+          {
+            object_ownership: {
+              _and: {
+                oauth_user_id: { _eq: $oauthUserId }
+                oauth_provider: { _eq: $oauthProvider }
+              }
+            }
+          }
+        ]
+      }
+      limit: $limit
+    ) {
+      type: metadata(path: "type")
+      name
+      size: metadata(path: "totalSize")
+      cid: head_cid
     }
   }
 `;

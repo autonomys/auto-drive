@@ -7,6 +7,7 @@ select_permissions:
       columns:
         - root_cid
         - head_cid
+        - name
         - metadata
         - created_at
         - updated_at

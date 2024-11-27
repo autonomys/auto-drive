@@ -437,4 +437,7 @@ CREATE TABLE public.jwt_token_registry (
     createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE metadata ADD COLUMN "name" TEXT DEFAULT '';
+UPDATE metadata SET "name" = metadata->>'name';
+
 -- End of file

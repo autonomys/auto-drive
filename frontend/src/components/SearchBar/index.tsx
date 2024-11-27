@@ -7,6 +7,16 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ObjectSearchResult } from '../../models/ObjectSearchResult';
 import { handleEnterOrSpace } from '../../utils/eventHandler';
+import { useQuery } from '@apollo/client';
+import {
+  SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
+  SEARCH_USER_METADATA_BY_CID_OR_NAME,
+} from '../../services/gql/common/query';
+import { useSession } from 'next-auth/react';
+import {
+  SearchGlobalMetadataByCidOrNameQuery,
+  SearchUserMetadataByCidOrNameQuery,
+} from '../../../gql/graphql';
 
 export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   const [query, setQuery] = useState('');
@@ -14,21 +24,47 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
+  const session = useSession();
   const [recommendations, setRecommendations] = useState<
     ObjectSearchResult[] | null
   >(null);
   const router = useRouter();
 
-  useEffect(() => {
-    if (query.length > 2) {
-      setError(null);
-      ApiService.searchByCIDOrName(query, scope)
-        .then(setRecommendations)
-        .catch(() => setError('Error fetching recommendations'));
-    } else {
-      setRecommendations(null);
-    }
-  }, [query, scope]);
+  const gqlQuery =
+    scope === 'global'
+      ? SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME
+      : SEARCH_USER_METADATA_BY_CID_OR_NAME;
+
+  useQuery(gqlQuery, {
+    variables: {
+      search: `%${query}%`,
+      limit: 5,
+      oauthUserId: session.data?.underlyingUserId,
+      oauthProvider: session.data?.underlyingProvider,
+    },
+    skip: query.length < 3 || !session.data?.accessToken,
+    context: {
+      headers: {
+        Authorization: `Bearer ${session.data?.accessToken}`,
+      },
+    },
+    onCompleted: (
+      data: SearchGlobalMetadataByCidOrNameQuery &
+        SearchUserMetadataByCidOrNameQuery,
+    ) => {
+      console.log('data', data);
+
+      setRecommendations(
+        data.metadata.map((e) => ({
+          cid: e.cid,
+          name: e.name ?? '',
+        })),
+      );
+    },
+    onError: (error) => {
+      setError(error.message);
+    },
+  });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

@@ -458,6 +458,7 @@ export type Metadata = {
   metadata_list_by_root_id: Array<Metadata>;
   /** An aggregate relationship */
   metadata_list_by_root_id_aggregate: Metadata_Aggregate;
+  name?: Maybe<Scalars['String']['output']>;
   /** An array relationship */
   nodes: Array<Nodes>;
   /** An aggregate relationship */
@@ -589,6 +590,7 @@ export type Metadata_Bool_Exp = {
   metadata?: InputMaybe<Jsonb_Comparison_Exp>;
   metadata_list_by_root_id?: InputMaybe<Metadata_Bool_Exp>;
   metadata_list_by_root_id_aggregate?: InputMaybe<Metadata_Aggregate_Bool_Exp>;
+  name?: InputMaybe<String_Comparison_Exp>;
   nodes?: InputMaybe<Nodes_Bool_Exp>;
   nodes_aggregate?: InputMaybe<Nodes_Aggregate_Bool_Exp>;
   object_ownership?: InputMaybe<Object_Ownership_Bool_Exp>;
@@ -603,6 +605,7 @@ export type Metadata_Max_Fields = {
   __typename?: 'metadata_max_fields';
   created_at?: Maybe<Scalars['timestamp']['output']>;
   head_cid?: Maybe<Scalars['String']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
 };
@@ -611,6 +614,7 @@ export type Metadata_Max_Fields = {
 export type Metadata_Max_Order_By = {
   created_at?: InputMaybe<Order_By>;
   head_cid?: InputMaybe<Order_By>;
+  name?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
   updated_at?: InputMaybe<Order_By>;
 };
@@ -620,6 +624,7 @@ export type Metadata_Min_Fields = {
   __typename?: 'metadata_min_fields';
   created_at?: Maybe<Scalars['timestamp']['output']>;
   head_cid?: Maybe<Scalars['String']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
 };
@@ -628,6 +633,7 @@ export type Metadata_Min_Fields = {
 export type Metadata_Min_Order_By = {
   created_at?: InputMaybe<Order_By>;
   head_cid?: InputMaybe<Order_By>;
+  name?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
   updated_at?: InputMaybe<Order_By>;
 };
@@ -639,6 +645,7 @@ export type Metadata_Order_By = {
   head_cid?: InputMaybe<Order_By>;
   metadata?: InputMaybe<Order_By>;
   metadata_list_by_root_id_aggregate?: InputMaybe<Metadata_Aggregate_Order_By>;
+  name?: InputMaybe<Order_By>;
   nodes_aggregate?: InputMaybe<Nodes_Aggregate_Order_By>;
   object_ownership_aggregate?: InputMaybe<Object_Ownership_Aggregate_Order_By>;
   root_cid?: InputMaybe<Order_By>;
@@ -654,6 +661,8 @@ export enum Metadata_Select_Column {
   HeadCid = 'head_cid',
   /** column name */
   Metadata = 'metadata',
+  /** column name */
+  Name = 'name',
   /** column name */
   RootCid = 'root_cid',
   /** column name */
@@ -673,6 +682,7 @@ export type Metadata_Stream_Cursor_Value_Input = {
   created_at?: InputMaybe<Scalars['timestamp']['input']>;
   head_cid?: InputMaybe<Scalars['String']['input']>;
   metadata?: InputMaybe<Scalars['jsonb']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
   root_cid?: InputMaybe<Scalars['String']['input']>;
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
@@ -2505,6 +2515,24 @@ export type GetMetadataByHeadCidQueryVariables = Exact<{
 
 export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, user?: { __typename?: 'users', public_id?: string | null } | null }> }> };
 
+export type SearchGlobalMetadataByCidOrNameQueryVariables = Exact<{
+  search: Scalars['String']['input'];
+  limit: Scalars['Int']['input'];
+}>;
+
+
+export type SearchGlobalMetadataByCidOrNameQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', name?: string | null, type?: any | null, size?: any | null, cid: string }> };
+
+export type SearchUserMetadataByCidOrNameQueryVariables = Exact<{
+  search: Scalars['String']['input'];
+  oauthUserId: Scalars['String']['input'];
+  oauthProvider: Scalars['String']['input'];
+  limit: Scalars['Int']['input'];
+}>;
+
+
+export type SearchUserMetadataByCidOrNameQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', name?: string | null, type?: any | null, size?: any | null, cid: string }> };
+
 export type GetGlobalFilesQueryVariables = Exact<{
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
@@ -2551,7 +2579,10 @@ export type GetMyFilesQuery = { __typename?: 'query_root', metadata: Array<{ __t
 
 export const GetMetadataByHeadCidDocument = gql`
     query GetMetadataByHeadCID($headCid: String!) {
-  metadata(distinct_on: root_cid, where: {_and: {head_cid: {_eq: $headCid}}}) {
+  metadata(
+    distinct_on: root_cid
+    where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
+  ) {
     metadata
     maximumBlockDepth: nodes(
       order_by: {transaction_result: {created_at: desc_nulls_first}}
@@ -2628,6 +2659,104 @@ export type GetMetadataByHeadCidQueryHookResult = ReturnType<typeof useGetMetada
 export type GetMetadataByHeadCidLazyQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidLazyQuery>;
 export type GetMetadataByHeadCidSuspenseQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidSuspenseQuery>;
 export type GetMetadataByHeadCidQueryResult = Apollo.QueryResult<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>;
+export const SearchGlobalMetadataByCidOrNameDocument = gql`
+    query SearchGlobalMetadataByCIDOrName($search: String!, $limit: Int!) {
+  metadata(
+    distinct_on: root_cid
+    where: {_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
+    limit: $limit
+  ) {
+    type: metadata(path: "type")
+    name
+    size: metadata(path: "totalSize")
+    cid: head_cid
+  }
+}
+    `;
+
+/**
+ * __useSearchGlobalMetadataByCidOrNameQuery__
+ *
+ * To run a query within a React component, call `useSearchGlobalMetadataByCidOrNameQuery` and pass it any options that fit your needs.
+ * When your component renders, `useSearchGlobalMetadataByCidOrNameQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useSearchGlobalMetadataByCidOrNameQuery({
+ *   variables: {
+ *      search: // value for 'search'
+ *      limit: // value for 'limit'
+ *   },
+ * });
+ */
+export function useSearchGlobalMetadataByCidOrNameQuery(baseOptions: Apollo.QueryHookOptions<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables> & ({ variables: SearchGlobalMetadataByCidOrNameQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>(SearchGlobalMetadataByCidOrNameDocument, options);
+      }
+export function useSearchGlobalMetadataByCidOrNameLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>(SearchGlobalMetadataByCidOrNameDocument, options);
+        }
+export function useSearchGlobalMetadataByCidOrNameSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>(SearchGlobalMetadataByCidOrNameDocument, options);
+        }
+export type SearchGlobalMetadataByCidOrNameQueryHookResult = ReturnType<typeof useSearchGlobalMetadataByCidOrNameQuery>;
+export type SearchGlobalMetadataByCidOrNameLazyQueryHookResult = ReturnType<typeof useSearchGlobalMetadataByCidOrNameLazyQuery>;
+export type SearchGlobalMetadataByCidOrNameSuspenseQueryHookResult = ReturnType<typeof useSearchGlobalMetadataByCidOrNameSuspenseQuery>;
+export type SearchGlobalMetadataByCidOrNameQueryResult = Apollo.QueryResult<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>;
+export const SearchUserMetadataByCidOrNameDocument = gql`
+    query SearchUserMetadataByCIDOrName($search: String!, $oauthUserId: String!, $oauthProvider: String!, $limit: Int!) {
+  metadata(
+    distinct_on: root_cid
+    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}}}}]}
+    limit: $limit
+  ) {
+    type: metadata(path: "type")
+    name
+    size: metadata(path: "totalSize")
+    cid: head_cid
+  }
+}
+    `;
+
+/**
+ * __useSearchUserMetadataByCidOrNameQuery__
+ *
+ * To run a query within a React component, call `useSearchUserMetadataByCidOrNameQuery` and pass it any options that fit your needs.
+ * When your component renders, `useSearchUserMetadataByCidOrNameQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useSearchUserMetadataByCidOrNameQuery({
+ *   variables: {
+ *      search: // value for 'search'
+ *      oauthUserId: // value for 'oauthUserId'
+ *      oauthProvider: // value for 'oauthProvider'
+ *      limit: // value for 'limit'
+ *   },
+ * });
+ */
+export function useSearchUserMetadataByCidOrNameQuery(baseOptions: Apollo.QueryHookOptions<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables> & ({ variables: SearchUserMetadataByCidOrNameQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>(SearchUserMetadataByCidOrNameDocument, options);
+      }
+export function useSearchUserMetadataByCidOrNameLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>(SearchUserMetadataByCidOrNameDocument, options);
+        }
+export function useSearchUserMetadataByCidOrNameSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>(SearchUserMetadataByCidOrNameDocument, options);
+        }
+export type SearchUserMetadataByCidOrNameQueryHookResult = ReturnType<typeof useSearchUserMetadataByCidOrNameQuery>;
+export type SearchUserMetadataByCidOrNameLazyQueryHookResult = ReturnType<typeof useSearchUserMetadataByCidOrNameLazyQuery>;
+export type SearchUserMetadataByCidOrNameSuspenseQueryHookResult = ReturnType<typeof useSearchUserMetadataByCidOrNameSuspenseQuery>;
+export type SearchUserMetadataByCidOrNameQueryResult = Apollo.QueryResult<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>;
 export const GetGlobalFilesDocument = gql`
     query GetGlobalFiles($limit: Int!, $offset: Int!) {
   metadata(

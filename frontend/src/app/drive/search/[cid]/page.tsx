@@ -1,25 +1,37 @@
-'use client';
-
-import { UploadedObjectMetadata } from '@/models/UploadedObjectMetadata';
-import { ApiService } from '@/services/api';
-import { useEffect, useState } from 'react';
-import { useScopeStore } from '../../../../states/scope';
 import { SearchResult } from '../../../../views/SearchResult';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../../../api/auth/[...nextauth]/config';
+import { SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME } from '../../../../services/gql/common/query';
+import { apiv2Client } from '../../../../services/gql';
+import { SearchGlobalMetadataByCidOrNameQuery } from '../../../../../gql/graphql';
 
-export default function Page({ params: { cid } }: { params: { cid: string } }) {
-  const [objectsMetadata, setObjectsMetadata] =
-    useState<UploadedObjectMetadata[]>();
-  const scope = useScopeStore(({ scope }) => scope);
+export default async function Page({
+  params: { cid },
+}: {
+  params: { cid: string };
+}) {
+  const session = await getServerSession(authOptions);
 
-  useEffect(() => {
-    ApiService.searchByCIDOrName(cid, scope)
-      .then((e) =>
-        Promise.all(
-          e.map((e) => ApiService.fetchUploadedObjectMetadata(e.cid)),
-        ),
-      )
-      .then(setObjectsMetadata);
-  }, [cid, scope]);
+  const { data } =
+    await apiv2Client.query<SearchGlobalMetadataByCidOrNameQuery>({
+      query: SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
+      variables: {
+        search: cid,
+        limit: 100,
+      },
+      context: {
+        headers: {
+          Authorization: `Bearer ${session?.accessToken}`,
+        },
+      },
+    });
 
-  return <SearchResult objects={objectsMetadata ?? []} />;
+  const objects = data.metadata.map((metadata) => ({
+    type: metadata.type,
+    name: metadata.name ?? '',
+    size: metadata.size,
+    cid: metadata.cid,
+  }));
+
+  return <SearchResult objects={objects} />;
 }

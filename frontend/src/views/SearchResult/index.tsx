@@ -1,22 +1,18 @@
-import { UploadedObjectMetadata } from '../../models/UploadedObjectMetadata';
+import { BaseMetadata } from '../../models/UploadedObjectMetadata';
 import { FileCard } from '../../components/common/FileCard';
 
-export const SearchResult = ({
-  objects,
-}: {
-  objects: UploadedObjectMetadata[];
-}) => {
+export const SearchResult = ({ objects }: { objects: BaseMetadata[] }) => {
   return (
     <div className='grid grid-cols-4 gap-4'>
       {objects && objects.length > 0 ? (
-        objects.map(({ metadata }) => (
+        objects.map(({ cid, name, size, type }) => (
           <FileCard
-            key={metadata.dataCid}
+            key={cid}
             metadata={{
-              type: metadata.type,
-              name: metadata.name ?? '',
-              totalSize: metadata.totalSize,
-              cid: metadata.dataCid,
+              type,
+              name,
+              size,
+              cid,
             }}
           />
         ))

@@ -6,6 +6,7 @@ import { stringify } from '../../utils/misc.js'
 export interface MetadataEntry {
   root_cid: string
   head_cid: string
+  name: string
   metadata: OffchainMetadata
 }
 
@@ -34,8 +35,8 @@ const setMetadata = async (
   const db = await getDatabase()
 
   return db.query({
-    text: 'INSERT INTO metadata (root_cid, head_cid, metadata) VALUES ($1, $2, $3) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata',
-    values: [rootCid, headCid, stringify(metadata)],
+    text: 'INSERT INTO metadata (root_cid, head_cid, metadata, name) VALUES ($1, $2, $3, $4) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata, name = EXCLUDED.name',
+    values: [rootCid, headCid, stringify(metadata), metadata.name],
   })
 }
 

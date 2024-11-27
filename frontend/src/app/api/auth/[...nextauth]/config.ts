@@ -5,7 +5,7 @@ import {
   generateAccessToken,
   invalidateRefreshToken,
   refreshAccessToken,
-} from './refreshers';
+} from './jwt';
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -26,6 +26,8 @@ export const authOptions: AuthOptions = {
         token.accessToken && token.authProvider && token.refreshToken;
       if (isTokenSetupAndRefreshable) {
         const accessToken = await refreshAccessToken({
+          underlyingUserId: token.underlyingUserId!,
+          underlyingProvider: token.underlyingProvider!,
           refreshToken: token.refreshToken!,
         });
         return accessToken;
@@ -35,6 +37,7 @@ export const authOptions: AuthOptions = {
       if (isOAuthSuccessfullyLoggedIn) {
         return generateAccessToken({
           provider: account.provider,
+          userId: account.providerAccountId,
           oauthAccessToken: account.access_token!,
         });
       }
@@ -45,11 +48,13 @@ export const authOptions: AuthOptions = {
       session.accessToken = token.accessToken;
       session.authProvider = token.authProvider;
       session.authUserId = token.authUserId;
+      session.underlyingProvider = token.underlyingProvider;
+      session.underlyingUserId = token.underlyingUserId;
       return session;
     },
   },
   session: {
-    strategy: 'jwt',  
+    strategy: 'jwt',
   },
   events: {
     async signOut({ token }) {

@@ -1,4 +1,7 @@
-import { GetMetadataByHeadCidDocument } from '../../../../../gql/graphql';
+import {
+  GetMetadataByHeadCidDocument,
+  GetMetadataByHeadCidQuery,
+} from '../../../../../gql/graphql';
 import { ObjectDetails } from '../../../../views/ObjectDetails';
 import { apiv2Client } from '../../../../services/gql';
 import { authOptions } from '../../../api/auth/[...nextauth]/config';
@@ -7,7 +10,7 @@ import { mapObjectInformationFromQueryResult } from '../../../../services/gql/ut
 
 export default async function Page({ params }: { params: { cid: string } }) {
   const session = await getServerSession(authOptions);
-  const { data } = await apiv2Client.query({
+  const { data } = await apiv2Client.query<GetMetadataByHeadCidQuery>({
     query: GetMetadataByHeadCidDocument,
     variables: { headCid: params.cid },
     context: {

@@ -39,9 +39,11 @@ const getRefreshTokenFromResponse = (response: Response): string => {
 
 export const generateAccessToken = async ({
   provider,
+  userId,
   oauthAccessToken,
 }: {
   provider: string;
+  userId: string;
   oauthAccessToken: string;
 }): Promise<JWT> => {
   const response = await fetch(
@@ -65,17 +67,26 @@ export const generateAccessToken = async ({
     ...token,
     authProvider: 'custom-jwt',
     authUserId: token.oauthUserId,
-    id: token.oauthUserId,
+    underlyingProvider: provider,
+    underlyingUserId: userId,
     accessToken,
     refreshToken,
+    oauthUser: {
+      oauthProvider: provider,
+      oauthUserId: userId,
+    },
   };
 
   return nextJWT;
 };
 
 export const refreshAccessToken = async ({
+  underlyingUserId,
+  underlyingProvider,
   refreshToken,
 }: {
+  underlyingUserId: string;
+  underlyingProvider: string;
   refreshToken: string;
 }): Promise<JWT> => {
   const response = await fetch(
@@ -102,6 +113,8 @@ export const refreshAccessToken = async ({
     authUserId: token.oauthUserId,
     accessToken,
     refreshToken,
+    underlyingProvider,
+    underlyingUserId,
   };
 
   return nextJWT;

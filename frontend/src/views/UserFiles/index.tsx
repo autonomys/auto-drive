@@ -97,7 +97,7 @@ export const UserFiles = () => {
           <FileDropZone />
         </div>
         <div className='w-full max-w-md'>
-          <SearchBar scope='global' />
+          <SearchBar scope='user' />
         </div>
         <div className=''>
           <UploadingObjects />
