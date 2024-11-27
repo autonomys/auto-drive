@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { User } from '../../models/users/index.js'
 import { UsersUseCases } from '../../useCases/index.js'
 import { AuthManager } from './index.js'
+import { CustomJWTAuth } from './providers/custom.js'
 
 export const handleAuth = async (
   req: Request,
@@ -36,4 +37,10 @@ export const handleAuth = async (
   }
 
   return UsersUseCases.getUserByOAuthUser(oauthUser)
+}
+
+export const refreshAccessToken = async (
+  refreshToken: string,
+): Promise<string | null> => {
+  return CustomJWTAuth.refreshAccessToken(refreshToken)
 }

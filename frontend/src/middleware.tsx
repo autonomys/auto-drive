@@ -24,7 +24,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const userInfo: UserInfo | null = await AuthService.checkAuth(
-    session.provider,
+    session.authProvider,
     session.accessToken,
   ).catch(() => null);
 

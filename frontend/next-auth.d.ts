@@ -4,7 +4,8 @@ declare module 'next-auth' {
   interface Session {
     error?: 'RefreshTokenError';
     accessToken?: string;
-    provider?: string;
+    authProvider?: string;
+    authUserId?: string;
   }
 
   interface Account extends nextAuth.Account {
@@ -19,6 +20,7 @@ declare module 'next-auth/jwt' {
     iat: number;
     refreshToken?: string;
     error?: 'RefreshTokenError';
-    provider?: string;
+    authProvider?: string;
+    authUserId?: string;
   }
 }

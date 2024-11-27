@@ -82,9 +82,10 @@ objectController.get('/search', async (req, res) => {
     }
 
     if (typeof cid !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Missing or invalid cid value',
       })
+      return
     }
 
     const limit = req.query.limit
@@ -117,9 +118,10 @@ objectController.get('/:cid/metadata', async (req, res) => {
     const { cid } = req.params
     const metadata = await ObjectUseCases.getMetadata(cid)
     if (!metadata) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'Metadata not found',
       })
+      return
     }
 
     res.json(metadata)
@@ -144,9 +146,10 @@ objectController.post('/:cid/share', async (req, res) => {
   const { cid } = req.params
 
   if (!publicId) {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing `publicId` in request body',
     })
+    return
   }
 
   const user = await handleAuth(req, res)
@@ -177,9 +180,10 @@ objectController.get('/:cid/download', async (req, res) => {
 
     const metadata = await ObjectUseCases.getMetadata(cid)
     if (!metadata) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'Metadata not found',
       })
+      return
     }
 
     console.log(`Attempting to retrieve data for metadataCid: ${cid}`)
@@ -263,9 +267,10 @@ objectController.get('/:cid', async (req, res) => {
   const objectInformation = await ObjectUseCases.getObjectInformation(cid)
 
   if (!objectInformation) {
-    return res.status(404).json({
+    res.status(404).json({
       error: 'Object not found',
     })
+    return
   }
 
   res.json(objectInformation)

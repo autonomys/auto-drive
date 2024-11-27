@@ -10,13 +10,13 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 const getApi = async () => {
   const session = await getAuthSession();
-  if (!session?.accessToken || !session.provider) {
+  if (!session?.accessToken || !session.authProvider) {
     throw new Error('No session found');
   }
 
   return createAutoDriveApi({
     url: API_BASE_URL,
-    provider: session.provider as AuthProvider,
+    provider: session.authProvider as AuthProvider,
     apiKey: session.accessToken,
   });
 };
