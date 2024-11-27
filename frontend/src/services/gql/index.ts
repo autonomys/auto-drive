@@ -5,12 +5,6 @@ import { getAuthSession } from '../../utils/auth';
 const authLink = setContext(async (_, { headers }) => {
   const token = await getAuthSession();
 
-  const ssr = typeof window === 'undefined';
-  const tokenAvailable = !!token?.accessToken;
-
-  console.log('isSSR', ssr);
-  console.log('tokenAvailable', tokenAvailable);
-
   return {
     headers: {
       ...headers,
