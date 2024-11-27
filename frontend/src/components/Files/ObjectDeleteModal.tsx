@@ -5,11 +5,14 @@ import {
   Transition,
   TransitionChild,
 } from '@headlessui/react';
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useState } from 'react';
 import { UploadedObjectMetadata } from '../../models/UploadedObjectMetadata';
 import { ApiService } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Button } from '../common/Button';
+import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
+import { useSession } from 'next-auth/react';
+import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
 
 export const ObjectDeleteModal = ({
   cid,
@@ -20,12 +23,25 @@ export const ObjectDeleteModal = ({
 }) => {
   const isOpen = cid !== null;
   const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
+  const session = useSession();
 
-  useEffect(() => {
-    if (cid) {
-      ApiService.fetchUploadedObjectMetadata(cid).then(setMetadata);
-    }
-  }, [cid]);
+  useGetMetadataByHeadCidQuery({
+    variables: {
+      headCid: cid ?? '',
+    },
+    skip: !cid || !session.data?.accessToken,
+    onCompleted: (data) => {
+      setMetadata(mapObjectInformationFromQueryResult(data));
+    },
+    onError: (error) => {
+      console.error('error', error);
+    },
+    context: {
+      headers: {
+        Authorization: `Bearer ${session.data?.accessToken}`,
+      },
+    },
+  });
 
   const deleteObject = useCallback(() => {
     if (!metadata) {

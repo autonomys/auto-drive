@@ -1,6 +1,5 @@
 'use client';
 
-import { ApiService } from '@/services/api';
 import { Transition } from '@headlessui/react';
 import { SearchIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';

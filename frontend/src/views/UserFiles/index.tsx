@@ -13,9 +13,9 @@ import {
   FileTable,
 } from '../../components/common/FileTable';
 import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholder';
-import { GetMyFilesQuery, useGetMyFilesQuery } from '../../../gql/graphql';
+import { useGetMyFilesQuery } from '../../../gql/graphql';
 import { useSession } from 'next-auth/react';
-import { OwnerRole } from '@autonomys/auto-drive';
+import { objectSummaryFromUserFilesQuery } from './utils';
 
 export const UserFiles = () => {
   const [pageSize, setPageSize] = useState(5);
@@ -38,35 +38,6 @@ export const UserFiles = () => {
     setPageSize(newPageSize);
   }, []);
 
-  const parseQueryResultIntoFileSummaries = useCallback(
-    (e: GetMyFilesQuery): ObjectSummary[] => {
-      return e.metadata.map((m) => ({
-        headCid: m.root_metadata!.cid,
-        size: m.root_metadata?.size ?? 0,
-        owners: (m.root_metadata?.object_ownership ?? []).map((o) => ({
-          publicId: o.user?.public_id ?? '',
-          role: o.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
-        })),
-        type: m.root_metadata?.type,
-        name: m.root_metadata?.name,
-        mimeType: m.root_metadata?.mimeType,
-        children: m.root_metadata?.children,
-        uploadStatus: {
-          uploadedNodes: m.root_metadata?.publishedNodes.aggregate?.count ?? 0,
-          archivedNodes: m.root_metadata?.archivedNodes.aggregate?.count ?? 0,
-          totalNodes: m.root_metadata?.totalNodes.aggregate?.count ?? 0,
-          minimumBlockDepth:
-            m.root_metadata?.minimumBlockDepth?.[0]?.transaction_result
-              ?.blockNumber ?? null,
-          maximumBlockDepth:
-            m.root_metadata?.maximumBlockDepth?.[0]?.transaction_result
-              ?.blockNumber ?? null,
-        },
-      }));
-    },
-    [],
-  );
-
   const session = useSession();
 
   const { loading } = useGetMyFilesQuery({
@@ -84,7 +55,7 @@ export const UserFiles = () => {
     },
     onCompleted(data) {
       updateResult({
-        rows: parseQueryResultIntoFileSummaries(data),
+        rows: objectSummaryFromUserFilesQuery(data),
         totalCount: data.metadata_aggregate.aggregate?.count ?? 0,
       });
     },

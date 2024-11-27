@@ -4,13 +4,16 @@ import bytes from 'bytes';
 import { ApiService } from '@/services/api';
 import { FileIcon, FolderIcon, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useInterval, useLocalStorage } from 'usehooks-ts';
+import { useLocalStorage } from 'usehooks-ts';
 import {
   UploadedObjectMetadata,
   UploadStatus,
 } from '../../models/UploadedObjectMetadata';
 import { ObjectShareModal } from './ObjectShareModal';
 import { handleEscape } from '../../utils/eventHandler';
+import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
+import { useSession } from 'next-auth/react';
+import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
 
 export const UploadingObjects = () => {
   const [uploadingObjects] = useLocalStorage<string[]>('uploading-objects', []);
@@ -53,19 +56,30 @@ const UploadingObject = ({
     'uploading-objects',
     [],
   );
+  const session = useSession();
   const [shareCid, setShareCid] = useState<string | null>(null);
 
   const progress = useMemo(() => {
     return (uploadStatus.uploadedNodes / uploadStatus.totalNodes) * 100;
   }, [uploadStatus]);
 
-  useInterval(() => {
-    ApiService.fetchUploadedObjectMetadata(metadata.dataCid).then(
-      (metadata) => {
-        setUploadStatus(metadata.uploadStatus);
+  useGetMetadataByHeadCidQuery({
+    variables: {
+      headCid: metadata.dataCid ?? '',
+    },
+    onCompleted: (data) => {
+      setUploadStatus(mapObjectInformationFromQueryResult(data).uploadStatus);
+    },
+    onError: (error) => {
+      console.error('error', error);
+    },
+    context: {
+      headers: {
+        Authorization: `Bearer ${session.data?.accessToken}`,
       },
-    );
-  }, 5_000);
+    },
+    pollInterval: 5_000,
+  });
 
   useEffect(() => {
     if (uploadStatus.uploadedNodes === uploadStatus.totalNodes) {
