@@ -32,6 +32,7 @@ export const ObjectDownloadModal = ({
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [wrongPassword, setWrongPassword] = useState<boolean>(false);
   const defaultPassword = useEncryptionStore((store) => store.password);
+  const session = useSession();
 
   useEffect(() => {
     if (!cid) {
@@ -43,7 +44,6 @@ export const ObjectDownloadModal = ({
     }
   }, [cid]);
 
-  const session = useSession();
   useGetMetadataByHeadCidQuery({
     variables: {
       headCid: cid ?? '',

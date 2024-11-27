@@ -1,8 +1,16 @@
-import { GetMetadataByHeadCidQuery } from '../../../gql/graphql';
+import {
+  GetAllUsersWithSubscriptionsQuery,
+  GetMetadataByHeadCidQuery,
+} from '../../../gql/graphql';
+import {
+  SubscriptionGranularity,
+  SubscriptionWithUser,
+} from '../../models/Subscriptions';
 import {
   OwnerRole,
   UploadedObjectMetadata,
 } from '../../models/UploadedObjectMetadata';
+import { UserRole } from '../../models/User';
 
 export const mapObjectInformationFromQueryResult = (
   result: GetMetadataByHeadCidQuery,
@@ -24,4 +32,29 @@ export const mapObjectInformationFromQueryResult = (
       role: owner.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
     })),
   };
+};
+
+export const mapUsersFromQueryResult = (
+  result: GetAllUsersWithSubscriptionsQuery,
+): SubscriptionWithUser[] => {
+  return result.users.map((user) => ({
+    id: user.user_membership!.subscription!.id,
+    organizationId: user.user_membership!.subscription!.organizationId,
+    uploadLimit: user.user_membership!.subscription!.uploadLimit,
+    downloadLimit: user.user_membership!.subscription!.downloadLimit,
+    granularity: user.user_membership!.subscription!
+      .granularity as SubscriptionGranularity,
+    userPublicId: user.publicId,
+    role: user.role,
+    oauthProvider: user.oauthProvider,
+    user: {
+      publicId: user.publicId!,
+      role: user.role as UserRole,
+      oauthProvider: user.oauthProvider,
+      oauthUserId: user.oauthUserId,
+      downloadCredits: 0,
+      uploadCredits: 0,
+      onboarded: true,
+    },
+  }));
 };

@@ -112,3 +112,23 @@ export const SEARCH_USER_METADATA_BY_CID_OR_NAME = gql`
     }
   }
 `;
+
+export const GET_ALL_USERS_WITH_SUBSCRIPTIONS = gql`
+  query GetAllUsersWithSubscriptions {
+    users {
+      publicId: public_id
+      role
+      oauthProvider: oauth_provider
+      oauthUserId: oauth_user_id
+      user_membership {
+        subscription {
+          id
+          organizationId: organization_id
+          uploadLimit: upload_limit
+          downloadLimit: download_limit
+          granularity
+        }
+      }
+    }
+  }
+`;

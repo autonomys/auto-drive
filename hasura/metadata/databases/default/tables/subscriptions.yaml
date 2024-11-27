@@ -12,6 +12,18 @@ select_permissions:
         - download_limit
         - created_at
         - updated_at
+      allow_aggregations: true
+      filter: { organization_id: { _eq: "X-Hasura-Organization-Id" } }
+    comment: ""
+  - role: app-admin
+    permission:
+      columns:
+        - id
+        - organization_id
+        - granularity
+        - upload_limit
+        - download_limit
+        - created_at
+        - updated_at
       filter: {}
       allow_aggregations: true
-    comment: ""

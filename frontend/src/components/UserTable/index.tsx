@@ -1,3 +1,5 @@
+'use client';
+
 import { UserTableRow } from './UserTableRow';
 import { SubscriptionWithUser } from '../../models/Subscriptions';
 import {

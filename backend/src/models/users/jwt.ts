@@ -13,6 +13,7 @@ export type CustomAccessTokenPayload = BaseTokenPayload & {
     'x-hasura-allowed-roles': string[]
     'x-hasura-oauth-provider': string
     'x-hasura-oauth-user-id': string
+    'x-hasura-organization-id': string
   }
 }
 

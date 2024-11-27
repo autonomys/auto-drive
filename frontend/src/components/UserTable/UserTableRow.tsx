@@ -1,3 +1,5 @@
+'use client';
+
 import bytes from 'bytes';
 import toast from 'react-hot-toast';
 import { Copy } from 'lucide-react';

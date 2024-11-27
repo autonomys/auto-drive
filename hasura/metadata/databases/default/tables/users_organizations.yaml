@@ -18,3 +18,34 @@ select_permissions:
         }
       allow_aggregations: true
     comment: ""
+  - role: app-admin
+    permission:
+      columns:
+        - oauth_provider
+        - oauth_user_id
+        - organization_id
+        - created_at
+        - updated_at
+      filter: {}
+      allow_aggregations: true
+array_relationships:
+  - name: users
+    using:
+      manual_configuration:
+        column_mapping:
+          oauth_user_id: oauth_user_id
+          oauth_provider: oauth_provider
+        insertion_order: null
+        remote_table:
+          name: users
+          schema: public
+object_relationships:
+  - name: subscription
+    using:
+      manual_configuration:
+        column_mapping:
+          organization_id: organization_id
+        insertion_order: null
+        remote_table:
+          name: subscriptions
+          schema: public

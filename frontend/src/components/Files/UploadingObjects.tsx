@@ -21,6 +21,7 @@ export const UploadingObjects = () => {
     useState<UploadedObjectMetadata[]>();
 
   useEffect(() => {
+    // TODO: reimplement this without using local storage
     Promise.all(
       uploadingObjects.map((cid) =>
         ApiService.fetchUploadedObjectMetadata(cid),
