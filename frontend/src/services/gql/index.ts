@@ -17,7 +17,7 @@ const httpLink = createHttpLink({
   uri: process.env.NEXT_PUBLIC_GQL_URL,
 });
 
-export const apiv2Client = new ApolloClient({
+export const gqlClient = new ApolloClient({
   uri: process.env.NEXT_PUBLIC_GQL_URL,
   cache: new InMemoryCache(),
   link: authLink.concat(httpLink),

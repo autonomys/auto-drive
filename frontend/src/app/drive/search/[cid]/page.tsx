@@ -1,6 +1,6 @@
 import { SearchResult } from '../../../../views/SearchResult';
 import { SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME } from '../../../../services/gql/common/query';
-import { apiv2Client } from '../../../../services/gql';
+import { gqlClient } from '../../../../services/gql';
 import { SearchGlobalMetadataByCidOrNameQuery } from '../../../../../gql/graphql';
 
 export default async function Page({
@@ -8,14 +8,13 @@ export default async function Page({
 }: {
   params: { cid: string };
 }) {
-  const { data } =
-    await apiv2Client.query<SearchGlobalMetadataByCidOrNameQuery>({
-      query: SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
-      variables: {
-        search: cid,
-        limit: 100,
-      },
-    });
+  const { data } = await gqlClient.query<SearchGlobalMetadataByCidOrNameQuery>({
+    query: SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
+    variables: {
+      search: cid,
+      limit: 100,
+    },
+  });
 
   const objects = data.metadata.map((metadata) => ({
     type: metadata.type,

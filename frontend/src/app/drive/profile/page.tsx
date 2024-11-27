@@ -1,5 +1,5 @@
 import { Profile } from '../../../views/Profile';
-import { apiv2Client } from '../../../services/gql';
+import { gqlClient } from '../../../services/gql';
 import { GetProfileQueryText } from '../../../views/Profile/query';
 import { GetProfileQuery } from '../../../../gql/graphql';
 
@@ -13,7 +13,7 @@ const getApiKeysFromResult = (user: GetProfileQuery['users'][number]) => {
 };
 
 export default async function Page() {
-  const { data } = await apiv2Client.query<GetProfileQuery>({
+  const { data } = await gqlClient.query<GetProfileQuery>({
     query: GetProfileQueryText,
     variables: {},
     fetchPolicy: 'no-cache',

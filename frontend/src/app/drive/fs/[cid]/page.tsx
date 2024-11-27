@@ -1,5 +1,5 @@
 import { FileCard } from '../../../../components/common/FileCard';
-import { apiv2Client } from '../../../../services/gql';
+import { gqlClient } from '../../../../services/gql';
 import {
   GetMetadataByHeadCidDocument,
   GetMetadataByHeadCidQuery,
@@ -7,7 +7,7 @@ import {
 import { mapObjectInformationFromQueryResult } from '../../../../services/gql/utils';
 
 export default async function Page({ params }: { params: { cid: string } }) {
-  const { data } = await apiv2Client.query<GetMetadataByHeadCidQuery>({
+  const { data } = await gqlClient.query<GetMetadataByHeadCidQuery>({
     query: GetMetadataByHeadCidDocument,
     variables: { headCid: params.cid },
   });
