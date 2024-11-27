@@ -3,11 +3,13 @@ import {
   GetMetadataByHeadCidQuery,
 } from '../../../../../gql/graphql';
 import { ObjectDetails } from '../../../../views/ObjectDetails';
-import { gqlClient } from '../../../../services/gql';
+import { getGqlSSRClient } from '../../../../services/gql';
 import { mapObjectInformationFromQueryResult } from '../../../../services/gql/utils';
 
 export default async function Page({ params }: { params: { cid: string } }) {
-  const { data } = await gqlClient.query<GetMetadataByHeadCidQuery>({
+  const client = await getGqlSSRClient();
+
+  const { data } = await client.query<GetMetadataByHeadCidQuery>({
     query: GetMetadataByHeadCidDocument,
     variables: { headCid: params.cid },
   });

@@ -1,14 +1,16 @@
 import { SearchResult } from '../../../../views/SearchResult';
 import { SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME } from '../../../../services/gql/common/query';
-import { gqlClient } from '../../../../services/gql';
 import { SearchGlobalMetadataByCidOrNameQuery } from '../../../../../gql/graphql';
+import { getGqlSSRClient } from '../../../../services/gql';
 
 export default async function Page({
   params: { cid },
 }: {
   params: { cid: string };
 }) {
-  const { data } = await gqlClient.query<SearchGlobalMetadataByCidOrNameQuery>({
+  const client = await getGqlSSRClient();
+
+  const { data } = await client.query<SearchGlobalMetadataByCidOrNameQuery>({
     query: SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
     variables: {
       search: cid,
