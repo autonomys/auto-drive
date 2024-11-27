@@ -38,7 +38,10 @@ const getUserFromAccessToken = async (
 
 const createAccessToken = async (user: OAuthUser, refreshTokenId: string) => {
   const dbUser = await UsersUseCases.getUserByOAuthUser(user)
-  const userInfo = await UsersUseCases.getUserInfo(dbUser.publicId)
+
+  const userInfo = dbUser.onboarded
+    ? await UsersUseCases.getUserInfo(dbUser.publicId)
+    : null
 
   const roles =
     dbUser.role === UserRole.Admin ? ['app-admin', 'user'] : ['user']
@@ -56,7 +59,7 @@ const createAccessToken = async (user: OAuthUser, refreshTokenId: string) => {
       'x-hasura-oauth-provider': user.provider,
       'x-hasura-oauth-user-id': user.id,
       'x-hasura-organization-id':
-        userInfo.subscription?.organizationId ?? 'none',
+        userInfo?.subscription?.organizationId ?? 'none',
     },
   }
 
