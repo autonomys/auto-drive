@@ -2,14 +2,15 @@ export const Disclaimer = () => {
   return (
     <div className='relative rounded-lg border border-red-300 bg-red-50 bg-opacity-60 p-4'>
       <h3 className='mb-2 font-semibold'>Please, note:</h3>
-      <ul className='list-inside list-disc space-y-1 text-sm'>
+      <ul className='list-inside list-disc space-y-1 text-sm font-bold'>
         <li>Uploaded content will be visible and searchable by everyone</li>
         <li>Anyone can download your files</li>
-        <li>Storage is permanent and irreversible</li>
         <li>
-          Your uploads & downloads are limitted to <strong>100MB</strong> and{' '}
-          <strong>5GB</strong> monthly respectively
+          Files are stored on Autonomy&apos;s network so they can&apos;t be
+          deleted by anyone
         </li>
+        <li>Storage is permanent and irreversible</li>
+        <li>Encryption is available but the encrypted file will be public</li>
       </ul>
     </div>
   );
