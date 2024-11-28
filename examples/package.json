@@ -1,14 +1,16 @@
 {
-  "name": "data-operations-example",
+  "name": "auto-drive-examples",
   "version": "1.0.0",
   "main": "index.ts",
   "license": "MIT",
+  "type": "module",
   "scripts": {
-    "data-operations": "ts-node data-operations/index.ts",
-    "transaction-manager": "ts-node transaction-manager/index.ts"
+    "simple-cli": "node --loader ts-node/esm simple-cli/index.ts"
   },
   "dependencies": {
+    "@autonomys/auto-drive": "^1.0.10",
     "axios": "^1.7.5",
+    "commander": "^12.1.0",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
