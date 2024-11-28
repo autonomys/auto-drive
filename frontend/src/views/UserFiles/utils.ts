@@ -16,15 +16,15 @@ export const objectSummaryFromUserFilesQuery = (
     mimeType: m.root_metadata?.mimeType,
     children: m.root_metadata?.children,
     uploadStatus: {
-      uploadedNodes: m.root_metadata!.publishedNodes.aggregate?.count ?? 0,
-      archivedNodes: m.root_metadata!.archivedNodes.aggregate?.count ?? 0,
-      totalNodes: m.root_metadata!.totalNodes.aggregate?.count ?? 0,
+      uploadedNodes: m.root_metadata!.publishedNodes?.aggregate?.count ?? 0,
+      archivedNodes: m.root_metadata!.archivedNodes?.aggregate?.count ?? 0,
+      totalNodes: m.root_metadata!.totalNodes?.aggregate?.count ?? 0,
       minimumBlockDepth:
-        m.root_metadata!.minimumBlockDepth[0].transaction_result?.blockNumber ??
-        null,
+        m.root_metadata!.minimumBlockDepth?.[0]?.transaction_result
+          ?.blockNumber ?? null,
       maximumBlockDepth:
-        m.root_metadata!.maximumBlockDepth[0].transaction_result?.blockNumber ??
-        null,
+        m.root_metadata!.maximumBlockDepth?.[0]?.transaction_result
+          ?.blockNumber ?? null,
     },
   }));
 };
