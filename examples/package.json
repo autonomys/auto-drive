@@ -5,16 +5,21 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "simple-cli": "node --loader ts-node/esm simple-cli/index.ts"
+    "simple-cli": "node --loader ts-node/esm simple-cli/index.ts",
+    "simple-page": "node --loader ts-node/esm simple-page/index.tsx"
   },
   "dependencies": {
     "@autonomys/auto-drive": "^1.0.10",
     "axios": "^1.7.5",
     "commander": "^12.1.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "light-server": "^2.9.1",
+    "react": "^18.3.1",
+    "react-scripts": "^5.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.5.1",
+    "@types/react": "^18.3.12",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
   }

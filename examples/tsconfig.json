@@ -7,8 +7,9 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
     "outDir": "./dist"
   },
-  "include": ["./**/*.ts"],
+  "include": ["./**/*.ts", "simple-page/src/index.jsx"],
   "exclude": ["node_modules"]
 }
