@@ -1,0 +1,60 @@
+table:
+  name: metadata
+  schema: public
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - root_cid
+        - head_cid
+        - name
+        - metadata
+        - created_at
+        - updated_at
+      filter: {}
+      allow_aggregations: true
+    comment: ""
+object_relationships:
+  - name: root_metadata
+    using:
+      manual_configuration:
+        column_mapping:
+          root_cid: head_cid
+        insertion_order: null
+        remote_table:
+          name: metadata
+          schema: public
+  - name: head
+    using:
+      manual_configuration:
+        column_mapping:
+          head_cid: cid
+        insertion_order: null
+        remote_table:
+          name: nodes
+          schema: public
+array_relationships:
+  - name: nodes
+    using:
+      manual_configuration:
+        column_mapping:
+          head_cid: head_cid
+        remote_table:
+          name: nodes
+          schema: public
+  - name: object_ownership
+    using:
+      manual_configuration:
+        column_mapping:
+          head_cid: cid
+        remote_table:
+          name: object_ownership
+      schema: public
+  - name: metadata_list_by_root_id
+    using:
+      manual_configuration:
+        column_mapping:
+          root_cid: head_cid
+        remote_table:
+          name: metadata
+          schema: public

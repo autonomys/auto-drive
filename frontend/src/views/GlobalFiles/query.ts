@@ -1,0 +1,80 @@
+import { gql } from '@apollo/client';
+
+export const GET_GLOBAL_FILES = gql`
+  query GetGlobalFiles($limit: Int!, $offset: Int!) {
+    metadata(
+      distinct_on: root_cid
+      where: {
+        root_metadata: {
+          object_ownership: { _and: { is_admin: { _eq: true } } }
+        }
+      }
+      limit: $limit
+      offset: $offset
+    ) {
+      root_metadata {
+        cid: head_cid
+        type: metadata(path: "type")
+        name: metadata(path: "name")
+        mimeType: metadata(path: "mimeType")
+        size: metadata(path: "totalSize")
+        children: metadata(path: "children")
+        maximumBlockDepth: nodes(
+          order_by: { transaction_result: { created_at: desc_nulls_first } }
+          limit: 1
+        ) {
+          transaction_result {
+            blockNumber: transaction_result(path: "blockNumber")
+          }
+        }
+        minimumBlockDepth: nodes(
+          order_by: { transaction_result: { created_at: asc } }
+          limit: 1
+        ) {
+          transaction_result {
+            blockNumber: transaction_result(path: "blockNumber")
+          }
+        }
+        publishedNodes: nodes_aggregate(
+          where: {
+            transaction_result: { transaction_result: { _is_null: false } }
+          }
+        ) {
+          aggregate {
+            count
+          }
+        }
+        archivedNodes: nodes_aggregate(
+          where: { piece_offset: { _is_null: false } }
+        ) {
+          aggregate {
+            count
+          }
+        }
+        totalNodes: nodes_aggregate {
+          aggregate {
+            count
+          }
+        }
+        object_ownership {
+          user {
+            public_id
+          }
+          is_admin
+        }
+      }
+    }
+    metadata_aggregate(
+      distinct_on: root_cid
+      where: {
+        root_metadata: {
+          object_ownership: { _and: { is_admin: { _eq: true } } }
+        }
+      }
+    ) {
+      aggregate {
+        count
+      }
+    }
+  }
+`;

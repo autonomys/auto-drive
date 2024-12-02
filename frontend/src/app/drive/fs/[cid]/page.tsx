@@ -1,25 +1,28 @@
-import { ApiService } from '@/services/api';
 import { FileCard } from '../../../../components/common/FileCard';
+import { gqlClient } from '../../../../services/gql';
+import {
+  GetMetadataByHeadCidDocument,
+  GetMetadataByHeadCidQuery,
+} from '../../../../../gql/graphql';
+import { mapObjectInformationFromQueryResult } from '../../../../services/gql/utils';
+
+export const dynamic = 'force-dynamic';
 
 export default async function Page({ params }: { params: { cid: string } }) {
-  const { cid } = params;
+  const { data } = await gqlClient.query<GetMetadataByHeadCidQuery>({
+    query: GetMetadataByHeadCidDocument,
+    variables: { headCid: params.cid },
+  });
 
-  const objMetadata = await ApiService.fetchUploadedObjectMetadata(cid);
-
-  if (objMetadata.metadata.type === 'file') {
+  const metadata = mapObjectInformationFromQueryResult(data);
+  if (metadata.metadata.type === 'file') {
     throw new Error('File type not supported');
   }
 
-  const childrenMetadata = await Promise.all(
-    objMetadata.metadata.children.map((e) =>
-      ApiService.fetchUploadedObjectMetadata(e.cid),
-    ),
-  );
-
   return (
     <div className='grid grid-cols-4 gap-4'>
-      {childrenMetadata.map(({ metadata }) => {
-        return <FileCard key={metadata.dataCid} metadata={metadata} />;
+      {metadata.metadata.children.map((metadata) => {
+        return <FileCard key={metadata.cid} metadata={metadata} />;
       })}
     </div>
   );

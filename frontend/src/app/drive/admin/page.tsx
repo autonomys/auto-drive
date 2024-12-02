@@ -1,23 +1,18 @@
-'use client';
+import { GetAllUsersWithSubscriptionsQuery } from '../../../../gql/graphql';
+import { gqlClient } from '../../../services/gql';
+import { GET_ALL_USERS_WITH_SUBSCRIPTIONS } from '../../../services/gql/common/query';
+import { mapUsersFromQueryResult } from '../../../services/gql/utils';
+import { AdminPanel } from '../../../views/AdminPanel';
 
-import { useEffect, useState } from 'react';
-import { ApiService } from '../../../services/api';
-import { UserSubscriptionsTable } from '../../../components/UserTable';
-import { SubscriptionWithUser } from '../../../models/Subscriptions';
+export const dynamic = 'force-dynamic';
 
-export default function Page() {
-  const [users, setUsers] = useState<SubscriptionWithUser[] | undefined>();
+export default async function Page() {
+  const { data } = await gqlClient.query<GetAllUsersWithSubscriptionsQuery>({
+    query: GET_ALL_USERS_WITH_SUBSCRIPTIONS,
+    fetchPolicy: 'network-only',
+  });
 
-  useEffect(() => {
-    ApiService.getUserList().then(setUsers);
-  }, []);
+  const users = mapUsersFromQueryResult(data);
 
-  return (
-    <div>
-      <h1 className='mb-4 text-2xl font-bold'>Users</h1>
-      <div className='flex flex-col gap-2'>
-        <UserSubscriptionsTable users={users} />
-      </div>
-    </div>
-  );
+  return <AdminPanel users={users} />;
 }

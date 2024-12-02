@@ -1,0 +1,14 @@
+table:
+  name: organizations
+  schema: public
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - name
+        - created_at
+        - updated_at
+      filter: {}
+      allow_aggregations: true
+    comment: ""

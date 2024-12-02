@@ -12,6 +12,9 @@ import { ApiService } from '../../services/api';
 import { Button } from '../common/Button';
 import { Link } from 'lucide-react';
 import { isValidUUID } from '../../utils/misc';
+import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
+import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
+import { useSession } from 'next-auth/react';
 
 export const ObjectShareModal = ({
   cid,
@@ -23,12 +26,26 @@ export const ObjectShareModal = ({
   const isOpen = cid !== null;
   const [publicId, setPublicId] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
+  const session = useSession();
 
-  useEffect(() => {
-    if (cid) {
-      ApiService.fetchUploadedObjectMetadata(cid).then(setMetadata);
-    }
-  }, [cid]);
+  useGetMetadataByHeadCidQuery({
+    variables: {
+      headCid: cid ?? '',
+    },
+    skip: !cid || !session.data?.accessToken,
+    onCompleted: (data) => {
+      console.log('data', data);
+      setMetadata(mapObjectInformationFromQueryResult(data));
+    },
+    onError: (error) => {
+      console.error('error', error);
+    },
+    context: {
+      headers: {
+        Authorization: `Bearer ${session.data?.accessToken}`,
+      },
+    },
+  });
 
   const shareObject = useCallback(async () => {
     if (!publicId) {

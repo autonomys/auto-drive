@@ -6,7 +6,6 @@ import {
   TransitionChild,
 } from '@headlessui/react';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { ApiService } from '../../services/api';
 import { OffchainMetadata } from '@autonomys/auto-dag-data';
 import { InvalidDecryptKey } from '../../utils/file';
 import { Button } from '../common/Button';
@@ -14,6 +13,9 @@ import { shortenString } from '../../utils/misc';
 import { useEncryptionStore } from '../../states/encryption';
 import { fetchFile } from '../../services/download';
 import toast from 'react-hot-toast';
+import { useSession } from 'next-auth/react';
+import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
+import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
 
 const toastId = 'object-download-modal';
 
@@ -30,6 +32,7 @@ export const ObjectDownloadModal = ({
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [wrongPassword, setWrongPassword] = useState<boolean>(false);
   const defaultPassword = useEncryptionStore((store) => store.password);
+  const session = useSession();
 
   useEffect(() => {
     if (!cid) {
@@ -38,19 +41,33 @@ export const ObjectDownloadModal = ({
       setPasswordConfirmed(false);
       setIsDownloading(false);
       setWrongPassword(false);
-    } else {
-      ApiService.fetchUploadedObjectMetadata(cid).then(({ metadata }) => {
-        setMetadata(metadata);
-        setPassword(undefined);
-        setPasswordConfirmed(false);
-        setIsDownloading(false);
-        if (defaultPassword && !wrongPassword) {
-          setPassword(defaultPassword);
-          setPasswordConfirmed(true);
-        }
-      });
     }
-  }, [cid, defaultPassword, wrongPassword]);
+  }, [cid]);
+
+  useGetMetadataByHeadCidQuery({
+    variables: {
+      headCid: cid ?? '',
+    },
+    skip: !cid || !session.data?.accessToken,
+    onCompleted: (data) => {
+      setMetadata(mapObjectInformationFromQueryResult(data).metadata);
+      setPassword(undefined);
+      setPasswordConfirmed(false);
+      setIsDownloading(false);
+      if (defaultPassword && !wrongPassword) {
+        setPassword(defaultPassword);
+        setPasswordConfirmed(true);
+      }
+    },
+    onError: (error) => {
+      console.error('error', error);
+    },
+    context: {
+      headers: {
+        Authorization: `Bearer ${session.data?.accessToken}`,
+      },
+    },
+  });
 
   const onDownload = useCallback(async () => {
     if (!metadata) return <DialogTitle>Fetching metadata...</DialogTitle>;

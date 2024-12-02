@@ -1,7 +1,6 @@
 'use client';
 
 import bytes from 'bytes';
-import { OffchainMetadata } from '@autonomys/auto-dag-data';
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
 import {
   Download,
@@ -13,17 +12,18 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
-import { UploadedObjectMetadata } from '../../models/UploadedObjectMetadata';
 import { ObjectDownloadModal } from '../Files/ObjectDownloadModal';
 import { handleClick, handleEnterOrSpace } from '../../utils/eventHandler';
+import { shortenString } from '../../utils/misc';
+import { BaseMetadata } from '../../models/UploadedObjectMetadata';
 
-interface FileCardProps extends Partial<UploadedObjectMetadata> {
+interface FileCardProps {
   icon?: React.ReactNode;
-  metadata: OffchainMetadata;
+  metadata: BaseMetadata;
 }
 
 export const FileCard = ({
-  metadata: { type, name, totalSize, dataCid },
+  metadata: { type, name, size, cid },
   icon,
 }: FileCardProps) => {
   const router = useRouter();
@@ -34,8 +34,8 @@ export const FileCard = ({
   }, []);
 
   const navigate = useCallback(() => {
-    router.push(`/drive/fs/${dataCid}`);
-  }, [dataCid, router]);
+    router.push(`/drive/fs/${cid}`);
+  }, [cid, router]);
 
   const objectIcon = useMemo(() => {
     if (icon) return icon;
@@ -79,18 +79,20 @@ export const FileCard = ({
   return (
     <Popover className='flex flex-1 flex-col'>
       <ObjectDownloadModal
-        cid={isDownloadModalOpen ? dataCid : null}
+        cid={isDownloadModalOpen ? cid : null}
         onClose={() => setIsDownloadModalOpen(false)}
       />
-      <div className='relative flex max-w-sm flex-1 flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm'>
+      <div className='relative flex max-w-sm flex-1 flex-col text-ellipsis rounded-lg border border-gray-200 bg-white p-4 shadow-sm'>
         <div className='mb-4 flex items-start justify-between'>
           {objectIcon}
           <PopoverButton>
             <MoreVertical size={20} />
           </PopoverButton>
         </div>
-        <h2 className='mb-2 text-lg font-semibold text-gray-800'>{name}</h2>
-        <p className='mb-4 text-gray-500'>Size: {bytes(Number(totalSize))}</p>
+        <h2 className='mb-2 text-lg font-semibold text-gray-800'>
+          {name ? shortenString(name, 20) : shortenString(cid, 20)}
+        </h2>
+        <p className='mb-4 text-gray-500'>Size: {bytes(Number(size))}</p>
         <button
           onClick={handleDownloadClick}
           className='flex w-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600'

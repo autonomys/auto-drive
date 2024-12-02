@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken'
-import { OAuthUser } from '../../../models/users/index.js'
+import { OAuthUser, UserRole } from '../../../models/users/index.js'
 import { env } from '../../../utils/misc.js'
 import {
   CustomAccessTokenPayload,
@@ -8,6 +8,7 @@ import {
 } from '../../../models/users/jwt.js'
 import { v4 } from 'uuid'
 import { jwtTokenRegistry } from '../../../repositories/users/jwt.js'
+import { UsersUseCases } from '../../../useCases/index.js'
 
 const JWT_SECRET = env('JWT_SECRET')
 
@@ -35,13 +36,31 @@ const getUserFromAccessToken = async (
   }
 }
 
-const createAccessToken = (user: OAuthUser, refreshTokenId: string) => {
+const createAccessToken = async (user: OAuthUser, refreshTokenId: string) => {
+  const dbUser = await UsersUseCases.getUserByOAuthUser(user)
+
+  const userInfo = dbUser.onboarded
+    ? await UsersUseCases.getUserInfo(dbUser.publicId)
+    : null
+
+  const roles =
+    dbUser.role === UserRole.Admin ? ['app-admin', 'user'] : ['user']
+  const defaultRole = dbUser.role === UserRole.Admin ? 'app-admin' : 'user'
+
   const payload: CustomAccessTokenPayload = {
     id: v4(),
     isRefreshToken: false,
     oauthProvider: user.provider,
     oauthUserId: user.id,
     refreshTokenId,
+    'https://hasura.io/jwt/claims': {
+      'x-hasura-default-role': defaultRole,
+      'x-hasura-allowed-roles': roles,
+      'x-hasura-oauth-provider': user.provider,
+      'x-hasura-oauth-user-id': user.id,
+      'x-hasura-organization-id':
+        userInfo?.subscription?.organizationId ?? 'none',
+    },
   }
 
   return jwt.sign(payload, JWT_SECRET, {
@@ -73,7 +92,7 @@ const createSessionTokens = async (user: OAuthUser) => {
   const refreshToken = await createRefreshToken(user)
   const refreshTokenId = getIdFromRefreshToken(refreshToken)
 
-  const accessToken = createAccessToken(user, refreshTokenId)
+  const accessToken = await createAccessToken(user, refreshTokenId)
 
   return { accessToken, refreshToken }
 }

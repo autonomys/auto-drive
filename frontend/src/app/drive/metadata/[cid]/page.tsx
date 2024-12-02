@@ -1,16 +1,20 @@
-'use client';
+import {
+  GetMetadataByHeadCidDocument,
+  GetMetadataByHeadCidQuery,
+} from '../../../../../gql/graphql';
+import { ObjectDetails } from '../../../../views/ObjectDetails';
+import { gqlClient } from '../../../../services/gql';
+import { mapObjectInformationFromQueryResult } from '../../../../services/gql/utils';
 
-import { useEffect, useState } from 'react';
-import { ApiService } from '../../../../services/api';
-import { UploadedObjectMetadata } from '../../../../models/UploadedObjectMetadata';
-import { UploadedObjectInformation } from '../../../../components/UploadedObjectInformation';
+export const dynamic = 'force-dynamic';
 
-export default function Page({ params }: { params: { cid: string } }) {
-  const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
+export default async function Page({ params }: { params: { cid: string } }) {
+  const { data } = await gqlClient.query<GetMetadataByHeadCidQuery>({
+    query: GetMetadataByHeadCidDocument,
+    variables: { headCid: params.cid },
+  });
 
-  useEffect(() => {
-    ApiService.fetchUploadedObjectMetadata(params.cid).then(setMetadata);
-  }, [params.cid]);
+  const metadata = mapObjectInformationFromQueryResult(data);
 
-  return <UploadedObjectInformation object={metadata} />;
+  return <ObjectDetails metadata={metadata} />;
 }

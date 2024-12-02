@@ -1,0 +1,18 @@
+{
+  "name": "hasura",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "console": "hasura console",
+    "metadata": "hasura metadata apply --skip-update-check",
+    "migrate": "hasura migrate apply --database-name default",
+    "start": "yarn metadata && yarn migrate && yarn console"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Autonomys"
+  },
+  "dependencies": {
+    "hasura": "^2.0.1"
+  }
+}

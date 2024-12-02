@@ -1,0 +1,11 @@
+actions: []
+
+custom_types:
+  enums: []
+  input_objects:
+    - name: UpdateAccountInput
+    - name: SlackNotificationInput
+  objects:
+    - name: UpdateAccountOutput
+    - name: SlackNotificationOutput
+  scalars: []

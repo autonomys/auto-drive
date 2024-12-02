@@ -3,17 +3,12 @@ import {
   createAutoDriveApi,
   downloadFile,
 } from '@autonomys/auto-drive';
-import { ApiKey, ApiKeyWithoutSecret } from '../models/ApiKey';
-import { PaginatedResult } from '../models/common';
-import { ObjectSearchResult } from '../models/ObjectSearchResult';
+import { ApiKey } from '../models/ApiKey';
 import {
   SubscriptionGranularity,
   SubscriptionWithUser,
 } from '../models/Subscriptions';
-import {
-  ObjectSummary,
-  UploadedObjectMetadata,
-} from '../models/UploadedObjectMetadata';
+import { UploadedObjectMetadata } from '../models/UploadedObjectMetadata';
 import { User, UserInfo } from '../models/User';
 import { getAuthSession } from '../utils/auth';
 import { uploadFileContent } from '../utils/file';
@@ -57,21 +52,6 @@ export const ApiService = {
         'X-Auth-Provider': session.authProvider,
       },
     });
-    return response.json();
-  },
-  getApiKeysByUser: async (): Promise<ApiKeyWithoutSecret[]> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/users/@me/apiKeys`, {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-      },
-    });
-
     return response.json();
   },
   deleteApiKey: async (apiKeyId: string): Promise<void> => {
@@ -148,99 +128,6 @@ export const ApiService = {
     });
 
     return downloadFile(api, cid, password);
-  },
-  searchByCIDOrName: async (
-    query: string,
-    scope: 'user' | 'global',
-  ): Promise<ObjectSearchResult[]> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(
-      `${API_BASE_URL}/objects/search?cid=${query}&scope=${scope}`,
-      {
-        headers: {
-          Authorization: `Bearer ${session?.accessToken}`,
-          'X-Auth-Provider': session.authProvider,
-        },
-      },
-    );
-
-    return response.json();
-  },
-  getRootObjects: async (
-    scope: 'user' | 'global',
-    offset: number,
-    limit: number,
-  ): Promise<PaginatedResult<ObjectSummary>> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(
-      `${API_BASE_URL}/objects/roots?scope=${scope}&offset=${offset}&limit=${limit}`,
-      {
-        headers: {
-          Authorization: `Bearer ${session?.accessToken}`,
-          'X-Auth-Provider': session.authProvider,
-        },
-      },
-    );
-
-    return response.json();
-  },
-  getSharedRoots: async (
-    offset: number,
-    limit: number,
-  ): Promise<PaginatedResult<ObjectSummary>> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(
-      `${API_BASE_URL}/objects/roots/shared?offset=${offset}&limit=${limit}`,
-      {
-        headers: {
-          Authorization: `Bearer ${session?.accessToken}`,
-          'X-Auth-Provider': session.authProvider,
-        },
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
-  getTrashObjects: async (
-    offset: number,
-    limit: number,
-  ): Promise<PaginatedResult<ObjectSummary>> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(
-      `${API_BASE_URL}/objects/roots/deleted?offset=${offset}&limit=${limit}`,
-      {
-        headers: {
-          Authorization: `Bearer ${session?.accessToken}`,
-          'X-Auth-Provider': session.authProvider,
-        },
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.json();
   },
   generateApiKey: async (): Promise<ApiKey> => {
     const session = await getAuthSession();

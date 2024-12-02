@@ -1,0 +1,52 @@
+table:
+  name: users
+  schema: public
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - oauth_provider
+        - oauth_user_id
+        - public_id
+        - role
+        - created_at
+        - updated_at
+      allow_aggregations: true
+      filter:
+        {
+          oauth_provider: { _eq: "X-Hasura-Oauth-Provider" },
+          oauth_user_id: { _eq: "X-Hasura-Oauth-User-Id" },
+        }
+    comment: ""
+  - role: app-admin
+    permission:
+      columns:
+        - oauth_provider
+        - oauth_user_id
+        - public_id
+        - role
+        - created_at
+        - updated_at
+      allow_aggregations: true
+      filter: {}
+object_relationships:
+  - name: user_membership
+    using:
+      manual_configuration:
+        column_mapping:
+          oauth_user_id: oauth_user_id
+          oauth_provider: oauth_provider
+        insertion_order: null
+        remote_table:
+          name: users_organizations
+          schema: public
+array_relationships:
+  - name: api_keys
+    using:
+      foreign_key_constraint_on:
+        columns:
+          - oauth_provider
+          - oauth_user_id
+        table:
+          schema: public
+          name: api_keys

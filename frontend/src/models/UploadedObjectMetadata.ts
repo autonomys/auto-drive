@@ -6,6 +6,13 @@ export interface UploadedObjectMetadata {
   owners: Owner[];
 }
 
+export interface BaseMetadata {
+  cid: string;
+  name?: string;
+  size?: number;
+  type: 'file' | 'folder';
+}
+
 export interface UploadStatus {
   uploadedNodes: number;
   totalNodes: number;

@@ -7,10 +7,11 @@ import jwt from 'jsonwebtoken'
 import { AuthManager } from '../../../src/services/authManager'
 import { closeDatabase, getDatabase } from '../../../src/drivers/pg'
 import { dbMigration } from '../../utils/dbMigrate'
+import { User } from '../../../src/models/users'
+import { createMockUser } from '../../utils/mocks'
 
 describe('JWT', () => {
-  const provider = 'custom'
-  const userId = '123'
+  let user: User
 
   let refreshTokenId: string
   let accessTokenString: string
@@ -19,6 +20,7 @@ describe('JWT', () => {
   beforeAll(async () => {
     await getDatabase()
     await dbMigration.up()
+    user = await createMockUser()
   })
 
   afterAll(async () => {
@@ -28,8 +30,8 @@ describe('JWT', () => {
 
   it('should generate a JWT token', async () => {
     const token = await CustomJWTAuth.createSessionTokens({
-      id: userId,
-      provider,
+      id: user.oauthUserId,
+      provider: user.oauthProvider,
     })
 
     const refreshTokenDecoded = jwt.decode(token.refreshToken)
@@ -38,7 +40,7 @@ describe('JWT', () => {
     }
     const refreshTokenPayload = refreshTokenDecoded as CustomRefreshTokenPayload
 
-    expect(refreshTokenPayload.oauthUserId).toBe(userId)
+    expect(refreshTokenPayload.oauthUserId).toBe(user.oauthUserId)
     expect(refreshTokenPayload.isRefreshToken).toBe(true)
     expect(refreshTokenPayload.id).toBeDefined()
 
@@ -51,8 +53,8 @@ describe('JWT', () => {
     }
     const accessTokenPayload = decoded as CustomAccessTokenPayload
 
-    expect(accessTokenPayload.oauthProvider).toBe(provider)
-    expect(accessTokenPayload.oauthUserId).toBe(userId)
+    expect(accessTokenPayload.oauthProvider).toBe(user.oauthProvider)
+    expect(accessTokenPayload.oauthUserId).toBe(user.oauthUserId)
     expect(accessTokenPayload.isRefreshToken).toBe(false)
     expect(accessTokenPayload.refreshTokenId).toBe(refreshTokenId)
 
@@ -67,8 +69,8 @@ describe('JWT', () => {
     )
 
     expect(user).toBeDefined()
-    expect(user?.id).toBe(userId)
-    expect(user?.provider).toBe(provider)
+    expect(user?.id).toBe(user.id)
+    expect(user?.provider).toBe(user.provider)
   })
 
   it('should be able to refresh with the refresh token', async () => {
@@ -90,8 +92,8 @@ describe('JWT', () => {
 
     expect(accessTokenPayload.refreshTokenId).toBe(refreshTokenId)
     expect(accessTokenPayload.isRefreshToken).toBe(false)
-    expect(accessTokenPayload.oauthUserId).toBe(userId)
-    expect(accessTokenPayload.oauthProvider).toBe(provider)
+    expect(accessTokenPayload.oauthUserId).toBe(user.oauthUserId)
+    expect(accessTokenPayload.oauthProvider).toBe(user.oauthProvider)
 
     accessTokenString = newAccessToken
   })
@@ -117,6 +119,9 @@ describe('JWT', () => {
   })
 
   it('should not be able to authenticate with the access token after invalidating the refresh token', async () => {
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET is not set')
+    }
     await CustomJWTAuth.invalidateRefreshToken(refreshTokenString)
 
     await expect(
