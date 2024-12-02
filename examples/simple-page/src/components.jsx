@@ -2,7 +2,7 @@ import { useState } from "react";
 import { uploadFileFromInput, createAutoDriveApi } from "@autonomys/auto-drive";
 
 const api = createAutoDriveApi({
-  apiKey: "b940cdd07ff34a72824040a7f94e69e9",
+  apiKey: "<api-key>",
   url: "https://demo.auto-drive.autonomys.xyz/api",
 });
 
