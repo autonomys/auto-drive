@@ -1,10 +1,15 @@
 {
-    "compilerOptions": {
-      "target": "es2018",
-      "module": "commonjs",
-      "strict": true,
-      "esModuleInterop": true,
-      "skipLibCheck": true,
-      "forceConsistentCasingInFileNames": true
-    }
-  }
+  "compilerOptions": {
+    "target": "es2018",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "outDir": "./dist"
+  },
+  "include": ["./**/*.ts", "simple-page/src/index.jsx"],
+  "exclude": ["node_modules"]
+}
