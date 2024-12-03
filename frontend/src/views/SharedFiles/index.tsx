@@ -10,7 +10,6 @@ import { PaginatedResult } from '../../models/common';
 import { useGetSharedFilesQuery } from '../../../gql/graphql';
 import { useUserStore } from '../../states/user';
 import { objectSummaryFromSharedFilesQuery } from './utils';
-import { gqlClient } from '../../services/gql';
 
 export const SharedFiles = () => {
   const user = useUserStore(({ user }) => user);

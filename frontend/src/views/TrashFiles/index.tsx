@@ -12,7 +12,6 @@ import { PaginatedResult } from '../../models/common';
 import { useGetTrashedFilesQuery } from '../../../gql/graphql';
 import { useUserStore } from '../../states/user';
 import { objectSummaryFromTrashedFilesQuery } from './utils';
-import { gqlClient } from '../../services/gql';
 
 export const TrashFiles = () => {
   const [objects, setObjects] = useState<ObjectSummary[] | null>(null);

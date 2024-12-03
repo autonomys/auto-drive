@@ -16,7 +16,6 @@ import {
   SearchGlobalMetadataByCidOrNameQuery,
   SearchUserMetadataByCidOrNameQuery,
 } from '../../../gql/graphql';
-import { gqlClient } from '../../services/gql';
 
 export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   const [query, setQuery] = useState('');

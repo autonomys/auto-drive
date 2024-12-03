@@ -16,7 +16,6 @@ import toast from 'react-hot-toast';
 import { useSession } from 'next-auth/react';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
-import { gqlClient } from '../../services/gql';
 
 const toastId = 'object-download-modal';
 

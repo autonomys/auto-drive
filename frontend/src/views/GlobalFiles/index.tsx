@@ -12,7 +12,6 @@ import { PaginatedResult } from '../../models/common';
 import { useGetGlobalFilesQuery } from '../../../gql/graphql';
 import { objectSummaryFromGlobalFilesQuery } from './utils';
 import { ObjectSummary } from '../../models/UploadedObjectMetadata';
-import { gqlClient } from '../../services/gql';
 
 export const GlobalFiles = () => {
   const [pageSize, setPageSize] = useState(5);

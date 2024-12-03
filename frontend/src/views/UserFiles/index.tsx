@@ -15,7 +15,6 @@ import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholde
 import { useGetMyFilesQuery } from '../../../gql/graphql';
 import { useSession } from 'next-auth/react';
 import { objectSummaryFromUserFilesQuery } from './utils';
-import { gqlClient } from '../../services/gql';
 import { objectSummaryFromSharedFilesQuery } from '../SharedFiles/utils';
 
 export const UserFiles = () => {

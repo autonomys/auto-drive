@@ -14,7 +14,6 @@ import { Link } from 'lucide-react';
 import { isValidUUID } from '../../utils/misc';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
-import { gqlClient } from '../../services/gql';
 
 export const ObjectShareModal = ({
   cid,

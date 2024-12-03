@@ -12,7 +12,6 @@ import toast from 'react-hot-toast';
 import { Button } from '../common/Button';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
-import { gqlClient } from '../../services/gql';
 
 export const ObjectDeleteModal = ({
   cid,

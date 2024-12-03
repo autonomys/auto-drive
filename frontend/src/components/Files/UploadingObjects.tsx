@@ -13,7 +13,6 @@ import { ObjectShareModal } from './ObjectShareModal';
 import { handleEscape } from '../../utils/eventHandler';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
-import { gqlClient } from '../../services/gql';
 
 export const UploadingObjects = () => {
   const [uploadingObjects] = useLocalStorage<string[]>('uploading-objects', []);
