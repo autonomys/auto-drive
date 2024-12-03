@@ -41,7 +41,6 @@ export const GlobalFiles = () => {
       limit: pageSize,
       offset: currentPage * pageSize,
     },
-    client: gqlClient,
   });
 
   useEffect(() => {

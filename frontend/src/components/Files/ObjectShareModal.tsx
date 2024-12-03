@@ -33,13 +33,11 @@ export const ObjectShareModal = ({
     },
     skip: !cid,
     onCompleted: (data) => {
-      console.log('data', data);
       setMetadata(mapObjectInformationFromQueryResult(data));
     },
     onError: (error) => {
       console.error('error', error);
     },
-    client: gqlClient,
   });
 
   const shareObject = useCallback(async () => {

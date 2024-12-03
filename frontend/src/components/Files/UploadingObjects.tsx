@@ -73,7 +73,6 @@ const UploadingObject = ({
     onError: (error) => {
       console.error('error', error);
     },
-    client: gqlClient,
     pollInterval: 5_000,
   });
 

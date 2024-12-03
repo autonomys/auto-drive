@@ -35,7 +35,6 @@ export const ObjectDeleteModal = ({
     onError: (error) => {
       console.error('error', error);
     },
-    client: gqlClient,
   });
 
   const deleteObject = useCallback(() => {

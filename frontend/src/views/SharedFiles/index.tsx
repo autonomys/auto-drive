@@ -33,7 +33,6 @@ export const SharedFiles = () => {
       offset: currentPage * pageSize,
     },
     skip: !user,
-    client: gqlClient,
   });
 
   useEffect(() => {

@@ -43,7 +43,6 @@ export const TrashFiles = () => {
       offset: currentPage * pageSize,
     },
     skip: !user,
-    client: gqlClient,
   });
 
   useEffect(() => {

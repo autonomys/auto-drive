@@ -43,7 +43,6 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
       oauthProvider: session.data?.underlyingProvider,
     },
     skip: query.length < 3,
-    client: gqlClient,
     onCompleted: (
       data: SearchGlobalMetadataByCidOrNameQuery &
         SearchUserMetadataByCidOrNameQuery,

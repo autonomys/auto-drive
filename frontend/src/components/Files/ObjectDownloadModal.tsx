@@ -63,7 +63,6 @@ export const ObjectDownloadModal = ({
     onError: (error) => {
       console.error('error', error);
     },
-    client: gqlClient,
   });
 
   const onDownload = useCallback(async () => {

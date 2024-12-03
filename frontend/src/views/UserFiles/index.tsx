@@ -49,7 +49,6 @@ export const UserFiles = () => {
       offset: currentPage * pageSize,
     },
     skip: !user || !session.data,
-    client: gqlClient,
     onCompleted(data) {
       updateResult({
         rows: objectSummaryFromUserFilesQuery(data),
