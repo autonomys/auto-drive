@@ -16,6 +16,7 @@ import {
   SearchGlobalMetadataByCidOrNameQuery,
   SearchUserMetadataByCidOrNameQuery,
 } from '../../../gql/graphql';
+import { gqlClient } from '../../services/gql';
 
 export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   const [query, setQuery] = useState('');
@@ -41,12 +42,8 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
       oauthUserId: session.data?.underlyingUserId,
       oauthProvider: session.data?.underlyingProvider,
     },
-    skip: query.length < 3 || !session.data?.accessToken,
-    context: {
-      headers: {
-        Authorization: `Bearer ${session.data?.accessToken}`,
-      },
-    },
+    skip: query.length < 3,
+    client: gqlClient,
     onCompleted: (
       data: SearchGlobalMetadataByCidOrNameQuery &
         SearchUserMetadataByCidOrNameQuery,

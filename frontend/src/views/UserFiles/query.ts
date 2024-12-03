@@ -16,6 +16,7 @@ export const GET_USER_FILES = gql`
               oauth_user_id: { _eq: $oauthUserId }
               oauth_provider: { _eq: $oauthProvider }
               is_admin: { _eq: true }
+              marked_as_deleted: { _is_null: true }
             }
           }
         }

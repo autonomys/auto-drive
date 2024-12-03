@@ -1,13 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useUserStore } from '../../states/user';
 import { ObjectSummary } from '../../models/UploadedObjectMetadata';
 import { PaginatedResult } from '../../models/common';
 import { FileDropZone } from '../../components/Files/FileDropZone';
 import { SearchBar } from '../../components/SearchBar';
 import { UploadingObjects } from '../../components/Files/UploadingObjects';
-import { LoaderCircle } from 'lucide-react';
 import {
   FileActionButtons,
   FileTable,
@@ -16,6 +15,8 @@ import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholde
 import { useGetMyFilesQuery } from '../../../gql/graphql';
 import { useSession } from 'next-auth/react';
 import { objectSummaryFromUserFilesQuery } from './utils';
+import { gqlClient } from '../../services/gql';
+import { objectSummaryFromSharedFilesQuery } from '../SharedFiles/utils';
 
 export const UserFiles = () => {
   const [pageSize, setPageSize] = useState(5);
@@ -40,7 +41,7 @@ export const UserFiles = () => {
 
   const session = useSession();
 
-  const { loading } = useGetMyFilesQuery({
+  const { data, loading } = useGetMyFilesQuery({
     variables: {
       oauthUserId: user?.oauthUserId ?? '',
       oauthProvider: user?.oauthProvider ?? '',
@@ -48,11 +49,7 @@ export const UserFiles = () => {
       offset: currentPage * pageSize,
     },
     skip: !user || !session.data,
-    context: {
-      headers: {
-        Authorization: `Bearer ${session.data?.accessToken}`,
-      },
-    },
+    client: gqlClient,
     onCompleted(data) {
       updateResult({
         rows: objectSummaryFromUserFilesQuery(data),
@@ -60,6 +57,21 @@ export const UserFiles = () => {
       });
     },
   });
+
+  useEffect(() => {
+    if (data) {
+      updateResult({
+        rows: objectSummaryFromSharedFilesQuery(data),
+        totalCount: data.metadata_aggregate.aggregate?.count ?? 0,
+      });
+    }
+  }, [data, updateResult]);
+
+  useEffect(() => {
+    if (loading) {
+      setObjects(null);
+    }
+  }, [loading]);
 
   return (
     <div className='flex w-full'>
@@ -72,32 +84,20 @@ export const UserFiles = () => {
         </div>
         <div className=''>
           <UploadingObjects />
-          {objects === null && (
-            <div className='flex min-h-[50vh] items-center justify-center'>
-              <LoaderCircle className='h-10 w-10 animate-spin' />
-            </div>
-          )}
-          {loading && (
-            <div className='flex min-h-[50vh] items-center justify-center'>
-              <LoaderCircle className='h-10 w-10 animate-spin' />
-            </div>
-          )}
-          {objects && objects.length > 0 && (
-            <FileTable
-              files={objects}
-              pageSize={pageSize}
-              setPageSize={updatePageSize}
-              currentPage={currentPage}
-              setCurrentPage={updateCurrentPage}
-              totalItems={totalItems}
-              actionButtons={[
-                FileActionButtons.DOWNLOAD,
-                FileActionButtons.SHARE,
-                FileActionButtons.DELETE,
-              ]}
-            />
-          )}
-          {objects && objects.length === 0 && <NoUploadsPlaceholder />}
+          <FileTable
+            files={objects}
+            pageSize={pageSize}
+            setPageSize={updatePageSize}
+            currentPage={currentPage}
+            setCurrentPage={updateCurrentPage}
+            totalItems={totalItems}
+            actionButtons={[
+              FileActionButtons.DOWNLOAD,
+              FileActionButtons.SHARE,
+              FileActionButtons.DELETE,
+            ]}
+            noFilesPlaceholder={<NoUploadsPlaceholder />}
+          />
         </div>
       </div>
     </div>

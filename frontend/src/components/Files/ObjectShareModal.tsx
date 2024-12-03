@@ -14,7 +14,7 @@ import { Link } from 'lucide-react';
 import { isValidUUID } from '../../utils/misc';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
-import { useSession } from 'next-auth/react';
+import { gqlClient } from '../../services/gql';
 
 export const ObjectShareModal = ({
   cid,
@@ -26,13 +26,12 @@ export const ObjectShareModal = ({
   const isOpen = cid !== null;
   const [publicId, setPublicId] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
-  const session = useSession();
 
   useGetMetadataByHeadCidQuery({
     variables: {
       headCid: cid ?? '',
     },
-    skip: !cid || !session.data?.accessToken,
+    skip: !cid,
     onCompleted: (data) => {
       console.log('data', data);
       setMetadata(mapObjectInformationFromQueryResult(data));
@@ -40,11 +39,7 @@ export const ObjectShareModal = ({
     onError: (error) => {
       console.error('error', error);
     },
-    context: {
-      headers: {
-        Authorization: `Bearer ${session.data?.accessToken}`,
-      },
-    },
+    client: gqlClient,
   });
 
   const shareObject = useCallback(async () => {

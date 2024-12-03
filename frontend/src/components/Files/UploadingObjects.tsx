@@ -12,8 +12,8 @@ import {
 import { ObjectShareModal } from './ObjectShareModal';
 import { handleEscape } from '../../utils/eventHandler';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
-import { useSession } from 'next-auth/react';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
+import { gqlClient } from '../../services/gql';
 
 export const UploadingObjects = () => {
   const [uploadingObjects] = useLocalStorage<string[]>('uploading-objects', []);
@@ -57,7 +57,6 @@ const UploadingObject = ({
     'uploading-objects',
     [],
   );
-  const session = useSession();
   const [shareCid, setShareCid] = useState<string | null>(null);
 
   const progress = useMemo(() => {
@@ -74,11 +73,7 @@ const UploadingObject = ({
     onError: (error) => {
       console.error('error', error);
     },
-    context: {
-      headers: {
-        Authorization: `Bearer ${session.data?.accessToken}`,
-      },
-    },
+    client: gqlClient,
     pollInterval: 5_000,
   });
 

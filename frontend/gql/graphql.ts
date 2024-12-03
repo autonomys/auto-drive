@@ -3242,7 +3242,7 @@ export const GetMyFilesDocument = gql`
     query GetMyFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!) {
   metadata(
     distinct_on: root_cid
-    where: {root_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}}}}}
+    where: {root_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}}
     limit: $limit
     offset: $offset
   ) {

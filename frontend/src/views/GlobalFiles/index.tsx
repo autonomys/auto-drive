@@ -1,7 +1,6 @@
 'use client';
 
-import { LoaderCircle } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   FileTable,
   FileActionButtons,
@@ -13,7 +12,7 @@ import { PaginatedResult } from '../../models/common';
 import { useGetGlobalFilesQuery } from '../../../gql/graphql';
 import { objectSummaryFromGlobalFilesQuery } from './utils';
 import { ObjectSummary } from '../../models/UploadedObjectMetadata';
-import { useSession } from 'next-auth/react';
+import { gqlClient } from '../../services/gql';
 
 export const GlobalFiles = () => {
   const [pageSize, setPageSize] = useState(5);
@@ -37,26 +36,28 @@ export const GlobalFiles = () => {
     setPageSize(newPageSize);
   }, []);
 
-  const session = useSession();
-
-  useGetGlobalFilesQuery({
+  const { data, loading } = useGetGlobalFilesQuery({
     variables: {
       limit: pageSize,
       offset: currentPage * pageSize,
     },
-    onCompleted: (data) => {
+    client: gqlClient,
+  });
+
+  useEffect(() => {
+    if (data) {
       updateResult({
         rows: objectSummaryFromGlobalFilesQuery(data),
         totalCount: data.metadata_aggregate?.aggregate?.count ?? 0,
       });
-    },
-    skip: !session.data?.accessToken,
-    context: {
-      headers: {
-        Authorization: `Bearer ${session.data?.accessToken}`,
-      },
-    },
-  });
+    }
+  }, [data, updateResult]);
+
+  useEffect(() => {
+    if (loading) {
+      setRootObjectMetadata(null);
+    }
+  }, [loading]);
 
   return (
     <div className='flex w-full'>
@@ -66,27 +67,18 @@ export const GlobalFiles = () => {
             <SearchBar scope='global' />
           </div>
         </div>
-        <div className=''>
+        <div>
           <UploadingObjects />
-          {rootObjectMetadata === null && (
-            <div className='flex min-h-[50vh] items-center justify-center'>
-              <LoaderCircle className='h-10 w-10 animate-spin' />
-            </div>
-          )}
-          {rootObjectMetadata && rootObjectMetadata.length > 0 && (
-            <FileTable
-              files={rootObjectMetadata}
-              pageSize={pageSize}
-              setPageSize={updatePageSize}
-              currentPage={currentPage}
-              setCurrentPage={updateCurrentPage}
-              totalItems={totalItems}
-              actionButtons={[FileActionButtons.DOWNLOAD]}
-            />
-          )}
-          {rootObjectMetadata && rootObjectMetadata.length === 0 && (
-            <NoUploadsPlaceholder />
-          )}
+          <FileTable
+            files={rootObjectMetadata}
+            pageSize={pageSize}
+            setPageSize={updatePageSize}
+            currentPage={currentPage}
+            setCurrentPage={updateCurrentPage}
+            totalItems={totalItems}
+            actionButtons={[FileActionButtons.DOWNLOAD]}
+            noFilesPlaceholder={<NoUploadsPlaceholder />}
+          />
         </div>
       </div>
     </div>
