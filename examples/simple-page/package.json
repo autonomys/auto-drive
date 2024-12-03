@@ -2,6 +2,7 @@
   "name": "simple-page",
   "packageManager": "yarn@4.5.1",
   "dependencies": {
+    "@autonomys/auto-drive": "^1.0.12",
     "@peculiar/webcrypto": "^1.5.0",
     "crypto-browserify": "^3.12.1",
     "react": "^18.3.1",
