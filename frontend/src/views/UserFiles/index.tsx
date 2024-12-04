@@ -14,7 +14,6 @@ import {
 import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholder';
 import { useGetMyFilesQuery } from '../../../gql/graphql';
 import { useSession } from 'next-auth/react';
-import { objectSummaryFromUserFilesQuery } from './utils';
 import { objectSummaryFromSharedFilesQuery } from '../SharedFiles/utils';
 
 export const UserFiles = () => {
@@ -48,12 +47,6 @@ export const UserFiles = () => {
       offset: currentPage * pageSize,
     },
     skip: !user || !session.data,
-    onCompleted(data) {
-      updateResult({
-        rows: objectSummaryFromUserFilesQuery(data),
-        totalCount: data.metadata_aggregate.aggregate?.count ?? 0,
-      });
-    },
   });
 
   useEffect(() => {
