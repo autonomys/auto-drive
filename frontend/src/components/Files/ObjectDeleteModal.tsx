@@ -11,7 +11,6 @@ import { ApiService } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Button } from '../common/Button';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
-import { useSession } from 'next-auth/react';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
 
 export const ObjectDeleteModal = ({
@@ -23,23 +22,17 @@ export const ObjectDeleteModal = ({
 }) => {
   const isOpen = cid !== null;
   const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
-  const session = useSession();
 
   useGetMetadataByHeadCidQuery({
     variables: {
       headCid: cid ?? '',
     },
-    skip: !cid || !session.data?.accessToken,
+    skip: !cid,
     onCompleted: (data) => {
       setMetadata(mapObjectInformationFromQueryResult(data));
     },
     onError: (error) => {
       console.error('error', error);
-    },
-    context: {
-      headers: {
-        Authorization: `Bearer ${session.data?.accessToken}`,
-      },
     },
   });
 

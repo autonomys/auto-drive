@@ -41,12 +41,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
       oauthUserId: session.data?.underlyingUserId,
       oauthProvider: session.data?.underlyingProvider,
     },
-    skip: query.length < 3 || !session.data?.accessToken,
-    context: {
-      headers: {
-        Authorization: `Bearer ${session.data?.accessToken}`,
-      },
-    },
+    skip: query.length < 3,
     onCompleted: (
       data: SearchGlobalMetadataByCidOrNameQuery &
         SearchUserMetadataByCidOrNameQuery,
