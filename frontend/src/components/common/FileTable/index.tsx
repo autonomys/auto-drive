@@ -2,7 +2,7 @@
 
 import { ObjectSummary } from '../../../models/UploadedObjectMetadata';
 import { Checkbox, Transition } from '@headlessui/react';
-import { Square, SquareCheck } from 'lucide-react';
+import { LoaderCircle, Square, SquareCheck } from 'lucide-react';
 import { FC, useCallback, useState } from 'react';
 import { ObjectShareModal } from '../../Files/ObjectShareModal';
 import { ObjectDeleteModal } from '../../Files/ObjectDeleteModal';
@@ -10,7 +10,7 @@ import { ObjectDownloadModal } from '../../Files/ObjectDownloadModal';
 import { useUserStore } from '../../../states/user';
 import { Table } from '../Table';
 import { TableHead, TableHeadCell, TableHeadRow } from '../Table/TableHead';
-import { TableBody } from '../Table/TableBody';
+import { TableBody, TableBodyRow, TableBodyCell } from '../Table/TableBody';
 import { Button } from '../Button';
 import { TableFooter } from '../Table/TableFooter';
 import { TablePaginator } from '../TablePaginator';
@@ -25,13 +25,14 @@ export enum FileActionButtons {
 }
 
 export const FileTable: FC<{
-  files: ObjectSummary[];
+  files: ObjectSummary[] | null;
   pageSize: number;
   setPageSize: (pageSize: number) => void;
   currentPage: number;
   setCurrentPage: (currentPage: number) => void;
   totalItems: number;
   actionButtons: FileActionButtons[];
+  noFilesPlaceholder?: React.ReactNode;
 }> = ({
   files,
   pageSize,
@@ -40,6 +41,7 @@ export const FileTable: FC<{
   setCurrentPage,
   totalItems,
   actionButtons,
+  noFilesPlaceholder,
 }) => {
   const user = useUserStore(({ user }) => user);
   const [downloadingCID, setDownloadingCID] = useState<string | null>(null);
@@ -63,6 +65,10 @@ export const FileTable: FC<{
     );
   }, []);
 
+  if (files && files.length === 0 && noFilesPlaceholder) {
+    return noFilesPlaceholder;
+  }
+
   return (
     <div className='flex flex-col'>
       <ObjectShareModal cid={shareCID} closeModal={() => setShareCID(null)} />
@@ -82,7 +88,7 @@ export const FileTable: FC<{
                 onChange={() =>
                   selectedFiles.length > 0
                     ? setSelectedFiles([])
-                    : setSelectedFiles(files.map((f) => f.headCid))
+                    : setSelectedFiles(files ? files.map((f) => f.headCid) : [])
                 }
               >
                 {selectedFiles.length > 0 ? <SquareCheck /> : <Square />}
@@ -118,20 +124,30 @@ export const FileTable: FC<{
               </TableHeadRow>
             </TableHead>
             <TableBody>
-              {files.map((file) => (
-                <FileTableRow
-                  key={file.headCid}
-                  file={file}
-                  user={user!}
-                  selectedFiles={selectedFiles}
-                  toggleSelectFile={toggleSelectFile}
-                  actionButtons={actionButtons}
-                  onDownloadFile={setDownloadingCID}
-                  onShareFile={setShareCID}
-                  onDeleteFile={setDeleteCID}
-                  onRestoreFile={setRestoreCID}
-                />
-              ))}
+              {files ? (
+                files.map((file) => (
+                  <FileTableRow
+                    key={file.headCid}
+                    file={file}
+                    user={user!}
+                    selectedFiles={selectedFiles}
+                    toggleSelectFile={toggleSelectFile}
+                    actionButtons={actionButtons}
+                    onDownloadFile={setDownloadingCID}
+                    onShareFile={setShareCID}
+                    onDeleteFile={setDeleteCID}
+                    onRestoreFile={setRestoreCID}
+                  />
+                ))
+              ) : (
+                <TableBodyRow>
+                  <TableBodyCell colSpan={5}>
+                    <div className='flex h-10 w-full items-center justify-center'>
+                      <LoaderCircle className='h-4 w-4 animate-spin' />
+                    </div>
+                  </TableBodyCell>
+                </TableBodyRow>
+              )}
             </TableBody>
             <TableFooter>
               <tr className='w-full'>

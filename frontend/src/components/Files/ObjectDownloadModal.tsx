@@ -62,11 +62,6 @@ export const ObjectDownloadModal = ({
     onError: (error) => {
       console.error('error', error);
     },
-    context: {
-      headers: {
-        Authorization: `Bearer ${session.data?.accessToken}`,
-      },
-    },
   });
 
   const onDownload = useCallback(async () => {
