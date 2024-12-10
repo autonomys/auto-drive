@@ -1,4 +1,4 @@
-import { createAutoDriveApi } from "@autonomys/auto-drive";
+import autoDrive from "@autonomys/auto-drive";
 import dotenv from "dotenv";
 
 dotenv.config({
@@ -12,7 +12,7 @@ if (!url || !apiKey) {
   throw new Error("AUTO_DRIVE_URL and AUTO_DRIVE_API_KEY must be set");
 }
 
-export const api = createAutoDriveApi({
+export const api = autoDrive.createAutoDriveApi({
   apiKey,
   url,
 });

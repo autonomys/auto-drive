@@ -1,5 +1,5 @@
 import { Argument, Command } from "commander";
-import { uploadFileFromFilepath } from "@autonomys/auto-drive";
+import autoDrive from "@autonomys/auto-drive";
 import { api } from "../services/api.js";
 
 export const publishCommand = new Command("publish")
@@ -7,10 +7,11 @@ export const publishCommand = new Command("publish")
   .option("-p, --password <password>", "The password to use for the file")
   .option("--no-compression", "Whether to not compress the file", false)
   .action(async (path, options) => {
-    await uploadFileFromFilepath(api, path, {
-      password: options.password,
-      compression: options.compression,
-    })
+    await autoDrive
+      .uploadFileFromFilepath(api, path, {
+        password: options.password,
+        compression: options.compression,
+      })
       .promise.then((e) => {
         console.log(`Published file with CID: ${e.cid}`);
       })
