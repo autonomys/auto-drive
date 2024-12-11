@@ -42,20 +42,19 @@ module.exports = {
   resolve: {
     extensions: [".js", ".jsx"],
     alias: {
-      browser: false,
-      fs: false,
-      path: require.resolve("path-browserify"),
-      buffer: require.resolve("buffer"),
-      //   vm: false,
-      //   process: require.resolve("process/browser"),
-      //   stream: require.resolve("stream-browserify"),
       crypto: false,
+      path: require.resolve("path-browserify"),
+      util: false,
+      buffer: require.resolve("buffer"),
+      assert: require.resolve("assert"),
+      process: require.resolve("process"),
     },
   },
   plugins: [
     new HtmlWebpackPlugin({ template: "./public/index.html" }),
     new webpack.ProvidePlugin({
       Buffer: ["buffer", "Buffer"],
+      process: require.resolve("process"),
     }),
   ],
   devServer: {
