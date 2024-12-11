@@ -35,9 +35,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.0.12":
-  version: 1.0.12
-  resolution: "@autonomys/auto-dag-data@npm:1.0.12"
+"@autonomys/auto-dag-data@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@autonomys/auto-dag-data@npm:1.1.0"
   dependencies:
     "@ipld/dag-pb": "npm:^4.1.2"
     "@peculiar/webcrypto": "npm:^1.5.0"
@@ -49,20 +49,22 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/b0bed5c2e8af5aef3f0697b207c37ba6aaa72d02b4dc51973a09e4411a8b9b0ff36e490ffc402cd56599803352cc1c63c22b8dfdea6da4aa7eb852322e2ba933
+  checksum: 10c0/4cc73649855e4666df864e0c5bb85270e622a9272005b95e2bde605477ca90266a88a092feec02386b964e85e6c68bfe01d2cb4301d7a87e07e9d4cc5b593ff8
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.0.12":
-  version: 1.0.12
-  resolution: "@autonomys/auto-drive@npm:1.0.12"
+"@autonomys/auto-drive@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@autonomys/auto-drive@npm:1.1.0"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.0.12"
+    "@autonomys/auto-dag-data": "npm:^1.1.0"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^2.1.35"
+    process: "npm:^0.11.10"
     rxjs: "npm:^7.8.1"
+    stream: "npm:^0.0.3"
     zod: "npm:^3.23.8"
-  checksum: 10c0/dec7c687554815d8f3f82f6ac02878068c1d6ddb1ebaeba4afbd7f0e56e8a346dc94793f60eda00e788ddf69d052d45295748cf7cc55816833b21cf516ee5a3c
+  checksum: 10c0/7e88755fa88e6fc86a16b425304dda31361d789c439e56685264a97a0018016cd8e4eb1385fdedd08874a5522188e4037f4fa97a12dfa47a2e5c3f82469ff430
   languageName: node
   linkType: hard
 
@@ -3973,7 +3975,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "auto-drive-examples@workspace:."
   dependencies:
-    "@autonomys/auto-drive": "npm:^1.0.12"
+    "@autonomys/auto-drive": "npm:^1.1.0"
     "@types/node": "npm:^22.5.1"
     "@types/react": "npm:^18.3.12"
     axios: "npm:^1.7.5"
@@ -4751,6 +4753,13 @@ __metadata:
   version: 1.0.1
   resolution: "commondir@npm:1.0.1"
   checksum: 10c0/33a124960e471c25ee19280c9ce31ccc19574b566dc514fe4f4ca4c34fa8b0b57cf437671f5de380e11353ea9426213fca17687dd2ef03134fea2dbc53809fd6
+  languageName: node
+  linkType: hard
+
+"component-emitter@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "component-emitter@npm:2.0.0"
+  checksum: 10c0/65dfaf787ea49eb48f0ffec766bda7ec67e8dbeb3b406f08724dcae842e0aa274731fcccb9280b77d2b41693061731a9080b60d276020246a146544cd9900b83
   languageName: node
   linkType: hard
 
@@ -11154,6 +11163,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"process@npm:^0.11.10":
+  version: 0.11.10
+  resolution: "process@npm:0.11.10"
+  checksum: 10c0/40c3ce4b7e6d4b8c3355479df77aeed46f81b279818ccdc500124e6a5ab882c0cc81ff7ea16384873a95a74c4570b01b120f287abbdd4c877931460eca6084b3
+  languageName: node
+  linkType: hard
+
 "promise-retry@npm:^2.0.1":
   version: 2.0.1
   resolution: "promise-retry@npm:2.0.1"
@@ -12536,6 +12552,15 @@ __metadata:
   version: 0.2.6
   resolution: "stream-buffers@npm:0.2.6"
   checksum: 10c0/8d685a5f98e0b392802fc07617f31e6ae63652ed2fff7fe7df309222ffb06502f47b31ab35c2cf9b4de0320f657ed3aa6d697641f0f72f5c6f3a703ba8d7b594
+  languageName: node
+  linkType: hard
+
+"stream@npm:^0.0.3":
+  version: 0.0.3
+  resolution: "stream@npm:0.0.3"
+  dependencies:
+    component-emitter: "npm:^2.0.0"
+  checksum: 10c0/5d262408583f3d5fed8077b33ad670320d85c6b7c0fb3ab73a9a632fbad0ee36f3c66e6feb5264cb39dbee3a619174fa886b5f69f98217666d0844f6a2f6510b
   languageName: node
   linkType: hard
 
