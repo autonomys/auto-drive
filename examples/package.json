@@ -9,7 +9,7 @@
     "simple-page": "node --loader ts-node/esm simple-page/index.tsx"
   },
   "dependencies": {
-    "@autonomys/auto-drive": "^1.0.12",
+    "@autonomys/auto-drive": "^1.1.0",
     "axios": "^1.7.5",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
