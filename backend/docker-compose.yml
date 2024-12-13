@@ -2,11 +2,12 @@ version: '3.8'
 
 services:
   app:
-    image: node:20
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: node_app
     working_dir: /usr/src/app
     volumes:
       - .:/usr/src/app
     ports:
       - '3000:3000'
-    entrypoint: ['bash', 'start-server.sh']
