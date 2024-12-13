@@ -8,13 +8,12 @@ networks:
 
 services:
   backend:
-    image: node:20
-    container_name: node_app
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     working_dir: /usr/src/app
     volumes:
       - ./backend:/usr/src/app
-    ports:
-      - "3000:3000"
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres

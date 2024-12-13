@@ -7,7 +7,7 @@ services:
   hasura:
     image: hasura/graphql-engine:v2.40.0
     depends_on:
-      app:
+      backend:
         condition: service_healthy
     volumes:
       - ./hasura/metadata:/hasura-metadata
@@ -49,9 +49,10 @@ services:
     command:
       - graphql-engine
       - serve
-  app:
-    image: node:20
-    container_name: node_app
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     working_dir: /usr/src/app
     volumes:
       - ./backend:/usr/src/app
@@ -63,4 +64,3 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-    entrypoint: ["bash", "start-server.sh"]

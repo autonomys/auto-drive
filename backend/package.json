@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "start:server": "node --loader ts-node/esm src/server.ts",
-    "start": "node --loader ts-node/esm",
+    "start": "node dist/server.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --coverage",
     "lint": "eslint . "
   },
@@ -44,7 +44,7 @@
     "@types/jsonwebtoken": "^9",
     "@types/lru-cache": "^7.10.10",
     "@types/multer": "^1.4.12",
-    "@types/node": "^22.3.0",
+    "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
     "@types/pg-format": "^1",
     "@types/uuid": "^10",
