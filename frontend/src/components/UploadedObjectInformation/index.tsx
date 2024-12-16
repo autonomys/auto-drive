@@ -10,6 +10,7 @@ import { ObjectShareModal } from '../Files/ObjectShareModal';
 import { ObjectDeleteModal } from '../Files/ObjectDeleteModal';
 import { Loader } from 'lucide-react';
 import { ObjectDownloadModal } from '../Files/ObjectDownloadModal';
+import { FilePreview } from '../FilePreview';
 
 export const UploadedObjectInformation = ({
   object,
@@ -174,13 +175,25 @@ export const UploadedObjectInformation = ({
           <span className='ml-[4px]'>0</span>
         </div>
       </div>
-      <span className='ml-2 text-xl font-semibold'>Owners</span>
+      <span className='ml-2 text-xl font-semibold'>Upload Options</span>
       <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
-        {owners?.map((o) => (
-          <div className='flex' key={o.publicId}>
-            <span className='ml-[4px]'>{o.publicId}</span>
-          </div>
-        ))}
+        <div className='flex'>
+          <span>Encryption: </span>
+          <span className='ml-[4px] font-bold'>
+            {object.metadata.uploadOptions?.encryption?.algorithm || 'Disabled'}
+          </span>
+        </div>
+        <div className='flex'>
+          <span>Compression: </span>
+          <span className='ml-[4px] font-bold'>
+            {object.metadata.uploadOptions?.compression?.algorithm ||
+              'Disabled'}
+          </span>
+        </div>
+      </div>
+      <span className='ml-2 text-xl font-semibold'>Preview</span>
+      <div className='flex w-full flex-col items-center'>
+        <FilePreview metadata={object.metadata} />
       </div>
     </div>
   );

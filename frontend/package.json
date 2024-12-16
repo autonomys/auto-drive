@@ -12,6 +12,7 @@
   "dependencies": {
     "@apollo/client": "^3.11.10",
     "@autonomys/auto-drive": "^1.0.8",
+    "@cyntler/react-doc-viewer": "^1.17.0",
     "@graphql-codegen/cli": "^5.0.3",
     "@graphql-codegen/introspection": "^4.0.3",
     "@graphql-codegen/typescript": "^4.1.2",
