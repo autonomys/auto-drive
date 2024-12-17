@@ -7,6 +7,7 @@ import { userController } from './controllers/user.js'
 import { handleAuth } from './services/authManager/express.js'
 import { uploadController } from './controllers/upload.js'
 import { config } from './config.js'
+import { logger } from './drivers/logger.js'
 
 const createServer = async () => {
   const app = express()
@@ -55,7 +56,7 @@ const createServer = async () => {
   })
 
   app.listen(config.port, () => {
-    console.log(`Server running at http://localhost:${config.port}`)
+    logger.info(`Server running at http://localhost:${config.port}`)
   })
 }
 

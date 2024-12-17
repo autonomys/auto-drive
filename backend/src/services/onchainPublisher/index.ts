@@ -1,3 +1,4 @@
+import { logger } from '../../drivers/logger.js'
 import { TransactionResultsUseCases } from '../../useCases/index.js'
 import { safeCallback } from '../../utils/safe.js'
 import { createTransactionManager } from './transactionManager.js'
@@ -20,7 +21,7 @@ const processPendingUploads = safeCallback(async () => {
     const pendingUploads =
       await TransactionResultsUseCases.getPendingTransactionResults(20)
 
-    console.log(`${pendingUploads.length} pending uploads`)
+    logger.error(`${pendingUploads.length} pending uploads`)
     if (pendingUploads.length === 0) {
       return
     }

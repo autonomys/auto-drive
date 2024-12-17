@@ -6,6 +6,7 @@ import {
   ObjectUseCases,
   UploadStatusUseCases,
 } from '../useCases/index.js'
+import { logger } from '../drivers/logger.js'
 
 const objectController = Router()
 
@@ -186,7 +187,7 @@ objectController.get('/:cid/download', async (req, res) => {
       return
     }
 
-    console.log(`Attempting to retrieve data for metadataCid: ${cid}`)
+    logger.info(`Attempting to retrieve data for metadataCid: ${cid}`)
     const data = await FilesUseCases.downloadObject(user, cid)
 
     const safeName = encodeURIComponent(metadata.name || 'download')

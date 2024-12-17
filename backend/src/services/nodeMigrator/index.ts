@@ -1,3 +1,4 @@
+import { logger } from '../../drivers/logger.js'
 import { UploadsUseCases } from '../../useCases/uploads/uploads.js'
 import { safeCallback } from '../../utils/safe.js'
 
@@ -15,13 +16,13 @@ const processPendingMigrations = safeCallback(async () => {
 
   try {
     const pendingMigrations = await UploadsUseCases.getPendingMigrations(1)
-    console.log(`Found ${pendingMigrations.length} pending migrations`)
+    logger.error(`Found ${pendingMigrations.length} pending migrations`)
     if (pendingMigrations.length === 0) {
       return
     }
 
     for (const upload of pendingMigrations) {
-      console.log(`Processing migration for upload ${upload.id}`)
+      logger.error(`Processing migration for upload ${upload.id}`)
       await UploadsUseCases.processMigration(upload.id)
     }
   } finally {

@@ -4,6 +4,7 @@ const DEFAULT_CHUNK_SIZE = 10 * 1024 ** 2
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 
 export const config = {
+  logLevel: env('LOG_LEVEL', 'info'),
   postgres: {
     url: env('DATABASE_URL'),
   },

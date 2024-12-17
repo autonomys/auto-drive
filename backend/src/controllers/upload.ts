@@ -5,6 +5,7 @@ import multer from 'multer'
 import { FolderTreeFolderSchema } from '../models/objects/folderTree.js'
 import { uploadOptionsSchema } from '../models/uploads/upload.js'
 import { z } from 'zod'
+import { logger } from '../drivers/logger.js'
 
 const uploadController = Router()
 
@@ -44,7 +45,7 @@ uploadController.post('/file', async (req, res) => {
     res.status(200).json(upload)
     return
   } catch (error) {
-    console.log(error)
+    logger.error(error as string)
 
     res.status(500).json({
       error: 'Failed to create upload',
@@ -88,7 +89,7 @@ uploadController.post('/folder', async (req, res) => {
     res.status(200).json(upload)
     return
   } catch (error) {
-    console.log(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to create upload',
     })
@@ -142,7 +143,7 @@ uploadController.post('/folder/:uploadId/file', async (req, res) => {
     res.status(200).json(upload)
     return
   } catch (error) {
-    console.log(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to create file in folder',
     })
@@ -185,7 +186,7 @@ uploadController.post(
       })
       return
     } catch (error) {
-      console.log(error)
+      logger.error(error)
 
       res.status(500).json({
         error: 'Failed to upload chunk',
@@ -210,7 +211,7 @@ uploadController.post('/:uploadId/complete', async (req, res) => {
     })
     return
   } catch (error) {
-    console.log(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to complete upload',
     })

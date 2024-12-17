@@ -8,6 +8,7 @@ import { waitReady } from '@polkadot/wasm-crypto'
 import { createConnection } from '../../drivers/substrate.js'
 import { Transaction, TransactionResult } from '../../models/objects/index.js'
 import { initializeQueue, registerTransactionInQueue } from './queue.js'
+import { logger } from '../../drivers/logger.js'
 
 const submitTransaction = async (
   api: ApiPromise,
@@ -24,7 +25,7 @@ const submitTransaction = async (
         unsubscribe()
       }
       if (!isResolved) {
-        console.log(
+        logger.error(
           `Transaction timed out. Tx hash: ${transaction.hash.toString()}`,
         )
         reject(new Error('Transaction timeout'))
@@ -47,7 +48,7 @@ const submitTransaction = async (
         async (result: SubmittableResultValue) => {
           const { status, dispatchError } = result
 
-          console.log(
+          logger.error(
             `Current status: ${
               status.type
             }, Tx hash: ${transaction.hash.toString()}`,
@@ -74,7 +75,7 @@ const submitTransaction = async (
                 error: errorMessage,
               })
             } else {
-              console.log(`In block: ${status.asInBlock.toString()}`)
+              logger.error(`In block: ${status.asInBlock.toString()}`)
               const blockHash = status.asInBlock.toString()
               const { block } = await api.rpc.chain.getBlock(blockHash)
               resolve({
