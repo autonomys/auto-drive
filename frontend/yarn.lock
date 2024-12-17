@@ -115,9 +115,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.1.2":
-  version: 1.1.2
-  resolution: "@autonomys/auto-dag-data@npm:1.1.2"
+"@autonomys/auto-dag-data@npm:^1.1.4":
+  version: 1.1.4
+  resolution: "@autonomys/auto-dag-data@npm:1.1.4"
   dependencies:
     "@ipld/dag-pb": "npm:^4.1.2"
     "@peculiar/webcrypto": "npm:^1.5.0"
@@ -129,22 +129,22 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/62a5e6f045d953d48ce397f5b4e05e37126345203063d836d19f479d927aa0f277ec0023d3c3445b42f5c690f38bee0b1afec140beb26a3549046d9b3cd57f0f
+  checksum: 10c0/6cc4a5363ae79337835459964107e3dee253e6596b8d769de9c7cda5cd26f44557cd81e3042d24bd274a698807d8e667d234ed25de44fad73c9f4ac8ca7ab827
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.1.2":
-  version: 1.1.2
-  resolution: "@autonomys/auto-drive@npm:1.1.2"
+"@autonomys/auto-drive@npm:^1.1.4":
+  version: 1.1.4
+  resolution: "@autonomys/auto-drive@npm:1.1.4"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.1.2"
+    "@autonomys/auto-dag-data": "npm:^1.1.4"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^2.1.35"
     process: "npm:^0.11.10"
     rxjs: "npm:^7.8.1"
     stream: "npm:^0.0.3"
     zod: "npm:^3.23.8"
-  checksum: 10c0/e42d37600ee55641e7ffad4ccb60fb8927e3cdbcc7607489cdf4dfecc41ed94c59391d11d5a4a7a7485784b69aa105c6733658c1371be1d646f9daeb49187da6
+  checksum: 10c0/3f76b9d9ef5bfb64f081501f03c3be2710bd4ecb66d4a146b04947dfe369f5fd90fcba9732b2e180924267c7b15b1ae72435f5d97ddaffb5f890ccbeef404bf3
   languageName: node
   linkType: hard
 
@@ -4756,7 +4756,7 @@ __metadata:
   dependencies:
     "@apollo/client": "npm:^3.11.10"
     "@autonomys/auto-dag-data": "npm:^1.0.7"
-    "@autonomys/auto-drive": "npm:^1.1.2"
+    "@autonomys/auto-drive": "npm:^1.1.4"
     "@cyntler/react-doc-viewer": "npm:^1.17.0"
     "@graphql-codegen/cli": "npm:^5.0.3"
     "@graphql-codegen/introspection": "npm:^4.0.3"
