@@ -115,9 +115,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.0.8":
-  version: 1.0.8
-  resolution: "@autonomys/auto-dag-data@npm:1.0.8"
+"@autonomys/auto-dag-data@npm:^1.1.4":
+  version: 1.1.4
+  resolution: "@autonomys/auto-dag-data@npm:1.1.4"
   dependencies:
     "@ipld/dag-pb": "npm:^4.1.2"
     "@peculiar/webcrypto": "npm:^1.5.0"
@@ -129,19 +129,22 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/97b92114afa667aadccacabed0241b3e486854bd2e091e36b2d859bfd842e6f0aa4720138ba6ef9d9d3aaca8fc1d00ece0cfdf659fcb852867bcfd9dd05b771f
+  checksum: 10c0/6cc4a5363ae79337835459964107e3dee253e6596b8d769de9c7cda5cd26f44557cd81e3042d24bd274a698807d8e667d234ed25de44fad73c9f4ac8ca7ab827
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.0.8":
-  version: 1.0.8
-  resolution: "@autonomys/auto-drive@npm:1.0.8"
+"@autonomys/auto-drive@npm:^1.1.4":
+  version: 1.1.4
+  resolution: "@autonomys/auto-drive@npm:1.1.4"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.0.8"
+    "@autonomys/auto-dag-data": "npm:^1.1.4"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^2.1.35"
+    process: "npm:^0.11.10"
+    rxjs: "npm:^7.8.1"
+    stream: "npm:^0.0.3"
     zod: "npm:^3.23.8"
-  checksum: 10c0/084b44703abb637698df3c7ac773795c50af32649b3060fbdf21d6803f1a0107b6b81c9c06f098bb637314fbf1ef240a54d5dab98da18d78e968ee08de08c124
+  checksum: 10c0/3f76b9d9ef5bfb64f081501f03c3be2710bd4ecb66d4a146b04947dfe369f5fd90fcba9732b2e180924267c7b15b1ae72435f5d97ddaffb5f890ccbeef404bf3
   languageName: node
   linkType: hard
 
@@ -3559,6 +3562,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"component-emitter@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "component-emitter@npm:2.0.0"
+  checksum: 10c0/65dfaf787ea49eb48f0ffec766bda7ec67e8dbeb3b406f08724dcae842e0aa274731fcccb9280b77d2b41693061731a9080b60d276020246a146544cd9900b83
+  languageName: node
+  linkType: hard
+
 "concat-map@npm:0.0.1":
   version: 0.0.1
   resolution: "concat-map@npm:0.0.1"
@@ -4746,7 +4756,7 @@ __metadata:
   dependencies:
     "@apollo/client": "npm:^3.11.10"
     "@autonomys/auto-dag-data": "npm:^1.0.7"
-    "@autonomys/auto-drive": "npm:^1.0.8"
+    "@autonomys/auto-drive": "npm:^1.1.4"
     "@cyntler/react-doc-viewer": "npm:^1.17.0"
     "@graphql-codegen/cli": "npm:^5.0.3"
     "@graphql-codegen/introspection": "npm:^4.0.3"
@@ -7619,6 +7629,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"process@npm:^0.11.10":
+  version: 0.11.10
+  resolution: "process@npm:0.11.10"
+  checksum: 10c0/40c3ce4b7e6d4b8c3355479df77aeed46f81b279818ccdc500124e6a5ab882c0cc81ff7ea16384873a95a74c4570b01b120f287abbdd4c877931460eca6084b3
+  languageName: node
+  linkType: hard
+
 "promise-retry@npm:^2.0.1":
   version: 2.0.1
   resolution: "promise-retry@npm:2.0.1"
@@ -8431,6 +8448,15 @@ __metadata:
   dependencies:
     minipass: "npm:^7.0.3"
   checksum: 10c0/e5a1e23a4057a86a97971465418f22ea89bd439ac36ade88812dd920e4e61873e8abd6a9b72a03a67ef50faa00a2daf1ab745c5a15b46d03e0544a0296354227
+  languageName: node
+  linkType: hard
+
+"stream@npm:^0.0.3":
+  version: 0.0.3
+  resolution: "stream@npm:0.0.3"
+  dependencies:
+    component-emitter: "npm:^2.0.0"
+  checksum: 10c0/5d262408583f3d5fed8077b33ad670320d85c6b7c0fb3ab73a9a632fbad0ee36f3c66e6feb5264cb39dbee3a619174fa886b5f69f98217666d0844f6a2f6510b
   languageName: node
   linkType: hard
 
