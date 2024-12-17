@@ -1,7 +1,8 @@
 import { Keyring } from '@polkadot/api'
+import { config } from '../../config'
 
 export const getAccounts = () => {
-  const privateKeys = process.env.PRIVATE_KEYS_PATH ?? '//Alice'
+  const privateKeys = config.privateKeysPath
   const privateKeysArray = privateKeys
     .split(',')
     .map((key) => key.trim())

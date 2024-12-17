@@ -2,18 +2,7 @@ import { AwaitIterable } from 'interface-store'
 import { downloadCacheFilePartsRepository } from '../../../repositories/cache/fileParts.js'
 import { registryRepository } from '../../../repositories/cache/registry.js'
 import { asyncByChunk } from '../../../utils/async.js'
-
-const DEFAULT_CHUNK_SIZE = 10 * 1024 ** 2 // 10MB
-const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3) // 10GB
-
-const config = {
-  chunkSize: process.env.DATABASE_DOWNLOAD_CACHE_CHUNK_SIZE
-    ? parseInt(process.env.DATABASE_DOWNLOAD_CACHE_CHUNK_SIZE)
-    : DEFAULT_CHUNK_SIZE,
-  maxCacheSize: process.env.DATABASE_DOWNLOAD_CACHE_MAX_SIZE
-    ? BigInt(process.env.DATABASE_DOWNLOAD_CACHE_MAX_SIZE)
-    : DEFAULT_MAX_CACHE_SIZE,
-}
+import { config } from '../../../config.js'
 
 const internalSet = async function* (
   cid: string,
@@ -21,7 +10,10 @@ const internalSet = async function* (
   size: bigint,
 ): AsyncIterable<Buffer> {
   let i = 0
-  for await (const chunk of asyncByChunk(data, config.chunkSize)) {
+  for await (const chunk of asyncByChunk(
+    data,
+    config.databaseDownloadCache.chunkSize,
+  )) {
     await downloadCacheFilePartsRepository.addFilePart({
       cid,
       index: i,
@@ -43,10 +35,10 @@ const internalSet = async function* (
 const updateCacheSize = async (size: bigint) => {
   let currentSize = BigInt(await registryRepository.getTotalSize())
   const newSize = currentSize + BigInt(size)
-  if (newSize > config.maxCacheSize) {
+  if (newSize > config.databaseDownloadCache.maxCacheSize) {
     const entries = await registryRepository.getEntriesSortedByLastAccessedAt()
     for (const entry of entries) {
-      if (currentSize <= config.maxCacheSize) {
+      if (currentSize <= config.databaseDownloadCache.maxCacheSize) {
         break
       }
       await registryRepository.removeEntries([entry.cid])

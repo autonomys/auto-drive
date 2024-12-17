@@ -3,14 +3,10 @@ import { createWS } from '../../drivers/ws.js'
 import { ObjectMappingListEntrySchema } from '../../models/objects/objectMappings.js'
 import { NodesUseCases } from '../../useCases/index.js'
 import { transactionResultsRepository } from '../../repositories/index.js'
+import { config } from '../../config.js'
 
 const start = async () => {
-  const url = process.env.OBJECT_MAPPING_ARCHIVER_URL
-  if (!url) {
-    throw new Error('OBJECT_MAPPING_ARCHIVER_URL is not set')
-  }
-
-  const ws = createWS(url)
+  const ws = createWS(config.objectMappingArchiverUrl)
 
   const SAFE_BLOCK_NUMBER_THRESHOLD = 100
   const blockNumber =

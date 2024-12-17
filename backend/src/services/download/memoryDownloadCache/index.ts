@@ -1,11 +1,10 @@
 import { LRUCache } from 'lru-cache'
 import { bufferToAsyncIterable } from '../../../utils/async.js'
 import { AwaitIterable } from 'interface-store'
-
-const ONE_GB = 1024 ** 3
+import { config } from '../../../config.js'
 
 const cache = new LRUCache<string, Buffer>({
-  maxSize: Number(process.env.MAX_CACHE_SIZE ?? ONE_GB),
+  maxSize: config.memoryDownloadCache.maxCacheSize,
 })
 
 const has = (cid: string) => {

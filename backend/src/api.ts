@@ -6,28 +6,26 @@ import { objectController } from './controllers/object.js'
 import { userController } from './controllers/user.js'
 import { handleAuth } from './services/authManager/express.js'
 import { uploadController } from './controllers/upload.js'
+import { config } from './config.js'
 
 const createServer = async () => {
   const app = express()
-  const port = Number(process.env.PORT) || 3000
 
-  // Increase the limit to 10MB (adjust as needed)
-  const requestSizeLimit = process.env.REQUEST_SIZE_LIMIT || '200mb'
   app.use(
     express.json({
-      limit: requestSizeLimit,
+      limit: config.requestSizeLimit,
     }),
   )
   app.use(
     express.urlencoded({
-      limit: requestSizeLimit,
+      limit: config.requestSizeLimit,
       extended: true,
     }),
   )
-  if (process.env.CORS_ALLOW_ORIGINS) {
+  if (config.corsAllowedOrigins) {
     app.use(
       cors({
-        origin: process.env.CORS_ALLOW_ORIGINS,
+        origin: config.corsAllowedOrigins,
       }),
     )
   }
@@ -56,8 +54,8 @@ const createServer = async () => {
     }
   })
 
-  app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`)
+  app.listen(config.port, () => {
+    console.log(`Server running at http://localhost:${config.port}`)
   })
 }
 

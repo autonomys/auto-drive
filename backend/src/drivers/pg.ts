@@ -1,10 +1,11 @@
 import pg from 'pg'
+import { config } from '../config'
 
 let db: pg.Client | undefined
 
 const createDB = async (): Promise<pg.Client> => {
   const client = new pg.Client({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: config.postgres.url,
   })
 
   await client.connect()
