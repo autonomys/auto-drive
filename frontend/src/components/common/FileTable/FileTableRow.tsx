@@ -20,6 +20,8 @@ import { FileActionButtons } from '../FileTable';
 import bytes from 'bytes';
 import { Button } from '../Button';
 import { handleEnterOrSpace } from '../../../utils/eventHandler';
+import { SquareArrowOutUpRight } from 'lucide-react';
+import { InternalLink } from '../InternalLink';
 
 export const FileTableRow = ({
   file,
@@ -169,12 +171,19 @@ export const FileTableRow = ({
                 onMouseEnter={() => popoverButtonRef.current?.click()}
                 onMouseLeave={() => popoverButtonRef.current?.click()}
               >
-                <PopoverButton ref={popoverButtonRef} as='span'>
+                <PopoverButton
+                  ref={popoverButtonRef}
+                  as='div'
+                  className='flex items-center'
+                >
                   <span className='font-semibold text-accent hover:cursor-pointer'>
                     {file.name
                       ? shortenString(file.name, 30)
                       : `No name (${file.headCid.slice(0, 12)})`}
                   </span>
+                  <InternalLink href={`/drive/metadata/${file.headCid}`}>
+                    <SquareArrowOutUpRight className='ml-2 h-4 w-4 transition-all duration-200 hover:scale-105' />
+                  </InternalLink>
                 </PopoverButton>
                 <Transition
                   as={Fragment}
