@@ -1,5 +1,6 @@
 import Websocket from 'websocket'
 import { stringify } from '../utils/misc.js'
+import { logger } from './logger.js'
 
 type RPCMessage = {
   jsonrpc: string
@@ -31,7 +32,7 @@ export const createWS = (endpoint: string): WS => {
       console.error('WebSocket connection error', errorDetails)
 
       setTimeout(() => {
-        console.log(`Reconnecting to RPC Web Socket (${endpoint})`)
+        logger.error(`Reconnecting to RPC Web Socket (${endpoint})`)
         handleConnection()
       }, 10_000)
     }
@@ -44,7 +45,7 @@ export const createWS = (endpoint: string): WS => {
     }
 
     ws.onclose = (event) => {
-      console.log(
+      logger.error(
         `WebSocket connection closed (${event.code}) due to ${event.reason}.`,
       )
     }
@@ -54,7 +55,7 @@ export const createWS = (endpoint: string): WS => {
 
   const connected: Promise<void> = new Promise((resolve) => {
     ws.onopen = () => {
-      console.log(`Connected to RPC Web Socket (${endpoint})`)
+      logger.error(`Connected to RPC Web Socket (${endpoint})`)
       resolve()
     }
   })

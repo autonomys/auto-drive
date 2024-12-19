@@ -3,27 +3,24 @@ import { createWS } from '../../drivers/ws.js'
 import { ObjectMappingListEntrySchema } from '../../models/objects/objectMappings.js'
 import { NodesUseCases } from '../../useCases/index.js'
 import { transactionResultsRepository } from '../../repositories/index.js'
+import { config } from '../../config.js'
+import { logger } from '../../drivers/logger.js'
 
 const start = async () => {
-  const url = process.env.OBJECT_MAPPING_ARCHIVER_URL
-  if (!url) {
-    throw new Error('OBJECT_MAPPING_ARCHIVER_URL is not set')
-  }
-
-  const ws = createWS(url)
+  const ws = createWS(config.objectMappingArchiverUrl)
 
   const SAFE_BLOCK_NUMBER_THRESHOLD = 100
   const blockNumber =
     await transactionResultsRepository.getFirstNotArchivedNode()
 
   if (!blockNumber) {
-    console.log('Subscribing to real time object mappings')
+    logger.error('Subscribing to real time object mappings')
     await ws.send({
       jsonrpc: '2.0',
       method: 'subscribe_object_mappings',
     })
   } else {
-    console.log(`Subscribing to recover object mappings from ${blockNumber}`)
+    logger.error(`Subscribing to recover object mappings from ${blockNumber}`)
     await ws.send({
       jsonrpc: '2.0',
       method: 'subscribe_recover_object_mappings',
@@ -47,7 +44,7 @@ const start = async () => {
     }
 
     if (data.result.v0.objects.length > 0) {
-      console.log(
+      logger.error(
         `Processing object mapping list entry of length ${data.result.v0.objects.length}`,
       )
       await NodesUseCases.processNodeArchived(data.result)

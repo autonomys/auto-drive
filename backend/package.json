@@ -31,6 +31,7 @@
     "pizzip": "^3.1.7",
     "uuid": "^10.0.0",
     "websocket": "^1.0.35",
+    "winston": "^3.17.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

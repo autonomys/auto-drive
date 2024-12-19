@@ -1,3 +1,4 @@
+import { logger } from '../../drivers/logger.js'
 import { FilesUseCases, ObjectUseCases } from '../../useCases/index.js'
 import { databaseDownloadCache } from './databaseDownloadCache/index.js'
 import { memoryDownloadCache } from './memoryDownloadCache/index.js'
@@ -6,12 +7,12 @@ import { AwaitIterable } from 'interface-store'
 export const downloadService = {
   download: async (cid: string): Promise<AwaitIterable<Buffer>> => {
     if (memoryDownloadCache.has(cid)) {
-      console.log('Downloading file from memory', cid)
+      logger.error('Downloading file from memory', cid)
       return memoryDownloadCache.get(cid)!
     }
 
     if (await databaseDownloadCache.has(cid)) {
-      console.log('Downloading file from database', cid)
+      logger.error('Downloading file from database', cid)
       let data = databaseDownloadCache.get(cid)!
       data = memoryDownloadCache.set(cid, data)
       return data

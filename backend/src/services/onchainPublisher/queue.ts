@@ -7,6 +7,7 @@ import {
 } from '../../models/objects/index.js'
 import { getOnChainNonce } from '../../utils/networkApi.js'
 import { getAccount, getAccounts } from './accounts.js'
+import { logger } from '../../drivers/logger.js'
 
 export const queue: Queue = {
   api: null,
@@ -100,7 +101,7 @@ const drainQueue = async () => {
     )
   }
 
-  console.log(
+  logger.error(
     `Queue drained there are ${queue.transactions.length} transactions left`,
   )
 }
@@ -118,7 +119,7 @@ const retryTransactions = () => {
     (tx) => !transactionsToRetry.includes(tx) || tx.retries > 0,
   )
 
-  console.log(`Retrying ${transactionsToRetry.length} transactions`)
+  logger.error(`Retrying ${transactionsToRetry.length} transactions`)
 
   transactionsToRetry = transactionsToRetry.filter((tx) => tx.retries > 0)
   transactionsToRetry.forEach(async (tx) => {

@@ -20,6 +20,7 @@ import {
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
 import { UploadType } from '../../models/uploads/upload.js'
 import { ObjectUseCases } from './object.js'
+import { logger } from '../../drivers/logger.js'
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
@@ -148,7 +149,7 @@ export const processNodeArchived = async (
 ) => {
   const nodes = await nodesRepository.getArchivingNodesCID()
 
-  console.log(`Archiving ${nodes.length} nodes`)
+  logger.error(`Archiving ${nodes.length} nodes`)
 
   const objects = objectMappings.v0.objects.map((e) => {
     const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))

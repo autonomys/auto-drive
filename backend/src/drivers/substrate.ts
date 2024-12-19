@@ -1,9 +1,8 @@
 import { ApiPromise, WsProvider } from '@polkadot/api'
-
-const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'ws://localhost:9944'
+import { config } from '../config'
 
 export const createConnection = (): Promise<ApiPromise> => {
-  const provider = new WsProvider(RPC_ENDPOINT)
+  const provider = new WsProvider(config.rpcEndpoint)
 
   return ApiPromise.create({
     provider,
