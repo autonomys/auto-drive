@@ -56,20 +56,26 @@ const saveNode = async (
 
 const getChunkData = async (cid: string | CID): Promise<Buffer | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
-  const node = await nodesRepository.getNode(cidString)
-  if (!node) {
+
+  let ipldNodeBytes: Buffer | undefined = await nodesRepository
+    .getNode(cidString)
+    .then((e) => (e ? Buffer.from(e.encoded_node, 'base64') : undefined))
+
+  if (!ipldNodeBytes) {
+    ipldNodeBytes = await BlockstoreUseCases.getNode(cidString)
+  }
+
+  if (!ipldNodeBytes) {
     return undefined
   }
 
-  const chunkData = decodeIPLDNodeData(
-    Buffer.from(node.encoded_node, 'base64'),
-  ).data
+  const chunkData = decodeIPLDNodeData(new Uint8Array(ipldNodeBytes))
 
   if (!chunkData) {
     return undefined
   }
 
-  return Buffer.from(chunkData)
+  return Buffer.from(chunkData.data ?? '')
 }
 
 const saveNodes = async (
