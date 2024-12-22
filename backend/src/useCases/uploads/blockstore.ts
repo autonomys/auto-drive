@@ -151,10 +151,22 @@ const processFolderUpload = async (upload: FolderUpload): Promise<CID> => {
   return processFileTree(upload.id, upload, fileTree)
 }
 
+const getNode = async (cid: string): Promise<Buffer | undefined> => {
+  const nodes = await blockstoreRepository.getNodesByCid(cid)
+  if (nodes.length === 0) {
+    return undefined
+  }
+
+  const node = nodes[0]
+
+  return Buffer.from(node.data)
+}
+
 export const BlockstoreUseCases = {
   getFileUploadIdCID,
   getFolderUploadIdCID,
   getUploadCID,
   getChunksByNodeType,
   processFolderUpload,
+  getNode,
 }

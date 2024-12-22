@@ -130,6 +130,17 @@ const deleteBlockstoreEntry = async (uploadId: string, cid: string) => {
   )
 }
 
+const getNodesByCid = async (cid: string) => {
+  const db = await getDatabase()
+
+  const result = await db.query<BlockstoreEntry>(
+    'SELECT * FROM uploads.blockstore WHERE cid = $1 ORDER BY sort_id ASC',
+    [cid],
+  )
+
+  return result.rows.map(parseEntry)
+}
+
 export const blockstoreRepository = {
   addBlockstoreEntry,
   addBatchBlockstoreEntries,
@@ -141,4 +152,5 @@ export const blockstoreRepository = {
   deleteBlockstoreEntry,
   getByCIDWithoutData,
   getByCIDAndRootUploadId,
+  getNodesByCid,
 }
