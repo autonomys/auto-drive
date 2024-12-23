@@ -35,9 +35,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.1.4":
-  version: 1.1.4
-  resolution: "@autonomys/auto-dag-data@npm:1.1.4"
+"@autonomys/auto-dag-data@npm:^1.2.0":
+  version: 1.2.0
+  resolution: "@autonomys/auto-dag-data@npm:1.2.0"
   dependencies:
     "@ipld/dag-pb": "npm:^4.1.2"
     "@peculiar/webcrypto": "npm:^1.5.0"
@@ -49,22 +49,21 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/6cc4a5363ae79337835459964107e3dee253e6596b8d769de9c7cda5cd26f44557cd81e3042d24bd274a698807d8e667d234ed25de44fad73c9f4ac8ca7ab827
+  checksum: 10c0/31e9dc4b6172a952b1e56b363f377b61fc205247aa6f79440651fd8f40145e8274a485a24e6fd3f87a31e11eaff813383420c073e8bc20ef9616ed562025d371
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.1.0":
-  version: 1.1.4
-  resolution: "@autonomys/auto-drive@npm:1.1.4"
+"@autonomys/auto-drive@npm:^1.2.0":
+  version: 1.2.0
+  resolution: "@autonomys/auto-drive@npm:1.2.0"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.1.4"
+    "@autonomys/auto-dag-data": "npm:^1.2.0"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^2.1.35"
     process: "npm:^0.11.10"
-    rxjs: "npm:^7.8.1"
     stream: "npm:^0.0.3"
     zod: "npm:^3.23.8"
-  checksum: 10c0/3f76b9d9ef5bfb64f081501f03c3be2710bd4ecb66d4a146b04947dfe369f5fd90fcba9732b2e180924267c7b15b1ae72435f5d97ddaffb5f890ccbeef404bf3
+  checksum: 10c0/c733b9cbbbebfa3d64b7b366d24b1ef0fa4efd9138f250a3c5472bb0ed0fe3ac913a5d2fa3ae28eef88333da8043297155470f61a25c9a8c20525471c7f3ab57
   languageName: node
   linkType: hard
 
@@ -3974,7 +3973,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "auto-drive-examples@workspace:."
   dependencies:
-    "@autonomys/auto-drive": "npm:^1.1.0"
+    "@autonomys/auto-drive": "npm:^1.2.0"
     "@types/node": "npm:^22.5.1"
     "@types/react": "npm:^18.3.12"
     axios: "npm:^1.7.5"
@@ -11988,15 +11987,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rxjs@npm:^7.8.1":
-  version: 7.8.1
-  resolution: "rxjs@npm:7.8.1"
-  dependencies:
-    tslib: "npm:^2.1.0"
-  checksum: 10c0/3c49c1ecd66170b175c9cacf5cef67f8914dcbc7cd0162855538d365c83fea631167cacb644b3ce533b2ea0e9a4d0b12175186985f89d75abe73dbd8f7f06f68
-  languageName: node
-  linkType: hard
-
 "safe-array-concat@npm:^1.1.2, safe-array-concat@npm:^1.1.3":
   version: 1.1.3
   resolution: "safe-array-concat@npm:1.1.3"
@@ -13295,7 +13285,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tslib@npm:^2.0.0, tslib@npm:^2.0.3, tslib@npm:^2.1.0, tslib@npm:^2.4.0, tslib@npm:^2.6.2, tslib@npm:^2.7.0, tslib@npm:^2.8.1":
+"tslib@npm:^2.0.0, tslib@npm:^2.0.3, tslib@npm:^2.4.0, tslib@npm:^2.6.2, tslib@npm:^2.7.0, tslib@npm:^2.8.1":
   version: 2.8.1
   resolution: "tslib@npm:2.8.1"
   checksum: 10c0/9c4759110a19c53f992d9aae23aac5ced636e99887b51b9e61def52611732872ff7668757d4e4c61f19691e36f4da981cd9485e869b4a7408d689f6bf1f14e62

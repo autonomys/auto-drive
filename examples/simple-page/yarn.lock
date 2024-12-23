@@ -35,9 +35,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.1.0":
-  version: 1.1.0
-  resolution: "@autonomys/auto-dag-data@npm:1.1.0"
+"@autonomys/auto-dag-data@npm:^1.2.0":
+  version: 1.2.0
+  resolution: "@autonomys/auto-dag-data@npm:1.2.0"
   dependencies:
     "@ipld/dag-pb": "npm:^4.1.2"
     "@peculiar/webcrypto": "npm:^1.5.0"
@@ -49,22 +49,21 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/4cc73649855e4666df864e0c5bb85270e622a9272005b95e2bde605477ca90266a88a092feec02386b964e85e6c68bfe01d2cb4301d7a87e07e9d4cc5b593ff8
+  checksum: 10c0/31e9dc4b6172a952b1e56b363f377b61fc205247aa6f79440651fd8f40145e8274a485a24e6fd3f87a31e11eaff813383420c073e8bc20ef9616ed562025d371
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.1.0":
-  version: 1.1.0
-  resolution: "@autonomys/auto-drive@npm:1.1.0"
+"@autonomys/auto-drive@npm:^1.2.0":
+  version: 1.2.0
+  resolution: "@autonomys/auto-drive@npm:1.2.0"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.1.0"
+    "@autonomys/auto-dag-data": "npm:^1.2.0"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^2.1.35"
     process: "npm:^0.11.10"
-    rxjs: "npm:^7.8.1"
     stream: "npm:^0.0.3"
     zod: "npm:^3.23.8"
-  checksum: 10c0/7e88755fa88e6fc86a16b425304dda31361d789c439e56685264a97a0018016cd8e4eb1385fdedd08874a5522188e4037f4fa97a12dfa47a2e5c3f82469ff430
+  checksum: 10c0/c733b9cbbbebfa3d64b7b366d24b1ef0fa4efd9138f250a3c5472bb0ed0fe3ac913a5d2fa3ae28eef88333da8043297155470f61a25c9a8c20525471c7f3ab57
   languageName: node
   linkType: hard
 
@@ -12621,15 +12620,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rxjs@npm:^7.8.1":
-  version: 7.8.1
-  resolution: "rxjs@npm:7.8.1"
-  dependencies:
-    tslib: "npm:^2.1.0"
-  checksum: 10c0/3c49c1ecd66170b175c9cacf5cef67f8914dcbc7cd0162855538d365c83fea631167cacb644b3ce533b2ea0e9a4d0b12175186985f89d75abe73dbd8f7f06f68
-  languageName: node
-  linkType: hard
-
 "safe-array-concat@npm:^1.1.2":
   version: 1.1.2
   resolution: "safe-array-concat@npm:1.1.2"
@@ -13034,7 +13024,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "simple-page@workspace:."
   dependencies:
-    "@autonomys/auto-drive": "npm:^1.1.0"
+    "@autonomys/auto-drive": "npm:^1.2.0"
     "@babel/core": "npm:^7.26.0"
     "@babel/preset-env": "npm:^7.26.0"
     "@babel/preset-react": "npm:^7.25.9"
@@ -13937,7 +13927,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tslib@npm:^2.0.0, tslib@npm:^2.0.3, tslib@npm:^2.1.0, tslib@npm:^2.4.0, tslib@npm:^2.6.2, tslib@npm:^2.7.0, tslib@npm:^2.8.1":
+"tslib@npm:^2.0.0, tslib@npm:^2.0.3, tslib@npm:^2.4.0, tslib@npm:^2.6.2, tslib@npm:^2.7.0, tslib@npm:^2.8.1":
   version: 2.8.1
   resolution: "tslib@npm:2.8.1"
   checksum: 10c0/9c4759110a19c53f992d9aae23aac5ced636e99887b51b9e61def52611732872ff7668757d4e4c61f19691e36f4da981cd9485e869b4a7408d689f6bf1f14e62

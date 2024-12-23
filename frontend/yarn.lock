@@ -97,7 +97,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.0.7, @autonomys/auto-dag-data@npm:^1.1.4":
+"@autonomys/auto-dag-data@npm:^1.0.7":
   version: 1.1.4
   resolution: "@autonomys/auto-dag-data@npm:1.1.4"
   dependencies:
@@ -115,18 +115,35 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.1.4":
-  version: 1.1.4
-  resolution: "@autonomys/auto-drive@npm:1.1.4"
+"@autonomys/auto-dag-data@npm:^1.2.0":
+  version: 1.2.0
+  resolution: "@autonomys/auto-dag-data@npm:1.2.0"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.1.4"
+    "@ipld/dag-pb": "npm:^4.1.2"
+    "@peculiar/webcrypto": "npm:^1.5.0"
+    "@webbuf/blake3": "npm:^3.0.26"
+    "@webbuf/fixedbuf": "npm:^3.0.26"
+    "@webbuf/webbuf": "npm:^3.0.26"
+    fflate: "npm:^0.8.2"
+    multiformats: "npm:^13.2.2"
+    protobufjs: "npm:^7.4.0"
+    protons: "npm:^7.6.0"
+    protons-runtime: "npm:^5.5.0"
+  checksum: 10c0/31e9dc4b6172a952b1e56b363f377b61fc205247aa6f79440651fd8f40145e8274a485a24e6fd3f87a31e11eaff813383420c073e8bc20ef9616ed562025d371
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-drive@npm:^1.2.0":
+  version: 1.2.0
+  resolution: "@autonomys/auto-drive@npm:1.2.0"
+  dependencies:
+    "@autonomys/auto-dag-data": "npm:^1.2.0"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^2.1.35"
     process: "npm:^0.11.10"
-    rxjs: "npm:^7.8.1"
     stream: "npm:^0.0.3"
     zod: "npm:^3.23.8"
-  checksum: 10c0/3f76b9d9ef5bfb64f081501f03c3be2710bd4ecb66d4a146b04947dfe369f5fd90fcba9732b2e180924267c7b15b1ae72435f5d97ddaffb5f890ccbeef404bf3
+  checksum: 10c0/c733b9cbbbebfa3d64b7b366d24b1ef0fa4efd9138f250a3c5472bb0ed0fe3ac913a5d2fa3ae28eef88333da8043297155470f61a25c9a8c20525471c7f3ab57
   languageName: node
   linkType: hard
 
@@ -4748,7 +4765,7 @@ __metadata:
   dependencies:
     "@apollo/client": "npm:^3.11.10"
     "@autonomys/auto-dag-data": "npm:^1.0.7"
-    "@autonomys/auto-drive": "npm:^1.1.4"
+    "@autonomys/auto-drive": "npm:^1.2.0"
     "@cyntler/react-doc-viewer": "npm:^1.17.0"
     "@graphql-codegen/cli": "npm:^5.0.3"
     "@graphql-codegen/introspection": "npm:^4.0.3"
