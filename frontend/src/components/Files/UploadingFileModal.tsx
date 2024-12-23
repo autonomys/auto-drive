@@ -3,7 +3,6 @@ import { Dialog, Transition } from '@headlessui/react';
 import { Button } from '../common/Button';
 import { useEncryptionStore } from '../../states/encryption';
 import { UploadService } from '../../services/upload';
-import { UploadFileStatus } from '@autonomys/auto-drive';
 
 export const UploadingFileModal = ({
   file,
