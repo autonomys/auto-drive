@@ -14,7 +14,7 @@ export const listCommand = new Command("ls")
   .option("-l, --limit <limit>", "The limit of roots to list", "100")
   .option("-o, --offset <offset>", "The offset of roots to list", "0")
   .action(async (options) => {
-    const roots = await autoDrive.getRoots(api, {
+    const roots = await autoDrive.apiCalls.getRoots(api, {
       scope: options.scope as autoDrive.Scope,
       limit: options.limit,
       offset: options.offset,

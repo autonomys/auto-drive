@@ -23,10 +23,9 @@ export const UploadingFolderModal = ({
 
     const passwordToUse = password ? password : undefined;
 
-    await (
-      await UploadService.uploadFolder(data, { password: passwordToUse })
-    ).forEach((status) => {
-      setProgress(status.progress);
+    await UploadService.uploadFolder(data, {
+      password: passwordToUse,
+      onProgress: (progress) => setProgress(progress),
     });
 
     setPasswordConfirmed(false);

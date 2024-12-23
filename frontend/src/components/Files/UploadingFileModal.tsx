@@ -24,11 +24,8 @@ export const UploadingFileModal = ({
 
       await UploadService.uploadFile(file, {
         password,
-      }).then((observer) =>
-        observer.forEach((status: UploadFileStatus) => {
-          setProgress(status.progress);
-        }),
-      );
+        onProgress: (progress) => setProgress(progress),
+      });
 
       onClose();
       setPasswordConfirmed(false);

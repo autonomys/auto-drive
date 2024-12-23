@@ -1,4 +1,4 @@
-import { env } from './utils/misc'
+import { env } from './utils/misc.js'
 
 const DEFAULT_CHUNK_SIZE = 10 * 1024 ** 2
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
