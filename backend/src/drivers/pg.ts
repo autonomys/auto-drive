@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { config } from '../config'
+import { config } from '../config.js'
 
 let db: pg.Client | undefined
 

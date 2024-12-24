@@ -11,9 +11,12 @@ export const publishCommand = new Command("publish")
       .uploadFileFromFilepath(api, path, {
         password: options.password,
         compression: options.compression,
+        onProgress: (progress) => {
+          console.log(`Progress: ${progress}%`);
+        },
       })
-      .promise.then((e) => {
-        console.log(`Published file with CID: ${e.cid}`);
+      .then((cid) => {
+        console.log(`Published file with CID: ${cid}`);
       })
       .catch((e) => {
         console.error(e);

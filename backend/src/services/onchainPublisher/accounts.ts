@@ -1,5 +1,5 @@
 import { Keyring } from '@polkadot/api'
-import { config } from '../../config'
+import { config } from '../../config.js'
 
 export const getAccounts = () => {
   const privateKeys = config.privateKeysPath
