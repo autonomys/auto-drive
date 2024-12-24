@@ -83,7 +83,7 @@ export const RemainingCreditTracker = ({
             {startDate} - {endDate}
           </div>
         </div>
-        <div className='mt-2 flex flex-col text-center'>
+        <div className='mt-1 flex flex-col text-center'>
           <a
             target='_blank'
             rel='noreferrer'
