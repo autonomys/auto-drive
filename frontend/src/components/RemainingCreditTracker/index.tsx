@@ -83,6 +83,16 @@ export const RemainingCreditTracker = ({
             {startDate} - {endDate}
           </div>
         </div>
+        <div className='mt-1 flex flex-col text-center'>
+          <a
+            target='_blank'
+            rel='noreferrer'
+            href='https://forms.gle/EAPzicXcbP7gH2uT6'
+            className='text-sm text-black hover:underline'
+          >
+            Ask for more credits
+          </a>
+        </div>
       </div>
     </div>
   );

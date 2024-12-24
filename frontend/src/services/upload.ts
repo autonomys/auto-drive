@@ -23,24 +23,32 @@ const getApi = async () => {
 
 const uploadFile = async (
   file: File,
-  { password }: { password?: string } = {},
+  {
+    password,
+    onProgress,
+  }: { password?: string; onProgress?: (progress: number) => void } = {},
 ) => {
   const api = await getApi();
 
   return uploadFileFromInput(api, file, {
     password,
     compression: true,
+    onProgress,
   });
 };
 
 const uploadFolder = async (
   files: FileList,
-  { password }: { password?: string } = {},
+  {
+    password,
+    onProgress,
+  }: { password?: string; onProgress?: (progress: number) => void } = {},
 ) => {
   const api = await getApi();
 
   const folderUploadObserver = await uploadFolderFromInput(api, files, {
     password,
+    onProgress,
   });
 
   return folderUploadObserver;
