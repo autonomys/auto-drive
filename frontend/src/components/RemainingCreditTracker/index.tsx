@@ -88,7 +88,7 @@ export const RemainingCreditTracker = ({
             target='_blank'
             rel='noreferrer'
             href='https://forms.gle/EAPzicXcbP7gH2uT6'
-            className='text-sm text-black hover:scale-105 hover:underline'
+            className='text-sm text-black hover:underline'
           >
             Ask for more credits
           </a>
