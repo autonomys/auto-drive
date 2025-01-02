@@ -1,11 +1,7 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
-  ],
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
       colors: {
@@ -17,6 +13,11 @@ const config: Config = {
         'light-danger': '#ffcdd2',
         'gray-button': '#9EA49F',
         'light-gray': '#4E4F54',
+        backgroundLight: '#EBEFFC',
+        backgroundDark: '#3654A6',
+        backgroundDarker: '#27355D',
+        backgroundDarkest: '#050D26',
+        whiteOpaque: '#ffffffb3',
       },
     },
   },
