@@ -21,7 +21,7 @@ export const SigningInButtons = () => {
     <div className='flex flex-col gap-2'>
       <button
         onClick={handleGoogleAuth}
-        className='flex w-full max-w-xs transform items-center justify-center rounded-full border-2 border-backgroundDarker bg-white px-6 py-3 font-bold text-white transition duration-300 ease-in-out hover:-translate-y-1 hover:scale-105 hover:border-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2'
+        className='flex w-full max-w-xs transform items-center justify-center gap-2 rounded-full border-2 border-backgroundDarker bg-white px-6 py-3 font-bold text-backgroundDarker transition duration-300 ease-in-out hover:-translate-y-1 hover:scale-105 hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2'
         aria-label='Sign in with Google'
       >
         <GoogleIcon />
@@ -30,10 +30,10 @@ export const SigningInButtons = () => {
       </button>
       <button
         onClick={handleDiscordAuth}
-        className='flex w-full max-w-xs transform items-center justify-center rounded-full border-2 border-transparent bg-black px-6 py-3 font-bold text-white transition duration-300 ease-in-out hover:-translate-y-1 hover:scale-105 hover:border-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2'
-        aria-label='Sign in with Google'
+        className='flex w-full max-w-xs transform items-center justify-center rounded-full border-2 border-backgroundDarker bg-white px-6 py-3 font-bold text-backgroundDarker transition duration-300 ease-in-out hover:-translate-y-1 hover:scale-105 hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2'
+        aria-label='Sign in with Discord'
       >
-        <DiscordIcon />
+        <DiscordIcon fillColor='#5865F2' />
         Sign in with Discord
         {isClicked === 'discord' && <LoaderCircle className='animate-spin' />}
       </button>
