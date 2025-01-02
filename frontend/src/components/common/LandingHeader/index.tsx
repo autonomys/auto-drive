@@ -8,8 +8,8 @@ export const LandingHeader = () => {
 
   const getLinkClass = useCallback(
     (path: string) => {
-      return `rounded-xl px-8 py-[1px] font-semibold ${
-        pathname === path ? 'bg-white' : 'bg-transparent'
+      return `rounded-lg px-8 py-[1px] font-medium ${
+        pathname === path ? 'bg-white' : 'bg-transparent hover:cursor-pointer'
       }`;
     },
     [pathname],
@@ -18,12 +18,12 @@ export const LandingHeader = () => {
   return (
     <div className='flex w-full flex-row justify-center gap-2 bg-transparent px-[20%] py-2'>
       <ul className='flex flex-row gap-4'>
-        <li className={getLinkClass('/')}>
-          <a href='/'>Home</a>
-        </li>
-        <li className={getLinkClass('/faqs')}>
-          <a href='/faqs'>FAQs</a>
-        </li>
+        <a className='content' href='/'>
+          <li className={getLinkClass('/')}>Home</li>
+        </a>
+        <a className='content' href='/faqs'>
+          <li className={getLinkClass('/faqs')}>FAQs</li>
+        </a>
       </ul>
     </div>
   );
