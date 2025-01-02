@@ -15,7 +15,7 @@ export const Home = () => {
             Auto-Drive
           </h1>
           <p className='text-gray max-w-[75%] text-center text-lg font-light'>
-            Store, share, and download your files securely with autonomys
+            Store, share, and download your files securely with Autonomys Network
             decentralized permanent storage.
           </p>
           <SigningInButtons />
