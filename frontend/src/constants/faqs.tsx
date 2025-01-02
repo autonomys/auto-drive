@@ -26,7 +26,7 @@ export const faqs = [
     answer: (
       <span>
         Yes, you can use Auto-Drive for creating apps. Login into your account
-        and create an API_KEY.
+        and create an Api Key.
         <br />
         <br />
         <span>
