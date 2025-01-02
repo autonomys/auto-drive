@@ -10,7 +10,7 @@ export const config = {
   },
   port: Number(env('PORT', '3000')),
   requestSizeLimit: env('REQUEST_SIZE_LIMIT', '200mb'),
-  corsAllowedOrigins: env('CORS_ALLOWED_ORIGINS', '*'),
+  corsAllowedOrigins: env('CORS_ALLOWED_ORIGINS', undefined),
   rpcEndpoint: env('RPC_ENDPOINT', 'ws://localhost:9944'),
   databaseDownloadCache: {
     chunkSize: Number(
