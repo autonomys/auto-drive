@@ -25,8 +25,8 @@ export const Home = () => {
             className='w-full rounded-3xl border-2 border-gray-200'
             src='/preview.png'
             alt='Home Hero'
-            width={500}
-            height={500}
+            width={420}
+            height={272}
           />
         </div>
       </div>
