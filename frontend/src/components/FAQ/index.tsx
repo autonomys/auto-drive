@@ -15,7 +15,7 @@ export const FAQ: FC = () => {
     <div className='min-h-full w-full'>
       <LandingHeader />
       <div className='mt-8 flex w-full flex-col items-center justify-center'>
-        <div className='mt-4 w-[60%]'>
+        <div className='mt-4 w-[90%] md:w-[60%]'>
           {faqs.map((question, index) => (
             <div key={index} className='m-4'>
               <button
