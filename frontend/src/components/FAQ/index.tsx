@@ -22,7 +22,7 @@ export const FAQ: FC = () => {
                 className='dark:bg-boxDark w-full rounded-lg bg-white p-8 text-left text-gray-900 shadow-md dark:border-none dark:text-white'
                 onClick={() => toggleFAQ(index)}
               >
-                <span className='font-semibold'>
+                <span className='font-semibold text-xl text-gray-900 dark:text-gray-900'>
                   {index + 1}. {question.question}
                 </span>
                 <span className='float-right'>
