@@ -12,7 +12,7 @@ export const Home = () => {
       <LandingHeader />
       <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
         <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
-          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent'>
+          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent text-center'>
             Auto Drive
           </h1>
           <p className='text-gray max-w-[75%] text-center text-lg font-light'>
@@ -45,7 +45,7 @@ export const Home = () => {
           />
         </div>
         <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
-          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent'>
+          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent text-center'>
             Upload Files & Folders
           </h1>
           <p className='text-gray max-w-[75%] text-center text-lg font-light'>
@@ -58,7 +58,7 @@ export const Home = () => {
       </h2>
       <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
         <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
-          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent'>
+          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent text-center'>
             Secure End-to-End Encryption (E2EE)
           </h1>
           <p className='text-gray max-w-[75%] text-center text-lg font-light leading-relaxed'>
@@ -89,7 +89,7 @@ export const Home = () => {
           />
         </div>
         <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
-          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent'>
+          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent text-center'>
             Create API Keys
           </h1>
           <p className='text-gray max-w-[75%] text-center text-lg font-light'>
@@ -102,7 +102,7 @@ export const Home = () => {
       </h2>
       <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
         <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
-          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent'>
+          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent text-center'>
             @autonomys/auto-drive
           </h1>
           <p className='text-gray max-w-[75%] text-center text-lg font-light'>
@@ -166,7 +166,7 @@ export const Home = () => {
           </Link>
         </div>
         <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
-          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent'>
+          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent text-center'>
             Auto-DAG Data Structure
           </h1>
           <p className='text-gray max-w-[75%] text-center text-lg font-light leading-relaxed'>
@@ -188,7 +188,7 @@ export const Home = () => {
           />
         </div>
         <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
-          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent'>
+          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent text-center'>
             Auto Drive
           </h1>
           <p className='text-gray max-w-[75%] text-center text-lg font-light'>
