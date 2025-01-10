@@ -177,10 +177,22 @@ export const Home = () => {
       <h2 className="text-center text-4xl font-bold text-backgroundDarker my-8">
         Join Us Today and Experience the Future of Storage!
       </h2>
-      <div className='mt-5 flex min-h-[20vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
+      <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
+        <div className='flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+          <Image
+            className='w-full rounded-3xl border-2 border-gray-200'
+            src='/preview.png'
+            alt='Home Hero'
+            width={420}
+            height={272}
+          />
+        </div>
         <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
-          <p className="text-center text-lg font-light text-gray-700 mb-8">
-            Sign in now to start your journey with Autonomys Network and enjoy secure, decentralized storage.
+          <h1 className='margin-0 bg-gradient-to-b from-backgroundDarkest to-backgroundDark bg-clip-text text-4xl font-semibold text-transparent'>
+            Auto Drive
+          </h1>
+          <p className='text-gray max-w-[75%] text-center text-lg font-light'>
+            Sign in now to store, share, and download your files securely with Autonomys Network decentralized permanent storage.
           </p>
           <SigningInButtons />
         </div>
