@@ -87,9 +87,9 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   );
 
   const handleSelectItem = useCallback(
-    (item: string) => {
+    (cid: string) => {
       setIsOpen(false);
-      router.push(`/drive/search/${item}`);
+      router.push(`/drive/search/${cid}`);
       inputRef.current?.focus();
     },
     [router],
@@ -139,9 +139,9 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
           role='button'
           tabIndex={0}
           key={item.cid}
-          onKeyDown={handleEnterOrSpace(() => handleSelectItem(displayText))}
+          onKeyDown={handleEnterOrSpace(() => handleSelectItem(item.cid))}
           className='relative cursor-pointer select-none overflow-hidden text-ellipsis px-4 py-2 font-semibold text-gray-900 hover:bg-blue-600 hover:text-white'
-          onClick={() => handleSelectItem(displayText)}
+          onClick={() => handleSelectItem(item.cid)}
         >
           {displayText}
         </div>

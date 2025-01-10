@@ -18,7 +18,7 @@ export const SearchResult = ({ objects }: { objects: BaseMetadata[] }) => {
         ))
       ) : (
         <div className='flex h-[50%] w-full flex-col items-center justify-center text-center text-xl text-gray-500'>
-          No root objects, upload some!
+          No objects found!
         </div>
       )}
     </div>
