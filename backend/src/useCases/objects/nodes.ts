@@ -11,7 +11,7 @@ import { PBNode } from '@ipld/dag-pb'
 import { CID } from 'multiformats'
 import { nodesRepository } from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
-import { getUploadBlockstore } from '../../services/uploadProcessorCache/index.js'
+import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/index.js'
 import { ObjectMappingListEntry } from '../../models/objects/objectMappings.js'
 import {
   asyncIterableForEach,

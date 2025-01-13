@@ -7,7 +7,7 @@ import {
 import { Pair } from 'interface-blockstore'
 import { AwaitIterable } from 'interface-store'
 import { CID } from 'multiformats/cid'
-import { blockstoreRepository } from '../../repositories/uploads/index.js'
+import { blockstoreRepository } from '../../../repositories/uploads/index.js'
 import { BaseBlockstore } from 'blockstore-core'
 
 export class MultiUploadBlockstore implements BaseBlockstore {

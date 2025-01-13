@@ -1,10 +1,10 @@
 import { z } from 'zod'
-import { createWS } from '../../drivers/ws.js'
-import { ObjectMappingListEntrySchema } from '../../models/objects/objectMappings.js'
-import { NodesUseCases } from '../../useCases/index.js'
-import { transactionResultsRepository } from '../../repositories/index.js'
-import { config } from '../../config.js'
-import { logger } from '../../drivers/logger.js'
+import { createWS } from '../../../drivers/ws.js'
+import { ObjectMappingListEntrySchema } from '../../../models/objects/objectMappings.js'
+import { NodesUseCases } from '../../../useCases/index.js'
+import { transactionResultsRepository } from '../../../repositories/index.js'
+import { config } from '../../../config.js'
+import { logger } from '../../../drivers/logger.js'
 
 const start = async () => {
   const ws = createWS(config.objectMappingArchiverUrl)

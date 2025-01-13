@@ -16,7 +16,7 @@ import {
 } from '../../models/uploads/upload.js'
 import { UploadsUseCases } from './uploads.js'
 import { FolderTreeFolder } from '../../models/objects/index.js'
-import { getUploadBlockstore } from '../../services/uploadProcessorCache/index.js'
+import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 
 const getFileUploadIdCID = async (uploadId: string): Promise<CID> => {
