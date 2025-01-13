@@ -59,8 +59,8 @@ const getNodesByHeadCid = async (headCid: string) => {
   const db = await getDatabase()
 
   return db
-    .query<Node>({
-      text: 'SELECT * FROM nodes WHERE head_cid = $1',
+    .query<Omit<Node, 'encoded_node'>>({
+      text: 'SELECT cid, root_cid, head_cid, type, piece_index, piece_offset FROM nodes WHERE head_cid = $1',
       values: [headCid],
     })
     .then((e) => e.rows)
@@ -70,8 +70,8 @@ const getNodesByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
 
   return db
-    .query<Node>({
-      text: 'SELECT * FROM nodes WHERE root_cid = $1',
+    .query<Omit<Node, 'encoded_node'>>({
+      text: 'SELECT cid, root_cid, head_cid, type, piece_index, piece_offset FROM nodes WHERE root_cid = $1',
       values: [rootCid],
     })
     .then((e) => e.rows)
