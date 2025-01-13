@@ -3,7 +3,7 @@
 import { HelpCircleIcon, HomeIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useCallback } from 'react';
-
+import Link from 'next/link';
 export const LandingHeader = () => {
   const pathname = usePathname();
 
@@ -19,16 +19,16 @@ export const LandingHeader = () => {
   return (
     <div className='flex w-full flex-row justify-center gap-2 bg-transparent px-[20%] py-2'>
       <ul className='flex flex-row gap-4'>
-        <a className='content' href='/'>
+        <Link className='content' href='/'>
           <li className={getLinkClass('/')}>
             <HomeIcon className='h-4 w-4' />
           </li>
-        </a>
-        <a className='content' href='/faqs'>
+        </Link>
+        <Link className='content' href='/faqs'>
           <li className={getLinkClass('/faqs')}>
             <HelpCircleIcon className='h-4 w-4' />
           </li>
-        </a>
+        </Link>
       </ul>
     </div>
   );
