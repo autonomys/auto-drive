@@ -102,7 +102,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
         recommendations &&
         recommendations.length > 0
       ) {
-        router.push(`/drive/search/${query}`);
+        router.push(`/drive/search/${encodeURIComponent(query)}`);
       }
     },
     [recommendations, query, router],
