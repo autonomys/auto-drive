@@ -27,6 +27,7 @@ import {
 } from '../../../src/useCases/index.js'
 import {
   interactionsRepository,
+  metadataRepository,
   nodesRepository,
 } from '../../../src/repositories/index.js'
 import { InteractionType } from '../../../src/models/objects/interactions.js'
@@ -36,6 +37,8 @@ import {
   OwnerRole,
   TransactionStatus,
 } from '../../../src/models/objects/index.js'
+import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
+import { jest } from '@jest/globals'
 
 const files = [
   {
@@ -312,6 +315,28 @@ files.map((file, index) => {
           minimumBlockDepth: PUBLISH_ON_BLOCK,
           maximumBlockDepth: PUBLISH_ON_BLOCK,
         })
+      })
+
+      it('should be able to archive the object', async () => {
+        await ObjectUseCases.markAsArchived(cid)
+
+        const metadata = await metadataRepository.getMetadata(cid)
+        expect(metadata).not.toBeNull()
+        expect(metadata?.is_archived).toBe(true)
+      })
+
+      it('should be able to remove the nodes', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const downloadFileMock: any = jest
+          .fn()
+          .mockImplementation(async function* () {
+            yield Buffer.alloc(0)
+          })
+        FileGateway.downloadFile = downloadFileMock
+
+        const file = await FilesUseCases.downloadObject(user, cid)
+        expect(file).toEqual(Buffer.from([]))
+        expect(downloadFileMock).toHaveBeenCalledWith(cid)
       })
     })
   })
