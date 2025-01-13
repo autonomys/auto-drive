@@ -8,6 +8,7 @@ export interface MetadataEntry {
   head_cid: string
   name: string
   metadata: OffchainMetadata
+  is_archived: boolean
 }
 
 type MetadataEntryWithTotalCount = MetadataEntry & {

@@ -8,6 +8,8 @@ export interface Node {
   head_cid: string
   type: MetadataType
   encoded_node: string
+  piece_index?: number
+  piece_offset?: number
 }
 
 const saveNode = async (node: Node) => {

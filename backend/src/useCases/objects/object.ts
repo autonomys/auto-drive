@@ -268,6 +268,15 @@ const restoreObject = async (executor: User, cid: string) => {
   await OwnershipUseCases.restoreObject(executor, cid)
 }
 
+const isArchived = async (cid: string) => {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
+    return false
+  }
+
+  return metadata.is_archived
+}
+
 export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
@@ -282,4 +291,5 @@ export const ObjectUseCases = {
   markAsDeleted,
   restoreObject,
   getObjectSummaryByCID,
+  isArchived,
 }
