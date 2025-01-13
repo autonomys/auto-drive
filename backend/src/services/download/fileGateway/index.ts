@@ -1,8 +1,11 @@
 import { config } from '../../../config'
 
 const downloadFile = async function* (cid: string): AsyncIterable<Buffer> {
-  const url = config.filesGateway
-  const response = await fetch(`${url}/files/${cid}`)
+  const response = await fetch(`${config.filesGateway}/files/${cid}`, {
+    headers: {
+      Authorization: `Bearer ${config.filesGatewayToken}`,
+    },
+  })
 
   if (!response.ok) {
     throw new Error('Failed to download file')

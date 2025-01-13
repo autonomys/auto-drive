@@ -31,4 +31,5 @@ export const config = {
   objectMappingArchiverUrl: env('OBJECT_MAPPING_ARCHIVER_URL'),
   privateKeysPath: env('PRIVATE_KEYS_PATH', '//Alice'),
   filesGateway: env('FILES_GATEWAY_URL'),
+  filesGatewayToken: env('FILES_GATEWAY_TOKEN'),
 }
