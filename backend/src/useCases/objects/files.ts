@@ -28,7 +28,7 @@ import {
   bufferToAsyncIterable,
 } from '../../utils/async.js'
 import { downloadService } from '../../services/download/index.js'
-import { FileGateway } from '../../services/download/fileGateway/index.js'
+import { FileGateway } from '../../services/dsn/fileGateway/index.js'
 
 const generateFileArtifacts = async (
   uploadId: string,
