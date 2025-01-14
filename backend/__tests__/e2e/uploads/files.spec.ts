@@ -332,9 +332,11 @@ files.map((file, index) => {
 
         const downloadFileMock = jest
           .spyOn(FileGateway, 'downloadFile')
-          .mockImplementation(async function* () {
-            yield Buffer.alloc(0)
-          })
+          .mockResolvedValue(
+            (async function* () {
+              yield Buffer.alloc(0)
+            })(),
+          )
 
         await downloadService.download(cid)
         expect(downloadFileMock).toHaveBeenCalledWith(cid)
