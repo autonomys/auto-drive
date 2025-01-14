@@ -79,8 +79,14 @@ const has = async (cid: string) => {
   return !!entry
 }
 
+export const clear = async () => {
+  await downloadCacheFilePartsRepository.clear()
+  await registryRepository.clear()
+}
+
 export const databaseDownloadCache = {
   set,
   get,
   has,
+  clear,
 }

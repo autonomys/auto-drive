@@ -28,6 +28,7 @@ import {
   bufferToAsyncIterable,
 } from '../../utils/async.js'
 import { downloadService } from '../../services/download/index.js'
+import { FileGateway } from '../../services/dsn/fileGateway/index.js'
 
 const generateFileArtifacts = async (
   uploadId: string,
@@ -298,6 +299,12 @@ const handleFolderUploadFinalization = async (
 const retrieveObject = async (
   metadata: OffchainMetadata,
 ): Promise<AwaitIterable<Buffer>> => {
+  const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
+
+  if (isArchived) {
+    return FileGateway.downloadFile(metadata.dataCid)
+  }
+
   return metadata.type === 'folder'
     ? await retrieveAndReassembleFolderAsZip(new PizZip(), metadata.dataCid)
     : retrieveAndReassembleFile(metadata)

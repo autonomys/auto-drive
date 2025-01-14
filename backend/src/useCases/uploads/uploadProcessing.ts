@@ -3,7 +3,7 @@ import {
   FileProcessingInfo,
   fileProcessingInfoRepository,
 } from '../../repositories/uploads/fileProcessingInfo.js'
-import { getUploadBlockstore } from '../../services/uploadProcessorCache/index.js'
+import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/index.js'
 import {
   cidOfNode,
   createFileChunkIpldNode,

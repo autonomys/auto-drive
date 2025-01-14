@@ -24,6 +24,16 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      RPC_ENDPOINT: ${RPC_ENDPOINT}
+      PRIVATE_KEYS_PATH: ${PRIVATE_KEYS_PATH}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      OBJECT_MAPPING_ARCHIVER_URL: ${OBJECT_MAPPING_ARCHIVER_URL}
+      MAX_CACHE_SIZE: ${MAX_CACHE_SIZE}
+      JWT_SECRET: ${JWT_SECRET}
+      FILES_GATEWAY_URL: ${FILES_GATEWAY_URL}
+      FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}
+    ports:
+      - "127.0.0.1:3000:3000"
   hasura:
     depends_on:
       backend:

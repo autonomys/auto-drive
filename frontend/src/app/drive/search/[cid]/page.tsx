@@ -13,7 +13,7 @@ export default async function Page({
   const { data } = await gqlClient.query<SearchGlobalMetadataByCidOrNameQuery>({
     query: SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
     variables: {
-      search: cid,
+      search: `%${decodeURIComponent(cid)}%`,
       limit: 100,
     },
   });

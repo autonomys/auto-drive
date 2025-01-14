@@ -8,6 +8,8 @@ export interface Node {
   head_cid: string
   type: MetadataType
   encoded_node: string
+  piece_index?: number
+  piece_offset?: number
 }
 
 const saveNode = async (node: Node) => {
@@ -57,8 +59,8 @@ const getNodesByHeadCid = async (headCid: string) => {
   const db = await getDatabase()
 
   return db
-    .query<Node>({
-      text: 'SELECT * FROM nodes WHERE head_cid = $1',
+    .query<Omit<Node, 'encoded_node'>>({
+      text: 'SELECT cid, root_cid, head_cid, type, piece_index, piece_offset FROM nodes WHERE head_cid = $1',
       values: [headCid],
     })
     .then((e) => e.rows)
@@ -68,8 +70,8 @@ const getNodesByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
 
   return db
-    .query<Node>({
-      text: 'SELECT * FROM nodes WHERE root_cid = $1',
+    .query<Omit<Node, 'encoded_node'>>({
+      text: 'SELECT cid, root_cid, head_cid, type, piece_index, piece_offset FROM nodes WHERE root_cid = $1',
       values: [rootCid],
     })
     .then((e) => e.rows)
@@ -158,6 +160,15 @@ const setNodeArchivingData = async ({
   })
 }
 
+const removeNodesByHeadCid = async (cid: string) => {
+  const db = await getDatabase()
+
+  return db.query({
+    text: 'DELETE FROM nodes WHERE head_cid = $1',
+    values: [cid],
+  })
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -167,4 +178,5 @@ export const nodesRepository = {
   setNodeArchivingData,
   getNodesByHeadCid,
   getNodesByRootCid,
+  removeNodesByHeadCid,
 }

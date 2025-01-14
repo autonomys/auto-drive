@@ -4,10 +4,10 @@ import {
   Queue,
   Transaction,
   TransactionStatus,
-} from '../../models/objects/index.js'
-import { getOnChainNonce } from '../../utils/networkApi.js'
+} from '../../../models/objects/index.js'
+import { getOnChainNonce } from '../../../utils/networkApi.js'
 import { getAccount, getAccounts } from './accounts.js'
-import { logger } from '../../drivers/logger.js'
+import { logger } from '../../../drivers/logger.js'
 
 export const queue: Queue = {
   api: null,

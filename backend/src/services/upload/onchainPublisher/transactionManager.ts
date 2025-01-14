@@ -5,10 +5,13 @@ import {
 } from '@polkadot/api/types'
 import { KeyringPair } from '@polkadot/keyring/types'
 import { waitReady } from '@polkadot/wasm-crypto'
-import { createConnection } from '../../drivers/substrate.js'
-import { Transaction, TransactionResult } from '../../models/objects/index.js'
+import { createConnection } from '../../../drivers/substrate.js'
+import {
+  Transaction,
+  TransactionResult,
+} from '../../../models/objects/index.js'
 import { initializeQueue, registerTransactionInQueue } from './queue.js'
-import { logger } from '../../drivers/logger.js'
+import { logger } from '../../../drivers/logger.js'
 
 const submitTransaction = async (
   api: ApiPromise,

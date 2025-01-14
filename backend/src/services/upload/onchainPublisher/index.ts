@@ -1,6 +1,6 @@
-import { logger } from '../../drivers/logger.js'
-import { TransactionResultsUseCases } from '../../useCases/index.js'
-import { safeCallback } from '../../utils/safe.js'
+import { logger } from '../../../drivers/logger.js'
+import { TransactionResultsUseCases } from '../../../useCases/index.js'
+import { safeCallback } from '../../../utils/safe.js'
 import { createTransactionManager } from './transactionManager.js'
 import { compactAddLength } from '@polkadot/util'
 

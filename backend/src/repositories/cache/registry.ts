@@ -57,10 +57,18 @@ const getEntry = async (cid: string) => {
   return result.rows.map(toBigInt)[0]
 }
 
+export const clear = async () => {
+  const db = await getDatabase()
+  await db.query({
+    text: 'DELETE FROM download_cache.registry',
+  })
+}
+
 export const registryRepository = {
   addEntry,
   removeEntries,
   getEntriesSortedByLastAccessedAt,
   getTotalSize,
   getEntry,
+  clear,
 }
