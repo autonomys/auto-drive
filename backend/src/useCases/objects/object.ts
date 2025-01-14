@@ -9,6 +9,7 @@ import {
 } from '../../models/objects/object.js'
 import {
   metadataRepository,
+  nodesRepository,
   ownershipRepository,
 } from '../../repositories/index.js'
 import { UsersUseCases } from '../index.js'
@@ -277,6 +278,28 @@ const isArchived = async (cid: string) => {
   return metadata.is_archived
 }
 
+const hasAllNodesArchived = async (cid: string) => {
+  const nodes = await nodesRepository.getNodesByRootCid(cid)
+
+  if (nodes.length === 0) {
+    return false
+  }
+
+  return nodes.every((node) => node.piece_index !== null)
+}
+
+const getNonArchivedObjects = async () => {
+  const objects = await metadataRepository.getMetadataByIsArchived(false)
+
+  return objects.map((e) => e.head_cid)
+}
+
+const markAsArchived = async (cid: string) => {
+  await metadataRepository.markAsArchived(cid)
+
+  await nodesRepository.removeNodesByHeadCid(cid)
+}
+
 export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
@@ -292,4 +315,7 @@ export const ObjectUseCases = {
   restoreObject,
   getObjectSummaryByCID,
   isArchived,
+  hasAllNodesArchived,
+  getNonArchivedObjects,
+  markAsArchived,
 }

@@ -7,6 +7,7 @@ import {
   UploadStatusUseCases,
 } from '../useCases/index.js'
 import { logger } from '../drivers/logger.js'
+import { CompressionAlgorithm } from '@autonomys/auto-dag-data'
 
 const objectController = Router()
 

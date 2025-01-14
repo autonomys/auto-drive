@@ -1,23 +1,22 @@
-import { config } from '../../../config'
+import { config } from '../../../config.js'
+import { request } from 'https'
 
-const downloadFile = async function* (cid: string): AsyncIterable<Buffer> {
-  const response = await fetch(`${config.filesGateway}/files/${cid}`, {
-    headers: {
-      Authorization: `Bearer ${config.filesGatewayToken}`,
-    },
+const downloadFile = async (cid: string): Promise<AsyncIterable<Buffer>> => {
+  const req = request(
+    `${config.filesGateway}/files/${cid}?api_key=${config.filesGatewayToken}`,
+  )
+
+  req.end()
+
+  return new Promise((resolve, reject) => {
+    req.on('response', (res) => {
+      resolve(res)
+    })
+
+    req.on('error', (err) => {
+      reject(err)
+    })
   })
-
-  if (!response.ok) {
-    throw new Error('Failed to download file')
-  }
-
-  if (response.body === null) {
-    throw new Error('File not found')
-  }
-
-  for await (const chunk of response.body) {
-    yield Buffer.from(chunk)
-  }
 }
 
 export const FileGateway = {

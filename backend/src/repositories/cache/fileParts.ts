@@ -42,9 +42,17 @@ const removeFileParts = async (cids: string[]) => {
   })
 }
 
+export const clear = async () => {
+  const db = await getDatabase()
+  await db.query({
+    text: 'DELETE FROM download_cache.file_parts',
+  })
+}
+
 export const downloadCacheFilePartsRepository = {
   addFilePart,
   getFilePartCount,
   getFilePart,
   removeFileParts,
+  clear,
 }

@@ -259,6 +259,29 @@ const getMetadataByUser = async (provider: string, userId: string) => {
   })
 }
 
+const markAsArchived = async (cid: string) => {
+  const db = await getDatabase()
+
+  await db.query({
+    text: 'UPDATE metadata SET is_archived = true WHERE head_cid = $1',
+    values: [cid],
+  })
+}
+
+const getMetadataByIsArchived = async (
+  isArchived: boolean,
+  limit: number = 100,
+) => {
+  const db = await getDatabase()
+
+  const result = await db.query<MetadataEntry>({
+    text: 'SELECT * FROM metadata WHERE is_archived = $1 LIMIT $2',
+    values: [isArchived, limit],
+  })
+
+  return result.rows
+}
+
 export const metadataRepository = {
   getMetadata,
   setMetadata,
@@ -273,4 +296,6 @@ export const metadataRepository = {
   getMetadataByRootCid,
   getSharedRootObjectsByUser,
   getMarkedAsDeletedRootObjectsByUser,
+  markAsArchived,
+  getMetadataByIsArchived,
 }

@@ -39,6 +39,7 @@ import {
 } from '../../../src/models/objects/index.js'
 import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
 import { jest } from '@jest/globals'
+import { downloadService } from '../../../src/services/download/index.js'
 
 const files = [
   {
@@ -326,16 +327,16 @@ files.map((file, index) => {
       })
 
       it('should be able to remove the nodes', async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const downloadFileMock: any = jest
-          .fn()
+        await databaseDownloadCache.clear()
+        await memoryDownloadCache.clear()
+
+        const downloadFileMock = jest
+          .spyOn(FileGateway, 'downloadFile')
           .mockImplementation(async function* () {
             yield Buffer.alloc(0)
           })
-        FileGateway.downloadFile = downloadFileMock
 
-        const file = await FilesUseCases.downloadObject(user, cid)
-        expect(file).toEqual(Buffer.from([]))
+        await downloadService.download(cid)
         expect(downloadFileMock).toHaveBeenCalledWith(cid)
       })
     })

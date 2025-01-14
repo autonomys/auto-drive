@@ -160,6 +160,15 @@ const setNodeArchivingData = async ({
   })
 }
 
+const removeNodesByHeadCid = async (cid: string) => {
+  const db = await getDatabase()
+
+  return db.query({
+    text: 'DELETE FROM nodes WHERE head_cid = $1',
+    values: [cid],
+  })
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -169,4 +178,5 @@ export const nodesRepository = {
   setNodeArchivingData,
   getNodesByHeadCid,
   getNodesByRootCid,
+  removeNodesByHeadCid,
 }

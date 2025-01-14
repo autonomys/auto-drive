@@ -38,8 +38,11 @@ const set = async function* (
   }
 }
 
+export const clear = async () => cache.clear()
+
 export const memoryDownloadCache = {
   has,
   get,
   set,
+  clear,
 }
