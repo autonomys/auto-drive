@@ -15,10 +15,50 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'Auto-Drive',
-  description: 'Autonomys Drive',
+  title: 'Auto Drive',
+  description:
+    'Store, share, and download your files securely with Autonomys Network decentralized permanent storage.',
+  keywords: [
+    'autonomys',
+    'auto-drive',
+    'decentralized storage',
+    'permanent storage',
+    'autonomys network',
+    'file storage',
+    'file sharing',
+    'secure storage',
+    'blockchain storage',
+    'distributed storage',
+    'cloud storage alternative',
+    'web3 storage',
+    'peer-to-peer storage',
+    'encrypted storage',
+    'data persistence'
+  ],
   icons: {
     icon: '/favicon.ico',
+  },
+  openGraph: {
+    title: 'Auto Drive',
+    description:
+      'Store, share, and download your files securely with Autonomys Network decentralized permanent storage.',
+    images: ['/share.png'],
+    url: 'https://ai3.storage/',
+    siteName: 'Auto Drive',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Auto Drive',
+    description:
+      'Store, share, and download your files securely with Autonomys Network decentralized permanent storage.',
+    images: ['/share.png'],
+    site: '@AutonomysNet',
+    creator: '@AutonomysLabs',
+  },
+  alternates: {
+    canonical: 'https://ai3.storage/',
   },
 };
 
