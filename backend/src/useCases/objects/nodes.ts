@@ -155,7 +155,7 @@ export const processNodeArchived = async (
 ) => {
   const nodes = await nodesRepository.getArchivingNodesCID()
 
-  logger.error(`Archiving ${nodes.length} nodes`)
+  logger.info(`Archiving ${nodes.length} nodes`)
 
   const objects = objectMappings.v0.objects.map((e) => {
     const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))

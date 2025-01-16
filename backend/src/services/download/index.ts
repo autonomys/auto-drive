@@ -7,12 +7,12 @@ import { AwaitIterable } from 'interface-store'
 export const downloadService = {
   download: async (cid: string): Promise<AwaitIterable<Buffer>> => {
     if (memoryDownloadCache.has(cid)) {
-      logger.error('Downloading file from memory', cid)
+      logger.debug('Downloading file from memory', cid)
       return memoryDownloadCache.get(cid)!
     }
 
     if (await databaseDownloadCache.has(cid)) {
-      logger.error('Downloading file from database', cid)
+      logger.debug('Downloading file from database', cid)
       let data = databaseDownloadCache.get(cid)!
       data = memoryDownloadCache.set(cid, data)
       return data
