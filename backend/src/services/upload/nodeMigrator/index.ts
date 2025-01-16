@@ -16,13 +16,13 @@ const processPendingMigrations = safeCallback(async () => {
 
   try {
     const pendingMigrations = await UploadsUseCases.getPendingMigrations(1)
-    logger.error(`Found ${pendingMigrations.length} pending migrations`)
+    logger.info(`Found ${pendingMigrations.length} pending migrations`)
     if (pendingMigrations.length === 0) {
       return
     }
 
     for (const upload of pendingMigrations) {
-      logger.error(`Processing migration for upload ${upload.id}`)
+      logger.info(`Processing migration for upload ${upload.id}`)
       await UploadsUseCases.processMigration(upload.id)
     }
   } finally {

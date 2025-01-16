@@ -32,7 +32,7 @@ export const createWS = (endpoint: string): WS => {
       console.error('WebSocket connection error', errorDetails)
 
       setTimeout(() => {
-        logger.error(`Reconnecting to RPC Web Socket (${endpoint})`)
+        logger.info(`Reconnecting to RPC Web Socket (${endpoint})`)
         handleConnection()
       }, 10_000)
     }
@@ -55,7 +55,7 @@ export const createWS = (endpoint: string): WS => {
 
   const connected: Promise<void> = new Promise((resolve) => {
     ws.onopen = () => {
-      logger.error(`Connected to RPC Web Socket (${endpoint})`)
+      logger.info(`Connected to RPC Web Socket (${endpoint})`)
       resolve()
     }
   })

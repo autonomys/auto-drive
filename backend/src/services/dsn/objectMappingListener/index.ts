@@ -14,13 +14,13 @@ const start = async () => {
     await transactionResultsRepository.getFirstNotArchivedNode()
 
   if (!blockNumber) {
-    logger.error('Subscribing to real time object mappings')
+    logger.info('Subscribing to real time object mappings')
     await ws.send({
       jsonrpc: '2.0',
       method: 'subscribe_object_mappings',
     })
   } else {
-    logger.error(`Subscribing to recover object mappings from ${blockNumber}`)
+    logger.info(`Subscribing to recover object mappings from ${blockNumber}`)
     await ws.send({
       jsonrpc: '2.0',
       method: 'subscribe_recover_object_mappings',
@@ -44,7 +44,7 @@ const start = async () => {
     }
 
     if (data.result.v0.objects.length > 0) {
-      logger.error(
+      logger.info(
         `Processing object mapping list entry of length ${data.result.v0.objects.length}`,
       )
       await NodesUseCases.processNodeArchived(data.result)

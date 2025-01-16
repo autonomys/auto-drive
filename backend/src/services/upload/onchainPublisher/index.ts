@@ -21,7 +21,7 @@ const processPendingUploads = safeCallback(async () => {
     const pendingUploads =
       await TransactionResultsUseCases.getPendingTransactionResults(20)
 
-    logger.error(`${pendingUploads.length} pending uploads`)
+    logger.info(`${pendingUploads.length} pending uploads`)
     if (pendingUploads.length === 0) {
       return
     }

@@ -51,7 +51,7 @@ const submitTransaction = async (
         async (result: SubmittableResultValue) => {
           const { status, dispatchError } = result
 
-          logger.error(
+          logger.debug(
             `Current status: ${
               status.type
             }, Tx hash: ${transaction.hash.toString()}`,
@@ -78,7 +78,7 @@ const submitTransaction = async (
                 error: errorMessage,
               })
             } else {
-              logger.error(`In block: ${status.asInBlock.toString()}`)
+              logger.info(`In block: ${status.asInBlock.toString()}`)
               const blockHash = status.asInBlock.toString()
               const { block } = await api.rpc.chain.getBlock(blockHash)
               resolve({
