@@ -15,17 +15,16 @@ import {
   UploadStatus,
   UploadType,
 } from '../../../src/models/uploads/upload'
-import { User } from '../../../src/models/users'
+import { UserWithOrganization } from '../../../src/models/users'
 import {
   FilesUseCases,
   ObjectUseCases,
   TransactionResultsUseCases,
-  UsersUseCases,
 } from '../../../src/useCases'
 import { UploadsUseCases } from '../../../src/useCases/uploads/uploads'
 import { dbMigration } from '../../utils/dbMigrate'
 import { PreconditionError } from '../../utils/error'
-import { MOCK_UNONBOARDED_USER } from '../../utils/mocks'
+import { createMockUser } from '../../utils/mocks'
 import { MemoryBlockstore } from 'blockstore-core'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads'
 import { nodesRepository } from '../../../src/repositories'
@@ -33,14 +32,12 @@ import { asyncIterableToPromiseOfArray } from '../../../src/utils/async'
 import PizZip from 'pizzip'
 
 describe('Folder Upload', () => {
-  let user: User
+  let user: UserWithOrganization
   let folderUpload: Upload
 
   beforeAll(async () => {
     await dbMigration.up()
-    const result = await UsersUseCases.onboardUser(MOCK_UNONBOARDED_USER)
-    if (!result) throw new PreconditionError('Failed to setup test user')
-    user = result
+    user = createMockUser()
   })
 
   afterAll(async () => {
@@ -311,7 +308,8 @@ describe('Folder Upload', () => {
         owners: [
           {
             role: OwnerRole.ADMIN,
-            publicId: user.publicId,
+            oauthUserId: user.oauthUserId,
+            oauthProvider: user.oauthProvider,
           },
         ],
       })

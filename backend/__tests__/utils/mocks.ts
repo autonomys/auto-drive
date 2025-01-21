@@ -1,7 +1,9 @@
-import { UnonboardedUser, User, UserRole } from '../../src/models/users'
-import { faker } from '@faker-js/faker'
-import { UsersUseCases } from '../../src/useCases'
-import { PreconditionError } from './error'
+import {
+  UnonboardedUser,
+  UserRole,
+  UserWithOrganization,
+} from '../../src/models/users'
+import { v4 } from 'uuid'
 
 export const MOCK_UNONBOARDED_USER: UnonboardedUser = {
   oauthProvider: 'google',
@@ -11,19 +13,11 @@ export const MOCK_UNONBOARDED_USER: UnonboardedUser = {
   onboarded: false,
 }
 
-export const createMockUser = async (): Promise<User> => {
-  const user: UnonboardedUser = {
-    oauthProvider: 'google',
-    oauthUserId: faker.string.uuid(),
-    role: UserRole.Admin,
-    publicId: null,
-    onboarded: false,
+export const createMockUser = (): UserWithOrganization => {
+  return {
+    ...MOCK_UNONBOARDED_USER,
+    onboarded: true,
+    organizationId: v4(),
+    publicId: v4(),
   }
-
-  const onboardUser = await UsersUseCases.onboardUser(user)
-  if (!onboardUser) {
-    throw new PreconditionError('Failed to onboard user')
-  }
-
-  return onboardUser
 }
