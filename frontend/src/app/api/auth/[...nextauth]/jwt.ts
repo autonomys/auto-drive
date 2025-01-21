@@ -2,6 +2,9 @@
 import { JWT } from 'next-auth/jwt';
 import jwt from 'jsonwebtoken';
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_AUTH_API_URL || 'http://localhost:3030';
+
 const ensureCorrectTokenFormation = (token: unknown) => {
   if (typeof token !== 'object' || token === null) {
     throw new Error('Token is not an object');
@@ -46,16 +49,13 @@ export const generateAccessToken = async ({
   userId: string;
   oauthAccessToken: string;
 }): Promise<JWT> => {
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/users/@me/accessToken`,
-    {
-      method: 'POST',
-      headers: {
-        'x-auth-provider': provider,
-        Authorization: `Bearer ${oauthAccessToken}`,
-      },
+  const response = await fetch(`${API_BASE_URL}/users/@me/accessToken`, {
+    method: 'POST',
+    headers: {
+      'x-auth-provider': provider,
+      Authorization: `Bearer ${oauthAccessToken}`,
     },
-  );
+  });
 
   const newTokens = await response.json();
   const accessToken = newTokens.accessToken;
@@ -85,15 +85,12 @@ export const refreshAccessToken = async ({
   underlyingProvider: string;
   refreshToken: string;
 }): Promise<JWT> => {
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/users/@me/refreshToken`,
-    {
-      method: 'POST',
-      headers: {
-        Cookie: `refreshToken=${refreshToken};`,
-      },
+  const response = await fetch(`${API_BASE_URL}/users/@me/refreshToken`, {
+    method: 'POST',
+    headers: {
+      Cookie: `refreshToken=${refreshToken};`,
     },
-  );
+  });
 
   const newTokens = await response.json();
   const accessToken = newTokens.accessToken;
@@ -121,18 +118,15 @@ export const invalidateRefreshToken = async ({
 }: {
   refreshToken: string;
 }): Promise<void> => {
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/users/@me/invalidateToken`,
-    {
-      method: 'DELETE',
-      body: JSON.stringify({
-        token: refreshToken,
-      }),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+  const response = await fetch(`${API_BASE_URL}/users/@me/invalidateToken`, {
+    method: 'DELETE',
+    body: JSON.stringify({
+      token: refreshToken,
+    }),
+    headers: {
+      'Content-Type': 'application/json',
     },
-  );
+  });
 
   if (!response.ok) {
     throw new Error(

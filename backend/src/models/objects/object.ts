@@ -16,7 +16,8 @@ export interface UploadStatus {
 }
 
 export interface Owner {
-  publicId: string
+  oauthProvider: string
+  oauthUserId: string
   role: OwnerRole
 }
 

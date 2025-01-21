@@ -28,21 +28,21 @@ export async function middleware(req: NextRequest) {
     session.accessToken,
   ).catch(() => null);
 
-  if (!userInfo?.user) {
+  if (!userInfo) {
     console.log('redirecting to home: 2');
     return pathname !== '/'
       ? NextResponse.redirect(new URL('/', req.url))
       : NextResponse.next();
   }
 
-  if (userInfo?.user && !userInfo.user.onboarded) {
+  if (!userInfo.onboarded) {
     console.log('redirecting to onboarding');
     return pathname.startsWith('/onboarding')
       ? NextResponse.next()
       : NextResponse.redirect(new URL('/onboarding', req.url));
   }
 
-  if (userInfo?.user && userInfo.user.onboarded) {
+  if (userInfo.onboarded) {
     const redirect = cookies().get('redirect');
     if (redirect?.value) {
       return NextResponse.redirect(new URL(redirect.value, req.url), {
@@ -51,6 +51,7 @@ export async function middleware(req: NextRequest) {
         },
       });
     }
+
     return pathname.startsWith('/drive')
       ? NextResponse.next()
       : NextResponse.redirect(new URL('/drive', req.url));

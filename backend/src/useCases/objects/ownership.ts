@@ -1,9 +1,6 @@
 import { User } from '../../models/users/index.js'
 import { Owner, OwnerRole } from '../../models/objects/index.js'
-import {
-  ownershipRepository,
-  usersRepository,
-} from '../../repositories/index.js'
+import { ownershipRepository } from '../../repositories/index.js'
 
 const setUserAsOwner = async (user: User, cid: string) => {
   await ownershipRepository.setUserAsOwner(
@@ -41,24 +38,11 @@ const restoreObject = async (user: User, cid: string) => {
 
 const getOwners = async (cid: string): Promise<Owner[]> => {
   const ownerships = await ownershipRepository.getOwnerships(cid)
-  const users = await Promise.all(
-    ownerships.map((e) =>
-      usersRepository.getUserByOAuthInformation(
-        e.oauth_provider,
-        e.oauth_user_id,
-      ),
-    ),
-  )
 
-  if (users.some((user) => !user)) {
-    throw new Error('Inconsistent database state')
-  }
-
-  const safeUsers = users.map((user) => user!)
-
-  return safeUsers.map((user, index) => ({
-    publicId: user.public_id,
-    role: ownerships[index].is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
+  return ownerships.map((ownership) => ({
+    oauthProvider: ownership.oauth_provider,
+    oauthUserId: ownership.oauth_user_id,
+    role: ownership.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
   }))
 }
 

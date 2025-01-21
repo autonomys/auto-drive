@@ -6,9 +6,9 @@ import {
   TransitionChild,
 } from '@headlessui/react';
 import { Fragment, useCallback } from 'react';
-import { ApiService } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Button } from '../common/Button';
+import { AuthService } from '../../services/auth';
 
 export const DeleteApiKeyModal = ({
   apiKeyId,
@@ -24,7 +24,7 @@ export const DeleteApiKeyModal = ({
       return;
     }
 
-    ApiService.deleteApiKey(apiKeyId)
+    AuthService.deleteApiKey(apiKeyId)
       .then(() => {
         toast.success('API key deleted successfully');
         closeModal();

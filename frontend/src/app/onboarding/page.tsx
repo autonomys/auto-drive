@@ -2,16 +2,16 @@
 
 import { Button, Checkbox } from '@headlessui/react';
 import { useCallback, useState } from 'react';
-import { ApiService } from '../../services/api';
 import Image from 'next/image';
 import { Disclaimer } from '../../components/common/Disclaimer';
 import { CheckIcon } from 'lucide-react';
+import { AuthService } from '../../services/auth';
 
 export default function OnboardingPage() {
   const [accepted, setAccepted] = useState(false);
 
   const onboardUser = useCallback(async () => {
-    ApiService.onboardUser()
+    AuthService.onboardUser()
       .then(() => {
         window.location.assign('/drive');
       })

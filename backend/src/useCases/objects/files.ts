@@ -6,12 +6,12 @@ import {
   OffchainMetadata,
 } from '@autonomys/auto-dag-data'
 import PizZip from 'pizzip'
-import { User } from '../../models/users/index.js'
+import { User, UserWithOrganization } from '../../models/users/index.js'
 import {
   NodesUseCases,
   ObjectUseCases,
   OwnershipUseCases,
-  UsersUseCases,
+  SubscriptionsUseCases,
 } from '../index.js'
 import { InteractionType } from '../../models/objects/interactions.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
@@ -211,7 +211,7 @@ const retrieveAndReassembleFolderAsZip = async (
 }
 
 const downloadObject = async (
-  reader: User,
+  reader: UserWithOrganization,
   cid: string,
 ): Promise<AwaitIterable<Buffer>> => {
   const metadata = await ObjectUseCases.getMetadata(cid)
@@ -219,10 +219,11 @@ const downloadObject = async (
     throw new Error(`Metadata with CID ${cid} not found`)
   }
 
-  const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
-    reader,
-    InteractionType.Download,
-  )
+  const pendingCredits =
+    await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      reader,
+      InteractionType.Download,
+    )
 
   if (pendingCredits < metadata.totalSize) {
     throw new Error('Not enough download credits')
@@ -230,7 +231,7 @@ const downloadObject = async (
 
   const download = await downloadService.download(cid)
 
-  await UsersUseCases.registerInteraction(
+  await SubscriptionsUseCases.registerInteraction(
     reader,
     InteractionType.Download,
     metadata.totalSize,
@@ -240,13 +241,14 @@ const downloadObject = async (
 }
 
 const handleFileUploadFinalization = async (
-  user: User,
+  user: UserWithOrganization,
   uploadId: string,
 ): Promise<string> => {
-  const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
-    user,
-    InteractionType.Upload,
-  )
+  const pendingCredits =
+    await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      user,
+      InteractionType.Upload,
+    )
   const { metadata } = await generateFileArtifacts(uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (pendingCredits < metadata.totalSize) {
@@ -264,7 +266,7 @@ const handleFileUploadFinalization = async (
     )
   }
 
-  await UsersUseCases.registerInteraction(
+  await SubscriptionsUseCases.registerInteraction(
     user,
     InteractionType.Upload,
     metadata.totalSize.valueOf(),
