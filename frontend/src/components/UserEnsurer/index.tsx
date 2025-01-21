@@ -16,5 +16,5 @@ export const UserEnsurer: FC<PropsWithChildren> = ({ children }) => {
     updateSubscription();
   }, [updateUser, updateSubscription]);
 
-  return user ? children : <>Loading user</>;
+  return user && children;
 };
