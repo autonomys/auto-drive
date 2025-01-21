@@ -1,29 +1,9 @@
-import { ApiKey, ApiKeyWithoutSecret } from '../models/ApiKey';
-import { OnboardedUser, User, UserInfo } from '../models/User';
-import { getAuthSession } from '../utils/auth';
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_AUTH_API_URL || 'http://localhost:3030';
+import { ApiKey, ApiKeyWithoutSecret } from '../../models/ApiKey';
+import { OnboardedUser, User, UserInfo } from '../../models/User';
+import { getAuthSession } from '../../utils/auth';
+import { API_BASE_URL } from './config';
 
 export const AuthService = {
-  checkAuth: async (provider?: string, token?: string): Promise<UserInfo> => {
-    if (!provider || !token) {
-      throw new Error('Provider or token is not defined');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/users/@me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'X-Auth-Provider': provider,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch user');
-    }
-
-    return response.json() as Promise<UserInfo>;
-  },
   onboardUser: async (): Promise<User> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {

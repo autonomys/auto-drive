@@ -3,7 +3,7 @@ import express from 'express'
 
 import 'dotenv/config.js'
 import { objectController } from './controllers/object.js'
-import { subscriptionController } from './controllers/user.js'
+import { subscriptionController } from './controllers/subscriptions.js'
 import { handleAuth } from './services/auth/express.js'
 import { uploadController } from './controllers/upload.js'
 import { config } from './config.js'

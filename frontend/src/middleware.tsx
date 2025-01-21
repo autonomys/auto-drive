@@ -1,6 +1,6 @@
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
-import { AuthService } from './services/auth';
+import { checkAuth } from './services/auth/jwt';
 import { UserInfo } from './models/User';
 import { cookies } from 'next/headers';
 
@@ -23,7 +23,7 @@ export async function middleware(req: NextRequest) {
       : NextResponse.next();
   }
 
-  const userInfo: UserInfo | null = await AuthService.checkAuth(
+  const userInfo: UserInfo | null = await checkAuth(
     session.authProvider,
     session.accessToken,
   ).catch(() => null);

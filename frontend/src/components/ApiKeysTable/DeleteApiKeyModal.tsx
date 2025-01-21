@@ -8,7 +8,7 @@ import {
 import { Fragment, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { Button } from '../common/Button';
-import { AuthService } from '../../services/auth';
+import { AuthService } from '../../services/auth/auth';
 
 export const DeleteApiKeyModal = ({
   apiKeyId,

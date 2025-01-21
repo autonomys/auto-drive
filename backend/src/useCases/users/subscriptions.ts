@@ -13,10 +13,11 @@ import { subscriptionsRepository } from '../../repositories/users/subscriptions.
 import { interactionsRepository } from '../../repositories/objects/interactions.js'
 import { InteractionType } from '../../models/objects/interactions.js'
 import { InteractionsUseCases } from '../objects/interactions.js'
+import { AuthManager } from '../../services/auth/index.js'
 
 const updateSubscription = async (
   executor: User,
-  user: UserWithOrganization,
+  userPublicId: string,
   granularity: SubscriptionGranularity,
   uploadLimit: number,
   downloadLimit: number,
@@ -24,6 +25,8 @@ const updateSubscription = async (
   if (executor.role !== UserRole.Admin) {
     throw new Error('User does not have admin privileges')
   }
+
+  const user = await AuthManager.getUserFromPublicId(userPublicId)
 
   const subscription = await subscriptionsRepository.getByOrganizationId(
     user.organizationId,
@@ -134,6 +137,19 @@ const getSubscriptionInfo = async (
   }
 }
 
+const getUserListSubscriptions = async (
+  userPublicIds: string[],
+): Promise<Record<string, SubscriptionInfo>> => {
+  return Object.fromEntries(
+    await Promise.all(
+      userPublicIds.map(async (userPublicId) => {
+        const user = await AuthManager.getUserFromPublicId(userPublicId)
+        return [userPublicId, await getSubscriptionInfo(user)]
+      }),
+    ),
+  )
+}
+
 const getPendingCreditsByUserAndType = async (
   user: UserWithOrganization,
   type: InteractionType,
@@ -161,4 +177,5 @@ export const SubscriptionsUseCases = {
   getSubscriptionInfo,
   getPendingCreditsByUserAndType,
   registerInteraction,
+  getUserListSubscriptions,
 }

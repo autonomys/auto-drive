@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import { SubscriptionInfo } from '../models/Subscriptions';
-import { AuthService } from '../services/auth';
+import { AuthService } from '../services/auth/auth';
 
 interface UserStore {
   user: User | null;

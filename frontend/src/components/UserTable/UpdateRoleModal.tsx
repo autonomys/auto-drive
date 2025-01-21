@@ -8,9 +8,9 @@ import {
   DialogTitle,
 } from '@headlessui/react';
 import { Fragment, useCallback, useState } from 'react';
-import { ApiService } from '../../services/api';
 import toast from 'react-hot-toast';
 import { UserRole } from '../../models/User';
+import { AuthService } from '../../services/auth/auth';
 
 export const UpdateRoleModal = ({
   userHandle,
@@ -24,9 +24,9 @@ export const UpdateRoleModal = ({
   const updateRole = useCallback(async () => {
     if (userHandle) {
       if (role === UserRole.Admin) {
-        await ApiService.addAdmin(userHandle);
+        await AuthService.addAdmin(userHandle);
       } else {
-        await ApiService.removeAdmin(userHandle);
+        await AuthService.removeAdmin(userHandle);
       }
       onClose();
       toast.success('Role updated');

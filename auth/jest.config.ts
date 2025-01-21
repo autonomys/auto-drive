@@ -1,7 +1,4 @@
-const { createDefaultEsmPreset } = require("ts-jest");
-
 module.exports = {
-  ...createDefaultEsmPreset(),
   globalSetup: "./global-setup.ts",
   globalTeardown: "./global-teardown.ts",
   testMatch: ["**/__tests__/**/*.spec.ts"],

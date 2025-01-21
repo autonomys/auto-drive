@@ -6,7 +6,6 @@ import {
 import {
   SubscriptionGranularity,
   SubscriptionInfo,
-  SubscriptionWithUser,
 } from '../models/Subscriptions';
 import { UploadedObjectMetadata } from '../models/UploadedObjectMetadata';
 import { getAuthSession } from '../utils/auth';
@@ -38,20 +37,29 @@ export const ApiService = {
 
     return response.json() as Promise<SubscriptionInfo>;
   },
-  getUserList: async (): Promise<SubscriptionWithUser[]> => {
+  getUserList: async (
+    userPublicIds: string[],
+  ): Promise<Record<string, SubscriptionInfo>> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/subscriptions/list`, {
+    const response = await fetch(`${API_BASE_URL}/subscriptions/list`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
       },
+      body: JSON.stringify({ userPublicIds }),
     });
-    return response.json();
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Record<string, SubscriptionInfo>>;
   },
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const session = await getAuthSession();
@@ -166,7 +174,7 @@ export const ApiService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/subscriptions/update`, {
+    const response = await fetch(`${API_BASE_URL}/subscriptions/update`, {
       method: 'POST',
       body: JSON.stringify({
         granularity,

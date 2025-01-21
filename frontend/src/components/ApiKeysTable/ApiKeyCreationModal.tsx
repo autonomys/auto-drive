@@ -12,7 +12,7 @@ import { ApiKey } from '../../models/ApiKey';
 import toast from 'react-hot-toast';
 import { Button } from '../common/Button';
 import { handleEnterOrSpace } from '../../utils/eventHandler';
-import { AuthService } from '../../services/auth';
+import { AuthService } from '../../services/auth/auth';
 
 export const ApiKeyCreationModal = ({
   isOpen,

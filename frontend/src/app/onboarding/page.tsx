@@ -5,7 +5,7 @@ import { useCallback, useState } from 'react';
 import Image from 'next/image';
 import { Disclaimer } from '../../components/common/Disclaimer';
 import { CheckIcon } from 'lucide-react';
-import { AuthService } from '../../services/auth';
+import { AuthService } from '../../services/auth/auth';
 
 export default function OnboardingPage() {
   const [accepted, setAccepted] = useState(false);
