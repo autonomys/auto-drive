@@ -57,10 +57,9 @@ export const GET_GLOBAL_FILES = gql`
           }
         }
         object_ownership {
-          user {
-            public_id
-          }
           is_admin
+          oauth_provider
+          oauth_user_id
         }
       }
     }

@@ -50,9 +50,8 @@ export const GET_METADATA_BY_HEAD_CID = gql`
         }
       }
       object_ownership {
-        user {
-          public_id
-        }
+        oauth_user_id
+        oauth_provider
         is_admin
       }
     }
