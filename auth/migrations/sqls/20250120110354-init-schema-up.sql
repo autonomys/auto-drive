@@ -45,7 +45,7 @@ CREATE TABLE users.organizations (
 create trigger set_timestamp before
 update
     on
-    users.organizations for each row execute function trigger_set_timestamp();
+    users.organizations for each row execute function users.trigger_set_timestamp();
 
 
 -- users.users definition
@@ -70,7 +70,7 @@ CREATE TABLE users.users (
 create trigger set_timestamp before
 update
     on
-    users.users for each row execute function trigger_set_timestamp();
+    users.users for each row execute function users.trigger_set_timestamp();
 
 
 -- users.api_keys definition
@@ -96,7 +96,7 @@ CREATE TABLE users.api_keys (
 create trigger set_timestamp before
 update
     on
-    users.api_keys for each row execute function trigger_set_timestamp();
+    users.api_keys for each row execute function users.trigger_set_timestamp();
 
 
 -- users.users_organizations definition

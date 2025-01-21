@@ -7,7 +7,8 @@
     "start": "node dist/index.js",
     "build": "tsc",
     "dev": "nodemon src/index.ts",
-    "migrate": "db-migrate -t auth_migrations"
+    "migrate": "db-migrate -t auth_migrations",
+    "test": "jest"
   },
   "dependencies": {
     "@types/express": "^5.0.0",
@@ -24,8 +25,12 @@
     "winston": "^3.17.0"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^10.16.0",
     "@types/cors": "^2.8.17",
+    "db-migrate-plugin-typescript": "^2.0.0",
+    "jest": "^29.7.0",
     "nodemon": "^3.1.9",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2"
   }
 }

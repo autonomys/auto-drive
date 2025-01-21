@@ -9,16 +9,12 @@ const getUserFromAccessToken = async (
 ): Promise<OAuthUser> => {
   switch (provider) {
     case "google":
-      console.log("google accessToken", accessToken);
       return GoogleAuth.getUserFromAccessToken(accessToken);
     case "discord":
-      console.log("discord accessToken", accessToken);
       return DiscordAuth.getUserFromAccessToken(accessToken);
     case "apikey":
-      console.log("apikey accessToken", accessToken);
       return ApiKeyAuth.getUserFromApiKey(accessToken);
     case "custom-jwt":
-      console.log("custom-jwt accessToken", accessToken);
       return CustomJWTAuth.getUserFromAccessToken(accessToken);
     default:
       throw new Error("Invalid provider");

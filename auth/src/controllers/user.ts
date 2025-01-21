@@ -22,8 +22,6 @@ userController.post("/@me/onboard", async (req, res) => {
     const onboardedUser = await UsersUseCases.onboardUser(user);
     res.json(onboardedUser);
   } catch (error) {
-    console.log(error);
-
     res.status(500).json({
       error: "Failed to onboard user",
     });

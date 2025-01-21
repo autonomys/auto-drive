@@ -31,7 +31,6 @@ export const handleAuth = async (
     accessToken
   ).catch(() => null);
 
-  console.log("oauthUser", oauthUser);
   if (!oauthUser) {
     res.status(401).json({
       error: "Failed to authenticate user",

@@ -67,8 +67,6 @@ const createAccessToken = async (
     },
   };
 
-  console.log("created access token", payload.id);
-
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: "1h",
   });
@@ -81,8 +79,6 @@ const createRefreshToken = async (user: OAuthUser) => {
     oauthUserId: user.id,
     id: v4(),
   };
-
-  console.log("created refresh token", payload.id);
 
   await jwtTokenRegistry.addTokenToRegistry(payload.id);
 
