@@ -3,7 +3,6 @@ import {
   createAutoDriveApi,
   downloadFile,
 } from '@autonomys/auto-drive';
-import { ApiKey } from '../models/ApiKey';
 import {
   SubscriptionGranularity,
   SubscriptionInfo,
@@ -12,7 +11,6 @@ import {
 import { UploadedObjectMetadata } from '../models/UploadedObjectMetadata';
 import { getAuthSession } from '../utils/auth';
 import { uploadFileContent } from '../utils/file';
-import { AuthService } from './auth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -27,7 +25,7 @@ export const ApiService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/@me`, {
+    const response = await fetch(`${API_BASE_URL}/subscriptions/@me`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,

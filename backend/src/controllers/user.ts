@@ -2,9 +2,9 @@ import { Router } from 'express'
 import { handleAuth } from '../services/auth/express.js'
 import { SubscriptionsUseCases } from '../useCases/users/subscriptions.js'
 
-const userController = Router()
+const subscriptionController = Router()
 
-userController.get('/@me', async (req, res) => {
+subscriptionController.get('/@me', async (req, res) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -24,4 +24,4 @@ userController.get('/@me', async (req, res) => {
   }
 })
 
-export { userController }
+export { subscriptionController }

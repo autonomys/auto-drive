@@ -175,6 +175,24 @@ const initUser = async (
   });
 };
 
+export const getUserList = async (executor: User): Promise<User[]> => {
+  const isAdmin = await isAdminUser(executor);
+  if (!isAdmin) {
+    throw new Error("User does not have admin privileges");
+  }
+
+  const users = await usersRepository.getAllUsers();
+
+  return users.map((user) =>
+    userFromTable({
+      oauthProvider: user.oauth_provider,
+      oauthUserId: user.oauth_user_id,
+      publicId: user.public_id,
+      role: user.role,
+    })
+  );
+};
+
 export const UsersUseCases = {
   onboardUser,
   getUserByOAuthUser,
@@ -185,4 +203,5 @@ export const UsersUseCases = {
   resolveUser,
   initUser,
   getUserWithOrganization,
+  getUserList,
 };

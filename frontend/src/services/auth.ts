@@ -1,5 +1,5 @@
 import { ApiKey, ApiKeyWithoutSecret } from '../models/ApiKey';
-import { User, UserInfo } from '../models/User';
+import { OnboardedUser, User, UserInfo } from '../models/User';
 import { getAuthSession } from '../utils/auth';
 
 const API_BASE_URL =
@@ -162,6 +162,25 @@ export const AuthService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return response.json() as Promise<ApiKey[]>;
+    return response.json() as Promise<ApiKeyWithoutSecret[]>;
+  },
+  getUserList: async (): Promise<OnboardedUser[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/list`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<OnboardedUser[]>;
   },
 };

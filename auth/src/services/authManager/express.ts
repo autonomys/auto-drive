@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { User } from "../../models";
+import { User, UserRole } from "../../models";
 import { UsersUseCases } from "../../useCases/index";
 import { AuthManager } from "./index";
 import { CustomJWTAuth } from "./providers/custom";
@@ -41,7 +41,7 @@ export const handleAuth = async (
   return UsersUseCases.getUserByOAuthUser(oauthUser);
 };
 
-export const handleAdminAuth = async (
+export const handleApiSecretAuth = async (
   req: Request,
   res: Response
 ): Promise<true | null> => {
@@ -54,7 +54,15 @@ export const handleAdminAuth = async (
     return null;
   }
 
-  return accessToken === config.apiSecret || null;
+  const isCorrectApiSecret = accessToken === config.apiSecret;
+  if (!isCorrectApiSecret) {
+    res.status(401).json({
+      error: "Unauthorized",
+    });
+    return null;
+  }
+
+  return isCorrectApiSecret;
 };
 
 export const refreshAccessToken = async (

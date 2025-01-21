@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-  handleAdminAuth,
+  handleApiSecretAuth,
   handleAuth,
   refreshAccessToken,
 } from "../services/authManager/express";
@@ -63,8 +63,8 @@ userController.post("/@me/refreshToken", async (req, res) => {
     const accessToken = await refreshAccessToken(refreshToken);
 
     res.json({ accessToken });
-  } catch {
-    res.status(401).json({ error: "Unauthorized" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to refresh access token" });
     return;
   }
 });
@@ -219,14 +219,30 @@ userController.post("/admin/remove", async (req, res) => {
   }
 });
 
+userController.get("/list", async (req, res) => {
+  const user = await handleAuth(req, res);
+  if (!user) {
+    return;
+  }
+
+  try {
+    const users = await UsersUseCases.getUserList(user);
+
+    res.json(users);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Failed to get user list",
+    });
+    return;
+  }
+});
+
 userController.get("/:publicId", async (req, res) => {
   const { publicId } = req.params;
 
-  const isAdmin = await handleAdminAuth(req, res);
+  const isAdmin = await handleApiSecretAuth(req, res);
   if (!isAdmin) {
-    res.status(401).json({
-      error: "Unauthorized",
-    });
     return;
   }
 

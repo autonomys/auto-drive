@@ -1,7 +1,15 @@
-import { UserSubscriptionsTable } from '../../components/UserTable';
-import { SubscriptionWithUser } from '../../models/Subscriptions';
+'use client';
 
-export const AdminPanel = ({ users }: { users: SubscriptionWithUser[] }) => {
+import { AuthService } from '../../services/auth';
+import { UserSubscriptionsTable } from '../../components/UserTable';
+import { OnboardedUser } from '../../models/User';
+import { useEffect } from 'react';
+
+export const AdminPanel = ({ users }: { users: OnboardedUser[] }) => {
+  useEffect(() => {
+    console.log(AuthService.getUserList());
+  });
+
   return (
     <div>
       <h1 className='mb-4 text-2xl font-bold'>Users</h1>
