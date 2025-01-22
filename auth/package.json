@@ -8,7 +8,8 @@
     "build": "tsc",
     "dev": "nodemon src/index.ts",
     "migrate": "db-migrate -t auth_migrations",
-    "test": "jest"
+    "test": "jest",
+    "lambda:build": "yarn build && esbuild src/lambda.ts --bundle --platform=node --target=node18 --outfile=build/index.js"
   },
   "dependencies": {
     "@types/express": "^5.0.0",
@@ -18,8 +19,10 @@
     "db-migrate": "^0.11.14",
     "db-migrate-pg": "^1.5.2",
     "dotenv": "^16.4.7",
+    "esbuild": "^0.24.2",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "serverless-http": "^3.2.0",
     "typescript": "^5.7.3",
     "uuid": "^11.0.5",
     "winston": "^3.17.0"

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { userController } from "./controllers/user";
+import { userController } from "./controllers/http/user";
 import { config } from "./config";
 import { logger } from "./drivers";
 
@@ -27,3 +27,5 @@ app.use("/users", userController);
 app.listen(config.port, () => {
   console.log(`Server is running on port ${config.port}`);
 });
+
+export { app };

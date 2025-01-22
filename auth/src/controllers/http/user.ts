@@ -3,12 +3,12 @@ import {
   handleApiSecretAuth,
   handleAuth,
   refreshAccessToken,
-} from "../services/authManager/express";
-import { UsersUseCases } from "../useCases/index";
-import { ApiKeysUseCases } from "../useCases/apikeys";
-import { UserRole } from "../models/index";
-import { CustomJWTAuth } from "../services/authManager/providers/custom";
-import { logger } from "../drivers";
+} from "../../services/authManager/express";
+import { UsersUseCases } from "../../useCases/index";
+import { ApiKeysUseCases } from "../../useCases/apikeys";
+import { UserRole } from "../../models/index";
+import { CustomJWTAuth } from "../../services/authManager/providers/custom";
+import { logger } from "../../drivers";
 
 const userController = Router();
 
@@ -22,6 +22,7 @@ userController.post("/@me/onboard", async (req, res) => {
     const onboardedUser = await UsersUseCases.onboardUser(user);
     res.json(onboardedUser);
   } catch (error) {
+    console.error(error);
     res.status(500).json({
       error: "Failed to onboard user",
     });
@@ -64,6 +65,7 @@ userController.post("/@me/refreshToken", async (req, res) => {
 
     res.json({ accessToken });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Failed to refresh access token" });
     return;
   }
