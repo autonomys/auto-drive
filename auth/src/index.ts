@@ -27,3 +27,5 @@ app.use("/users", userController);
 app.listen(config.port, () => {
   console.log(`Server is running on port ${config.port}`);
 });
+
+export { app };

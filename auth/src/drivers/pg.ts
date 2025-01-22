@@ -1,16 +1,49 @@
 import pg from "pg";
 import { config } from "../config";
+import { DsqlSigner } from "@aws-sdk/dsql-signer";
+import { env } from "../utils/misc";
 
 let db: pg.Client | undefined;
 
-const createDB = async (): Promise<pg.Client> => {
+export const createPgDB = async (
+  dbConfig: string | pg.ClientConfig = config.postgres.url
+): Promise<pg.Client> => {
+  const client = new pg.Client(dbConfig);
+
+  await client.connect();
+
+  return client;
+};
+
+export const createDSQLConnection = async (): Promise<pg.Client> => {
+  const signer = new DsqlSigner({
+    hostname: env("DSQL_CLUSTER_ENDPOINT"),
+    region: env("AWS_REGION"),
+  });
+
+  const token = await signer.getDbConnectAdminAuthToken();
+
   const client = new pg.Client({
-    connectionString: config.postgres.url,
+    host: env("DSQL_CLUSTER_ENDPOINT"),
+    port: Number(env("DSQL_CLUSTER_PORT", "5432")),
+    user: env("DSQL_CLUSTER_USER", "admin"),
+    password: token,
+    database: env("DB_NAME", "postgres"),
+    ssl: { rejectUnauthorized: false },
   });
 
   await client.connect();
 
   return client;
+};
+
+export const createDB = async () => {
+  const isDSQL = !!process.env.DSQL_CLUSTER_ENDPOINT;
+  if (isDSQL) {
+    return createDSQLConnection();
+  }
+
+  return createPgDB();
 };
 
 export const getDatabase = async () => {
