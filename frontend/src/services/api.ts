@@ -3,13 +3,11 @@ import {
   createAutoDriveApi,
   downloadFile,
 } from '@autonomys/auto-drive';
-import { ApiKey } from '../models/ApiKey';
 import {
   SubscriptionGranularity,
-  SubscriptionWithUser,
+  SubscriptionInfo,
 } from '../models/Subscriptions';
 import { UploadedObjectMetadata } from '../models/UploadedObjectMetadata';
-import { User, UserInfo } from '../models/User';
 import { getAuthSession } from '../utils/auth';
 import { uploadFileContent } from '../utils/file';
 
@@ -20,13 +18,13 @@ export interface UploadResponse {
 }
 
 export const ApiService = {
-  getMe: async (): Promise<UserInfo> => {
+  getSubscription: async (): Promise<SubscriptionInfo> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/@me`, {
+    const response = await fetch(`${API_BASE_URL}/subscriptions/@me`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
@@ -37,43 +35,31 @@ export const ApiService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<SubscriptionInfo>;
   },
-  getUserList: async (): Promise<SubscriptionWithUser[]> => {
+  getUserList: async (
+    userPublicIds: string[],
+  ): Promise<Record<string, SubscriptionInfo>> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/subscriptions/list`, {
+    const response = await fetch(`${API_BASE_URL}/subscriptions/list`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
       },
+      body: JSON.stringify({ userPublicIds }),
     });
-    return response.json();
-  },
-  deleteApiKey: async (apiKeyId: string): Promise<void> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(
-      `${API_BASE_URL}/users/@me/apiKeys/${apiKeyId}`,
-      {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          'X-Auth-Provider': session.authProvider,
-        },
-      },
-    );
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
+
+    return response.json() as Promise<Record<string, SubscriptionInfo>>;
   },
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const session = await getAuthSession();
@@ -129,27 +115,6 @@ export const ApiService = {
 
     return downloadFile(api, cid, password);
   },
-  generateApiKey: async (): Promise<ApiKey> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/users/@me/apiKeys/create`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
   shareObject: async (dataCid: string, publicId: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
@@ -198,66 +163,6 @@ export const ApiService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  onboardUser: async (): Promise<User> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/users/@me/onboard`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
-  addAdmin: async (publicId: string): Promise<void> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/users/admin/add`, {
-      method: 'POST',
-      body: JSON.stringify({ publicId }),
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-  },
-  removeAdmin: async (publicId: string): Promise<void> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/users/admin/remove`, {
-      method: 'POST',
-      body: JSON.stringify({ publicId }),
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-  },
   updateSubscription: async (
     publicId: string,
     granularity: SubscriptionGranularity,
@@ -269,7 +174,7 @@ export const ApiService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/subscriptions/update`, {
+    const response = await fetch(`${API_BASE_URL}/subscriptions/update`, {
       method: 'POST',
       body: JSON.stringify({
         granularity,

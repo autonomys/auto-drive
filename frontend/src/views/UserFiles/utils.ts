@@ -8,7 +8,8 @@ export const objectSummaryFromUserFilesQuery = (
     headCid: m.root_metadata!.cid,
     size: m.root_metadata?.size ?? 0,
     owners: m.root_metadata!.object_ownership.map((o) => ({
-      publicId: o.user?.public_id ?? '',
+      oauthProvider: o.oauth_provider ?? '',
+      oauthUserId: o.oauth_user_id ?? '',
       role: o.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
     })),
     type: m.root_metadata?.type,

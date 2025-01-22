@@ -67,3 +67,15 @@ services:
     command:
       - graphql-engine
       - serve
+  auth:
+    build:
+      context: ./auth
+      dockerfile: Dockerfile
+    ports:
+      - "${AUTH_PORT}:${AUTH_PORT}"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - AUTH_PORT=${AUTH_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      - API_SECRET=${API_SECRET}

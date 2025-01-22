@@ -1,4 +1,4 @@
-import { SubscriptionInfo } from './subscription'
+import { Organization } from './organization'
 
 export type OAuthUser = {
   provider: string
@@ -34,9 +34,8 @@ export type UnonboardedUser = UserBase & {
 
 export type User = OnboardedUser | UnonboardedUser
 
-export type UserInfo = {
-  user: User
-  subscription?: SubscriptionInfo
+export type UserWithOrganization = User & {
+  organizationId: Organization['id']
 }
 
 export const userFromOAuth = (

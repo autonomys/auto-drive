@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import { SubscriptionInfo } from '../models/Subscriptions';
+import { AuthService } from '../services/auth/auth';
 
 interface UserStore {
   user: User | null;
@@ -11,6 +12,7 @@ interface UserStore {
   setUser: (user: UserInfo) => void;
   clearUser: () => void;
   updateUser: () => void;
+  updateSubscription: () => void;
 }
 
 export const useUserStore = create<UserStore>()(
@@ -18,10 +20,24 @@ export const useUserStore = create<UserStore>()(
     (set) => ({
       user: null,
       subscription: null,
-      setUser: (userInfo: UserInfo) => set(userInfo),
+      setUser: (userInfo: UserInfo) =>
+        set({
+          user: userInfo,
+        }),
       clearUser: () => set({ user: null, subscription: null }),
       updateUser: () => {
-        ApiService.getMe().then((userInfo) => set(userInfo));
+        AuthService.getMe().then((userInfo) => {
+          set({
+            user: userInfo,
+          });
+        });
+      },
+      updateSubscription: () => {
+        ApiService.getSubscription().then((subscription) => {
+          set({
+            subscription,
+          });
+        });
       },
     }),
     {

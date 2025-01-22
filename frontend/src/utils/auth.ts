@@ -1,12 +1,11 @@
-import { getServerSession, type Session } from 'next-auth';
-import { getSession } from 'next-auth/react';
+import { type Session } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '../app/api/auth/[...nextauth]/config';
 
 export const getAuthSession = async (): Promise<Session | null> => {
   const internalSession = await (typeof window === 'undefined'
-    ? getServerSession(authOptions)
-    : getSession());
+    ? import('next-auth').then((m) => m.getServerSession(authOptions))
+    : import('next-auth/react').then((m) => m.getSession()));
 
   if (!internalSession) {
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions

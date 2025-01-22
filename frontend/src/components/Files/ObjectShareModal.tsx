@@ -64,10 +64,6 @@ export const ObjectShareModal = ({
     setPublicId(null);
   }, [metadata]);
 
-  const isAlreadyOwnwer = useMemo(() => {
-    return !!metadata?.owners.some((owner) => owner.publicId === publicId);
-  }, [metadata, publicId]);
-
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(
       `${window.location.origin}/drive/metadata/${metadata?.metadata.dataCid}`,
@@ -133,17 +129,12 @@ export const ObjectShareModal = ({
                   </Button>
                   <Button
                     variant='lightAccent'
-                    disabled={invalidPublicId || isAlreadyOwnwer}
+                    disabled={invalidPublicId}
                     onClick={shareObject}
                   >
                     Share with public ID
                   </Button>
                 </div>
-                {isAlreadyOwnwer && (
-                  <p className='mt-4 text-center text-sm text-red-500'>
-                    This user is already an owner of this object.
-                  </p>
-                )}
                 {publicId && invalidPublicId && (
                   <p className='mt-4 text-center text-sm text-red-500'>
                     Invalid public ID.

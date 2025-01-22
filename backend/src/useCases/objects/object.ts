@@ -12,11 +12,11 @@ import {
   nodesRepository,
   ownershipRepository,
 } from '../../repositories/index.js'
-import { UsersUseCases } from '../index.js'
 import { OwnershipUseCases } from './ownership.js'
 import { UploadStatusUseCases } from './uploadStatus.js'
 import { MetadataEntry } from '../../repositories/objects/metadata.js'
 import { PaginatedResult } from './common.js'
+import { AuthManager } from '../../services/auth/index.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -231,7 +231,7 @@ const shareObject = async (executor: User, cid: string, publicId: string) => {
     throw new Error('User is not an admin of this object')
   }
 
-  const user = await UsersUseCases.getUserByPublicId(publicId)
+  const user = await AuthManager.getUserFromPublicId(publicId)
   if (!user) {
     throw new Error('User not found')
   }

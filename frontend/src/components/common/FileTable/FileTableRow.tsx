@@ -22,6 +22,7 @@ import { Button } from '../Button';
 import { handleEnterOrSpace } from '../../../utils/eventHandler';
 import { SquareArrowOutUpRight } from 'lucide-react';
 import { InternalLink } from '../InternalLink';
+import { OwnerBadge } from './OwnerBadge';
 
 export const FileTableRow = ({
   file,
@@ -46,38 +47,19 @@ export const FileTableRow = ({
 }) => {
   const [isRowExpanded, setIsRowExpanded] = useState(false);
 
-  const renderOwnerBadge = useCallback(
-    (owner: string) => {
-      if (owner === user?.publicId) {
-        return (
-          <span className='rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800'>
-            You
-          </span>
-        );
-      } else if (owner.startsWith('@')) {
-        return (
-          <span className='rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800'>
-            {shortenString(owner.slice(1), 15)}
-          </span>
-        );
-      } else {
-        return (
-          <span className='rounded-full bg-gray-200 px-2 py-1 text-xs font-semibold text-gray-800'>
-            {shortenString(owner.slice(1), 15)}
-          </span>
-        );
-      }
-    },
-    [user?.publicId],
-  );
-
-  const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN)?.publicId;
+  const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN);
 
   const popoverButtonRef = useRef<HTMLButtonElement>(null);
-  const isOwner = user?.publicId === owner;
+  const isOwner =
+    user?.oauthProvider === owner?.oauthProvider &&
+    user?.oauthUserId === owner?.oauthUserId;
+
   const [showDownloadTooltip, setShowDownloadTooltip] = useState(false);
+
   const hasFileOwnership = file.owners.find(
-    (e) => e.publicId === user?.publicId,
+    (e) =>
+      e.oauthProvider === user?.oauthProvider &&
+      e.oauthUserId === user?.oauthUserId,
   );
 
   const stopEventPropagation = useCallback(function <
@@ -132,6 +114,8 @@ export const FileTableRow = ({
       stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(toggleExpand),
     [toggleExpand, stopEventPropagation],
   );
+
+  console.log(actionButtons);
 
   return (
     <Fragment key={file.headCid}>
@@ -206,9 +190,7 @@ export const FileTableRow = ({
         </TableBodyCell>
         <TableBodyCell>{getTypeFromMetadata(file)}</TableBodyCell>
         <TableBodyCell>{bytes(Number(file.size))}</TableBodyCell>
-        <TableBodyCell>
-          {owner ? renderOwnerBadge(owner) : 'Unknown'}
-        </TableBodyCell>
+        <TableBodyCell>{owner ? <OwnerBadge /> : 'Unknown'}</TableBodyCell>
         <TableBodyCell className='flex justify-end'>
           <ConditionalRender
             condition={actionButtons.includes(FileActionButtons.DOWNLOAD)}
@@ -320,7 +302,7 @@ export const FileTableRow = ({
               <span>{bytes(Number(child.totalSize))}</span>
             </TableBodyCell>
             <TableBodyCell>
-              {owner ? renderOwnerBadge(owner) : 'Unknown'}
+              <OwnerBadge />
             </TableBodyCell>
             <TableBodyCell>
               <Button

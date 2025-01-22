@@ -67,9 +67,8 @@ export const GET_TRASHED_FILES = gql`
           }
         }
         object_ownership {
-          user {
-            public_id
-          }
+          oauth_provider
+          oauth_user_id
           is_admin
         }
       }

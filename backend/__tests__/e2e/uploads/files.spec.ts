@@ -1,8 +1,6 @@
-import { User } from '../../../src/models/users/index.js'
-import { UsersUseCases } from '../../../src/useCases/users/users.js'
+import { UserWithOrganization } from '../../../src/models/users/index.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { PreconditionError } from '../../utils/error.js'
-import { MOCK_UNONBOARDED_USER } from '../../utils/mocks.js'
+import { createMockUser } from '../../utils/mocks.js'
 import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
 import {
   Upload,
@@ -56,13 +54,10 @@ const files = [
 
 files.map((file, index) => {
   describe(`File Upload #${index + 1}`, () => {
-    let user: User
+    const user: UserWithOrganization = createMockUser()
 
     beforeAll(async () => {
       await dbMigration.up()
-      const result = await UsersUseCases.onboardUser(MOCK_UNONBOARDED_USER)
-      if (!result) throw new PreconditionError('Failed to setup test user')
-      user = result
     })
 
     afterAll(async () => {
@@ -214,7 +209,7 @@ files.map((file, index) => {
       })
 
       it('should have been added an interaction', async () => {
-        const { id } = await SubscriptionsUseCases.getSubscription(user)
+        const { id } = await SubscriptionsUseCases.getSubscriptionInfo(user)
         const interactions =
           await interactionsRepository.getInteractionsBySubscriptionIdAndTypeInTimeRange(
             id,
@@ -256,7 +251,8 @@ files.map((file, index) => {
         expect(objectInformation?.cid).toBe(cid)
         expect(objectInformation?.owners).toEqual([
           {
-            publicId: user.publicId,
+            oauthUserId: user.oauthUserId,
+            oauthProvider: user.oauthProvider,
             role: OwnerRole.ADMIN,
           },
         ])

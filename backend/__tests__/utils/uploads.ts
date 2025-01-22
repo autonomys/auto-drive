@@ -1,9 +1,9 @@
-import { User } from '../../src/models/users/user.js'
+import { UserWithOrganization } from '../../src/models/users/user.js'
 import { UploadsUseCases } from '../../src/useCases/uploads/uploads.js'
 import { PreconditionError } from './error.js'
 
 export const uploadFile = async (
-  user: User,
+  user: UserWithOrganization,
   name: string,
   content: Buffer | string,
   mimeType: string,

@@ -1,0 +1,2 @@
+ALTER TABLE subscriptions DROP CONSTRAINT fk_organization_id;
+ALTER TABLE uploads.uploads DROP CONSTRAINT uploads_oauth_provider_oauth_user_id_fkey;
