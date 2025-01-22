@@ -3,18 +3,21 @@
 import { AuthService } from '../../services/auth/auth';
 import { UserSubscriptionsTable } from '../../components/UserTable';
 import { useEffect, useState } from 'react';
-import { ApiService } from '../../services/api';
 import { SubscriptionWithUser } from '../../models/Subscriptions';
+import { useNetwork } from '../../contexts/network';
 
 export const AdminPanel = () => {
   const [subscriptionsWithUsers, setSubscriptionsWithUsers] = useState<
     SubscriptionWithUser[]
   >([]);
 
+  const network = useNetwork();
+
   useEffect(() => {
     AuthService.getUserList().then((users) => {
-      ApiService.getUserList(users.map((user) => user.publicId)).then(
-        (subscriptionsByPublicId) => {
+      network?.api
+        .getUserList(users.map((user) => user.publicId))
+        .then((subscriptionsByPublicId) => {
           const subscriptions = Object.entries(subscriptionsByPublicId);
           const subscriptionsWithUsers: SubscriptionWithUser[] =
             subscriptions.map(([publicId, subscription]) => ({
@@ -23,10 +26,9 @@ export const AdminPanel = () => {
             }));
 
           setSubscriptionsWithUsers(subscriptionsWithUsers);
-        },
-      );
+        });
     });
-  }, []);
+  }, [network?.api]);
 
   return (
     <div>

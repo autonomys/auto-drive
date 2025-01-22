@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { Button } from '../common/Button';
 import { useEncryptionStore } from '../../states/encryption';
-import { UploadService } from '../../services/upload';
+import { useNetwork } from '../../contexts/network';
 
 export const UploadingFileModal = ({
   file,
@@ -16,12 +16,12 @@ export const UploadingFileModal = ({
   const [progress, setProgress] = useState(0);
   const [password, setPassword] = useState<string>();
   const [passwordConfirmed, setPasswordConfirmed] = useState<boolean>();
-
+  const network = useNetwork();
   const manageUpload = useCallback(
     async (password: string | undefined) => {
       if (!file) return;
 
-      await UploadService.uploadFile(file, {
+      await network.uploadService.uploadFile(file, {
         password,
         onProgress: (progress) => setProgress(progress),
       });
@@ -29,7 +29,7 @@ export const UploadingFileModal = ({
       onClose();
       setPasswordConfirmed(false);
     },
-    [file, onClose],
+    [file, onClose, network.uploadService],
   );
 
   const onConfirmPassword = useCallback(() => {

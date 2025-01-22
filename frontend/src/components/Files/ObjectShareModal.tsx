@@ -8,7 +8,7 @@ import {
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { UploadedObjectMetadata } from '../../models/UploadedObjectMetadata';
-import { ApiService } from '../../services/api';
+import { useNetwork } from '../../contexts/network';
 import { Button } from '../common/Button';
 import { Link } from 'lucide-react';
 import { isValidUUID } from '../../utils/misc';
@@ -22,6 +22,7 @@ export const ObjectShareModal = ({
   cid: string | null;
   closeModal: () => void;
 }) => {
+  const network = useNetwork();
   const isOpen = cid !== null;
   const [publicId, setPublicId] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
@@ -48,7 +49,8 @@ export const ObjectShareModal = ({
       return;
     }
 
-    await ApiService.shareObject(metadata?.metadata.dataCid, publicId)
+    await network.api
+      .shareObject(metadata?.metadata.dataCid, publicId)
       .then(async () => {
         toast.success('Object shared successfully');
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -58,7 +60,7 @@ export const ObjectShareModal = ({
       .catch(() => {
         toast.error('Failed to share object');
       });
-  }, [metadata, publicId, closeModal]);
+  }, [publicId, metadata?.metadata.dataCid, network.api, closeModal]);
 
   useEffect(() => {
     setPublicId(null);

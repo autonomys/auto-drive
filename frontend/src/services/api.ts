@@ -11,20 +11,20 @@ import { UploadedObjectMetadata } from '../models/UploadedObjectMetadata';
 import { getAuthSession } from '../utils/auth';
 import { uploadFileContent } from '../utils/file';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-
 export interface UploadResponse {
   cid: string;
 }
 
-export const ApiService = {
+export type Api = ReturnType<typeof createApiService>;
+
+export const createApiService = (apiBaseUrl: string) => ({
   getSubscription: async (): Promise<SubscriptionInfo> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/subscriptions/@me`, {
+    const response = await fetch(`${apiBaseUrl}/subscriptions/@me`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
@@ -45,7 +45,7 @@ export const ApiService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/subscriptions/list`, {
+    const response = await fetch(`${apiBaseUrl}/subscriptions/list`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -67,7 +67,7 @@ export const ApiService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/objects/file`, {
+    const response = await fetch(`${apiBaseUrl}/objects/file`, {
       method: 'POST',
       body: JSON.stringify({
         data: await uploadFileContent(file),
@@ -90,7 +90,7 @@ export const ApiService = {
   fetchUploadedObjectMetadata: async (
     cid: string,
   ): Promise<UploadedObjectMetadata> => {
-    const response = await fetch(`${API_BASE_URL}/objects/${cid}`);
+    const response = await fetch(`${apiBaseUrl}/objects/${cid}`);
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
@@ -108,7 +108,7 @@ export const ApiService = {
     }
 
     const api = createAutoDriveApi({
-      url: API_BASE_URL,
+      url: apiBaseUrl,
       provider: session.authProvider as AuthProvider,
       apiKey: session.accessToken,
     });
@@ -121,7 +121,7 @@ export const ApiService = {
       throw new Error('No session');
     }
 
-    await fetch(`${API_BASE_URL}/objects/${dataCid}/share`, {
+    await fetch(`${apiBaseUrl}/objects/${dataCid}/share`, {
       method: 'POST',
       body: JSON.stringify({ publicId }),
       headers: {
@@ -137,7 +137,7 @@ export const ApiService = {
       throw new Error('No session');
     }
 
-    await fetch(`${API_BASE_URL}/objects/${cid}/delete`, {
+    await fetch(`${apiBaseUrl}/objects/${cid}/delete`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
@@ -151,7 +151,7 @@ export const ApiService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/objects/${cid}/restore`, {
+    const response = await fetch(`${apiBaseUrl}/objects/${cid}/restore`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
@@ -174,7 +174,7 @@ export const ApiService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/subscriptions/update`, {
+    const response = await fetch(`${apiBaseUrl}/subscriptions/update`, {
       method: 'POST',
       body: JSON.stringify({
         granularity,
@@ -193,4 +193,4 @@ export const ApiService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-};
+});

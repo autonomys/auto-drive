@@ -1,4 +1,3 @@
-import { ApiService } from '../services/api';
 import { User, UserInfo } from '../models/User.js';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -33,11 +32,7 @@ export const useUserStore = create<UserStore>()(
         });
       },
       updateSubscription: () => {
-        ApiService.getSubscription().then((subscription) => {
-          set({
-            subscription,
-          });
-        });
+        // TODO: Implement
       },
     }),
     {

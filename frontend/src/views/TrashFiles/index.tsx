@@ -1,7 +1,6 @@
 'use client';
 
 import { ObjectSummary } from '../../models/UploadedObjectMetadata';
-import { UploadingObjects } from '../../components/Files/UploadingObjects';
 import { NoFilesInTrashPlaceholder } from './NoFilesInTrashPlaceholder';
 import {
   FileActionButtons,
@@ -63,7 +62,6 @@ export const TrashFiles = () => {
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
         <div className=''>
-          <UploadingObjects />
           <FileTable
             files={objects}
             pageSize={pageSize}
