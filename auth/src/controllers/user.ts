@@ -3,12 +3,12 @@ import {
   handleApiSecretAuth,
   handleAuth,
   refreshAccessToken,
-} from "../../services/authManager/express";
-import { UsersUseCases } from "../../useCases/index";
-import { ApiKeysUseCases } from "../../useCases/apikeys";
-import { UserRole } from "../../models/index";
-import { CustomJWTAuth } from "../../services/authManager/providers/custom";
-import { logger } from "../../drivers";
+} from "../services/authManager/express";
+import { UsersUseCases } from "../useCases/index";
+import { ApiKeysUseCases } from "../useCases/apikeys";
+import { UserRole } from "../models/index";
+import { CustomJWTAuth } from "../services/authManager/providers/custom";
+import { logger } from "../drivers";
 
 const userController = Router();
 

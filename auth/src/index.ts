@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { userController } from "./controllers/http/user";
+import { userController } from "./controllers/user";
 import { config } from "./config";
 import { logger } from "./drivers";
 
