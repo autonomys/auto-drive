@@ -39,7 +39,10 @@ export const UserSubscriptionsTable = ({
               </TableHead>
               <TableBody>
                 {users?.map((user) => (
-                  <UserTableRow key={user.id} subscriptionWithUser={user} />
+                  <UserTableRow
+                    key={user.user.publicId}
+                    subscriptionWithUser={user}
+                  />
                 ))}
                 {users === undefined && (
                   <TableBodyRow>

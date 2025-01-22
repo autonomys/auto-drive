@@ -1,21 +1,19 @@
-import { User } from '../../../src/models/users'
-import { ObjectUseCases, UsersUseCases } from '../../../src/useCases'
+import { UserWithOrganization } from '../../../src/models/users'
+import { AuthManager } from '../../../src/services/auth'
+import { ObjectUseCases } from '../../../src/useCases'
 import { dbMigration } from '../../utils/dbMigrate'
 import { PreconditionError } from '../../utils/error'
-import { createMockUser, MOCK_UNONBOARDED_USER } from '../../utils/mocks'
+import { createMockUser } from '../../utils/mocks'
 import { uploadFile } from '../../utils/uploads'
+import { jest } from '@jest/globals'
 
 describe('Object', () => {
-  let user: User
+  let user: UserWithOrganization
   let fileCid: string
 
   beforeAll(async () => {
     await dbMigration.up()
-    const result = await UsersUseCases.onboardUser(MOCK_UNONBOARDED_USER)
-    if (!result) {
-      throw new PreconditionError('Failed to onboard user')
-    }
-    user = result
+    user = createMockUser()
     fileCid = await uploadFile(user, 'test.txt', 'test', 'text/plain')
   })
 
@@ -176,8 +174,12 @@ describe('Object', () => {
   describe('Share object', () => {
     let randomFile: string
     it('should be able to share object', async () => {
-      const mockUser = await createMockUser()
+      const mockUser = createMockUser()
       randomFile = await uploadFile(mockUser, 'test.txt', 'test', 'text/plain')
+
+      jest
+        .spyOn(AuthManager, 'getUserFromPublicId')
+        .mockResolvedValueOnce(createMockUser())
 
       await expect(
         ObjectUseCases.shareObject(mockUser, randomFile, user.publicId!),

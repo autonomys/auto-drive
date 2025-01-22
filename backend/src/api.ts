@@ -3,8 +3,8 @@ import express from 'express'
 
 import 'dotenv/config.js'
 import { objectController } from './controllers/object.js'
-import { userController } from './controllers/user.js'
-import { handleAuth } from './services/authManager/express.js'
+import { subscriptionController } from './controllers/subscriptions.js'
+import { handleAuth } from './services/auth/express.js'
 import { uploadController } from './controllers/upload.js'
 import { config } from './config.js'
 import { logger } from './drivers/logger.js'
@@ -32,7 +32,7 @@ const createServer = async () => {
   }
 
   app.use('/objects', objectController)
-  app.use('/users', userController)
+  app.use('/subscriptions', subscriptionController)
   app.use('/uploads', uploadController)
 
   app.get('/health', (_req, res) => {

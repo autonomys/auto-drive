@@ -11,7 +11,7 @@ import {
   UploadType,
 } from '../../models/uploads/upload.js'
 import { FolderTreeFolder } from '../../models/objects/folderTree.js'
-import { User } from '../../models/users/user.js'
+import { UserWithOrganization } from '../../models/users/user.js'
 import { filePartsRepository } from '../../repositories/uploads/fileParts.js'
 import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../repositories/uploads/fileProcessingInfo.js'
@@ -35,7 +35,10 @@ export const mapTableToModel = (upload: UploadEntry): Upload => {
   } as Upload
 }
 
-const checkPermissions = async (upload: UploadEntry, user: User) => {
+const checkPermissions = async (
+  upload: UploadEntry,
+  user: UserWithOrganization,
+) => {
   if (
     upload.oauth_provider !== user.oauthProvider ||
     upload.oauth_user_id !== user.oauthUserId
@@ -55,7 +58,7 @@ const initFileProcessing = async (upload: UploadEntry): Promise<void> => {
 }
 
 const createFileUpload = async (
-  user: User,
+  user: UserWithOrganization,
   name: string,
   mimeType: string | null,
   uploadOptions: FileUploadOptions | null,
@@ -86,7 +89,7 @@ const createFileUpload = async (
 }
 
 export const createFolderUpload = async (
-  user: User,
+  user: UserWithOrganization,
   name: string,
   folderTree: FolderTreeFolder,
   uploadOptions: FileUploadOptions | null,
@@ -110,7 +113,7 @@ export const createFolderUpload = async (
 }
 
 const createFileInFolder = async (
-  user: User,
+  user: UserWithOrganization,
   uploadId: string,
   relativeId: string,
   name: string,
@@ -139,7 +142,7 @@ const createFileInFolder = async (
 }
 
 const uploadChunk = async (
-  user: User,
+  user: UserWithOrganization,
   uploadId: string,
   index: number,
   chunkData: Buffer,
@@ -162,7 +165,7 @@ const uploadChunk = async (
 }
 
 const completeUpload = async (
-  user: User,
+  user: UserWithOrganization,
   uploadId: string,
 ): Promise<string> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId)

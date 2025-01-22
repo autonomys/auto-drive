@@ -32,4 +32,8 @@ export const config = {
   privateKeysPath: env('PRIVATE_KEYS_PATH', '//Alice'),
   filesGateway: env('FILES_GATEWAY_URL'),
   filesGatewayToken: env('FILES_GATEWAY_TOKEN'),
+  authService: {
+    url: env('AUTH_SERVICE_URL', 'http://localhost:3030'),
+    token: env('AUTH_SERVICE_API_KEY'),
+  },
 }

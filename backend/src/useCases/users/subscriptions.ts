@@ -1,34 +1,35 @@
 import { v4 } from 'uuid'
-import { User, UserOrPublicId } from '../../models/users/user.js'
+import {
+  User,
+  UserRole,
+  UserWithOrganization,
+} from '../../models/users/user.js'
 import {
   Subscription,
   SubscriptionGranularity,
   SubscriptionInfo,
 } from '../../models/users/subscription.js'
 import { subscriptionsRepository } from '../../repositories/users/subscriptions.js'
-import { OrganizationsUseCases } from './organizations.js'
-import { UsersUseCases } from './users.js'
 import { interactionsRepository } from '../../repositories/objects/interactions.js'
 import { InteractionType } from '../../models/objects/interactions.js'
+import { InteractionsUseCases } from '../objects/interactions.js'
+import { AuthManager } from '../../services/auth/index.js'
 
 const updateSubscription = async (
   executor: User,
-  userOrPublicId: UserOrPublicId,
+  userPublicId: string,
   granularity: SubscriptionGranularity,
   uploadLimit: number,
   downloadLimit: number,
 ): Promise<void> => {
-  const isAdmin = await UsersUseCases.isAdminUser(executor)
-  if (!isAdmin) {
+  if (executor.role !== UserRole.Admin) {
     throw new Error('User does not have admin privileges')
   }
 
-  const user = await UsersUseCases.resolveUser(userOrPublicId)
-
-  const organization = await OrganizationsUseCases.getOrganizationByUser(user)
+  const user = await AuthManager.getUserFromPublicId(userPublicId)
 
   const subscription = await subscriptionsRepository.getByOrganizationId(
-    organization.id,
+    user.organizationId,
   )
 
   if (!subscription) {
@@ -43,25 +44,22 @@ const updateSubscription = async (
   )
 }
 
-const getSubscription = async (
-  userOrPublicId: UserOrPublicId,
+const getOrCreateSubscription = async (
+  user: UserWithOrganization,
 ): Promise<Subscription> => {
-  const user = await UsersUseCases.resolveUser(userOrPublicId)
-
-  const organization = await OrganizationsUseCases.getOrganizationByUser(user)
-
   const subscription = await subscriptionsRepository.getByOrganizationId(
-    organization.id,
+    user.organizationId,
   )
-
   if (!subscription) {
-    throw new Error('Subscription not found')
+    return initSubscription(user.organizationId)
   }
 
   return subscription
 }
 
-const initSubscription = async (organizationId: string): Promise<void> => {
+const initSubscription = async (
+  organizationId: string,
+): Promise<Subscription> => {
   const subscription =
     await subscriptionsRepository.getByOrganizationId(organizationId)
   if (subscription) {
@@ -73,13 +71,23 @@ const initSubscription = async (organizationId: string): Promise<void> => {
   const FIVE_GB = 1024 ** 3 * 5
   const INITIAL_UPLOAD_LIMIT: number = HUNDRED_MB
   const INITIAL_DOWNLOAD_LIMIT: number = FIVE_GB
-  await subscriptionsRepository.createSubscription(
-    v4(),
+
+  const newSubscription = {
+    id: v4(),
     organizationId,
-    INITIAL_GRANULARITY,
-    INITIAL_UPLOAD_LIMIT,
-    INITIAL_DOWNLOAD_LIMIT,
+    granularity: INITIAL_GRANULARITY,
+    uploadLimit: INITIAL_UPLOAD_LIMIT,
+    downloadLimit: INITIAL_DOWNLOAD_LIMIT,
+  }
+  await subscriptionsRepository.createSubscription(
+    newSubscription.id,
+    organizationId,
+    newSubscription.granularity,
+    newSubscription.uploadLimit,
+    newSubscription.downloadLimit,
   )
+
+  return newSubscription
 }
 
 const getPendingCreditsBySubscriptionAndType = async (
@@ -109,10 +117,9 @@ const getPendingCreditsBySubscriptionAndType = async (
 }
 
 const getSubscriptionInfo = async (
-  userOrPublicId: UserOrPublicId,
+  user: UserWithOrganization,
 ): Promise<SubscriptionInfo> => {
-  const subscription =
-    await SubscriptionsUseCases.getSubscription(userOrPublicId)
+  const subscription = await getOrCreateSubscription(user)
 
   const pendingUploadCredits = await getPendingCreditsBySubscriptionAndType(
     subscription,
@@ -130,10 +137,45 @@ const getSubscriptionInfo = async (
   }
 }
 
+const getUserListSubscriptions = async (
+  userPublicIds: string[],
+): Promise<Record<string, SubscriptionInfo>> => {
+  return Object.fromEntries(
+    await Promise.all(
+      userPublicIds.map(async (userPublicId) => {
+        const user = await AuthManager.getUserFromPublicId(userPublicId)
+        return [userPublicId, await getSubscriptionInfo(user)]
+      }),
+    ),
+  )
+}
+
+const getPendingCreditsByUserAndType = async (
+  user: UserWithOrganization,
+  type: InteractionType,
+): Promise<number> => {
+  const subscription = await getOrCreateSubscription(user)
+
+  return getPendingCreditsBySubscriptionAndType(subscription, type)
+}
+
+const registerInteraction = async (
+  user: UserWithOrganization,
+  type: InteractionType,
+  size: bigint,
+) => {
+  const subscription = await getOrCreateSubscription(user)
+
+  await InteractionsUseCases.createInteraction(subscription.id, type, size)
+}
+
 export const SubscriptionsUseCases = {
   updateSubscription,
-  getSubscription,
+  getOrCreateSubscription,
   initSubscription,
   getPendingCreditsBySubscriptionAndType,
   getSubscriptionInfo,
+  getPendingCreditsByUserAndType,
+  registerInteraction,
+  getUserListSubscriptions,
 }

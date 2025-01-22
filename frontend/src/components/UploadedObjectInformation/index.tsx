@@ -21,19 +21,21 @@ export const UploadedObjectInformation = ({
   const [shareModalCid, setShareModalCid] = useState<string | null>(null);
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
   const user = useUserStore(({ user }) => user);
-  const ownerHandle = object?.owners.find(
-    (o) => o.role === OwnerRole.ADMIN,
-  )?.publicId;
 
   const owners = useMemo(() => {
     return object?.owners.sort((a, b) => a.role.localeCompare(b.role));
   }, [object?.owners]);
 
   const isOwner = owners?.some(
-    (o) => o.publicId === user?.publicId && o.role === OwnerRole.ADMIN,
+    (o) =>
+      o.oauthProvider === user?.oauthProvider &&
+      o.oauthUserId === user?.oauthUserId &&
+      o.role === OwnerRole.ADMIN,
   );
   const hasFileOwnership = object?.owners.some(
-    (o) => o.publicId === user?.publicId,
+    (o) =>
+      o.oauthProvider === user?.oauthProvider &&
+      o.oauthUserId === user?.oauthUserId,
   );
 
   const handleDownload = useCallback(async () => {
@@ -115,9 +117,7 @@ export const UploadedObjectInformation = ({
         </div>
         <div className='flex'>
           <span>{'Owner: '}</span>
-          <span className='ml-[4px]'>
-            {ownerHandle === user?.publicId ? 'You' : ownerHandle}
-          </span>
+          <span className='ml-[4px]'>{isOwner ? 'You' : 'Unknown'}</span>
         </div>
         <div className='flex'>
           <span>Total Nodes: </span>

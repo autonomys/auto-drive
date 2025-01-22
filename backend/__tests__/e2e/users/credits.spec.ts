@@ -1,20 +1,19 @@
 import { InteractionType } from '../../../src/models/objects/interactions'
-import { UsersUseCases } from '../../../src/useCases/users/users'
 import { PreconditionError } from '../../utils/error'
 import { closeDatabase, getDatabase } from '../../../src/drivers/pg'
-import { User } from '../../../src/models/users'
-import { MOCK_UNONBOARDED_USER } from '../../utils/mocks'
+import { UserWithOrganization } from '../../../src/models/users'
+import { createMockUser } from '../../utils/mocks'
 import { dbMigration } from '../../utils/dbMigrate'
+import { SubscriptionsUseCases } from '../../../src/useCases'
 
 describe('CreditsUseCases', () => {
-  let user: User
+  const mockUser: UserWithOrganization = createMockUser()
 
   beforeAll(async () => {
     await getDatabase()
     await dbMigration.up()
-    const result = await UsersUseCases.onboardUser(MOCK_UNONBOARDED_USER)
+    const result = await SubscriptionsUseCases.getOrCreateSubscription(mockUser)
     if (!result) throw new PreconditionError('Failed to setup test user')
-    user = result
   })
 
   afterAll(async () => {
@@ -26,21 +25,23 @@ describe('CreditsUseCases', () => {
     const interactionType = InteractionType.Upload
     const size = BigInt(1024)
 
-    const initialCredits = await UsersUseCases.getPendingCreditsByUserAndType(
-      user.publicId,
-      interactionType,
-    )
+    const initialCredits =
+      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+        mockUser,
+        interactionType,
+      )
 
-    await UsersUseCases.registerInteraction(
-      user.publicId,
+    await SubscriptionsUseCases.registerInteraction(
+      mockUser,
       interactionType,
       size,
     )
 
-    const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
-      user.publicId,
-      interactionType,
-    )
+    const pendingCredits =
+      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+        mockUser,
+        interactionType,
+      )
 
     expect(initialCredits - pendingCredits).toEqual(Number(size))
   })
@@ -49,21 +50,23 @@ describe('CreditsUseCases', () => {
     const interactionType = InteractionType.Download
     const size = BigInt(2048)
 
-    const initialCredits = await UsersUseCases.getPendingCreditsByUserAndType(
-      user.publicId,
-      interactionType,
-    )
+    const initialCredits =
+      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+        mockUser,
+        interactionType,
+      )
 
-    await UsersUseCases.registerInteraction(
-      user.publicId,
+    await SubscriptionsUseCases.registerInteraction(
+      mockUser,
       interactionType,
       size,
     )
 
-    const pendingCredits = await UsersUseCases.getPendingCreditsByUserAndType(
-      user.publicId,
-      interactionType,
-    )
+    const pendingCredits =
+      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+        mockUser,
+        interactionType,
+      )
 
     expect(initialCredits - pendingCredits).toEqual(Number(size))
   })

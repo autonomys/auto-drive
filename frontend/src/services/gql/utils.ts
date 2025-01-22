@@ -28,8 +28,9 @@ export const mapObjectInformationFromQueryResult = (
         metadata.maximumBlockDepth[0]?.transaction_result?.blockNumber ?? null,
     },
     owners: metadata.object_ownership.map((owner) => ({
-      publicId: owner.user?.public_id ?? '',
       role: owner.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
+      oauthProvider: owner.oauth_provider ?? '',
+      oauthUserId: owner.oauth_user_id ?? '',
     })),
   };
 };
