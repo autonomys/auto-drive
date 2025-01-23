@@ -1,5 +1,9 @@
 import { redirect } from 'next/navigation';
 
-export default function Page() {
-  redirect('/mainnet/drive');
+export default function Page({
+  params: { chain },
+}: {
+  params: { chain: string };
+}) {
+  redirect(`/${chain}/drive`);
 }
