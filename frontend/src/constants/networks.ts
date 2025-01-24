@@ -11,7 +11,7 @@ export interface Network {
   gql: string;
 }
 
-export const defaultNetworkId = NetworkId.TAURUS;
+export const defaultNetworkId = NetworkId.MAINNET;
 
 export const networks: Partial<Record<NetworkId, Network>> = {
   [NetworkId.TAURUS]: {
@@ -23,6 +23,16 @@ export const networks: Partial<Record<NetworkId, Network>> = {
     gql:
       process.env.NEXT_PUBLIC_TAURUS_GQL_URL ||
       'https://demo.auto-drive.autonomys.xyz/hasura/v1/graphql',
+  },
+  [NetworkId.MAINNET]: {
+    id: NetworkId.MAINNET,
+    name: 'Mainnet',
+    http:
+      process.env.NEXT_PUBLIC_MAINNET_HTTP_URL ||
+      'https://mainnet.auto-drive.autonomys.xyz/api',
+    gql:
+      process.env.NEXT_PUBLIC_MAINNET_GQL_URL ||
+      'https://mainnet.auto-drive.autonomys.xyz/hasura/v1/graphql',
   },
 };
 
