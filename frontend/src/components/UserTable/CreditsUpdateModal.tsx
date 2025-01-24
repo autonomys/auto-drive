@@ -8,8 +8,8 @@ import {
   DialogTitle,
 } from '@headlessui/react';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { ApiService } from '../../services/api';
 import toast from 'react-hot-toast';
+import { useNetwork } from '../../contexts/network';
 
 export const CreditsUpdateModal = ({
   userHandle,
@@ -25,6 +25,8 @@ export const CreditsUpdateModal = ({
   const [uploadCredits, setUploadCredits] = useState<string>('');
   const [uploadCreditsUnit, setUploadCreditsUnit] = useState<number>(1024 ** 2);
 
+  const network = useNetwork();
+
   useEffect(() => {
     setDownloadCredits('');
     setUploadCredits('');
@@ -36,7 +38,7 @@ export const CreditsUpdateModal = ({
     if (userHandle && downloadCredits && uploadCredits) {
       const downloadBytes = Number(downloadCredits) * downloadCreditsUnit;
       const uploadBytes = Number(uploadCredits) * uploadCreditsUnit;
-      await ApiService.updateSubscription(
+      await network.api.updateSubscription(
         userHandle,
         'monthly',
         uploadBytes,
@@ -46,6 +48,7 @@ export const CreditsUpdateModal = ({
       toast.success('Credits updated');
     }
   }, [
+    network.api,
     userHandle,
     downloadCredits,
     downloadCreditsUnit,

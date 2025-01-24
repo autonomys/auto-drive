@@ -3,7 +3,6 @@ import {
   FileActionButtons,
   FileTable,
 } from '../../components/common/FileTable';
-import { UploadingObjects } from '../../components/Files/UploadingObjects';
 import { NoSharedFilesPlaceholder } from './NoSharedFilesPlaceholder';
 import { useCallback, useEffect, useState } from 'react';
 import { PaginatedResult } from '../../models/common';
@@ -53,7 +52,6 @@ export const SharedFiles = () => {
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
         <div className=''>
-          <UploadingObjects />
           <FileTable
             files={objects}
             pageSize={pageSize}

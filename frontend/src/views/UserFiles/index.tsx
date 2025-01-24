@@ -6,7 +6,6 @@ import { ObjectSummary } from '../../models/UploadedObjectMetadata';
 import { PaginatedResult } from '../../models/common';
 import { FileDropZone } from '../../components/Files/FileDropZone';
 import { SearchBar } from '../../components/SearchBar';
-import { UploadingObjects } from '../../components/Files/UploadingObjects';
 import {
   FileActionButtons,
   FileTable,
@@ -47,6 +46,7 @@ export const UserFiles = () => {
       offset: currentPage * pageSize,
     },
     skip: !user || !session.data,
+    fetchPolicy: 'no-cache',
   });
 
   useEffect(() => {
@@ -74,7 +74,6 @@ export const UserFiles = () => {
           <SearchBar scope='user' />
         </div>
         <div className=''>
-          <UploadingObjects />
           <FileTable
             files={objects}
             pageSize={pageSize}

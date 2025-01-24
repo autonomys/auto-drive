@@ -6,7 +6,6 @@ import {
   FileActionButtons,
 } from '../../components/common/FileTable';
 import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholder';
-import { UploadingObjects } from '../../components/Files/UploadingObjects';
 import { SearchBar } from '../../components/SearchBar';
 import { PaginatedResult } from '../../models/common';
 import { useGetGlobalFilesQuery } from '../../../gql/graphql';
@@ -66,7 +65,6 @@ export const GlobalFiles = () => {
           </div>
         </div>
         <div>
-          <UploadingObjects />
           <FileTable
             files={rootObjectMetadata}
             pageSize={pageSize}

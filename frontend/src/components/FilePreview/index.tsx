@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ApiService } from '../../services/api';
 import { OffchainMetadata } from '@autonomys/auto-dag-data';
 import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
 import '@cyntler/react-doc-viewer/dist/index.css';
 import { simpleMimeType } from '../../utils/misc';
+import { useNetwork } from '../../contexts/network';
 
 const MAX_FILE_SIZE = BigInt(100 * 1024 * 1024); // 100 MB
 
 export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
+  const network = useNetwork();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFilePreviewable, setIsFilePreviewable] = useState(false);
@@ -30,7 +31,8 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   useEffect(() => {
     if (isFilePreviewable) {
       setLoading(true);
-      ApiService.downloadObject(metadata.dataCid)
+      network.api
+        .downloadObject(metadata.dataCid)
         .then(async (file) => {
           let buffer = Buffer.alloc(0);
           for await (const chunk of file) {
@@ -52,7 +54,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
     } else {
       setLoading(false);
     }
-  }, [metadata, isFilePreviewable]);
+  }, [metadata, isFilePreviewable, network.api]);
 
   const documents = useMemo(() => {
     return (

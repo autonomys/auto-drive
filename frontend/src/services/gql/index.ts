@@ -1,6 +1,7 @@
-import { ApolloClient, createHttpLink, InMemoryCache } from '@apollo/client';
+import { ApolloClient, HttpLink, InMemoryCache } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
 import { getAuthSession } from '../../utils/auth';
+import { NetworkId, getNetwork } from '../../constants/networks';
 
 const authLink = setContext(async (_, { headers }) => {
   const token = await getAuthSession();
@@ -13,12 +14,12 @@ const authLink = setContext(async (_, { headers }) => {
   };
 });
 
-const httpLink = createHttpLink({
-  uri: process.env.NEXT_PUBLIC_GQL_URL,
-});
+export const createGQLClient = (apiBaseUrl: string) =>
+  new ApolloClient({
+    uri: apiBaseUrl,
+    cache: new InMemoryCache(),
+    link: authLink.concat(new HttpLink({ uri: apiBaseUrl })),
+  });
 
-export const gqlClient = new ApolloClient({
-  uri: process.env.NEXT_PUBLIC_GQL_URL,
-  cache: new InMemoryCache(),
-  link: authLink.concat(httpLink),
-});
+export const createGQLClientByNetwork = (networkId: NetworkId) =>
+  createGQLClient(getNetwork(networkId).gql);

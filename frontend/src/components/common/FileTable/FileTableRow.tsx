@@ -115,8 +115,6 @@ export const FileTableRow = ({
     [toggleExpand, stopEventPropagation],
   );
 
-  console.log(actionButtons);
-
   return (
     <Fragment key={file.headCid}>
       <TableBodyRow

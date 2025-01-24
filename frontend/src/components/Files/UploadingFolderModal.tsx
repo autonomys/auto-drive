@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { UploadService } from '../../services/upload';
 import { Dialog, Transition } from '@headlessui/react';
 import { Button } from '../common/Button';
 import { FileWarning } from 'lucide-react';
 import { useEncryptionStore } from '../../states/encryption';
+import { useNetwork } from '../../contexts/network';
 
 export const UploadingFolderModal = ({
   data,
@@ -15,6 +15,7 @@ export const UploadingFolderModal = ({
   const [password, setPassword] = useState<string>();
   const [passwordConfirmed, setPasswordConfirmed] = useState<boolean>();
   const [progress, setProgress] = useState(0);
+  const network = useNetwork();
 
   const progressPercentage = Math.round(progress);
 
@@ -23,7 +24,7 @@ export const UploadingFolderModal = ({
 
     const passwordToUse = password ? password : undefined;
 
-    await UploadService.uploadFolder(data, {
+    await network.uploadService.uploadFolder(data, {
       password: passwordToUse,
       onProgress: (progress) => setProgress(progress),
     });
@@ -31,7 +32,7 @@ export const UploadingFolderModal = ({
     setPasswordConfirmed(false);
     onClose();
     window.location.reload();
-  }, [data, password, onClose]);
+  }, [data, password, onClose, network.uploadService]);
 
   useEffect(() => {
     if (!passwordConfirmed) return;

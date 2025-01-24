@@ -6,9 +6,9 @@ import {
   TransitionChild,
 } from '@headlessui/react';
 import { Fragment, useCallback } from 'react';
-import { ApiService } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Button } from '../common/Button';
+import { useNetwork } from '../../contexts/network';
 
 export const ObjectRestoreModal = ({
   cid,
@@ -17,17 +17,19 @@ export const ObjectRestoreModal = ({
   cid: string | null;
   closeModal: () => void;
 }) => {
+  const network = useNetwork();
+
   const onRestoreObject = useCallback(() => {
     if (!cid) {
       return;
     }
 
-    ApiService.restoreObject(cid).then(() => {
+    network.api.restoreObject(cid).then(() => {
       toast.success('Object restored successfully');
       closeModal();
       window.location.reload();
     });
-  }, [cid, closeModal]);
+  }, [cid, network.api, closeModal]);
 
   return (
     <Transition appear show={cid !== null} as={Fragment}>

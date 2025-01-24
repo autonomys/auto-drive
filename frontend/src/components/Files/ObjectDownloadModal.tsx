@@ -11,11 +11,11 @@ import { InvalidDecryptKey } from '../../utils/file';
 import { Button } from '../common/Button';
 import { shortenString } from '../../utils/misc';
 import { useEncryptionStore } from '../../states/encryption';
-import { fetchFile } from '../../services/download';
 import toast from 'react-hot-toast';
 import { useSession } from 'next-auth/react';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
+import { useNetwork } from '../../contexts/network';
 
 const toastId = 'object-download-modal';
 
@@ -33,6 +33,7 @@ export const ObjectDownloadModal = ({
   const [wrongPassword, setWrongPassword] = useState<boolean>(false);
   const defaultPassword = useEncryptionStore((store) => store.password);
   const session = useSession();
+  const network = useNetwork();
 
   useEffect(() => {
     if (!cid) {
@@ -69,7 +70,7 @@ export const ObjectDownloadModal = ({
     const passwordToUse = password ?? undefined;
 
     try {
-      await fetchFile(metadata.dataCid, passwordToUse);
+      await network.downloadService.fetchFile(metadata.dataCid, passwordToUse);
       await new Promise((resolve) => setTimeout(resolve, 250));
       toast.success('Download completed', {
         id: toastId,
@@ -82,7 +83,7 @@ export const ObjectDownloadModal = ({
         setWrongPassword(true);
       }
     }
-  }, [metadata, password, onClose]);
+  }, [metadata, password, network.downloadService, onClose]);
 
   const passwordOrNotEncrypted =
     (metadata && !metadata.uploadOptions?.encryption?.algorithm) ||
