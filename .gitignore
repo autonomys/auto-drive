@@ -37,5 +37,6 @@ coverage/
 *.tmp
 *.temp
 
+.cache/
 database.sqlite
 .cursorrules
