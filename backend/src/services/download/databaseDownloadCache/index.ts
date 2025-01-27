@@ -73,10 +73,10 @@ const get = async function* (cid: string): AsyncIterable<Buffer> {
   }
 }
 
-const has = async (cid: string) => {
+const has = async (cid: string): Promise<boolean> => {
   const entry = await registryRepository.getEntry(cid)
 
-  return !!entry
+  return Boolean(entry).valueOf()
 }
 
 export const clear = async () => {
