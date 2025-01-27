@@ -16,8 +16,8 @@ import { ObjectDownloadModal } from '../Files/ObjectDownloadModal';
 import { handleClick, handleEnterOrSpace } from '../../utils/eventHandler';
 import { shortenString } from '../../utils/misc';
 import { BaseMetadata } from '../../models/UploadedObjectMetadata';
-import { getFSPath } from '../../app/[chain]/drive/fs/[cid]/page';
 import { useNetwork } from '../../contexts/network';
+import { getFSPath } from '../../views/FileSystem';
 
 interface FileCardProps {
   icon?: React.ReactNode;

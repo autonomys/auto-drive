@@ -1,4 +1,3 @@
-import { FileCard } from '../../../../../components/common/FileCard';
 import { createGQLClientByNetwork } from '../../../../../services/gql';
 import {
   GetMetadataByHeadCidDocument,
@@ -6,6 +5,7 @@ import {
 } from '../../../../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../../../../services/gql/utils';
 import { NetworkId } from '../../../../../constants/networks';
+import { FS } from '../../../../../views/FileSystem';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,19 +22,6 @@ export default async function Page({
   });
 
   const metadata = mapObjectInformationFromQueryResult(data);
-  if (metadata.metadata.type === 'file') {
-    throw new Error('File type not supported');
-  }
 
-  return (
-    <div className='grid grid-cols-4 gap-4'>
-      {metadata.metadata.children.map((metadata) => {
-        return <FileCard key={metadata.cid} metadata={metadata} />;
-      })}
-    </div>
-  );
+  return <FS metadata={metadata} />;
 }
-
-export const getFSPath = (networkId: NetworkId, cid: string) => {
-  return `/${networkId}/drive/fs/${cid}`;
-};
