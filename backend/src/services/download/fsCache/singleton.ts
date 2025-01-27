@@ -1,7 +1,7 @@
 import { createFileCache } from './index.js'
 import { ensureDirectoryExists } from '../../../utils/fs.js'
 import path from 'path'
-import { config } from '../../../config'
+import { config } from '../../../config.js'
 import { Keyv } from 'keyv'
 import KeyvSqlite from '@keyvhq/sqlite'
 import { LRUCache } from 'lru-cache'
