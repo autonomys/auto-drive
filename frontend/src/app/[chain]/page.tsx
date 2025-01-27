@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { defaultNetworkId, NetworkId } from '../../constants/networks';
 
 export default function Page({
   params: { chain },
@@ -8,7 +7,3 @@ export default function Page({
 }) {
   redirect(`/${chain}/drive`);
 }
-
-export const getDrivePath = (networkId: NetworkId = defaultNetworkId) => {
-  return `/${networkId}/drive`;
-};

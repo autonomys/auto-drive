@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { Disclaimer } from '../../components/common/Disclaimer';
 import { CheckIcon } from 'lucide-react';
 import { AuthService } from '../../services/auth/auth';
-import { getDrivePath } from '../[chain]/page';
+import { getDrivePath } from '../../views/UserFiles';
 
 export default function OnboardingPage() {
   const [accepted, setAccepted] = useState(false);

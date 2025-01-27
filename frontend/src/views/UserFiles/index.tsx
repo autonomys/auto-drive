@@ -14,6 +14,7 @@ import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholde
 import { useGetMyFilesQuery } from '../../../gql/graphql';
 import { useSession } from 'next-auth/react';
 import { objectSummaryFromSharedFilesQuery } from '../SharedFiles/utils';
+import { NetworkId, defaultNetworkId } from '../../constants/networks';
 
 export const UserFiles = () => {
   const [pageSize, setPageSize] = useState(5);
@@ -92,4 +93,8 @@ export const UserFiles = () => {
       </div>
     </div>
   );
+};
+
+export const getDrivePath = (networkId: NetworkId = defaultNetworkId) => {
+  return `/${networkId}/drive`;
 };
