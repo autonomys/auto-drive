@@ -34,3 +34,7 @@ export default async function Page({
     </div>
   );
 }
+
+export const getFSPath = (networkId: NetworkId, cid: string) => {
+  return `/${networkId}/drive/fs/${cid}`;
+};

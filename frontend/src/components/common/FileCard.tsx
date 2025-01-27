@@ -16,6 +16,8 @@ import { ObjectDownloadModal } from '../Files/ObjectDownloadModal';
 import { handleClick, handleEnterOrSpace } from '../../utils/eventHandler';
 import { shortenString } from '../../utils/misc';
 import { BaseMetadata } from '../../models/UploadedObjectMetadata';
+import { getFSPath } from '../../app/[chain]/drive/fs/[cid]/page';
+import { useNetwork } from '../../contexts/network';
 
 interface FileCardProps {
   icon?: React.ReactNode;
@@ -28,14 +30,15 @@ export const FileCard = ({
 }: FileCardProps) => {
   const router = useRouter();
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const { network } = useNetwork();
 
   const download = useCallback(() => {
     setIsDownloadModalOpen(true);
   }, []);
 
   const navigate = useCallback(() => {
-    router.push(`/drive/fs/${cid}`);
-  }, [cid, router]);
+    router.push(getFSPath(network.id, cid));
+  }, [cid, router, network]);
 
   const objectIcon = useMemo(() => {
     if (icon) return icon;

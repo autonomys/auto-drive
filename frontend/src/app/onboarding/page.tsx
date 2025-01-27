@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Disclaimer } from '../../components/common/Disclaimer';
 import { CheckIcon } from 'lucide-react';
 import { AuthService } from '../../services/auth/auth';
+import { getDrivePath } from '../[chain]/page';
 
 export default function OnboardingPage() {
   const [accepted, setAccepted] = useState(false);
@@ -13,7 +14,7 @@ export default function OnboardingPage() {
   const onboardUser = useCallback(async () => {
     AuthService.onboardUser()
       .then(() => {
-        window.location.assign('/drive');
+        window.location.assign(getDrivePath());
       })
       .catch((error) => {
         console.error(error);

@@ -4,6 +4,8 @@ import type { IPLDNodeData } from '@autonomys/auto-dag-data';
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { FC, useState } from 'react';
 import { InternalLink } from '../common/InternalLink';
+import { getFSPath } from '../../app/[chain]/drive/fs/[cid]/page';
+import { useNetwork } from '../../contexts/network';
 
 interface NodeExplorerProps {
   cid: string;
@@ -18,6 +20,7 @@ export const NodeExplorer: FC<NodeExplorerProps> = ({
 }) => {
   const [isMetadataOpen, setIsMetadataOpen] = useState(true);
   const [isLinksOpen, setIsLinksOpen] = useState(true);
+  const { network } = useNetwork();
 
   const toggleMetadata = () => setIsMetadataOpen(!isMetadataOpen);
   const toggleLinks = () => setIsLinksOpen(!isLinksOpen);
@@ -68,7 +71,7 @@ export const NodeExplorer: FC<NodeExplorerProps> = ({
             {links.map((link, index) => (
               <li key={index}>
                 <InternalLink
-                  href={`/drive/fs/${link}`}
+                  href={getFSPath(network.id, link)}
                   className='break-all text-blue-600 hover:text-blue-800 hover:underline'
                 >
                   {link}
