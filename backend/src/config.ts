@@ -1,9 +1,8 @@
 import { env } from './utils/misc.js'
 
-const DEFAULT_CHUNK_SIZE = 10 * 1024 ** 2
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 
-const DEFAULT_CACHE_MAX_SIZE = 100 * 1024 ** 2 // 100mb
+const DEFAULT_CACHE_MAX_SIZE = 10 * 1024 ** 3 // 10GB
 const DEFAULT_CACHE_TTL = 1000000 // 1000000 seconds
 
 export const config = {
@@ -15,17 +14,6 @@ export const config = {
   requestSizeLimit: env('REQUEST_SIZE_LIMIT', '200mb'),
   corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS,
   rpcEndpoint: env('RPC_ENDPOINT', 'ws://localhost:9944'),
-  databaseDownloadCache: {
-    chunkSize: Number(
-      env('DATABASE_DOWNLOAD_CACHE_CHUNK_SIZE', DEFAULT_CHUNK_SIZE.toString()),
-    ),
-    maxCacheSize: BigInt(
-      env(
-        'DATABASE_DOWNLOAD_CACHE_MAX_SIZE',
-        DEFAULT_MAX_CACHE_SIZE.toString(),
-      ),
-    ),
-  },
   memoryDownloadCache: {
     maxCacheSize: Number(
       env('MEMORY_DOWNLOAD_CACHE_MAX_SIZE', DEFAULT_MAX_CACHE_SIZE.toString()),
