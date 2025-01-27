@@ -38,6 +38,7 @@ import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
 import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
 import { fsCache } from '../../../src/services/download/fsCache/singleton.js'
+import { handleArchivedObjects } from '../../../src/services/upload/nodeRemover/index.js'
 
 const files = [
   {
@@ -315,11 +316,14 @@ files.map((file, index) => {
       })
 
       it('should be able to archive the object', async () => {
-        await ObjectUseCases.markAsArchived(cid)
+        await handleArchivedObjects()
 
         const metadata = await metadataRepository.getMetadata(cid)
         expect(metadata).not.toBeNull()
         expect(metadata?.is_archived).toBe(true)
+
+        expect(memoryDownloadCache.has(cid)).toBe(true)
+        expect(fsCache.get(cid)).not.toBeNull()
       })
 
       it('should be able to remove the nodes', async () => {
