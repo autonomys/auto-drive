@@ -1,4 +1,5 @@
 import { AwaitIterable } from 'interface-store'
+import { PassThrough, Readable } from 'stream'
 
 export const asyncIterableMap = async <T, R>(
   iterable: AwaitIterable<T>,
@@ -48,6 +49,16 @@ export const bufferToAsyncIterable = (
   })()
 }
 
+export const asyncIterableToBuffer = async (
+  iterable: AwaitIterable<Buffer>,
+): Promise<Buffer> => {
+  let buffer = Buffer.alloc(0)
+  for await (const chunk of iterable) {
+    buffer = Buffer.concat([buffer, chunk])
+  }
+  return buffer
+}
+
 export const asyncByChunk = async function* (
   iterable: AwaitIterable<Buffer>,
   chunkSize: number,
@@ -65,4 +76,22 @@ export const asyncByChunk = async function* (
   if (accumulated.length > 0 && !ignoreLastChunk) {
     yield accumulated
   }
+}
+
+export async function forkAsyncIterable(
+  asyncIterable: AwaitIterable<Buffer>,
+): Promise<[Readable, Readable]> {
+  const passThrough1 = new PassThrough()
+  const passThrough2 = new PassThrough()
+
+  ;(async () => {
+    for await (const chunk of asyncIterable) {
+      passThrough1.write(chunk)
+      passThrough2.write(chunk)
+    }
+    passThrough1.end()
+    passThrough2.end()
+  })()
+
+  return [passThrough1, passThrough2]
 }

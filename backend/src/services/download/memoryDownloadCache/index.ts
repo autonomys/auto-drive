@@ -1,5 +1,8 @@
 import { LRUCache } from 'lru-cache'
-import { bufferToAsyncIterable } from '../../../utils/async.js'
+import {
+  asyncIterableToBuffer,
+  bufferToAsyncIterable,
+} from '../../../utils/async.js'
 import { AwaitIterable } from 'interface-store'
 import { config } from '../../../config.js'
 
@@ -21,15 +24,11 @@ const get = (cid: string) => {
   return bufferToAsyncIterable(value)
 }
 
-const set = async function* (
+const set = async (
   cid: string,
   value: AwaitIterable<Buffer>,
-): AsyncIterable<Buffer> {
-  let buffer = Buffer.alloc(0)
-  for await (const chunk of value) {
-    buffer = Buffer.concat([buffer, chunk])
-    yield chunk
-  }
+): Promise<void> => {
+  const buffer = await asyncIterableToBuffer(value)
 
   if (buffer.length > 0) {
     cache.set(cid, buffer, {

@@ -29,7 +29,6 @@ import {
   nodesRepository,
 } from '../../../src/repositories/index.js'
 import { InteractionType } from '../../../src/models/objects/interactions.js'
-import { databaseDownloadCache } from '../../../src/services/download/databaseDownloadCache/index.js'
 import { memoryDownloadCache } from '../../../src/services/download/memoryDownloadCache/index.js'
 import {
   OwnerRole,
@@ -38,6 +37,7 @@ import {
 import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
 import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
+import { fsCache } from '../../../src/services/download/fsCache/singleton.js'
 import { handleArchivedObjects } from '../../../src/services/upload/nodeRemover/index.js'
 
 const files = [
@@ -223,10 +223,10 @@ files.map((file, index) => {
       })
 
       it('download cache should be updated', async () => {
-        const asyncFromDatabase = await databaseDownloadCache.get(cid)
+        const asyncFromDatabase = await fsCache.get(cid)
         expect(asyncFromDatabase).not.toBeNull()
         const fileArrayFromDatabase = await asyncIterableToPromiseOfArray(
-          asyncFromDatabase!,
+          asyncFromDatabase!.data,
         )
         const fileBufferFromDatabase = Buffer.concat(fileArrayFromDatabase)
         expect(fileBufferFromDatabase).toEqual(rndBuffer)
@@ -323,11 +323,11 @@ files.map((file, index) => {
         expect(metadata?.is_archived).toBe(true)
 
         expect(memoryDownloadCache.has(cid)).toBe(true)
-        expect(await databaseDownloadCache.has(cid)).toBe(true)
+        expect(fsCache.get(cid)).not.toBeNull()
       })
 
-      it('should be able to downloaded from gateway', async () => {
-        await databaseDownloadCache.clear()
+      it('should be able to remove the nodes', async () => {
+        await fsCache.clear()
         await memoryDownloadCache.clear()
 
         const downloadFileMock = jest
