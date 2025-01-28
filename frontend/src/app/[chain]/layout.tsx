@@ -8,24 +8,24 @@ import {
   UsersIcon,
   Earth,
 } from 'lucide-react';
-import { InternalLink } from '../../../components/common/InternalLink';
-import '../../globals.css';
-import { UserEnsurer } from '../../../components/UserEnsurer';
-import { RoleProtected } from '../../../components/RoleProtected';
-import { UserRole } from '../../../models/User';
-import { RemainingCreditTracker } from '../../../components/RemainingCreditTracker';
+import { InternalLink } from '../../components/common/InternalLink';
+import '../globals.css';
+import { UserEnsurer } from '../../components/UserEnsurer';
+import { RoleProtected } from '../../components/RoleProtected';
+import { UserRole } from '../../models/User';
+import { RemainingCreditTracker } from '../../components/RemainingCreditTracker';
 import { useMemo } from 'react';
 import Image from 'next/image';
-import { useUserStore } from '../../../states/user';
+import { useUserStore } from '../../states/user';
 import { SessionProvider } from 'next-auth/react';
 import {
   defaultNetworkId,
   NetworkId,
   networks,
-} from '../../../constants/networks';
-import { NetworkProvider } from '../../../contexts/network';
+} from '../../constants/networks';
+import { NetworkProvider } from '../../contexts/network';
 import { redirect } from 'next/navigation';
-import { NetworkDropdown } from '../../../components/NetworkDropdown';
+import { NetworkDropdown } from '../../components/NetworkDropdown';
 
 export default function AppLayout({
   children,
