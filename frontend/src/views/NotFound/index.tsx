@@ -3,7 +3,9 @@
 
 import { XIcon } from 'lucide-react';
 import { DiscordIcon } from '../../components/common/DiscordIcon';
-import { EXTERNAL_ROUTES } from '../../constants/routes';
+import { EXTERNAL_ROUTES, ROUTES } from '../../constants/routes';
+import { InternalLink } from '../../components/common/InternalLink';
+import { Button } from '../../components/common/Button';
 
 export const NotFound = () => {
   return (
@@ -31,6 +33,9 @@ export const NotFound = () => {
           <XIcon />
         </a>
       </p>
+      <InternalLink href={ROUTES.drive()}>
+        <Button variant='lightAccent'>Go to home</Button>
+      </InternalLink>
     </div>
   );
 };
