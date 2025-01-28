@@ -16,7 +16,7 @@ import {
   SearchGlobalMetadataByCidOrNameQuery,
   SearchUserMetadataByCidOrNameQuery,
 } from '../../../gql/graphql';
-import { getSearchResultPath } from '../../views/SearchResult';
+import { ROUTES } from '../../constants/routes';
 import { useNetwork } from '../../contexts/network';
 
 export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
@@ -92,7 +92,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   const handleSelectItem = useCallback(
     (cid: string) => {
       setIsOpen(false);
-      router.push(getSearchResultPath(network.id, cid));
+      router.push(ROUTES.search(network.id, cid));
       inputRef.current?.focus();
     },
     [network, router],
@@ -105,7 +105,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
         recommendations &&
         recommendations.length > 0
       ) {
-        router.push(getSearchResultPath(network.id, query));
+        router.push(ROUTES.search(network.id, query));
       }
     },
     [recommendations, query, router, network],

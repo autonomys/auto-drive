@@ -1,3 +1,5 @@
+import { defaultNetworkId, NetworkId } from './networks';
+
 export const EXTERNAL_ROUTES = {
   autonomys: 'https://autonomys.xyz/',
   academy: 'https://academy.autonomys.xyz/',
@@ -23,4 +25,22 @@ export const EXTERNAL_ROUTES = {
   subscan: 'https://autonomys.subscan.io/',
   spaceAcres:
     'https://api.github.com/repos/autonomys/space-acres/releases/latest',
+};
+
+export const ROUTES = {
+  drive: (networkId: NetworkId = defaultNetworkId) => {
+    return `/${networkId}/drive`;
+  },
+  onboarding: () => {
+    return '/onboarding';
+  },
+  search: (networkId: NetworkId, query: string) => {
+    return `/${networkId}/drive/search/${encodeURIComponent(query)}`;
+  },
+  objectDetails: (networkId: NetworkId, cid: string) => {
+    return `/${networkId}/drive/metadata/${cid}`;
+  },
+  fs: (networkId: NetworkId, cid: string) => {
+    return `/${networkId}/drive/fs/${cid}`;
+  },
 };

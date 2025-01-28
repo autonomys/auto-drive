@@ -14,7 +14,7 @@ import { Link } from 'lucide-react';
 import { isValidUUID } from '../../utils/misc';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
-import { getObjectDetailsPath } from '../../views/ObjectDetails';
+import { ROUTES } from '../../constants/routes';
 
 export const ObjectShareModal = ({
   cid,
@@ -73,7 +73,7 @@ export const ObjectShareModal = ({
     }
 
     navigator.clipboard.writeText(
-      `${window.location.origin}/${getObjectDetailsPath(
+      `${window.location.origin}/${ROUTES.objectDetails(
         network.network.id,
         metadata?.metadata.dataCid,
       )}`,

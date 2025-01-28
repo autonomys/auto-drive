@@ -4,8 +4,8 @@ import type { IPLDNodeData } from '@autonomys/auto-dag-data';
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { FC, useState } from 'react';
 import { InternalLink } from '../common/InternalLink';
-import { getFSPath } from '../../views/FileSystem';
 import { useNetwork } from '../../contexts/network';
+import { ROUTES } from '../../constants/routes';
 
 interface NodeExplorerProps {
   cid: string;
@@ -71,7 +71,7 @@ export const NodeExplorer: FC<NodeExplorerProps> = ({
             {links.map((link, index) => (
               <li key={index}>
                 <InternalLink
-                  href={getFSPath(network.id, link)}
+                  href={ROUTES.fs(network.id, link)}
                   className='break-all text-blue-600 hover:text-blue-800 hover:underline'
                 >
                   {link}

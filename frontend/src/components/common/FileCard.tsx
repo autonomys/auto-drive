@@ -17,7 +17,7 @@ import { handleClick, handleEnterOrSpace } from '../../utils/eventHandler';
 import { shortenString } from '../../utils/misc';
 import { BaseMetadata } from '../../models/UploadedObjectMetadata';
 import { useNetwork } from '../../contexts/network';
-import { getFSPath } from '../../views/FileSystem';
+import { ROUTES } from '../../constants/routes';
 
 interface FileCardProps {
   icon?: React.ReactNode;
@@ -37,7 +37,7 @@ export const FileCard = ({
   }, []);
 
   const navigate = useCallback(() => {
-    router.push(getFSPath(network.id, cid));
+    router.push(ROUTES.fs(network.id, cid));
   }, [cid, router, network]);
 
   const objectIcon = useMemo(() => {

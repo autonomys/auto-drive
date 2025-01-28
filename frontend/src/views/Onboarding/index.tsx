@@ -4,23 +4,22 @@ import { useCallback, useState } from 'react';
 import { Button, Checkbox } from '@headlessui/react';
 import { CheckIcon } from 'lucide-react';
 import { AuthService } from '../../services/auth/auth';
-import { getDrivePath } from '../../views/UserFiles';
 import { Disclaimer } from '../../components/common/Disclaimer';
+// import { getDrivePath } from '../UserFiles';
 import Image from 'next/image';
+import { ROUTES } from '../../constants/routes';
 
 export const Onboarding = () => {
   const [accepted, setAccepted] = useState(false);
 
   const onboardUser = useCallback(async () => {
-    if (typeof document !== 'undefined') {
-      AuthService.onboardUser()
-        .then(() => {
-          window.location.assign(getDrivePath());
-        })
-        .catch((error) => {
-          console.error(error);
-        });
-    }
+    AuthService.onboardUser()
+      .then(() => {
+        window.location.assign(ROUTES.drive());
+      })
+      .catch((error) => {
+        console.error(error);
+      });
   }, []);
 
   return (

@@ -1,6 +1,5 @@
 import { BaseMetadata } from '../../models/UploadedObjectMetadata';
 import { FileCard } from '../../components/common/FileCard';
-import { NetworkId } from '../../constants/networks';
 
 export const SearchResult = ({ objects }: { objects: BaseMetadata[] }) => {
   return (
@@ -24,8 +23,4 @@ export const SearchResult = ({ objects }: { objects: BaseMetadata[] }) => {
       )}
     </div>
   );
-};
-
-export const getSearchResultPath = (networkId: NetworkId, query: string) => {
-  return `/${networkId}/drive/search/${encodeURIComponent(query)}`;
 };
