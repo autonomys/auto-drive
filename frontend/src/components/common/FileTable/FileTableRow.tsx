@@ -23,8 +23,8 @@ import { handleEnterOrSpace } from '../../../utils/eventHandler';
 import { SquareArrowOutUpRight } from 'lucide-react';
 import { InternalLink } from '../InternalLink';
 import { OwnerBadge } from './OwnerBadge';
-import { getObjectDetailsPath } from '../../../views/ObjectDetails';
 import { useNetwork } from '../../../contexts/network';
+import { ROUTES } from '../../../constants/routes';
 
 export const FileTableRow = ({
   file,
@@ -167,7 +167,7 @@ export const FileTableRow = ({
                       : `No name (${file.headCid.slice(0, 12)})`}
                   </span>
                   <InternalLink
-                    href={getObjectDetailsPath(network.id, file.headCid)}
+                    href={ROUTES.objectDetails(network.id, file.headCid)}
                   >
                     <SquareArrowOutUpRight className='ml-2 h-4 w-4 transition-all duration-200 hover:scale-105' />
                   </InternalLink>

@@ -65,7 +65,7 @@ export const UploadedObjectInformation = ({
   }
 
   return (
-    <div className='flex flex-col gap-4'>
+    <div className='flex flex-grow flex-col gap-4'>
       <ObjectDownloadModal
         cid={downloadModalCid}
         onClose={() => setDownloadModalCid(null)}
@@ -192,7 +192,7 @@ export const UploadedObjectInformation = ({
         </div>
       </div>
       <span className='ml-2 text-xl font-semibold'>Preview</span>
-      <div className='flex w-full flex-col items-center'>
+      <div className='flex flex-grow'>
         <FilePreview metadata={object.metadata} />
       </div>
     </div>
