@@ -2,8 +2,11 @@ import { ObjectSummary } from '../../models/UploadedObjectMetadata';
 import bytes from 'bytes';
 import { getTypeFromMetadata } from '../../utils/file';
 import { InternalLink } from '../common/InternalLink';
+import { useNetwork } from '../../contexts/network';
+import { getObjectDetailsPath } from '../../views/ObjectDetails';
 
 export const Metadata = ({ object }: { object: ObjectSummary }) => {
+  const { network } = useNetwork();
   return (
     <div className='rounded-lg border border-[#202124] border-opacity-20 bg-white p-4 text-xs'>
       <div className='mb-4 flex flex-col'>
@@ -60,7 +63,7 @@ export const Metadata = ({ object }: { object: ObjectSummary }) => {
         </div>
       </div>
       <div className='flex justify-end'>
-        <InternalLink href={`/drive/metadata/${object.headCid}`}>
+        <InternalLink href={getObjectDetailsPath(network.id, object.headCid)}>
           <span className='mt-4 font-semibold text-primary hover:cursor-pointer'>
             See more
           </span>

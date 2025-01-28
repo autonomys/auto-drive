@@ -23,6 +23,8 @@ import { handleEnterOrSpace } from '../../../utils/eventHandler';
 import { SquareArrowOutUpRight } from 'lucide-react';
 import { InternalLink } from '../InternalLink';
 import { OwnerBadge } from './OwnerBadge';
+import { getObjectDetailsPath } from '../../../views/ObjectDetails';
+import { useNetwork } from '../../../contexts/network';
 
 export const FileTableRow = ({
   file,
@@ -46,6 +48,7 @@ export const FileTableRow = ({
   onRestoreFile: (cid: string) => void;
 }) => {
   const [isRowExpanded, setIsRowExpanded] = useState(false);
+  const { network } = useNetwork();
 
   const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN);
 
@@ -163,7 +166,9 @@ export const FileTableRow = ({
                       ? shortenString(file.name, 30)
                       : `No name (${file.headCid.slice(0, 12)})`}
                   </span>
-                  <InternalLink href={`/drive/metadata/${file.headCid}`}>
+                  <InternalLink
+                    href={getObjectDetailsPath(network.id, file.headCid)}
+                  >
                     <SquareArrowOutUpRight className='ml-2 h-4 w-4 transition-all duration-200 hover:scale-105' />
                   </InternalLink>
                 </PopoverButton>

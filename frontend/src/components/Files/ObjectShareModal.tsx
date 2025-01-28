@@ -14,6 +14,7 @@ import { Link } from 'lucide-react';
 import { isValidUUID } from '../../utils/misc';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
+import { getObjectDetailsPath } from '../../views/ObjectDetails';
 
 export const ObjectShareModal = ({
   cid,
@@ -67,11 +68,18 @@ export const ObjectShareModal = ({
   }, [metadata]);
 
   const copyLink = useCallback(() => {
+    if (!metadata?.metadata.dataCid) {
+      return;
+    }
+
     navigator.clipboard.writeText(
-      `${window.location.origin}/drive/metadata/${metadata?.metadata.dataCid}`,
+      `${window.location.origin}/${getObjectDetailsPath(
+        network.network.id,
+        metadata?.metadata.dataCid,
+      )}`,
     );
     toast.success('Link copied to clipboard');
-  }, [metadata?.metadata.dataCid]);
+  }, [metadata?.metadata.dataCid, network.network]);
 
   const invalidPublicId = useMemo(() => {
     return !isValidUUID(publicId);

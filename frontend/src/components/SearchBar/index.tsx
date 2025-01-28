@@ -16,6 +16,8 @@ import {
   SearchGlobalMetadataByCidOrNameQuery,
   SearchUserMetadataByCidOrNameQuery,
 } from '../../../gql/graphql';
+import { getSearchResultPath } from '../../views/SearchResult';
+import { useNetwork } from '../../contexts/network';
 
 export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   const [query, setQuery] = useState('');
@@ -28,6 +30,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
     ObjectSearchResult[] | null
   >(null);
   const router = useRouter();
+  const { network } = useNetwork();
 
   const gqlQuery =
     scope === 'global'
@@ -89,10 +92,10 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   const handleSelectItem = useCallback(
     (cid: string) => {
       setIsOpen(false);
-      router.push(`/drive/search/${cid}`);
+      router.push(getSearchResultPath(network.id, cid));
       inputRef.current?.focus();
     },
-    [router],
+    [network, router],
   );
 
   const handleKeyDown = useCallback(
@@ -102,10 +105,10 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
         recommendations &&
         recommendations.length > 0
       ) {
-        router.push(`/drive/search/${encodeURIComponent(query)}`);
+        router.push(getSearchResultPath(network.id, query));
       }
     },
-    [recommendations, query, router],
+    [recommendations, query, router, network],
   );
 
   const searchBarResult = useMemo(() => {
