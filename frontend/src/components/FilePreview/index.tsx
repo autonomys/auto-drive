@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { OffchainMetadata } from '@autonomys/auto-dag-data';
-import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
-import '@cyntler/react-doc-viewer/dist/index.css';
 import { simpleMimeType } from '../../utils/misc';
 import { useNetwork } from '../../contexts/network';
+import { Arguments } from '../common/Arguments';
+import { FolderPreview, NoPreviewAvailable } from './NoPreviewAvailable';
 
 const MAX_FILE_SIZE = BigInt(100 * 1024 * 1024); // 100 MB
 
@@ -56,49 +56,51 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
     }
   }, [metadata, isFilePreviewable, network.api]);
 
-  const documents = useMemo(() => {
+  const fileData = useMemo(() => {
     return (
-      file && [
-        {
-          uri: URL.createObjectURL(file),
-          fileName: metadata.name,
-          fileType: metadata.type === 'file' ? metadata.mimeType : undefined,
-        },
-      ]
+      file && {
+        uri: URL.createObjectURL(file),
+        fileName: metadata.name,
+        fileType: metadata.type === 'file' ? metadata.mimeType : undefined,
+      }
     );
   }, [file, metadata]);
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+  const preview = useMemo(() => {
+    if (loading) {
+      return <div>Loading...</div>;
+    }
 
-  if (error) {
-    return <div>Error: {error}</div>;
-  }
+    if (error) {
+      return <div>Error: {error}</div>;
+    }
 
-  const noRenderer = () => (
-    <div className='flex h-full items-center justify-center'>
-      <div className='text-center text-gray-500'>File is not previewable</div>
-    </div>
-  );
+    if (metadata.type === 'folder') {
+      return <FolderPreview metadata={metadata} />;
+    }
 
-  if (!isFilePreviewable) {
-    return noRenderer();
-  }
+    if (!isFilePreviewable || !fileData) {
+      return <NoPreviewAvailable />;
+    }
 
-  return (
-    <DocViewer
-      documents={documents ?? []}
-      pluginRenderers={DocViewerRenderers}
-      initialActiveDocument={documents?.[0]}
-      config={{
-        noRenderer: {
-          overrideComponent: noRenderer,
-        },
-        header: {
-          disableHeader: true,
-        },
-      }}
-    />
-  );
+    if (
+      metadata.type === 'file' &&
+      metadata.mimeType === 'application/json' &&
+      file
+    ) {
+      return <Arguments file={file} />;
+    }
+
+    return (
+      <object
+        className='h-[50vh] w-full rounded bg-gray-100'
+        data={fileData?.uri}
+        type={fileData?.fileType}
+        aria-label={fileData?.fileName}
+        title={fileData?.fileName}
+      />
+    );
+  }, [loading, error, metadata, file, isFilePreviewable, fileData]);
+
+  return preview;
 };
