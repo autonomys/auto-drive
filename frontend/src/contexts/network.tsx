@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo } from 'react';
+import { createContext, useContext, useEffect, useMemo } from 'react';
 import { Network } from '../constants/networks';
 import { Api, createApiService } from '../services/api';
 import {
@@ -12,6 +12,7 @@ import {
   DownloadApi as DownloadService,
 } from '../services/download';
 import { createUploadService, UploadService } from '../services/upload';
+import { useUserStore } from '../states/user';
 
 interface NetworkArtifact {
   network: Network;
@@ -33,8 +34,6 @@ export const NetworkProvider = ({
   network: Network;
 }) => {
   const api = useMemo(() => {
-    console.log('creating api service', network.http);
-
     return createApiService(network.http);
   }, [network]);
 
@@ -43,13 +42,20 @@ export const NetworkProvider = ({
   }, [network]);
 
   const downloadService = useMemo(() => {
-    console.log('creating download service', network.http);
     return createDownloadService(api);
-  }, [api, network.http]);
+  }, [api]);
 
   const uploadService = useMemo(() => {
     return createUploadService(network.http);
   }, [network.http]);
+
+  const setSubscription = useUserStore((e) => e.setSubscription);
+
+  useEffect(() => {
+    api.getSubscription().then((subscription) => {
+      setSubscription(subscription);
+    });
+  }, [api, setSubscription]);
 
   return (
     <NetworkContext.Provider
