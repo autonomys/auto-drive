@@ -7,11 +7,11 @@ import { dbMigration } from '../../utils/dbMigrate'
 import { SubscriptionsUseCases } from '../../../src/useCases'
 
 describe('CreditsUseCases', () => {
-  const mockUser: UserWithOrganization = createMockUser()
-
+  let mockUser: UserWithOrganization
   beforeAll(async () => {
     await getDatabase()
     await dbMigration.up()
+    mockUser = createMockUser()
     const result = await SubscriptionsUseCases.getOrCreateSubscription(mockUser)
     if (!result) throw new PreconditionError('Failed to setup test user')
   })
