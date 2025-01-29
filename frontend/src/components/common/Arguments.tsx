@@ -36,10 +36,7 @@ export const Arguments: FC<Props> = ({ file, collapseAtEntry = 5 }) => {
   }, [file]);
 
   return (
-    <div
-      data-testid='testJsonDisplay'
-      className='w-full rounded bg-gray-100 px-2 py-4'
-    >
+    <div data-testid='testJsonDisplay' className='w-full'>
       <ReactJson
         src={args || {}}
         iconStyle='circle'
