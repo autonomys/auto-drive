@@ -3,7 +3,7 @@ import { request } from 'https'
 
 const downloadFile = async (cid: string): Promise<AsyncIterable<Buffer>> => {
   const req = request(
-    `${config.filesGateway}/files/${cid}?api_key=${config.filesGatewayToken}`,
+    `${config.filesGateway}/files/${cid}?api_key=${config.filesGatewayToken}&raw=true`,
   )
 
   req.end()
