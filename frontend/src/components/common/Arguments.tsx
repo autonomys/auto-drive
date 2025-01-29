@@ -38,7 +38,7 @@ export const Arguments: FC<Props> = ({ file, collapseAtEntry = 5 }) => {
   return (
     <div
       data-testid='testJsonDisplay'
-      className='text-grayDark w-full dark:text-white'
+      className='w-full rounded bg-gray-100 px-2 py-4'
     >
       <ReactJson
         src={args || {}}
