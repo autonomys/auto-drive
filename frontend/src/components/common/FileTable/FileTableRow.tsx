@@ -296,6 +296,11 @@ export const FileTableRow = ({
                 >
                   {child.name ?? `No name (${child.cid.slice(0, 12)})`}
                 </span>
+                <InternalLink
+                  href={ROUTES.objectDetails(network.id, child.cid)}
+                >
+                  <SquareArrowOutUpRight className='ml-2 h-4 w-4 transition-all duration-200 hover:scale-105' />
+                </InternalLink>
               </div>
             </TableBodyCell>
             <TableBodyCell>
