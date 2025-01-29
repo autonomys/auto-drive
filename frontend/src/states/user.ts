@@ -11,7 +11,7 @@ interface UserStore {
   setUser: (user: UserInfo) => void;
   clearUser: () => void;
   updateUser: () => void;
-  updateSubscription: () => void;
+  setSubscription: (subcriptionInfo: SubscriptionInfo) => void;
 }
 
 export const useUserStore = create<UserStore>()(
@@ -31,9 +31,10 @@ export const useUserStore = create<UserStore>()(
           });
         });
       },
-      updateSubscription: () => {
-        // TODO: Implement
-      },
+      setSubscription: (subcriptionInfo: SubscriptionInfo) =>
+        set({
+          subscription: subcriptionInfo,
+        }),
     }),
     {
       name: 'user-dto-storage',
