@@ -12,6 +12,9 @@ export const GET_METADATA_BY_HEAD_CID = gql`
       }
     ) {
       metadata
+      published_objects {
+        id
+      }
       maximumBlockDepth: nodes(
         order_by: { transaction_result: { created_at: desc_nulls_first } }
         limit: 1

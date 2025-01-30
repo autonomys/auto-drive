@@ -192,7 +192,7 @@ export const UploadedObjectInformation = ({
         </div>
       </div>
       <span className='ml-2 text-xl font-semibold'>Preview</span>
-      <div className='flex flex-grow rounded bg-gray-100 px-2 py-4'>
+      <div className='flex flex-grow'>
         <FilePreview metadata={object.metadata} />
       </div>
     </div>

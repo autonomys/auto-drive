@@ -31,6 +31,9 @@ export const GET_USER_FILES = gql`
         mimeType: metadata(path: "mimeType")
         size: metadata(path: "totalSize")
         children: metadata(path: "children")
+        published_objects {
+          id
+        }
         maximumBlockDepth: nodes(
           order_by: { transaction_result: { created_at: desc_nulls_first } }
           limit: 1

@@ -5,16 +5,16 @@ import {
   Transition,
   TransitionChild,
 } from '@headlessui/react';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
 import { UploadedObjectMetadata } from '../../models/UploadedObjectMetadata';
 import { useNetwork } from '../../contexts/network';
 import { Button } from '../common/Button';
-import { Link } from 'lucide-react';
-import { isValidUUID } from '../../utils/misc';
+import { Download, Link } from 'lucide-react';
 import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
 import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
 import { ROUTES } from '../../constants/routes';
+import { networks } from '../../constants/networks';
 
 export const ObjectShareModal = ({
   cid,
@@ -25,7 +25,6 @@ export const ObjectShareModal = ({
 }) => {
   const network = useNetwork();
   const isOpen = cid !== null;
-  const [publicId, setPublicId] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
 
   useGetMetadataByHeadCidQuery({
@@ -41,33 +40,36 @@ export const ObjectShareModal = ({
     },
   });
 
-  const shareObject = useCallback(async () => {
-    if (!publicId) {
-      return;
-    }
-
+  const copyDownloadLink = useCallback(async () => {
     if (!metadata?.metadata.dataCid) {
+      toast.error('Some error occurred');
+      return;
+    }
+    const apiUrl = networks[network.network.id]?.http;
+    if (!apiUrl) {
+      toast.error('Some error occurred');
       return;
     }
 
-    await network.api
-      .shareObject(metadata?.metadata.dataCid, publicId)
-      .then(async () => {
-        toast.success('Object shared successfully');
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        closeModal();
-        window.location.reload();
-      })
-      .catch(() => {
-        toast.error('Failed to share object');
-      });
-  }, [publicId, metadata?.metadata.dataCid, network.api, closeModal]);
+    const toastId = toast.loading('Copying link to clipboard...');
+    let publicId = metadata.publishedObjectId;
+    if (!publicId) {
+      publicId = await network.api.publishObject(metadata.metadata.dataCid);
+    }
 
-  useEffect(() => {
-    setPublicId(null);
-  }, [metadata]);
+    navigator.clipboard.writeText(`${apiUrl}/objects/${publicId}/public`);
 
-  const copyLink = useCallback(() => {
+    toast.success('Link copied to clipboard', {
+      id: toastId,
+    });
+  }, [
+    metadata?.metadata.dataCid,
+    metadata?.publishedObjectId,
+    network.api,
+    network.network.id,
+  ]);
+
+  const copyDetailsLink = useCallback(() => {
     if (!metadata?.metadata.dataCid) {
       return;
     }
@@ -80,10 +82,6 @@ export const ObjectShareModal = ({
     );
     toast.success('Link copied to clipboard');
   }, [metadata?.metadata.dataCid, network.network]);
-
-  const invalidPublicId = useMemo(() => {
-    return !isValidUUID(publicId);
-  }, [publicId]);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -118,38 +116,30 @@ export const ObjectShareModal = ({
                 >
                   Share &quot;{metadata?.metadata.name}&quot;
                 </DialogTitle>
-                <div className='mt-2'>
-                  <p className='text-sm text-gray-500'>
-                    Enter the public ID of the user you want to share with.
+                <div className='mt-4 flex flex-col gap-2'>
+                  <p className='text-grey-100 rounded-md bg-amber-100 p-2 text-sm font-medium'>
+                    Be careful, downloads from this link would be deducted from
+                    your download credits.
                   </p>
+                  <div className='mt-4 flex justify-center gap-2'>
+                    <Button
+                      variant='lightAccent'
+                      className='flex items-center gap-2'
+                      onClick={copyDownloadLink}
+                    >
+                      <Download className='h-4 w-4' />
+                      Copy download link
+                    </Button>
+                    <Button
+                      variant='lightAccent'
+                      className='flex items-center gap-2'
+                      onClick={copyDetailsLink}
+                    >
+                      <Link className='h-4 w-4' />
+                      Copy details link
+                    </Button>
+                  </div>
                 </div>
-                <input
-                  className='w-full rounded-md border border-gray-300 p-2'
-                  value={publicId ?? ''}
-                  onChange={(e) => setPublicId(e.target.value)}
-                />
-                <div className='mt-4 flex justify-center gap-2'>
-                  <Button
-                    variant='lightAccent'
-                    className='flex items-center gap-2'
-                    onClick={copyLink}
-                  >
-                    <Link className='h-4 w-4' />
-                    Share link
-                  </Button>
-                  <Button
-                    variant='lightAccent'
-                    disabled={invalidPublicId}
-                    onClick={shareObject}
-                  >
-                    Share with public ID
-                  </Button>
-                </div>
-                {publicId && invalidPublicId && (
-                  <p className='mt-4 text-center text-sm text-red-500'>
-                    Invalid public ID.
-                  </p>
-                )}
               </DialogPanel>
             </TransitionChild>
           </div>

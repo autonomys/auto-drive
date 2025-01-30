@@ -4,6 +4,7 @@ export interface UploadedObjectMetadata {
   metadata: OffchainMetadata;
   uploadStatus: UploadStatus;
   owners: Owner[];
+  publishedObjectId: string | null;
 }
 
 export interface BaseMetadata {
@@ -38,6 +39,7 @@ export type ObjectSummary = {
   size: number;
   owners: Owner[];
   uploadStatus: UploadStatus;
+  publishedObjectId: string | null;
 } & (
   | {
       type: 'file';
