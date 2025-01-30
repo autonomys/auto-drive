@@ -33,6 +33,15 @@ const getByOrganizationId = async (
   return mapRows(result.rows)[0] || null
 }
 
+const getById = async (id: string): Promise<Subscription | null> => {
+  const db = await getDatabase()
+  const result = await db.query<DBSubscription>(
+    'SELECT * FROM subscriptions WHERE id = $1',
+    [id],
+  )
+  return mapRows(result.rows)[0] || null
+}
+
 const createSubscription = async (
   id: string,
   organizationId: string,
@@ -66,4 +75,5 @@ export const subscriptionsRepository = {
   getByOrganizationId,
   createSubscription,
   updateSubscription,
+  getById,
 }

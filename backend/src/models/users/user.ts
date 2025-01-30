@@ -27,32 +27,8 @@ export type OnboardedUser = UserBase & {
   onboarded: true
 }
 
-export type UnonboardedUser = UserBase & {
-  publicId: null
-  onboarded: false
-}
-
-export type User = OnboardedUser | UnonboardedUser
+export type User = OnboardedUser
 
 export type UserWithOrganization = User & {
   organizationId: Organization['id']
-}
-
-export const userFromOAuth = (
-  user: Omit<User, 'onboarded' | 'publicId'>,
-): UnonboardedUser => {
-  return {
-    ...user,
-    publicId: null,
-    onboarded: false,
-  }
-}
-
-export const userFromTable = (
-  user: Omit<OnboardedUser, 'onboarded'>,
-): OnboardedUser => {
-  return {
-    ...user,
-    onboarded: true,
-  }
 }

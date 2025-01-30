@@ -29,6 +29,7 @@ import {
 } from '../../utils/async.js'
 import { downloadService } from '../../services/download/index.js'
 import { FileGateway } from '../../services/dsn/fileGateway/index.js'
+import { FileDownload } from '../../models/objects/object.js'
 
 const generateFileArtifacts = async (
   uploadId: string,
@@ -213,7 +214,7 @@ const retrieveAndReassembleFolderAsZip = async (
 const downloadObject = async (
   reader: UserWithOrganization,
   cid: string,
-): Promise<AwaitIterable<Buffer>> => {
+): Promise<FileDownload> => {
   const metadata = await ObjectUseCases.getMetadata(cid)
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`)
@@ -229,15 +230,20 @@ const downloadObject = async (
     throw new Error('Not enough download credits')
   }
 
-  const download = await downloadService.download(cid)
+  return {
+    metadata,
+    startDownload: async () => {
+      await SubscriptionsUseCases.registerInteraction(
+        reader,
+        InteractionType.Download,
+        metadata.totalSize,
+      )
 
-  await SubscriptionsUseCases.registerInteraction(
-    reader,
-    InteractionType.Download,
-    metadata.totalSize,
-  )
+      const download = await downloadService.download(cid)
 
-  return download
+      return download
+    },
+  }
 }
 
 const handleFileUploadFinalization = async (

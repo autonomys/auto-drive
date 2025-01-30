@@ -203,16 +203,17 @@ objectController.get(
         return
       }
 
-      const metadata = await ObjectUseCases.getMetadata(cid)
+      logger.info(`Attempting to retrieve data for metadataCid: ${cid}`)
+      const { metadata, startDownload } = await FilesUseCases.downloadObject(
+        user,
+        cid,
+      )
       if (!metadata) {
         res.status(404).json({
           error: 'Metadata not found',
         })
         return
       }
-
-      logger.info(`Attempting to retrieve data for metadataCid: ${cid}`)
-      const data = await FilesUseCases.downloadObject(user, cid)
 
       const safeName = encodeURIComponent(metadata.name || 'download')
 
@@ -225,7 +226,7 @@ objectController.get(
         res.set('Content-Disposition', `attachment; filename="${safeName}.zip"`)
       }
 
-      pipeline(data, res, (err) => {
+      pipeline(await startDownload(), res, (err) => {
         if (err) {
           if (res.headersSent) return
           console.error('Error streaming data:', err)
@@ -308,6 +309,88 @@ objectController.get(
     }
 
     res.json(objectInformation)
+  }),
+)
+
+objectController.post(
+  '/:cid/publish',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const publishedObject = await ObjectUseCases.publishObject(user, cid)
+
+    res.json({ result: publishedObject.id })
+  }),
+)
+
+objectController.get(
+  '/:id/public',
+  asyncSafeHandler(async (req, res) => {
+    try {
+      const { id } = req.params
+
+      const user = await handleAuth(req, res)
+      if (!user) {
+        return
+      }
+
+      const { metadata, startDownload } =
+        await ObjectUseCases.downloadPublishedObject(id)
+      if (!metadata) {
+        res.status(404).json({
+          error: 'Published object not found',
+        })
+        return
+      }
+
+      const safeName = encodeURIComponent(metadata.name || 'download')
+      if (metadata.type === 'file') {
+        res.set('Content-Type', metadata.mimeType || 'application/octet-stream')
+        res.set('Content-Disposition', `attachment; filename="${safeName}"`)
+        res.set('Content-Length', metadata.totalSize.toString())
+      } else {
+        res.set('Content-Type', 'application/zip')
+        res.set('Content-Disposition', `attachment; filename="${safeName}.zip"`)
+      }
+
+      pipeline(await startDownload(), res, (err) => {
+        if (err) {
+          if (res.headersSent) return
+          console.error('Error streaming data:', err)
+          res.status(500).json({
+            error: 'Failed to stream data',
+            details: err.message,
+          })
+        }
+      })
+    } catch (error: unknown) {
+      console.error('Error retrieving data:', error)
+      res.status(500).json({
+        error: 'Failed to retrieve data',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }),
+)
+
+objectController.post(
+  '/:cid/unpublish',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    await ObjectUseCases.unpublishObject(user, cid)
+
+    res.sendStatus(204)
   }),
 )
 

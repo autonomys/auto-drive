@@ -1,4 +1,5 @@
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
+import { AwaitIterable } from 'interface-store'
 
 export interface ObjectInformation {
   cid: string
@@ -70,4 +71,9 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
         uploadStatus: object.uploadStatus,
         owners: object.owners,
       }
+}
+
+export interface FileDownload {
+  metadata: OffchainMetadata
+  startDownload: () => Promise<AwaitIterable<Buffer>>
 }
