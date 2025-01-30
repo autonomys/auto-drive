@@ -13,7 +13,6 @@ import {
 import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholder';
 import { useGetMyFilesQuery } from '../../../gql/graphql';
 import { useSession } from 'next-auth/react';
-import { objectSummaryFromSharedFilesQuery } from '../SharedFiles/utils';
 import { objectSummaryFromUserFilesQuery } from './utils';
 
 export const UserFiles = () => {
