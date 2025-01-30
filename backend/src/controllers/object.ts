@@ -348,6 +348,12 @@ objectController.get(
         res.set('Content-Type', metadata.mimeType || 'application/octet-stream')
         res.set('Content-Disposition', `attachment; filename="${safeName}"`)
         res.set('Content-Length', metadata.totalSize.toString())
+        const compressedButNoEncrypted =
+          metadata.uploadOptions?.compression &&
+          !metadata.uploadOptions?.encryption
+        if (compressedButNoEncrypted) {
+          res.set('Content-Encoding', 'deflate')
+        }
       } else {
         res.set('Content-Type', 'application/zip')
         res.set('Content-Disposition', `attachment; filename="${safeName}.zip"`)
