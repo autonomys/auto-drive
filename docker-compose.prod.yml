@@ -76,3 +76,18 @@ services:
       interval: 15s
       timeout: 10s
       retries: 3
+  agent:
+    container_name: newrelic-infra
+    image: newrelic/infrastructure:latest
+    cap_add:
+      - SYS_PTRACE
+    network_mode: bridge
+    pid: host
+    privileged: true
+    volumes:
+      - "/:/host:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      NRIA_LICENSE_KEY: "${NR_API_KEY}"
+      NRIA_DISPLAY_NAME: "${NR_AGENT_IDENTIFIER}"
+    restart: unless-stopped
