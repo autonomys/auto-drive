@@ -334,11 +334,6 @@ objectController.get(
     try {
       const { id } = req.params
 
-      const user = await handleAuth(req, res)
-      if (!user) {
-        return
-      }
-
       const { metadata, startDownload } =
         await ObjectUseCases.downloadPublishedObject(id)
       if (!metadata) {
@@ -351,11 +346,17 @@ objectController.get(
       const safeName = encodeURIComponent(metadata.name || 'download')
       if (metadata.type === 'file') {
         res.set('Content-Type', metadata.mimeType || 'application/octet-stream')
-        res.set('Content-Disposition', `attachment; filename="${safeName}"`)
+        res.set('Content-Disposition', `filename="${safeName}"`)
         res.set('Content-Length', metadata.totalSize.toString())
+        const compressedButNoEncrypted =
+          metadata.uploadOptions?.compression &&
+          !metadata.uploadOptions?.encryption
+        if (compressedButNoEncrypted) {
+          res.set('Content-Encoding', 'deflate')
+        }
       } else {
         res.set('Content-Type', 'application/zip')
-        res.set('Content-Disposition', `attachment; filename="${safeName}.zip"`)
+        res.set('Content-Disposition', `filename="${safeName}.zip"`)
       }
 
       pipeline(await startDownload(), res, (err) => {
