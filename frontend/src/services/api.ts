@@ -193,4 +193,24 @@ export const createApiService = (apiBaseUrl: string) => ({
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
+  publishObject: async (cid: string): Promise<string> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/objects/${cid}/publish`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json().then((data) => data.result);
+  },
 });

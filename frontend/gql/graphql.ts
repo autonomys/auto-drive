@@ -467,6 +467,8 @@ export type Metadata = {
   object_ownership: Array<Object_Ownership>;
   /** An aggregate relationship */
   object_ownership_aggregate: Object_Ownership_Aggregate;
+  /** An object relationship */
+  published_objects?: Maybe<Published_Objects>;
   root_cid: Scalars['String']['output'];
   /** An object relationship */
   root_metadata?: Maybe<Metadata>;
@@ -595,6 +597,7 @@ export type Metadata_Bool_Exp = {
   nodes_aggregate?: InputMaybe<Nodes_Aggregate_Bool_Exp>;
   object_ownership?: InputMaybe<Object_Ownership_Bool_Exp>;
   object_ownership_aggregate?: InputMaybe<Object_Ownership_Aggregate_Bool_Exp>;
+  published_objects?: InputMaybe<Published_Objects_Bool_Exp>;
   root_cid?: InputMaybe<String_Comparison_Exp>;
   root_metadata?: InputMaybe<Metadata_Bool_Exp>;
   updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
@@ -648,6 +651,7 @@ export type Metadata_Order_By = {
   name?: InputMaybe<Order_By>;
   nodes_aggregate?: InputMaybe<Nodes_Aggregate_Order_By>;
   object_ownership_aggregate?: InputMaybe<Object_Ownership_Aggregate_Order_By>;
+  published_objects?: InputMaybe<Published_Objects_Order_By>;
   root_cid?: InputMaybe<Order_By>;
   root_metadata?: InputMaybe<Metadata_Order_By>;
   updated_at?: InputMaybe<Order_By>;
@@ -1306,6 +1310,110 @@ export type Organizations_Stream_Cursor_Value_Input = {
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
 
+/** columns and relationships of "published_objects" */
+export type Published_Objects = {
+  __typename?: 'published_objects';
+  cid: Scalars['String']['output'];
+  created_at: Scalars['timestamp']['output'];
+  id: Scalars['String']['output'];
+  public_id: Scalars['String']['output'];
+  updated_at: Scalars['timestamp']['output'];
+};
+
+/** aggregated selection of "published_objects" */
+export type Published_Objects_Aggregate = {
+  __typename?: 'published_objects_aggregate';
+  aggregate?: Maybe<Published_Objects_Aggregate_Fields>;
+  nodes: Array<Published_Objects>;
+};
+
+/** aggregate fields of "published_objects" */
+export type Published_Objects_Aggregate_Fields = {
+  __typename?: 'published_objects_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Published_Objects_Max_Fields>;
+  min?: Maybe<Published_Objects_Min_Fields>;
+};
+
+
+/** aggregate fields of "published_objects" */
+export type Published_Objects_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Published_Objects_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** Boolean expression to filter rows from the table "published_objects". All fields are combined with a logical 'AND'. */
+export type Published_Objects_Bool_Exp = {
+  _and?: InputMaybe<Array<Published_Objects_Bool_Exp>>;
+  _not?: InputMaybe<Published_Objects_Bool_Exp>;
+  _or?: InputMaybe<Array<Published_Objects_Bool_Exp>>;
+  cid?: InputMaybe<String_Comparison_Exp>;
+  created_at?: InputMaybe<Timestamp_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  public_id?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
+};
+
+/** aggregate max on columns */
+export type Published_Objects_Max_Fields = {
+  __typename?: 'published_objects_max_fields';
+  cid?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  public_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamp']['output']>;
+};
+
+/** aggregate min on columns */
+export type Published_Objects_Min_Fields = {
+  __typename?: 'published_objects_min_fields';
+  cid?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  public_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamp']['output']>;
+};
+
+/** Ordering options when selecting data from "published_objects". */
+export type Published_Objects_Order_By = {
+  cid?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  public_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** select columns of table "published_objects" */
+export enum Published_Objects_Select_Column {
+  /** column name */
+  Cid = 'cid',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  PublicId = 'public_id',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+/** Streaming cursor of the table "published_objects" */
+export type Published_Objects_Stream_Cursor_Input = {
+  /** Stream column input with initial value */
+  initial_value: Published_Objects_Stream_Cursor_Value_Input;
+  /** cursor ordering */
+  ordering?: InputMaybe<Cursor_Ordering>;
+};
+
+/** Initial value of the column from where the streaming should start */
+export type Published_Objects_Stream_Cursor_Value_Input = {
+  cid?: InputMaybe<Scalars['String']['input']>;
+  created_at?: InputMaybe<Scalars['timestamp']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  public_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
+};
+
 export type Query_Root = {
   __typename?: 'query_root';
   /** An array relationship */
@@ -1342,6 +1450,12 @@ export type Query_Root = {
   organizations_aggregate: Organizations_Aggregate;
   /** fetch data from the table: "organizations" using primary key columns */
   organizations_by_pk?: Maybe<Organizations>;
+  /** fetch data from the table: "published_objects" */
+  published_objects: Array<Published_Objects>;
+  /** fetch aggregated fields from the table: "published_objects" */
+  published_objects_aggregate: Published_Objects_Aggregate;
+  /** fetch data from the table: "published_objects" using primary key columns */
+  published_objects_by_pk?: Maybe<Published_Objects>;
   /** fetch data from the table: "subscriptions" */
   subscriptions: Array<Subscriptions>;
   /** fetch aggregated fields from the table: "subscriptions" */
@@ -1503,6 +1617,29 @@ export type Query_RootOrganizations_By_PkArgs = {
 };
 
 
+export type Query_RootPublished_ObjectsArgs = {
+  distinct_on?: InputMaybe<Array<Published_Objects_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Published_Objects_Order_By>>;
+  where?: InputMaybe<Published_Objects_Bool_Exp>;
+};
+
+
+export type Query_RootPublished_Objects_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Published_Objects_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Published_Objects_Order_By>>;
+  where?: InputMaybe<Published_Objects_Bool_Exp>;
+};
+
+
+export type Query_RootPublished_Objects_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type Query_RootSubscriptionsArgs = {
   distinct_on?: InputMaybe<Array<Subscriptions_Select_Column>>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -1638,6 +1775,14 @@ export type Subscription_Root = {
   organizations_by_pk?: Maybe<Organizations>;
   /** fetch data from the table in a streaming manner: "organizations" */
   organizations_stream: Array<Organizations>;
+  /** fetch data from the table: "published_objects" */
+  published_objects: Array<Published_Objects>;
+  /** fetch aggregated fields from the table: "published_objects" */
+  published_objects_aggregate: Published_Objects_Aggregate;
+  /** fetch data from the table: "published_objects" using primary key columns */
+  published_objects_by_pk?: Maybe<Published_Objects>;
+  /** fetch data from the table in a streaming manner: "published_objects" */
+  published_objects_stream: Array<Published_Objects>;
   /** fetch data from the table: "subscriptions" */
   subscriptions: Array<Subscriptions>;
   /** fetch aggregated fields from the table: "subscriptions" */
@@ -1846,6 +1991,36 @@ export type Subscription_RootOrganizations_StreamArgs = {
   batch_size: Scalars['Int']['input'];
   cursor: Array<InputMaybe<Organizations_Stream_Cursor_Input>>;
   where?: InputMaybe<Organizations_Bool_Exp>;
+};
+
+
+export type Subscription_RootPublished_ObjectsArgs = {
+  distinct_on?: InputMaybe<Array<Published_Objects_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Published_Objects_Order_By>>;
+  where?: InputMaybe<Published_Objects_Bool_Exp>;
+};
+
+
+export type Subscription_RootPublished_Objects_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Published_Objects_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Published_Objects_Order_By>>;
+  where?: InputMaybe<Published_Objects_Bool_Exp>;
+};
+
+
+export type Subscription_RootPublished_Objects_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootPublished_Objects_StreamArgs = {
+  batch_size: Scalars['Int']['input'];
+  cursor: Array<InputMaybe<Published_Objects_Stream_Cursor_Input>>;
+  where?: InputMaybe<Published_Objects_Bool_Exp>;
 };
 
 
@@ -2586,7 +2761,7 @@ export type GetMetadataByHeadCidQueryVariables = Exact<{
 }>;
 
 
-export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
+export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
 
 export type SearchGlobalMetadataByCidOrNameQueryVariables = Exact<{
   search: Scalars['String']['input'];
@@ -2652,7 +2827,7 @@ export type GetMyFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetMyFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
+export type GetMyFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
 
 
 export const GetMetadataByHeadCidDocument = gql`
@@ -2662,6 +2837,9 @@ export const GetMetadataByHeadCidDocument = gql`
     where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
   ) {
     metadata
+    published_objects {
+      id
+    }
     maximumBlockDepth: nodes(
       order_by: {transaction_result: {created_at: desc_nulls_first}}
       limit: 1
@@ -3249,6 +3427,9 @@ export const GetMyFilesDocument = gql`
       mimeType: metadata(path: "mimeType")
       size: metadata(path: "totalSize")
       children: metadata(path: "children")
+      published_objects {
+        id
+      }
       maximumBlockDepth: nodes(
         order_by: {transaction_result: {created_at: desc_nulls_first}}
         limit: 1

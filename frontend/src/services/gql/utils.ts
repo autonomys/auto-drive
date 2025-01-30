@@ -32,6 +32,7 @@ export const mapObjectInformationFromQueryResult = (
       oauthProvider: owner.oauth_provider ?? '',
       oauthUserId: owner.oauth_user_id ?? '',
     })),
+    publishedObjectId: metadata.published_objects?.id ?? null,
   };
 };
 

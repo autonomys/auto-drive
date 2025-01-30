@@ -14,6 +14,7 @@ import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholde
 import { useGetMyFilesQuery } from '../../../gql/graphql';
 import { useSession } from 'next-auth/react';
 import { objectSummaryFromSharedFilesQuery } from '../SharedFiles/utils';
+import { objectSummaryFromUserFilesQuery } from './utils';
 
 export const UserFiles = () => {
   const [pageSize, setPageSize] = useState(5);
@@ -51,8 +52,9 @@ export const UserFiles = () => {
 
   useEffect(() => {
     if (data) {
+      console.log(data);
       updateResult({
-        rows: objectSummaryFromSharedFilesQuery(data),
+        rows: objectSummaryFromUserFilesQuery(data),
         totalCount: data.metadata_aggregate.aggregate?.count ?? 0,
       });
     }
