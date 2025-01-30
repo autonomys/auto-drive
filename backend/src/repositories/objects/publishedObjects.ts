@@ -8,7 +8,7 @@ type DBPublishedObject = {
   updated_at: string
 }
 
-type PublishedObject = {
+export type PublishedObject = {
   id: string
   publicId: string
   cid: string
