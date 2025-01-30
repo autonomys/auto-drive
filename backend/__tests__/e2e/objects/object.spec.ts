@@ -171,21 +171,27 @@ describe('Object', () => {
     ])
   })
 
+  const sharedWithUser = createMockUser()
   describe('Share object', () => {
     let randomFile: string
     it('should be able to share object', async () => {
       const mockUser = createMockUser()
-      randomFile = await uploadFile(mockUser, 'test.txt', 'test', 'text/plain')
+      randomFile = await uploadFile(
+        mockUser,
+        'test.txt',
+        Buffer.from(Math.random().toString()),
+        'text/plain',
+      )
 
       jest
         .spyOn(AuthManager, 'getUserFromPublicId')
-        .mockResolvedValueOnce(createMockUser())
+        .mockResolvedValueOnce(sharedWithUser)
 
       await expect(
         ObjectUseCases.shareObject(mockUser, randomFile, user.publicId!),
       ).resolves.not.toThrow()
 
-      const sharedRoots = await ObjectUseCases.getSharedRoots(user)
+      const sharedRoots = await ObjectUseCases.getSharedRoots(sharedWithUser)
       expect(sharedRoots.rows).toMatchObject([
         {
           headCid: randomFile,
@@ -195,21 +201,21 @@ describe('Object', () => {
 
     it('should be able to delete shared object', async () => {
       await expect(
-        ObjectUseCases.markAsDeleted(user, randomFile),
+        ObjectUseCases.markAsDeleted(sharedWithUser, randomFile),
       ).resolves.not.toThrow()
     })
 
     it('should not be listed in shared objects', async () => {
-      const sharedRoots = await ObjectUseCases.getSharedRoots(user)
+      const sharedRoots = await ObjectUseCases.getSharedRoots(sharedWithUser)
       expect(sharedRoots.rows).toMatchObject([])
     })
 
     it('should be able to restore shared object', async () => {
       await expect(
-        ObjectUseCases.restoreObject(user, randomFile),
+        ObjectUseCases.restoreObject(sharedWithUser, randomFile),
       ).resolves.not.toThrow()
 
-      const sharedRoots = await ObjectUseCases.getSharedRoots(user)
+      const sharedRoots = await ObjectUseCases.getSharedRoots(sharedWithUser)
       expect(sharedRoots.rows).toMatchObject([
         {
           headCid: randomFile,

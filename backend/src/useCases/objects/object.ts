@@ -1,5 +1,5 @@
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
-import { User } from '../../models/users/index.js'
+import { User, UserWithOrganization } from '../../models/users/index.js'
 import {
   getObjectSummary,
   ObjectInformation,
@@ -17,6 +17,9 @@ import { UploadStatusUseCases } from './uploadStatus.js'
 import { MetadataEntry } from '../../repositories/objects/metadata.js'
 import { PaginatedResult } from './common.js'
 import { AuthManager } from '../../services/auth/index.js'
+import { publishedObjectsRepository } from '../../repositories/objects/publishedObjects.js'
+import { v4 } from 'uuid'
+import { FilesUseCases } from './files.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -300,6 +303,51 @@ const markAsArchived = async (cid: string) => {
   await nodesRepository.removeNodesByHeadCid(cid)
 }
 
+const publishObject = async (user: UserWithOrganization, cid: string) => {
+  const objects = await publishedObjectsRepository.getPublishedObjectById(cid)
+  if (objects) {
+    return objects
+  }
+
+  const publishedObject =
+    await publishedObjectsRepository.createPublishedObject(
+      v4(),
+      user.publicId,
+      cid,
+    )
+
+  return publishedObject
+}
+
+const downloadPublishedObject = async (id: string) => {
+  const publishedObject =
+    await publishedObjectsRepository.getPublishedObjectById(id)
+  if (!publishedObject) {
+    throw new Error('Published object not found')
+  }
+
+  const user = await AuthManager.getUserFromPublicId(publishedObject.publicId)
+  if (!user) {
+    throw new Error('User does not have a subscription')
+  }
+
+  return FilesUseCases.downloadObject(user, publishedObject.cid)
+}
+
+const unpublishObject = async (user: User, cid: string) => {
+  const publishedObject =
+    await publishedObjectsRepository.getPublishedObjectById(cid)
+  if (!publishedObject) {
+    return
+  }
+
+  if (publishedObject.publicId !== user.publicId) {
+    throw new Error('User does not have access to this object')
+  }
+
+  await publishedObjectsRepository.deletePublishedObject(cid)
+}
+
 export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
@@ -318,4 +366,7 @@ export const ObjectUseCases = {
   hasAllNodesArchived,
   getNonArchivedObjects,
   markAsArchived,
+  publishObject,
+  downloadPublishedObject,
+  unpublishObject,
 }

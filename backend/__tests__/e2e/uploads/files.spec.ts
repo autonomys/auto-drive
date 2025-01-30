@@ -203,8 +203,10 @@ files.map((file, index) => {
 
     describe('Downloading the file', () => {
       it('should be able to retrieve the file', async () => {
-        const file = await FilesUseCases.downloadObject(user, cid)
-        const fileArray = await asyncIterableToPromiseOfArray(file)
+        const { startDownload } = await FilesUseCases.downloadObject(user, cid)
+        const fileArray = await asyncIterableToPromiseOfArray(
+          await startDownload(),
+        )
         const fileBuffer = Buffer.concat(fileArray)
         expect(fileBuffer).toEqual(rndBuffer)
       })

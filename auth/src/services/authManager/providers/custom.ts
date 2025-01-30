@@ -63,6 +63,7 @@ const createAccessToken = async (
       "x-hasura-organization-id": userInfo?.onboarded
         ? userInfo.organizationId
         : "none",
+      "x-hasura-public-id": userInfo?.publicId ?? "none",
     },
   };
 

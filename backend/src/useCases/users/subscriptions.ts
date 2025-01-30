@@ -57,6 +57,12 @@ const getOrCreateSubscription = async (
   return subscription
 }
 
+const getSubscriptionById = async (
+  id: string,
+): Promise<Subscription | null> => {
+  return subscriptionsRepository.getById(id)
+}
+
 const initSubscription = async (
   organizationId: string,
 ): Promise<Subscription> => {
@@ -178,4 +184,5 @@ export const SubscriptionsUseCases = {
   getPendingCreditsByUserAndType,
   registerInteraction,
   getUserListSubscriptions,
+  getSubscriptionById,
 }

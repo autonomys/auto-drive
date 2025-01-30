@@ -33,6 +33,15 @@ object_relationships:
         remote_table:
           name: nodes
           schema: public
+object_relationships:
+  - name: published_objects
+    using:
+      manual_configuration:
+        column_mapping:
+          head_cid: cid
+        remote_table:
+          name: published_objects
+          schema: public
 array_relationships:
   - name: nodes
     using:
