@@ -33,7 +33,6 @@ object_relationships:
         remote_table:
           name: nodes
           schema: public
-object_relationships:
   - name: published_objects
     using:
       manual_configuration:
