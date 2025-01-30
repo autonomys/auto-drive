@@ -1,10 +1,11 @@
 volumes:
-  postgres_volume:
+  node-data: {}
+  postgres_data: {}
 
 services:
   postgres:
     image: postgres:latest
-    container_name: postgres_db
+    container_name: auto_drive_postgres_db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -12,16 +13,17 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - postgres_volume:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
   backend:
-    depends_on:
-      postgres:
-        condition: service_healthy
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
       RPC_ENDPOINT: ${RPC_ENDPOINT}
@@ -32,24 +34,74 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       FILES_GATEWAY_URL: ${FILES_GATEWAY_URL}
       FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}
-      AUTH_SERVICE_URL: http://auth:3030
-      AUTH_SERVICE_API_KEY: ${API_SECRET}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
+      AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}
     ports:
-      - "127.0.0.1:3000:3000"
+      - "${PORT}:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 20s
+      timeout: 2s
+      retries: 3
   hasura:
+    image: hasura/graphql-engine:v2.40.0
     depends_on:
       backend:
         condition: service_healthy
+    volumes:
+      - ./hasura/metadata:/hasura-metadata
+    restart: unless-stopped
     environment:
+      # Essential Environment Variables
       HASURA_GRAPHQL_METADATA_DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
       HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET} # Admin access secret
+      HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET} # JWT authentication secret
+
+      # Console and Development Mode
+      HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE} # Disable console in production
+      HASURA_GRAPHQL_DEV_MODE: "true" # Disable development mode features
+
+      # Role and CORS Settings
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: user # Default role for unauthenticated users
+      HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN} # Allowed domains for CORS
+      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: "true"
+
+      # Performance and Connection Settings
+      HASURA_GRAPHQL_MAX_CONNECTIONS: 100 # Maximum number of database connections
+      HASURA_GRAPHQL_STRIPES: 2 # Number of connection pool stripes
+      HASURA_GRAPHQL_CONNECTIONS_PER_STRIPE: 50 # Connections per stripe
+      HASURA_GRAPHQL_IDLE_TIMEOUT: 180 # Idle connection timeout in seconds
+      HASURA_GRAPHQL_TIMEOUT: 60 # Request timeout in seconds
+
+      # Logging Settings
+      HASURA_GRAPHQL_LOG_LEVEL: "warn" # Log verbosity level
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: "startup,http-log,webhook-log,websocket-log,query-log" # Enabled log types
+
+      # Security and Authorization
+      HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false" # Disable query allowlisting
+
+      # Hasura Migrations and Metadata
+      HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
+    ports:
+      - "${HASURA_GRAPHQL_PORT}:8080"
+    command:
+      - graphql-engine
+      - serve
   auth:
+    build:
+      context: ./auth
+      dockerfile: Dockerfile
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+    ports:
+      - "${AUTH_PORT}:3030"
     environment:
       - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
       - AUTH_PORT=${AUTH_PORT}
       - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET_ALGORITHM=${JWT_SECRET_ALGORITHM}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
       - API_SECRET=${API_SECRET}

@@ -69,8 +69,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       FILES_GATEWAY_URL: ${FILES_GATEWAY_URL}
       FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
+      AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 5
+      retries: 3

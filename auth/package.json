@@ -12,6 +12,7 @@
     "lambda:build": "yarn build && esbuild src/lambda.ts --bundle --platform=node --target=node18 --outfile=build/index.js"
   },
   "dependencies": {
+    "@aws-sdk/dsql-signer": "^3.734.0",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/pg": "^8.11.10",

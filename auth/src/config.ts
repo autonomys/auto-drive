@@ -11,5 +11,6 @@ export const config = {
   },
   corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS,
   jwtSecret: env("JWT_SECRET"),
+  jwtSecretAlgorithm: env("JWT_SECRET_ALGORITHM", "RS256"),
   apiSecret: env("API_SECRET"),
 };

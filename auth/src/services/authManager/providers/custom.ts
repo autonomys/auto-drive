@@ -1,6 +1,5 @@
 import jwt from "jsonwebtoken";
 import { OAuthUser, UserRole } from "../../../models/index";
-import { createPrivateKey } from "crypto";
 import {
   CustomAccessTokenPayload,
   CustomRefreshTokenPayload,
@@ -12,12 +11,13 @@ import { UsersUseCases } from "../../../useCases/index";
 import { config } from "../../../config";
 
 const JWT_SECRET = Buffer.from(config.jwtSecret, "base64").toString("utf-8");
+const JWT_SECRET_ALGORITHM = config.jwtSecretAlgorithm as jwt.Algorithm;
 
 const getUserFromAccessToken = async (
   accessToken: string
 ): Promise<OAuthUser> => {
   const decoded = jwt.verify(accessToken, JWT_SECRET, {
-    algorithms: ["RS256"],
+    algorithms: [JWT_SECRET_ALGORITHM],
   }) as CustomAccessTokenPayload;
   if (typeof decoded === "string") {
     throw new Error("Invalid access token");
@@ -68,7 +68,7 @@ const createAccessToken = async (
 
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: "1h",
-    algorithm: "RS256",
+    algorithm: JWT_SECRET_ALGORITHM,
   });
 };
 
@@ -84,7 +84,7 @@ const createRefreshToken = async (user: OAuthUser) => {
 
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: "7d",
-    algorithm: "RS256",
+    algorithm: JWT_SECRET_ALGORITHM,
   });
 };
 
@@ -106,7 +106,7 @@ const getUserFromRefreshToken = async (
   refreshToken: string
 ): Promise<OAuthUser> => {
   const decoded = jwt.verify(refreshToken, JWT_SECRET, {
-    algorithms: ["RS256"],
+    algorithms: [JWT_SECRET_ALGORITHM],
   }) as CustomAccessTokenPayload;
   if (typeof decoded === "string") {
     throw new Error("Invalid refresh token");
@@ -130,7 +130,7 @@ const getUserFromRefreshToken = async (
 
 const refreshAccessToken = async (refreshToken: string): Promise<string> => {
   const decoded = jwt.verify(refreshToken, JWT_SECRET, {
-    algorithms: ["RS256"],
+    algorithms: [JWT_SECRET_ALGORITHM],
   }) as CustomRefreshTokenPayload;
   if (typeof decoded === "string") {
     throw new Error("Invalid refresh token");
@@ -143,7 +143,7 @@ const refreshAccessToken = async (refreshToken: string): Promise<string> => {
 
 const invalidateRefreshToken = async (refreshOrAccessToken: string) => {
   const decoded = jwt.verify(refreshOrAccessToken, JWT_SECRET, {
-    algorithms: ["RS256"],
+    algorithms: [JWT_SECRET_ALGORITHM],
   }) as CustomTokenPayload;
 
   if (typeof decoded === "string") {
