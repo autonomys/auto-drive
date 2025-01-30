@@ -334,11 +334,6 @@ objectController.get(
     try {
       const { id } = req.params
 
-      const user = await handleAuth(req, res)
-      if (!user) {
-        return
-      }
-
       const { metadata, startDownload } =
         await ObjectUseCases.downloadPublishedObject(id)
       if (!metadata) {
