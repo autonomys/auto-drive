@@ -94,7 +94,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
 
     return (
       <object
-        className='h-[50vh] w-full rounded bg-gray-100'
+        className='h-[50vh] w-full'
         data={fileData?.uri}
         type={fileData?.fileType}
         aria-label={fileData?.fileName}
