@@ -1,0 +1,15 @@
+table:
+  name: published_objects
+  schema: public
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - public_id
+        - cid
+        - created_at
+        - updated_at
+      filter: { public_id: { _eq: "X-Hasura-Public-Id" } }
+      allow_aggregations: true
+    comment: ""
