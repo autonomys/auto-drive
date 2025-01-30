@@ -71,6 +71,7 @@ services:
       FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
       AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}
+      ACCEPT_UNAUTHORIZED_CERTS: ${ACCEPT_UNAUTHORIZED_CERTS}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 15s
