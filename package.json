@@ -1,0 +1,14 @@
+{
+  "name": "auto-drive",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/autonomys/auto-drive.git",
+  "author": "Autonomys Network",
+  "license": "MIT",
+  "scripts": {
+    "build:backend": "cd backend && yarn && yarn build && cd -",
+    "build:frontend": "cd frontend && yarn && yarn build && cd -",
+    "build:auth": "cd auth && yarn && yarn build && cd -",
+    "build": "yarn build:backend && yarn build:frontend && yarn build:auth"
+  }
+}
