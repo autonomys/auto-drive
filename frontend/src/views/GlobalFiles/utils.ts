@@ -16,6 +16,7 @@ export const objectSummaryFromGlobalFilesQuery = (
     name: m.root_metadata?.name,
     mimeType: m.root_metadata?.mimeType,
     children: m.root_metadata?.children,
+    publishedObjectId: null,
     uploadStatus: {
       uploadedNodes: m.root_metadata!.publishedNodes?.aggregate?.count ?? 0,
       archivedNodes: m.root_metadata!.archivedNodes?.aggregate?.count ?? 0,
