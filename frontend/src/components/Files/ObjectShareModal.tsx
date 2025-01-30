@@ -118,8 +118,8 @@ export const ObjectShareModal = ({
                 </DialogTitle>
                 <div className='mt-4 flex flex-col gap-2'>
                   <p className='text-grey-100 rounded-md bg-amber-100 p-2 text-sm font-medium'>
-                    Downloads from this link would be deducted from your
-                    download credits.
+                    Be careful, downloads from this link would be deducted from
+                    your download credits.
                   </p>
                   <div className='mt-4 flex justify-center gap-2'>
                     <Button
