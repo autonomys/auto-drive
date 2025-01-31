@@ -14,6 +14,7 @@ import { interactionsRepository } from '../../repositories/objects/interactions.
 import { InteractionType } from '../../models/objects/interactions.js'
 import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../services/auth/index.js'
+import { config } from '../../config.js'
 
 const updateSubscription = async (
   executor: User,
@@ -72,18 +73,13 @@ const initSubscription = async (
     throw new Error('Subscription already exists')
   }
 
-  const INITIAL_GRANULARITY: SubscriptionGranularity = 'monthly'
-  const HUNDRED_MB = 1024 ** 2 * 100
-  const FIVE_GB = 1024 ** 3 * 5
-  const INITIAL_UPLOAD_LIMIT: number = HUNDRED_MB
-  const INITIAL_DOWNLOAD_LIMIT: number = FIVE_GB
-
   const newSubscription = {
     id: v4(),
     organizationId,
-    granularity: INITIAL_GRANULARITY,
-    uploadLimit: INITIAL_UPLOAD_LIMIT,
-    downloadLimit: INITIAL_DOWNLOAD_LIMIT,
+    granularity: config.defaultSubscription
+      .granularity as SubscriptionGranularity,
+    uploadLimit: config.defaultSubscription.uploadLimit,
+    downloadLimit: config.defaultSubscription.downloadLimit,
   }
   await subscriptionsRepository.createSubscription(
     newSubscription.id,
