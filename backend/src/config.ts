@@ -5,6 +5,9 @@ const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 const DEFAULT_CACHE_MAX_SIZE = 10 * 1024 ** 3 // 10GB
 const DEFAULT_CACHE_TTL = 1000000 // 1000000 seconds
 
+const HUNDRED_MB = 1024 ** 2 * 100
+const FIVE_GB = 1024 ** 3 * 5
+
 export const config = {
   logLevel: env('LOG_LEVEL', 'info'),
   postgres: {
@@ -32,4 +35,13 @@ export const config = {
     env('CACHE_MAX_SIZE', DEFAULT_CACHE_MAX_SIZE.toString()),
   ),
   cacheTtl: Number(env('CACHE_TTL', DEFAULT_CACHE_TTL.toString())),
+  defaultSubscription: {
+    granularity: env('DEFAULT_SUBSCRIPTION_GRANULARITY', 'monthly'),
+    uploadLimit: Number(
+      env('DEFAULT_SUBSCRIPTION_UPLOAD_LIMIT', HUNDRED_MB.toString()),
+    ),
+    downloadLimit: Number(
+      env('DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT', FIVE_GB.toString()),
+    ),
+  },
 }
