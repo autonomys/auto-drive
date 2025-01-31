@@ -1,5 +1,6 @@
 import bytes from 'bytes';
 import { Download, Upload } from 'lucide-react';
+import { Button } from '../common/Button';
 
 interface CreditLimitsProps {
   uploadPending: number;
@@ -83,14 +84,14 @@ export const RemainingCreditTracker = ({
             {startDate} - {endDate}
           </div>
         </div>
-        <div className='mt-1 flex flex-col text-center'>
+        <div className='mt-2 flex flex-col text-center'>
           <a
             target='_blank'
             rel='noreferrer'
             href='https://forms.gle/EAPzicXcbP7gH2uT6'
             className='text-sm text-black hover:underline'
           >
-            Ask for more credits
+            <Button variant='primary'>Ask for more credits</Button>
           </a>
         </div>
       </div>
