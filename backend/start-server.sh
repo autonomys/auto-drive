@@ -1,2 +1,2 @@
-yarn db-migrate up
-node dist/server.js
+yarn db-migrate up -e ${NODE_ENV:-development}
+yarn start

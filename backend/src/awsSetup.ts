@@ -1,7 +1,7 @@
 import AWS from 'aws-sdk'
 import { env } from './utils/misc.js'
 
-async function main() {
+if (env('NODE_ENV', 'development') === 'production') {
   const secretsManager = new AWS.SecretsManager({
     region: env('AWS_REGION'),
   })
@@ -19,8 +19,4 @@ async function main() {
       process.env[realKey] = data.SecretString
     })
   })
-
-  await import('./server.js')
 }
-
-main()
