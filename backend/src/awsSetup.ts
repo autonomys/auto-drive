@@ -1,9 +1,8 @@
 import AWS from 'aws-sdk'
-import { env } from './utils/misc.js'
 
-if (env('NODE_ENV', 'development') === 'production') {
+if (process.env.NODE_ENV === 'production') {
   const secretsManager = new AWS.SecretsManager({
-    region: env('AWS_REGION'),
+    region: process.env.AWS_REGION,
   })
 
   const secrets = Object.entries(process.env).filter(
