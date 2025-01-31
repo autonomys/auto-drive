@@ -1,6 +1,6 @@
 import AWS from 'aws-sdk'
 
-if (process.env.NODE_ENV === 'production') {
+export const setupFinished = new Promise<void>((resolve) => {
   const secretsManager = new AWS.SecretsManager({
     region: process.env.AWS_REGION,
   })
@@ -9,13 +9,20 @@ if (process.env.NODE_ENV === 'production') {
     ([key, value]) => key.startsWith('AWS_SECRET_') && value !== undefined,
   ) as [string, string][]
 
-  secrets.forEach(([key, SecretId]) => {
-    secretsManager.getSecretValue({ SecretId }, (err, data) => {
-      if (err) {
-        throw err
-      }
-      const realKey = key.replace('AWS_SECRET_', '')
-      process.env[realKey] = data.SecretString
+  const promises = secrets.map(async ([key, SecretId]) => {
+    return new Promise((resolve) => {
+      secretsManager.getSecretValue({ SecretId }, (err, data) => {
+        if (err) {
+          throw err
+        }
+        const realKey = key.replace('AWS_SECRET_', '')
+        process.env[realKey] = data.SecretString
+        resolve(true)
+      })
     })
   })
-}
+
+  Promise.all(promises).then(() => {
+    resolve()
+  })
+})
