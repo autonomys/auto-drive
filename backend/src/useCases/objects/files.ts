@@ -306,7 +306,7 @@ const handleFolderUploadFinalization = async (
 
 const retrieveObject = async (
   metadata: OffchainMetadata,
-): Promise<AwaitIterable<Buffer>> => {
+): Promise<AwaitIterable<Uint8Array>> => {
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
 
   if (isArchived) {
