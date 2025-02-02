@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     title: 'Auto Drive',
     description:
       'Store, share, and download your files securely with Autonomys Network decentralized permanent storage.',
-    images: ['/share.png'],
+    images: ['https://ai3.storage/share.png'],
     url: 'https://ai3.storage/',
     siteName: 'Auto Drive',
     locale: 'en_US',
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     title: 'Auto Drive',
     description:
       'Store, share, and download your files securely with Autonomys Network decentralized permanent storage.',
-    images: ['/share.png'],
+    images: ['https://ai3.storage/share.png'],
     site: '@AutonomysNet',
     creator: '@AutonomysLabs',
   },
