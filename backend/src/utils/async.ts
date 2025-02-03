@@ -79,7 +79,7 @@ export const asyncByChunk = async function* (
 }
 
 export async function forkAsyncIterable(
-  asyncIterable: AwaitIterable<Buffer>,
+  asyncIterable: AwaitIterable<Uint8Array>,
 ): Promise<[Readable, Readable]> {
   const passThrough1 = new PassThrough()
   const passThrough2 = new PassThrough()
