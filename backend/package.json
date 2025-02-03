@@ -47,6 +47,7 @@
     "@swc/core": "^1.9.2",
     "@swc/jest": "^0.2.37",
     "@testcontainers/postgresql": "^10.14.0",
+    "@testcontainers/rabbitmq": "^10.17.2",
     "@types/amqplib": "^0.10.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

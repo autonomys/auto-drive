@@ -167,6 +167,16 @@ const getStatusByCID = async (cid: string): Promise<UploadStatus | null> => {
   return result.rows.at(0)?.status ?? null
 }
 
+const deleteEntriesByRootUploadId = async (
+  rootUploadId: string,
+): Promise<void> => {
+  const db = await getDatabase()
+
+  await db.query('DELETE FROM uploads.uploads WHERE root_upload_id = $1', [
+    rootUploadId,
+  ])
+}
+
 export const uploadsRepository = {
   createUploadEntry,
   getUploadEntryById,
@@ -177,4 +187,5 @@ export const uploadsRepository = {
   getUploadsByStatus,
   getStatusByCID,
   updateUploadStatusByRootUploadId,
+  deleteEntriesByRootUploadId,
 }

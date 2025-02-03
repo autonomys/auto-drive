@@ -119,7 +119,7 @@ describe('Nodes', () => {
 
     await NodesUseCases.saveNodes(cid, cid, [node])
 
-    await NodesUseCases.processNodeArchived(objectMappings)
+    await NodesUseCases.processNodeArchived(objectMappings.v0.objects)
 
     const savedNode = await nodesRepository.getNode(cidToString(cid))
     expect(savedNode).toMatchObject({

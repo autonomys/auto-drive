@@ -30,6 +30,7 @@ import { uploadsRepository } from '../../../src/repositories/uploads/uploads'
 import { nodesRepository } from '../../../src/repositories'
 import { asyncIterableToPromiseOfArray } from '../../../src/utils/async'
 import PizZip from 'pizzip'
+import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore'
 
 describe('Folder Upload', () => {
   let user: UserWithOrganization
@@ -232,15 +233,16 @@ describe('Folder Upload', () => {
     it('should uploads being migrated', async () => {
       if (!folderCID) throw new PreconditionError('Folder CID not defined')
 
+      const cid = await BlockstoreUseCases.getUploadCID(folderUpload.id)
       await expect(
         UploadsUseCases.processMigration(folderUpload.id),
       ).resolves.not.toThrow()
 
+      const node = await nodesRepository.getNode(cidToString(cid))
+      expect(node).not.toBeNull()
+
       const uploads = await uploadsRepository.getUploadsByRoot(folderUpload.id)
-      expect(uploads?.length).toBe(totalNodes)
-      expect(uploads?.every((e) => e.status === UploadStatus.COMPLETED)).toBe(
-        true,
-      )
+      expect(uploads).toHaveLength(0)
     })
 
     it('upload status should be updated on node publishing', async () => {

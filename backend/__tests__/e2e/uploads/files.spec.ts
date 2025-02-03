@@ -39,6 +39,7 @@ import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
 import { fsCache } from '../../../src/services/download/fsCache/singleton.js'
 import { handleArchivedObjects } from '../../../src/services/upload/nodeRemover/index.js'
+import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 
 const files = [
   {
@@ -188,16 +189,19 @@ files.map((file, index) => {
         expect(pendingMigrations[0].id).toBe(upload.id)
       })
 
-      it('should be able to process the migration', async () => {
+      it('should be able to process the migration and remove the upload', async () => {
+        const cid = await BlockstoreUseCases.getUploadCID(upload.id)
         await expect(
           UploadsUseCases.processMigration(upload.id),
         ).resolves.not.toThrow()
 
+        const node = await nodesRepository.getNode(cidToString(cid))
+        expect(node).not.toBeNull()
+
         const uploadEntry = await uploadsRepository.getUploadEntryById(
           upload.id,
         )
-        expect(uploadEntry).not.toBeNull()
-        expect(uploadEntry!.status).toBe(UploadStatus.COMPLETED)
+        expect(uploadEntry).toBeNull()
       })
     })
 
