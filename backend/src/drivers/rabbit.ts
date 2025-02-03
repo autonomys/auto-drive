@@ -11,11 +11,11 @@ const initRabbit = async () => {
   return channel
 }
 
-let channel: Channel
+let channel: Promise<Channel>
 
 const getConnection = async () => {
   if (!channel) {
-    channel = await initRabbit()
+    channel = initRabbit()
   }
   return channel
 }
