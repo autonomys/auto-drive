@@ -1,10 +1,10 @@
-import { logger } from '../../drivers/logger'
-import { Rabbit } from '../../drivers/rabbit'
-import { NodesUseCases } from '../../useCases'
-import { UploadsUseCases } from '../../useCases/uploads/uploads'
-import { exhaustiveCheck } from '../../utils/misc'
-import { OnchainPublisher } from '../upload/onchainPublisher'
-import { Task, TaskSchema } from './tasks'
+import { logger } from '../../drivers/logger.js'
+import { Rabbit } from '../../drivers/rabbit.js'
+import { NodesUseCases } from '../../useCases/objects/nodes.js'
+import { UploadsUseCases } from '../../useCases/uploads/uploads.js'
+import { exhaustiveCheck } from '../../utils/misc.js'
+import { OnchainPublisher } from '../upload/onchainPublisher/index.js'
+import { Task, TaskSchema } from './tasks.js'
 
 export const TaskManager = {
   start: () => {

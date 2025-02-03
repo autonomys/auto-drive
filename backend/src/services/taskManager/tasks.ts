@@ -1,5 +1,5 @@
 import z from 'zod'
-import { ObjectMappingSchema } from '../../models/objects/objectMappings'
+import { ObjectMappingSchema } from '../../models/objects/objectMappings.js'
 
 export const TaskSchema = z.discriminatedUnion('id', [
   z.object({

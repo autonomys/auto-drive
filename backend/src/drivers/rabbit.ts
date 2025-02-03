@@ -1,5 +1,5 @@
 import { Channel, connect } from 'amqplib'
-import { config } from '../config'
+import { config } from '../config.js'
 
 const queue = 'task-manager'
 
