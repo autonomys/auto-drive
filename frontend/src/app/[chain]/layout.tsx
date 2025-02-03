@@ -14,7 +14,7 @@ import { UserEnsurer } from '../../components/UserEnsurer';
 import { RoleProtected } from '../../components/RoleProtected';
 import { UserRole } from '../../models/User';
 import { RemainingCreditTracker } from '../../components/RemainingCreditTracker';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { useUserStore } from '../../states/user';
 import { SessionProvider } from 'next-auth/react';
@@ -26,6 +26,7 @@ import {
 import { NetworkProvider } from '../../contexts/network';
 import { redirect } from 'next/navigation';
 import { NetworkDropdown } from '../../components/NetworkDropdown';
+import { AuthService } from '../../services/auth/auth';
 
 export default function AppLayout({
   children,
@@ -35,6 +36,13 @@ export default function AppLayout({
   params: { chain: NetworkId };
 }>) {
   const subscription = useUserStore(({ subscription }) => subscription);
+  const setUser = useUserStore(({ setUser }) => setUser);
+
+  useEffect(() => {
+    AuthService.getMe().then((user) => {
+      setUser(user);
+    });
+  }, [setUser]);
 
   const startDate = useMemo(() => {
     const date = new Date();
