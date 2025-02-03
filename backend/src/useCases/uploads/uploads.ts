@@ -23,6 +23,7 @@ import { Task } from '../../services/taskManager/tasks.js'
 import { chunkArray } from '../../utils/misc.js'
 import { config } from '../../config.js'
 import { blockstoreRepository } from '../../repositories/uploads/blockstore.js'
+import { BlockstoreUseCases } from './blockstore.js'
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -270,7 +271,8 @@ const removeUploadArtifacts = async (uploadId: string): Promise<void> => {
 }
 
 const scheduleNodesPublish = async (uploadId: string): Promise<void> => {
-  const nodes = await NodesUseCases.getCidsByRootCid(uploadId)
+  const cid = await BlockstoreUseCases.getUploadCID(uploadId)
+  const nodes = await NodesUseCases.getCidsByRootCid(cidToString(cid))
 
   const tasks: Task[] = chunkArray(
     nodes,
