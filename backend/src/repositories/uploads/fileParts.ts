@@ -58,9 +58,18 @@ const getUploadFilePartsSize = async (
     .then((result) => BigInt(result.rows.at(0)?.total_size ?? '0').valueOf())
 }
 
+const deleteChunksByUploadId = async (uploadId: string): Promise<void> => {
+  const db = await getDatabase()
+
+  await db.query('DELETE FROM uploads.file_parts WHERE upload_id = $1', [
+    uploadId,
+  ])
+}
+
 export const filePartsRepository = {
   addChunk,
   getChunksByUploadId,
   getChunkByUploadIdAndPartIndex,
   getUploadFilePartsSize,
+  deleteChunksByUploadId,
 }

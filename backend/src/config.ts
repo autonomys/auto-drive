@@ -44,4 +44,10 @@ export const config = {
       env('DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT', FIVE_GB.toString()),
     ),
   },
+  rabbitmq: {
+    url: env('RABBITMQ_URL'),
+  },
+  params: {
+    maxUploadNodesPerBatch: Number(env('MAX_UPLOAD_NODES_PER_BATCH', '20')),
+  },
 }

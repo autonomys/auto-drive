@@ -18,6 +18,11 @@ import { fileProcessingInfoRepository } from '../../repositories/uploads/filePro
 import { FilesUseCases } from '../objects/files.js'
 import { NodesUseCases } from '../objects/index.js'
 import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
+import { TaskManager } from '../../services/taskManager/index.js'
+import { Task } from '../../services/taskManager/tasks.js'
+import { chunkArray } from '../../utils/misc.js'
+import { config } from '../../config.js'
+import { blockstoreRepository } from '../../repositories/uploads/blockstore.js'
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -189,6 +194,8 @@ const completeUpload = async (
 
   await uploadsRepository.updateUploadEntry(updatedUpload)
 
+  await scheduleNodeMigration(uploadId)
+
   return cidToString(cid)
 }
 
@@ -243,6 +250,41 @@ const getPendingMigrations = async (limit: number): Promise<UploadEntry[]> => {
   return pendingMigrations
 }
 
+const scheduleNodeMigration = async (uploadId: string): Promise<void> => {
+  const tasks: Task[] = [
+    {
+      id: 'migrate-upload-nodes',
+      params: {
+        uploadId,
+      },
+    },
+  ]
+  TaskManager.publish(tasks)
+}
+
+const removeUploadArtifacts = async (uploadId: string): Promise<void> => {
+  await blockstoreRepository.deleteBlockstoreEntries(uploadId)
+  await uploadsRepository.deleteUploadEntry(uploadId)
+  await filePartsRepository.deleteChunksByUploadId(uploadId)
+  await fileProcessingInfoRepository.deleteFileProcessingInfo(uploadId)
+}
+
+const scheduleNodesPublish = async (uploadId: string): Promise<void> => {
+  const nodes = await NodesUseCases.getCidsByRootCid(uploadId)
+
+  const tasks: Task[] = chunkArray(
+    nodes,
+    config.params.maxUploadNodesPerBatch,
+  ).map((nodes) => ({
+    id: 'publish-nodes',
+    params: {
+      nodes,
+    },
+  }))
+
+  TaskManager.publish(tasks)
+}
+
 const processMigration = async (uploadId: string): Promise<void> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
@@ -251,10 +293,8 @@ const processMigration = async (uploadId: string): Promise<void> => {
 
   await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId)
 
-  await uploadsRepository.updateUploadStatusByRootUploadId(
-    uploadId,
-    UploadStatus.COMPLETED,
-  )
+  await scheduleNodesPublish(uploadId)
+  await removeUploadArtifacts(uploadId)
 }
 
 export const UploadsUseCases = {

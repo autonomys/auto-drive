@@ -1,16 +1,19 @@
 import { MetadataType } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import pgFormat from 'pg-format'
+import z from 'zod'
 
-export interface Node {
-  cid: string
-  root_cid: string
-  head_cid: string
-  type: MetadataType
-  encoded_node: string
-  piece_index?: number
-  piece_offset?: number
-}
+export type Node = z.infer<typeof NodeSchema>
+
+export const NodeSchema = z.object({
+  cid: z.string(),
+  root_cid: z.string(),
+  head_cid: z.string(),
+  type: z.string(),
+  encoded_node: z.string(),
+  piece_index: z.number().optional(),
+  piece_offset: z.number().optional(),
+})
 
 const saveNode = async (node: Node) => {
   const db = await getDatabase()
@@ -160,13 +163,24 @@ const setNodeArchivingData = async ({
   })
 }
 
-const removeNodesByHeadCid = async (cid: string) => {
+const removeNodesByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
 
   return db.query({
-    text: 'DELETE FROM nodes WHERE head_cid = $1',
-    values: [cid],
+    text: 'DELETE FROM nodes WHERE root_cid = $1',
+    values: [rootCid],
   })
+}
+
+const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT * FROM nodes WHERE cid = ANY($1)',
+      values: [cids],
+    })
+    .then((e) => e.rows)
 }
 
 export const nodesRepository = {
@@ -178,5 +192,6 @@ export const nodesRepository = {
   setNodeArchivingData,
   getNodesByHeadCid,
   getNodesByRootCid,
-  removeNodesByHeadCid,
+  removeNodesByRootCid,
+  getNodesByCids,
 }

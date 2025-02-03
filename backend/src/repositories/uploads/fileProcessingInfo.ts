@@ -58,8 +58,18 @@ const getFileProcessingInfoByUploadId = async (
   return result.rows[0] ?? null
 }
 
+const deleteFileProcessingInfo = async (uploadId: string): Promise<void> => {
+  const db = await getDatabase()
+
+  await db.query(
+    'DELETE FROM uploads.file_processing_info WHERE upload_id = $1',
+    [uploadId],
+  )
+}
+
 export const fileProcessingInfoRepository = {
   addFileProcessingInfo,
   updateFileProcessingInfo,
   getFileProcessingInfoByUploadId,
+  deleteFileProcessingInfo,
 }

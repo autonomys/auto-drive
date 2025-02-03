@@ -141,7 +141,7 @@ const processFolderUpload = async (upload: FolderUpload): Promise<CID> => {
   const files = await UploadsUseCases.getFileFromFolderUpload(upload.id)
 
   const allCompleted = files.every((f) =>
-    [UploadStatus.COMPLETED, UploadStatus.MIGRATING].includes(f.status),
+    [UploadStatus.MIGRATING].includes(f.status),
   )
   if (!allCompleted) {
     throw new Error('Not all files are being uploaded')

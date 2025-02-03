@@ -297,10 +297,9 @@ const getNonArchivedObjects = async () => {
   return objects.map((e) => e.head_cid)
 }
 
-const markAsArchived = async (cid: string) => {
+const processArchival = async (cid: string) => {
   await metadataRepository.markAsArchived(cid)
-
-  await nodesRepository.removeNodesByHeadCid(cid)
+  await nodesRepository.removeNodesByRootCid(cid)
 }
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
@@ -365,7 +364,7 @@ export const ObjectUseCases = {
   isArchived,
   hasAllNodesArchived,
   getNonArchivedObjects,
-  markAsArchived,
+  processArchival,
   publishObject,
   downloadPublishedObject,
   unpublishObject,

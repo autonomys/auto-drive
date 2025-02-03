@@ -12,7 +12,7 @@ import { CID } from 'multiformats'
 import { nodesRepository } from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/index.js'
-import { ObjectMappingListEntry } from '../../models/objects/objectMappings.js'
+import { ObjectMapping } from '../../models/objects/objectMappings.js'
 import {
   asyncIterableForEach,
   asyncIterableToPromiseOfArray,
@@ -21,6 +21,9 @@ import { BlockstoreUseCases } from '../uploads/blockstore.js'
 import { UploadType } from '../../models/uploads/upload.js'
 import { ObjectUseCases } from './object.js'
 import { logger } from '../../drivers/logger.js'
+import { Node } from '../../repositories/objects/nodes.js'
+import { TaskManager } from '../../services/taskManager/index.js'
+import { Task } from '../../services/taskManager/tasks.js'
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
@@ -150,14 +153,12 @@ const migrateFromBlockstoreToNodesTable = async (
   }
 }
 
-export const processNodeArchived = async (
-  objectMappings: ObjectMappingListEntry,
-) => {
+const processNodeArchived = async (objectMappings: ObjectMapping[]) => {
   const nodes = await nodesRepository.getArchivingNodesCID()
 
   logger.info(`Archiving ${nodes.length} nodes`)
 
-  const objects = objectMappings.v0.objects.map((e) => {
+  const objects = objectMappings.map((e) => {
     const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
 
     return nodes.includes(cid)
@@ -181,6 +182,30 @@ export const processNodeArchived = async (
   return objects
 }
 
+const scheduleNodeArchiving = async (
+  objects: ObjectMapping[],
+): Promise<void> => {
+  const tasks: Task[] = [
+    {
+      id: 'archive-objects',
+      params: {
+        objects,
+      },
+    },
+  ]
+  TaskManager.publish(tasks)
+}
+
+export const getCidsByRootCid = async (rootCid: string): Promise<string[]> => {
+  return nodesRepository
+    .getNodesByRootCid(rootCid)
+    .then((e) => e.map((e) => e.cid))
+}
+
+export const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
+  return nodesRepository.getNodesByCids(cids)
+}
+
 export const NodesUseCases = {
   getNode,
   saveNode,
@@ -188,4 +213,7 @@ export const NodesUseCases = {
   saveNodes,
   migrateFromBlockstoreToNodesTable,
   processNodeArchived,
+  getCidsByRootCid,
+  getNodesByCids,
+  scheduleNodeArchiving,
 }
