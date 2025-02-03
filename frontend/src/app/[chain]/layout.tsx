@@ -2,7 +2,8 @@
 
 import '../globals.css';
 import { UserEnsurer } from '../../components/UserEnsurer';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useUserStore } from '../../states/user';
 import { SessionProvider } from 'next-auth/react';
 import {
   defaultNetworkId,
@@ -13,6 +14,7 @@ import { NetworkProvider } from '../../contexts/network';
 import { redirect } from 'next/navigation';
 import { TopNavbar } from '@/components/Navbar/TopNavbar';
 import { SideNavbar } from '@/components/Navbar/SideNavbar';
+import { AuthService } from '../../services/auth/auth';
 
 export default function AppLayout({
   children,
@@ -21,6 +23,14 @@ export default function AppLayout({
   children: React.ReactNode;
   params: { chain: NetworkId };
 }>) {
+  const setUser = useUserStore(({ setUser }) => setUser);
+
+  useEffect(() => {
+    AuthService.getMe().then((user) => {
+      setUser(user);
+    });
+  }, [setUser]);
+
   const network = useMemo(() => {
     return networks[params.chain] || null;
   }, [params.chain]);
