@@ -28,19 +28,17 @@ export const EXTERNAL_ROUTES = {
 };
 
 export const ROUTES = {
-  drive: (networkId: NetworkId = defaultNetworkId) => {
-    return `/${networkId}/drive`;
-  },
-  onboarding: () => {
-    return '/onboarding';
-  },
-  search: (networkId: NetworkId, query: string) => {
-    return `/${networkId}/drive/search/${encodeURIComponent(query)}`;
-  },
-  objectDetails: (networkId: NetworkId, cid: string) => {
-    return `/${networkId}/drive/metadata/${cid}`;
-  },
-  fs: (networkId: NetworkId, cid: string) => {
-    return `/${networkId}/drive/fs/${cid}`;
-  },
+  drive: (networkId: NetworkId = defaultNetworkId) => `/${networkId}/drive`,
+  onboarding: () => '/onboarding',
+  search: (networkId: NetworkId, query: string) =>
+    `/${networkId}/drive/search/${encodeURIComponent(query)}`,
+  objectDetails: (networkId: NetworkId, cid: string) =>
+    `/${networkId}/drive/metadata/${cid}`,
+  fs: (networkId: NetworkId, cid: string) => `/${networkId}/drive/fs/${cid}`,
+
+  globalFeed: (networkId: NetworkId) => `/${networkId}/drive/global`,
+  shared: (networkId: NetworkId) => `/${networkId}/drive/shared`,
+  trash: (networkId: NetworkId) => `/${networkId}/drive/trash`,
+  profile: (networkId: NetworkId) => `/${networkId}/drive/profile`,
+  admin: (networkId: NetworkId) => `/${networkId}/drive/admin`,
 };
