@@ -3,7 +3,7 @@ import { config } from '../config.js'
 
 const queue = 'task-manager'
 
-const initRabbit = async () => {
+const init = async () => {
   connection = await connect(config.rabbitmq.url)
   const channel = await connection.createChannel()
   await channel.assertQueue('task-manager')
@@ -16,7 +16,7 @@ let channel: Promise<Channel> | null = null
 
 const getConnection = async () => {
   if (!channel) {
-    channel = initRabbit()
+    channel = init()
   }
   return channel
 }
@@ -56,6 +56,7 @@ const close = async () => {
 }
 
 export const Rabbit = {
+  init,
   publish,
   subscribe,
   close,

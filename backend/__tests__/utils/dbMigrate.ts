@@ -6,6 +6,7 @@ let dbMigrateInstance: ReturnType<typeof dbMigrate.getInstance>
 
 const up = async () => {
   await getDatabase()
+  await Rabbit.init()
   dbMigrateInstance = dbMigrate.getInstance(true)
   dbMigrateInstance.silence(true)
   await dbMigrateInstance.up()
