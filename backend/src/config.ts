@@ -50,4 +50,5 @@ export const config = {
   params: {
     maxUploadNodesPerBatch: Number(env('MAX_UPLOAD_NODES_PER_BATCH', '20')),
   },
+  optionalAuth: env('OPTIONAL_AUTH', 'false') === 'true',
 }

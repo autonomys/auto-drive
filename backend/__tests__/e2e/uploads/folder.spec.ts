@@ -347,7 +347,7 @@ describe('Folder Upload', () => {
     })
 
     it('should be able to download folder as zip', async () => {
-      const zip = await FilesUseCases.downloadObject(user, folderCID)
+      const zip = await FilesUseCases.downloadObjectByUser(user, folderCID)
       const dataStream = await zip.startDownload()
       const zipArray = await asyncIterableToPromiseOfArray(dataStream)
       const zipBuffer = Buffer.concat(zipArray)

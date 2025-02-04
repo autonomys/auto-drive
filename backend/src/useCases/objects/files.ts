@@ -211,7 +211,7 @@ const retrieveAndReassembleFolderAsZip = async (
   return bufferToAsyncIterable(folder.generate({ type: 'nodebuffer' }))
 }
 
-const downloadObject = async (
+const downloadObjectByUser = async (
   reader: UserWithOrganization,
   cid: string,
 ): Promise<FileDownload> => {
@@ -243,6 +243,20 @@ const downloadObject = async (
 
       return download
     },
+  }
+}
+
+const downloadObjectByAnonymous = async (
+  cid: string,
+): Promise<FileDownload> => {
+  const metadata = await ObjectUseCases.getMetadata(cid)
+  if (!metadata) {
+    throw new Error(`Metadata with CID ${cid} not found`)
+  }
+
+  return {
+    metadata,
+    startDownload: async () => downloadService.download(cid),
   }
 }
 
@@ -306,7 +320,7 @@ const handleFolderUploadFinalization = async (
 
 const retrieveObject = async (
   metadata: OffchainMetadata,
-): Promise<AwaitIterable<Buffer>> => {
+): Promise<AwaitIterable<Uint8Array>> => {
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
 
   if (isArchived) {
@@ -321,6 +335,7 @@ const retrieveObject = async (
 export const FilesUseCases = {
   handleFileUploadFinalization,
   handleFolderUploadFinalization,
-  downloadObject,
+  downloadObjectByUser,
+  downloadObjectByAnonymous,
   retrieveObject,
 }
