@@ -103,11 +103,10 @@ export const FileTableRow = ({
     [onRestoreFile, file.headCid, stopEventPropagation],
   );
   const handleToggleSelectFile = useMemo(
-    () =>
-      stopEventPropagation<React.MouseEvent<HTMLInputElement>>(() =>
-        toggleSelectFile(file.headCid),
-      ),
-    [toggleSelectFile, file.headCid, stopEventPropagation],
+    () => (headCid: string) => {
+      toggleSelectFile(headCid);
+    },
+    [],
   );
 
   const toggleExpand = useCallback(() => setIsRowExpanded((prev) => !prev), []);
@@ -129,7 +128,7 @@ export const FileTableRow = ({
               type='checkbox'
               readOnly={true}
               checked={selectedFiles.some((cid) => cid === file.headCid)}
-              onClick={handleToggleSelectFile}
+              onChange={() => handleToggleSelectFile(file.headCid)}
               className='mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500'
             />
             {file.type === 'folder' && file.children && (
@@ -278,9 +277,7 @@ export const FileTableRow = ({
             <TableBodyCell className='w-[50%]'>
               <div className='flex items-center'>
                 <input
-                  onClick={stopEventPropagation(() =>
-                    toggleSelectFile(child.cid),
-                  )}
+                  onChange={() => toggleSelectFile(child.cid)}
                   readOnly={true}
                   checked={selectedFiles.some((f) => f === child.cid)}
                   type='checkbox'
