@@ -1,17 +1,16 @@
-import { Channel, connect, Connection } from 'amqplib'
+import { Channel, connect } from 'amqplib'
 import { config } from '../config.js'
 
 const queue = 'task-manager'
 
 const init = async () => {
-  connection = await connect(config.rabbitmq.url)
+  const connection = await connect(config.rabbitmq.url)
   const channel = await connection.createChannel()
   await channel.assertQueue('task-manager')
 
   return channel
 }
 
-let connection: Connection | null = null
 let channel: Promise<Channel> | null = null
 
 const getConnection = async () => {
@@ -51,10 +50,8 @@ const subscribe = async (callback: (message: object) => Promise<unknown>) => {
 
 const close = async () => {
   const channelInstance = await channel
-  await channelInstance?.close()
   channel = null
-  await connection?.close()
-  connection = null
+  await channelInstance?.connection?.close()
 }
 
 export const Rabbit = {
