@@ -20,6 +20,7 @@ import { AuthManager } from '../../services/auth/index.js'
 import { publishedObjectsRepository } from '../../repositories/objects/publishedObjects.js'
 import { v4 } from 'uuid'
 import { FilesUseCases } from './files.js'
+import { downloadService } from '../../services/download/index.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -347,6 +348,18 @@ const unpublishObject = async (user: User, cid: string) => {
   await publishedObjectsRepository.deletePublishedObject(cid)
 }
 
+const checkObjectsArchivalStatus = async () => {
+  const cids = await getNonArchivedObjects()
+
+  for (const cid of cids) {
+    const allNodesArchived = await hasAllNodesArchived(cid)
+    if (allNodesArchived) {
+      await downloadService.download(cid)
+      await processArchival(cid)
+    }
+  }
+}
+
 export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
@@ -368,4 +381,5 @@ export const ObjectUseCases = {
   publishObject,
   downloadPublishedObject,
   unpublishObject,
+  checkObjectsArchivalStatus,
 }

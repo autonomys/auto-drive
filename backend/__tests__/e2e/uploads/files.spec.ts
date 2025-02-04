@@ -38,7 +38,6 @@ import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
 import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
 import { fsCache } from '../../../src/services/download/fsCache/singleton.js'
-import { handleArchivedObjects } from '../../../src/services/upload/nodeRemover/index.js'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 
 const files = [
@@ -322,7 +321,7 @@ files.map((file, index) => {
       })
 
       it('should be able to archive the object', async () => {
-        await handleArchivedObjects()
+        await ObjectUseCases.checkObjectsArchivalStatus()
 
         const metadata = await metadataRepository.getMetadata(cid)
         expect(metadata).not.toBeNull()

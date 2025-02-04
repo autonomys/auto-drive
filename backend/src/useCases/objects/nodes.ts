@@ -179,6 +179,8 @@ const processNodeArchived = async (objectMappings: ObjectMapping[]) => {
 
   await Promise.all(promises)
 
+  await ObjectUseCases.checkObjectsArchivalStatus()
+
   return objects
 }
 
