@@ -13,6 +13,7 @@ import {
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { nodesRepository } from '../../../src/repositories/index.js'
 import { ObjectMappingListEntry } from '../../../src/models/objects/objectMappings.js'
+import { mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
 
 describe('Nodes', () => {
   const id = v4()
@@ -26,10 +27,12 @@ describe('Nodes', () => {
   }
 
   beforeAll(async () => {
+    mockRabbitPublish()
     await dbMigration.up()
   })
   afterAll(async () => {
     await dbMigration.down()
+    unmockMethods()
   })
 
   it('should be able to save node', async () => {

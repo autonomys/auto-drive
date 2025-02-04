@@ -8,6 +8,7 @@ import { SubscriptionsUseCases } from '../../../src/useCases'
 
 describe('CreditsUseCases', () => {
   let mockUser: UserWithOrganization
+
   beforeAll(async () => {
     await getDatabase()
     await dbMigration.up()

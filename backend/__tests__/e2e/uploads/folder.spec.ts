@@ -24,17 +24,23 @@ import {
 import { UploadsUseCases } from '../../../src/useCases/uploads/uploads'
 import { dbMigration } from '../../utils/dbMigrate'
 import { PreconditionError } from '../../utils/error'
-import { createMockUser } from '../../utils/mocks'
+import {
+  createMockUser,
+  mockRabbitPublish,
+  unmockMethods,
+} from '../../utils/mocks'
 import { MemoryBlockstore } from 'blockstore-core'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads'
 import { nodesRepository } from '../../../src/repositories'
 import { asyncIterableToPromiseOfArray } from '../../../src/utils/async'
 import PizZip from 'pizzip'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore'
+import { Rabbit } from '../../../src/drivers/rabbit'
 
 describe('Folder Upload', () => {
   let user: UserWithOrganization
   let folderUpload: Upload
+  let rabbitMock: jest.SpiedFunction<typeof Rabbit.publish>
 
   beforeAll(async () => {
     await dbMigration.up()
@@ -43,6 +49,14 @@ describe('Folder Upload', () => {
 
   afterAll(async () => {
     await dbMigration.down()
+  })
+
+  beforeEach(() => {
+    rabbitMock = mockRabbitPublish()
+  })
+
+  afterEach(() => {
+    unmockMethods()
   })
 
   const folderName = 'test'
@@ -180,6 +194,14 @@ describe('Folder Upload', () => {
       )
 
       folderCID = await UploadsUseCases.completeUpload(user, folderUpload.id)
+
+      expect(rabbitMock).toHaveBeenCalledWith({
+        id: 'migrate-upload-nodes',
+        params: {
+          uploadId: folderUpload.id,
+        },
+      })
+
       expect(folderCID).toBe(expectedCID)
     })
 
@@ -243,6 +265,13 @@ describe('Folder Upload', () => {
 
       const uploads = await uploadsRepository.getUploadsByRoot(folderUpload.id)
       expect(uploads).toHaveLength(0)
+
+      expect(rabbitMock).toHaveBeenCalledWith({
+        id: 'publish-nodes',
+        params: {
+          nodes: expect.arrayContaining([cidToString(cid)]),
+        },
+      })
     })
 
     it('upload status should be updated on node publishing', async () => {

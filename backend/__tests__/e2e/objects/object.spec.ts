@@ -3,7 +3,11 @@ import { AuthManager } from '../../../src/services/auth'
 import { ObjectUseCases } from '../../../src/useCases'
 import { dbMigration } from '../../utils/dbMigrate'
 import { PreconditionError } from '../../utils/error'
-import { createMockUser } from '../../utils/mocks'
+import {
+  createMockUser,
+  mockRabbitPublish,
+  unmockMethods,
+} from '../../utils/mocks'
 import { uploadFile } from '../../utils/uploads'
 import { jest } from '@jest/globals'
 
@@ -12,12 +16,14 @@ describe('Object', () => {
   let fileCid: string
 
   beforeAll(async () => {
+    mockRabbitPublish()
     await dbMigration.up()
     user = createMockUser()
     fileCid = await uploadFile(user, 'test.txt', 'test', 'text/plain')
   })
 
   afterAll(async () => {
+    unmockMethods()
     await dbMigration.down()
   })
 

@@ -10,7 +10,6 @@ const up = async () => {
   dbMigrateInstance = dbMigrate.getInstance(true)
   dbMigrateInstance.silence(true)
   await dbMigrateInstance.up()
-  jest.spyOn(Rabbit, 'publish').mockImplementation(() => Promise.resolve())
 }
 
 const down = async () => {

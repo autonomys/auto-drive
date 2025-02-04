@@ -1,6 +1,10 @@
 import { UserWithOrganization } from '../../../src/models/users/index.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { createMockUser } from '../../utils/mocks.js'
+import {
+  createMockUser,
+  mockRabbitPublish,
+  unmockMethods,
+} from '../../utils/mocks.js'
 import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
 import {
   Upload,
@@ -42,6 +46,7 @@ import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
 import { fsCache } from '../../../src/services/download/fsCache/singleton.js'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
+import { Rabbit } from '../../../src/drivers/rabbit.js'
 
 const files = [
   {
@@ -59,6 +64,7 @@ const files = [
 files.map((file, index) => {
   describe(`File Upload #${index + 1}`, () => {
     const user: UserWithOrganization = createMockUser()
+    let rabbitMock: jest.SpiedFunction<typeof Rabbit.publish>
 
     beforeAll(async () => {
       await dbMigration.up()
@@ -66,6 +72,14 @@ files.map((file, index) => {
 
     afterAll(async () => {
       await dbMigration.down()
+    })
+
+    beforeEach(() => {
+      rabbitMock = mockRabbitPublish()
+    })
+
+    afterEach(() => {
+      unmockMethods()
     })
 
     const { filename, mimeType, rndBuffer } = file
@@ -138,6 +152,13 @@ files.map((file, index) => {
         )
         cid = await UploadsUseCases.completeUpload(user, upload.id)
 
+        expect(rabbitMock).toHaveBeenCalledWith({
+          id: 'migrate-upload-nodes',
+          params: {
+            uploadId: upload.id,
+          },
+        })
+
         expect(cid).toBe(cidToString(expectedCID))
       })
 
@@ -196,6 +217,13 @@ files.map((file, index) => {
         await expect(
           UploadsUseCases.processMigration(upload.id),
         ).resolves.not.toThrow()
+
+        expect(rabbitMock).toHaveBeenCalledWith({
+          id: 'publish-nodes',
+          params: {
+            nodes: expect.arrayContaining([cidToString(cid)]),
+          },
+        })
 
         const node = await nodesRepository.getNode(cidToString(cid))
         expect(node).not.toBeNull()
