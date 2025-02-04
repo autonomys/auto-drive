@@ -6,7 +6,7 @@ const queue = 'task-manager'
 const init = async () => {
   const connection = await connect(config.rabbitmq.url)
   const channel = await connection.createChannel()
-  await channel.assertQueue('task-manager')
+  await channel.assertQueue(queue)
 
   return channel
 }
@@ -22,8 +22,6 @@ const getConnection = async () => {
 
 const publish = async (message: object) => {
   const channel = await getConnection()
-
-  await channel.assertQueue(queue)
   channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)))
 }
 
