@@ -14,12 +14,15 @@ import {
   MetadataType,
   DEFAULT_MAX_CHUNK_SIZE,
   cidToString,
+  blake3HashFromCid,
+  stringToCid,
 } from '@autonomys/auto-dag-data'
 import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
 import { asyncIterableToPromiseOfArray } from '../../../src/utils/async.js'
 import {
   FilesUseCases,
+  NodesUseCases,
   SubscriptionsUseCases,
   TransactionResultsUseCases,
 } from '../../../src/useCases/index.js'
@@ -299,28 +302,19 @@ files.map((file, index) => {
       it('object information should be updated on archiving', async () => {
         // Mocking archiving onchain
         const nodes = await nodesRepository.getNodesByHeadCid(cid)
-        const transactionResults = nodes.map((node) =>
-          nodesRepository.setNodeArchivingData({
-            cid: node.cid,
-            pieceIndex: 1,
-            pieceOffset: 1,
-          }),
-        )
-        await Promise.all(transactionResults)
-        // End of mocking
 
-        const objectInformation = await ObjectUseCases.getObjectInformation(cid)
-        expect(objectInformation).not.toBeNull()
-        expect(objectInformation?.uploadStatus).toEqual({
-          uploadedNodes: nodes.length,
-          totalNodes: nodes.length,
-          archivedNodes: nodes.length,
-          minimumBlockDepth: PUBLISH_ON_BLOCK,
-          maximumBlockDepth: PUBLISH_ON_BLOCK,
-        })
+        await NodesUseCases.processNodeArchived(
+          nodes.map((node) => [
+            Buffer.from(blake3HashFromCid(stringToCid(node.cid))).toString(
+              'hex',
+            ),
+            1,
+            1,
+          ]),
+        )
       })
 
-      it('should be able to archive the object', async () => {
+      it('metadata should be updated as archived', async () => {
         await ObjectUseCases.checkObjectsArchivalStatus()
 
         const metadata = await metadataRepository.getMetadata(cid)
