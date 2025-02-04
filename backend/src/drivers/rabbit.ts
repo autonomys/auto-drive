@@ -47,9 +47,11 @@ const subscribe = async (callback: (message: object) => Promise<unknown>) => {
 }
 
 const close = async () => {
-  const channelInstance = await channel
+  const promise = channel
   channel = null
-  await channelInstance?.connection?.close()
+  const channelInstance = await promise
+
+  return channelInstance?.connection.close()
 }
 
 export const Rabbit = {
