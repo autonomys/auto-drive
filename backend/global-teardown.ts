@@ -3,7 +3,7 @@ export default async () => {
     await new Promise((resolve) => {
       setTimeout(() => {
         global.__POSTGRES_CONTAINER__.stop()
-        // global.__RABBITMQ_CONTAINER__.stop()
+        global.__RABBITMQ_CONTAINER__.stop()
         resolve(true)
       }, 2_000)
     })

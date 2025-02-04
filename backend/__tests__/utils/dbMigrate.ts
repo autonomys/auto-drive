@@ -12,6 +12,7 @@ const up = async () => {
 }
 
 const down = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 1000))
   await closeDatabase()
   await Rabbit.close()
   await dbMigrateInstance.down()
