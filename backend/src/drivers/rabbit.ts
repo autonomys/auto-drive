@@ -51,7 +51,7 @@ const subscribe = async (callback: (message: object) => Promise<unknown>) => {
 
 const close = async () => {
   const channelInstance = await channel
-  channelInstance?.close()
+  await channelInstance?.close()
   channel = null
   await connection?.close()
   connection = null
