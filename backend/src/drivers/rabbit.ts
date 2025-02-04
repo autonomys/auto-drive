@@ -17,7 +17,7 @@ const getConnection = async () => {
   if (!channel) {
     channel = init()
   }
-  return channel
+  return await channel
 }
 
 const publish = async (message: object) => {
