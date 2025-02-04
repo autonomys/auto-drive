@@ -1,22 +1,20 @@
+import { AwaitIterable } from 'interface-store'
 import { config } from '../../../config.js'
-import { request } from 'https'
 
-const downloadFile = async (cid: string): Promise<AsyncIterable<Buffer>> => {
-  const req = request(
+const downloadFile = async (
+  cid: string,
+): Promise<AwaitIterable<Uint8Array>> => {
+  const response = await fetch(
     `${config.filesGateway}/files/${cid}?api_key=${config.filesGatewayToken}&raw=true`,
   )
 
-  req.end()
+  if (!response.ok) {
+    throw new Error(`Error fetching file: ${response.statusText}`)
+  }
 
-  return new Promise((resolve, reject) => {
-    req.on('response', (res) => {
-      resolve(res)
-    })
+  if (!response.body) return []
 
-    req.on('error', (err) => {
-      reject(err)
-    })
-  })
+  return response.body
 }
 
 export const FileGateway = {
