@@ -1,6 +1,10 @@
 import { UserWithOrganization } from '../../../src/models/users/index.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { createMockUser } from '../../utils/mocks.js'
+import {
+  createMockUser,
+  mockRabbitPublish,
+  unmockMethods,
+} from '../../utils/mocks.js'
 import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
 import {
   Upload,
@@ -14,12 +18,15 @@ import {
   MetadataType,
   DEFAULT_MAX_CHUNK_SIZE,
   cidToString,
+  blake3HashFromCid,
+  stringToCid,
 } from '@autonomys/auto-dag-data'
 import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
 import { asyncIterableToPromiseOfArray } from '../../../src/utils/async.js'
 import {
   FilesUseCases,
+  NodesUseCases,
   SubscriptionsUseCases,
   TransactionResultsUseCases,
 } from '../../../src/useCases/index.js'
@@ -38,7 +45,8 @@ import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
 import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
 import { fsCache } from '../../../src/services/download/fsCache/singleton.js'
-import { handleArchivedObjects } from '../../../src/services/upload/nodeRemover/index.js'
+import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
+import { Rabbit } from '../../../src/drivers/rabbit.js'
 
 const files = [
   {
@@ -56,6 +64,7 @@ const files = [
 files.map((file, index) => {
   describe(`File Upload #${index + 1}`, () => {
     const user: UserWithOrganization = createMockUser()
+    let rabbitMock: jest.SpiedFunction<typeof Rabbit.publish>
 
     beforeAll(async () => {
       await dbMigration.up()
@@ -63,6 +72,14 @@ files.map((file, index) => {
 
     afterAll(async () => {
       await dbMigration.down()
+    })
+
+    beforeEach(() => {
+      rabbitMock = mockRabbitPublish()
+    })
+
+    afterEach(() => {
+      unmockMethods()
     })
 
     const { filename, mimeType, rndBuffer } = file
@@ -135,6 +152,13 @@ files.map((file, index) => {
         )
         cid = await UploadsUseCases.completeUpload(user, upload.id)
 
+        expect(rabbitMock).toHaveBeenCalledWith({
+          id: 'migrate-upload-nodes',
+          params: {
+            uploadId: upload.id,
+          },
+        })
+
         expect(cid).toBe(cidToString(expectedCID))
       })
 
@@ -188,22 +212,35 @@ files.map((file, index) => {
         expect(pendingMigrations[0].id).toBe(upload.id)
       })
 
-      it('should be able to process the migration', async () => {
+      it('should be able to process the migration and remove the upload', async () => {
+        const cid = await BlockstoreUseCases.getUploadCID(upload.id)
         await expect(
           UploadsUseCases.processMigration(upload.id),
         ).resolves.not.toThrow()
 
+        expect(rabbitMock).toHaveBeenCalledWith({
+          id: 'publish-nodes',
+          params: {
+            nodes: expect.arrayContaining([cidToString(cid)]),
+          },
+        })
+
+        const node = await nodesRepository.getNode(cidToString(cid))
+        expect(node).not.toBeNull()
+
         const uploadEntry = await uploadsRepository.getUploadEntryById(
           upload.id,
         )
-        expect(uploadEntry).not.toBeNull()
-        expect(uploadEntry!.status).toBe(UploadStatus.COMPLETED)
+        expect(uploadEntry).toBeNull()
       })
     })
 
     describe('Downloading the file', () => {
       it('should be able to retrieve the file', async () => {
-        const { startDownload } = await FilesUseCases.downloadObject(user, cid)
+        const { startDownload } = await FilesUseCases.downloadObjectByUser(
+          user,
+          cid,
+        )
         const fileArray = await asyncIterableToPromiseOfArray(
           await startDownload(),
         )
@@ -296,29 +333,20 @@ files.map((file, index) => {
       it('object information should be updated on archiving', async () => {
         // Mocking archiving onchain
         const nodes = await nodesRepository.getNodesByHeadCid(cid)
-        const transactionResults = nodes.map((node) =>
-          nodesRepository.setNodeArchivingData({
-            cid: node.cid,
-            pieceIndex: 1,
-            pieceOffset: 1,
-          }),
-        )
-        await Promise.all(transactionResults)
-        // End of mocking
 
-        const objectInformation = await ObjectUseCases.getObjectInformation(cid)
-        expect(objectInformation).not.toBeNull()
-        expect(objectInformation?.uploadStatus).toEqual({
-          uploadedNodes: nodes.length,
-          totalNodes: nodes.length,
-          archivedNodes: nodes.length,
-          minimumBlockDepth: PUBLISH_ON_BLOCK,
-          maximumBlockDepth: PUBLISH_ON_BLOCK,
-        })
+        await NodesUseCases.processNodeArchived(
+          nodes.map((node) => [
+            Buffer.from(blake3HashFromCid(stringToCid(node.cid))).toString(
+              'hex',
+            ),
+            1,
+            1,
+          ]),
+        )
       })
 
-      it('should be able to archive the object', async () => {
-        await handleArchivedObjects()
+      it('metadata should be updated as archived', async () => {
+        await ObjectUseCases.checkObjectsArchivalStatus()
 
         const metadata = await metadataRepository.getMetadata(cid)
         expect(metadata).not.toBeNull()

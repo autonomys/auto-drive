@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { UserWithOrganization } from '../../models/users/index.js'
 import { AuthManager } from './index.js'
+import { config } from '../../config.js'
 
 export const handleAuth = async (
   req: Request,
@@ -32,4 +33,15 @@ export const handleAuth = async (
   }
 
   return user
+}
+
+export const handleOptionalAuth = async (
+  req: Request,
+  res: Response,
+): Promise<UserWithOrganization | boolean | null> => {
+  if (config.optionalAuth) {
+    return true
+  }
+
+  return handleAuth(req, res)
 }

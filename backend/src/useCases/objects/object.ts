@@ -20,6 +20,7 @@ import { AuthManager } from '../../services/auth/index.js'
 import { publishedObjectsRepository } from '../../repositories/objects/publishedObjects.js'
 import { v4 } from 'uuid'
 import { FilesUseCases } from './files.js'
+import { downloadService } from '../../services/download/index.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -297,10 +298,9 @@ const getNonArchivedObjects = async () => {
   return objects.map((e) => e.head_cid)
 }
 
-const markAsArchived = async (cid: string) => {
+const processArchival = async (cid: string) => {
   await metadataRepository.markAsArchived(cid)
-
-  await nodesRepository.removeNodesByHeadCid(cid)
+  await nodesRepository.removeNodesByRootCid(cid)
 }
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
@@ -331,7 +331,7 @@ const downloadPublishedObject = async (id: string) => {
     throw new Error('User does not have a subscription')
   }
 
-  return FilesUseCases.downloadObject(user, publishedObject.cid)
+  return FilesUseCases.downloadObjectByUser(user, publishedObject.cid)
 }
 
 const unpublishObject = async (user: User, cid: string) => {
@@ -346,6 +346,18 @@ const unpublishObject = async (user: User, cid: string) => {
   }
 
   await publishedObjectsRepository.deletePublishedObject(cid)
+}
+
+const checkObjectsArchivalStatus = async () => {
+  const cids = await getNonArchivedObjects()
+
+  for (const cid of cids) {
+    const allNodesArchived = await hasAllNodesArchived(cid)
+    if (allNodesArchived) {
+      await downloadService.download(cid)
+      await processArchival(cid)
+    }
+  }
 }
 
 export const ObjectUseCases = {
@@ -365,8 +377,9 @@ export const ObjectUseCases = {
   isArchived,
   hasAllNodesArchived,
   getNonArchivedObjects,
-  markAsArchived,
+  processArchival,
   publishObject,
   downloadPublishedObject,
   unpublishObject,
+  checkObjectsArchivalStatus,
 }

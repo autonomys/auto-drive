@@ -5,7 +5,11 @@ import { AuthManager } from '../../../src/services/auth'
 import { ObjectUseCases, SubscriptionsUseCases } from '../../../src/useCases'
 import { asyncIterableToPromiseOfArray } from '../../../src/utils/async'
 import { dbMigration } from '../../utils/dbMigrate'
-import { createMockUser } from '../../utils/mocks'
+import {
+  createMockUser,
+  mockRabbitPublish,
+  unmockMethods,
+} from '../../utils/mocks'
 import { uploadFile } from '../../utils/uploads'
 import { jest } from '@jest/globals'
 
@@ -17,11 +21,13 @@ describe('Public URL', () => {
 
   beforeAll(async () => {
     await dbMigration.up()
+    mockRabbitPublish()
     user = createMockUser()
     fileCid = await uploadFile(user, 'test.txt', content, 'text/plain')
   })
 
   afterAll(async () => {
+    unmockMethods()
     await dbMigration.down()
   })
 

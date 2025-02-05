@@ -47,7 +47,7 @@ const start = async () => {
       logger.info(
         `Processing object mapping list entry of length ${data.result.v0.objects.length}`,
       )
-      await NodesUseCases.processNodeArchived(data.result)
+      await NodesUseCases.scheduleNodeArchiving(data.result.v0.objects)
     }
   })
 }

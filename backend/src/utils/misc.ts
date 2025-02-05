@@ -14,3 +14,15 @@ export const env = (key: string, defaultValue?: string) => {
   }
   return value
 }
+
+export const exhaustiveCheck = (value: never) => {
+  throw new Error(`Unhandled case: ${JSON.stringify(value)}`)
+}
+
+export const chunkArray = <T>(array: T[], size: number): T[][] => {
+  const chunks = []
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size))
+  }
+  return chunks
+}

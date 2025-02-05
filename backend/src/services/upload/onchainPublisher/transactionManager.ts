@@ -12,6 +12,7 @@ import {
 } from '../../../models/objects/index.js'
 import { initializeQueue, registerTransactionInQueue } from './queue.js'
 import { logger } from '../../../drivers/logger.js'
+import { Mutex } from 'async-mutex'
 
 const submitTransaction = async (
   api: ApiPromise,
@@ -33,7 +34,7 @@ const submitTransaction = async (
         )
         reject(new Error('Transaction timeout'))
       }
-    }, 180000) // 3 minutes timeout
+    }, 60_000) // 3 minutes timeout
 
     const cleanup = () => {
       clearTimeout(timeout)
@@ -41,6 +42,11 @@ const submitTransaction = async (
         unsubscribe()
       }
     }
+
+    api.once('error', (error) => {
+      cleanup()
+      reject(error)
+    })
 
     transaction
       .signAndSend(
@@ -108,6 +114,7 @@ const submitTransaction = async (
 
 export const createTransactionManager = () => {
   let api: ApiPromise
+  const mutex = new Mutex()
 
   const ensureInitialized = async (): Promise<void> => {
     await waitReady()
@@ -117,22 +124,23 @@ export const createTransactionManager = () => {
 
   const submit = async (
     transactions: Transaction[],
-  ): Promise<TransactionResult[]> => {
-    await ensureInitialized()
+  ): Promise<TransactionResult[]> =>
+    mutex.runExclusive(async () => {
+      await ensureInitialized()
 
-    const promises: Promise<TransactionResult>[] = []
-    for (const transaction of transactions) {
-      const { account, nonce } = await registerTransactionInQueue(transaction)
+      const promises: Promise<TransactionResult>[] = []
+      for (const transaction of transactions) {
+        const { account, nonce } = await registerTransactionInQueue(transaction)
 
-      const trx = api.tx[transaction.module][transaction.method](
-        ...transaction.params,
-      )
+        const trx = api.tx[transaction.module][transaction.method](
+          ...transaction.params,
+        )
 
-      promises.push(submitTransaction(api, account, trx, nonce))
-    }
+        promises.push(submitTransaction(api, account, trx, nonce))
+      }
 
-    return Promise.all(promises)
-  }
+      return Promise.all(promises)
+    })
 
   return {
     submit,

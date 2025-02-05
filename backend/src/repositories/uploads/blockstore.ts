@@ -130,6 +130,14 @@ const deleteBlockstoreEntry = async (uploadId: string, cid: string) => {
   )
 }
 
+const deleteBlockstoreEntries = async (uploadId: string) => {
+  const db = await getDatabase()
+
+  await db.query('DELETE FROM uploads.blockstore WHERE upload_id = $1', [
+    uploadId,
+  ])
+}
+
 const getNodesByCid = async (cid: string) => {
   const db = await getDatabase()
 
@@ -153,4 +161,5 @@ export const blockstoreRepository = {
   getByCIDWithoutData,
   getByCIDAndRootUploadId,
   getNodesByCid,
+  deleteBlockstoreEntries,
 }

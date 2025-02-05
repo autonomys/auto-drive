@@ -36,6 +36,7 @@ services:
       FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
       AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     ports:
       - "${PORT}:3000"
     healthcheck:
@@ -88,6 +89,14 @@ services:
     command:
       - graphql-engine
       - serve
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
   auth:
     build:
       context: ./auth

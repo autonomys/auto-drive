@@ -19,6 +19,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
   backend:
     build:
       context: ./backend
@@ -36,11 +44,14 @@ services:
       FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
       AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 15s
       timeout: 10s
       retries: 3
+    ports:
+      - "${PORT}:3000"
   hasura:
     image: hasura/graphql-engine:v2.40.0
     depends_on:

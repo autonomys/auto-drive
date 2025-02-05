@@ -1,5 +1,7 @@
 import { closeDatabase, getDatabase } from '../../src/drivers/pg'
 import dbMigrate from 'db-migrate'
+import { Rabbit } from '../../src/drivers/rabbit'
+import { jest } from '@jest/globals'
 
 let dbMigrateInstance: ReturnType<typeof dbMigrate.getInstance>
 
@@ -11,8 +13,11 @@ const up = async () => {
 }
 
 const down = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 1000))
   await closeDatabase()
+  await Rabbit.close()
   await dbMigrateInstance.down()
+  jest.restoreAllMocks()
 }
 
 export const dbMigration = {
