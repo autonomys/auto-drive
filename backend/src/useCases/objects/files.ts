@@ -30,6 +30,7 @@ import {
 import { downloadService } from '../../services/download/index.js'
 import { FileGateway } from '../../services/dsn/fileGateway/index.js'
 import { FileDownload } from '../../models/objects/object.js'
+import { config } from '../../config.js'
 
 const generateFileArtifacts = async (
   uploadId: string,
@@ -252,6 +253,9 @@ const downloadObjectByAnonymous = async (
   const metadata = await ObjectUseCases.getMetadata(cid)
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`)
+  }
+  if (metadata.totalSize > config.params.maxAnonymousDownloadSize) {
+    throw new Error('File too large to be downloaded anonymously.')
   }
 
   return {

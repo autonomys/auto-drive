@@ -48,6 +48,9 @@ export const config = {
   },
   params: {
     maxUploadNodesPerBatch: Number(env('MAX_UPLOAD_NODES_PER_BATCH', '20')),
+    maxAnonymousDownloadSize: Number(
+      env('MAX_ANONYMOUS_DOWNLOAD_SIZE', HUNDRED_MB.toString()),
+    ),
     optionalAuth: env('OPTIONAL_AUTH', 'false') === 'true',
     defaultSubscription: {
       granularity: env('DEFAULT_SUBSCRIPTION_GRANULARITY', 'monthly'),
