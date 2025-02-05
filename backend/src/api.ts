@@ -14,19 +14,19 @@ const createServer = async () => {
 
   app.use(
     express.json({
-      limit: config.requestSizeLimit,
+      limit: config.express.requestSizeLimit,
     }),
   )
   app.use(
     express.urlencoded({
-      limit: config.requestSizeLimit,
+      limit: config.express.requestSizeLimit,
       extended: true,
     }),
   )
-  if (config.corsAllowedOrigins) {
+  if (config.express.corsAllowedOrigins) {
     app.use(
       cors({
-        origin: config.corsAllowedOrigins,
+        origin: config.express.corsAllowedOrigins,
       }),
     )
   }
@@ -55,8 +55,8 @@ const createServer = async () => {
     }
   })
 
-  app.listen(config.port, () => {
-    logger.info(`Server running at http://localhost:${config.port}`)
+  app.listen(config.express.port, () => {
+    logger.info(`Server running at http://localhost:${config.express.port}`)
   })
 }
 

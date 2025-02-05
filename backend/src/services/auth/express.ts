@@ -39,7 +39,7 @@ export const handleOptionalAuth = async (
   req: Request,
   res: Response,
 ): Promise<UserWithOrganization | boolean | null> => {
-  if (config.optionalAuth) {
+  if (config.params.optionalAuth) {
     return true
   }
 
