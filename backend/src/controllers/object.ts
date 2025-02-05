@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
-import { handleAuth } from '../services/auth/express.js'
+import { handleAuth, handleOptionalAuth } from '../services/auth/express.js'
 import {
   FilesUseCases,
   ObjectUseCases,
@@ -198,16 +198,20 @@ objectController.get(
     try {
       const { cid } = req.params
 
-      const user = await handleAuth(req, res)
-      if (!user) {
+      const optionalAuthResult = await handleOptionalAuth(req, res)
+      if (!optionalAuthResult) {
         return
       }
 
       logger.info(`Attempting to retrieve data for metadataCid: ${cid}`)
-      const { metadata, startDownload } = await FilesUseCases.downloadObject(
-        user,
-        cid,
-      )
+
+      const user =
+        typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
+
+      const { metadata, startDownload } = !user
+        ? await FilesUseCases.downloadObjectByAnonymous(cid)
+        : await FilesUseCases.downloadObjectByUser(user, cid)
+
       if (!metadata) {
         res.status(404).json({
           error: 'Metadata not found',

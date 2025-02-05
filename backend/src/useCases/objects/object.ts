@@ -331,7 +331,7 @@ const downloadPublishedObject = async (id: string) => {
     throw new Error('User does not have a subscription')
   }
 
-  return FilesUseCases.downloadObject(user, publishedObject.cid)
+  return FilesUseCases.downloadObjectByUser(user, publishedObject.cid)
 }
 
 const unpublishObject = async (user: User, cid: string) => {

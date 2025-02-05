@@ -237,7 +237,10 @@ files.map((file, index) => {
 
     describe('Downloading the file', () => {
       it('should be able to retrieve the file', async () => {
-        const { startDownload } = await FilesUseCases.downloadObject(user, cid)
+        const { startDownload } = await FilesUseCases.downloadObjectByUser(
+          user,
+          cid,
+        )
         const fileArray = await asyncIterableToPromiseOfArray(
           await startDownload(),
         )
