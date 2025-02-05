@@ -20,6 +20,7 @@
     "@polkadot/types": "^13.0.1",
     "@polkadot/util-crypto": "^13.0.2",
     "amqplib": "^0.10.5",
+    "async-mutex": "^0.5.0",
     "aws-sdk": "^2.1692.0",
     "body-parser": "^1.20.2",
     "cache-manager": "^6.4.0",

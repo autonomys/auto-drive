@@ -24,6 +24,9 @@ const publishNodes = safeCallback(async (cids: string[]) => {
     })
 
     const results = await transactionManager.submit(transactions)
+    if (results.some((result) => !result.success)) {
+      throw new Error('Error publishing nodes')
+    }
 
     await Promise.all(
       nodes.map((node, index) =>
