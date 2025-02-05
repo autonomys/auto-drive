@@ -43,6 +43,13 @@ export const createFileCache = (config: BaseCacheConfig) => {
     }
   }
 
+  const serialize = (data: FileCacheEntry) => {
+    return {
+      ...data,
+      size: data.size?.toString(),
+    }
+  }
+
   const get = async (cid: string): Promise<FileResponse | null> => {
     const start = performance.now()
     const data: UncheckedFileCacheEntry = deserialize(
@@ -68,22 +75,16 @@ export const createFileCache = (config: BaseCacheConfig) => {
     const { data, ...rest } = fileResponse
 
     const start = performance.now()
-    const cachePromise = filepathCache
-      .set(cid, {
-        ...rest,
-      })
-      .then(() => {
-        const end = performance.now()
-        logger.debug(`Caching file for ${cid} took ${end - start}ms`)
-      })
+    await writeFile(filePath, data)
+    const end = performance.now()
+    logger.debug(`Writing file to cache for ${cid} took ${end - start}ms`)
+
+    const serialized = serialize(rest)
 
     const start2 = performance.now()
-    const writePromise = writeFile(filePath, data).then(() => {
-      const end2 = performance.now()
-      logger.debug(`Writing file to cache for ${cid} took ${end2 - start2}ms`)
-    })
-
-    await Promise.all([cachePromise, writePromise])
+    await filepathCache.set(cid, serialized)
+    const end2 = performance.now()
+    logger.debug(`Caching file for ${cid} took ${end2 - start2}ms`)
   }
 
   const remove = async (cid: string) => {
