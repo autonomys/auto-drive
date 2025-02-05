@@ -45,6 +45,7 @@ services:
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
       AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      OPTIONAL_AUTH: ${OPTIONAL_AUTH}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 15s
