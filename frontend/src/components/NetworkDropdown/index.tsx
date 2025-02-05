@@ -11,11 +11,19 @@ import { CheckIcon, ChevronDownIcon } from '@heroicons/react/20/solid';
 import { Network, networks } from '../../constants/networks';
 import { FC, Fragment } from 'react';
 import { AutonomysSymbol } from '../common/AutonomysSymbol';
+import { cn } from '@/utils/cn';
 
 export const NetworkDropdown: FC<{
   selected: Network;
   onChange: (network: Network) => void;
 }> = ({ selected, onChange }) => {
+  const isActive = (selected: Network, network: Network) => {
+    if (selected.id === network.id) {
+      return true;
+    }
+    return false;
+  };
+
   return (
     <Listbox value={selected} onChange={onChange}>
       <div className='relative mt-1 w-36'>
@@ -41,28 +49,33 @@ export const NetworkDropdown: FC<{
             {Object.values(networks).map((network, personIdx) => (
               <ListboxOption
                 key={personIdx}
-                className={({ selectedOption }) =>
-                  `relative flex cursor-default select-none items-center justify-start gap-2 py-2 pl-4 pr-4 text-gray-900 hover:opacity-80 ${
-                    selectedOption && 'bg-gray-100'
-                  }`
-                }
+                className={cn(
+                  'relative flex cursor-default select-none items-center justify-start gap-2 py-2 pl-4 pr-4 text-gray-900',
+                  isActive(selected, network) ? 'bg-gray-100' : '',
+                )}
                 value={network}
               >
-                {({ selected }) => (
-                  <>
-                    <AutonomysSymbol />
-                    <span
-                      className={`${selected ? 'font-medium' : 'font-normal'}`}
-                    >
-                      {network.name}
+                <div className='flex'>
+                  <AutonomysSymbol />
+                  <span
+                    className={cn(
+                      'my-auto ml-2',
+                      isActive(selected, network)
+                        ? 'font-medium'
+                        : 'font-normal',
+                    )}
+                  >
+                    {network.name}
+                  </span>
+                  {isActive(selected, network) ? (
+                    <span className='text-greenBright absolute inset-y-0 right-2 my-auto flex items-center'>
+                      <CheckIcon
+                        className='size-4 text-gray-400'
+                        aria-hidden='true'
+                      />
                     </span>
-                    {selected ? (
-                      <span className='text-greenBright absolute inset-y-0 left-0 flex items-center pl-3'>
-                        <CheckIcon className='size-5' aria-hidden='true' />
-                      </span>
-                    ) : null}
-                  </>
-                )}
+                  ) : null}
+                </div>
               </ListboxOption>
             ))}
           </ListboxOptions>
