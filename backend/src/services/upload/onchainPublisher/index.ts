@@ -8,6 +8,8 @@ import { TaskManager } from '../../taskManager/index.js'
 
 const transactionManager = createTransactionManager()
 
+const REPUBLISH_DELAY = 10_000
+
 const publishNodes = safeCallback(async (cids: string[]) => {
   logger.info(`Uploading ${cids.length} nodes`)
 
@@ -26,7 +28,7 @@ const publishNodes = safeCallback(async (cids: string[]) => {
   const results = await transactionManager.submit(transactions)
   const someNodeFailed = results.some((result) => !result.success)
   if (someNodeFailed) {
-    await republishNodes(
+    republishNodes(
       nodes
         .filter((_, index) => !results[index].success)
         .map((node) => node.cid),
@@ -46,6 +48,7 @@ const publishNodes = safeCallback(async (cids: string[]) => {
 })
 
 const republishNodes = safeCallback(async (nodes: string[]) => {
+  await new Promise((resolve) => setTimeout(resolve, REPUBLISH_DELAY))
   TaskManager.publish({
     id: 'publish-nodes',
     params: {
