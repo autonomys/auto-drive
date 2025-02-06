@@ -24,7 +24,7 @@ export const getAccount = (address: string) => {
 }
 
 export const createAccountManager = async (api: ApiPromise) => {
-  const accounts = getAccounts()
+  let accounts = getAccounts()
 
   const nonceByAccount: Record<string, number> = {}
   let trxCounter = 0
@@ -48,7 +48,18 @@ export const createAccountManager = async (api: ApiPromise) => {
     return { account, nonce }
   }
 
+  const removeAccount = (address: string) => {
+    const index = accounts.findIndex((account) => account.address === address)
+    if (index !== -1) {
+      accounts.splice(index, 1)
+    }
+
+    if (accounts.length === 0) {
+      accounts = getAccounts()
+    }
+  }
+
   await Promise.all(promises)
 
-  return { registerTransaction }
+  return { registerTransaction, removeAccount }
 }

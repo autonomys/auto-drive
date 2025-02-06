@@ -80,7 +80,7 @@ const submitTransaction = (
               }
               resolve({
                 success: false,
-                batchTxHash: transaction.hash.toString(),
+                txHash: transaction.hash.toString(),
                 status: status.type,
                 error: errorMessage,
               })
@@ -90,13 +90,21 @@ const submitTransaction = (
               const { block } = await api.rpc.chain.getBlock(blockHash)
               resolve({
                 success: true,
-                batchTxHash: transaction.hash.toString(),
+                txHash: transaction.hash.toString(),
                 blockHash: status.asInBlock.toString(),
                 blockNumber: block.header.number.toNumber(),
                 status: status.type,
               })
             }
-          } else if (status.isInvalid || status.isUsurped) {
+          } else if (status.isInvalid) {
+            cleanup()
+            resolve({
+              success: false,
+              txHash: transaction.hash.toString(),
+              status: 'Invalid',
+              error: 'Transaction invalid',
+            })
+          } else if (status.isUsurped) {
             cleanup()
             isResolved = true
             reject(new Error(`Transaction ${status.type}`))
@@ -143,7 +151,24 @@ export const createTransactionManager = () => {
           ...transaction.params,
         )
 
-        return pLimitted(() => submitTransaction(api, account, trx, nonce))
+        return pLimitted(() =>
+          submitTransaction(api, account, trx, nonce)
+            .catch((error) => {
+              logger.error('Transaction submitted failed', error)
+              return {
+                success: false,
+                error: error.message,
+                status: 'Failed',
+              }
+            })
+            .then((result) => {
+              if (!result.success) {
+                accountManager.removeAccount(account.address)
+              }
+
+              return result
+            }),
+        )
       },
     )
 

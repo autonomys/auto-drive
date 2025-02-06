@@ -309,4 +309,5 @@ export const UploadsUseCases = {
   getPendingMigrations,
   processMigration,
   createSubFolderUpload,
+  scheduleNodesPublish,
 }

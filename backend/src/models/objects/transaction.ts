@@ -31,8 +31,8 @@ export type Transaction = {
 
 export type TransactionResult = {
   success: boolean
-  batchTxHash: string
   blockNumber?: number
+  txHash?: string
   blockHash?: string
   status: string
   error?: string
