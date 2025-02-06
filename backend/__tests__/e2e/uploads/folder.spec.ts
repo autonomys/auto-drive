@@ -281,7 +281,7 @@ describe('Folder Upload', () => {
       const promises = nodes.map((e) => {
         TransactionResultsUseCases.setTransactionResults(e.cid, {
           success: true,
-          batchTxHash: '0x123',
+          txHash: '0x123',
           status: TransactionStatus.CONFIRMED,
           blockNumber,
           blockHash: '0x123',
