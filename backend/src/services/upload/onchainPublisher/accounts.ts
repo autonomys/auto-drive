@@ -1,5 +1,6 @@
-import { Keyring } from '@polkadot/api'
+import { ApiPromise, Keyring } from '@polkadot/api'
 import { config } from '../../../config.js'
+import { getOnChainNonce } from '../../../utils/networkApi.js'
 
 export const getAccounts = () => {
   const privateKeys = config.chain.privateKeysPath
@@ -20,4 +21,34 @@ export const getAccounts = () => {
 export const getAccount = (address: string) => {
   const accounts = getAccounts()
   return accounts.find((account) => account.address === address)
+}
+
+export const createAccountManager = async (api: ApiPromise) => {
+  const accounts = getAccounts()
+
+  const nonceByAccount: Record<string, number> = {}
+  let trxCounter = 0
+
+  const promises = accounts.map(async (account) => {
+    const nonce = await getOnChainNonce(api, account.address)
+    nonceByAccount[account.address] = nonce
+  })
+
+  const getNextAccount = () => {
+    const account = accounts[trxCounter % accounts.length]
+    trxCounter++
+    return account
+  }
+
+  const registerTransaction = () => {
+    const account = getNextAccount()
+    const nonce = nonceByAccount[account.address]
+    nonceByAccount[account.address] = nonce + 1
+
+    return { account, nonce }
+  }
+
+  await Promise.all(promises)
+
+  return { registerTransaction }
 }

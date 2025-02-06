@@ -10,11 +10,12 @@ import {
   Transaction,
   TransactionResult,
 } from '../../../models/objects/index.js'
-import { initializeQueue, registerTransactionInQueue } from './queue.js'
 import { logger } from '../../../drivers/logger.js'
-import { Mutex } from 'async-mutex'
+import { createAccountManager } from './accounts.js'
+import pLimit from 'p-limit'
+import { config } from '../../../config.js'
 
-const submitTransaction = async (
+const submitTransaction = (
   api: ApiPromise,
   keyPair: KeyringPair,
   transaction: SubmittableExtrinsic<'promise'>,
@@ -114,33 +115,40 @@ const submitTransaction = async (
 
 export const createTransactionManager = () => {
   let api: ApiPromise
-  const mutex = new Mutex()
+  let accountManager: Awaited<ReturnType<typeof createAccountManager>>
 
-  const ensureInitialized = async (): Promise<void> => {
-    await waitReady()
-    api = await createConnection()
-    initializeQueue(api)
-  }
+  const uniqueExecution = pLimit(1)
+  const ensureInitialized = () =>
+    uniqueExecution(async (): Promise<void> => {
+      await waitReady()
+      api = api ?? (await createConnection())
+      accountManager = accountManager ?? (await createAccountManager(api))
+    })
+
+  const pLimitted = pLimit(config.params.maxConcurrentUploads)
 
   const submit = async (
     transactions: Transaction[],
-  ): Promise<TransactionResult[]> =>
-    mutex.runExclusive(async () => {
-      await ensureInitialized()
+  ): Promise<TransactionResult[]> => {
+    await ensureInitialized()
 
-      const promises: Promise<TransactionResult>[] = []
-      for (const transaction of transactions) {
-        const { account, nonce } = await registerTransactionInQueue(transaction)
+    const transactionWithAccount = transactions.map((transaction) => {
+      const { account, nonce } = accountManager.registerTransaction()
+      return { transaction, account, nonce }
+    })
 
+    const promises = transactionWithAccount.map(
+      ({ transaction, account, nonce }) => {
         const trx = api.tx[transaction.module][transaction.method](
           ...transaction.params,
         )
 
-        promises.push(submitTransaction(api, account, trx, nonce))
-      }
+        return pLimitted(() => submitTransaction(api, account, trx, nonce))
+      },
+    )
 
-      return Promise.all(promises)
-    })
+    return Promise.all(promises)
+  }
 
   return {
     submit,
