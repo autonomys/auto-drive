@@ -7,7 +7,7 @@ import { config } from '../../../config.js'
 import { logger } from '../../../drivers/logger.js'
 
 const start = async () => {
-  const ws = createWS(config.objectMappingArchiverUrl)
+  const ws = createWS(config.objectMappingArchiver.url)
 
   const SAFE_BLOCK_NUMBER_THRESHOLD = 100
   const blockNumber =

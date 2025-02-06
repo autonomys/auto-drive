@@ -76,10 +76,10 @@ const initSubscription = async (
   const newSubscription = {
     id: v4(),
     organizationId,
-    granularity: config.defaultSubscription
+    granularity: config.params.defaultSubscription
       .granularity as SubscriptionGranularity,
-    uploadLimit: config.defaultSubscription.uploadLimit,
-    downloadLimit: config.defaultSubscription.downloadLimit,
+    uploadLimit: config.params.defaultSubscription.uploadLimit,
+    downloadLimit: config.params.defaultSubscription.downloadLimit,
   }
   await subscriptionsRepository.createSubscription(
     newSubscription.id,
