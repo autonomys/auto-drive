@@ -14,7 +14,7 @@ export const handleDownloadResponseHeaders = (
     res.set('Content-Disposition', `filename="${safeName}"`)
     const compressedButNoEncrypted =
       metadata.uploadOptions?.compression && !metadata.uploadOptions?.encryption
-    if (compressedButNoEncrypted) {
+    if (compressedButNoEncrypted && !frontendCalling) {
       res.set('Content-Encoding', 'deflate')
     }
     res.set('Content-Length', metadata.totalSize.toString())
