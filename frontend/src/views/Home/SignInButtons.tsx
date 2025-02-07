@@ -1,12 +1,21 @@
-import { signIn } from 'next-auth/react';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
+import { LoaderCircle } from 'lucide-react';
+import { BuiltInProviderType } from 'next-auth/providers';
+import { getCsrfToken, signIn } from 'next-auth/react';
 import { useCallback, useState } from 'react';
+import { SiweMessage } from 'siwe';
+import { useAccount, useSignMessage } from 'wagmi';
 import { DiscordIcon } from '../../components/common/DiscordIcon';
 import { GoogleIcon } from '../../components/common/GoogleIcon';
-import { BuiltInProviderType } from 'next-auth/providers';
-import { LoaderCircle } from 'lucide-react';
+import { WalletIcon } from '../../components/common/WalletIcon';
 
 export const SigningInButtons = () => {
-  const [isClicked, setIsClicked] = useState<BuiltInProviderType>();
+  const { openConnectModal } = useConnectModal();
+  const { address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  const [isClicked, setIsClicked] = useState<
+    BuiltInProviderType | 'auto-evm'
+  >();
 
   const handleGoogleAuth = useCallback(() => {
     setIsClicked('google');
@@ -16,6 +25,36 @@ export const SigningInButtons = () => {
     setIsClicked('discord');
     signIn('discord');
   }, []);
+  const handleAutoEVM = useCallback(async () => {
+    setIsClicked('auto-evm');
+    if (openConnectModal) openConnectModal();
+
+    if (address) {
+      const siweMessage = new SiweMessage({
+        address,
+        chainId: 490000,
+        domain: window.location.host,
+        statement: 'Sign in to Auto Drive.',
+        uri: window.location.origin,
+        version: '1',
+        nonce: await getCsrfToken(),
+        issuedAt: new Date().toISOString(),
+        expirationTime: new Date(
+          Date.now() + 1000 * 7 * 24 * 60 * 60,
+        ).toISOString(),
+      });
+      const message = siweMessage.prepareMessage();
+      const signature = await signMessageAsync({
+        message,
+      });
+      signIn('auto-evm', {
+        address,
+        message,
+        signature,
+        redirect: false,
+      });
+    }
+  }, [openConnectModal, address, signMessageAsync]);
 
   return (
     <div className='flex flex-col gap-2'>
@@ -36,6 +75,15 @@ export const SigningInButtons = () => {
         <DiscordIcon fillColor='#5865F2' />
         Sign in with Discord
         {isClicked === 'discord' && <LoaderCircle className='animate-spin' />}
+      </button>
+      <button
+        onClick={handleAutoEVM}
+        className='flex w-full max-w-xs transform items-center justify-center rounded-full border-2 border-backgroundDarker bg-white px-6 py-3 font-bold text-backgroundDarker transition duration-300 ease-in-out hover:-translate-y-1 hover:scale-105 hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2'
+        aria-label='Sign in with Auto-EVM'
+      >
+        <WalletIcon />
+        Sign in with Auto-EVM
+        {isClicked === 'auto-evm' && <LoaderCircle className='animate-spin' />}
       </button>
     </div>
   );
