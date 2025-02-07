@@ -52,12 +52,14 @@ export const ObjectShareModal = ({
     }
 
     const toastId = toast.loading('Copying link to clipboard...');
-    let publicId = metadata.publishedObjectId;
-    if (!publicId) {
-      publicId = await network.api.publishObject(metadata.metadata.dataCid);
+    let link = metadata.publishedObjectId
+      ? `${apiUrl}/objects/${metadata.publishedObjectId}/public`
+      : null;
+    if (!link) {
+      link = await network.api.publishObject(metadata.metadata.dataCid);
     }
 
-    navigator.clipboard.writeText(`${apiUrl}/objects/${publicId}/public`);
+    navigator.clipboard.writeText(link);
 
     toast.success('Link copied to clipboard', {
       id: toastId,
