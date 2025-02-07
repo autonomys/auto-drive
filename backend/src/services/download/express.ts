@@ -13,7 +13,10 @@ export const handleDownloadResponseHeaders = (
 
   if (metadata.type === 'file') {
     res.set('Content-Type', metadata.mimeType || 'application/octet-stream')
-    res.set('Content-Disposition', `filename="${safeName}"`)
+    res.set(
+      'Content-Disposition',
+      `filename="${safeName}"; ${isExpectedDocument ? 'inline' : 'attachment'}`,
+    )
     const compressedButNoEncrypted =
       metadata.uploadOptions?.compression && !metadata.uploadOptions?.encryption
     if (compressedButNoEncrypted && isExpectedDocument) {
