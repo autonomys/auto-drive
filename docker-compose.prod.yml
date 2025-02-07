@@ -49,6 +49,18 @@ services:
     command:
       - graphql-engine
       - serve
+    profiles:
+      - base
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+    profiles:
+      - rabbit
   backend:
     build:
       context: ./backend
@@ -66,6 +78,8 @@ services:
       interval: 15s
       timeout: 10s
       retries: 3
+    profiles:
+      - base
   agent:
     container_name: newrelic-infra
     image: newrelic/infrastructure:latest
@@ -81,3 +95,5 @@ services:
       NRIA_LICENSE_KEY: "${NR_API_KEY}"
       NRIA_DISPLAY_NAME: "${NR_AGENT_IDENTIFIER}"
     restart: unless-stopped
+    profiles:
+      - base
