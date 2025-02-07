@@ -1,3 +1,4 @@
+import { OAuthUser } from '@auto-drive/models'
 import jwt from 'jsonwebtoken'
 import { SiweMessage } from 'siwe'
 
@@ -7,7 +8,9 @@ interface Web3AuthToken {
   signature: string
 }
 
-export const getUserFromAccessToken = async (accessToken: string) => {
+export const getUserFromAccessToken = async (
+  accessToken: string,
+): Promise<OAuthUser> => {
   const decoded = jwt.decode(accessToken)
   if (!decoded) throw new Error('Invalid token')
   if (typeof decoded !== 'object') throw new Error('Invalid token')
@@ -25,6 +28,7 @@ export const getUserFromAccessToken = async (accessToken: string) => {
   return {
     provider: 'auto-evm',
     id: address,
+    username: address,
   }
 }
 
