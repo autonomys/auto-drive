@@ -5,7 +5,7 @@ const downloadFile = async (
   cid: string,
 ): Promise<AwaitIterable<Uint8Array>> => {
   const response = await fetch(
-    `${config.filesGateway}/files/${cid}?api_key=${config.filesGateway.token}&raw=true`,
+    `${config.filesGateway.url}/files/${cid}?api_key=${config.filesGateway.token}&raw=true`,
   )
 
   if (!response.ok) {
