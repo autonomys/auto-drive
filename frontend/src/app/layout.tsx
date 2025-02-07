@@ -1,7 +1,8 @@
+import { Web3Provider } from '@/contexts/web3';
 import { Metadata } from 'next';
 import localFont from 'next/font/local';
-import './globals.css';
 import { ToasterSetup } from '../components/ToasterSetup';
+import './globals.css';
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
     'web3 storage',
     'peer-to-peer storage',
     'encrypted storage',
-    'data persistence'
+    'data persistence',
   ],
   icons: {
     icon: '/favicon.ico',
@@ -72,7 +73,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <Web3Provider>{children}</Web3Provider>
         <ToasterSetup />
       </body>
     </html>
