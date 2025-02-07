@@ -311,7 +311,7 @@ files.map((file, index) => {
         const transactionResults = nodes.map((node) =>
           TransactionResultsUseCases.setTransactionResults(node.cid, {
             success: true,
-            batchTxHash: '0x123',
+            txHash: '0x123',
             status: TransactionStatus.CONFIRMED,
             blockNumber: PUBLISH_ON_BLOCK,
           }),

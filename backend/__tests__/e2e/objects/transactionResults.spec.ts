@@ -18,7 +18,7 @@ describe('Transaction Results', () => {
   it('should be able to save transaction results', async () => {
     const transactionResult: TransactionResult = {
       success: true,
-      batchTxHash: '0x123',
+      txHash: '0x123',
       status: 'success',
     }
 

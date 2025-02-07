@@ -30,10 +30,11 @@ const subscribe = async (callback: (message: object) => Promise<unknown>) => {
     if (message) {
       try {
         await callback(JSON.parse(message.content.toString()))
+        channel.ack(message)
       } catch (error) {
         console.error('Error processing message', error)
+        channel.nack(message, false, true)
       }
-      channel.ack(message)
     } else {
       console.error('No message received')
     }

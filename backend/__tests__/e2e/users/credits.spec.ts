@@ -75,6 +75,6 @@ describe('CreditsUseCases', () => {
         interactionType,
       )
 
-    expect(initialCredits - pendingCredits).toEqual(Number(size))
+    expect(initialCredits - pendingCredits).toBe(Number(size).valueOf())
   })
 })

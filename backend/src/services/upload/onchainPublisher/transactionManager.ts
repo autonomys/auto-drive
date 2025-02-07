@@ -10,11 +10,12 @@ import {
   Transaction,
   TransactionResult,
 } from '../../../models/objects/index.js'
-import { initializeQueue, registerTransactionInQueue } from './queue.js'
 import { logger } from '../../../drivers/logger.js'
-import { Mutex } from 'async-mutex'
+import { createAccountManager } from './accounts.js'
+import pLimit from 'p-limit'
+import { config } from '../../../config.js'
 
-const submitTransaction = async (
+const submitTransaction = (
   api: ApiPromise,
   keyPair: KeyringPair,
   transaction: SubmittableExtrinsic<'promise'>,
@@ -79,7 +80,7 @@ const submitTransaction = async (
               }
               resolve({
                 success: false,
-                batchTxHash: transaction.hash.toString(),
+                txHash: transaction.hash.toString(),
                 status: status.type,
                 error: errorMessage,
               })
@@ -89,13 +90,21 @@ const submitTransaction = async (
               const { block } = await api.rpc.chain.getBlock(blockHash)
               resolve({
                 success: true,
-                batchTxHash: transaction.hash.toString(),
+                txHash: transaction.hash.toString(),
                 blockHash: status.asInBlock.toString(),
                 blockNumber: block.header.number.toNumber(),
                 status: status.type,
               })
             }
-          } else if (status.isInvalid || status.isUsurped) {
+          } else if (status.isInvalid) {
+            cleanup()
+            resolve({
+              success: false,
+              txHash: transaction.hash.toString(),
+              status: 'Invalid',
+              error: 'Transaction invalid',
+            })
+          } else if (status.isUsurped) {
             cleanup()
             isResolved = true
             reject(new Error(`Transaction ${status.type}`))
@@ -114,33 +123,57 @@ const submitTransaction = async (
 
 export const createTransactionManager = () => {
   let api: ApiPromise
-  const mutex = new Mutex()
+  let accountManager: Awaited<ReturnType<typeof createAccountManager>>
 
-  const ensureInitialized = async (): Promise<void> => {
-    await waitReady()
-    api = await createConnection()
-    initializeQueue(api)
-  }
+  const uniqueExecution = pLimit(1)
+  const ensureInitialized = () =>
+    uniqueExecution(async (): Promise<void> => {
+      await waitReady()
+      api = api ?? (await createConnection())
+      accountManager = accountManager ?? (await createAccountManager(api))
+    })
+
+  const pLimitted = pLimit(config.params.maxConcurrentUploads)
 
   const submit = async (
     transactions: Transaction[],
-  ): Promise<TransactionResult[]> =>
-    mutex.runExclusive(async () => {
-      await ensureInitialized()
+  ): Promise<TransactionResult[]> => {
+    await ensureInitialized()
 
-      const promises: Promise<TransactionResult>[] = []
-      for (const transaction of transactions) {
-        const { account, nonce } = await registerTransactionInQueue(transaction)
+    const transactionWithAccount = transactions.map((transaction) => {
+      const { account, nonce } = accountManager.registerTransaction()
+      return { transaction, account, nonce }
+    })
 
+    const promises = transactionWithAccount.map(
+      ({ transaction, account, nonce }) => {
         const trx = api.tx[transaction.module][transaction.method](
           ...transaction.params,
         )
 
-        promises.push(submitTransaction(api, account, trx, nonce))
-      }
+        return pLimitted(() =>
+          submitTransaction(api, account, trx, nonce)
+            .catch((error) => {
+              logger.error('Transaction submitted failed', error)
+              return {
+                success: false,
+                error: error.message,
+                status: 'Failed',
+              }
+            })
+            .then((result) => {
+              if (!result.success) {
+                accountManager.removeAccount(account.address)
+              }
 
-      return Promise.all(promises)
-    })
+              return result
+            }),
+        )
+      },
+    )
+
+    return Promise.all(promises)
+  }
 
   return {
     submit,
