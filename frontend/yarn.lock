@@ -76,7 +76,7 @@
     relay-runtime "12.0.0"
     signedsource "^1.0.0"
 
-"@autonomys/auto-dag-data@^1.0.7", "@autonomys/auto-dag-data@^1.2.1":
+"@autonomys/auto-dag-data@^1.0.7":
   version "1.2.1"
   resolved "https://registry.yarnpkg.com/@autonomys/auto-dag-data/-/auto-dag-data-1.2.1.tgz#45042895f4e4083486e94de80f2025ee95ec800e"
   integrity sha512-I9jzvsOX1yB2I+YcdOSllSedfQbbeyL1TldnTCqx1Itp54KdfYcc4MrQwAGut0otcvKcIUEtzYpSK5z6ATeFOQ==
@@ -92,12 +92,28 @@
     protons "^7.6.0"
     protons-runtime "^5.5.0"
 
-"@autonomys/auto-drive@^1.2.0":
-  version "1.2.1"
-  resolved "https://registry.yarnpkg.com/@autonomys/auto-drive/-/auto-drive-1.2.1.tgz#679db76f28239d961e63db820bd86adff9046528"
-  integrity sha512-XR353ceE4lZ0LOdhc1TcVd0l5aVB6qbCx8CRmeoiLgo1EjgV9t6WHTWtgWNdVPheVVmfGkDbKzXm7Q+jF0xsUg==
+"@autonomys/auto-dag-data@^1.2.6":
+  version "1.2.6"
+  resolved "https://registry.yarnpkg.com/@autonomys/auto-dag-data/-/auto-dag-data-1.2.6.tgz#83184c1bdfc0364288ee3cac9380fac977683ae1"
+  integrity sha512-upwUn8bDZjIdKZTQpj1fhZ5dO+eJiG0srfvmp+Eqn1D2ggHObdovBJ3j+fhywofvKBJcfzObb0lF26d4irKMOQ==
   dependencies:
-    "@autonomys/auto-dag-data" "^1.2.1"
+    "@ipld/dag-pb" "^4.1.2"
+    "@peculiar/webcrypto" "^1.5.0"
+    "@webbuf/blake3" "^3.0.26"
+    "@webbuf/fixedbuf" "^3.0.26"
+    "@webbuf/webbuf" "^3.0.26"
+    fflate "^0.8.2"
+    multiformats "^13.2.2"
+    protobufjs "^7.4.0"
+    protons "^7.6.0"
+    protons-runtime "^5.5.0"
+
+"@autonomys/auto-drive@^1.2.6":
+  version "1.2.6"
+  resolved "https://registry.yarnpkg.com/@autonomys/auto-drive/-/auto-drive-1.2.6.tgz#c9b4290a622f4c6c3ba623301b04fae9d2966758"
+  integrity sha512-yX+TtoumGuEZ2yUp9ZVOfsMee1tk9GJ3cdTSm2sLfe8qFCobNFNcJV2Y7FuXbkConHeWEGnKfG9A+YUWUASdiQ==
+  dependencies:
+    "@autonomys/auto-dag-data" "^1.2.6"
     jszip "^3.10.1"
     mime-types "^2.1.35"
     process "^0.11.10"

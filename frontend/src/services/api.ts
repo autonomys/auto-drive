@@ -2,6 +2,7 @@ import {
   AuthProvider,
   createAutoDriveApi,
   downloadFile,
+  publishObject,
 } from '@autonomys/auto-drive';
 import {
   SubscriptionGranularity,
@@ -199,18 +200,12 @@ export const createApiService = (apiBaseUrl: string) => ({
       throw new Error('No session');
     }
 
-    const response = await fetch(`${apiBaseUrl}/objects/${cid}/publish`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-      },
+    const apiDrive = createAutoDriveApi({
+      provider: session.authProvider as AuthProvider,
+      apiKey: session.accessToken,
+      url: apiBaseUrl,
     });
 
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.json().then((data) => data.result);
+    return publishObject(apiDrive, cid);
   },
 });
