@@ -220,7 +220,7 @@ objectController.get(
         return
       }
 
-      handleDownloadResponseHeaders(res, metadata)
+      handleDownloadResponseHeaders(req, res, metadata)
 
       pipeline(await startDownload(), res, (err) => {
         if (err) {
@@ -339,7 +339,7 @@ objectController.get(
         return
       }
 
-      handleDownloadResponseHeaders(res, metadata)
+      handleDownloadResponseHeaders(req, res, metadata)
 
       pipeline(await startDownload(), res, (err) => {
         if (err) {
