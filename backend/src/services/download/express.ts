@@ -7,14 +7,16 @@ export const handleDownloadResponseHeaders = (
   metadata: OffchainMetadata,
 ) => {
   const safeName = encodeURIComponent(metadata.name || 'download')
-  const frontendCalling = !!req.headers.origin
+  const isExpectedDocument =
+    req.headers['sec-fetch-dest'] === 'document' ||
+    req.headers['sec-fetch-dest'] === 'iframe'
 
   if (metadata.type === 'file') {
     res.set('Content-Type', metadata.mimeType || 'application/octet-stream')
     res.set('Content-Disposition', `filename="${safeName}"`)
     const compressedButNoEncrypted =
       metadata.uploadOptions?.compression && !metadata.uploadOptions?.encryption
-    if (compressedButNoEncrypted && !frontendCalling) {
+    if (compressedButNoEncrypted && isExpectedDocument) {
       res.set('Content-Encoding', 'deflate')
     }
     res.set('Content-Length', metadata.totalSize.toString())
@@ -22,7 +24,7 @@ export const handleDownloadResponseHeaders = (
     res.set('Content-Type', 'application/zip')
     res.set(
       'Content-Disposition',
-      `filename="${safeName}.zip; ${frontendCalling ? 'attachment' : 'inline'}`,
+      `filename="${safeName}.zip; ${isExpectedDocument ? 'inline' : 'attachment'}`,
     )
   }
 }
