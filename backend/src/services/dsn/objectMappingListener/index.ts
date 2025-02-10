@@ -2,24 +2,24 @@ import { z } from 'zod'
 import { createWS } from '../../../drivers/ws.js'
 import { ObjectMappingListEntrySchema } from '../../../models/objects/objectMappings.js'
 import { NodesUseCases } from '../../../useCases/index.js'
-import { transactionResultsRepository } from '../../../repositories/index.js'
 import { config } from '../../../config.js'
 import { logger } from '../../../drivers/logger.js'
+import { nodesRepository } from '../../../repositories/index.js'
 
 const start = async () => {
   const ws = createWS(config.objectMappingArchiver.url)
 
   const SAFE_BLOCK_NUMBER_THRESHOLD = 100
-  const blockNumber =
-    await transactionResultsRepository.getFirstNotArchivedNode()
+  const node = await nodesRepository.getFirstNotArchivedNode()
 
-  if (!blockNumber) {
+  if (!node?.block_published_on) {
     logger.info('Subscribing to real time object mappings')
     await ws.send({
       jsonrpc: '2.0',
       method: 'subscribe_object_mappings',
     })
   } else {
+    const blockNumber = node.block_published_on
     logger.info(`Subscribing to recover object mappings from ${blockNumber}`)
     await ws.send({
       jsonrpc: '2.0',

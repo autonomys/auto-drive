@@ -2,6 +2,7 @@ import { MetadataType } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import pgFormat from 'pg-format'
 import z from 'zod'
+import { TransactionResult } from '../../models/objects/transaction.js'
 
 export type Node = z.infer<typeof NodeSchema>
 
@@ -13,6 +14,8 @@ export const NodeSchema = z.object({
   encoded_node: z.string(),
   piece_index: z.number().optional(),
   piece_offset: z.number().optional(),
+  block_published_on: z.number().nullable(),
+  tx_published_on: z.string().nullable(),
 })
 
 const saveNode = async (node: Node) => {
@@ -183,6 +186,39 @@ const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
     .then((e) => e.rows)
 }
 
+const updateNodePublishedOn = async (
+  cid: string,
+  result: TransactionResult,
+) => {
+  const db = await getDatabase()
+
+  return db.query({
+    text: 'UPDATE nodes SET published_on = $1 WHERE cid = $2',
+    values: [result, cid],
+  })
+}
+
+const getUploadedNodesByRootCid = async (rootCid: string) => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT * FROM nodes WHERE root_cid = $1 AND published_on IS NOT NULL',
+      values: [rootCid],
+    })
+    .then((e) => e.rows)
+}
+
+const getFirstNotArchivedNode = async () => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT cid FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL LIMIT 1',
+    })
+    .then((e) => e.rows.at(0))
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -194,4 +230,7 @@ export const nodesRepository = {
   getNodesByRootCid,
   removeNodesByRootCid,
   getNodesByCids,
+  updateNodePublishedOn,
+  getUploadedNodesByRootCid,
+  getFirstNotArchivedNode,
 }

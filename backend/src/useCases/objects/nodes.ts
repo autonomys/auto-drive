@@ -24,6 +24,7 @@ import { logger } from '../../drivers/logger.js'
 import { Node } from '../../repositories/objects/nodes.js'
 import { TaskManager } from '../../services/taskManager/index.js'
 import { Task } from '../../services/taskManager/tasks.js'
+import { TransactionResult } from '../../models/objects/transaction.js'
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
@@ -54,6 +55,8 @@ const saveNode = async (
     cid: cidString,
     type,
     encoded_node: encodedNode,
+    block_published_on: null,
+    tx_published_on: null,
   })
 }
 
@@ -145,6 +148,8 @@ const migrateFromBlockstoreToNodesTable = async (
             head_cid: cidToString(rootCID),
             type: decodeIPLDNodeData(Buffer.from(e.block)).type,
             encoded_node: Buffer.from(e.block).toString('base64'),
+            block_published_on: null,
+            tx_published_on: null,
           })),
         )
       },
@@ -198,14 +203,23 @@ const scheduleNodeArchiving = async (
   TaskManager.publish(tasks)
 }
 
-export const getCidsByRootCid = async (rootCid: string): Promise<string[]> => {
+const getCidsByRootCid = async (rootCid: string): Promise<string[]> => {
   return nodesRepository
     .getNodesByRootCid(rootCid)
     .then((e) => e.map((e) => e.cid))
 }
 
-export const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
+const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
   return nodesRepository.getNodesByCids(cids)
+}
+
+const setPublishedOn = async (
+  cid: string,
+  result: TransactionResult,
+): Promise<void> => {
+  await nodesRepository.updateNodePublishedOn(cid, result)
+
+  return
 }
 
 export const NodesUseCases = {
@@ -218,4 +232,5 @@ export const NodesUseCases = {
   getCidsByRootCid,
   getNodesByCids,
   scheduleNodeArchiving,
+  setPublishedOn,
 }
