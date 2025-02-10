@@ -28,7 +28,7 @@ export const NodeExplorer: FC<NodeExplorerProps> = ({
   const hasMetadata = metadata && Object.keys(metadata).length > 0;
 
   return (
-    <div className='mx-auto max-w-4xl rounded-lg bg-white p-6 shadow-lg'>
+    <div className='dark:bg-darkWhite mx-auto max-w-4xl rounded-lg bg-white p-6 shadow-lg'>
       <h1 className='mb-6 text-3xl font-bold text-gray-800'>
         Node {cid.slice(0, 10)}
       </h1>

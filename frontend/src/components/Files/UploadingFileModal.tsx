@@ -59,8 +59,8 @@ export const UploadingFileModal = ({
   return (
     <Transition show={!!file}>
       <Dialog as='div' onClose={onClose}>
-        <div className='fixed inset-0 flex items-center justify-center bg-black bg-opacity-50'>
-          <div className='min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform'>
+        <div className='dark:bg-darkBlack/25 fixed inset-0 flex items-center justify-center bg-black/25 bg-opacity-50'>
+          <div className='dark:bg-darkWhite min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform'>
             {passwordConfirmed ? (
               <div>
                 <div className='relative h-2 w-full rounded bg-gray-200'>
@@ -76,7 +76,7 @@ export const UploadingFileModal = ({
             ) : (
               <div>
                 <div className='flex flex-col gap-2 p-4'>
-                  <span className='text-md block text-center font-semibold text-gray-700'>
+                  <span className='dark:text-darkBlack text-md block text-center font-semibold text-gray-700'>
                     Enter Encrypting Password
                   </span>
                   <input

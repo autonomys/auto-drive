@@ -14,11 +14,11 @@ export const TablePaginator = ({
   totalItems: number;
 }) => {
   return (
-    <div className='flex w-full items-center justify-between p-4 text-sm text-light-gray'>
+    <div className='dark:text-darkBlack flex w-full items-center justify-between p-4 text-sm text-light-gray'>
       <div className='flex items-center'>
         <span className='mr-2'>Items per page:</span>
         <select
-          className='rounded border border-gray-300 bg-gray-100 p-1 pr-1'
+          className='dark:bg-darkWhite rounded border border-gray-300 bg-gray-100 p-1 pr-1'
           value={pageSize}
           onChange={(e) => setPageSize(parseInt(e.target.value))}
         >
@@ -37,14 +37,14 @@ export const TablePaginator = ({
       <div className='flex items-center gap-2'>
         <button
           disabled={currentPage === 0}
-          className='cursor-pointer rounded-md border border-light-gray p-2 text-gray-800 transition-all hover:scale-[102%] disabled:opacity-0'
+          className='dark:text-darkBlack cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-0'
           onClick={() => setCurrentPage(currentPage - 1)}
         >
           <ChevronLeftIcon className='h-4 w-4' />
         </button>
         <button
           disabled={currentPage * pageSize + pageSize >= totalItems}
-          className='cursor-pointer rounded-md border border-light-gray p-2 text-gray-800 transition-all hover:scale-[102%] disabled:opacity-0'
+          className='dark:text-darkBlack cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-0'
           onClick={() => setCurrentPage(currentPage + 1)}
         >
           <ChevronRightIcon className='h-4 w-4' />

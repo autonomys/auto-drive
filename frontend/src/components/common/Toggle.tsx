@@ -8,7 +8,7 @@ export const Toggle = ({
   return (
     <button
       className={`h-6 w-12 rounded-full p-[2px] transition-colors duration-300 ease-in-out focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
-        value ? 'bg-black' : 'bg-gray-200'
+        value ? 'dark:bg-darkBlack bg-black' : 'bg-gray-200'
       }`}
       onClick={() => onUpdate(!value)}
       aria-pressed={value}

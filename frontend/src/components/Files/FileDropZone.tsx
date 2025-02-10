@@ -174,20 +174,20 @@ export function FileDropZone() {
           leaveTo='transform scale-95 opacity-0'
         >
           <PopoverPanel className='absolute z-10 w-full'>
-            <div className='rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5'>
+            <div className='dark:bg-darkWhiteHover dark:text-darkBlack rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5'>
               <div className='p-4'>
                 <button
                   onClick={openFileDialog}
-                  className='flex w-full items-center rounded-md px-4 py-2 text-sm text-gray-700 hover:bg-gray-100'
+                  className='dark:hover:bg-darkWhite flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100'
                 >
-                  <FileIcon className='mr-3 h-5 w-5 text-gray-400' />
+                  <FileIcon className='mr-3 h-5 w-5' />
                   Select Files
                 </button>
                 <button
                   onClick={openFolderDialog}
-                  className='flex w-full items-center rounded-md px-4 py-2 text-sm text-gray-700 hover:bg-gray-100'
+                  className='dark:hover:bg-darkWhite flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100'
                 >
-                  <FolderIcon className='mr-3 h-5 w-5 text-gray-400' />
+                  <FolderIcon className='mr-3 h-5 w-5' />
                   Select Folder
                 </button>
               </div>

@@ -104,7 +104,7 @@ export const UploadedObjectInformation = ({
         </Button>
       </div>
       <span className='ml-2 text-xl font-semibold'>Metadata</span>
-      <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
+      <div className='dark:bg-darkWhiteHover dark:text-darkBlack grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
         <div className='flex'>
           <span>Name:</span>
           <span className='ml-[4px]'>{object.metadata.name ?? 'Unnamed'}</span>
@@ -149,7 +149,7 @@ export const UploadedObjectInformation = ({
         </div>
       </div>
       <span className='ml-2 text-xl font-semibold'>Upload Status</span>
-      <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
+      <div className='dark:bg-darkWhiteHover dark:text-darkBlack grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
         <div className='flex'>
           <span>Total Nodes: </span>
           <span className='ml-[4px]'>{object.uploadStatus.totalNodes}</span>
@@ -176,7 +176,7 @@ export const UploadedObjectInformation = ({
         </div>
       </div>
       <span className='ml-2 text-xl font-semibold'>Upload Options</span>
-      <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
+      <div className='dark:bg-darkWhiteHover dark:text-darkBlack grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
         <div className='flex'>
           <span>Encryption: </span>
           <span className='ml-[4px] font-bold'>

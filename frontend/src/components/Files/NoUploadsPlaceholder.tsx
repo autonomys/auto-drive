@@ -2,7 +2,7 @@ import { Disclaimer } from '../common/Disclaimer';
 
 export const NoUploadsPlaceholder = () => {
   return (
-    <div className='mx-auto max-w-2xl rounded-lg bg-white p-6'>
+    <div className='dark:bg-darkWhite mx-auto max-w-2xl rounded-lg bg-white p-6'>
       <h2 className='mb-4 text-center text-2xl font-bold'>
         Make your first upload
       </h2>

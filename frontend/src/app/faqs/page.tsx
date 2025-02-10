@@ -13,7 +13,7 @@ const geistSans = localFont({
 export default function App() {
   return (
     <div
-      className={`from-backgroundLight to-backgroundDark flex min-h-screen flex-col items-center justify-between bg-gradient-to-b ${geistSans.variable}`}
+      className={`flex min-h-screen flex-col items-center justify-between bg-gradient-to-b from-backgroundLight to-backgroundDark dark:from-backgroundDark dark:to-backgroundDarkest ${geistSans.variable}`}
     >
       <FAQ />
       <Footer />

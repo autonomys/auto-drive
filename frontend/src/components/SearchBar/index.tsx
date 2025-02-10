@@ -118,7 +118,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
 
     if (error) {
       return (
-        <li className='relative cursor-default select-none px-4 py-2 text-red-500'>
+        <li className='dark:text-darkBlack relative cursor-default select-none px-4 py-2 text-red-500'>
           {error}
         </li>
       );
@@ -126,7 +126,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
 
     if (recommendations && recommendations.length === 0) {
       return (
-        <li className='relative cursor-default select-none px-4 py-2 text-gray-700'>
+        <li className='dark:text-darkBlack relative cursor-default select-none px-4 py-2 text-gray-700'>
           Nothing found.
         </li>
       );
@@ -143,7 +143,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
           tabIndex={0}
           key={item.cid}
           onKeyDown={handleEnterOrSpace(() => handleSelectItem(item.cid))}
-          className='relative cursor-pointer select-none overflow-hidden text-ellipsis px-4 py-2 font-semibold text-gray-900 hover:bg-blue-600 hover:text-white'
+          className='dark:text-darkBlack relative cursor-pointer select-none overflow-hidden text-ellipsis px-4 py-2 font-semibold text-gray-900 hover:bg-blue-600 hover:text-white'
           onClick={() => handleSelectItem(item.cid)}
         >
           {displayText}
@@ -153,13 +153,13 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   }, [query, recommendations, error, handleSelectItem]);
 
   return (
-    <div className='mx-auto w-full max-w-md'>
+    <div className='dark:text-darkBlack mx-auto w-full max-w-md'>
       <div className='relative mt-1'>
         <div className='relative w-full'>
           <input
             ref={inputRef}
             type='text'
-            className='w-full rounded-lg border border-[#BCC1CA] bg-white py-2 pl-3 pr-10 text-sm leading-5 text-black text-gray-900 placeholder:text-black focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+            className='dark:bg-darkWhite dark:text-darkBlack dark:placeholder:text-darkBlack w-full rounded-lg border border-[#BCC1CA] bg-white py-2 pl-3 pr-10 text-sm leading-5 text-black text-gray-900 placeholder:text-black focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
             value={query}
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}
@@ -186,7 +186,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
           >
             <ul
               ref={dropdownRef}
-              className='absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm'
+              className='dark:bg-darkWhite absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm'
             >
               {searchBarResult}
             </ul>

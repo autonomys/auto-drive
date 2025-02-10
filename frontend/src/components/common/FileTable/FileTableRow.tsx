@@ -136,7 +136,7 @@ export const FileTableRow = ({
                 {isRowExpanded ? (
                   <DisplayerIcon className='rotate-90 text-accent' />
                 ) : (
-                  <DisplayerIcon className='text-black' />
+                  <DisplayerIcon className='dark:text-darkBlack text-black' />
                 )}
               </button>
             )}
@@ -144,7 +144,7 @@ export const FileTableRow = ({
               role='button'
               tabIndex={0}
               onKeyDown={handleEnterOrSpace(toggleExpand)}
-              className={`relative ml-2 text-sm font-medium text-gray-900 ${
+              className={`dark:text-darkBlack relative ml-2 text-sm font-medium text-gray-900 ${
                 file.type === 'folder'
                   ? 'hover:cursor-pointer hover:underline'
                   : ''
@@ -181,7 +181,7 @@ export const FileTableRow = ({
                   leaveTo='opacity-0 translate-y-1'
                 >
                   <PopoverPanel className='absolute left-0 z-10'>
-                    <div className='rounded-lg bg-white shadow-md'>
+                    <div className='dark:bg-darkWhite rounded-lg bg-white shadow-md'>
                       <Metadata object={file} />
                     </div>
                   </PopoverPanel>
@@ -222,7 +222,7 @@ export const FileTableRow = ({
               >
                 <div className='absolute bottom-0 left-0 z-10 translate-y-full'>
                   {file.uploadStatus.totalNodes === null && (
-                    <div className='rounded-lg bg-white p-2 shadow-md'>
+                    <div className='dark:bg-darkWhite rounded-lg bg-white p-2 shadow-md'>
                       <span className='text-sm text-gray-700'>
                         Processing upload...
                       </span>
