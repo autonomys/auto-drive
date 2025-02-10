@@ -1,7 +1,9 @@
 import { SearchResult } from '../../../../../views/SearchResult';
-import { SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME } from '../../../../../services/gql/common/query';
 import { createGQLClientByNetwork } from '../../../../../services/gql';
-import { SearchGlobalMetadataByCidOrNameQuery } from '../../../../../../gql/graphql';
+import {
+  SearchGlobalMetadataByCidOrNameDocument,
+  SearchGlobalMetadataByCidOrNameQuery,
+} from '../../../../../../gql/graphql';
 import { NetworkId } from '../../../../../constants/networks';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +16,7 @@ export default async function Page({
   const gqlClient = createGQLClientByNetwork(chain);
 
   const { data } = await gqlClient.query<SearchGlobalMetadataByCidOrNameQuery>({
-    query: SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
+    query: SearchGlobalMetadataByCidOrNameDocument,
     variables: {
       search: `%${decodeURIComponent(cid)}%`,
       limit: 100,

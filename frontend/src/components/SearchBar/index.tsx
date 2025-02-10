@@ -7,13 +7,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ObjectSearchResult } from '../../models/ObjectSearchResult';
 import { handleEnterOrSpace } from '../../utils/eventHandler';
 import { useQuery } from '@apollo/client';
-import {
-  SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
-  SEARCH_USER_METADATA_BY_CID_OR_NAME,
-} from '../../services/gql/common/query';
 import { useSession } from 'next-auth/react';
 import {
+  SearchGlobalMetadataByCidOrNameDocument,
   SearchGlobalMetadataByCidOrNameQuery,
+  SearchUserMetadataByCidOrNameDocument,
   SearchUserMetadataByCidOrNameQuery,
 } from '../../../gql/graphql';
 import { ROUTES } from '../../constants/routes';
@@ -34,8 +32,8 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
 
   const gqlQuery =
     scope === 'global'
-      ? SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME
-      : SEARCH_USER_METADATA_BY_CID_OR_NAME;
+      ? SearchGlobalMetadataByCidOrNameDocument
+      : SearchUserMetadataByCidOrNameDocument;
 
   useQuery(gqlQuery, {
     variables: {
