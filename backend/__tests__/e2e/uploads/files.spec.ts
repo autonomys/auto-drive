@@ -28,7 +28,6 @@ import {
   FilesUseCases,
   NodesUseCases,
   SubscriptionsUseCases,
-  TransactionResultsUseCases,
 } from '../../../src/useCases/index.js'
 import {
   interactionsRepository,
@@ -309,7 +308,7 @@ files.map((file, index) => {
         // Mocking publishing onchain
         const nodes = await nodesRepository.getNodesByHeadCid(cid)
         const transactionResults = nodes.map((node) =>
-          TransactionResultsUseCases.setTransactionResults(node.cid, {
+          NodesUseCases.setPublishedOn(node.cid, {
             success: true,
             txHash: '0x123',
             status: TransactionStatus.CONFIRMED,

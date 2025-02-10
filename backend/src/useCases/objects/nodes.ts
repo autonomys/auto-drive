@@ -217,7 +217,16 @@ const setPublishedOn = async (
   cid: string,
   result: TransactionResult,
 ): Promise<void> => {
-  await nodesRepository.updateNodePublishedOn(cid, result)
+  if (!result.blockNumber || !result.txHash) {
+    logger.error(`No block number or tx hash for ${cid}`)
+    throw new Error(`No block number or tx hash for ${cid}`)
+  }
+
+  await nodesRepository.updateNodePublishedOn(
+    cid,
+    result.blockNumber,
+    result.txHash,
+  )
 
   return
 }

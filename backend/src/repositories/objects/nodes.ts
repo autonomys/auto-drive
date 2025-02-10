@@ -2,7 +2,6 @@ import { MetadataType } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import pgFormat from 'pg-format'
 import z from 'zod'
-import { TransactionResult } from '../../models/objects/transaction.js'
 
 export type Node = z.infer<typeof NodeSchema>
 
@@ -188,13 +187,14 @@ const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
 
 const updateNodePublishedOn = async (
   cid: string,
-  result: TransactionResult,
+  blockPublishedOn: number,
+  txPublishedOn: string,
 ) => {
   const db = await getDatabase()
 
   return db.query({
-    text: 'UPDATE nodes SET published_on = $1 WHERE cid = $2',
-    values: [result, cid],
+    text: 'UPDATE nodes SET block_published_on = $1, tx_published_on = $2 WHERE cid = $3',
+    values: [blockPublishedOn, txPublishedOn, cid],
   })
 }
 
@@ -203,7 +203,7 @@ const getUploadedNodesByRootCid = async (rootCid: string) => {
 
   return db
     .query<Node>({
-      text: 'SELECT * FROM nodes WHERE root_cid = $1 AND published_on IS NOT NULL',
+      text: 'SELECT * FROM nodes WHERE root_cid = $1 AND block_published_on IS NOT NULL',
       values: [rootCid],
     })
     .then((e) => e.rows)

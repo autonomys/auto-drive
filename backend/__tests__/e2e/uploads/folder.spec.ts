@@ -18,8 +18,8 @@ import {
 import { UserWithOrganization } from '../../../src/models/users'
 import {
   FilesUseCases,
+  NodesUseCases,
   ObjectUseCases,
-  TransactionResultsUseCases,
 } from '../../../src/useCases'
 import { UploadsUseCases } from '../../../src/useCases/uploads/uploads'
 import { dbMigration } from '../../utils/dbMigrate'
@@ -279,12 +279,11 @@ describe('Folder Upload', () => {
       const blockNumber = 123
       const nodes = await nodesRepository.getNodesByRootCid(folderCID)
       const promises = nodes.map((e) => {
-        TransactionResultsUseCases.setTransactionResults(e.cid, {
+        NodesUseCases.setPublishedOn(e.cid, {
           success: true,
           txHash: '0x123',
           status: TransactionStatus.CONFIRMED,
           blockNumber,
-          blockHash: '0x123',
         })
       })
 
