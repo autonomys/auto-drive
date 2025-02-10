@@ -106,7 +106,7 @@ export const FileTableRow = ({
     () => (headCid: string) => {
       toggleSelectFile(headCid);
     },
-    [],
+    [toggleSelectFile],
   );
 
   const toggleExpand = useCallback(() => setIsRowExpanded((prev) => !prev), []);

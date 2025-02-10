@@ -23,9 +23,9 @@ export const mapObjectInformationFromQueryResult = (
       totalNodes: metadata.totalNodes?.aggregate?.count ?? 0,
       archivedNodes: metadata.archivedNodes?.aggregate?.count ?? 0,
       minimumBlockDepth:
-        metadata.minimumBlockDepth[0]?.transaction_result?.blockNumber ?? null,
+        metadata.minimumBlockDepth?.[0]?.block_published_on ?? null,
       maximumBlockDepth:
-        metadata.maximumBlockDepth[0]?.transaction_result?.blockNumber ?? null,
+        metadata.maximumBlockDepth?.[0]?.block_published_on ?? null,
     },
     owners: metadata.object_ownership.map((owner) => ({
       role: owner.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,

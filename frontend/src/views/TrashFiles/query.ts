@@ -30,25 +30,21 @@ export const GET_TRASHED_FILES = gql`
         size: metadata(path: "totalSize")
         children: metadata(path: "children")
         maximumBlockDepth: nodes(
-          order_by: { transaction_result: { created_at: desc_nulls_first } }
+          order_by: { block_published_on: desc_nulls_last }
           limit: 1
         ) {
-          transaction_result {
-            blockNumber: transaction_result(path: "blockNumber")
-          }
+          block_published_on
+          tx_published_on
         }
         minimumBlockDepth: nodes(
-          order_by: { transaction_result: { created_at: asc } }
+          order_by: { block_published_on: desc_nulls_last }
           limit: 1
         ) {
-          transaction_result {
-            blockNumber: transaction_result(path: "blockNumber")
-          }
+          block_published_on
+          tx_published_on
         }
         publishedNodes: nodes_aggregate(
-          where: {
-            transaction_result: { transaction_result: { _is_null: false } }
-          }
+          where: { block_published_on: { _is_null: false } }
         ) {
           aggregate {
             count
