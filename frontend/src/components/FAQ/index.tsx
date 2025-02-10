@@ -19,10 +19,10 @@ export const FAQ: FC = () => {
           {faqs.map((question, index) => (
             <div key={index} className='m-4'>
               <button
-                className='dark:bg-boxDark w-full rounded-lg bg-white p-8 text-left text-gray-900 shadow-md dark:border-none dark:text-white'
+                className='dark:bg-darkWhite dark:text-darkBlack w-full rounded-lg bg-white p-8 text-left text-backgroundDark shadow-md dark:border-none dark:text-white'
                 onClick={() => toggleFAQ(index)}
               >
-                <span className='font-semibold text-xl text-gray-900 dark:text-gray-900'>
+                <span className='dark:text-darkBlack text-xl font-semibold text-black'>
                   {index + 1}. {question.question}
                 </span>
                 <span className='float-right'>
@@ -30,8 +30,8 @@ export const FAQ: FC = () => {
                 </span>
               </button>
               {openIndex === index && (
-                <div className='mt-2 rounded-lg bg-gray-100 p-4 dark:bg-gray-700'>
-                  <p className='whitespace-pre-line text-gray-700 dark:text-white'>
+                <div className='dark:bg-darkWhiteHover mt-2 rounded-lg bg-gray-100 p-4'>
+                  <p className='dark:text-darkBlack whitespace-pre-line text-black'>
                     {question.answer}
                   </p>
                 </div>

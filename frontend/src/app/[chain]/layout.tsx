@@ -39,8 +39,8 @@ export default function AppLayout({
   }
 
   return (
-    <div className='min-h-screen bg-white'>
-      <div className='flex h-screen flex-col rounded-lg bg-white'>
+    <div className='dark:bg-darkWhite min-h-screen bg-white dark:bg-gray-900'>
+      <div className='dark:bg-darkWhite dark:bg-darkWhite flex h-screen flex-col rounded-lg bg-white dark:text-white'>
         <TopNavbar networkId={params.chain} />
         <div className='flex flex-1 overflow-hidden px-10'>
           <UserEnsurer>

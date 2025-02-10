@@ -48,7 +48,7 @@ export const UserSubscriptionsTable = ({
                   <TableBodyRow>
                     <TableBodyCell
                       colSpan={7}
-                      className='whitespace-nowrap px-6 py-4 text-center text-sm text-gray-500'
+                      className='dark:text-darkBlack whitespace-nowrap px-6 py-4 text-center text-sm text-black'
                     >
                       <span className='flex items-center justify-center'>
                         <Loader className='h-4 w-4 animate-spin' />

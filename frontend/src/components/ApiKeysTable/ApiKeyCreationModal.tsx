@@ -65,7 +65,7 @@ export const ApiKeyCreationModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='fixed inset-0 bg-black/25' />
+          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black dark:bg-backgroundDarkest' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -79,7 +79,7 @@ export const ApiKeyCreationModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-backgroundDark'>
                 <DialogTitle
                   as='h3'
                   className='text-center text-lg font-medium leading-6 text-gray-900'
@@ -93,7 +93,7 @@ export const ApiKeyCreationModal = ({
                         <button
                           tabIndex={0}
                           onKeyDown={handleEnterOrSpace(copyApiKey)}
-                          className='flex cursor-pointer items-center rounded bg-gray-100 px-2 py-1 text-center font-mono text-sm'
+                          className='flex cursor-pointer items-center rounded bg-gray-100 px-2 py-1 text-center font-mono text-sm dark:bg-backgroundDark'
                           onClick={copyApiKey}
                           title='Click to copy'
                         >
@@ -108,7 +108,7 @@ export const ApiKeyCreationModal = ({
                     </div>
                   ) : (
                     <Fragment>
-                      <p className='text-center text-sm text-gray-500'>
+                      <p className='text-center text-sm text-gray-500 dark:text-white'>
                         You are about to create a new API key. This key will
                         allow you to access the API programmatically. Please
                         keep this key secure and do not share it with anyone.

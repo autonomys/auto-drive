@@ -91,7 +91,7 @@ export const HandleSelector = ({
           <input
             ref={inputRef}
             type='text'
-            className='w-full rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+            className='dark:bg-darkWhite w-full rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
             value={selectedHandle ?? query}
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}
@@ -116,7 +116,7 @@ export const HandleSelector = ({
         >
           <ul
             ref={dropdownRef}
-            className='absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm'
+            className='dark:bg-darkWhite absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm'
           >
             {searchBarResult}
           </ul>

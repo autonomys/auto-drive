@@ -10,5 +10,7 @@ export const RoleProtected: FC<PropsWithChildren<{ roles: UserRole[] }>> = ({
 }) => {
   const user = useUserStore(({ user }) => user);
 
+  console.log('user', user);
+
   return user && roles.includes(user.role) && children;
 };

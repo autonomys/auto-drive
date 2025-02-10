@@ -17,7 +17,7 @@ export const SearchResult = ({ objects }: { objects: BaseMetadata[] }) => {
           />
         ))
       ) : (
-        <div className='flex h-[50%] w-full flex-col items-center justify-center text-center text-xl text-gray-500'>
+        <div className='dark:text-darkBlack flex h-[50%] w-full flex-col items-center justify-center text-center text-xl text-gray-500'>
           No objects found!
         </div>
       )}

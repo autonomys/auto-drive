@@ -85,14 +85,14 @@ export const FileCard = ({
         cid={isDownloadModalOpen ? cid : null}
         onClose={() => setIsDownloadModalOpen(false)}
       />
-      <div className='relative flex max-w-sm flex-1 flex-col text-ellipsis rounded-lg border border-gray-200 bg-white p-4 shadow-sm'>
+      <div className='dark:bg-darkWhite relative flex max-w-sm flex-1 flex-col text-ellipsis rounded-lg border border-gray-200 bg-white p-4 shadow-sm'>
         <div className='mb-4 flex items-start justify-between'>
           {objectIcon}
           <PopoverButton>
             <MoreVertical size={20} />
           </PopoverButton>
         </div>
-        <h2 className='mb-2 text-lg font-semibold text-gray-800'>
+        <h2 className='dark:text-darkBlack mb-2 text-lg font-semibold text-gray-800'>
           {name ? shortenString(name, 20) : shortenString(cid, 20)}
         </h2>
         <p className='mb-4 text-gray-500'>Size: {bytes(Number(size))}</p>
@@ -112,10 +112,10 @@ export const FileCard = ({
             Open
           </button>
         )}
-        <PopoverPanel className='w-fit-content absolute right-0 top-0 divide-y divide-gray-200 rounded-xl bg-white text-sm/6 ring-1 ring-gray-200 transition duration-200 ease-in-out [--anchor-gap:var(--spacing-5)] data-[closed]:-translate-y-1 data-[closed]:opacity-0'>
+        <PopoverPanel className='w-fit-content dark:bg-darkWhite absolute right-0 top-0 divide-y divide-gray-200 rounded-xl bg-white text-sm/6 ring-1 ring-gray-200 transition duration-200 ease-in-out [--anchor-gap:var(--spacing-5)] data-[closed]:-translate-y-1 data-[closed]:opacity-0'>
           <div className='flex w-40 flex-col gap-2 p-3'>
             <span
-              className='flex items-center gap-2 font-semibold text-gray-800'
+              className='dark:text-darkBlack flex items-center gap-2 font-semibold text-black'
               onClick={handleDownloadClick}
               role='button'
               tabIndex={0}
@@ -130,7 +130,7 @@ export const FileCard = ({
                 role='button'
                 tabIndex={0}
                 onKeyDown={handleNavigateKeyDown}
-                className='flex items-center gap-2 font-semibold text-gray-800'
+                className='dark:text-darkBlack flex items-center gap-2 font-semibold text-black'
                 onClick={handleNavigateClick}
               >
                 <FolderIcon size={16} />

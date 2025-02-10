@@ -17,7 +17,7 @@ export const RecentActivities = ({
   activities?: Activity[];
 }) => {
   return (
-    <div className='max-w-md rounded-lg bg-white p-6'>
+    <div className='dark:bg-darkWhite max-w-md rounded-lg bg-white p-6'>
       <h2 className='mb-4 text-xl font-semibold'>Recent Global Activities:</h2>
       <ul className='space-y-2'>
         {activities.map((activity, index) => (
