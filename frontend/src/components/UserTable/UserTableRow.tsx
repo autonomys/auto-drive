@@ -54,7 +54,7 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
           role='button'
           tabIndex={0}
           onKeyDown={handleEnterOrSpace(copyToClipboard)}
-          className='flex cursor-pointer items-center gap-2 text-sm text-gray-900 transition-colors duration-200 hover:text-blue-500'
+          className='dark:text-darkBlack flex cursor-pointer items-center gap-2 text-sm text-black transition-colors duration-200 hover:text-blue-500'
           onClick={copyToClipboard}
         >
           {shortenString(subscriptionWithUser.user.publicId!, 16)}{' '}
@@ -62,27 +62,29 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-gray-900'>
+        <div className='dark:text-darkBlack text-sm text-black'>
           {subscriptionWithUser.user.oauthProvider}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='flex items-center gap-2 text-sm text-gray-900'>
+        <div className='dark:text-darkBlack flex items-center gap-2 text-sm text-black'>
           {subscriptionWithUser.user.role}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-gray-900'>{granularity}</div>
+        <div className='dark:text-darkBlack text-sm text-black'>
+          {granularity}
+        </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-gray-900'>
+        <div className='dark:text-darkBlack text-sm text-black'>
           {bytes(Number(subscriptionWithUser.uploadLimit), {
             unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-gray-900'>
+        <div className='dark:text-darkBlack text-sm text-black'>
           {bytes(Number(subscriptionWithUser.downloadLimit), {
             unitSeparator: ' ',
           })}

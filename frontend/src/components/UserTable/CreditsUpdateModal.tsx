@@ -95,7 +95,7 @@ export const CreditsUpdateModal = ({
               <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
-                  className='text-lg font-medium leading-6 text-gray-900'
+                  className='dark:text-darkBlack text-lg font-medium leading-6 text-black'
                 >
                   Update credits
                 </DialogTitle>
@@ -110,7 +110,7 @@ export const CreditsUpdateModal = ({
                         onChange={(e) => setDownloadCredits(e.target.value)}
                       />
                       <select
-                        className='rounded border border-gray-300 px-2 py-1'
+                        className='dark:bg-darkWhite dark:text-darkBlack dark:ring-darkWhiteHover rounded border border-gray-300 bg-white px-2 py-1 text-black dark:ring-1'
                         value={downloadCreditsUnit}
                         onChange={(e) =>
                           setDownloadCreditsUnit(Number(e.target.value))
@@ -130,7 +130,7 @@ export const CreditsUpdateModal = ({
                         onChange={(e) => setUploadCredits(e.target.value)}
                       />
                       <select
-                        className='rounded border border-gray-300 px-2 py-1'
+                        className='dark:bg-darkWhite dark:text-darkBlack dark:ring-darkWhiteHover rounded border border-gray-300 bg-white px-2 py-1 text-black dark:ring-1'
                         value={uploadCreditsUnit}
                         onChange={(e) =>
                           setUploadCreditsUnit(Number(e.target.value))
