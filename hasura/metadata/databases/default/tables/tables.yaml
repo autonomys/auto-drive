@@ -5,7 +5,6 @@
 - "!include interactions.yaml"
 - "!include organizations.yaml"
 - "!include subscriptions.yaml"
-- "!include transaction_results.yaml"
 - "!include users.yaml"
 - "!include users_organizations.yaml"
 - "!include published_objects.yaml"

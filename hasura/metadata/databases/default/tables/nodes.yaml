@@ -12,6 +12,8 @@ select_permissions:
         - type
         - piece_index
         - piece_offset
+        - block_published_on
+        - tx_published_on
       filter: {}
       allow_aggregations: true
     comment: ""
@@ -24,15 +26,6 @@ object_relationships:
         insertion_order: null
         remote_table:
           name: nodes
-          schema: public
-  - name: transaction_result
-    using:
-      manual_configuration:
-        column_mapping:
-          cid: cid
-        insertion_order: null
-        remote_table:
-          name: transaction_results
           schema: public
 array_relationships:
   - name: nodes
