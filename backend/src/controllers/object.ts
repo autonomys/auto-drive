@@ -129,6 +129,30 @@ objectController.get(
 )
 
 objectController.get(
+  '/:cid/summary',
+  asyncSafeHandler(async (req, res) => {
+    try {
+      const { cid } = req.params
+      const summary = await ObjectUseCases.getObjectSummaryByCID(cid)
+      if (!summary) {
+        res.status(404).json({
+          error: 'Metadata not found',
+        })
+        return
+      }
+
+      res.json(summary)
+    } catch (error: unknown) {
+      console.error('Error retrieving metadata:', error)
+      res.status(500).json({
+        error: 'Failed to retrieve metadata',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }),
+)
+
+objectController.get(
   '/:cid/metadata',
   asyncSafeHandler(async (req, res) => {
     try {
