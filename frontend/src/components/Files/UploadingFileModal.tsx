@@ -69,7 +69,7 @@ export const UploadingFileModal = ({
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <div className='mt-4 flex justify-center text-sm font-semibold'>
+                <div className='dark:text-darkBlack mt-4 flex justify-center text-sm font-semibold text-black'>
                   <div>Uploading... {progressPercentage}%</div>
                 </div>
               </div>
