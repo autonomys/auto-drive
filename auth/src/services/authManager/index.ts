@@ -1,7 +1,7 @@
 import { OAuthUser } from "../../models/index";
 import { ApiKeyAuth } from "./providers/apikey";
 import { CustomJWTAuth } from "./providers/custom";
-import { DiscordAuth, GoogleAuth } from "./providers/index";
+import { DiscordAuth, GitHubAuth, GoogleAuth } from "./providers/index";
 
 const getUserFromAccessToken = async (
   provider: string,
@@ -16,6 +16,8 @@ const getUserFromAccessToken = async (
       return ApiKeyAuth.getUserFromApiKey(accessToken);
     case "custom-jwt":
       return CustomJWTAuth.getUserFromAccessToken(accessToken);
+    case "github":
+      return GitHubAuth.getUserFromAccessToken(accessToken);
     default:
       throw new Error("Invalid provider");
   }
