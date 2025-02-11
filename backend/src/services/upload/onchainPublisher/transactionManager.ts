@@ -140,10 +140,12 @@ export const createTransactionManager = () => {
   ): Promise<TransactionResult[]> => {
     await ensureInitialized()
 
-    const transactionWithAccount = transactions.map((transaction) => {
-      const { account, nonce } = accountManager.registerTransaction()
+    const trxPromises = transactions.map(async (transaction) => {
+      const { account, nonce } = await accountManager.registerTransaction()
       return { transaction, account, nonce }
     })
+
+    const transactionWithAccount = await Promise.all(trxPromises)
 
     const promises = transactionWithAccount.map(
       ({ transaction, account, nonce }) => {
@@ -161,9 +163,9 @@ export const createTransactionManager = () => {
                 status: 'Failed',
               }
             })
-            .then((result) => {
+            .then(async (result) => {
               if (!result.success) {
-                accountManager.removeAccount(account.address)
+                await accountManager.removeAccount(account.address)
               }
 
               return result

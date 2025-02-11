@@ -1,9 +1,6 @@
 import { UploadStatus } from '../../models/objects/index.js'
 import { UploadStatus as UploadStatusType } from '../../models/uploads/upload.js'
-import {
-  nodesRepository,
-  transactionResultsRepository,
-} from '../../repositories/index.js'
+import { nodesRepository } from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 
 const getUploadStatus = async (cid: string): Promise<UploadStatus> => {
@@ -27,17 +24,16 @@ const getUploadStatus = async (cid: string): Promise<UploadStatus> => {
   const { totalCount, archivedCount } = await nodesRepository.getNodeCount({
     rootCid: cid,
   })
-  const uploadedNodes =
-    await transactionResultsRepository.getUploadedNodesByRootCid(cid)
+  const uploadedNodes = await nodesRepository.getUploadedNodesByRootCid(cid)
 
   const minimumBlockDepth = uploadedNodes
-    .filter((e) => e.transaction_result.blockNumber)
-    .map((e) => e.transaction_result.blockNumber!)
+    .filter((e) => e.block_published_on)
+    .map((e) => e.block_published_on!)
     .reduce((a, b) => (a === null ? b : Math.min(a, b)), null as number | null)
 
   const maxSeenBlockDepth = uploadedNodes
-    .filter((e) => e.transaction_result.blockNumber)
-    .map((e) => e.transaction_result.blockNumber!)
+    .filter((e) => e.block_published_on)
+    .map((e) => e.block_published_on!)
     .reduce((a, b) => (a === null ? b : Math.max(a, b)), null as number | null)
 
   const isFullyUploaded = uploadedNodes.length === totalCount

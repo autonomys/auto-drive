@@ -13,6 +13,8 @@ export const NodeSchema = z.object({
   encoded_node: z.string(),
   piece_index: z.number().optional(),
   piece_offset: z.number().optional(),
+  block_published_on: z.number().nullable(),
+  tx_published_on: z.string().nullable(),
 })
 
 const saveNode = async (node: Node) => {
@@ -183,6 +185,40 @@ const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
     .then((e) => e.rows)
 }
 
+const updateNodePublishedOn = async (
+  cid: string,
+  blockPublishedOn: number,
+  txPublishedOn: string,
+) => {
+  const db = await getDatabase()
+
+  return db.query({
+    text: 'UPDATE nodes SET block_published_on = $1, tx_published_on = $2 WHERE cid = $3',
+    values: [blockPublishedOn, txPublishedOn, cid],
+  })
+}
+
+const getUploadedNodesByRootCid = async (rootCid: string) => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT * FROM nodes WHERE root_cid = $1 AND block_published_on IS NOT NULL',
+      values: [rootCid],
+    })
+    .then((e) => e.rows)
+}
+
+const getFirstNotArchivedNode = async () => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT cid FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL LIMIT 1',
+    })
+    .then((e) => e.rows.at(0))
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -194,4 +230,7 @@ export const nodesRepository = {
   getNodesByRootCid,
   removeNodesByRootCid,
   getNodesByCids,
+  updateNodePublishedOn,
+  getUploadedNodesByRootCid,
+  getFirstNotArchivedNode,
 }
