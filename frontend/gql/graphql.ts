@@ -2655,11 +2655,6 @@ export type GetGlobalFilesQueryVariables = Exact<{
 
 export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, oauth_provider: string, oauth_user_id: string }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
 
-export type GetProfileQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type GetProfileQuery = { __typename?: 'query_root', users: Array<{ __typename?: 'users', public_id?: string | null, oauth_user_id: string, oauth_provider: string, api_keys: Array<{ __typename?: 'api_keys', id: string, oauth_user_id: string, oauth_provider: string, created_at?: any | null, deleted_at?: any | null }> }> };
-
 export type GetSharedFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
   oauthProvider: Scalars['String']['input'];
@@ -3015,54 +3010,6 @@ export type GetGlobalFilesQueryHookResult = ReturnType<typeof useGetGlobalFilesQ
 export type GetGlobalFilesLazyQueryHookResult = ReturnType<typeof useGetGlobalFilesLazyQuery>;
 export type GetGlobalFilesSuspenseQueryHookResult = ReturnType<typeof useGetGlobalFilesSuspenseQuery>;
 export type GetGlobalFilesQueryResult = Apollo.QueryResult<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>;
-export const GetProfileDocument = gql`
-    query GetProfile {
-  users {
-    public_id
-    oauth_user_id
-    oauth_provider
-    api_keys(where: {deleted_at: {_is_null: true}}) {
-      id
-      oauth_user_id
-      oauth_provider
-      created_at
-      deleted_at
-    }
-  }
-}
-    `;
-
-/**
- * __useGetProfileQuery__
- *
- * To run a query within a React component, call `useGetProfileQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetProfileQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetProfileQuery({
- *   variables: {
- *   },
- * });
- */
-export function useGetProfileQuery(baseOptions?: Apollo.QueryHookOptions<GetProfileQuery, GetProfileQueryVariables>) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<GetProfileQuery, GetProfileQueryVariables>(GetProfileDocument, options);
-      }
-export function useGetProfileLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetProfileQuery, GetProfileQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<GetProfileQuery, GetProfileQueryVariables>(GetProfileDocument, options);
-        }
-export function useGetProfileSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetProfileQuery, GetProfileQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<GetProfileQuery, GetProfileQueryVariables>(GetProfileDocument, options);
-        }
-export type GetProfileQueryHookResult = ReturnType<typeof useGetProfileQuery>;
-export type GetProfileLazyQueryHookResult = ReturnType<typeof useGetProfileLazyQuery>;
-export type GetProfileSuspenseQueryHookResult = ReturnType<typeof useGetProfileSuspenseQuery>;
-export type GetProfileQueryResult = Apollo.QueryResult<GetProfileQuery, GetProfileQueryVariables>;
 export const GetSharedFilesDocument = gql`
     query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!) {
   metadata(
