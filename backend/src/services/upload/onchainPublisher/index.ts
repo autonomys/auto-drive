@@ -1,5 +1,5 @@
 import { logger } from '../../../drivers/logger.js'
-import { TransactionResultsUseCases } from '../../../useCases/index.js'
+import { NodesUseCases } from '../../../useCases/index.js'
 import { safeCallback } from '../../../utils/safe.js'
 import { createTransactionManager } from './transactionManager.js'
 import { compactAddLength } from '@polkadot/util'
@@ -39,10 +39,7 @@ const publishNodes = safeCallback(async (cids: string[]) => {
     nodes.map((node, index) => {
       const isSuccess = results[index].success
       if (!isSuccess) return null
-      return TransactionResultsUseCases.setTransactionResults(
-        node.cid,
-        results[index],
-      )
+      return NodesUseCases.setPublishedOn(node.cid, results[index])
     }),
   )
 })

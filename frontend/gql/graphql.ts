@@ -694,6 +694,7 @@ export type Metadata_Stream_Cursor_Value_Input = {
 /** columns and relationships of "nodes" */
 export type Nodes = {
   __typename?: 'nodes';
+  block_published_on?: Maybe<Scalars['Int']['output']>;
   cid: Scalars['String']['output'];
   encoded_node?: Maybe<Scalars['String']['output']>;
   head_cid?: Maybe<Scalars['String']['output']>;
@@ -706,8 +707,7 @@ export type Nodes = {
   /** An object relationship */
   root?: Maybe<Nodes>;
   root_cid?: Maybe<Scalars['String']['output']>;
-  /** An object relationship */
-  transaction_result?: Maybe<Transaction_Results>;
+  tx_published_on?: Maybe<Scalars['String']['output']>;
   type?: Maybe<Scalars['String']['output']>;
 };
 
@@ -790,12 +790,14 @@ export type Nodes_Aggregate_Order_By = {
 /** aggregate avg on columns */
 export type Nodes_Avg_Fields = {
   __typename?: 'nodes_avg_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by avg() on columns of table "nodes" */
 export type Nodes_Avg_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -805,6 +807,7 @@ export type Nodes_Bool_Exp = {
   _and?: InputMaybe<Array<Nodes_Bool_Exp>>;
   _not?: InputMaybe<Nodes_Bool_Exp>;
   _or?: InputMaybe<Array<Nodes_Bool_Exp>>;
+  block_published_on?: InputMaybe<Int_Comparison_Exp>;
   cid?: InputMaybe<String_Comparison_Exp>;
   encoded_node?: InputMaybe<String_Comparison_Exp>;
   head_cid?: InputMaybe<String_Comparison_Exp>;
@@ -814,58 +817,67 @@ export type Nodes_Bool_Exp = {
   piece_offset?: InputMaybe<Int_Comparison_Exp>;
   root?: InputMaybe<Nodes_Bool_Exp>;
   root_cid?: InputMaybe<String_Comparison_Exp>;
-  transaction_result?: InputMaybe<Transaction_Results_Bool_Exp>;
+  tx_published_on?: InputMaybe<String_Comparison_Exp>;
   type?: InputMaybe<String_Comparison_Exp>;
 };
 
 /** aggregate max on columns */
 export type Nodes_Max_Fields = {
   __typename?: 'nodes_max_fields';
+  block_published_on?: Maybe<Scalars['Int']['output']>;
   cid?: Maybe<Scalars['String']['output']>;
   encoded_node?: Maybe<Scalars['String']['output']>;
   head_cid?: Maybe<Scalars['String']['output']>;
   piece_index?: Maybe<Scalars['Int']['output']>;
   piece_offset?: Maybe<Scalars['Int']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
+  tx_published_on?: Maybe<Scalars['String']['output']>;
   type?: Maybe<Scalars['String']['output']>;
 };
 
 /** order by max() on columns of table "nodes" */
 export type Nodes_Max_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   cid?: InputMaybe<Order_By>;
   encoded_node?: InputMaybe<Order_By>;
   head_cid?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
+  tx_published_on?: InputMaybe<Order_By>;
   type?: InputMaybe<Order_By>;
 };
 
 /** aggregate min on columns */
 export type Nodes_Min_Fields = {
   __typename?: 'nodes_min_fields';
+  block_published_on?: Maybe<Scalars['Int']['output']>;
   cid?: Maybe<Scalars['String']['output']>;
   encoded_node?: Maybe<Scalars['String']['output']>;
   head_cid?: Maybe<Scalars['String']['output']>;
   piece_index?: Maybe<Scalars['Int']['output']>;
   piece_offset?: Maybe<Scalars['Int']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
+  tx_published_on?: Maybe<Scalars['String']['output']>;
   type?: Maybe<Scalars['String']['output']>;
 };
 
 /** order by min() on columns of table "nodes" */
 export type Nodes_Min_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   cid?: InputMaybe<Order_By>;
   encoded_node?: InputMaybe<Order_By>;
   head_cid?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
+  tx_published_on?: InputMaybe<Order_By>;
   type?: InputMaybe<Order_By>;
 };
 
 /** Ordering options when selecting data from "nodes". */
 export type Nodes_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   cid?: InputMaybe<Order_By>;
   encoded_node?: InputMaybe<Order_By>;
   head_cid?: InputMaybe<Order_By>;
@@ -874,12 +886,14 @@ export type Nodes_Order_By = {
   piece_offset?: InputMaybe<Order_By>;
   root?: InputMaybe<Nodes_Order_By>;
   root_cid?: InputMaybe<Order_By>;
-  transaction_result?: InputMaybe<Transaction_Results_Order_By>;
+  tx_published_on?: InputMaybe<Order_By>;
   type?: InputMaybe<Order_By>;
 };
 
 /** select columns of table "nodes" */
 export enum Nodes_Select_Column {
+  /** column name */
+  BlockPublishedOn = 'block_published_on',
   /** column name */
   Cid = 'cid',
   /** column name */
@@ -893,18 +907,22 @@ export enum Nodes_Select_Column {
   /** column name */
   RootCid = 'root_cid',
   /** column name */
+  TxPublishedOn = 'tx_published_on',
+  /** column name */
   Type = 'type'
 }
 
 /** aggregate stddev on columns */
 export type Nodes_Stddev_Fields = {
   __typename?: 'nodes_stddev_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by stddev() on columns of table "nodes" */
 export type Nodes_Stddev_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -912,12 +930,14 @@ export type Nodes_Stddev_Order_By = {
 /** aggregate stddev_pop on columns */
 export type Nodes_Stddev_Pop_Fields = {
   __typename?: 'nodes_stddev_pop_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by stddev_pop() on columns of table "nodes" */
 export type Nodes_Stddev_Pop_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -925,12 +945,14 @@ export type Nodes_Stddev_Pop_Order_By = {
 /** aggregate stddev_samp on columns */
 export type Nodes_Stddev_Samp_Fields = {
   __typename?: 'nodes_stddev_samp_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by stddev_samp() on columns of table "nodes" */
 export type Nodes_Stddev_Samp_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -945,24 +967,28 @@ export type Nodes_Stream_Cursor_Input = {
 
 /** Initial value of the column from where the streaming should start */
 export type Nodes_Stream_Cursor_Value_Input = {
+  block_published_on?: InputMaybe<Scalars['Int']['input']>;
   cid?: InputMaybe<Scalars['String']['input']>;
   encoded_node?: InputMaybe<Scalars['String']['input']>;
   head_cid?: InputMaybe<Scalars['String']['input']>;
   piece_index?: InputMaybe<Scalars['Int']['input']>;
   piece_offset?: InputMaybe<Scalars['Int']['input']>;
   root_cid?: InputMaybe<Scalars['String']['input']>;
+  tx_published_on?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** aggregate sum on columns */
 export type Nodes_Sum_Fields = {
   __typename?: 'nodes_sum_fields';
+  block_published_on?: Maybe<Scalars['Int']['output']>;
   piece_index?: Maybe<Scalars['Int']['output']>;
   piece_offset?: Maybe<Scalars['Int']['output']>;
 };
 
 /** order by sum() on columns of table "nodes" */
 export type Nodes_Sum_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -970,12 +996,14 @@ export type Nodes_Sum_Order_By = {
 /** aggregate var_pop on columns */
 export type Nodes_Var_Pop_Fields = {
   __typename?: 'nodes_var_pop_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by var_pop() on columns of table "nodes" */
 export type Nodes_Var_Pop_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -983,12 +1011,14 @@ export type Nodes_Var_Pop_Order_By = {
 /** aggregate var_samp on columns */
 export type Nodes_Var_Samp_Fields = {
   __typename?: 'nodes_var_samp_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by var_samp() on columns of table "nodes" */
 export type Nodes_Var_Samp_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -996,12 +1026,14 @@ export type Nodes_Var_Samp_Order_By = {
 /** aggregate variance on columns */
 export type Nodes_Variance_Fields = {
   __typename?: 'nodes_variance_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by variance() on columns of table "nodes" */
 export type Nodes_Variance_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -1416,9 +1448,9 @@ export type Published_Objects_Stream_Cursor_Value_Input = {
 
 export type Query_Root = {
   __typename?: 'query_root';
-  /** An array relationship */
+  /** fetch data from the table: "api_keys" */
   api_keys: Array<Api_Keys>;
-  /** An aggregate relationship */
+  /** fetch aggregated fields from the table: "api_keys" */
   api_keys_aggregate: Api_Keys_Aggregate;
   /** fetch data from the table: "api_keys" using primary key columns */
   api_keys_by_pk?: Maybe<Api_Keys>;
@@ -1462,12 +1494,6 @@ export type Query_Root = {
   subscriptions_aggregate: Subscriptions_Aggregate;
   /** fetch data from the table: "subscriptions" using primary key columns */
   subscriptions_by_pk?: Maybe<Subscriptions>;
-  /** fetch data from the table: "transaction_results" */
-  transaction_results: Array<Transaction_Results>;
-  /** fetch aggregated fields from the table: "transaction_results" */
-  transaction_results_aggregate: Transaction_Results_Aggregate;
-  /** fetch data from the table: "transaction_results" using primary key columns */
-  transaction_results_by_pk?: Maybe<Transaction_Results>;
   /** An array relationship */
   users: Array<Users>;
   /** An aggregate relationship */
@@ -1663,29 +1689,6 @@ export type Query_RootSubscriptions_By_PkArgs = {
 };
 
 
-export type Query_RootTransaction_ResultsArgs = {
-  distinct_on?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Transaction_Results_Order_By>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
-};
-
-
-export type Query_RootTransaction_Results_AggregateArgs = {
-  distinct_on?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Transaction_Results_Order_By>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
-};
-
-
-export type Query_RootTransaction_Results_By_PkArgs = {
-  cid: Scalars['String']['input'];
-};
-
-
 export type Query_RootUsersArgs = {
   distinct_on?: InputMaybe<Array<Users_Select_Column>>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -1729,9 +1732,9 @@ export type Query_RootUsers_Organizations_AggregateArgs = {
 
 export type Subscription_Root = {
   __typename?: 'subscription_root';
-  /** An array relationship */
+  /** fetch data from the table: "api_keys" */
   api_keys: Array<Api_Keys>;
-  /** An aggregate relationship */
+  /** fetch aggregated fields from the table: "api_keys" */
   api_keys_aggregate: Api_Keys_Aggregate;
   /** fetch data from the table: "api_keys" using primary key columns */
   api_keys_by_pk?: Maybe<Api_Keys>;
@@ -1791,14 +1794,6 @@ export type Subscription_Root = {
   subscriptions_by_pk?: Maybe<Subscriptions>;
   /** fetch data from the table in a streaming manner: "subscriptions" */
   subscriptions_stream: Array<Subscriptions>;
-  /** fetch data from the table: "transaction_results" */
-  transaction_results: Array<Transaction_Results>;
-  /** fetch aggregated fields from the table: "transaction_results" */
-  transaction_results_aggregate: Transaction_Results_Aggregate;
-  /** fetch data from the table: "transaction_results" using primary key columns */
-  transaction_results_by_pk?: Maybe<Transaction_Results>;
-  /** fetch data from the table in a streaming manner: "transaction_results" */
-  transaction_results_stream: Array<Transaction_Results>;
   /** An array relationship */
   users: Array<Users>;
   /** An aggregate relationship */
@@ -2054,36 +2049,6 @@ export type Subscription_RootSubscriptions_StreamArgs = {
 };
 
 
-export type Subscription_RootTransaction_ResultsArgs = {
-  distinct_on?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Transaction_Results_Order_By>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
-};
-
-
-export type Subscription_RootTransaction_Results_AggregateArgs = {
-  distinct_on?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Transaction_Results_Order_By>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
-};
-
-
-export type Subscription_RootTransaction_Results_By_PkArgs = {
-  cid: Scalars['String']['input'];
-};
-
-
-export type Subscription_RootTransaction_Results_StreamArgs = {
-  batch_size: Scalars['Int']['input'];
-  cursor: Array<InputMaybe<Transaction_Results_Stream_Cursor_Input>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
-};
-
-
 export type Subscription_RootUsersArgs = {
   distinct_on?: InputMaybe<Array<Users_Select_Column>>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -2336,116 +2301,12 @@ export type Timestamp_Comparison_Exp = {
   _nin?: InputMaybe<Array<Scalars['timestamp']['input']>>;
 };
 
-/** columns and relationships of "transaction_results" */
-export type Transaction_Results = {
-  __typename?: 'transaction_results';
-  cid: Scalars['String']['output'];
-  created_at?: Maybe<Scalars['timestamp']['output']>;
-  /** An object relationship */
-  node?: Maybe<Nodes>;
-  transaction_result?: Maybe<Scalars['jsonb']['output']>;
-  updated_at: Scalars['timestamp']['output'];
-};
-
-
-/** columns and relationships of "transaction_results" */
-export type Transaction_ResultsTransaction_ResultArgs = {
-  path?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** aggregated selection of "transaction_results" */
-export type Transaction_Results_Aggregate = {
-  __typename?: 'transaction_results_aggregate';
-  aggregate?: Maybe<Transaction_Results_Aggregate_Fields>;
-  nodes: Array<Transaction_Results>;
-};
-
-/** aggregate fields of "transaction_results" */
-export type Transaction_Results_Aggregate_Fields = {
-  __typename?: 'transaction_results_aggregate_fields';
-  count: Scalars['Int']['output'];
-  max?: Maybe<Transaction_Results_Max_Fields>;
-  min?: Maybe<Transaction_Results_Min_Fields>;
-};
-
-
-/** aggregate fields of "transaction_results" */
-export type Transaction_Results_Aggregate_FieldsCountArgs = {
-  columns?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  distinct?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-/** Boolean expression to filter rows from the table "transaction_results". All fields are combined with a logical 'AND'. */
-export type Transaction_Results_Bool_Exp = {
-  _and?: InputMaybe<Array<Transaction_Results_Bool_Exp>>;
-  _not?: InputMaybe<Transaction_Results_Bool_Exp>;
-  _or?: InputMaybe<Array<Transaction_Results_Bool_Exp>>;
-  cid?: InputMaybe<String_Comparison_Exp>;
-  created_at?: InputMaybe<Timestamp_Comparison_Exp>;
-  node?: InputMaybe<Nodes_Bool_Exp>;
-  transaction_result?: InputMaybe<Jsonb_Comparison_Exp>;
-  updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
-};
-
-/** aggregate max on columns */
-export type Transaction_Results_Max_Fields = {
-  __typename?: 'transaction_results_max_fields';
-  cid?: Maybe<Scalars['String']['output']>;
-  created_at?: Maybe<Scalars['timestamp']['output']>;
-  updated_at?: Maybe<Scalars['timestamp']['output']>;
-};
-
-/** aggregate min on columns */
-export type Transaction_Results_Min_Fields = {
-  __typename?: 'transaction_results_min_fields';
-  cid?: Maybe<Scalars['String']['output']>;
-  created_at?: Maybe<Scalars['timestamp']['output']>;
-  updated_at?: Maybe<Scalars['timestamp']['output']>;
-};
-
-/** Ordering options when selecting data from "transaction_results". */
-export type Transaction_Results_Order_By = {
-  cid?: InputMaybe<Order_By>;
-  created_at?: InputMaybe<Order_By>;
-  node?: InputMaybe<Nodes_Order_By>;
-  transaction_result?: InputMaybe<Order_By>;
-  updated_at?: InputMaybe<Order_By>;
-};
-
-/** select columns of table "transaction_results" */
-export enum Transaction_Results_Select_Column {
-  /** column name */
-  Cid = 'cid',
-  /** column name */
-  CreatedAt = 'created_at',
-  /** column name */
-  TransactionResult = 'transaction_result',
-  /** column name */
-  UpdatedAt = 'updated_at'
-}
-
-/** Streaming cursor of the table "transaction_results" */
-export type Transaction_Results_Stream_Cursor_Input = {
-  /** Stream column input with initial value */
-  initial_value: Transaction_Results_Stream_Cursor_Value_Input;
-  /** cursor ordering */
-  ordering?: InputMaybe<Cursor_Ordering>;
-};
-
-/** Initial value of the column from where the streaming should start */
-export type Transaction_Results_Stream_Cursor_Value_Input = {
-  cid?: InputMaybe<Scalars['String']['input']>;
-  created_at?: InputMaybe<Scalars['timestamp']['input']>;
-  transaction_result?: InputMaybe<Scalars['jsonb']['input']>;
-  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
-};
-
 /** columns and relationships of "users" */
 export type Users = {
   __typename?: 'users';
-  /** An array relationship */
+  /** fetch data from the table: "api_keys" */
   api_keys: Array<Api_Keys>;
-  /** An aggregate relationship */
+  /** fetch aggregated fields from the table: "api_keys" */
   api_keys_aggregate: Api_Keys_Aggregate;
   created_at?: Maybe<Scalars['timestamp']['output']>;
   oauth_provider: Scalars['String']['output'];
@@ -2761,7 +2622,7 @@ export type GetMetadataByHeadCidQueryVariables = Exact<{
 }>;
 
 
-export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
+export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
 
 export type SearchGlobalMetadataByCidOrNameQueryVariables = Exact<{
   search: Scalars['String']['input'];
@@ -2792,7 +2653,7 @@ export type GetGlobalFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, oauth_provider: string, oauth_user_id: string }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
+export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, oauth_provider: string, oauth_user_id: string }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
 
 export type GetProfileQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -2807,7 +2668,7 @@ export type GetSharedFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetSharedFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
+export type GetSharedFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
 
 export type GetTrashedFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -2817,7 +2678,7 @@ export type GetTrashedFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetTrashedFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
+export type GetTrashedFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
 
 export type GetMyFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -2827,7 +2688,7 @@ export type GetMyFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetMyFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
+export type GetMyFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
 
 
 export const GetMetadataByHeadCidDocument = gql`
@@ -2841,24 +2702,20 @@ export const GetMetadataByHeadCidDocument = gql`
       id
     }
     maximumBlockDepth: nodes(
-      order_by: {transaction_result: {created_at: desc_nulls_first}}
+      order_by: {block_published_on: desc_nulls_last}
       limit: 1
     ) {
-      transaction_result {
-        blockNumber: transaction_result(path: "blockNumber")
-      }
+      block_published_on
+      tx_published_on
     }
     minimumBlockDepth: nodes(
-      order_by: {transaction_result: {created_at: asc}}
+      order_by: {block_published_on: desc_nulls_last}
       limit: 1
     ) {
-      transaction_result {
-        blockNumber: transaction_result(path: "blockNumber")
-      }
+      block_published_on
+      tx_published_on
     }
-    publishedNodes: nodes_aggregate(
-      where: {transaction_result: {transaction_result: {_is_null: false}}}
-    ) {
+    publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
       aggregate {
         count
       }
@@ -3079,24 +2936,20 @@ export const GetGlobalFilesDocument = gql`
       size: metadata(path: "totalSize")
       children: metadata(path: "children")
       maximumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: desc_nulls_first}}
+        order_by: {block_published_on: desc_nulls_last}
         limit: 1
       ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
+        block_published_on
+        tx_published_on
       }
       minimumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: asc}}
+        order_by: {block_published_on: desc_nulls_last}
         limit: 1
       ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
+        block_published_on
+        tx_published_on
       }
-      publishedNodes: nodes_aggregate(
-        where: {transaction_result: {transaction_result: {_is_null: false}}}
-      ) {
+      publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
         aggregate {
           count
         }
@@ -3226,24 +3079,20 @@ export const GetSharedFilesDocument = gql`
       size: metadata(path: "totalSize")
       children: metadata(path: "children")
       maximumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: desc_nulls_first}}
+        order_by: {block_published_on: desc_nulls_last}
         limit: 1
       ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
+        block_published_on
+        tx_published_on
       }
       minimumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: asc}}
+        order_by: {block_published_on: desc_nulls_last}
         limit: 1
       ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
+        block_published_on
+        tx_published_on
       }
-      publishedNodes: nodes_aggregate(
-        where: {transaction_result: {transaction_result: {_is_null: false}}}
-      ) {
+      publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
         aggregate {
           count
         }
@@ -3327,24 +3176,20 @@ export const GetTrashedFilesDocument = gql`
       size: metadata(path: "totalSize")
       children: metadata(path: "children")
       maximumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: desc_nulls_first}}
+        order_by: {block_published_on: desc_nulls_last}
         limit: 1
       ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
+        block_published_on
+        tx_published_on
       }
       minimumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: asc}}
+        order_by: {block_published_on: desc_nulls_last}
         limit: 1
       ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
+        block_published_on
+        tx_published_on
       }
-      publishedNodes: nodes_aggregate(
-        where: {transaction_result: {transaction_result: {_is_null: false}}}
-      ) {
+      publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
         aggregate {
           count
         }
@@ -3431,24 +3276,20 @@ export const GetMyFilesDocument = gql`
         id
       }
       maximumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: desc_nulls_first}}
+        order_by: {block_published_on: desc_nulls_last}
         limit: 1
       ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
+        block_published_on
+        tx_published_on
       }
       minimumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: asc}}
+        order_by: {block_published_on: desc_nulls_last}
         limit: 1
       ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
+        block_published_on
+        tx_published_on
       }
-      publishedNodes: nodes_aggregate(
-        where: {transaction_result: {transaction_result: {_is_null: false}}}
-      ) {
+      publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
         aggregate {
           count
         }

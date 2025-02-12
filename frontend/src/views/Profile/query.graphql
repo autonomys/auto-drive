@@ -1,6 +1,3 @@
-import { gql } from '@apollo/client';
-
-export const GetProfileQueryText = gql`
   query GetProfile {
     users {
       public_id
@@ -15,4 +12,3 @@ export const GetProfileQueryText = gql`
       }
     }
   }
-`;

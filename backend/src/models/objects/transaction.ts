@@ -1,5 +1,5 @@
 import { ApiPromise } from '@polkadot/api'
-
+import z from 'zod'
 export interface Queue {
   transactions: TransactionInfo[]
   api: ApiPromise | null
@@ -29,11 +29,13 @@ export type Transaction = {
   params: unknown[]
 }
 
-export type TransactionResult = {
-  success: boolean
-  blockNumber?: number
-  txHash?: string
-  blockHash?: string
-  status: string
-  error?: string
-}
+export const TransactionResultSchema = z.object({
+  success: z.boolean(),
+  blockNumber: z.number().optional(),
+  txHash: z.string().optional(),
+  blockHash: z.string().optional(),
+  status: z.string(),
+  error: z.string().optional(),
+})
+
+export type TransactionResult = z.infer<typeof TransactionResultSchema>
