@@ -82,7 +82,7 @@ export const ApiKeyCreationModal = ({
               <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-backgroundDark'>
                 <DialogTitle
                   as='h3'
-                  className='text-center text-lg font-medium leading-6 text-gray-900'
+                  className='dark:text-darkBlack text-center text-lg font-medium leading-6 text-black'
                 >
                   Create API Key
                 </DialogTitle>

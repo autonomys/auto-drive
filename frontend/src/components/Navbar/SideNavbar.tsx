@@ -1,6 +1,7 @@
 import { NetworkId } from '@/constants/networks';
 import { ROUTES } from '@/constants/routes';
 import {
+  CodeXmlIcon,
   Earth,
   HomeIcon,
   SettingsIcon,
@@ -36,6 +37,11 @@ export const NAV_ITEMS = [
     href: (networkId: NetworkId) => ROUTES.trash(networkId),
     icon: TrashIcon,
     label: 'Trash',
+  },
+  {
+    href: (networkId: NetworkId) => ROUTES.developers(networkId),
+    icon: CodeXmlIcon,
+    label: 'Developers',
   },
   {
     href: (networkId: NetworkId) => ROUTES.profile(networkId),
