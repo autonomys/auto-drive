@@ -21,10 +21,10 @@ export const faqs = [
     question: 'How data availability is ensured?',
     answer: (
       <span>
-        Once your file is archived is decomposed into chunks and each chunk is
-        processed by an erasure code. This means that if a chunk is lost, the
-        file can be reconstructed from the remaining chunks. Additionally, every
-        chunk is stored in multiple nodes to ensure data availability.
+        Once your file is archived, it&apos;s decomposed into chunks, and each
+        chunk is erasure encoded. This means that if a piece of data is lost, the
+        file can be reconstructed and its integrity can be verified. Additionally,
+        every chunk is stored in multiple nodes to ensure data availability.
         <br />
         <br />
         <span>
@@ -80,8 +80,8 @@ export const faqs = [
       <span>
         Both networks provides the same interface through our SDK so you can
         switch between them but mainnet storage has true permanent storage and a
-        much higher replication factor, taurus storage will be eventually shut
-        down, obviously with some reasonable notice.
+        much higher replication factor, taurus is a testnet, therefore it will
+        eventually be deprecated and replaced by a newer testnet.
         <br />
         <br />
         If your application needs permanent storage, we recommend using mainnet
@@ -91,7 +91,7 @@ export const faqs = [
     ),
   },
   {
-    question: 'Could I participate pledging storage?',
+    question: 'Could I participate, in pledging storage to the network?',
     answer: (
       <span>
         Yes, you can pledge storage to the network and earn rewards. Find more
