@@ -21,14 +21,14 @@ export const faqs = [
     question: 'How data availability is ensured?',
     answer: (
       <span>
-        Your file is decomposed into chunks and each chunk is processed by an
-        erasure code. This means that if a chunk is lost, the file can be
-        reconstructed from the remaining chunks. Additionally, every chunk is
-        stored in multiple nodes to ensure data availability.
+        Once your file is archived is decomposed into chunks and each chunk is
+        processed by an erasure code. This means that if a chunk is lost, the
+        file can be reconstructed from the remaining chunks. Additionally, every
+        chunk is stored in multiple nodes to ensure data availability.
         <br />
         <br />
         <span>
-          The replication factor means how many copies of each erasure-coded
+          The replication factor states how many copies of each erasure-coded
           chunk are stored on-chain. You can check the replication factor of
           your file as the factor between the total pledged storage and the
           current size of the chain in{' '}
