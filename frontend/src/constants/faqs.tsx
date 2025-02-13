@@ -13,10 +13,6 @@ export const faqs = [
       'Yes, it is free but uploads and downloads have a monthly limit in bytes.',
   },
   {
-    question: 'Is all data stored on-chain?',
-    answer: 'Yes, all data is stored on-chain.',
-  },
-  {
     question: 'Are all files public?',
     answer:
       'Autonomys is a decentralized storage network, so all files are public by default. However, you can encrypt your files before uploading them to ensure they are private.',
