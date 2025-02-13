@@ -95,7 +95,7 @@ export const faqs = [
     answer: (
       <span>
         Yes, you can pledge storage to the network and earn rewards. Find more
-        about pledging storage for earning rewards{' '}
+        about farming{' '}
         <a
           href={EXTERNAL_ROUTES.farmerDocs}
           target='_blank'
