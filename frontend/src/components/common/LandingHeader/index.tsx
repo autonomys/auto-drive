@@ -12,7 +12,7 @@ export const LandingHeader = () => {
       return `rounded-lg px-8 py-2 font-medium ${
         pathname === path
           ? 'bg-white dark:bg-darkWhite dark:text-darkBlack'
-          : 'bg-transparent hover:cursor-pointer dark:text-darkWhite'
+          : 'bg-transparent hover:cursor-pointer dark:text-darkBlack'
       }`;
     },
     [pathname],
