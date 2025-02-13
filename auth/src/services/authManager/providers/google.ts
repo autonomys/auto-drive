@@ -12,7 +12,7 @@ const getUserFromAccessToken = async (
   accessToken: string
 ): Promise<OAuthUser> => {
   const googleUser = await fetch(
-    "https://www.googleapis.com/oauth2/v1/userinfo?scope=https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/oauth2/v1/userinfo",
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -27,7 +27,6 @@ const getUserFromAccessToken = async (
 
   return {
     provider: "google",
-    email: googleUser.email,
     id: googleUser.id,
   };
 };
