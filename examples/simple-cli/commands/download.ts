@@ -1,4 +1,3 @@
-import autoDrive from "@autonomys/auto-drive";
 import { Argument, Command } from "commander";
 import { api } from "../services/api.js";
 import { createWriteStream } from "fs";
@@ -8,7 +7,7 @@ export const downloadCommand = new Command("download")
   .option("-p, --password <password>", "The password to use for the file")
   .option("-o, --output <output>", "The path to save the file to")
   .action(async (cid, options) => {
-    const iterable = await autoDrive.downloadFile(api, cid, options.password);
+    const iterable = await api.downloadFile(cid, options.password);
     if (options.output) {
       await saveIterableInFile(iterable, options.output);
     } else {

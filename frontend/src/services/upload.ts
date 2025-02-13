@@ -1,9 +1,4 @@
-import {
-  AuthProvider,
-  createAutoDriveApi,
-  uploadFileFromInput,
-  uploadFolderFromInput,
-} from '@autonomys/auto-drive';
+import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import { getAuthSession } from '../utils/auth';
 
 export type UploadService = ReturnType<typeof createUploadService>;
@@ -31,7 +26,7 @@ export const createUploadService = (apiBaseUrl: string) => {
   ) => {
     const api = await getApi();
 
-    return uploadFileFromInput(api, file, {
+    return api.uploadFileFromInput(file, {
       password,
       compression: true,
       onProgress,
@@ -47,7 +42,7 @@ export const createUploadService = (apiBaseUrl: string) => {
   ) => {
     const api = await getApi();
 
-    const folderUploadObserver = await uploadFolderFromInput(api, files, {
+    const folderUploadObserver = await api.uploadFolderFromInput(files, {
       password,
       onProgress,
     });

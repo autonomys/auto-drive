@@ -92,10 +92,10 @@
     protons "^7.6.0"
     protons-runtime "^5.5.0"
 
-"@autonomys/auto-dag-data@^1.2.7":
-  version "1.2.7"
-  resolved "https://registry.yarnpkg.com/@autonomys/auto-dag-data/-/auto-dag-data-1.2.7.tgz#3611b42925d0d674729c00b4fa36b7433e7604dc"
-  integrity sha512-IPTGKF4eB0cLlFSXXivGAkcxsDeWjX/ubSy96kEcBY9BQtsD1tXPEItV6rXXhGCU0Pi+v9hczf879tWUNUM6bw==
+"@autonomys/auto-dag-data@^1.3.0":
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/@autonomys/auto-dag-data/-/auto-dag-data-1.3.0.tgz#1b5d9fe63f16ed3430cf5f4e4c0a870f3248d9e1"
+  integrity sha512-1NHr6/q5LdLSqF0+QQe0GkIfvQ6tfA7ZOiKS0qNt5q3MgyDyZQieHwBkr/QiGqBDLWmHtDV1hrFMFjB6kIUr5w==
   dependencies:
     "@ipld/dag-pb" "^4.1.2"
     "@peculiar/webcrypto" "^1.5.0"
@@ -108,23 +108,23 @@
     protons "^7.6.0"
     protons-runtime "^5.5.0"
 
-"@autonomys/auto-drive@^1.2.7":
-  version "1.2.7"
-  resolved "https://registry.yarnpkg.com/@autonomys/auto-drive/-/auto-drive-1.2.7.tgz#4481e3d7df4072def9e2f37b93c1dba544d7beb4"
-  integrity sha512-zqTY1FoBSsCJT43tYeU1ibUUMCSx/x8lLkmZqEOuiWC45FbEKUkYLLjd+1ylzX8qcvrjgu4N1nOJhQATPi1TuQ==
+"@autonomys/auto-drive@^1.3.0":
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/@autonomys/auto-drive/-/auto-drive-1.3.0.tgz#6dea7e7560761b69cd4b48244ad379a513ec1115"
+  integrity sha512-oc/8nrUxgGLCQTaUvCC7FQoE9F19lVWGWiJUt86X3kVSwp24/Ie52r6SXR8n7XO60jItflCS3XiNTjuuRKE68Q==
   dependencies:
-    "@autonomys/auto-dag-data" "^1.2.7"
-    "@autonomys/auto-utils" "^1.2.7"
+    "@autonomys/auto-dag-data" "^1.3.0"
+    "@autonomys/auto-utils" "^1.3.0"
     jszip "^3.10.1"
     mime-types "^2.1.35"
     process "^0.11.10"
     stream "^0.0.3"
     zod "^3.23.8"
 
-"@autonomys/auto-utils@^1.2.7":
-  version "1.2.7"
-  resolved "https://registry.yarnpkg.com/@autonomys/auto-utils/-/auto-utils-1.2.7.tgz#a099e364beb0557ec1059f787e0af3e99a697fad"
-  integrity sha512-gksSkV1cr4w8smyrNhTC6rrL5TCfKYsFBZhlSr3WsU5/0IQCjLJpUaNaANsMlzfUQzt1Ln0V++SKzkwPcn7HcA==
+"@autonomys/auto-utils@^1.3.0":
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/@autonomys/auto-utils/-/auto-utils-1.3.0.tgz#be90ec28c3df3a1bd56acc0bf6fe13a7dee48ecf"
+  integrity sha512-siBu4XQRfCRisTAyAYjb0zKm5dWcFSiq9gB3woTSmBIHNASBAXmrW+zkV7NUqFwm72AcOKuzQjgQ5M9iaHELxQ==
   dependencies:
     "@polkadot/api" "^14.3.1"
     "@polkadot/extension-dapp" "^0.56.2"
