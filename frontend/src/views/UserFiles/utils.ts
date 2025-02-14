@@ -4,27 +4,28 @@ import { ObjectSummary, OwnerRole } from '../../models/UploadedObjectMetadata';
 export const objectSummaryFromUserFilesQuery = (
   e: GetMyFilesQuery,
 ): ObjectSummary[] => {
-  return e.metadata.map((m) => ({
-    headCid: m.root_metadata!.cid,
-    size: m.root_metadata?.size ?? 0,
-    owners: m.root_metadata!.object_ownership.map((o) => ({
+  return e.metadata_roots.map((m) => ({
+    headCid: m.cid ?? '',
+    size: m.size ?? 0,
+    owners: m.inner_metadata!.object_ownership.map((o) => ({
       oauthProvider: o.oauth_provider,
       oauthUserId: o.oauth_user_id,
       role: o.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
     })),
-    type: m.root_metadata?.type,
-    name: m.root_metadata?.name,
-    mimeType: m.root_metadata?.mimeType,
-    children: m.root_metadata?.children,
-    publishedObjectId: m.root_metadata?.published_objects?.id ?? null,
+    type: m.type,
+    name: m.name,
+    mimeType: m.mimeType,
+    children: m.children,
+    publishedObjectId: m.inner_metadata?.published_objects?.id ?? null,
+    createdAt: m.created_at,
     uploadStatus: {
-      uploadedNodes: m.root_metadata!.publishedNodes.aggregate?.count ?? 0,
-      archivedNodes: m.root_metadata!.archivedNodes.aggregate?.count ?? 0,
-      totalNodes: m.root_metadata!.totalNodes.aggregate?.count ?? 0,
+      uploadedNodes: m.inner_metadata!.publishedNodes.aggregate?.count ?? 0,
+      archivedNodes: m.inner_metadata!.archivedNodes.aggregate?.count ?? 0,
+      totalNodes: m.inner_metadata!.totalNodes.aggregate?.count ?? 0,
       minimumBlockDepth:
-        m.root_metadata!.minimumBlockDepth?.[0]?.block_published_on ?? null,
+        m.inner_metadata!.minimumBlockDepth?.[0]?.block_published_on ?? null,
       maximumBlockDepth:
-        m.root_metadata!.maximumBlockDepth?.[0]?.block_published_on ?? null,
+        m.inner_metadata!.maximumBlockDepth?.[0]?.block_published_on ?? null,
     },
   }));
 };

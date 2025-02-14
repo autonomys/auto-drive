@@ -40,6 +40,7 @@ export type ObjectSummary = {
   owners: Owner[];
   uploadStatus: UploadStatus;
   publishedObjectId: string | null;
+  createdAt: string | null;
 } & (
   | {
       type: 'file';

@@ -58,12 +58,12 @@ services:
     ports:
       - "${PORT}:3000"
   hasura:
-    image: hasura/graphql-engine:v2.40.0
+    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
     depends_on:
       backend:
         condition: service_healthy
     volumes:
-      - ./hasura/metadata:/hasura-metadata
+      - ./hasura:/app
     restart: unless-stopped
     environment:
       # Essential Environment Variables
@@ -96,9 +96,7 @@ services:
       HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false" # Disable query allowlisting
 
       # Hasura Migrations and Metadata
-      HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
+      HASURA_GRAPHQL_METADATA_DIR: /app/metadata
+      HASURA_GRAPHQL_MIGRATIONS_DIR: /app/migrations
     ports:
       - "${HASURA_GRAPHQL_PORT}:8080"
-    command:
-      - graphql-engine
-      - serve

@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
@@ -8,7 +9,7 @@ import {
 import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholder';
 import { SearchBar } from '../../components/SearchBar';
 import { PaginatedResult } from '../../models/common';
-import { useGetGlobalFilesQuery } from '../../../gql/graphql';
+import { Order_By, useGetGlobalFilesQuery } from '../../../gql/graphql';
 import { objectSummaryFromGlobalFilesQuery } from './utils';
 import { ObjectSummary } from '../../models/UploadedObjectMetadata';
 
@@ -38,6 +39,7 @@ export const GlobalFiles = () => {
     variables: {
       limit: pageSize,
       offset: currentPage * pageSize,
+      orderBy: [{ created_at: Order_By.DescNullsLast }],
     },
   });
 
@@ -45,7 +47,7 @@ export const GlobalFiles = () => {
     if (data) {
       updateResult({
         rows: objectSummaryFromGlobalFilesQuery(data),
-        totalCount: data.metadata_aggregate?.aggregate?.count ?? 0,
+        totalCount: data.metadata_roots_aggregate?.aggregate?.count ?? 0,
       });
     }
   }, [data, updateResult]);

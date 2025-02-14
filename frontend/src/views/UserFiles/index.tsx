@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
@@ -11,7 +12,7 @@ import {
   FileTable,
 } from '../../components/common/FileTable';
 import { NoUploadsPlaceholder } from '../../components/Files/NoUploadsPlaceholder';
-import { useGetMyFilesQuery } from '../../../gql/graphql';
+import { Order_By, useGetMyFilesQuery } from '../../../gql/graphql';
 import { useSession } from 'next-auth/react';
 import { objectSummaryFromUserFilesQuery } from './utils';
 
@@ -44,6 +45,7 @@ export const UserFiles = () => {
       oauthProvider: user?.oauthProvider ?? '',
       limit: pageSize,
       offset: currentPage * pageSize,
+      orderBy: [{ created_at: Order_By.DescNullsLast }],
     },
     skip: !user || !session.data,
     fetchPolicy: 'no-cache',
@@ -54,7 +56,7 @@ export const UserFiles = () => {
       console.log(data);
       updateResult({
         rows: objectSummaryFromUserFilesQuery(data),
-        totalCount: data.metadata_aggregate.aggregate?.count ?? 0,
+        totalCount: data.metadata_roots_aggregate.aggregate?.count ?? 0,
       });
     }
   }, [data, updateResult]);

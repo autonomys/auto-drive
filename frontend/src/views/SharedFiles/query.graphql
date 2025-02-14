@@ -3,11 +3,11 @@ query GetSharedFiles(
   $oauthProvider: String!
   $limit: Int!
   $offset: Int!
+  $orderBy: [metadata_roots_order_by!]
 ) {
-  metadata(
-    distinct_on: root_cid
+  metadata_roots(
     where: {
-      root_metadata: {
+      inner_metadata: {
         object_ownership: {
           _and: {
             oauth_user_id: { _eq: $oauthUserId }
@@ -20,14 +20,16 @@ query GetSharedFiles(
     }
     limit: $limit
     offset: $offset
+    order_by: $orderBy
   ) {
-    root_metadata {
-      cid: head_cid
-      type: metadata(path: "type")
-      name: metadata(path: "name")
-      mimeType: metadata(path: "mimeType")
-      size: metadata(path: "totalSize")
-      children: metadata(path: "children")
+    cid: head_cid
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    children: metadata(path: "children")
+    createdAt: created_at
+    inner_metadata {
       maximumBlockDepth: nodes(
         order_by: { block_published_on: desc_nulls_last }
         limit: 1
@@ -68,15 +70,15 @@ query GetSharedFiles(
       }
     }
   }
-  metadata_aggregate(
-    distinct_on: root_cid
+  metadata_roots_aggregate(
     where: {
-      root_metadata: {
+      inner_metadata: {
         object_ownership: {
           _and: {
             oauth_user_id: { _eq: $oauthUserId }
             oauth_provider: { _eq: $oauthProvider }
-            is_admin: { _eq: true }
+            marked_as_deleted: { _is_null: true }
+            is_admin: { _eq: false }
           }
         }
       }

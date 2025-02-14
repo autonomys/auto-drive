@@ -119,7 +119,7 @@ export const FileTable: FC<{
                 <TableHeadCell>Root CID</TableHeadCell>
                 <TableHeadCell>Type</TableHeadCell>
                 <TableHeadCell>Size</TableHeadCell>
-                <TableHeadCell>Owner</TableHeadCell>
+                <TableHeadCell>Date</TableHeadCell>
                 <TableHeadCell className='text-right'>Actions</TableHeadCell>
               </TableHeadRow>
             </TableHead>
