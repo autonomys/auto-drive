@@ -1,6 +1,7 @@
 volumes:
   node-data: {}
   postgres_db: {}
+  files_cache: {}
 
 services:
   # Hasura GraphQL Engine
@@ -67,7 +68,7 @@ services:
       dockerfile: Dockerfile
     working_dir: /usr/src/app
     volumes:
-      - ./backend:/usr/src/app
+      - files_cache:/usr/src/app
     ports:
       - "3000:3000"
     restart: unless-stopped
