@@ -1,9 +1,4 @@
-import {
-  AuthProvider,
-  createAutoDriveApi,
-  downloadFile,
-  publishObject,
-} from '@autonomys/auto-drive';
+import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
   SubscriptionGranularity,
   SubscriptionInfo,
@@ -114,7 +109,7 @@ export const createApiService = (apiBaseUrl: string) => ({
       apiKey: session.accessToken,
     });
 
-    return downloadFile(api, cid, password);
+    return api.downloadFile(cid, password);
   },
   shareObject: async (dataCid: string, publicId: string): Promise<void> => {
     const session = await getAuthSession();
@@ -206,6 +201,6 @@ export const createApiService = (apiBaseUrl: string) => ({
       url: apiBaseUrl,
     });
 
-    return publishObject(apiDrive, cid);
+    return apiDrive.publishObject(cid);
   },
 });
