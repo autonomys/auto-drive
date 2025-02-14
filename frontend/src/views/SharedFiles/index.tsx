@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 import { ObjectSummary } from '../../models/UploadedObjectMetadata';
 import {
   FileActionButtons,
@@ -6,7 +7,7 @@ import {
 import { NoSharedFilesPlaceholder } from './NoSharedFilesPlaceholder';
 import { useCallback, useEffect, useState } from 'react';
 import { PaginatedResult } from '../../models/common';
-import { useGetSharedFilesQuery } from '../../../gql/graphql';
+import { Order_By, useGetSharedFilesQuery } from '../../../gql/graphql';
 import { useUserStore } from '../../states/user';
 import { objectSummaryFromSharedFilesQuery } from './utils';
 
@@ -29,6 +30,7 @@ export const SharedFiles = () => {
       oauthProvider: user?.oauthProvider ?? '',
       limit: pageSize,
       offset: currentPage * pageSize,
+      orderBy: [{ created_at: Order_By.DescNullsLast }],
     },
     skip: !user,
   });
@@ -37,7 +39,7 @@ export const SharedFiles = () => {
     if (data) {
       updateResult({
         rows: objectSummaryFromSharedFilesQuery(data),
-        totalCount: data.metadata_aggregate.aggregate?.count ?? 0,
+        totalCount: data.metadata_roots_aggregate.aggregate?.count ?? 0,
       });
     }
   }, [data, updateResult]);
