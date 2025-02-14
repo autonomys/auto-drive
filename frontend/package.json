@@ -26,6 +26,7 @@
     "byte-size": "^9.0.0",
     "bytes": "^3.1.2",
     "clsx": "^2.1.1",
+    "dayjs": "^1.11.13",
     "fflate": "^0.8.2",
     "graphql": "^16.9.0",
     "jsonwebtoken": "^9.0.2",

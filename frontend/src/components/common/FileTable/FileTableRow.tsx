@@ -25,7 +25,7 @@ import { InternalLink } from '../InternalLink';
 import { OwnerBadge } from './OwnerBadge';
 import { useNetwork } from '../../../contexts/network';
 import { ROUTES } from '../../../constants/routes';
-import { formatDate } from '../../../utils/time';
+import { utcToLocalRelativeTime } from '../../../utils/time';
 
 export const FileTableRow = ({
   file,
@@ -194,7 +194,7 @@ export const FileTableRow = ({
         <TableBodyCell>{getTypeFromMetadata(file)}</TableBodyCell>
         <TableBodyCell>{bytes(Number(file.size))}</TableBodyCell>
         <TableBodyCell>
-          {file.createdAt ? formatDate(file.createdAt) : 'Unknown'}
+          {file.createdAt ? utcToLocalRelativeTime(file.createdAt) : 'Unknown'}
         </TableBodyCell>
         <TableBodyCell className='flex justify-end'>
           <ConditionalRender
