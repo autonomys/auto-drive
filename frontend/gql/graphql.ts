@@ -3095,7 +3095,7 @@ export type GetAllUsersWithSubscriptionsQueryResult = Apollo.QueryResult<GetAllU
 export const GetGlobalFilesDocument = gql`
     query GetGlobalFiles($limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
   metadata_roots(
-    where: {inner_metadata: {object_ownership: {_and: {is_admin: {_eq: true}}}}}
+    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}}
     limit: $limit
     offset: $offset
     order_by: $orderBy
@@ -3145,7 +3145,7 @@ export const GetGlobalFilesDocument = gql`
     }
   }
   metadata_roots_aggregate(
-    where: {inner_metadata: {object_ownership: {_and: {is_admin: {_eq: true}}}}}
+    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}}
   ) {
     aggregate {
       count
