@@ -25,6 +25,7 @@ import { InternalLink } from '../InternalLink';
 import { OwnerBadge } from './OwnerBadge';
 import { useNetwork } from '../../../contexts/network';
 import { ROUTES } from '../../../constants/routes';
+import { utcToLocalRelativeTime } from '../../../utils/time';
 
 export const FileTableRow = ({
   file,
@@ -136,7 +137,7 @@ export const FileTableRow = ({
                 {isRowExpanded ? (
                   <DisplayerIcon className='rotate-90 text-accent' />
                 ) : (
-                  <DisplayerIcon className='dark:text-darkBlack text-black' />
+                  <DisplayerIcon className='text-black dark:text-darkBlack' />
                 )}
               </button>
             )}
@@ -144,7 +145,7 @@ export const FileTableRow = ({
               role='button'
               tabIndex={0}
               onKeyDown={handleEnterOrSpace(toggleExpand)}
-              className={`dark:text-darkBlack relative ml-2 text-sm font-medium text-gray-900 ${
+              className={`relative ml-2 text-sm font-medium text-gray-900 dark:text-darkBlack ${
                 file.type === 'folder'
                   ? 'hover:cursor-pointer hover:underline'
                   : ''
@@ -181,7 +182,7 @@ export const FileTableRow = ({
                   leaveTo='opacity-0 translate-y-1'
                 >
                   <PopoverPanel className='absolute left-0 z-10'>
-                    <div className='dark:bg-darkWhite rounded-lg bg-white shadow-md'>
+                    <div className='rounded-lg bg-white shadow-md dark:bg-darkWhite'>
                       <Metadata object={file} />
                     </div>
                   </PopoverPanel>
@@ -192,7 +193,9 @@ export const FileTableRow = ({
         </TableBodyCell>
         <TableBodyCell>{getTypeFromMetadata(file)}</TableBodyCell>
         <TableBodyCell>{bytes(Number(file.size))}</TableBodyCell>
-        <TableBodyCell>{owner ? <OwnerBadge /> : 'Unknown'}</TableBodyCell>
+        <TableBodyCell>
+          {file.createdAt ? utcToLocalRelativeTime(file.createdAt) : 'Unknown'}
+        </TableBodyCell>
         <TableBodyCell className='flex justify-end'>
           <ConditionalRender
             condition={actionButtons.includes(FileActionButtons.DOWNLOAD)}
@@ -222,7 +225,7 @@ export const FileTableRow = ({
               >
                 <div className='absolute bottom-0 left-0 z-10 translate-y-full'>
                   {file.uploadStatus.totalNodes === null && (
-                    <div className='dark:bg-darkWhite rounded-lg bg-white p-2 shadow-md'>
+                    <div className='rounded-lg bg-white p-2 shadow-md dark:bg-darkWhite'>
                       <span className='text-sm text-gray-700'>
                         Processing upload...
                       </span>

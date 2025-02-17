@@ -1,0 +1,27 @@
+table:
+  name: metadata_roots
+  schema: public
+  is_table: true
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - root_cid
+        - head_cid
+        - name
+        - metadata
+        - created_at
+        - updated_at
+      filter: {}
+      allow_aggregations: true
+    comment: ""
+object_relationships:
+  - name: inner_metadata
+    using:
+      manual_configuration:
+        column_mapping:
+          root_cid: root_cid
+        insertion_order: null
+        remote_table:
+          name: metadata
+          schema: public

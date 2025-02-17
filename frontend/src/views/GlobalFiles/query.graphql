@@ -1,19 +1,22 @@
-query GetGlobalFiles($limit: Int!, $offset: Int!) {
-  metadata(
-    distinct_on: root_cid
-    where: {
-      root_metadata: { object_ownership: { _and: { is_admin: { _eq: true } } } }
-    }
+query GetGlobalFiles(
+  $limit: Int!
+  $offset: Int!
+  $orderBy: [metadata_roots_order_by!]
+) {
+  metadata_roots(
+    where: { inner_metadata: { object_ownership: { is_admin: { _eq: true } } } }
     limit: $limit
     offset: $offset
+    order_by: $orderBy
   ) {
-    root_metadata {
-      cid: head_cid
-      type: metadata(path: "type")
-      name: metadata(path: "name")
-      mimeType: metadata(path: "mimeType")
-      size: metadata(path: "totalSize")
-      children: metadata(path: "children")
+    cid: head_cid
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    children: metadata(path: "children")
+    createdAt: created_at
+    inner_metadata {
       maximumBlockDepth: nodes(
         order_by: { block_published_on: desc_nulls_last }
         limit: 1
@@ -54,11 +57,8 @@ query GetGlobalFiles($limit: Int!, $offset: Int!) {
       }
     }
   }
-  metadata_aggregate(
-    distinct_on: root_cid
-    where: {
-      root_metadata: { object_ownership: { _and: { is_admin: { _eq: true } } } }
-    }
+  metadata_roots_aggregate(
+    where: { inner_metadata: { object_ownership: { is_admin: { _eq: true } } } }
   ) {
     aggregate {
       count
