@@ -32,12 +32,12 @@ export const downloadService = {
     const data = await FilesUseCases.retrieveObject(metadata)
 
     const [stream1, stream2] = await forkAsyncIterable(data)
-    await fsCache.set(cid, {
+    fsCache.set(cid, {
       data: stream1,
       size: metadata.totalSize,
     })
     const [stream3, stream4] = await forkAsyncIterable(stream2)
-    await memoryDownloadCache.set(cid, stream3)
+    memoryDownloadCache.set(cid, stream3)
 
     return stream4
   },
