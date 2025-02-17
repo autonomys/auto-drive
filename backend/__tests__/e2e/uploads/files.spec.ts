@@ -261,6 +261,8 @@ files.map((file, index) => {
       })
 
       it('download cache should be updated', async () => {
+        // Wait for the async context to finish
+        await new Promise((resolve) => setTimeout(resolve, 300))
         const asyncFromDatabase = await fsCache.get(cid)
         expect(asyncFromDatabase).not.toBeNull()
         const fileArrayFromDatabase = await asyncIterableToPromiseOfArray(
