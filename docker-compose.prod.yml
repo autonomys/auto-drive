@@ -6,7 +6,7 @@ volumes:
 services:
   # Hasura GraphQL Engine
   hasura:
-    image: hasura/graphql-engine:v2.40.0
+    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
     depends_on:
       backend:
         condition: service_healthy

@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 'use client';
 
 import { ObjectSummary } from '../../models/UploadedObjectMetadata';
@@ -8,7 +9,7 @@ import {
 } from '../../components/common/FileTable';
 import { useCallback, useEffect, useState } from 'react';
 import { PaginatedResult } from '../../models/common';
-import { useGetTrashedFilesQuery } from '../../../gql/graphql';
+import { Order_By, useGetTrashedFilesQuery } from '../../../gql/graphql';
 import { useUserStore } from '../../states/user';
 import { objectSummaryFromTrashedFilesQuery } from './utils';
 
@@ -39,6 +40,7 @@ export const TrashFiles = () => {
       oauthProvider: user!.oauthProvider,
       limit: pageSize,
       offset: currentPage * pageSize,
+      orderBy: [{ created_at: Order_By.DescNullsLast }],
     },
     skip: !user,
   });
@@ -53,7 +55,7 @@ export const TrashFiles = () => {
     if (data) {
       updateResult({
         rows: objectSummaryFromTrashedFilesQuery(data),
-        totalCount: data.metadata_aggregate.aggregate?.count ?? 0,
+        totalCount: data.metadata_roots_aggregate.aggregate?.count ?? 0,
       });
     }
   }, [data, updateResult]);
