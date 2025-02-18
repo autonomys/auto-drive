@@ -15,6 +15,7 @@ import {
   TableBodyRow,
 } from '../common/Table/TableBody';
 import { Button } from '../common/Button';
+import { useRouter } from 'next/navigation';
 
 export const ApiKeysTable = ({
   apiKeys,
@@ -34,9 +35,12 @@ export const ApiKeysTable = ({
 
   const nonDeletedApiKeys = apiKeys?.filter((apiKey) => !apiKey.deletedAt);
 
+  const router = useRouter();
+
   const onSuccess = useCallback(() => {
     closeCreationModal();
-  }, [closeCreationModal]);
+    router.refresh();
+  }, [closeCreationModal, router]);
 
   return (
     <div className='flex flex-col'>

@@ -9,6 +9,7 @@ import { Fragment, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { Button } from '../common/Button';
 import { AuthService } from '../../services/auth/auth';
+import { useRouter } from 'next/navigation';
 
 export const DeleteApiKeyModal = ({
   apiKeyId,
@@ -19,6 +20,8 @@ export const DeleteApiKeyModal = ({
 }) => {
   const isOpen = apiKeyId !== null;
 
+  const router = useRouter();
+
   const deleteApiKey = useCallback(() => {
     if (!apiKeyId) {
       return;
@@ -28,11 +31,12 @@ export const DeleteApiKeyModal = ({
       .then(() => {
         toast.success('API key deleted successfully');
         closeModal();
+        router.refresh();
       })
       .catch(() => {
         toast.error('Failed to delete API key');
       });
-  }, [apiKeyId, closeModal]);
+  }, [apiKeyId, closeModal, router]);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -46,7 +50,7 @@ export const DeleteApiKeyModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black dark:bg-backgroundDarkest' />
+          <div className='fixed inset-0 bg-black dark:bg-backgroundDarkest dark:bg-darkBlack/25' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -60,7 +64,7 @@ export const DeleteApiKeyModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left text-center align-middle shadow-xl transition-all'>
+              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left text-center align-middle shadow-xl transition-all dark:bg-darkWhite'>
                 <DialogTitle
                   as='h3'
                   className='text-lg font-medium leading-6 text-gray-900 dark:text-white'
