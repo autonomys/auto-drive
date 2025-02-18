@@ -22,6 +22,7 @@ export const GlobalFiles = () => {
   const setFetcher = useFileTableState((e) => e.setFetcher);
   const fetch = useFileTableState((e) => e.fetch);
   const objects = useFileTableState((e) => e.objects);
+  const resetPagination = useFileTableState((e) => e.resetPagination);
   const { gql } = useNetwork();
 
   const fetcher = useCallback(
@@ -44,6 +45,7 @@ export const GlobalFiles = () => {
   );
 
   useEffect(() => {
+    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
   }, [fetcher, gql, setFetcher, setObjects]);

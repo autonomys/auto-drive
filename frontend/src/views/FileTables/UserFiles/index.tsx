@@ -20,6 +20,7 @@ export const UserFiles = () => {
   const setFetcher = useFileTableState((e) => e.setFetcher);
   const fetch = useFileTableState((e) => e.fetch);
   const objects = useFileTableState((e) => e.objects);
+  const resetPagination = useFileTableState((e) => e.resetPagination);
   const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
 
@@ -45,9 +46,10 @@ export const UserFiles = () => {
   );
 
   useEffect(() => {
+    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, setFetcher, setObjects]);
+  }, [fetcher, gql, setFetcher, setObjects, resetPagination]);
 
   useEffect(() => {
     console.log(objects);

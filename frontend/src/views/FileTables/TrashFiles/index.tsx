@@ -21,6 +21,7 @@ export const TrashFiles = () => {
   const setFetcher = useFileTableState((e) => e.setFetcher);
   const fetch = useFileTableState((e) => e.fetch);
   const objects = useFileTableState((e) => e.objects);
+  const resetPagination = useFileTableState((e) => e.resetPagination);
   const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
 
@@ -46,6 +47,7 @@ export const TrashFiles = () => {
   );
 
   useEffect(() => {
+    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
   }, [fetcher, gql, setFetcher, setObjects]);
