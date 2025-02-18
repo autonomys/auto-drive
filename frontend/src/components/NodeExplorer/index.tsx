@@ -3,9 +3,9 @@
 import type { IPLDNodeData } from '@autonomys/auto-dag-data';
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { FC, useState } from 'react';
-import { InternalLink } from '../common/InternalLink';
-import { useNetwork } from '../../contexts/network';
-import { ROUTES } from '../../constants/routes';
+import { InternalLink } from 'components/common/InternalLink';
+import { useNetwork } from 'contexts/network';
+import { ROUTES } from 'constants/routes';
 
 interface NodeExplorerProps {
   cid: string;
@@ -28,7 +28,7 @@ export const NodeExplorer: FC<NodeExplorerProps> = ({
   const hasMetadata = metadata && Object.keys(metadata).length > 0;
 
   return (
-    <div className='dark:bg-darkWhite mx-auto max-w-4xl rounded-lg bg-white p-6 shadow-lg'>
+    <div className='mx-auto max-w-4xl rounded-lg bg-white p-6 shadow-lg dark:bg-darkWhite'>
       <h1 className='mb-6 text-3xl font-bold text-gray-800'>
         Node {cid.slice(0, 10)}
       </h1>

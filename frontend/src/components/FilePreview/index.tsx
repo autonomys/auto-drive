@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { OffchainMetadata } from '@autonomys/auto-dag-data';
-import { simpleMimeType } from '../../utils/misc';
-import { useNetwork } from '../../contexts/network';
-import { Arguments } from '../common/Arguments';
-import { FolderPreview } from './FolderPreview';
-import { NoPreviewAvailable } from './NoPreviewAvailable';
+import { simpleMimeType } from 'utils/misc';
+import { useNetwork } from 'contexts/network';
+import { Arguments } from 'components/common/Arguments';
+import { FolderPreview } from 'components/FilePreview/FolderPreview';
+import { NoPreviewAvailable } from 'components/FilePreview/NoPreviewAvailable';
 
 const MAX_FILE_SIZE = BigInt(100 * 1024 * 1024); // 100 MB
 

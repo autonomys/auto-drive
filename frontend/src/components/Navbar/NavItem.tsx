@@ -1,4 +1,4 @@
-import { InternalLink } from '../common/InternalLink';
+import { InternalLink } from 'components/common/InternalLink';
 
 export type NavItemProps = {
   href: string;
@@ -15,7 +15,7 @@ export const NavItem = ({
 }: NavItemProps) => (
   <InternalLink className='contents' href={href}>
     <button
-      className={`dark:hover:text-darkPrimary mb-2 flex items-center space-x-2 text-black hover:text-blue-600 ${isActive ? 'text-darkPrimary' : 'dark:text-darkBlack'}`}
+      className={`mb-2 flex items-center space-x-2 text-black hover:text-blue-600 dark:hover:text-darkPrimary ${isActive ? 'text-darkPrimary' : 'dark:text-darkBlack'}`}
     >
       <Icon className='h-5 w-5' />
       <span className='hidden md:block'>{label}</span>

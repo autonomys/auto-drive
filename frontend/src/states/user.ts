@@ -1,9 +1,9 @@
-import { User, UserInfo } from '../models/User.js';
+import { User, UserInfo } from 'models/User.js';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { SubscriptionInfo } from '../models/Subscriptions';
-import { AuthService } from '../services/auth/auth';
+import { SubscriptionInfo } from 'models/Subscriptions';
+import { AuthService } from 'services/auth/auth';
 
 interface UserStore {
   user: User | null;

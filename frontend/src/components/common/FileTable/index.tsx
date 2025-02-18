@@ -3,19 +3,27 @@
 import { Checkbox, Transition } from '@headlessui/react';
 import { LoaderCircle, Square, SquareCheck } from 'lucide-react';
 import { FC, useCallback, useState } from 'react';
-import { ObjectShareModal } from '../../Files/ObjectShareModal';
-import { ObjectDeleteModal } from '../../Files/ObjectDeleteModal';
-import { ObjectDownloadModal } from '../../Files/ObjectDownloadModal';
-import { useUserStore } from '../../../states/user';
-import { Table } from '../Table';
-import { TableHead, TableHeadCell, TableHeadRow } from '../Table/TableHead';
-import { TableBody, TableBodyRow, TableBodyCell } from '../Table/TableBody';
-import { Button } from '../Button';
-import { TableFooter } from '../Table/TableFooter';
-import { TablePaginator } from '../TablePaginator';
-import { ObjectRestoreModal } from '../../Files/ObjectRestoreModal';
+import { ObjectShareModal } from 'components/Files/ObjectShareModal';
+import { ObjectDeleteModal } from 'components/Files/ObjectDeleteModal';
+import { ObjectDownloadModal } from 'components/Files/ObjectDownloadModal';
+import { useUserStore } from 'states/user';
+import { Table } from 'components/common/Table';
+import {
+  TableHead,
+  TableHeadCell,
+  TableHeadRow,
+} from 'components/common/Table/TableHead';
+import {
+  TableBody,
+  TableBodyRow,
+  TableBodyCell,
+} from 'components/common/Table/TableBody';
+import { Button } from 'components/common/Button';
+import { TableFooter } from 'components/common/Table/TableFooter';
+import { TablePaginator } from 'components/common/TablePaginator';
+import { ObjectRestoreModal } from 'components/Files/ObjectRestoreModal';
 import { FileTableRow } from './FileTableRow';
-import { useFileTableState } from '../../../views/FileTables/state';
+import { useFileTableState } from 'views/FileTables/state';
 
 export enum FileActionButtons {
   DOWNLOAD = 'download',

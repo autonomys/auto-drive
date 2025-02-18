@@ -1,6 +1,6 @@
 import { FC, PropsWithoutRef } from 'react';
-import { FileCard } from '../../components/common/FileCard';
-import { UploadedObjectMetadata } from '../../models/UploadedObjectMetadata';
+import { FileCard } from 'components/common/FileCard';
+import { UploadedObjectMetadata } from 'models/UploadedObjectMetadata';
 
 export const FS: FC<PropsWithoutRef<{ metadata: UploadedObjectMetadata }>> = ({
   metadata,

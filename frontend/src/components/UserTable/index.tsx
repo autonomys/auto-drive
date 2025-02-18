@@ -1,18 +1,18 @@
 'use client';
 
 import { UserTableRow } from './UserTableRow';
-import { SubscriptionWithUser } from '../../models/Subscriptions';
+import { SubscriptionWithUser } from 'models/Subscriptions';
 import {
   TableBody,
   TableBodyCell,
   TableBodyRow,
-} from '../common/Table/TableBody';
-import { Table } from '../common/Table';
+} from 'components/common/Table/TableBody';
+import { Table } from 'components/common/Table';
 import {
   TableHead,
   TableHeadRow,
   TableHeadCell,
-} from '../common/Table/TableHead';
+} from 'components/common/Table/TableHead';
 import { Loader } from 'lucide-react';
 
 export const UserSubscriptionsTable = ({
@@ -48,7 +48,7 @@ export const UserSubscriptionsTable = ({
                   <TableBodyRow>
                     <TableBodyCell
                       colSpan={7}
-                      className='dark:text-darkBlack whitespace-nowrap px-6 py-4 text-center text-sm text-black'
+                      className='whitespace-nowrap px-6 py-4 text-center text-sm text-black dark:text-darkBlack'
                     >
                       <span className='flex items-center justify-center'>
                         <Loader className='h-4 w-4 animate-spin' />

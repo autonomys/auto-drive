@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { Button } from '../common/Button';
+import { Button } from 'components/common/Button';
 import { FileWarning } from 'lucide-react';
-import { useEncryptionStore } from '../../states/encryption';
-import { useNetwork } from '../../contexts/network';
-import { useFileTableState } from '../../views/FileTables/state';
+import { useEncryptionStore } from 'states/encryption';
+import { useNetwork } from 'contexts/network';
+import { useFileTableState } from 'views/FileTables/state';
 
 export const UploadingFolderModal = ({
   data,

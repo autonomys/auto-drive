@@ -7,15 +7,15 @@ import {
 } from '@headlessui/react';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { OffchainMetadata } from '@autonomys/auto-dag-data';
-import { InvalidDecryptKey } from '../../utils/file';
-import { Button } from '../common/Button';
-import { shortenString } from '../../utils/misc';
-import { useEncryptionStore } from '../../states/encryption';
+import { InvalidDecryptKey } from 'utils/file';
+import { Button } from 'components/common/Button';
+import { shortenString } from 'utils/misc';
+import { useEncryptionStore } from 'states/encryption';
 import toast from 'react-hot-toast';
 import { useSession } from 'next-auth/react';
-import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
-import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
-import { useNetwork } from '../../contexts/network';
+import { useGetMetadataByHeadCidQuery } from 'gql/graphql';
+import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
+import { useNetwork } from 'contexts/network';
 
 const toastId = 'object-download-modal';
 
@@ -189,7 +189,7 @@ export const ObjectDownloadModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black bg-opacity-25' />
+          <div className='fixed inset-0 bg-black bg-opacity-25 dark:bg-darkBlack/25' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -203,7 +203,7 @@ export const ObjectDownloadModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-darkWhite'>
                 {view}
               </DialogPanel>
             </TransitionChild>

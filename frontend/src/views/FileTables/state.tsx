@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ObjectSummary } from '../../models/UploadedObjectMetadata';
+import { ObjectSummary } from 'models/UploadedObjectMetadata';
 
 export const useFileTableState = create<{
   objects: ObjectSummary[] | null;

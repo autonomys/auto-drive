@@ -1,7 +1,7 @@
 import { ApolloClient, HttpLink, InMemoryCache } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
-import { getAuthSession } from '../../utils/auth';
-import { NetworkId, getNetwork } from '../../constants/networks';
+import { getAuthSession } from 'utils/auth';
+import { NetworkId, getNetwork } from 'constants/networks';
 
 const authLink = setContext(async (_, { headers }) => {
   const token = await getAuthSession();

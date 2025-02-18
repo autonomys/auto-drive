@@ -1,31 +1,28 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
-import {
-  ObjectSummary,
-  OwnerRole,
-} from '../../../models/UploadedObjectMetadata';
-import { User } from '../../../models/User';
-import { TableBodyCell, TableBodyRow } from '../Table/TableBody';
-import { DisplayerIcon } from '../Triangle';
+import { ObjectSummary, OwnerRole } from 'models/UploadedObjectMetadata';
+import { User } from 'models/User';
+import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';
+import { DisplayerIcon } from 'components/common/Triangle';
 import {
   Popover,
   PopoverButton,
   PopoverPanel,
   Transition,
 } from '@headlessui/react';
-import { shortenString } from '../../../utils/misc';
-import { Metadata } from '../../Files/Metadata';
-import { getTypeFromMetadata } from '../../../utils/file';
-import { ConditionalRender } from '../ConditionalRender';
-import { FileActionButtons } from '../FileTable';
+import { shortenString } from 'utils/misc';
+import { Metadata } from 'components/Files/Metadata';
+import { getTypeFromMetadata } from 'utils/file';
+import { ConditionalRender } from 'components/common/ConditionalRender';
+import { FileActionButtons } from 'components/common/FileTable';
 import bytes from 'bytes';
-import { Button } from '../Button';
-import { handleEnterOrSpace } from '../../../utils/eventHandler';
+import { Button } from 'components/common/Button';
+import { handleEnterOrSpace } from 'utils/eventHandler';
 import { SquareArrowOutUpRight } from 'lucide-react';
-import { InternalLink } from '../InternalLink';
+import { InternalLink } from 'components/common/InternalLink';
 import { OwnerBadge } from './OwnerBadge';
-import { useNetwork } from '../../../contexts/network';
-import { ROUTES } from '../../../constants/routes';
-import { utcToLocalRelativeTime } from '../../../utils/time';
+import { useNetwork } from 'contexts/network';
+import { ROUTES } from 'constants/routes';
+import { utcToLocalRelativeTime } from 'utils/time';
 
 export const FileTableRow = ({
   file,

@@ -5,12 +5,12 @@ import toast from 'react-hot-toast';
 import { Copy } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { CreditsUpdateModal } from './CreditsUpdateModal';
-import { SubscriptionWithUser } from '../../models/Subscriptions';
+import { SubscriptionWithUser } from 'models/Subscriptions';
 import { UpdateRoleModal } from './UpdateRoleModal';
-import { useUserStore } from '../../states/user';
-import { TableBodyCell, TableBodyRow } from '../common/Table/TableBody';
-import { shortenString } from '../../utils/misc';
-import { handleEnterOrSpace } from '../../utils/eventHandler';
+import { useUserStore } from 'states/user';
+import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';
+import { shortenString } from 'utils/misc';
+import { handleEnterOrSpace } from 'utils/eventHandler';
 
 type UserTableRowProps = {
   subscriptionWithUser: SubscriptionWithUser;
@@ -54,7 +54,7 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
           role='button'
           tabIndex={0}
           onKeyDown={handleEnterOrSpace(copyToClipboard)}
-          className='dark:text-darkBlack flex cursor-pointer items-center gap-2 text-sm text-black transition-colors duration-200 hover:text-blue-500'
+          className='flex cursor-pointer items-center gap-2 text-sm text-black transition-colors duration-200 hover:text-blue-500 dark:text-darkBlack'
           onClick={copyToClipboard}
         >
           {shortenString(subscriptionWithUser.user.publicId!, 16)}{' '}
@@ -62,29 +62,29 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
+        <div className='text-sm text-black dark:text-darkBlack'>
           {subscriptionWithUser.user.oauthProvider}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack flex items-center gap-2 text-sm text-black'>
+        <div className='flex items-center gap-2 text-sm text-black dark:text-darkBlack'>
           {subscriptionWithUser.user.role}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
+        <div className='text-sm text-black dark:text-darkBlack'>
           {granularity}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
+        <div className='text-sm text-black dark:text-darkBlack'>
           {bytes(Number(subscriptionWithUser.uploadLimit), {
             unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
+        <div className='text-sm text-black dark:text-darkBlack'>
           {bytes(Number(subscriptionWithUser.downloadLimit), {
             unitSeparator: ' ',
           })}

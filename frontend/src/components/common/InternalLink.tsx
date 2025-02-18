@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { handleEnterOrSpace } from '../../utils/eventHandler';
+import { handleEnterOrSpace } from 'utils/eventHandler';
 
 export const InternalLink = ({
   children,

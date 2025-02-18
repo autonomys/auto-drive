@@ -1,5 +1,5 @@
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { useFileTableState } from '../../../views/FileTables/state';
+import { useFileTableState } from 'views/FileTables/state';
 
 export const TablePaginator = () => {
   const {

@@ -1,11 +1,11 @@
 import {
   GetMetadataByHeadCidDocument,
   GetMetadataByHeadCidQuery,
-} from '../../../../../../gql/graphql';
-import { ObjectDetails } from '../../../../../views/ObjectDetails';
-import { mapObjectInformationFromQueryResult } from '../../../../../services/gql/utils';
-import { NetworkId } from '../../../../../constants/networks';
-import { createGQLClientByNetwork } from '../../../../../services/gql';
+} from 'gql/graphql';
+import { ObjectDetails } from 'views/ObjectDetails';
+import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
+import { NetworkId } from 'constants/networks';
+import { createGQLClientByNetwork } from 'services/gql';
 
 export const dynamic = 'force-dynamic';
 

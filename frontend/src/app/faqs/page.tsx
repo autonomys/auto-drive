@@ -1,8 +1,8 @@
 'use client';
 
 import localFont from 'next/font/local';
-import Footer from '../../components/Footer';
-import { FAQ } from '../../components/FAQ';
+import Footer from 'components/Footer';
+import { FAQ } from 'components/FAQ';
 
 const geistSans = localFont({
   src: '../fonts/GeistMonoVF.woff',

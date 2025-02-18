@@ -1,7 +1,7 @@
-import { ApiKey, ApiKeyWithoutSecret } from '../../models/ApiKey';
-import { OnboardedUser, User, UserInfo } from '../../models/User';
-import { getAuthSession } from '../../utils/auth';
-import { API_BASE_URL } from './config';
+import { ApiKey, ApiKeyWithoutSecret } from 'models/ApiKey';
+import { OnboardedUser, User, UserInfo } from 'models/User';
+import { getAuthSession } from 'utils/auth';
+import { API_BASE_URL } from 'services/auth/config';
 
 export const AuthService = {
   onboardUser: async (): Promise<User> => {

@@ -2,22 +2,19 @@
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import { useUserStore } from '../../../states/user';
-import { FileDropZone } from '../../../components/Files/FileDropZone';
-import { SearchBar } from '../../../components/SearchBar';
-import {
-  FileActionButtons,
-  FileTable,
-} from '../../../components/common/FileTable';
-import { NoUploadsPlaceholder } from '../../../components/Files/NoUploadsPlaceholder';
+import { useUserStore } from 'states/user';
+import { FileDropZone } from 'components/Files/FileDropZone';
+import { SearchBar } from 'components/SearchBar';
+import { FileActionButtons, FileTable } from 'components/common/FileTable';
+import { NoUploadsPlaceholder } from 'components/Files/NoUploadsPlaceholder';
 import {
   GetMyFilesDocument,
   GetMyFilesQuery,
   useGetMyFilesQuery,
-} from '../../../../gql/graphql';
+} from 'gql/graphql';
 import { objectSummaryFromUserFilesQuery } from './utils';
 import { useFileTableState } from '../state';
-import { useNetwork } from '../../../contexts/network';
+import { useNetwork } from 'contexts/network';
 
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);

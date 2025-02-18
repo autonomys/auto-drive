@@ -6,12 +6,12 @@ import {
   TransitionChild,
 } from '@headlessui/react';
 import { Fragment, useCallback, useState } from 'react';
-import { UploadedObjectMetadata } from '../../models/UploadedObjectMetadata';
+import { UploadedObjectMetadata } from 'models/UploadedObjectMetadata';
 import toast from 'react-hot-toast';
-import { Button } from '../common/Button';
-import { useGetMetadataByHeadCidQuery } from '../../../gql/graphql';
-import { mapObjectInformationFromQueryResult } from '../../services/gql/utils';
-import { useNetwork } from '../../contexts/network';
+import { Button } from 'components/common/Button';
+import { useGetMetadataByHeadCidQuery } from 'gql/graphql';
+import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
+import { useNetwork } from 'contexts/network';
 
 export const ObjectDeleteModal = ({
   cid,

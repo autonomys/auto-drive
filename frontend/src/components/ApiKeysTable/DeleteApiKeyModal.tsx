@@ -7,8 +7,8 @@ import {
 } from '@headlessui/react';
 import { Fragment, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Button } from '../common/Button';
-import { AuthService } from '../../services/auth/auth';
+import { Button } from 'components/common/Button';
+import { AuthService } from 'services/auth/auth';
 import { useRouter } from 'next/navigation';
 
 export const DeleteApiKeyModal = ({

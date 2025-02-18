@@ -1,19 +1,16 @@
 /* eslint-disable camelcase */
-import {
-  FileActionButtons,
-  FileTable,
-} from '../../../components/common/FileTable';
+import { FileActionButtons, FileTable } from 'components/common/FileTable';
 import { NoSharedFilesPlaceholder } from './NoSharedFilesPlaceholder';
 import { useCallback, useEffect } from 'react';
 import {
   GetSharedFilesDocument,
   GetSharedFilesQuery,
   useGetSharedFilesQuery,
-} from '../../../../gql/graphql';
+} from 'gql/graphql';
 import { objectSummaryFromSharedFilesQuery } from './utils';
 import { useFileTableState } from '../state';
-import { useNetwork } from '../../../contexts/network';
-import { useUserStore } from '../../../states/user';
+import { useNetwork } from 'contexts/network';
+import { useUserStore } from 'states/user';
 
 export const SharedFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);

@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { NetworkDropdown } from '../NetworkDropdown';
 import { redirect } from 'next/navigation';
-import { defaultNetworkId, NetworkId, networks } from '@/constants/networks';
-import { AutonomysSymbol } from '../common/AutonomysSymbol';
+import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
+import { AutonomysSymbol } from 'components/common/AutonomysSymbol';
 
 export type TopNavbarProps = {
   networkId: NetworkId;

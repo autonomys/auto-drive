@@ -8,11 +8,11 @@ import {
   DialogTitle,
 } from '@headlessui/react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { ApiKey } from '../../models/ApiKey';
+import { ApiKey } from 'models/ApiKey';
 import toast from 'react-hot-toast';
-import { Button } from '../common/Button';
-import { handleEnterOrSpace } from '../../utils/eventHandler';
-import { AuthService } from '../../services/auth/auth';
+import { Button } from 'components/common/Button';
+import { handleEnterOrSpace } from 'utils/eventHandler';
+import { AuthService } from 'services/auth/auth';
 
 export const ApiKeyCreationModal = ({
   isOpen,
@@ -65,7 +65,7 @@ export const ApiKeyCreationModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black dark:bg-backgroundDarkest' />
+          <div className='fixed inset-0 bg-black dark:bg-backgroundDarkest dark:bg-darkBlack/25' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -79,10 +79,10 @@ export const ApiKeyCreationModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-backgroundDark'>
+              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-backgroundDark dark:bg-darkWhite'>
                 <DialogTitle
                   as='h3'
-                  className='dark:text-darkBlack text-center text-lg font-medium leading-6 text-black'
+                  className='text-center text-lg font-medium leading-6 text-black dark:text-darkBlack'
                 >
                   Create API Key
                 </DialogTitle>

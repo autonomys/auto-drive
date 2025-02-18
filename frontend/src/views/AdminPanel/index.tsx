@@ -1,10 +1,10 @@
 'use client';
 
-import { AuthService } from '../../services/auth/auth';
-import { UserSubscriptionsTable } from '../../components/UserTable';
+import { AuthService } from 'services/auth/auth';
+import { UserSubscriptionsTable } from 'components/UserTable';
 import { useEffect, useState } from 'react';
-import { SubscriptionWithUser } from '../../models/Subscriptions';
-import { useNetwork } from '../../contexts/network';
+import { SubscriptionWithUser } from 'models/Subscriptions';
+import { useNetwork } from 'contexts/network';
 
 export const AdminPanel = () => {
   const [subscriptionsWithUsers, setSubscriptionsWithUsers] = useState<

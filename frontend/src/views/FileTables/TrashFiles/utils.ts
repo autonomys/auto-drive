@@ -1,8 +1,5 @@
-import { GetTrashedFilesQuery } from '../../../../gql/graphql';
-import {
-  ObjectSummary,
-  OwnerRole,
-} from '../../../models/UploadedObjectMetadata';
+import { GetTrashedFilesQuery } from 'gql/graphql';
+import { ObjectSummary, OwnerRole } from 'models/UploadedObjectMetadata';
 
 export const objectSummaryFromTrashedFilesQuery = (
   e: GetTrashedFilesQuery,

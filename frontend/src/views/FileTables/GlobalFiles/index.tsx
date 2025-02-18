@@ -2,20 +2,17 @@
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import {
-  FileTable,
-  FileActionButtons,
-} from '../../../components/common/FileTable';
-import { NoUploadsPlaceholder } from '../../../components/Files/NoUploadsPlaceholder';
-import { SearchBar } from '../../../components/SearchBar';
+import { FileTable, FileActionButtons } from 'components/common/FileTable';
+import { NoUploadsPlaceholder } from 'components/Files/NoUploadsPlaceholder';
+import { SearchBar } from 'components/SearchBar';
 import {
   GetGlobalFilesDocument,
   GetGlobalFilesQuery,
   useGetGlobalFilesQuery,
-} from '../../../../gql/graphql';
+} from 'gql/graphql';
 import { objectSummaryFromGlobalFilesQuery } from './utils';
 import { useFileTableState } from '../state';
-import { useNetwork } from '../../../contexts/network';
+import { useNetwork } from 'contexts/network';
 import { ApolloClient } from '@apollo/client';
 
 export const GlobalFiles = () => {

@@ -1,7 +1,7 @@
 import { OffchainFolderMetadata } from '@autonomys/auto-drive';
 import { useCallback } from 'react';
-import { useNetwork } from '../../contexts/network';
-import { ROUTES } from '../../constants/routes';
+import { useNetwork } from 'contexts/network';
+import { ROUTES } from 'constants/routes';
 
 export const FolderPreview = ({
   metadata,

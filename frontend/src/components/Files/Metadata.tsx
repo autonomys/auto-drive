@@ -1,17 +1,17 @@
-import { ObjectSummary } from '../../models/UploadedObjectMetadata';
+import { ObjectSummary } from 'models/UploadedObjectMetadata';
 import bytes from 'bytes';
-import { getTypeFromMetadata } from '../../utils/file';
-import { InternalLink } from '../common/InternalLink';
-import { useNetwork } from '../../contexts/network';
-import { ROUTES } from '../../constants/routes';
+import { getTypeFromMetadata } from 'utils/file';
+import { InternalLink } from 'components/common/InternalLink';
+import { useNetwork } from 'contexts/network';
+import { ROUTES } from 'constants/routes';
 
 export const Metadata = ({ object }: { object: ObjectSummary }) => {
   const { network } = useNetwork();
   return (
-    <div className='dark:bg-darkWhiteHover dark:text-darkBlack rounded-lg border border-[#202124] border-opacity-20 bg-white p-4 text-xs'>
+    <div className='rounded-lg border border-[#202124] border-opacity-20 bg-white p-4 text-xs dark:bg-darkWhiteHover dark:text-darkBlack'>
       <div className='mb-4 flex flex-col'>
         <div className='flex justify-between'>
-          <h4 className='dark:text-darkBlack text-wrap text-sm font-medium text-black'>
+          <h4 className='text-wrap text-sm font-medium text-black dark:text-darkBlack'>
             {object.name}
           </h4>
           {object.uploadStatus.archivedNodes ===
@@ -21,14 +21,14 @@ export const Metadata = ({ object }: { object: ObjectSummary }) => {
             </span>
           )}
         </div>
-        <p className='dark:text-darkBlack text-gray-500'>
+        <p className='text-gray-500 dark:text-darkBlack'>
           Size: {bytes(Number(object.size))}
         </p>
         <p>
           CID: <span className='text-blue-500'>{object.headCid}</span>
         </p>
       </div>
-      <div className='dark:text-darkBlack grid grid-cols-2 gap-x-4 gap-y-2 font-light text-black'>
+      <div className='grid grid-cols-2 gap-x-4 gap-y-2 font-light text-black dark:text-darkBlack'>
         <div className='flex'>
           <span>Type:</span>
           <span className='ml-[4px]'>{getTypeFromMetadata(object)}</span>
@@ -66,7 +66,7 @@ export const Metadata = ({ object }: { object: ObjectSummary }) => {
       </div>
       <div className='flex justify-end'>
         <InternalLink href={ROUTES.objectDetails(network.id, object.headCid)}>
-          <span className='dark:text-darkBlack mt-4 font-semibold text-primary hover:cursor-pointer'>
+          <span className='mt-4 font-semibold text-primary hover:cursor-pointer dark:text-darkBlack'>
             See more
           </span>
         </InternalLink>

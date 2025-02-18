@@ -1,5 +1,5 @@
-import { NetworkId } from '@/constants/networks';
-import { ROUTES } from '@/constants/routes';
+import { NetworkId } from 'constants/networks';
+import { ROUTES } from 'constants/routes';
 import {
   CodeXmlIcon,
   Earth,
@@ -10,10 +10,10 @@ import {
   UsersIcon,
 } from 'lucide-react';
 import React, { useMemo } from 'react';
-import { RoleProtected } from '../RoleProtected';
-import { UserRole } from '@/models/User';
-import { RemainingCreditTracker } from '../RemainingCreditTracker';
-import { useUserStore } from '@/states/user';
+import { RoleProtected } from 'components/RoleProtected';
+import { UserRole } from 'models/User';
+import { RemainingCreditTracker } from 'components/RemainingCreditTracker';
+import { useUserStore } from 'states/user';
 import { usePathname } from 'next/navigation';
 import { NavItem } from './NavItem';
 

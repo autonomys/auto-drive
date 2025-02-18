@@ -7,8 +7,8 @@ import {
 } from '@headlessui/react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Button } from '../common/Button';
-import { useEncryptionStore } from '../../states/encryption';
+import { Button } from 'components/common/Button';
+import { useEncryptionStore } from 'states/encryption';
 
 export const DefaultPasswordModal = ({
   isOpen,
@@ -56,7 +56,7 @@ export const DefaultPasswordModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black' />
+          <div className='fixed inset-0 bg-black dark:bg-darkBlack/25' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -70,7 +70,7 @@ export const DefaultPasswordModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-darkWhite'>
                 <DialogTitle
                   as='h3'
                   className='text-lg font-medium leading-6 text-gray-900'

@@ -1,4 +1,4 @@
-import { defaultNetworkId, NetworkId } from './networks';
+import { defaultNetworkId, NetworkId } from 'constants/networks';
 
 export const EXTERNAL_ROUTES = {
   autonomys: 'https://autonomys.xyz/',

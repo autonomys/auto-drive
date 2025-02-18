@@ -2,9 +2,9 @@
 
 import { useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
-import { useUserStore } from '../../states/user';
-import { DefaultPasswordModal } from '../../components/DefaultPasswordModal';
-import { Button } from '../../components/common/Button';
+import { useUserStore } from 'states/user';
+import { DefaultPasswordModal } from 'components/DefaultPasswordModal';
+import { Button } from 'components/common/Button';
 import { signOut } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
 

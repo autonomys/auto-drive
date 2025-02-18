@@ -6,8 +6,8 @@ import {
 } from '@headlessui/react';
 import { FileIcon, FolderIcon } from 'lucide-react';
 import React, { useCallback, useRef, useState } from 'react';
-import { UploadingFileModal } from './UploadingFileModal';
-import { UploadingFolderModal } from './UploadingFolderModal';
+import { UploadingFileModal } from 'components/Files/UploadingFileModal';
+import { UploadingFolderModal } from 'components/Files/UploadingFolderModal';
 import toast from 'react-hot-toast';
 
 export function FileDropZone() {
@@ -174,18 +174,18 @@ export function FileDropZone() {
           leaveTo='transform scale-95 opacity-0'
         >
           <PopoverPanel className='absolute z-10 w-full'>
-            <div className='dark:bg-darkWhiteHover dark:text-darkBlack rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5'>
+            <div className='rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-darkWhiteHover dark:text-darkBlack'>
               <div className='p-4'>
                 <button
                   onClick={openFileDialog}
-                  className='dark:hover:bg-darkWhite flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100'
+                  className='flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-darkWhite'
                 >
                   <FileIcon className='mr-3 h-5 w-5' />
                   Select Files
                 </button>
                 <button
                   onClick={openFolderDialog}
-                  className='dark:hover:bg-darkWhite flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100'
+                  className='flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-darkWhite'
                 >
                   <FolderIcon className='mr-3 h-5 w-5' />
                   Select Folder

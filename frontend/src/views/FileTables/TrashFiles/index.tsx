@@ -2,20 +2,17 @@
 'use client';
 
 import { NoFilesInTrashPlaceholder } from './NoFilesInTrashPlaceholder';
-import {
-  FileActionButtons,
-  FileTable,
-} from '../../../components/common/FileTable';
+import { FileActionButtons, FileTable } from 'components/common/FileTable';
 import { useCallback, useEffect } from 'react';
 import {
   GetTrashedFilesDocument,
   GetTrashedFilesQuery,
   useGetTrashedFilesQuery,
-} from '../../../../gql/graphql';
-import { useUserStore } from '../../../states/user';
+} from 'gql/graphql';
+import { useUserStore } from 'states/user';
 import { objectSummaryFromTrashedFilesQuery } from './utils';
 import { useFileTableState } from '../state';
-import { useNetwork } from '../../../contexts/network';
+import { useNetwork } from 'contexts/network';
 
 export const TrashFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);

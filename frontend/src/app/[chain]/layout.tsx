@@ -1,20 +1,16 @@
 'use client';
 
 import '../globals.css';
-import { UserEnsurer } from '../../components/UserEnsurer';
+import { UserEnsurer } from 'components/UserEnsurer';
 import { useEffect, useMemo } from 'react';
-import { useUserStore } from '../../states/user';
+import { useUserStore } from 'states/user';
 import { SessionProvider } from 'next-auth/react';
-import {
-  defaultNetworkId,
-  NetworkId,
-  networks,
-} from '../../constants/networks';
-import { NetworkProvider } from '../../contexts/network';
+import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
+import { NetworkProvider } from 'contexts/network';
 import { redirect } from 'next/navigation';
-import { TopNavbar } from '@/components/Navbar/TopNavbar';
-import { SideNavbar } from '@/components/Navbar/SideNavbar';
-import { AuthService } from '../../services/auth/auth';
+import { TopNavbar } from 'components/Navbar/TopNavbar';
+import { SideNavbar } from 'components/Navbar/SideNavbar';
+import { AuthService } from 'services/auth/auth';
 
 export default function AppLayout({
   children,
@@ -39,8 +35,8 @@ export default function AppLayout({
   }
 
   return (
-    <div className='dark:bg-darkWhite min-h-screen bg-white dark:bg-gray-900'>
-      <div className='dark:bg-darkWhite dark:bg-darkWhite flex h-screen flex-col rounded-lg bg-white dark:text-white'>
+    <div className='min-h-screen bg-white dark:bg-darkWhite dark:bg-gray-900'>
+      <div className='flex h-screen flex-col rounded-lg bg-white dark:bg-darkWhite dark:text-white'>
         <TopNavbar networkId={params.chain} />
         <div className='flex flex-1 overflow-hidden px-10'>
           <UserEnsurer>

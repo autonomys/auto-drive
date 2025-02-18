@@ -7,8 +7,8 @@ import {
 } from '@headlessui/react';
 import { Fragment, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Button } from '../common/Button';
-import { useNetwork } from '../../contexts/network';
+import { Button } from 'components/common/Button';
+import { useNetwork } from 'contexts/network';
 
 export const ObjectRestoreModal = ({
   cid,

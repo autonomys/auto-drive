@@ -1,17 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import Footer from '../../components/Footer';
-import { LandingHeader } from '../../components/common/LandingHeader';
+import Footer from 'components/Footer';
+import { LandingHeader } from 'components/common/LandingHeader';
 import { SigningInButtons } from './SignInButtons';
 import Image from 'next/image';
 
 export const Home = () => {
   return (
-    <div className='dark:bg-darkWhite dark:text-darkBlack flex min-h-screen flex-col items-center justify-between gap-2 bg-gradient-to-b from-backgroundLight to-backgroundDark dark:from-backgroundDark dark:to-backgroundDarkest'>
+    <div className='flex min-h-screen flex-col items-center justify-between gap-2 bg-gradient-to-b from-backgroundLight to-backgroundDark dark:bg-darkWhite dark:from-backgroundDark dark:to-backgroundDarkest dark:text-darkBlack'>
       <LandingHeader />
-      <div className='dark:bg-darkWhite mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
-        <div className='dark:bg-darkWhite flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+      <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0 dark:bg-darkWhite'>
+        <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <h1 className='margin-0 bg-gradient-to-b from-backgroundDark to-backgroundDarker bg-clip-text text-center text-4xl font-semibold text-transparent dark:from-backgroundLight dark:to-backgroundDark'>
             Auto Drive
           </h1>
@@ -21,7 +21,7 @@ export const Home = () => {
           </p>
           <SigningInButtons />
         </div>
-        <div className='dark:bg-darkWhite flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+        <div className='flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <Image
             className='w-full rounded-3xl border-2 border-gray-200'
             src='/preview.png'
@@ -31,11 +31,11 @@ export const Home = () => {
           />
         </div>
       </div>
-      <h2 className='dark:text-darkBlack my-8 text-center text-4xl font-bold text-backgroundDarker'>
+      <h2 className='my-8 text-center text-4xl font-bold text-backgroundDarker dark:text-darkBlack'>
         Upload Once, Access Forever.
       </h2>
-      <div className='dark:bg-darkWhite mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
-        <div className='dark:bg-darkWhite flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+      <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0 dark:bg-darkWhite'>
+        <div className='flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <Image
             className='w-full rounded-3xl border-2 border-gray-200'
             src='/images/drag-drop-or-select-files-folders.png.png'
@@ -44,7 +44,7 @@ export const Home = () => {
             height={272}
           />
         </div>
-        <div className='dark:bg-darkWhite flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+        <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <h1 className='margin-0 bg-gradient-to-b from-backgroundDark to-backgroundDarker bg-clip-text text-center text-4xl font-semibold text-transparent dark:from-backgroundLight dark:to-backgroundDark'>
             Upload Files & Folders
           </h1>
@@ -55,11 +55,11 @@ export const Home = () => {
           </p>
         </div>
       </div>
-      <h2 className='dark:text-darkBlack my-8 text-center text-4xl font-bold text-backgroundDarker'>
+      <h2 className='my-8 text-center text-4xl font-bold text-backgroundDarker dark:text-darkBlack'>
         Your Drive into Permanent Decentralized Storage.
       </h2>
-      <div className='dark:bg-darkWhite mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
-        <div className='dark:bg-darkWhite flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+      <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0 dark:bg-darkWhite'>
+        <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <h1 className='margin-0 bg-gradient-to-b from-backgroundDark to-backgroundDarker bg-clip-text text-center text-4xl font-semibold text-transparent dark:from-backgroundLight dark:to-backgroundDark'>
             Secure End-to-End Encryption (E2EE)
           </h1>
@@ -70,7 +70,7 @@ export const Home = () => {
             putting you in complete control of your data security.
           </p>
         </div>
-        <div className='dark:bg-darkWhite flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+        <div className='flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <Image
             className='w-full rounded-3xl border-2 border-gray-200'
             src='/images/upload-with-encryption-or-without.png'
@@ -80,11 +80,11 @@ export const Home = () => {
           />
         </div>
       </div>
-      <h2 className='dark:text-darkBlack my-8 text-center text-4xl font-bold text-backgroundDarker'>
+      <h2 className='my-8 text-center text-4xl font-bold text-backgroundDarker dark:text-darkBlack'>
         Seamless Integration & Developer-Friendly
       </h2>
-      <div className='dark:bg-darkWhite mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
-        <div className='dark:bg-darkWhite flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+      <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0 dark:bg-darkWhite'>
+        <div className='flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <Image
             className='w-full rounded-3xl border-2 border-gray-200'
             src='/images/api-support.png'
@@ -93,7 +93,7 @@ export const Home = () => {
             height={272}
           />
         </div>
-        <div className='dark:bg-darkWhite flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+        <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <h1 className='margin-0 bg-gradient-to-b from-backgroundDark to-backgroundDarker bg-clip-text text-center text-4xl font-semibold text-transparent dark:from-backgroundLight dark:to-backgroundDark'>
             Create API Keys
           </h1>
@@ -103,11 +103,11 @@ export const Home = () => {
           </p>
         </div>
       </div>
-      <h2 className='dark:text-darkBlack text-backgroundDarkers my-8 text-center text-4xl font-bold'>
+      <h2 className='text-backgroundDarkers my-8 text-center text-4xl font-bold dark:text-darkBlack'>
         TypeScript & JavaScript Support with Full Type Safety
       </h2>
-      <div className='dark:bg-darkWhite mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
-        <div className='dark:bg-darkWhite flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+      <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0 dark:bg-darkWhite'>
+        <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <h1 className='margin-0 bg-gradient-to-b from-backgroundDark to-backgroundDarker bg-clip-text text-center text-4xl font-semibold text-transparent dark:from-backgroundLight dark:to-backgroundDark'>
             @autonomys/auto-drive
           </h1>
@@ -137,7 +137,7 @@ export const Home = () => {
             </Link>
           </p>
         </div>
-        <div className='dark:bg-darkWhite flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+        <div className='flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <Link
             href='https://www.npmjs.com/package/@autonomys/auto-drive'
             className='text-accent'
@@ -154,11 +154,11 @@ export const Home = () => {
           </Link>
         </div>
       </div>
-      <h2 className='dark:text-darkBlack my-8 text-center text-4xl font-bold text-backgroundDarker'>
+      <h2 className='my-8 text-center text-4xl font-bold text-backgroundDarker dark:text-darkBlack'>
         Scalable Data Structure for Decentralized Storage
       </h2>
-      <div className='dark:bg-darkWhite mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
-        <div className='dark:bg-darkWhite flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+      <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0 dark:bg-darkWhite'>
+        <div className='flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <Link
             href='https://www.npmjs.com/package/@autonomys/auto-dag-data'
             className='text-accent'
@@ -174,7 +174,7 @@ export const Home = () => {
             />
           </Link>
         </div>
-        <div className='dark:bg-darkWhite flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+        <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <h1 className='margin-0 bg-gradient-to-b from-backgroundDark to-backgroundDarker bg-clip-text text-center text-4xl font-semibold text-transparent dark:from-backgroundLight dark:to-backgroundDark'>
             Auto-DAG Data Structure
           </h1>
@@ -186,11 +186,11 @@ export const Home = () => {
           </p>
         </div>
       </div>
-      <h2 className='dark:text-darkBlack my-8 text-center text-4xl font-bold text-backgroundDarker'>
+      <h2 className='my-8 text-center text-4xl font-bold text-backgroundDarker dark:text-darkBlack'>
         Join Us Today and Experience the Future of Storage!
       </h2>
-      <div className='dark:bg-darkWhite mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0'>
-        <div className='dark:bg-darkWhite flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+      <div className='mt-5 flex min-h-[50vh] w-[90%] flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl rounded-xl bg-white py-8 md:w-[60%] md:flex-row md:gap-0 md:py-0 dark:bg-darkWhite'>
+        <div className='flex h-full w-full grow flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <Image
             className='w-full rounded-3xl border-2 border-gray-200'
             src='/preview.png'
@@ -199,7 +199,7 @@ export const Home = () => {
             height={272}
           />
         </div>
-        <div className='dark:bg-darkWhite flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4'>
+        <div className='flex h-full w-full flex-col items-center justify-center gap-4 rounded-3xl bg-white px-4 dark:bg-darkWhite'>
           <h1 className='margin-0 bg-gradient-to-b from-backgroundDark to-backgroundDarker bg-clip-text text-center text-4xl font-semibold text-transparent dark:from-backgroundLight dark:to-backgroundDark'>
             Auto Drive
           </h1>

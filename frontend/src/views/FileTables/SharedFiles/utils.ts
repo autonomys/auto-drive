@@ -1,8 +1,5 @@
-import { GetSharedFilesQuery } from '../../../../gql/graphql';
-import {
-  ObjectSummary,
-  OwnerRole,
-} from '../../../models/UploadedObjectMetadata';
+import { GetSharedFilesQuery } from 'gql/graphql';
+import { ObjectSummary, OwnerRole } from 'models/UploadedObjectMetadata';
 
 export const objectSummaryFromSharedFilesQuery = (
   e: GetSharedFilesQuery,

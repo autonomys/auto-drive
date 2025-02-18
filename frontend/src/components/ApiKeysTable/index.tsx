@@ -1,20 +1,20 @@
 import { useCallback, useState } from 'react';
 import { ApiKeyCreationModal } from './ApiKeyCreationModal';
-import { ApiKeyWithoutSecret } from '../../models/ApiKey';
+import { ApiKeyWithoutSecret } from 'models/ApiKey';
 import { DeleteApiKeyModal } from './DeleteApiKeyModal';
 import { Loader } from 'lucide-react';
-import { Table } from '../common/Table';
+import { Table } from 'components/common/Table';
 import {
   TableHead,
   TableHeadCell,
   TableHeadRow,
-} from '../common/Table/TableHead';
+} from 'components/common/Table/TableHead';
 import {
   TableBody,
   TableBodyCell,
   TableBodyRow,
-} from '../common/Table/TableBody';
-import { Button } from '../common/Button';
+} from 'components/common/Table/TableBody';
+import { Button } from 'components/common/Button';
 import { useRouter } from 'next/navigation';
 
 export const ApiKeysTable = ({

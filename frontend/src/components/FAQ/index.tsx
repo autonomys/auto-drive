@@ -1,8 +1,8 @@
 'use client';
 
 import { FC, useCallback, useState } from 'react';
-import { LandingHeader } from '../common/LandingHeader';
-import { faqs } from '../../constants/faqs';
+import { LandingHeader } from 'components/common/LandingHeader';
+import { faqs } from 'constants/faqs';
 
 export const FAQ: FC = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
@@ -19,10 +19,10 @@ export const FAQ: FC = () => {
           {faqs.map((question, index) => (
             <div key={index} className='m-4'>
               <button
-                className='dark:bg-darkWhite dark:text-darkBlack w-full rounded-lg bg-white p-8 text-left text-backgroundDark shadow-md dark:border-none dark:text-white'
+                className='w-full rounded-lg bg-white p-8 text-left text-backgroundDark shadow-md dark:border-none dark:bg-darkWhite dark:text-darkBlack dark:text-white'
                 onClick={() => toggleFAQ(index)}
               >
-                <span className='dark:text-darkBlack text-xl font-semibold text-black'>
+                <span className='text-xl font-semibold text-black dark:text-darkBlack'>
                   {index + 1}. {question.question}
                 </span>
                 <span className='float-right'>
@@ -30,8 +30,8 @@ export const FAQ: FC = () => {
                 </span>
               </button>
               {openIndex === index && (
-                <div className='dark:bg-darkWhiteHover mt-2 rounded-lg bg-gray-100 p-4'>
-                  <p className='dark:text-darkBlack whitespace-pre-line text-black'>
+                <div className='mt-2 rounded-lg bg-gray-100 p-4 dark:bg-darkWhiteHover'>
+                  <p className='whitespace-pre-line text-black dark:text-darkBlack'>
                     {question.answer}
                   </p>
                 </div>
