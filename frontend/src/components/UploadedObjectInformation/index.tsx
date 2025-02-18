@@ -6,11 +6,11 @@ import { getTypeFromMetadata } from 'utils/file';
 import { useUserStore } from 'states/user';
 import { useCallback, useMemo, useState } from 'react';
 import { Button } from 'components/common/Button';
-import { ObjectShareModal } from '@/views/FileTables/common/ObjectShareModal';
-import { ObjectDeleteModal } from '@/views/FileTables/common/ObjectDeleteModal';
+import { ObjectShareModal } from '@/components/FileTables/common/ObjectShareModal';
+import { ObjectDeleteModal } from '@/components/FileTables/common/ObjectDeleteModal';
 import { Loader } from 'lucide-react';
-import { ObjectDownloadModal } from '@/views/FileTables/common/ObjectDownloadModal';
-import { FilePreview } from '@/views/ObjectDetails/FilePreview';
+import { ObjectDownloadModal } from '@/components/FileTables/common/ObjectDownloadModal';
+import { FilePreview } from '@/components/ObjectDetails/FilePreview';
 
 export const UploadedObjectInformation = ({
   object,

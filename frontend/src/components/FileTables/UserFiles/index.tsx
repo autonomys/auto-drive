@@ -3,13 +3,13 @@
 
 import { useCallback, useEffect } from 'react';
 import { useUserStore } from 'states/user';
-import { FileDropZone } from '@/views/FileTables/common/FileDropZone';
+import { FileDropZone } from '@/components/FileTables/common/FileDropZone';
 import { SearchBar } from 'components/SearchBar';
 import {
   FileActionButtons,
   FileTable,
-} from '@/views/FileTables/common/FileTable';
-import { NoUploadsPlaceholder } from '@/views/FileTables/common/NoUploadsPlaceholder';
+} from '@/components/FileTables/common/FileTable';
+import { NoUploadsPlaceholder } from '@/components/FileTables/common/NoUploadsPlaceholder';
 import {
   GetMyFilesDocument,
   GetMyFilesQuery,

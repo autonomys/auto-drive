@@ -1,6 +1,6 @@
 'use client';
 
-import { FAQs } from 'views/FAQs';
+import { FAQs } from '@/components/FAQs';
 
 export default function App() {
   return <FAQs />;

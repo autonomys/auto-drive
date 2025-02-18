@@ -3,9 +3,9 @@
 import { Checkbox, Transition } from '@headlessui/react';
 import { LoaderCircle, Square, SquareCheck } from 'lucide-react';
 import { FC, useCallback, useState } from 'react';
-import { ObjectShareModal } from '@/views/FileTables/common/ObjectShareModal';
-import { ObjectDeleteModal } from '@/views/FileTables/common/ObjectDeleteModal';
-import { ObjectDownloadModal } from '@/views/FileTables/common/ObjectDownloadModal';
+import { ObjectShareModal } from '@/components/FileTables/common/ObjectShareModal';
+import { ObjectDeleteModal } from '@/components/FileTables/common/ObjectDeleteModal';
+import { ObjectDownloadModal } from '@/components/FileTables/common/ObjectDownloadModal';
 import { useUserStore } from 'states/user';
 import { Table } from 'components/common/Table';
 import {
@@ -23,7 +23,7 @@ import { TableFooter } from 'components/common/Table/TableFooter';
 import { TablePaginator } from './TablePaginator';
 import { ObjectRestoreModal } from '../ObjectRestoreModal';
 import { FileTableRow } from './FileTableRow';
-import { useFileTableState } from 'views/FileTables/state';
+import { useFileTableState } from '@/components/FileTables/state';
 
 export enum FileActionButtons {
   DOWNLOAD = 'download',

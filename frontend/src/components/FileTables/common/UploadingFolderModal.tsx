@@ -4,7 +4,7 @@ import { Button } from 'components/common/Button';
 import { FileWarning } from 'lucide-react';
 import { useEncryptionStore } from 'states/encryption';
 import { useNetwork } from 'contexts/network';
-import { useFileTableState } from 'views/FileTables/state';
+import { useFileTableState } from '@/components/FileTables/state';
 
 export const UploadingFolderModal = ({
   data,

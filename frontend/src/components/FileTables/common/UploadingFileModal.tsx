@@ -3,7 +3,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { Button } from 'components/common/Button';
 import { useEncryptionStore } from 'states/encryption';
 import { useNetwork } from 'contexts/network';
-import { useFileTableState } from 'views/FileTables/state';
+import { useFileTableState } from '@/components/FileTables/state';
 
 export const UploadingFileModal = ({
   file,

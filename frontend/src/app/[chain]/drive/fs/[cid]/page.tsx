@@ -5,7 +5,7 @@ import {
 } from 'gql/graphql';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { NetworkId } from 'constants/networks';
-import { FS } from 'views/FileSystem';
+import { FS } from '@/components/FileSystem';
 
 export const dynamic = 'force-dynamic';
 
