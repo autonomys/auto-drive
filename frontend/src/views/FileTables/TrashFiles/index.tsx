@@ -2,7 +2,7 @@
 'use client';
 
 import { NoFilesInTrashPlaceholder } from './NoFilesInTrashPlaceholder';
-import { FileActionButtons, FileTable } from 'components/common/FileTable';
+import { FileActionButtons, FileTable } from '../common/FileTable';
 import { useCallback, useEffect } from 'react';
 import {
   GetTrashedFilesDocument,

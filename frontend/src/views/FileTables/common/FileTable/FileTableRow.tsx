@@ -10,10 +10,10 @@ import {
   Transition,
 } from '@headlessui/react';
 import { shortenString } from 'utils/misc';
-import { Metadata } from 'components/Files/Metadata';
+import { Metadata } from '@/views/FileTables/common/Metadata';
 import { getTypeFromMetadata } from 'utils/file';
 import { ConditionalRender } from 'components/common/ConditionalRender';
-import { FileActionButtons } from 'components/common/FileTable';
+import { FileActionButtons } from '@/views/FileTables/common/FileTable';
 import bytes from 'bytes';
 import { Button } from 'components/common/Button';
 import { handleEnterOrSpace } from 'utils/eventHandler';

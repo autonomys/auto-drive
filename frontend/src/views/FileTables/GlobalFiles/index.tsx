@@ -2,8 +2,8 @@
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import { FileTable, FileActionButtons } from 'components/common/FileTable';
-import { NoUploadsPlaceholder } from 'components/Files/NoUploadsPlaceholder';
+import { FileTable, FileActionButtons } from '../common/FileTable';
+import { NoUploadsPlaceholder } from '../common/NoUploadsPlaceholder';
 import { SearchBar } from 'components/SearchBar';
 import {
   GetGlobalFilesDocument,

@@ -1,5 +1,5 @@
 /* eslint-disable camelcase */
-import { FileActionButtons, FileTable } from 'components/common/FileTable';
+import { FileActionButtons, FileTable } from '../common/FileTable';
 import { NoSharedFilesPlaceholder } from './NoSharedFilesPlaceholder';
 import { useCallback, useEffect } from 'react';
 import {

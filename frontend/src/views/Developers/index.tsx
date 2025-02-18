@@ -1,6 +1,6 @@
 'use client';
 
-import { ApiKeysTable } from 'components/ApiKeysTable';
+import { ApiKeysTable } from './ApiKeysTable';
 import { ApiKeyWithoutSecret } from 'models/ApiKey';
 
 export const Developers = ({ apiKeys }: { apiKeys: ApiKeyWithoutSecret[] }) => {

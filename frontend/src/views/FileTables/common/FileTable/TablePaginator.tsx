@@ -9,6 +9,7 @@ export const TablePaginator = () => {
     setPage: setCurrentPage,
     total,
   } = useFileTableState();
+  
   return (
     <div className='flex w-full items-center justify-between p-4 text-sm text-light-gray dark:text-darkBlack'>
       <div className='flex items-center'>

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
-import { ObjectDownloadModal } from 'components/Files/ObjectDownloadModal';
+import { ObjectDownloadModal } from '@/views/FileTables/common/ObjectDownloadModal';
 import { handleClick, handleEnterOrSpace } from 'utils/eventHandler';
 import { shortenString } from 'utils/misc';
 import { BaseMetadata } from 'models/UploadedObjectMetadata';

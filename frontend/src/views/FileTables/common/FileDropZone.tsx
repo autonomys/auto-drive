@@ -6,8 +6,8 @@ import {
 } from '@headlessui/react';
 import { FileIcon, FolderIcon } from 'lucide-react';
 import React, { useCallback, useRef, useState } from 'react';
-import { UploadingFileModal } from 'components/Files/UploadingFileModal';
-import { UploadingFolderModal } from 'components/Files/UploadingFolderModal';
+import { UploadingFileModal } from './UploadingFileModal';
+import { UploadingFolderModal } from './UploadingFolderModal';
 import toast from 'react-hot-toast';
 
 export function FileDropZone() {
