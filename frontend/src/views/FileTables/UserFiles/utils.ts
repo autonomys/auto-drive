@@ -1,8 +1,11 @@
-import { GetTrashedFilesQuery } from '../../../gql/graphql';
-import { ObjectSummary, OwnerRole } from '../../models/UploadedObjectMetadata';
+import { GetMyFilesQuery } from '../../../../gql/graphql';
+import {
+  ObjectSummary,
+  OwnerRole,
+} from '../../../models/UploadedObjectMetadata';
 
-export const objectSummaryFromTrashedFilesQuery = (
-  e: GetTrashedFilesQuery,
+export const objectSummaryFromUserFilesQuery = (
+  e: GetMyFilesQuery,
 ): ObjectSummary[] => {
   return e.metadata_roots.map((m) => ({
     headCid: m.cid ?? '',
@@ -16,7 +19,7 @@ export const objectSummaryFromTrashedFilesQuery = (
     name: m.name,
     mimeType: m.mimeType,
     children: m.children,
-    publishedObjectId: null,
+    publishedObjectId: m.inner_metadata?.published_objects?.id ?? null,
     createdAt: m.created_at,
     uploadStatus: {
       uploadedNodes: m.inner_metadata!.publishedNodes.aggregate?.count ?? 0,

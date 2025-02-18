@@ -13,6 +13,9 @@ const config: CodegenConfig = {
         'typescript-operations',
         'typescript-react-apollo',
       ],
+      config: {
+        dedupeFragments: true,
+      },
     },
   },
 };

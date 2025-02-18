@@ -28,7 +28,6 @@ export const DeleteApiKeyModal = ({
       .then(() => {
         toast.success('API key deleted successfully');
         closeModal();
-        window.location.reload();
       })
       .catch(() => {
         toast.error('Failed to delete API key');

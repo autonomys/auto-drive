@@ -1,6 +1,5 @@
 'use client';
 
-import { ObjectSummary } from '../../../models/UploadedObjectMetadata';
 import { Checkbox, Transition } from '@headlessui/react';
 import { LoaderCircle, Square, SquareCheck } from 'lucide-react';
 import { FC, useCallback, useState } from 'react';
@@ -16,6 +15,7 @@ import { TableFooter } from '../Table/TableFooter';
 import { TablePaginator } from '../TablePaginator';
 import { ObjectRestoreModal } from '../../Files/ObjectRestoreModal';
 import { FileTableRow } from './FileTableRow';
+import { useFileTableState } from '../../../views/FileTables/state';
 
 export enum FileActionButtons {
   DOWNLOAD = 'download',
@@ -25,24 +25,9 @@ export enum FileActionButtons {
 }
 
 export const FileTable: FC<{
-  files: ObjectSummary[] | null;
-  pageSize: number;
-  setPageSize: (pageSize: number) => void;
-  currentPage: number;
-  setCurrentPage: (currentPage: number) => void;
-  totalItems: number;
   actionButtons: FileActionButtons[];
   noFilesPlaceholder?: React.ReactNode;
-}> = ({
-  files,
-  pageSize,
-  setPageSize,
-  currentPage,
-  setCurrentPage,
-  totalItems,
-  actionButtons,
-  noFilesPlaceholder,
-}) => {
+}> = ({ actionButtons, noFilesPlaceholder }) => {
   const user = useUserStore(({ user }) => user);
   const [downloadingCID, setDownloadingCID] = useState<string | null>(null);
   const [shareCID, setShareCID] = useState<string | null>(null);
@@ -50,12 +35,18 @@ export const FileTable: FC<{
   const [deleteCID, setDeleteCID] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
 
+  const objects = useFileTableState((v) => v.objects);
+  const refetch = useFileTableState((v) => v.fetch);
+
   const onClose = useCallback(() => {
     setShareCID(null);
     setDeleteCID(null);
     setDownloadingCID(null);
     setRestoreCID(null);
-  }, []);
+    setTimeout(() => {
+      refetch();
+    }, 500);
+  }, [refetch]);
 
   const toggleSelectFile = useCallback((cid: string) => {
     setSelectedFiles((prev) =>
@@ -65,17 +56,14 @@ export const FileTable: FC<{
     );
   }, []);
 
-  if (files && files.length === 0 && noFilesPlaceholder) {
+  if (objects && objects.length === 0 && noFilesPlaceholder) {
     return noFilesPlaceholder;
   }
 
   return (
     <div className='flex flex-col'>
       <ObjectShareModal cid={shareCID} closeModal={() => setShareCID(null)} />
-      <ObjectDeleteModal
-        cid={deleteCID}
-        closeModal={() => setDeleteCID(null)}
-      />
+      <ObjectDeleteModal cid={deleteCID} closeModal={onClose} />
       <ObjectDownloadModal cid={downloadingCID} onClose={onClose} />
       <ObjectRestoreModal cid={restoreCID} closeModal={onClose} />
       <div className='-my-2 sm:-mx-6 lg:-mx-8'>
@@ -88,7 +76,9 @@ export const FileTable: FC<{
                 onChange={() =>
                   selectedFiles.length > 0
                     ? setSelectedFiles([])
-                    : setSelectedFiles(files ? files.map((f) => f.headCid) : [])
+                    : setSelectedFiles(
+                        objects ? objects.map((f) => f.headCid) : [],
+                      )
                 }
               >
                 {selectedFiles.length > 0 ? <SquareCheck /> : <Square />}
@@ -124,8 +114,8 @@ export const FileTable: FC<{
               </TableHeadRow>
             </TableHead>
             <TableBody>
-              {files ? (
-                files.map((file) => (
+              {objects ? (
+                objects.map((file) => (
                   <FileTableRow
                     key={file.headCid}
                     file={file}
@@ -152,13 +142,7 @@ export const FileTable: FC<{
             <TableFooter>
               <tr className='w-full'>
                 <td colSpan={5}>
-                  <TablePaginator
-                    pageSize={pageSize}
-                    setPageSize={setPageSize}
-                    currentPage={currentPage}
-                    setCurrentPage={setCurrentPage}
-                    totalItems={totalItems}
-                  />
+                  <TablePaginator />
                 </td>
               </tr>
             </TableFooter>

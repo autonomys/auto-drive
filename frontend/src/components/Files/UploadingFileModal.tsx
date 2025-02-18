@@ -3,6 +3,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { Button } from '../common/Button';
 import { useEncryptionStore } from '../../states/encryption';
 import { useNetwork } from '../../contexts/network';
+import { useFileTableState } from '../../views/FileTables/state';
 
 export const UploadingFileModal = ({
   file,
@@ -32,14 +33,16 @@ export const UploadingFileModal = ({
     [file, onClose, network.uploadService],
   );
 
+  const refetch = useFileTableState((v) => v.fetch);
+
   const onConfirmPassword = useCallback(() => {
     if (passwordConfirmed) {
       const passwordToUse = password ?? undefined;
       manageUpload(passwordToUse).then(() => {
-        window.location.reload();
+        refetch();
       });
     }
-  }, [passwordConfirmed, manageUpload, password]);
+  }, [passwordConfirmed, manageUpload, password, refetch]);
 
   useEffect(() => {
     if (passwordConfirmed) {
@@ -59,8 +62,8 @@ export const UploadingFileModal = ({
   return (
     <Transition show={!!file}>
       <Dialog as='div' onClose={onClose}>
-        <div className='dark:bg-darkBlack/25 fixed inset-0 flex items-center justify-center bg-black/25 bg-opacity-50'>
-          <div className='dark:bg-darkWhite min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform'>
+        <div className='fixed inset-0 flex items-center justify-center bg-black/25 bg-opacity-50 dark:bg-darkBlack/25'>
+          <div className='min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform dark:bg-darkWhite'>
             {passwordConfirmed ? (
               <div>
                 <div className='relative h-2 w-full rounded bg-gray-200'>
@@ -69,14 +72,14 @@ export const UploadingFileModal = ({
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <div className='dark:text-darkBlack mt-4 flex justify-center text-sm font-semibold text-black'>
+                <div className='mt-4 flex justify-center text-sm font-semibold text-black dark:text-darkBlack'>
                   <div>Uploading... {progressPercentage}%</div>
                 </div>
               </div>
             ) : (
               <div>
                 <div className='flex flex-col gap-2 p-4'>
-                  <span className='dark:text-darkBlack text-md block text-center font-semibold text-gray-700'>
+                  <span className='text-md block text-center font-semibold text-gray-700 dark:text-darkBlack'>
                     Enter Encrypting Password
                   </span>
                   <input

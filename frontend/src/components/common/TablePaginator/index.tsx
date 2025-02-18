@@ -1,26 +1,22 @@
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+import { useFileTableState } from '../../../views/FileTables/state';
 
-export const TablePaginator = ({
-  pageSize,
-  setPageSize,
-  currentPage,
-  setCurrentPage,
-  totalItems,
-}: {
-  pageSize: number;
-  setPageSize: (pageSize: number) => void;
-  currentPage: number;
-  setCurrentPage: (currentPage: number) => void;
-  totalItems: number;
-}) => {
+export const TablePaginator = () => {
+  const {
+    limit,
+    setLimit,
+    page,
+    setPage: setCurrentPage,
+    total,
+  } = useFileTableState();
   return (
-    <div className='dark:text-darkBlack flex w-full items-center justify-between p-4 text-sm text-light-gray'>
+    <div className='flex w-full items-center justify-between p-4 text-sm text-light-gray dark:text-darkBlack'>
       <div className='flex items-center'>
         <span className='mr-2'>Items per page:</span>
         <select
-          className='dark:bg-darkWhite rounded border border-gray-300 bg-gray-100 p-1 pr-1'
-          value={pageSize}
-          onChange={(e) => setPageSize(parseInt(e.target.value))}
+          className='rounded border border-gray-300 bg-gray-100 p-1 pr-1 dark:bg-darkWhite'
+          value={limit}
+          onChange={(e) => setLimit(parseInt(e.target.value))}
         >
           <option value='5'>5</option>
           <option value='10'>10</option>
@@ -29,23 +25,22 @@ export const TablePaginator = ({
       </div>
       <div>
         <span>
-          {currentPage * pageSize + 1}-
-          {Math.min(currentPage * pageSize + pageSize, totalItems)} of{' '}
-          {totalItems} items
+          {page * limit + 1}-{Math.min(page * limit + limit, total)} of {total}{' '}
+          items
         </span>
       </div>
       <div className='flex items-center gap-2'>
         <button
-          disabled={currentPage === 0}
-          className='dark:text-darkBlack cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-0'
-          onClick={() => setCurrentPage(currentPage - 1)}
+          disabled={page === 0}
+          className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-0 dark:text-darkBlack'
+          onClick={() => setCurrentPage(page - 1)}
         >
           <ChevronLeftIcon className='h-4 w-4' />
         </button>
         <button
-          disabled={currentPage * pageSize + pageSize >= totalItems}
-          className='dark:text-darkBlack cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-0'
-          onClick={() => setCurrentPage(currentPage + 1)}
+          disabled={page * limit + limit >= total}
+          className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-0 dark:text-darkBlack'
+          onClick={() => setCurrentPage(page + 1)}
         >
           <ChevronRightIcon className='h-4 w-4' />
         </button>

@@ -36,7 +36,6 @@ export const ApiKeysTable = ({
 
   const onSuccess = useCallback(() => {
     closeCreationModal();
-    window.location.reload();
   }, [closeCreationModal]);
 
   return (

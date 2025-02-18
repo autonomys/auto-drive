@@ -4,6 +4,7 @@ import { Button } from '../common/Button';
 import { FileWarning } from 'lucide-react';
 import { useEncryptionStore } from '../../states/encryption';
 import { useNetwork } from '../../contexts/network';
+import { useFileTableState } from '../../views/FileTables/state';
 
 export const UploadingFolderModal = ({
   data,
@@ -19,6 +20,8 @@ export const UploadingFolderModal = ({
 
   const progressPercentage = Math.round(progress);
 
+  const refetch = useFileTableState((v) => v.fetch);
+
   const handleUpload = useCallback(async () => {
     if (!data) return;
 
@@ -31,8 +34,8 @@ export const UploadingFolderModal = ({
 
     setPasswordConfirmed(false);
     onClose();
-    window.location.reload();
-  }, [data, password, onClose, network.uploadService]);
+    refetch();
+  }, [data, password, onClose, network.uploadService, refetch]);
 
   useEffect(() => {
     if (!passwordConfirmed) return;
@@ -50,9 +53,9 @@ export const UploadingFolderModal = ({
   return (
     <Transition show={!!data}>
       <Dialog as='div' onClose={onClose}>
-        <div className='dark:bg-darkBlack/25 fixed inset-0 flex items-center justify-center bg-black/25'>
-          <div className='dark:bg-darkWhite min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform'>
-            <h3 className='dark:text-darkBlack mb-4 text-center text-lg font-medium'>
+        <div className='fixed inset-0 flex items-center justify-center bg-black/25 dark:bg-darkBlack/25'>
+          <div className='min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform dark:bg-darkWhite'>
+            <h3 className='mb-4 text-center text-lg font-medium dark:text-darkBlack'>
               Uploading Folder
             </h3>
             {passwordConfirmed ? (
@@ -75,7 +78,7 @@ export const UploadingFolderModal = ({
             ) : (
               <div>
                 <div className='flex flex-col gap-2 p-4'>
-                  <span className='dark:text-darkBlack text-md block text-center font-semibold text-gray-700'>
+                  <span className='text-md block text-center font-semibold text-gray-700 dark:text-darkBlack'>
                     Enter Encrypting Password
                   </span>
                   <input
