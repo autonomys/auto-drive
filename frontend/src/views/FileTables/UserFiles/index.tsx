@@ -10,16 +10,22 @@ import {
   FileTable,
 } from '../../../components/common/FileTable';
 import { NoUploadsPlaceholder } from '../../../components/Files/NoUploadsPlaceholder';
-import { GetMyFilesDocument, GetMyFilesQuery } from '../../../../gql/graphql';
+import {
+  GetMyFilesDocument,
+  GetMyFilesQuery,
+  useGetMyFilesQuery,
+} from '../../../../gql/graphql';
 import { objectSummaryFromUserFilesQuery } from './utils';
 import { useFileTableState } from '../state';
 import { useNetwork } from '../../../contexts/network';
 
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
+  const setTotal = useFileTableState((e) => e.setTotal);
   const setFetcher = useFileTableState((e) => e.setFetcher);
-  const fetch = useFileTableState((e) => e.fetch);
-  const objects = useFileTableState((e) => e.objects);
+  const limit = useFileTableState((e) => e.limit);
+  const page = useFileTableState((e) => e.page);
+
   const resetPagination = useFileTableState((e) => e.resetPagination);
   const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
@@ -51,13 +57,21 @@ export const UserFiles = () => {
     setFetcher(fetcher);
   }, [fetcher, gql, setFetcher, setObjects, resetPagination]);
 
-  useEffect(() => {
-    console.log(objects);
-  }, [objects]);
-
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
+  useGetMyFilesQuery({
+    fetchPolicy: 'cache-and-network',
+    skip: !user,
+    variables: {
+      limit,
+      offset: page * limit,
+      oauthUserId: user?.oauthUserId ?? '',
+      oauthProvider: user?.oauthProvider ?? '',
+    },
+    onCompleted: (data) => {
+      setObjects(objectSummaryFromUserFilesQuery(data));
+      setTotal(data.metadata_roots_aggregate?.aggregate?.count ?? 0);
+    },
+    pollInterval: 30_000,
+  });
 
   return (
     <div className='flex w-full'>

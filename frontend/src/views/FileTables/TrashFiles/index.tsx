@@ -10,6 +10,7 @@ import { useCallback, useEffect } from 'react';
 import {
   GetTrashedFilesDocument,
   GetTrashedFilesQuery,
+  useGetTrashedFilesQuery,
 } from '../../../../gql/graphql';
 import { useUserStore } from '../../../states/user';
 import { objectSummaryFromTrashedFilesQuery } from './utils';
@@ -19,9 +20,11 @@ import { useNetwork } from '../../../contexts/network';
 export const TrashFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
   const setFetcher = useFileTableState((e) => e.setFetcher);
-  const fetch = useFileTableState((e) => e.fetch);
-  const objects = useFileTableState((e) => e.objects);
+  const page = useFileTableState((e) => e.page);
+  const limit = useFileTableState((e) => e.limit);
+  const setTotal = useFileTableState((e) => e.setTotal);
   const resetPagination = useFileTableState((e) => e.resetPagination);
+
   const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
 
@@ -50,15 +53,23 @@ export const TrashFiles = () => {
     resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, setFetcher, setObjects]);
+  }, [fetcher, gql, resetPagination, setFetcher, setObjects]);
 
-  useEffect(() => {
-    console.log(objects);
-  }, [objects]);
-
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
+  useGetTrashedFilesQuery({
+    fetchPolicy: 'cache-and-network',
+    skip: !user,
+    variables: {
+      limit,
+      offset: page * limit,
+      oauthUserId: user?.oauthUserId ?? '',
+      oauthProvider: user?.oauthProvider ?? '',
+    },
+    onCompleted: (data) => {
+      setObjects(objectSummaryFromTrashedFilesQuery(data));
+      setTotal(data.metadata_roots_aggregate?.aggregate?.count ?? 0);
+    },
+    pollInterval: 30_000,
+  });
 
   return (
     <div className='flex w-full'>

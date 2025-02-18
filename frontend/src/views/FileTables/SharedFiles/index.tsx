@@ -8,6 +8,7 @@ import { useCallback, useEffect } from 'react';
 import {
   GetSharedFilesDocument,
   GetSharedFilesQuery,
+  useGetSharedFilesQuery,
 } from '../../../../gql/graphql';
 import { objectSummaryFromSharedFilesQuery } from './utils';
 import { useFileTableState } from '../state';
@@ -17,7 +18,10 @@ import { useUserStore } from '../../../states/user';
 export const SharedFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
   const setFetcher = useFileTableState((e) => e.setFetcher);
-  const fetch = useFileTableState((e) => e.fetch);
+  const setTotal = useFileTableState((e) => e.setTotal);
+  const limit = useFileTableState((e) => e.limit);
+  const page = useFileTableState((e) => e.page);
+
   const resetPagination = useFileTableState((e) => e.resetPagination);
 
   const { gql } = useNetwork();
@@ -50,9 +54,20 @@ export const SharedFiles = () => {
     setFetcher(fetcher);
   }, [fetcher, gql, setFetcher, setObjects, resetPagination]);
 
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
+  useGetSharedFilesQuery({
+    fetchPolicy: 'cache-and-network',
+    variables: {
+      limit,
+      offset: page * limit,
+      oauthUserId: user?.oauthUserId ?? '',
+      oauthProvider: user?.oauthProvider ?? '',
+    },
+    onCompleted: (data) => {
+      setObjects(objectSummaryFromSharedFilesQuery(data));
+      setTotal(data.metadata_roots_aggregate?.aggregate?.count ?? 0);
+    },
+    pollInterval: 30_000,
+  });
 
   return (
     <div className='flex w-full'>

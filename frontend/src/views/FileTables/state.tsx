@@ -22,6 +22,7 @@ export const useFileTableState = create<{
   fetch: () => void;
   setLimit: (limit: number) => void;
   setPage: (page: number) => void;
+  setTotal: (total: number) => void;
   resetPagination: () => void;
 }>((set, get) => ({
   objects: null,
@@ -29,6 +30,7 @@ export const useFileTableState = create<{
   page: 0,
   limit: 5,
   setObjects: (objects: ObjectSummary[] | null) => set({ objects }),
+  setTotal: (total: number) => set({ total }),
   fetcher: null,
   setFetcher: (
     fetcher: (

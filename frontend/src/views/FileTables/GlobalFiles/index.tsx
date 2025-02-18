@@ -11,6 +11,7 @@ import { SearchBar } from '../../../components/SearchBar';
 import {
   GetGlobalFilesDocument,
   GetGlobalFilesQuery,
+  useGetGlobalFilesQuery,
 } from '../../../../gql/graphql';
 import { objectSummaryFromGlobalFilesQuery } from './utils';
 import { useFileTableState } from '../state';
@@ -20,9 +21,11 @@ import { ApolloClient } from '@apollo/client';
 export const GlobalFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
   const setFetcher = useFileTableState((e) => e.setFetcher);
-  const fetch = useFileTableState((e) => e.fetch);
-  const objects = useFileTableState((e) => e.objects);
+  const page = useFileTableState((e) => e.page);
+  const limit = useFileTableState((e) => e.limit);
+  const setTotal = useFileTableState((e) => e.setTotal);
   const resetPagination = useFileTableState((e) => e.resetPagination);
+
   const { gql } = useNetwork();
 
   const fetcher = useCallback(
@@ -48,15 +51,20 @@ export const GlobalFiles = () => {
     resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, setFetcher, setObjects]);
+  }, [fetcher, gql, resetPagination, setFetcher, setObjects]);
 
-  useEffect(() => {
-    console.log(objects);
-  }, [objects]);
-
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
+  useGetGlobalFilesQuery({
+    fetchPolicy: 'cache-and-network',
+    variables: {
+      limit,
+      offset: page * limit,
+    },
+    onCompleted: (data) => {
+      setObjects(objectSummaryFromGlobalFilesQuery(data));
+      setTotal(data.metadata_roots_aggregate?.aggregate?.count ?? 0);
+    },
+    pollInterval: 30_000,
+  });
 
   return (
     <div className='flex w-full'>
