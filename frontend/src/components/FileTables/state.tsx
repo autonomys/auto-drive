@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { ObjectSummary } from 'models/UploadedObjectMetadata';
 
-export const useFileTableState = create<{
+interface FileTableStore {
   objects: ObjectSummary[] | null;
   total: number;
   page: number;
@@ -24,7 +24,9 @@ export const useFileTableState = create<{
   setPage: (page: number) => void;
   setTotal: (total: number) => void;
   resetPagination: () => void;
-}>((set, get) => ({
+}
+
+export const useFileTableState = create<FileTableStore>()((set, get) => ({
   objects: null,
   total: 0,
   page: 0,
