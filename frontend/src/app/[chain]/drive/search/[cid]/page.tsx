@@ -1,10 +1,10 @@
-import { SearchResult } from '../../../../../views/SearchResult';
-import { createGQLClientByNetwork } from '../../../../../services/gql';
+import { SearchResult } from '@/components/SearchResult';
+import { createGQLClientByNetwork } from 'services/gql';
 import {
   SearchGlobalMetadataByCidOrNameDocument,
   SearchGlobalMetadataByCidOrNameQuery,
-} from '../../../../../../gql/graphql';
-import { NetworkId } from '../../../../../constants/networks';
+} from 'gql/graphql';
+import { NetworkId } from 'constants/networks';
 
 export const dynamic = 'force-dynamic';
 

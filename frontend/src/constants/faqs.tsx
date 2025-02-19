@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { EXTERNAL_ROUTES } from './routes';
+import { EXTERNAL_ROUTES } from 'constants/routes';
 
 export type FAQ = {
   question: string;
@@ -22,9 +22,10 @@ export const faqs = [
     answer: (
       <span>
         Once your file is archived, it&apos;s decomposed into chunks, and each
-        chunk is erasure encoded. This means that if a piece of data is lost, the
-        file can be reconstructed and its integrity can be verified. Additionally,
-        every chunk is stored in multiple nodes to ensure data availability.
+        chunk is erasure encoded. This means that if a piece of data is lost,
+        the file can be reconstructed and its integrity can be verified.
+        Additionally, every chunk is stored in multiple nodes to ensure data
+        availability.
         <br />
         <br />
         <span>

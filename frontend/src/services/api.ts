@@ -2,10 +2,10 @@ import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
   SubscriptionGranularity,
   SubscriptionInfo,
-} from '../models/Subscriptions';
-import { UploadedObjectMetadata } from '../models/UploadedObjectMetadata';
-import { getAuthSession } from '../utils/auth';
-import { uploadFileContent } from '../utils/file';
+} from 'models/Subscriptions';
+import { UploadedObjectMetadata } from 'models/UploadedObjectMetadata';
+import { getAuthSession } from 'utils/auth';
+import { uploadFileContent } from 'utils/file';
 
 export interface UploadResponse {
   cid: string;

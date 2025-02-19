@@ -1,16 +1,16 @@
 import {
   OwnerRole,
   UploadedObjectMetadata,
-} from '../../models/UploadedObjectMetadata';
-import { getTypeFromMetadata } from '../../utils/file';
-import { useUserStore } from '../../states/user';
+} from 'models/UploadedObjectMetadata';
+import { getTypeFromMetadata } from 'utils/file';
+import { useUserStore } from 'globalStates/user';
 import { useCallback, useMemo, useState } from 'react';
-import { Button } from '../common/Button';
-import { ObjectShareModal } from '../Files/ObjectShareModal';
-import { ObjectDeleteModal } from '../Files/ObjectDeleteModal';
+import { Button } from 'components/common/Button';
+import { ObjectShareModal } from '@/components/FileTables/common/ObjectShareModal';
+import { ObjectDeleteModal } from '@/components/FileTables/common/ObjectDeleteModal';
 import { Loader } from 'lucide-react';
-import { ObjectDownloadModal } from '../Files/ObjectDownloadModal';
-import { FilePreview } from '../FilePreview';
+import { ObjectDownloadModal } from '@/components/FileTables/common/ObjectDownloadModal';
+import { FilePreview } from '@/components/ObjectDetails/FilePreview';
 
 export const UploadedObjectInformation = ({
   object,
@@ -104,7 +104,7 @@ export const UploadedObjectInformation = ({
         </Button>
       </div>
       <span className='ml-2 text-xl font-semibold'>Metadata</span>
-      <div className='dark:bg-darkWhiteHover dark:text-darkBlack grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
+      <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary dark:bg-darkWhiteHover dark:text-darkBlack'>
         <div className='flex'>
           <span>Name:</span>
           <span className='ml-[4px]'>{object.metadata.name ?? 'Unnamed'}</span>
@@ -149,7 +149,7 @@ export const UploadedObjectInformation = ({
         </div>
       </div>
       <span className='ml-2 text-xl font-semibold'>Upload Status</span>
-      <div className='dark:bg-darkWhiteHover dark:text-darkBlack grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
+      <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary dark:bg-darkWhiteHover dark:text-darkBlack'>
         <div className='flex'>
           <span>Total Nodes: </span>
           <span className='ml-[4px]'>{object.uploadStatus.totalNodes}</span>
@@ -176,7 +176,7 @@ export const UploadedObjectInformation = ({
         </div>
       </div>
       <span className='ml-2 text-xl font-semibold'>Upload Options</span>
-      <div className='dark:bg-darkWhiteHover dark:text-darkBlack grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary'>
+      <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary dark:bg-darkWhiteHover dark:text-darkBlack'>
         <div className='flex'>
           <span>Encryption: </span>
           <span className='ml-[4px] font-bold'>

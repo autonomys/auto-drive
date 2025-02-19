@@ -1,7 +1,7 @@
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAuth } from './services/auth/jwt';
-import { UserInfo } from './models/User';
+import { checkAuth } from 'services/auth/jwt';
+import { UserInfo } from 'models/User';
 import { cookies } from 'next/headers';
 
 export async function middleware(req: NextRequest) {

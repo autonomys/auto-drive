@@ -1,16 +1,16 @@
 import {
   GetAllUsersWithSubscriptionsQuery,
   GetMetadataByHeadCidQuery,
-} from '../../../gql/graphql';
+} from 'gql/graphql';
 import {
   SubscriptionGranularity,
   SubscriptionWithUser,
-} from '../../models/Subscriptions';
+} from 'models/Subscriptions';
 import {
   OwnerRole,
   UploadedObjectMetadata,
-} from '../../models/UploadedObjectMetadata';
-import { UserRole } from '../../models/User';
+} from 'models/UploadedObjectMetadata';
+import { UserRole } from 'models/User';
 
 export const mapObjectInformationFromQueryResult = (
   result: GetMetadataByHeadCidQuery,

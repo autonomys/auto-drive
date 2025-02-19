@@ -1,5 +1,5 @@
 import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
-import { getAuthSession } from '../utils/auth';
+import { getAuthSession } from 'utils/auth';
 
 export type UploadService = ReturnType<typeof createUploadService>;
 

@@ -1,5 +1,5 @@
-import { UserInfo } from '../../models/User';
-import { API_BASE_URL } from './config';
+import { UserInfo } from 'models/User';
+import { API_BASE_URL } from 'services/auth/config';
 
 export const checkAuth = async (
   provider?: string,
