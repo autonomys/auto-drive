@@ -7,7 +7,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { CreditsUpdateModal } from './CreditsUpdateModal';
 import { SubscriptionWithUser } from 'models/Subscriptions';
 import { UpdateRoleModal } from './UpdateRoleModal';
-import { useUserStore } from 'states/user';
+import { useUserStore } from 'globalStates/user';
 import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';
 import { shortenString } from 'utils/misc';
 import { handleEnterOrSpace } from 'utils/eventHandler';

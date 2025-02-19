@@ -9,7 +9,7 @@ import {
   GetTrashedFilesQuery,
   useGetTrashedFilesQuery,
 } from 'gql/graphql';
-import { useUserStore } from 'states/user';
+import { useUserStore } from 'globalStates/user';
 import { objectSummaryFromTrashedFilesQuery } from './utils';
 import { useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';

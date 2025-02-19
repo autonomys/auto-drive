@@ -12,7 +12,7 @@ import {
   DownloadApi as DownloadService,
 } from 'services/download';
 import { createUploadService, UploadService } from 'services/upload';
-import { useUserStore } from 'states/user';
+import { useUserStore } from 'globalStates/user';
 
 interface NetworkArtifact {
   network: Network;

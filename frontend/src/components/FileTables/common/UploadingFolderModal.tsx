@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { Button } from 'components/common/Button';
 import { FileWarning } from 'lucide-react';
-import { useEncryptionStore } from 'states/encryption';
+import { useEncryptionStore } from 'globalStates/encryption';
 import { useNetwork } from 'contexts/network';
 import { useFileTableState } from '@/components/FileTables/state';
 

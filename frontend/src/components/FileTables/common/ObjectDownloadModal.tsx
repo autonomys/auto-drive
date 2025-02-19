@@ -10,7 +10,7 @@ import { OffchainMetadata } from '@autonomys/auto-dag-data';
 import { InvalidDecryptKey } from 'utils/file';
 import { Button } from 'components/common/Button';
 import { shortenString } from 'utils/misc';
-import { useEncryptionStore } from 'states/encryption';
+import { useEncryptionStore } from 'globalStates/encryption';
 import toast from 'react-hot-toast';
 import { useSession } from 'next-auth/react';
 import { useGetMetadataByHeadCidQuery } from 'gql/graphql';

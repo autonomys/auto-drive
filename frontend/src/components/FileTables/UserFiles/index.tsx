@@ -2,7 +2,7 @@
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import { useUserStore } from 'states/user';
+import { useUserStore } from 'globalStates/user';
 import { FileDropZone } from '@/components/FileTables/common/FileDropZone';
 import { SearchBar } from 'components/SearchBar';
 import {

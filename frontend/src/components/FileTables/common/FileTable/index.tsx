@@ -6,7 +6,7 @@ import { FC, useCallback, useState } from 'react';
 import { ObjectShareModal } from '@/components/FileTables/common/ObjectShareModal';
 import { ObjectDeleteModal } from '@/components/FileTables/common/ObjectDeleteModal';
 import { ObjectDownloadModal } from '@/components/FileTables/common/ObjectDownloadModal';
-import { useUserStore } from 'states/user';
+import { useUserStore } from 'globalStates/user';
 import { Table } from 'components/common/Table';
 import {
   TableHead,

@@ -8,7 +8,7 @@ import {
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Button } from 'components/common/Button';
-import { useEncryptionStore } from 'states/encryption';
+import { useEncryptionStore } from 'globalStates/encryption';
 
 export const DefaultPasswordModal = ({
   isOpen,

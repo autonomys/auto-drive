@@ -3,7 +3,7 @@
 import '../globals.css';
 import { UserEnsurer } from 'components/UserEnsurer';
 import { useEffect, useMemo } from 'react';
-import { useUserStore } from 'states/user';
+import { useUserStore } from 'globalStates/user';
 import { SessionProvider } from 'next-auth/react';
 import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
 import { NetworkProvider } from 'contexts/network';

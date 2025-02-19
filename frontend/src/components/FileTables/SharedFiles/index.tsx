@@ -10,7 +10,7 @@ import {
 import { objectSummaryFromSharedFilesQuery } from './utils';
 import { useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
-import { useUserStore } from 'states/user';
+import { useUserStore } from 'globalStates/user';
 
 export const SharedFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);

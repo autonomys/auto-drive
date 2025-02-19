@@ -13,7 +13,7 @@ import React, { useMemo } from 'react';
 import { RoleProtected } from 'components/RoleProtected';
 import { UserRole } from 'models/User';
 import { RemainingCreditTracker } from 'components/RemainingCreditTracker';
-import { useUserStore } from 'states/user';
+import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';
 import { NavItem } from './NavItem';
 

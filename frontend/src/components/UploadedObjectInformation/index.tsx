@@ -3,7 +3,7 @@ import {
   UploadedObjectMetadata,
 } from 'models/UploadedObjectMetadata';
 import { getTypeFromMetadata } from 'utils/file';
-import { useUserStore } from 'states/user';
+import { useUserStore } from 'globalStates/user';
 import { useCallback, useMemo, useState } from 'react';
 import { Button } from 'components/common/Button';
 import { ObjectShareModal } from '@/components/FileTables/common/ObjectShareModal';
