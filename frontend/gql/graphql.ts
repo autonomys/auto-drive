@@ -2790,36 +2790,6 @@ export type Users_Stream_Cursor_Value_Input = {
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
 
-export type GetMetadataByHeadCidQueryVariables = Exact<{
-  headCid: Scalars['String']['input'];
-}>;
-
-
-export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
-
-export type SearchGlobalMetadataByCidOrNameQueryVariables = Exact<{
-  search: Scalars['String']['input'];
-  limit: Scalars['Int']['input'];
-}>;
-
-
-export type SearchGlobalMetadataByCidOrNameQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', name?: string | null, type?: any | null, size?: any | null, cid: string }> };
-
-export type SearchUserMetadataByCidOrNameQueryVariables = Exact<{
-  search: Scalars['String']['input'];
-  oauthUserId: Scalars['String']['input'];
-  oauthProvider: Scalars['String']['input'];
-  limit: Scalars['Int']['input'];
-}>;
-
-
-export type SearchUserMetadataByCidOrNameQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', name?: string | null, type?: any | null, size?: any | null, cid: string }> };
-
-export type GetAllUsersWithSubscriptionsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type GetAllUsersWithSubscriptionsQuery = { __typename?: 'query_root', users: Array<{ __typename?: 'users', role: string, publicId?: string | null, oauthProvider: string, oauthUserId: string, user_membership?: { __typename?: 'users_organizations', subscription?: { __typename?: 'subscriptions', id: string, granularity: string, organizationId: string, uploadLimit: any, downloadLimit: any } | null } | null }> };
-
 export type GetGlobalFilesQueryVariables = Exact<{
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
@@ -2862,236 +2832,37 @@ export type GetMyFilesQueryVariables = Exact<{
 
 export type GetMyFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
+export type GetMetadataByHeadCidQueryVariables = Exact<{
+  headCid: Scalars['String']['input'];
+}>;
 
-export const GetMetadataByHeadCidDocument = gql`
-    query GetMetadataByHeadCID($headCid: String!) {
-  metadata(
-    distinct_on: root_cid
-    where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
-  ) {
-    metadata
-    published_objects {
-      id
-    }
-    maximumBlockDepth: nodes(
-      order_by: {block_published_on: desc_nulls_last}
-      limit: 1
-    ) {
-      block_published_on
-      tx_published_on
-    }
-    minimumBlockDepth: nodes(
-      order_by: {block_published_on: desc_nulls_last}
-      limit: 1
-    ) {
-      block_published_on
-      tx_published_on
-    }
-    publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
-      aggregate {
-        count
-      }
-    }
-    archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
-      aggregate {
-        count
-      }
-    }
-    totalNodes: nodes_aggregate {
-      aggregate {
-        count
-      }
-    }
-    object_ownership {
-      oauth_user_id
-      oauth_provider
-      is_admin
-    }
-  }
-}
-    `;
 
-/**
- * __useGetMetadataByHeadCidQuery__
- *
- * To run a query within a React component, call `useGetMetadataByHeadCidQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetMetadataByHeadCidQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetMetadataByHeadCidQuery({
- *   variables: {
- *      headCid: // value for 'headCid'
- *   },
- * });
- */
-export function useGetMetadataByHeadCidQuery(baseOptions: Apollo.QueryHookOptions<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables> & ({ variables: GetMetadataByHeadCidQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>(GetMetadataByHeadCidDocument, options);
-      }
-export function useGetMetadataByHeadCidLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>(GetMetadataByHeadCidDocument, options);
-        }
-export function useGetMetadataByHeadCidSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>(GetMetadataByHeadCidDocument, options);
-        }
-export type GetMetadataByHeadCidQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidQuery>;
-export type GetMetadataByHeadCidLazyQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidLazyQuery>;
-export type GetMetadataByHeadCidSuspenseQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidSuspenseQuery>;
-export type GetMetadataByHeadCidQueryResult = Apollo.QueryResult<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>;
-export const SearchGlobalMetadataByCidOrNameDocument = gql`
-    query SearchGlobalMetadataByCIDOrName($search: String!, $limit: Int!) {
-  metadata(
-    distinct_on: root_cid
-    where: {_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
-    limit: $limit
-  ) {
-    type: metadata(path: "type")
-    name
-    size: metadata(path: "totalSize")
-    cid: head_cid
-  }
-}
-    `;
+export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
 
-/**
- * __useSearchGlobalMetadataByCidOrNameQuery__
- *
- * To run a query within a React component, call `useSearchGlobalMetadataByCidOrNameQuery` and pass it any options that fit your needs.
- * When your component renders, `useSearchGlobalMetadataByCidOrNameQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useSearchGlobalMetadataByCidOrNameQuery({
- *   variables: {
- *      search: // value for 'search'
- *      limit: // value for 'limit'
- *   },
- * });
- */
-export function useSearchGlobalMetadataByCidOrNameQuery(baseOptions: Apollo.QueryHookOptions<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables> & ({ variables: SearchGlobalMetadataByCidOrNameQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>(SearchGlobalMetadataByCidOrNameDocument, options);
-      }
-export function useSearchGlobalMetadataByCidOrNameLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>(SearchGlobalMetadataByCidOrNameDocument, options);
-        }
-export function useSearchGlobalMetadataByCidOrNameSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>(SearchGlobalMetadataByCidOrNameDocument, options);
-        }
-export type SearchGlobalMetadataByCidOrNameQueryHookResult = ReturnType<typeof useSearchGlobalMetadataByCidOrNameQuery>;
-export type SearchGlobalMetadataByCidOrNameLazyQueryHookResult = ReturnType<typeof useSearchGlobalMetadataByCidOrNameLazyQuery>;
-export type SearchGlobalMetadataByCidOrNameSuspenseQueryHookResult = ReturnType<typeof useSearchGlobalMetadataByCidOrNameSuspenseQuery>;
-export type SearchGlobalMetadataByCidOrNameQueryResult = Apollo.QueryResult<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>;
-export const SearchUserMetadataByCidOrNameDocument = gql`
-    query SearchUserMetadataByCIDOrName($search: String!, $oauthUserId: String!, $oauthProvider: String!, $limit: Int!) {
-  metadata(
-    distinct_on: root_cid
-    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}}}}]}
-    limit: $limit
-  ) {
-    type: metadata(path: "type")
-    name
-    size: metadata(path: "totalSize")
-    cid: head_cid
-  }
-}
-    `;
+export type SearchGlobalMetadataByCidOrNameQueryVariables = Exact<{
+  search: Scalars['String']['input'];
+  limit: Scalars['Int']['input'];
+}>;
 
-/**
- * __useSearchUserMetadataByCidOrNameQuery__
- *
- * To run a query within a React component, call `useSearchUserMetadataByCidOrNameQuery` and pass it any options that fit your needs.
- * When your component renders, `useSearchUserMetadataByCidOrNameQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useSearchUserMetadataByCidOrNameQuery({
- *   variables: {
- *      search: // value for 'search'
- *      oauthUserId: // value for 'oauthUserId'
- *      oauthProvider: // value for 'oauthProvider'
- *      limit: // value for 'limit'
- *   },
- * });
- */
-export function useSearchUserMetadataByCidOrNameQuery(baseOptions: Apollo.QueryHookOptions<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables> & ({ variables: SearchUserMetadataByCidOrNameQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>(SearchUserMetadataByCidOrNameDocument, options);
-      }
-export function useSearchUserMetadataByCidOrNameLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>(SearchUserMetadataByCidOrNameDocument, options);
-        }
-export function useSearchUserMetadataByCidOrNameSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>(SearchUserMetadataByCidOrNameDocument, options);
-        }
-export type SearchUserMetadataByCidOrNameQueryHookResult = ReturnType<typeof useSearchUserMetadataByCidOrNameQuery>;
-export type SearchUserMetadataByCidOrNameLazyQueryHookResult = ReturnType<typeof useSearchUserMetadataByCidOrNameLazyQuery>;
-export type SearchUserMetadataByCidOrNameSuspenseQueryHookResult = ReturnType<typeof useSearchUserMetadataByCidOrNameSuspenseQuery>;
-export type SearchUserMetadataByCidOrNameQueryResult = Apollo.QueryResult<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>;
-export const GetAllUsersWithSubscriptionsDocument = gql`
-    query GetAllUsersWithSubscriptions {
-  users {
-    publicId: public_id
-    role
-    oauthProvider: oauth_provider
-    oauthUserId: oauth_user_id
-    user_membership {
-      subscription {
-        id
-        organizationId: organization_id
-        uploadLimit: upload_limit
-        downloadLimit: download_limit
-        granularity
-      }
-    }
-  }
-}
-    `;
 
-/**
- * __useGetAllUsersWithSubscriptionsQuery__
- *
- * To run a query within a React component, call `useGetAllUsersWithSubscriptionsQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetAllUsersWithSubscriptionsQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetAllUsersWithSubscriptionsQuery({
- *   variables: {
- *   },
- * });
- */
-export function useGetAllUsersWithSubscriptionsQuery(baseOptions?: Apollo.QueryHookOptions<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>(GetAllUsersWithSubscriptionsDocument, options);
-      }
-export function useGetAllUsersWithSubscriptionsLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>(GetAllUsersWithSubscriptionsDocument, options);
-        }
-export function useGetAllUsersWithSubscriptionsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>(GetAllUsersWithSubscriptionsDocument, options);
-        }
-export type GetAllUsersWithSubscriptionsQueryHookResult = ReturnType<typeof useGetAllUsersWithSubscriptionsQuery>;
-export type GetAllUsersWithSubscriptionsLazyQueryHookResult = ReturnType<typeof useGetAllUsersWithSubscriptionsLazyQuery>;
-export type GetAllUsersWithSubscriptionsSuspenseQueryHookResult = ReturnType<typeof useGetAllUsersWithSubscriptionsSuspenseQuery>;
-export type GetAllUsersWithSubscriptionsQueryResult = Apollo.QueryResult<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>;
+export type SearchGlobalMetadataByCidOrNameQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', name?: string | null, type?: any | null, size?: any | null, cid: string }> };
+
+export type SearchUserMetadataByCidOrNameQueryVariables = Exact<{
+  search: Scalars['String']['input'];
+  oauthUserId: Scalars['String']['input'];
+  oauthProvider: Scalars['String']['input'];
+  limit: Scalars['Int']['input'];
+}>;
+
+
+export type SearchUserMetadataByCidOrNameQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', name?: string | null, type?: any | null, size?: any | null, cid: string }> };
+
+export type GetAllUsersWithSubscriptionsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type GetAllUsersWithSubscriptionsQuery = { __typename?: 'query_root', users: Array<{ __typename?: 'users', role: string, publicId?: string | null, oauthProvider: string, oauthUserId: string, user_membership?: { __typename?: 'users_organizations', subscription?: { __typename?: 'subscriptions', id: string, granularity: string, organizationId: string, uploadLimit: any, downloadLimit: any } | null } | null }> };
+
+
 export const GetGlobalFilesDocument = gql`
     query GetGlobalFiles($limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
   metadata_roots(
@@ -3490,3 +3261,231 @@ export type GetMyFilesQueryHookResult = ReturnType<typeof useGetMyFilesQuery>;
 export type GetMyFilesLazyQueryHookResult = ReturnType<typeof useGetMyFilesLazyQuery>;
 export type GetMyFilesSuspenseQueryHookResult = ReturnType<typeof useGetMyFilesSuspenseQuery>;
 export type GetMyFilesQueryResult = Apollo.QueryResult<GetMyFilesQuery, GetMyFilesQueryVariables>;
+export const GetMetadataByHeadCidDocument = gql`
+    query GetMetadataByHeadCID($headCid: String!) {
+  metadata(
+    where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
+  ) {
+    metadata
+    published_objects {
+      id
+    }
+    maximumBlockDepth: nodes(
+      order_by: {block_published_on: desc_nulls_last}
+      limit: 1
+    ) {
+      block_published_on
+      tx_published_on
+    }
+    minimumBlockDepth: nodes(
+      order_by: {block_published_on: desc_nulls_last}
+      limit: 1
+    ) {
+      block_published_on
+      tx_published_on
+    }
+    publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
+      aggregate {
+        count
+      }
+    }
+    archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
+      aggregate {
+        count
+      }
+    }
+    totalNodes: nodes_aggregate {
+      aggregate {
+        count
+      }
+    }
+    object_ownership {
+      oauth_user_id
+      oauth_provider
+      is_admin
+    }
+  }
+}
+    `;
+
+/**
+ * __useGetMetadataByHeadCidQuery__
+ *
+ * To run a query within a React component, call `useGetMetadataByHeadCidQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetMetadataByHeadCidQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetMetadataByHeadCidQuery({
+ *   variables: {
+ *      headCid: // value for 'headCid'
+ *   },
+ * });
+ */
+export function useGetMetadataByHeadCidQuery(baseOptions: Apollo.QueryHookOptions<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables> & ({ variables: GetMetadataByHeadCidQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>(GetMetadataByHeadCidDocument, options);
+      }
+export function useGetMetadataByHeadCidLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>(GetMetadataByHeadCidDocument, options);
+        }
+export function useGetMetadataByHeadCidSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>(GetMetadataByHeadCidDocument, options);
+        }
+export type GetMetadataByHeadCidQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidQuery>;
+export type GetMetadataByHeadCidLazyQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidLazyQuery>;
+export type GetMetadataByHeadCidSuspenseQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidSuspenseQuery>;
+export type GetMetadataByHeadCidQueryResult = Apollo.QueryResult<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>;
+export const SearchGlobalMetadataByCidOrNameDocument = gql`
+    query SearchGlobalMetadataByCIDOrName($search: String!, $limit: Int!) {
+  metadata(
+    distinct_on: root_cid
+    where: {_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
+    limit: $limit
+  ) {
+    type: metadata(path: "type")
+    name
+    size: metadata(path: "totalSize")
+    cid: head_cid
+  }
+}
+    `;
+
+/**
+ * __useSearchGlobalMetadataByCidOrNameQuery__
+ *
+ * To run a query within a React component, call `useSearchGlobalMetadataByCidOrNameQuery` and pass it any options that fit your needs.
+ * When your component renders, `useSearchGlobalMetadataByCidOrNameQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useSearchGlobalMetadataByCidOrNameQuery({
+ *   variables: {
+ *      search: // value for 'search'
+ *      limit: // value for 'limit'
+ *   },
+ * });
+ */
+export function useSearchGlobalMetadataByCidOrNameQuery(baseOptions: Apollo.QueryHookOptions<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables> & ({ variables: SearchGlobalMetadataByCidOrNameQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>(SearchGlobalMetadataByCidOrNameDocument, options);
+      }
+export function useSearchGlobalMetadataByCidOrNameLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>(SearchGlobalMetadataByCidOrNameDocument, options);
+        }
+export function useSearchGlobalMetadataByCidOrNameSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>(SearchGlobalMetadataByCidOrNameDocument, options);
+        }
+export type SearchGlobalMetadataByCidOrNameQueryHookResult = ReturnType<typeof useSearchGlobalMetadataByCidOrNameQuery>;
+export type SearchGlobalMetadataByCidOrNameLazyQueryHookResult = ReturnType<typeof useSearchGlobalMetadataByCidOrNameLazyQuery>;
+export type SearchGlobalMetadataByCidOrNameSuspenseQueryHookResult = ReturnType<typeof useSearchGlobalMetadataByCidOrNameSuspenseQuery>;
+export type SearchGlobalMetadataByCidOrNameQueryResult = Apollo.QueryResult<SearchGlobalMetadataByCidOrNameQuery, SearchGlobalMetadataByCidOrNameQueryVariables>;
+export const SearchUserMetadataByCidOrNameDocument = gql`
+    query SearchUserMetadataByCIDOrName($search: String!, $oauthUserId: String!, $oauthProvider: String!, $limit: Int!) {
+  metadata(
+    distinct_on: root_cid
+    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}}}}]}
+    limit: $limit
+  ) {
+    type: metadata(path: "type")
+    name
+    size: metadata(path: "totalSize")
+    cid: head_cid
+  }
+}
+    `;
+
+/**
+ * __useSearchUserMetadataByCidOrNameQuery__
+ *
+ * To run a query within a React component, call `useSearchUserMetadataByCidOrNameQuery` and pass it any options that fit your needs.
+ * When your component renders, `useSearchUserMetadataByCidOrNameQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useSearchUserMetadataByCidOrNameQuery({
+ *   variables: {
+ *      search: // value for 'search'
+ *      oauthUserId: // value for 'oauthUserId'
+ *      oauthProvider: // value for 'oauthProvider'
+ *      limit: // value for 'limit'
+ *   },
+ * });
+ */
+export function useSearchUserMetadataByCidOrNameQuery(baseOptions: Apollo.QueryHookOptions<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables> & ({ variables: SearchUserMetadataByCidOrNameQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>(SearchUserMetadataByCidOrNameDocument, options);
+      }
+export function useSearchUserMetadataByCidOrNameLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>(SearchUserMetadataByCidOrNameDocument, options);
+        }
+export function useSearchUserMetadataByCidOrNameSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>(SearchUserMetadataByCidOrNameDocument, options);
+        }
+export type SearchUserMetadataByCidOrNameQueryHookResult = ReturnType<typeof useSearchUserMetadataByCidOrNameQuery>;
+export type SearchUserMetadataByCidOrNameLazyQueryHookResult = ReturnType<typeof useSearchUserMetadataByCidOrNameLazyQuery>;
+export type SearchUserMetadataByCidOrNameSuspenseQueryHookResult = ReturnType<typeof useSearchUserMetadataByCidOrNameSuspenseQuery>;
+export type SearchUserMetadataByCidOrNameQueryResult = Apollo.QueryResult<SearchUserMetadataByCidOrNameQuery, SearchUserMetadataByCidOrNameQueryVariables>;
+export const GetAllUsersWithSubscriptionsDocument = gql`
+    query GetAllUsersWithSubscriptions {
+  users {
+    publicId: public_id
+    role
+    oauthProvider: oauth_provider
+    oauthUserId: oauth_user_id
+    user_membership {
+      subscription {
+        id
+        organizationId: organization_id
+        uploadLimit: upload_limit
+        downloadLimit: download_limit
+        granularity
+      }
+    }
+  }
+}
+    `;
+
+/**
+ * __useGetAllUsersWithSubscriptionsQuery__
+ *
+ * To run a query within a React component, call `useGetAllUsersWithSubscriptionsQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetAllUsersWithSubscriptionsQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetAllUsersWithSubscriptionsQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useGetAllUsersWithSubscriptionsQuery(baseOptions?: Apollo.QueryHookOptions<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>(GetAllUsersWithSubscriptionsDocument, options);
+      }
+export function useGetAllUsersWithSubscriptionsLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>(GetAllUsersWithSubscriptionsDocument, options);
+        }
+export function useGetAllUsersWithSubscriptionsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>(GetAllUsersWithSubscriptionsDocument, options);
+        }
+export type GetAllUsersWithSubscriptionsQueryHookResult = ReturnType<typeof useGetAllUsersWithSubscriptionsQuery>;
+export type GetAllUsersWithSubscriptionsLazyQueryHookResult = ReturnType<typeof useGetAllUsersWithSubscriptionsLazyQuery>;
+export type GetAllUsersWithSubscriptionsSuspenseQueryHookResult = ReturnType<typeof useGetAllUsersWithSubscriptionsSuspenseQuery>;
+export type GetAllUsersWithSubscriptionsQueryResult = Apollo.QueryResult<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>;

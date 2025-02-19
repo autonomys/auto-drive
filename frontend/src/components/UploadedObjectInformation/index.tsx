@@ -11,6 +11,7 @@ import { ObjectDeleteModal } from '@/components/FileTables/common/ObjectDeleteMo
 import { Loader } from 'lucide-react';
 import { ObjectDownloadModal } from '@/components/FileTables/common/ObjectDownloadModal';
 import { FilePreview } from '@/components/ObjectDetails/FilePreview';
+import { FolderPreview } from '../ObjectDetails/FolderPreview';
 
 export const UploadedObjectInformation = ({
   object,
@@ -193,7 +194,11 @@ export const UploadedObjectInformation = ({
       </div>
       <span className='ml-2 text-xl font-semibold'>Preview</span>
       <div className='flex flex-grow'>
-        <FilePreview metadata={object.metadata} />
+        {object.metadata.type === 'file' ? (
+          <FilePreview metadata={object.metadata} />
+        ) : (
+          <FolderPreview metadata={object.metadata} />
+        )}
       </div>
     </div>
   );

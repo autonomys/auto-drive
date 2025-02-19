@@ -3,7 +3,7 @@ import { OffchainMetadata } from '@autonomys/auto-dag-data';
 import { simpleMimeType } from 'utils/misc';
 import { useNetwork } from 'contexts/network';
 import { Arguments } from 'components/common/Arguments';
-import { FolderPreview } from './FolderPreview';
+import { FolderPreview } from '../FolderPreview';
 import { NoPreviewAvailable } from './NoPreviewAvailable';
 
 const MAX_FILE_SIZE = BigInt(100 * 1024 * 1024); // 100 MB
