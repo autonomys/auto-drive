@@ -68,7 +68,6 @@ export function FileDropZone() {
           subentries.map((subentry) => getRecursiveEntry(subentry)),
         ).then((entries) => [...entries.flat()]);
       } else {
-        console.log('entry is not a file or directory', entry);
         return [];
       }
     },

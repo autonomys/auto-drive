@@ -47,8 +47,6 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
       data: SearchGlobalMetadataByCidOrNameQuery &
         SearchUserMetadataByCidOrNameQuery,
     ) => {
-      console.log('data', data);
-
       setRecommendations(
         data.metadata.map((e) => ({
           cid: e.cid,

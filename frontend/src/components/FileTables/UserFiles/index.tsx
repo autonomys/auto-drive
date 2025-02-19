@@ -16,7 +16,7 @@ import {
   useGetMyFilesQuery,
 } from 'gql/graphql';
 import { objectSummaryFromUserFilesQuery } from './utils';
-import { useFileTableState } from '../state';
+import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
 
 export const UserFiles = () => {
@@ -30,8 +30,8 @@ export const UserFiles = () => {
   const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
 
-  const fetcher = useCallback(
-    async (page: number, limit: number) => {
+  const fetcher: Fetcher = useCallback(
+    async (page, limit, sortBy) => {
       const { data } = await gql.query<GetMyFilesQuery>({
         query: GetMyFilesDocument,
         variables: {
@@ -39,6 +39,7 @@ export const UserFiles = () => {
           offset: page * limit,
           oauthUserId: user?.oauthUserId ?? '',
           oauthProvider: user?.oauthProvider ?? '',
+          orderBy: sortBy,
         },
         fetchPolicy: 'no-cache',
       });

@@ -24,6 +24,7 @@ import { TablePaginator } from './TablePaginator';
 import { ObjectRestoreModal } from '../ObjectRestoreModal';
 import { FileTableRow } from './FileTableRow';
 import { useFileTableState } from '@/components/FileTables/state';
+import { SortableTableColumn } from './SortableTableColumn';
 
 export enum FileActionButtons {
   DOWNLOAD = 'download',
@@ -114,10 +115,10 @@ export const FileTable: FC<{
           <Table>
             <TableHead>
               <TableHeadRow>
-                <TableHeadCell>Root CID</TableHeadCell>
+                <SortableTableColumn name='Name' sortingKey='name' />
                 <TableHeadCell>Type</TableHeadCell>
                 <TableHeadCell>Size</TableHeadCell>
-                <TableHeadCell>Date</TableHeadCell>
+                <SortableTableColumn name='Date' sortingKey='created_at' />
                 <TableHeadCell className='text-right'>Actions</TableHeadCell>
               </TableHeadRow>
             </TableHead>
