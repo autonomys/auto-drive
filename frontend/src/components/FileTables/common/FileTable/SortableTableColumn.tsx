@@ -32,7 +32,7 @@ export const SortableTableColumn = ({
     setSortBy({
       [sortingKey]: isDesc ? Order_By.AscNullsLast : Order_By.DescNullsLast,
     });
-  }, [setSortBy, sortingKey, isDesc]);
+  }, [sortingKey, isAsc, setSortBy, isDesc]);
 
   return (
     <TableHeadCell
