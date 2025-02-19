@@ -11,13 +11,13 @@ import {
   useGetGlobalFilesQuery,
 } from 'gql/graphql';
 import { objectSummaryFromGlobalFilesQuery } from './utils';
-import { useFileTableState } from '../state';
+import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
-import { ApolloClient } from '@apollo/client';
 
 export const GlobalFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
   const setFetcher = useFileTableState((e) => e.setFetcher);
+  const sortBy = useFileTableState((e) => e.sortBy);
   const page = useFileTableState((e) => e.page);
   const limit = useFileTableState((e) => e.limit);
   const setTotal = useFileTableState((e) => e.setTotal);
@@ -25,13 +25,14 @@ export const GlobalFiles = () => {
 
   const { gql } = useNetwork();
 
-  const fetcher = useCallback(
-    async (page: number, limit: number) => {
+  const fetcher: Fetcher = useCallback(
+    async (page, limit, sortBy) => {
       const { data } = await gql.query<GetGlobalFilesQuery>({
         query: GetGlobalFilesDocument,
         variables: {
           limit,
           offset: page * limit,
+          orderBy: sortBy,
         },
         fetchPolicy: 'no-cache',
       });
@@ -55,6 +56,7 @@ export const GlobalFiles = () => {
     variables: {
       limit,
       offset: page * limit,
+      orderBy: sortBy,
     },
     onCompleted: (data) => {
       setObjects(objectSummaryFromGlobalFilesQuery(data));
@@ -81,19 +83,3 @@ export const GlobalFiles = () => {
     </div>
   );
 };
-
-export const createFetcher =
-  (gql: ApolloClient<object>) => async (page: number, limit: number) => {
-    const { data } = await gql.query<GetGlobalFilesQuery>({
-      query: GetGlobalFilesDocument,
-      variables: {
-        limit,
-        offset: page * limit,
-      },
-    });
-
-    return {
-      objects: objectSummaryFromGlobalFilesQuery(data),
-      total: data.metadata_roots_aggregate?.aggregate?.count ?? 0,
-    };
-  };
