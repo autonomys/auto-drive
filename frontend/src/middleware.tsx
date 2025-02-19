@@ -29,14 +29,12 @@ export async function middleware(req: NextRequest) {
   ).catch(() => null);
 
   if (!userInfo) {
-    console.log('redirecting to home: 2');
     return pathname !== '/'
       ? NextResponse.redirect(new URL('/', req.url))
       : NextResponse.next();
   }
 
   if (!userInfo.onboarded) {
-    console.log('redirecting to onboarding');
     return pathname.startsWith('/onboarding')
       ? NextResponse.next()
       : NextResponse.redirect(new URL('/onboarding', req.url));

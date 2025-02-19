@@ -13,7 +13,6 @@ export const createDownloadService = (api: Api) => {
     const fileInCache = await hasFileInCache(cid);
 
     if (fileInCache) {
-      console.log('Fetching file from cache', cid);
       return fetchFromCache(cid);
     }
 
