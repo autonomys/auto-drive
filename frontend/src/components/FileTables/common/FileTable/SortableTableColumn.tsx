@@ -28,11 +28,10 @@ export const SortableTableColumn = ({
   ) : null;
 
   const toggleSort = useCallback(() => {
-    console.log(sortingKey, isAsc);
     setSortBy({
       [sortingKey]: isDesc ? Order_By.AscNullsLast : Order_By.DescNullsLast,
     });
-  }, [sortingKey, isAsc, setSortBy, isDesc]);
+  }, [sortingKey, setSortBy, isDesc]);
 
   return (
     <TableHeadCell
