@@ -1,6 +1,14 @@
 FROM node:20.18.3-bookworm-slim
 
 COPY . .
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    python3-pip \
+    python3-setuptools \
+    git \
+    libsqlite3-dev
+RUN apt update && apt install -y curl
 RUN yarn install
 RUN yarn build
 
