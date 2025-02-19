@@ -15,7 +15,11 @@ import { UserRole } from 'models/User';
 export const mapObjectInformationFromQueryResult = (
   result: GetMetadataByHeadCidQuery,
 ): UploadedObjectMetadata => {
-  const metadata = result.metadata[0];
+  const metadata = result.metadata.at(0);
+  if (!metadata) {
+    throw new Error('Metadata not found');
+  }
+
   return {
     metadata: metadata.metadata,
     uploadStatus: {

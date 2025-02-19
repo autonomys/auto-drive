@@ -1,6 +1,5 @@
 query GetMetadataByHeadCID($headCid: String!) {
   metadata(
-    distinct_on: root_cid
     where: {
       _or: [{ head_cid: { _ilike: $headCid } }, { name: { _ilike: $headCid } }]
     }
