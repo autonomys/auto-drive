@@ -68,7 +68,8 @@ services:
       dockerfile: Dockerfile
     working_dir: /usr/src/app
     volumes:
-      - files_cache:/usr/src/app
+      - files_cache:/usr/src/app/.cache
+      - ./backend:/usr/src/app
     ports:
       - "3000:3000"
     restart: unless-stopped
