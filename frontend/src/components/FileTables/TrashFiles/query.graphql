@@ -6,7 +6,6 @@ query GetTrashedFiles(
   $orderBy: [metadata_roots_order_by!]
 ) {
   metadata_roots(
-    distinct_on: root_cid
     where: {
       inner_metadata: {
         object_ownership: {
