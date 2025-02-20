@@ -1,5 +1,7 @@
 FROM node:20.18.3-bookworm-slim
 
+WORKDIR /usr/src/app
+
 COPY . .
 RUN apt-get update && apt-get install -y \
     build-essential \
