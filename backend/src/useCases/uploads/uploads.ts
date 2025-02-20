@@ -195,7 +195,10 @@ const completeUpload = async (
 
   await uploadsRepository.updateUploadEntry(updatedUpload)
 
-  await scheduleNodeMigration(uploadId)
+  const isRootUpload = upload.root_upload_id === uploadId
+  if (isRootUpload) {
+    await scheduleNodeMigration(uploadId)
+  }
 
   return cidToString(cid)
 }
