@@ -76,7 +76,7 @@ export const FileTable: FC<{
       <ObjectDownloadModal cid={downloadingCID} onClose={onClose} />
       <ObjectRestoreModal cid={restoreCID} closeModal={onClose} />
       <div className='-my-2 sm:-mx-6 lg:-mx-8'>
-        <div className='inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8'>
+        <div className='inline-block w-full overflow-x-scroll py-2 sm:px-6 lg:px-8'>
           <div className='mb-4 ml-2 flex items-center justify-start gap-2'>
             <div className='flex h-8 items-center'>
               <Checkbox
@@ -112,7 +112,7 @@ export const FileTable: FC<{
               </div>
             </Transition>
           </div>
-          <Table>
+          <Table className='min-w-full rounded border border-gray-200'>
             <TableHead>
               <TableHeadRow>
                 <SortableTableColumn name='Name' sortingKey='name' />

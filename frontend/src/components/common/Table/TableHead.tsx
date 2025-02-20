@@ -9,7 +9,7 @@ export const TableHead = ({ children }: { children: ReactNode }) => {
 };
 
 export const TableHeadRow = ({ children }: { children: ReactNode }) => {
-  return <tr className='rounded-lg border-b border-gray-200'>{children}</tr>;
+  return <tr>{children}</tr>;
 };
 
 export const TableHeadCell = ({

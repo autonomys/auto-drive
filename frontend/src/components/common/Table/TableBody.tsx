@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 
 export const TableBody = ({ children }: { children: ReactNode }) => {
-  return <tbody>{children}</tbody>;
+  return <tbody className='w-full'>{children}</tbody>;
 };
 
 export const TableBodyRow = ({
@@ -15,7 +15,7 @@ export const TableBodyRow = ({
 }) => {
   return (
     <tr
-      className={`dark:bg-darkWhite dark:hover:bg-darkWhiteHover border border-gray-200 bg-white hover:bg-gray-100 ${className ?? ''}`}
+      className={`w-full border border-gray-200 bg-white hover:bg-gray-100 dark:bg-darkWhite dark:hover:bg-darkWhiteHover ${className ?? ''}`}
       onClick={onClick}
     >
       {children}
@@ -34,7 +34,7 @@ export const TableBodyCell = ({
 }) => {
   return (
     <td
-      className={`dark:text-darkBlack px-6 py-4 text-sm text-primary ${className ?? ''}`}
+      className={`px-6 py-4 text-sm text-primary dark:text-darkBlack ${className ?? ''}`}
       colSpan={colSpan}
     >
       {children}
