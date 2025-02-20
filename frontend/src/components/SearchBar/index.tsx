@@ -148,6 +148,14 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
     });
   }, [query, recommendations, error, handleSelectItem]);
 
+  const placeholder = useMemo(() => {
+    if (scope === 'global') {
+      return 'Search by Name or CID';
+    }
+
+    return 'Search by Name or CID within your files';
+  }, [scope]);
+
   return (
     <div className='mx-auto w-full max-w-md dark:text-darkBlack'>
       <div className='relative mt-1'>
@@ -160,7 +168,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder='Search by Name or CID'
+            placeholder={placeholder}
           />
           <button
             type='button'
