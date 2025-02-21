@@ -68,7 +68,7 @@ const createAccessToken = async (
   };
 
   return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: "1h",
+    expiresIn: "2d",
     algorithm: JWT_SECRET_ALGORITHM,
   });
 };
