@@ -3060,7 +3060,6 @@ export type GetSharedFilesQueryResult = Apollo.QueryResult<GetSharedFilesQuery, 
 export const GetTrashedFilesDocument = gql`
     query GetTrashedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
   metadata_roots(
-    distinct_on: root_cid
     where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: false}}}}}
     limit: $limit
     offset: $offset
