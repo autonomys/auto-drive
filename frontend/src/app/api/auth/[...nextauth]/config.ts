@@ -8,6 +8,11 @@ import {
   refreshAccessToken,
 } from './jwt';
 
+// 1 minute before the token expires
+const refreshingTokenThresholdInSeconds = process.env.REFRESHING_TOKEN_THRESHOLD
+  ? parseInt(process.env.REFRESHING_TOKEN_THRESHOLD)
+  : 60;
+
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
@@ -50,6 +55,17 @@ export const authOptions: AuthOptions = {
       throw new Error('No account or token found');
     },
     async session({ session, token }) {
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const isTokenExpired =
+        token.exp < nowInSeconds + refreshingTokenThresholdInSeconds;
+      if (isTokenExpired) {
+        const accessToken = await refreshAccessToken({
+          underlyingUserId: token.underlyingUserId!,
+          underlyingProvider: token.underlyingProvider!,
+          refreshToken: token.refreshToken!,
+        });
+        session.accessToken = accessToken.accessToken;
+      }
       session.accessToken = token.accessToken;
       session.authProvider = token.authProvider;
       session.authUserId = token.authUserId;
