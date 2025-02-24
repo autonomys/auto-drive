@@ -50,6 +50,15 @@ export const authOptions: AuthOptions = {
       throw new Error('No account or token found');
     },
     async session({ session, token }) {
+      const isTokenExpired = token.exp < Date.now() / 1000;
+      if (isTokenExpired) {
+        const accessToken = await refreshAccessToken({
+          underlyingUserId: token.underlyingUserId!,
+          underlyingProvider: token.underlyingProvider!,
+          refreshToken: token.refreshToken!,
+        });
+        session.accessToken = accessToken.accessToken;
+      }
       session.accessToken = token.accessToken;
       session.authProvider = token.authProvider;
       session.authUserId = token.authUserId;
