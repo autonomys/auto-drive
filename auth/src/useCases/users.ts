@@ -1,4 +1,6 @@
 import {
+  MaybeUser,
+  MaybeUserWithOrganization,
   OAuthUser,
   User,
   userFromOAuth,
@@ -6,17 +8,17 @@ import {
   UserOrPublicId,
   UserRole,
   UserWithOrganization,
-} from "../models";
-import { organizationsRepository, usersRepository } from "../repositories";
-import { OrganizationsUseCases } from "./organizations";
-import { v5 } from "uuid";
+} from '@auto-drive/models'
+import { usersRepository } from '../repositories/users.js'
+import { OrganizationsUseCases } from './organizations.js'
+import { v5 } from 'uuid'
 
 const getUserByPublicId = async (
-  publicId: string
+  publicId: string,
 ): Promise<User | undefined> => {
-  const dbUser = await usersRepository.getUserByPublicId(publicId);
+  const dbUser = await usersRepository.getUserByPublicId(publicId)
   if (!dbUser) {
-    return undefined;
+    return undefined
   }
 
   return userFromTable({
@@ -24,73 +26,79 @@ const getUserByPublicId = async (
     oauthUserId: dbUser.oauth_user_id,
     publicId: dbUser.public_id,
     role: dbUser.role,
-  });
-};
+  })
+}
 
-const resolveUser = async (userOrPublicId: UserOrPublicId): Promise<User> => {
+const resolveUser = async (
+  userOrPublicId: UserOrPublicId,
+): Promise<MaybeUser> => {
   if (userOrPublicId === null) {
-    throw new Error("User not found (user=null)");
+    throw new Error('User not found (user=null)')
   }
 
-  const isPublicId = typeof userOrPublicId === "string";
-  const user: User | undefined = isPublicId
+  const isPublicId = typeof userOrPublicId === 'string'
+  const user: MaybeUser | undefined = isPublicId
     ? await getUserByPublicId(userOrPublicId)
-    : userOrPublicId;
+    : userOrPublicId
   if (!user) {
-    throw new Error("User not found");
+    throw new Error('User not found')
   }
-  return user;
-};
 
-const generateUserPublicId = (user: User): string => {
-  const USER_PUBLIC_ID_NAMESPACE = "public-id-user-1";
+  return user
+}
 
-  const input = `${user.oauthProvider}-${user.oauthUserId}`;
-  return v5(input, Buffer.from(USER_PUBLIC_ID_NAMESPACE));
-};
+const generateUserPublicId = (user: MaybeUser): string => {
+  const USER_PUBLIC_ID_NAMESPACE = 'public-id-user-1'
+
+  const input = `${user.oauthProvider}-${user.oauthUserId}`
+  return v5(input, Buffer.from(USER_PUBLIC_ID_NAMESPACE))
+}
 
 const getUserWithOrganization = async (
-  user: UserOrPublicId
-): Promise<UserWithOrganization> => {
-  const resolvedUser = await resolveUser(user);
+  user: UserOrPublicId,
+): Promise<MaybeUserWithOrganization> => {
+  const resolvedUser = await resolveUser(user)
 
   if (!resolvedUser.onboarded) {
-    return resolvedUser;
+    return { ...resolvedUser, organizationId: null }
   }
 
-  const organization = await OrganizationsUseCases.getOrganizationByUser(
-    resolvedUser
-  );
+  const organization =
+    await OrganizationsUseCases.getOrganizationByUser(resolvedUser)
 
   return {
     ...resolvedUser,
     organizationId: organization.id,
-  };
-};
+  }
+}
 
-const onboardUser = async (user: User): Promise<User | undefined> => {
-  const publicId = generateUserPublicId(user);
+const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
+  if (user.onboarded) {
+    return user
+  }
+
+  const publicId = generateUserPublicId(user)
 
   const updatedUser = await UsersUseCases.initUser(
     user.oauthProvider,
     user.oauthUserId,
-    publicId
-  );
+    publicId,
+  )
 
-  return updatedUser;
-};
+  return updatedUser
+}
 
-const getUserByOAuthUser = async (user: OAuthUser): Promise<User> => {
+const getUserByOAuthUser = async (user: OAuthUser): Promise<MaybeUser> => {
   const dbUser = await usersRepository.getUserByOAuthInformation(
     user.provider,
-    user.id
-  );
+    user.id,
+  )
   if (!dbUser) {
     return userFromOAuth({
       oauthProvider: user.provider,
       oauthUserId: user.id,
       role: UserRole.User,
-    });
+    })
   }
 
   return userFromTable({
@@ -98,64 +106,64 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<User> => {
     oauthUserId: dbUser.oauth_user_id,
     publicId: dbUser.public_id,
     role: dbUser.role,
-  });
-};
+  })
+}
 
 const searchUsersByPublicId = async (publicId: string): Promise<string[]> => {
-  const maxResults = 10;
+  const maxResults = 10
   const dbUsers = await usersRepository.searchUsersByPublicId(
     publicId,
-    maxResults
-  );
+    maxResults,
+  )
 
-  return dbUsers.map((e) => e.public_id);
-};
+  return dbUsers.map((e) => e.public_id)
+}
 
 const isAdminUser = async (
-  userOrPublicId: UserOrPublicId
+  userOrPublicId: UserOrPublicId,
 ): Promise<boolean> => {
-  const user = await resolveUser(userOrPublicId);
+  const user = await resolveUser(userOrPublicId)
 
   const adminUser = await usersRepository.getUserByOAuthInformation(
     user.oauthProvider,
-    user.oauthUserId
-  );
+    user.oauthUserId,
+  )
 
-  return adminUser?.role === UserRole.Admin;
-};
+  return adminUser?.role === UserRole.Admin
+}
 
 const updateRole = async (
   executor: User,
   userOrPublicId: UserOrPublicId,
-  role: UserRole
+  role: UserRole,
 ) => {
-  const isAdmin = await isAdminUser(executor);
+  const isAdmin = await isAdminUser(executor)
   if (!isAdmin) {
-    throw new Error("User does not have admin privileges");
+    throw new Error('User does not have admin privileges')
   }
   if (!Object.values(UserRole).includes(role)) {
-    throw new Error("Invalid role");
+    throw new Error('Invalid role')
   }
 
-  const user = await resolveUser(userOrPublicId);
+  const user = await resolveUser(userOrPublicId)
 
-  return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role);
-};
+  return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role)
+}
 
 const initUser = async (
   oauthProvider: string,
   oauthUserId: string,
   publicId: string,
-  role: UserRole = UserRole.User
+  role: UserRole = UserRole.User,
 ): Promise<User> => {
   const user = await usersRepository.createUser(
     oauthProvider,
     oauthUserId,
     publicId,
-    role
-  );
+    role,
+  )
   if (!user) {
-    throw new Error("User creation failed");
+    throw new Error('User creation failed')
   }
 
   await OrganizationsUseCases.initOrganization(
@@ -164,24 +172,24 @@ const initUser = async (
       oauthUserId,
       publicId,
       role,
-    })
-  );
+    }),
+  )
 
   return userFromTable({
     oauthProvider: user.oauth_provider,
     oauthUserId: user.oauth_user_id,
     publicId: user.public_id,
     role: user.role,
-  });
-};
+  })
+}
 
 export const getUserList = async (executor: User): Promise<User[]> => {
-  const isAdmin = await isAdminUser(executor);
+  const isAdmin = await isAdminUser(executor)
   if (!isAdmin) {
-    throw new Error("User does not have admin privileges");
+    throw new Error('User does not have admin privileges')
   }
 
-  const users = await usersRepository.getAllUsers();
+  const users = await usersRepository.getAllUsers()
 
   return users.map((user) =>
     userFromTable({
@@ -189,9 +197,9 @@ export const getUserList = async (executor: User): Promise<User[]> => {
       oauthUserId: user.oauth_user_id,
       publicId: user.public_id,
       role: user.role,
-    })
-  );
-};
+    }),
+  )
+}
 
 export const UsersUseCases = {
   onboardUser,
@@ -204,4 +212,4 @@ export const UsersUseCases = {
   initUser,
   getUserWithOrganization,
   getUserList,
-};
+}

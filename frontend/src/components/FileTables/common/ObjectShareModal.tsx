@@ -7,7 +7,7 @@ import {
 } from '@headlessui/react';
 import { Fragment, useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
-import { UploadedObjectMetadata } from 'models/UploadedObjectMetadata';
+import { ObjectInformation } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
 import { Button } from 'components/common/Button';
 import { Download, Link } from 'lucide-react';
@@ -25,7 +25,7 @@ export const ObjectShareModal = ({
 }) => {
   const network = useNetwork();
   const isOpen = cid !== null;
-  const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
+  const [metadata, setMetadata] = useState<ObjectInformation | null>(null);
 
   useGetMetadataByHeadCidQuery({
     variables: {

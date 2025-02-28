@@ -23,7 +23,11 @@ export default function AppLayout({
 
   useEffect(() => {
     AuthService.getMe().then((user) => {
-      setUser(user);
+      if (user.onboarded) {
+        setUser(user);
+      } else {
+        redirect('/onboarding');
+      }
     });
   }, [setUser]);
 

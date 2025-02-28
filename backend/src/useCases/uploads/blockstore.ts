@@ -13,9 +13,9 @@ import {
   Upload,
   UploadStatus,
   UploadType,
-} from '../../models/uploads/upload.js'
+  FolderTreeFolder,
+} from '@auto-drive/models'
 import { UploadsUseCases } from './uploads.js'
-import { FolderTreeFolder } from '../../models/objects/index.js'
 import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 

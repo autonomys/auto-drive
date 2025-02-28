@@ -6,7 +6,7 @@ import {
   TransitionChild,
 } from '@headlessui/react';
 import { Fragment, useCallback, useState } from 'react';
-import { UploadedObjectMetadata } from 'models/UploadedObjectMetadata';
+import { ObjectInformation } from '@auto-drive/models';
 import toast from 'react-hot-toast';
 import { Button } from 'components/common/Button';
 import { useGetMetadataByHeadCidQuery } from 'gql/graphql';
@@ -21,7 +21,7 @@ export const ObjectDeleteModal = ({
   closeModal: () => void;
 }) => {
   const isOpen = cid !== null;
-  const [metadata, setMetadata] = useState<UploadedObjectMetadata | null>(null);
+  const [metadata, setMetadata] = useState<ObjectInformation | null>(null);
 
   const network = useNetwork();
 

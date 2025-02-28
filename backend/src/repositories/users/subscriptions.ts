@@ -2,7 +2,7 @@ import { getDatabase } from '../../drivers/pg.js'
 import {
   Subscription,
   SubscriptionGranularity,
-} from '../../models/users/subscription.js'
+} from '@auto-drive/models'
 
 type DBSubscription = {
   id: string

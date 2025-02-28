@@ -3,15 +3,13 @@ import {
   User,
   UserRole,
   UserWithOrganization,
-} from '../../models/users/user.js'
-import {
   Subscription,
   SubscriptionGranularity,
   SubscriptionInfo,
-} from '../../models/users/subscription.js'
+  InteractionType,
+} from '@auto-drive/models'
 import { subscriptionsRepository } from '../../repositories/users/subscriptions.js'
 import { interactionsRepository } from '../../repositories/objects/interactions.js'
-import { InteractionType } from '../../models/objects/interactions.js'
 import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../services/auth/index.js'
 import { config } from '../../config.js'
@@ -28,6 +26,9 @@ const updateSubscription = async (
   }
 
   const user = await AuthManager.getUserFromPublicId(userPublicId)
+  if (!user.organizationId) {
+    throw new Error('User organization ID is required')
+  }
 
   const subscription = await subscriptionsRepository.getByOrganizationId(
     user.organizationId,
@@ -48,6 +49,10 @@ const updateSubscription = async (
 const getOrCreateSubscription = async (
   user: UserWithOrganization,
 ): Promise<Subscription> => {
+  if (!user.organizationId) {
+    throw new Error('User organization ID is required')
+  }
+
   const subscription = await subscriptionsRepository.getByOrganizationId(
     user.organizationId,
   )

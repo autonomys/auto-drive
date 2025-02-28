@@ -1,11 +1,11 @@
 'use client';
 import { UploadedObjectInformation } from 'components/UploadedObjectInformation';
-import { UploadedObjectMetadata } from 'models/UploadedObjectMetadata';
+import { ObjectInformation } from '@auto-drive/models';
 
 export const ObjectDetails = ({
   metadata,
 }: {
-  metadata: UploadedObjectMetadata;
+  metadata: ObjectInformation;
 }) => {
   return <UploadedObjectInformation object={metadata} />;
 };

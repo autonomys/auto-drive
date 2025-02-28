@@ -1,6 +1,5 @@
 import { z } from 'zod'
-import { FolderTreeFolderSchema } from '../objects/index.js'
-import { UploadEntry } from '../../repositories/uploads/uploads.js'
+import { FolderTreeFolder, FolderTreeFolderSchema } from '../objects/index.js'
 import {
   CompressionAlgorithm,
   EncryptionAlgorithm,
@@ -20,6 +19,20 @@ export enum UploadStatus {
   CANCELLED = 'cancelled',
   FAILED = 'failed',
 }
+
+export type UploadEntry = {
+  id: string;
+  type: UploadType;
+  status: UploadStatus;
+  name: string;
+  file_tree: FolderTreeFolder | null;
+  mime_type: string | null;
+  root_upload_id: string;
+  relative_id: string | null;
+  oauth_provider: string;
+  oauth_user_id: string;
+  upload_options: FileUploadOptions | null;
+};
 
 export const uploadOptionsSchema = z.object({
   compression: z

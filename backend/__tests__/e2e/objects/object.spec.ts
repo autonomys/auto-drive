@@ -1,8 +1,8 @@
-import { UserWithOrganization } from '../../../src/models/users'
-import { AuthManager } from '../../../src/services/auth'
-import { ObjectUseCases } from '../../../src/useCases'
-import { dbMigration } from '../../utils/dbMigrate'
-import { PreconditionError } from '../../utils/error'
+import { UserWithOrganization } from '@auto-drive/models'
+import { AuthManager } from '../../../src/services/auth/index.js'
+import { ObjectUseCases } from '../../../src/useCases/index.js'
+import { dbMigration } from '../../utils/dbMigrate.js'
+import { PreconditionError } from '../../utils/error.js'
 import {
   createMockUser,
   mockRabbitPublish,

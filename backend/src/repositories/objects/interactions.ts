@@ -1,5 +1,5 @@
 import { getDatabase } from '../../drivers/pg.js'
-import { InteractionType } from '../../models/objects/interactions.js'
+import { InteractionType } from '@auto-drive/models'
 
 type DBInteraction = {
   id: string

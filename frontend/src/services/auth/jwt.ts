@@ -1,10 +1,10 @@
-import { UserInfo } from 'models/User';
+import { MaybeUser } from '@auto-drive/models';
 import { API_BASE_URL } from 'services/auth/config';
 
 export const checkAuth = async (
   provider?: string,
   token?: string,
-): Promise<UserInfo> => {
+): Promise<MaybeUser> => {
   if (!provider || !token) {
     throw new Error('Provider or token is not defined');
   }
@@ -20,5 +20,5 @@ export const checkAuth = async (
     throw new Error('Failed to fetch user');
   }
 
-  return response.json() as Promise<UserInfo>;
+  return response.json();
 };

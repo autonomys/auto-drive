@@ -9,9 +9,9 @@ import {
   Upload,
   UploadStatus,
   UploadType,
-} from '../../models/uploads/upload.js'
-import { FolderTreeFolder } from '../../models/objects/folderTree.js'
-import { UserWithOrganization } from '../../models/users/user.js'
+  FolderTreeFolder,
+  UserWithOrganization,
+} from '@auto-drive/models'
 import { filePartsRepository } from '../../repositories/uploads/fileParts.js'
 import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../repositories/uploads/fileProcessingInfo.js'
