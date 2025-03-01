@@ -10,6 +10,9 @@ import {
   Upload,
   UploadStatus,
   UploadType,
+  InteractionType,
+  OwnerRole,
+  TransactionStatus,
 } from '@auto-drive/models'
 import { blockstoreRepository } from '../../../src/repositories/uploads/index.js'
 import { MemoryBlockstore } from 'blockstore-core'
@@ -34,11 +37,6 @@ import {
   metadataRepository,
   nodesRepository,
 } from '../../../src/repositories/index.js'
-import {
-  InteractionType,
-  OwnerRole,
-  TransactionStatus,
-} from '@auto-drive/models'
 import { memoryDownloadCache } from '../../../src/services/download/memoryDownloadCache/index.js'
 import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
 import { jest } from '@jest/globals'
