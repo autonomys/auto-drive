@@ -6479,7 +6479,7 @@ __metadata:
     nodemon: "npm:^3.1.9"
     prettier: "npm:^3.5.2"
     serverless-http: "npm:^3.2.0"
-    ts-jest: "npm:^29.2.5"
+    ts-jest: "npm:^29.2.6"
     ts-node: "npm:^10.9.2"
     typescript: "npm:^5.7.3"
     uuid: "npm:^11.0.5"
@@ -16044,7 +16044,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ts-jest@npm:^29.2.5":
+"ts-jest@npm:^29.2.5, ts-jest@npm:^29.2.6":
   version: 29.2.6
   resolution: "ts-jest@npm:29.2.6"
   dependencies:
