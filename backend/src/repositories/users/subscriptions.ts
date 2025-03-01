@@ -1,8 +1,5 @@
 import { getDatabase } from '../../drivers/pg.js'
-import {
-  Subscription,
-  SubscriptionGranularity,
-} from '@auto-drive/models'
+import { Subscription, SubscriptionGranularity } from '@auto-drive/models'
 
 type DBSubscription = {
   id: string
@@ -71,9 +68,17 @@ const updateSubscription = async (
   return mapRows(result.rows)[0]
 }
 
+const getAll = async (): Promise<Subscription[]> => {
+  const db = await getDatabase()
+
+  const result = await db.query<DBSubscription>('SELECT * FROM subscriptions')
+  return mapRows(result.rows)
+}
+
 export const subscriptionsRepository = {
   getByOrganizationId,
   createSubscription,
   updateSubscription,
+  getAll,
   getById,
 }

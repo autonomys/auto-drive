@@ -45,7 +45,7 @@ const getInteractionsBySubscriptionIdAndTypeInTimeRange = async (
 
   const interactions = await db.query<DBInteraction>(
     'SELECT * FROM interactions WHERE subscription_id = $1 AND type = $2 AND created_at >= $3 AND created_at <= $4',
-    [subscriptionId, type, start, end],
+    [subscriptionId, type, start.toISOString(), end.toISOString()],
   )
 
   return mapRows(interactions.rows)
