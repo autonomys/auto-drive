@@ -29,12 +29,16 @@ jobs:
           node-version: "20"
 
       - name: Install Yarn
-        run: npm install --global yarn
+        run: corepack enable
 
       - name: Install dependencies
-        working-directory: ./frontend
-        run: yarn install
+        run: corepack use yarn@4.2.2
+
+      - name: Run lint
+        run: yarn frontend lint
+
+      - name: Run tests
+        run: yarn frontend test
 
       - name: Run build
-        working-directory: ./frontend
-        run: yarn build
+        run: yarn frontend build
