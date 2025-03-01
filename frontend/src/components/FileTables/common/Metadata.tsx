@@ -1,4 +1,4 @@
-import { ObjectSummary } from 'models/UploadedObjectMetadata';
+import { ObjectSummary } from '@auto-drive/models';
 import bytes from 'bytes';
 import { getTypeFromMetadata } from 'utils/file';
 import { InternalLink } from 'components/common/InternalLink';

@@ -1,3 +1,6 @@
+import { Organization } from "./organization";
+import { SubscriptionInfo } from "./subscription";
+
 export type OAuthUser = {
   provider: string;
   id: string;
@@ -11,7 +14,7 @@ export enum UserRole {
 
 export type PublicId = string | null;
 
-export type UserOrPublicId = User | PublicId;
+export type UserOrPublicId = MaybeUser | PublicId;
 
 type UserBase = {
   oauthProvider: string;
@@ -30,13 +33,26 @@ export type UnonboardedUser = UserBase & {
   onboarded: false;
 };
 
-export type User = OnboardedUser | UnonboardedUser;
+export type User = OnboardedUser;
 
-export type UserWithOrganization =
-  | UnonboardedUser
-  | (OnboardedUser & {
-      organizationId: string;
-    });
+export type MaybeUser = User | UnonboardedUser;
+
+export type UserWithOrganization = User & {
+  organizationId: Organization["id"] | null;
+};
+
+type UnonboardedUserWithOrganization = UnonboardedUser & {
+  organizationId: null;
+};
+
+export type MaybeUserWithOrganization =
+  | UserWithOrganization
+  | UnonboardedUserWithOrganization;
+
+export type UserInfo = {
+  user: MaybeUser;
+  subscription: SubscriptionInfo;
+};
 
 export const userFromOAuth = (
   user: Omit<User, "onboarded" | "publicId">

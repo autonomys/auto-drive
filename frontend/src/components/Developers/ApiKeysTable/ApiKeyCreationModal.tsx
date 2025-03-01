@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@headlessui/react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { ApiKey } from 'models/ApiKey';
+import { ApiKey } from '@auto-drive/models';
 import toast from 'react-hot-toast';
 import { Button } from 'components/common/Button';
 import { handleEnterOrSpace } from 'utils/eventHandler';

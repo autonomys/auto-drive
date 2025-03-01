@@ -29,8 +29,8 @@ services:
       - RABBITMQ_DEFAULT_PASS=guest
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/Dockerfile
     depends_on:
       - rabbitmq
       - postgres

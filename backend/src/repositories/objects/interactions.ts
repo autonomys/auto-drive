@@ -1,5 +1,5 @@
 import { getDatabase } from '../../drivers/pg.js'
-import { InteractionType } from '../../models/objects/interactions.js'
+import { InteractionType } from '@auto-drive/models'
 
 type DBInteraction = {
   id: string
@@ -45,7 +45,7 @@ const getInteractionsBySubscriptionIdAndTypeInTimeRange = async (
 
   const interactions = await db.query<DBInteraction>(
     'SELECT * FROM interactions WHERE subscription_id = $1 AND type = $2 AND created_at >= $3 AND created_at <= $4',
-    [subscriptionId, type, start, end],
+    [subscriptionId, type, start.toISOString(), end.toISOString()],
   )
 
   return mapRows(interactions.rows)

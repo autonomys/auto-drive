@@ -11,11 +11,14 @@ RUN apt-get update && apt-get install -y \
     git \
     libsqlite3-dev
 RUN apt update && apt install -y curl
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN corepack enable
+RUN corepack prepare yarn@4.2.2 --activate
 RUN yarn install
-RUN yarn build
+RUN yarn workspace backend build
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD curl -f http://localhost:3000/health || exit 1
 
-CMD ["bash", "start-server.sh"]
+CMD ["yarn", "workspace", "backend", "start"]

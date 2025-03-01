@@ -1,6 +1,6 @@
 /* eslint-disable camelcase */
 import { create } from 'zustand';
-import { ObjectSummary } from 'models/UploadedObjectMetadata';
+import { ObjectSummary } from '@auto-drive/models';
 import { Metadata_Roots_Order_By, Order_By } from '../../../gql/graphql';
 
 export interface Fetcher {

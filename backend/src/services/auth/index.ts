@@ -1,5 +1,5 @@
 import { config } from '../../config.js'
-import { UserWithOrganization } from '../../models/users/index.js'
+import { UserWithOrganization } from '@auto-drive/models'
 
 const getUserFromAccessToken = async (
   provider: string,

@@ -1,5 +1,10 @@
-import { ApiKey, ApiKeyWithoutSecret } from 'models/ApiKey';
-import { OnboardedUser, User, UserInfo } from 'models/User';
+import {
+  ApiKey,
+  ApiKeyWithoutSecret,
+  MaybeUser,
+  OnboardedUser,
+  User,
+} from '@auto-drive/models';
 import { getAuthSession } from 'utils/auth';
 import { API_BASE_URL } from 'services/auth/config';
 
@@ -106,7 +111,7 @@ export const AuthService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  getMe: async (): Promise<UserInfo> => {
+  getMe: async (): Promise<MaybeUser> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -161,6 +166,6 @@ export const AuthService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return response.json() as Promise<OnboardedUser[]>;
+    return response.json();
   },
 };

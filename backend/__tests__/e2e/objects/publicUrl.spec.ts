@@ -1,10 +1,12 @@
-import { InteractionType } from '../../../src/models/objects/interactions'
-import { UserWithOrganization } from '../../../src/models/users/user'
-import { PublishedObject } from '../../../src/repositories/objects/publishedObjects'
-import { AuthManager } from '../../../src/services/auth'
-import { ObjectUseCases, SubscriptionsUseCases } from '../../../src/useCases'
-import { asyncIterableToPromiseOfArray } from '../../../src/utils/async'
-import { dbMigration } from '../../utils/dbMigrate'
+import { InteractionType, UserWithOrganization } from '@auto-drive/models'
+import { PublishedObject } from '../../../src/repositories/objects/publishedObjects.js'
+import { AuthManager } from '../../../src/services/auth/index.js'
+import {
+  ObjectUseCases,
+  SubscriptionsUseCases,
+} from '../../../src/useCases/index.js'
+import { asyncIterableToPromiseOfArray } from '../../../src/utils/async.js'
+import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   createMockUser,
   mockRabbitPublish,

@@ -1,4 +1,4 @@
-import { UserWithOrganization } from '../../src/models/users/user.js'
+import { UserWithOrganization } from '@auto-drive/models'
 import { UploadsUseCases } from '../../src/useCases/uploads/uploads.js'
 import { PreconditionError } from './error.js'
 

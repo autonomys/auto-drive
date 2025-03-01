@@ -1,12 +1,14 @@
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
-import { User, UserWithOrganization } from '../../models/users/index.js'
 import {
   getObjectSummary,
   ObjectInformation,
   ObjectSearchResult,
   Owner,
   ObjectSummary,
-} from '../../models/objects/object.js'
+  PaginatedResult,
+  User,
+  UserWithOrganization,
+} from '@auto-drive/models'
 import {
   metadataRepository,
   nodesRepository,
@@ -15,7 +17,6 @@ import {
 import { OwnershipUseCases } from './ownership.js'
 import { UploadStatusUseCases } from './uploadStatus.js'
 import { MetadataEntry } from '../../repositories/objects/metadata.js'
-import { PaginatedResult } from './common.js'
 import { AuthManager } from '../../services/auth/index.js'
 import { publishedObjectsRepository } from '../../repositories/objects/publishedObjects.js'
 import { v4 } from 'uuid'
@@ -208,19 +209,23 @@ const getObjectSummaryByCID = async (cid: string) => {
 const getObjectInformation = async (
   cid: string,
 ): Promise<ObjectInformation | undefined> => {
-  const metadata = await getMetadata(cid)
+  const metadata = await metadataRepository.getMetadata(cid)
   if (!metadata) {
     return undefined
   }
 
   const uploadStatus = await UploadStatusUseCases.getUploadStatus(cid)
   const owners: Owner[] = await OwnershipUseCases.getOwners(cid)
+  const publishedObjectId =
+    await publishedObjectsRepository.getPublishedObjectByCid(cid)
 
   return {
     cid,
-    metadata,
+    metadata: metadata.metadata,
     uploadStatus,
     owners,
+    publishedObjectId: publishedObjectId?.id ?? null,
+    createdAt: metadata.created_at.toISOString(),
   }
 }
 
@@ -238,6 +243,10 @@ const shareObject = async (executor: User, cid: string, publicId: string) => {
   const user = await AuthManager.getUserFromPublicId(publicId)
   if (!user) {
     throw new Error('User not found')
+  }
+
+  if (user.publicId === null) {
+    throw new Error('User public ID is required')
   }
 
   await OwnershipUseCases.setUserAsOwner(user, cid)
@@ -307,6 +316,9 @@ const publishObject = async (user: UserWithOrganization, cid: string) => {
   const objects = await publishedObjectsRepository.getPublishedObjectById(cid)
   if (objects) {
     return objects
+  }
+  if (!user.publicId) {
+    throw new Error('User public ID is required')
   }
 
   const publishedObject =

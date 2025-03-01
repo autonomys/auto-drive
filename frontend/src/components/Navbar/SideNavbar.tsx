@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import React, { useMemo } from 'react';
 import { RoleProtected } from 'components/RoleProtected';
-import { UserRole } from 'models/User';
+import { UserRole } from '@auto-drive/models';
 import { RemainingCreditTracker } from 'components/RemainingCreditTracker';
 import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';

@@ -1,4 +1,4 @@
-name: Backend Build Check
+name: Services
 
 on:
   push:
@@ -15,7 +15,7 @@ on:
 
 jobs:
   backend-build-check:
-    name: Backend Build Check
+    name: Services Build, Test and Lint Check
     runs-on: ubuntu-latest
 
     # Cache dependencies to speed up the workflow
@@ -29,20 +29,19 @@ jobs:
           node-version: "20"
 
       - name: Install Yarn
-        run: npm install --global yarn
+        run: corepack enable
 
       - name: Install dependencies
-        working-directory: ./backend
-        run: yarn install
+        run: corepack use yarn@4.2.2
 
-      - name: Run tests
-        working-directory: ./backend
-        run: yarn test
+      - name: Build common
+        run: yarn models build
 
       - name: Run lint
-        working-directory: ./backend
         run: yarn lint
 
       - name: Run build
-        working-directory: ./backend
         run: yarn build
+
+      - name: Run tests
+        run: yarn test

@@ -1,7 +1,6 @@
-import { InteractionType } from '../../../src/models/objects/interactions'
-import { PreconditionError } from '../../utils/error'
-import { closeDatabase, getDatabase } from '../../../src/drivers/pg'
-import { UserWithOrganization } from '../../../src/models/users'
+import { InteractionType, UserWithOrganization } from '@auto-drive/models'
+import { PreconditionError } from '../../utils/error.js'
+import { closeDatabase, getDatabase } from '../../../src/drivers/pg.js'
 import {
   createMockUser,
   mockRabbitPublish,

@@ -1,9 +1,9 @@
 import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
-  SubscriptionGranularity,
   SubscriptionInfo,
-} from 'models/Subscriptions';
-import { UploadedObjectMetadata } from 'models/UploadedObjectMetadata';
+  SubscriptionGranularity,
+  ObjectInformation,
+} from '@auto-drive/models';
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
 
@@ -85,7 +85,7 @@ export const createApiService = (apiBaseUrl: string) => ({
   },
   fetchUploadedObjectMetadata: async (
     cid: string,
-  ): Promise<UploadedObjectMetadata> => {
+  ): Promise<ObjectInformation> => {
     const response = await fetch(`${apiBaseUrl}/objects/${cid}`);
 
     if (!response.ok) {

@@ -6,21 +6,22 @@ import {
   OffchainMetadata,
 } from '@autonomys/auto-dag-data'
 import PizZip from 'pizzip'
-import { User, UserWithOrganization } from '../../models/users/index.js'
+import {
+  UserWithOrganization,
+  InteractionType,
+  FileDownload,
+  FileArtifacts,
+  FolderArtifacts,
+  UploadArtifacts,
+  UploadType,
+} from '@auto-drive/models'
 import {
   NodesUseCases,
   ObjectUseCases,
   OwnershipUseCases,
   SubscriptionsUseCases,
 } from '../index.js'
-import { InteractionType } from '../../models/objects/interactions.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
-import {
-  FileArtifacts,
-  FolderArtifacts,
-  UploadArtifacts,
-  UploadType,
-} from '../../models/uploads/upload.js'
 import { AwaitIterable } from 'interface-store'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
 import {
@@ -29,7 +30,6 @@ import {
 } from '../../utils/async.js'
 import { downloadService } from '../../services/download/index.js'
 import { FileGateway } from '../../services/dsn/fileGateway/index.js'
-import { FileDownload } from '../../models/objects/object.js'
 import { config } from '../../config.js'
 
 const generateFileArtifacts = async (
@@ -300,7 +300,7 @@ const handleFileUploadFinalization = async (
 }
 
 const handleFolderUploadFinalization = async (
-  user: User,
+  user: UserWithOrganization,
   uploadId: string,
 ): Promise<string> => {
   const { metadata, childrenArtifacts } =

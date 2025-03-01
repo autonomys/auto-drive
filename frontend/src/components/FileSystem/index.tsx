@@ -1,18 +1,28 @@
 import { FC, PropsWithoutRef } from 'react';
 import { FileCard } from 'components/common/FileCard';
-import { UploadedObjectMetadata } from 'models/UploadedObjectMetadata';
+import { ObjectInformation } from '@auto-drive/models';
 
-export const FS: FC<PropsWithoutRef<{ metadata: UploadedObjectMetadata }>> = ({
-  metadata,
+export const FS: FC<PropsWithoutRef<{ information: ObjectInformation }>> = ({
+  information,
 }) => {
-  if (metadata.metadata.type === 'file') {
+  if (information.metadata.type === 'file') {
     throw new Error('File type not supported');
   }
 
   return (
     <div className='grid grid-cols-4 gap-4'>
-      {metadata.metadata.children.map((metadata) => {
-        return <FileCard key={metadata.cid} metadata={metadata} />;
+      {information.metadata.children.map((metadata) => {
+        return (
+          <FileCard
+            key={metadata.cid}
+            metadata={{
+              type: metadata.type,
+              name: metadata.name,
+              size: metadata.totalSize,
+              cid: metadata.cid,
+            }}
+          />
+        );
       })}
     </div>
   );

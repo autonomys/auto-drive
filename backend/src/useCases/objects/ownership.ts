@@ -1,5 +1,4 @@
-import { User } from '../../models/users/index.js'
-import { Owner, OwnerRole } from '../../models/objects/index.js'
+import { User, Owner, OwnerRole } from '@auto-drive/models'
 import { ownershipRepository } from '../../repositories/index.js'
 
 const setUserAsOwner = async (user: User, cid: string) => {

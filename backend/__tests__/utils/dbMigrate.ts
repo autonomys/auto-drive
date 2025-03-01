@@ -1,6 +1,6 @@
-import { closeDatabase, getDatabase } from '../../src/drivers/pg'
+import { closeDatabase, getDatabase } from '../../src/drivers/pg.js'
 import dbMigrate from 'db-migrate'
-import { Rabbit } from '../../src/drivers/rabbit'
+import { Rabbit } from '../../src/drivers/rabbit.js'
 import { jest } from '@jest/globals'
 
 let dbMigrateInstance: ReturnType<typeof dbMigrate.getInstance>

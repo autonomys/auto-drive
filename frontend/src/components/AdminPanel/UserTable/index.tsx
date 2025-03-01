@@ -1,7 +1,7 @@
 'use client';
 
 import { UserTableRow } from './UserTableRow';
-import { SubscriptionWithUser } from 'models/Subscriptions';
+import { SubscriptionWithUser } from '@auto-drive/models';
 import {
   TableBody,
   TableBodyCell,

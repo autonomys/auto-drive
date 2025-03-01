@@ -1,7 +1,6 @@
 import { FileUploadOptions } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
-import { FolderTreeFolder } from '../../models/objects/folderTree.js'
-import { UploadStatus, UploadType } from '../../models/uploads/upload.js'
+import { FolderTreeFolder, UploadStatus, UploadType } from '@auto-drive/models'
 
 export type UploadEntry = {
   id: string

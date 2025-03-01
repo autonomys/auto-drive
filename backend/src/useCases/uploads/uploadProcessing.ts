@@ -14,7 +14,7 @@ import {
   processBufferToIPLDFormatFromChunks,
   processChunksToIPLDFormat,
 } from '@autonomys/auto-dag-data'
-import { FolderUpload, UploadType } from '../../models/uploads/upload.js'
+import { FolderUpload, UploadType } from '@auto-drive/models'
 import { BlockstoreUseCases } from './blockstore.js'
 import { mapTableToModel } from './uploads.js'
 import {

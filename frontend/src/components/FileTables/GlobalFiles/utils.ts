@@ -1,5 +1,5 @@
 import { GetGlobalFilesQuery } from 'gql/graphql';
-import { ObjectSummary, OwnerRole } from 'models/UploadedObjectMetadata';
+import { ObjectSummary, OwnerRole } from '@auto-drive/models';
 
 export const objectSummaryFromGlobalFilesQuery = (
   e: GetGlobalFilesQuery,

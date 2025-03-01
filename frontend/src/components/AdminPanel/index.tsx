@@ -3,7 +3,7 @@
 import { AuthService } from 'services/auth/auth';
 import { UserSubscriptionsTable } from './UserTable';
 import { useEffect, useState } from 'react';
-import { SubscriptionWithUser } from 'models/Subscriptions';
+import { SubscriptionWithUser } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
 
 export const AdminPanel = () => {

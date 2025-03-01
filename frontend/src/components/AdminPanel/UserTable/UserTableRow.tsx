@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Copy } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { CreditsUpdateModal } from './CreditsUpdateModal';
-import { SubscriptionWithUser } from 'models/Subscriptions';
+import { SubscriptionWithUser } from '@auto-drive/models';
 import { UpdateRoleModal } from './UpdateRoleModal';
 import { useUserStore } from 'globalStates/user';
 import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';

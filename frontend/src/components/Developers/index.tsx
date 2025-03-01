@@ -1,7 +1,7 @@
 'use client';
 
 import { ApiKeysTable } from './ApiKeysTable';
-import { ApiKeyWithoutSecret } from 'models/ApiKey';
+import { ApiKeyWithoutSecret } from '@auto-drive/models';
 
 export const Developers = ({ apiKeys }: { apiKeys: ApiKeyWithoutSecret[] }) => {
   return (

@@ -1,6 +1,5 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
-import { ObjectSummary, OwnerRole } from 'models/UploadedObjectMetadata';
-import { User } from 'models/User';
+import { ObjectSummary, OwnerRole, User } from '@auto-drive/models';
 import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';
 import { DisplayerIcon } from 'components/common/Triangle';
 import {

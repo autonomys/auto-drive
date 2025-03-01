@@ -4,7 +4,7 @@ import { Transition } from '@headlessui/react';
 import { SearchIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ObjectSearchResult } from 'models/ObjectSearchResult';
+import { ObjectSearchResult } from '@auto-drive/models';
 import { handleEnterOrSpace } from 'utils/eventHandler';
 import { useQuery } from '@apollo/client';
 import { useSession } from 'next-auth/react';

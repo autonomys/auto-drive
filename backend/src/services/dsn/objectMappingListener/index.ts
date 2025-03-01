@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createWS } from '../../../drivers/ws.js'
-import { ObjectMappingListEntrySchema } from '../../../models/objects/objectMappings.js'
+import { ObjectMappingListEntrySchema } from '@auto-drive/models'
 import { NodesUseCases } from '../../../useCases/index.js'
 import { config } from '../../../config.js'
 import { logger } from '../../../drivers/logger.js'

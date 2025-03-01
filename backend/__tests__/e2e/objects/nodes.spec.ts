@@ -12,7 +12,7 @@ import {
 } from '@autonomys/auto-dag-data'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { nodesRepository } from '../../../src/repositories/index.js'
-import { ObjectMappingListEntry } from '../../../src/models/objects/objectMappings.js'
+import { ObjectMappingListEntry } from '@auto-drive/models'
 import { mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
 
 describe('Nodes', () => {

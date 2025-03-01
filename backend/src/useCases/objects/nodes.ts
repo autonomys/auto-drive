@@ -12,19 +12,17 @@ import { CID } from 'multiformats'
 import { nodesRepository } from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/index.js'
-import { ObjectMapping } from '../../models/objects/objectMappings.js'
 import {
   asyncIterableForEach,
   asyncIterableToPromiseOfArray,
 } from '../../utils/async.js'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
-import { UploadType } from '../../models/uploads/upload.js'
+import { UploadType, ObjectMapping, TransactionResult } from '@auto-drive/models'
 import { ObjectUseCases } from './object.js'
 import { logger } from '../../drivers/logger.js'
 import { Node } from '../../repositories/objects/nodes.js'
 import { TaskManager } from '../../services/taskManager/index.js'
 import { Task } from '../../services/taskManager/tasks.js'
-import { TransactionResult } from '../../models/objects/transaction.js'
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
