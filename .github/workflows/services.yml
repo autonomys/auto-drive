@@ -1,4 +1,4 @@
-name: Backend Build Check
+name: Services
 
 on:
   push:
