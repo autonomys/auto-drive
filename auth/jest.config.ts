@@ -1,4 +1,7 @@
+const tsJest = require('ts-jest')
+
 module.exports = {
+  ...tsJest.createDefaultEsmPreset(),
   globalSetup: './global-setup.ts',
   globalTeardown: './global-teardown.ts',
   testMatch: ['**/__tests__/**/*.spec.ts'],
@@ -12,6 +15,12 @@ module.exports = {
     './migrations/',
   ],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { tsconfig: './tsconfig.test.json' }],
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        useESM: true,
+        tsconfig: 'tsconfig.test.json',
+      },
+    ],
   },
 }

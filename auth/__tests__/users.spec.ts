@@ -75,6 +75,11 @@ describe('UsersUseCases', () => {
       id: MOCK_UNONBOARDED_USER.oauthUserId,
     })
 
+    if (!user.onboarded) {
+      expect(user.onboarded).toBeTruthy()
+      return
+    }
+
     const promise = OrganizationsUseCases.getOrganizationByUser(user)
     await expect(promise).resolves.toBeTruthy()
 
