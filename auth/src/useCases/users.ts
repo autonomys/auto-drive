@@ -7,7 +7,6 @@ import {
   userFromTable,
   UserOrPublicId,
   UserRole,
-  UserWithOrganization,
 } from '@auto-drive/models'
 import { usersRepository } from '../repositories/users.js'
 import { OrganizationsUseCases } from './organizations.js'

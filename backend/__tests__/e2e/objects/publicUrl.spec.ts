@@ -14,7 +14,6 @@ import {
 } from '../../utils/mocks'
 import { uploadFile } from '../../utils/uploads'
 import { jest } from '@jest/globals'
-import { subscriptionsRepository } from '../../../src/repositories/index.js'
 
 describe('Public URL', () => {
   let user: UserWithOrganization

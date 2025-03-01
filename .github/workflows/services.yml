@@ -15,7 +15,7 @@ on:
 
 jobs:
   backend-build-check:
-    name: Backend Build Check
+    name: Services Build, Test and Lint Check
     runs-on: ubuntu-latest
 
     # Cache dependencies to speed up the workflow
@@ -38,13 +38,10 @@ jobs:
         run: yarn models build
 
       - name: Run lint
-        run: yarn build
-
-      - name: Run lint
-        run: yarn eslint
-
-      - name: Run tests
-        run: yarn test
+        run: yarn lint
 
       - name: Run build
         run: yarn build
+
+      - name: Run tests
+        run: yarn test
