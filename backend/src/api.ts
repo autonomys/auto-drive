@@ -2,10 +2,10 @@ import cors from 'cors'
 import express from 'express'
 
 import 'dotenv/config.js'
-import { objectController } from './controllers/object.js'
-import { subscriptionController } from './controllers/subscriptions.js'
+import { objectController } from './http/controllers/object.js'
+import { subscriptionController } from './http/controllers/subscriptions.js'
 import { handleAuth } from './services/auth/express.js'
-import { uploadController } from './controllers/upload.js'
+import { uploadController } from './http/controllers/upload.js'
 import { config } from './config.js'
 import { logger } from './drivers/logger.js'
 
@@ -54,6 +54,8 @@ const createServer = async () => {
       })
     }
   })
+
+  app.use(vMetricsMiddleware)
 
   app.listen(config.express.port, () => {
     logger.info(`Server running at http://localhost:${config.express.port}`)
