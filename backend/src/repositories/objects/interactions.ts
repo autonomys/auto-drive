@@ -6,16 +6,19 @@ type DBInteraction = {
   subscription_id: string
   type: InteractionType
   size: string
+  created_at: string | Date
 }
 
-type Interaction = Omit<DBInteraction, 'size'> & {
+type Interaction = Omit<DBInteraction, 'size' | 'created_at'> & {
   size: number
+  createdAt: Date
 }
 
 const mapRows = (rows: DBInteraction[]): Interaction[] => {
   return rows.map((e) => ({
     ...e,
     size: Number(e.size),
+    createdAt: new Date(e.created_at),
   }))
 }
 
