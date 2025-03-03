@@ -47,6 +47,7 @@ export const config = {
     url: env('RABBITMQ_URL'),
   },
   monitoring: {
+    active: env('MONITORING_ENABLED', 'false') === 'true',
     victoriaEndpoint: env('VICTORIA_ENDPOINT'),
     auth: {
       username: env('VICTORIA_AUTH_USERNAME'),
