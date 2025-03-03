@@ -17,6 +17,11 @@ export const sendMetricToVictoria = async (metric: Metric): Promise<void> => {
     `${config.monitoring.auth.username}:${config.monitoring.auth.password}`,
   ).toString('base64')
 
+  if (!config.monitoring.victoriaEndpoint) {
+    console.error('Victoria endpoint is not set')
+    return
+  }
+
   const response = await fetch(config.monitoring.victoriaEndpoint, {
     method: 'POST',
     body: data,

@@ -48,10 +48,10 @@ export const config = {
   },
   monitoring: {
     active: env('MONITORING_ENABLED', 'false') === 'true',
-    victoriaEndpoint: env('VICTORIA_ENDPOINT'),
+    victoriaEndpoint: process.env.VICTORIA_ENDPOINT,
     auth: {
-      username: env('VICTORIA_AUTH_USERNAME'),
-      password: env('VICTORIA_AUTH_PASSWORD'),
+      username: process.env.VICTORIA_AUTH_USERNAME,
+      password: process.env.VICTORIA_AUTH_PASSWORD,
     },
     metricEnvironmentTag: env('ENVIRONMENT_TAG', 'chain=unknown'),
   },
