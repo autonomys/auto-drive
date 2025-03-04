@@ -1,14 +1,14 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
-import { handleAuth, handleOptionalAuth } from '../services/auth/express.js'
+import { handleAuth, handleOptionalAuth } from '../../services/auth/express.js'
 import {
   FilesUseCases,
   ObjectUseCases,
   UploadStatusUseCases,
-} from '../useCases/index.js'
-import { logger } from '../drivers/logger.js'
-import { asyncSafeHandler } from '../utils/express.js'
-import { handleDownloadResponseHeaders } from '../services/download/express.js'
+} from '../../useCases/index.js'
+import { logger } from '../../drivers/logger.js'
+import { asyncSafeHandler } from '../../utils/express.js'
+import { handleDownloadResponseHeaders } from '../../services/download/express.js'
 
 const objectController = Router()
 
