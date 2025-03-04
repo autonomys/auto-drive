@@ -15,9 +15,12 @@ const objectController = Router()
 objectController.get(
   '/roots',
   asyncSafeHandler(async (req, res) => {
-    const user = await handleAuth(req, res)
+    const user = await handleAuth(req)
     const { scope, limit, offset } = req.query
     if (!user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+      })
       return
     }
 
@@ -43,8 +46,11 @@ objectController.get(
 objectController.get(
   '/roots/shared',
   asyncSafeHandler(async (req, res) => {
-    const user = await handleAuth(req, res)
+    const user = await handleAuth(req)
     if (!user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+      })
       return
     }
 
@@ -65,8 +71,11 @@ objectController.get(
 objectController.get(
   '/roots/deleted',
   asyncSafeHandler(async (req, res) => {
-    const user = await handleAuth(req, res)
+    const user = await handleAuth(req)
     if (!user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+      })
       return
     }
 
@@ -90,8 +99,11 @@ objectController.get(
     try {
       const { scope, cid } = req.query
 
-      const user = await handleAuth(req, res)
+      const user = await handleAuth(req)
       if (!user) {
+        res.status(401).json({
+          error: 'Unauthorized',
+        })
         return
       }
 
@@ -199,8 +211,11 @@ objectController.post(
       return
     }
 
-    const user = await handleAuth(req, res)
+    const user = await handleAuth(req)
     if (!user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+      })
       return
     }
 
@@ -223,8 +238,11 @@ objectController.get(
     try {
       const { cid } = req.params
 
-      const optionalAuthResult = await handleOptionalAuth(req, res)
+      const optionalAuthResult = await handleOptionalAuth(req)
       if (!optionalAuthResult) {
+        res.status(401).json({
+          error: 'Unauthorized',
+        })
         return
       }
 
@@ -270,7 +288,7 @@ objectController.post(
   '/:cid/delete',
   asyncSafeHandler(async (req, res) => {
     try {
-      const user = await handleAuth(req, res)
+      const user = await handleAuth(req)
       if (!user) {
         return
       }
@@ -294,7 +312,7 @@ objectController.post(
   '/:cid/restore',
   asyncSafeHandler(async (req, res) => {
     try {
-      const user = await handleAuth(req, res)
+      const user = await handleAuth(req)
       if (!user) {
         return
       }
@@ -336,8 +354,7 @@ objectController.post(
   '/:cid/publish',
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
-
-    const user = await handleAuth(req, res)
+    const user = await handleAuth(req)
     if (!user) {
       return
     }
@@ -390,8 +407,11 @@ objectController.post(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const user = await handleAuth(req, res)
+    const user = await handleAuth(req)
     if (!user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+      })
       return
     }
 

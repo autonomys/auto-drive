@@ -9,11 +9,14 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": "src",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
     "paths": {
       "*": ["*"]
     },
     "strict": true,
-    "allowJs": true
+    "allowJs": true,
+    
   },
   "include": ["src/**/*", "types/**/*"],
   "exclude": ["node_modules", "dist"]

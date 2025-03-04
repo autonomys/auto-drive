@@ -1,0 +1,30 @@
+{
+  "entryFile": "src/api.ts",
+  "noImplicitAdditionalProperties": "throw-on-extras",
+  "controllerPathGlobs": ["src/http/controllers/**.ts"],
+  "spec": {
+    "outputDirectory": "build",
+    "specVersion": 3,
+    "securityDefinitions": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "The access token for the user"
+      }
+    },
+    "specMerging": "recursive"
+  },
+  "routes": {
+    "esm": true,
+    "routesDir": "src/routes",
+    "authenticationModule": "src/services/auth/express.ts"
+  },
+  "additionalProperties": true,
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@auto-drive/models": ["../node_modules/@auto-drive/models"]
+    }
+  }
+}

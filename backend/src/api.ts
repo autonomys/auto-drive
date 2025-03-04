@@ -2,13 +2,12 @@ import cors from 'cors'
 import express from 'express'
 
 import 'dotenv/config.js'
-import { objectController } from './http/controllers/object.js'
 import { subscriptionController } from './http/controllers/subscriptions.js'
 import { handleAuth } from './services/auth/express.js'
-import { uploadController } from './http/controllers/upload.js'
 import { config } from './config.js'
 import { logger } from './drivers/logger.js'
 import { requestTrace } from './http/middlewares/requestTrace.js'
+import { RegisterRoutes } from './routes/routes.js'
 
 const createServer = async () => {
   const app = express()
@@ -35,9 +34,7 @@ const createServer = async () => {
     app.use(requestTrace)
   }
 
-  app.use('/objects', objectController)
   app.use('/subscriptions', subscriptionController)
-  app.use('/uploads', uploadController)
 
   app.get('/health', (_req, res) => {
     res.sendStatus(204)
@@ -45,8 +42,11 @@ const createServer = async () => {
 
   app.get('/auth/session', async (req, res) => {
     try {
-      const user = await handleAuth(req, res)
+      const user = await handleAuth(req)
       if (!user) {
+        res.status(401).json({
+          error: 'Unauthorized',
+        })
         return
       }
 
@@ -58,6 +58,8 @@ const createServer = async () => {
       })
     }
   })
+
+  RegisterRoutes(app)
 
   app.listen(config.express.port, () => {
     logger.info(`Server running at http://localhost:${config.express.port}`)

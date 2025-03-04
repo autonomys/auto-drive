@@ -8,8 +8,11 @@ const subscriptionController = Router()
 subscriptionController.get(
   '/@me',
   asyncSafeHandler(async (req, res) => {
-    const user = await handleAuth(req, res)
+    const user = await handleAuth(req)
     if (!user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+      })
       return
     }
 
@@ -31,7 +34,7 @@ subscriptionController.get(
 subscriptionController.post(
   '/list',
   asyncSafeHandler(async (req, res) => {
-    const user = await handleAuth(req, res)
+    const user = await handleAuth(req)
     if (!user) {
       return
     }
@@ -53,8 +56,11 @@ subscriptionController.post(
 subscriptionController.post(
   '/update',
   asyncSafeHandler(async (req, res) => {
-    const executor = await handleAuth(req, res)
+    const executor = await handleAuth(req)
     if (!executor) {
+      res.status(401).json({
+        error: 'Unauthorized',
+      })
       return
     }
 
