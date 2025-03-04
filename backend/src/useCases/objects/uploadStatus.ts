@@ -1,13 +1,12 @@
-import { UploadStatus } from '../../models/objects/index.js'
-import { UploadStatus as UploadStatusType } from '../../models/uploads/upload.js'
+import { ObjectUploadStatus, UploadStatus } from '@auto-drive/models'
 import { nodesRepository } from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 
-const getUploadStatus = async (cid: string): Promise<UploadStatus> => {
+const getUploadStatus = async (cid: string): Promise<ObjectUploadStatus> => {
   const uploadStatus = await uploadsRepository.getStatusByCID(cid)
   const isMigratingOrPending =
     uploadStatus &&
-    [UploadStatusType.MIGRATING, UploadStatusType.PENDING].includes(
+    [UploadStatus.MIGRATING, UploadStatus.PENDING].includes(
       uploadStatus,
     )
 

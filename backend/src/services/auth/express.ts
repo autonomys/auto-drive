@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { UserWithOrganization } from '../../models/users/index.js'
+import { UserWithOrganization } from '@auto-drive/models'
 import { AuthManager } from './index.js'
 import { config } from '../../config.js'
 

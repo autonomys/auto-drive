@@ -1,6 +1,6 @@
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
-import { PaginatedResult } from '../../useCases/objects/common.js'
+import { PaginatedResult } from '@auto-drive/models'
 import { stringify } from '../../utils/misc.js'
 
 export interface MetadataEntry {
@@ -9,6 +9,7 @@ export interface MetadataEntry {
   name: string
   metadata: OffchainMetadata
   is_archived: boolean
+  created_at: Date
 }
 
 type MetadataEntryWithTotalCount = MetadataEntry & {

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { ApiKeyCreationModal } from './ApiKeyCreationModal';
-import { ApiKeyWithoutSecret } from 'models/ApiKey';
+import { ApiKeyWithoutSecret } from '@auto-drive/models';
 import { DeleteApiKeyModal } from './DeleteApiKeyModal';
 import { Loader } from 'lucide-react';
 import { Table } from 'components/common/Table';

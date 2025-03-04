@@ -2837,7 +2837,7 @@ export type GetMetadataByHeadCidQueryVariables = Exact<{
 }>;
 
 
-export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
+export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', head_cid: string, metadata?: any | null, created_at?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
 
 export type SearchGlobalMetadataByCidOrNameQueryVariables = Exact<{
   search: Scalars['String']['input'];
@@ -3265,7 +3265,9 @@ export const GetMetadataByHeadCidDocument = gql`
   metadata(
     where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
   ) {
+    head_cid
     metadata
+    created_at
     published_objects {
       id
     }

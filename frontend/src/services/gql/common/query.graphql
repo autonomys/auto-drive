@@ -4,7 +4,9 @@ query GetMetadataByHeadCID($headCid: String!) {
       _or: [{ head_cid: { _ilike: $headCid } }, { name: { _ilike: $headCid } }]
     }
   ) {
+    head_cid
     metadata
+    created_at
     published_objects {
       id
     }

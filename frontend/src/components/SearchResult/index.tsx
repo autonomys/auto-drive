@@ -1,5 +1,11 @@
-import { BaseMetadata } from 'models/UploadedObjectMetadata';
 import { FileCard } from 'components/common/FileCard';
+
+type BaseMetadata = {
+  cid: string;
+  name: string;
+  size: bigint;
+  type: 'file' | 'folder';
+};
 
 export const SearchResult = ({ objects }: { objects: BaseMetadata[] }) => {
   return (

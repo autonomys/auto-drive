@@ -1,5 +1,6 @@
 import { ApiPromise } from '@polkadot/api'
 import z from 'zod'
+
 export interface Queue {
   transactions: TransactionInfo[]
   api: ApiPromise | null

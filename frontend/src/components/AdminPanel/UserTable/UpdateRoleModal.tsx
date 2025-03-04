@@ -9,7 +9,7 @@ import {
 } from '@headlessui/react';
 import { Fragment, useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
-import { UserRole } from 'models/User';
+import { UserRole } from '@auto-drive/models';
 import { AuthService } from 'services/auth/auth';
 
 export const UpdateRoleModal = ({

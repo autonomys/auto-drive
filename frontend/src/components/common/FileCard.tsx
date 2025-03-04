@@ -15,13 +15,18 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ObjectDownloadModal } from '@/components/FileTables/common/ObjectDownloadModal';
 import { handleClick, handleEnterOrSpace } from 'utils/eventHandler';
 import { shortenString } from 'utils/misc';
-import { BaseMetadata } from 'models/UploadedObjectMetadata';
 import { useNetwork } from 'contexts/network';
 import { ROUTES } from 'constants/routes';
+import { OffchainMetadata } from '@autonomys/auto-drive';
 
 interface FileCardProps {
   icon?: React.ReactNode;
-  metadata: BaseMetadata;
+  metadata: {
+    type: OffchainMetadata['type'];
+    name?: string;
+    size: bigint;
+    cid: string;
+  };
 }
 
 export const FileCard = ({

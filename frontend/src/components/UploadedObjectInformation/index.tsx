@@ -1,7 +1,4 @@
-import {
-  OwnerRole,
-  UploadedObjectMetadata,
-} from 'models/UploadedObjectMetadata';
+import { OwnerRole, ObjectInformation } from '@auto-drive/models';
 import { getTypeFromMetadata } from 'utils/file';
 import { useUserStore } from 'globalStates/user';
 import { useCallback, useMemo, useState } from 'react';
@@ -16,7 +13,7 @@ import { FolderPreview } from '../ObjectDetails/FolderPreview';
 export const UploadedObjectInformation = ({
   object,
 }: {
-  object: UploadedObjectMetadata | null;
+  object: ObjectInformation | null;
 }) => {
   const [downloadModalCid, setDownloadModalCid] = useState<string | null>(null);
   const [shareModalCid, setShareModalCid] = useState<string | null>(null);

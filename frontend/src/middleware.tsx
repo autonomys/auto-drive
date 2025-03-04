@@ -1,7 +1,7 @@
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAuth } from 'services/auth/jwt';
-import { UserInfo } from 'models/User';
+import { MaybeUser } from '@auto-drive/models';
 import { cookies } from 'next/headers';
 
 export async function middleware(req: NextRequest) {
@@ -23,10 +23,12 @@ export async function middleware(req: NextRequest) {
       : NextResponse.next();
   }
 
-  const userInfo: UserInfo | null = await checkAuth(
+  const userInfo: MaybeUser | null = await checkAuth(
     session.authProvider,
     session.accessToken,
   ).catch(() => null);
+
+  console.log('userInfo', userInfo);
 
   if (!userInfo) {
     return pathname !== '/'

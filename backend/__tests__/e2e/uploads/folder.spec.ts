@@ -8,34 +8,32 @@ import {
   FolderTreeFolder,
   OwnerRole,
   TransactionStatus,
-} from '../../../src/models/objects'
-import {
   FileUpload,
   Upload,
   UploadStatus,
   UploadType,
-} from '../../../src/models/uploads/upload'
-import { UserWithOrganization } from '../../../src/models/users'
+  UserWithOrganization,
+} from '@auto-drive/models'
 import {
   FilesUseCases,
   NodesUseCases,
   ObjectUseCases,
-} from '../../../src/useCases'
-import { UploadsUseCases } from '../../../src/useCases/uploads/uploads'
-import { dbMigration } from '../../utils/dbMigrate'
-import { PreconditionError } from '../../utils/error'
+} from '../../../src/useCases/index.js'
+import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
+import { dbMigration } from '../../utils/dbMigrate.js'
+import { PreconditionError } from '../../utils/error.js'
 import {
   createMockUser,
   mockRabbitPublish,
   unmockMethods,
 } from '../../utils/mocks'
 import { MemoryBlockstore } from 'blockstore-core'
-import { uploadsRepository } from '../../../src/repositories/uploads/uploads'
-import { nodesRepository } from '../../../src/repositories'
-import { asyncIterableToPromiseOfArray } from '../../../src/utils/async'
+import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
+import { nodesRepository } from '../../../src/repositories/index.js'
+import { asyncIterableToPromiseOfArray } from '../../../src/utils/async.js'
 import PizZip from 'pizzip'
-import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore'
-import { Rabbit } from '../../../src/drivers/rabbit'
+import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
+import { Rabbit } from '../../../src/drivers/rabbit.js'
 
 describe('Folder Upload', () => {
   let user: UserWithOrganization

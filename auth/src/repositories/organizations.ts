@@ -1,47 +1,47 @@
-import { getDatabase } from "../drivers";
+import { getDatabase } from '../drivers/pg.js'
 
 type DBOrganization = {
-  id: string;
-  name: string;
-};
+  id: string
+  name: string
+}
 
 const getOrganizationById = async (
-  id: string
+  id: string,
 ): Promise<DBOrganization | null> => {
-  const db = await getDatabase();
+  const db = await getDatabase()
   const result = await db.query<DBOrganization>(
-    "SELECT * FROM users.organizations WHERE id = $1",
-    [id]
-  );
-  return result.rows[0] || null;
-};
+    'SELECT * FROM users.organizations WHERE id = $1',
+    [id],
+  )
+  return result.rows[0] || null
+}
 
 const createOrganization = async (
   id: string,
-  name: string
+  name: string,
 ): Promise<DBOrganization> => {
-  const db = await getDatabase();
+  const db = await getDatabase()
   const result = await db.query<DBOrganization>(
-    "INSERT INTO users.organizations (id, name) VALUES ($1, $2) RETURNING *",
-    [id, name]
-  );
-  return result.rows[0];
-};
+    'INSERT INTO users.organizations (id, name) VALUES ($1, $2) RETURNING *',
+    [id, name],
+  )
+  return result.rows[0]
+}
 
 const updateOrganizationName = async (
   id: string,
-  name: string
+  name: string,
 ): Promise<DBOrganization> => {
-  const db = await getDatabase();
+  const db = await getDatabase()
   const result = await db.query<DBOrganization>(
-    "UPDATE users.organizations SET name = $1 WHERE id = $2 RETURNING *",
-    [name, id]
-  );
-  return result.rows[0];
-};
+    'UPDATE users.organizations SET name = $1 WHERE id = $2 RETURNING *',
+    [name, id],
+  )
+  return result.rows[0]
+}
 
 export const organizationsRepository = {
   getOrganizationById,
   createOrganization,
   updateOrganizationName,
-};
+}

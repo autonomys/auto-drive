@@ -1,16 +1,12 @@
-import { User, UserInfo } from 'models/User.js';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-
-import { SubscriptionInfo } from 'models/Subscriptions';
-import { AuthService } from 'services/auth/auth';
+import { SubscriptionInfo, User } from '@auto-drive/models';
 
 interface UserStore {
   user: User | null;
   subscription: SubscriptionInfo | null;
-  setUser: (user: UserInfo) => void;
+  setUser: (user: User) => void;
   clearUser: () => void;
-  updateUser: () => void;
   setSubscription: (subcriptionInfo: SubscriptionInfo) => void;
 }
 
@@ -19,18 +15,11 @@ export const useUserStore = create<UserStore>()(
     (set) => ({
       user: null,
       subscription: null,
-      setUser: (userInfo: UserInfo) =>
+      setUser: (user: User) =>
         set({
-          user: userInfo,
+          user: user,
         }),
       clearUser: () => set({ user: null, subscription: null }),
-      updateUser: () => {
-        AuthService.getMe().then((userInfo) => {
-          set({
-            user: userInfo,
-          });
-        });
-      },
       setSubscription: (subcriptionInfo: SubscriptionInfo) =>
         set({
           subscription: subcriptionInfo,

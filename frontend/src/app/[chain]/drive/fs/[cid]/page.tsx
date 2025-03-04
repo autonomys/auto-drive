@@ -21,7 +21,7 @@ export default async function Page({
     variables: { headCid: params.cid },
   });
 
-  const metadata = mapObjectInformationFromQueryResult(data);
+  const objInfo = mapObjectInformationFromQueryResult(data);
 
-  return <FS metadata={metadata} />;
+  return <FS information={objInfo} />;
 }
