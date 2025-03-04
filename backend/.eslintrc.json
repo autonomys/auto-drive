@@ -4,11 +4,12 @@
     "es2021": true,
     "node": true
   },
-  "plugins": ["@typescript-eslint", "prettier", "import"],
+  "plugins": ["@typescript-eslint", "prettier", "require-extensions"],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/eslint-recommended",
     "plugin:@typescript-eslint/recommended",
+    "plugin:require-extensions/recommended",
     "prettier"
   ],
   "parserOptions": {
@@ -23,17 +24,7 @@
     "react/react-in-jsx-scope": "off",
     "spaced-comment": "error",
     "quotes": ["error", "single"],
-    "no-duplicate-imports": "error",
-    "import/extensions": [
-      "error",
-      "ignorePackages",
-      {
-        "ts": ".js",
-        "tsx": ".jsx",
-        "js": ".js",
-        "jsx": ".jsx"
-      }
-    ]
+    "no-duplicate-imports": "error"
   },
   "ignorePatterns": [
     "dist/**/*",

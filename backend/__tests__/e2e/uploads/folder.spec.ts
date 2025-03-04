@@ -26,7 +26,7 @@ import {
   createMockUser,
   mockRabbitPublish,
   unmockMethods,
-} from '../../utils/mocks'
+} from '../../utils/mocks.js'
 import { MemoryBlockstore } from 'blockstore-core'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
 import { nodesRepository } from '../../../src/repositories/index.js'

@@ -1,4 +1,3 @@
-// eslint-disable-next-line import/extensions
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'

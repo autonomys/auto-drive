@@ -5,9 +5,9 @@ import {
   createMockUser,
   mockRabbitPublish,
   unmockMethods,
-} from '../../utils/mocks'
-import { dbMigration } from '../../utils/dbMigrate'
-import { SubscriptionsUseCases } from '../../../src/useCases'
+} from '../../utils/mocks.js'
+import { dbMigration } from '../../utils/dbMigrate.js'
+import { SubscriptionsUseCases } from '../../../src/useCases/index.js'
 
 describe('CreditsUseCases', () => {
   let mockUser: UserWithOrganization
