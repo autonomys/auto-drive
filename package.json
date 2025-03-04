@@ -9,6 +9,7 @@
     "backend",
     "frontend",
     "auth",
+    "gateway",
     "packages/*"
   ],
   "scripts": {
@@ -21,6 +22,7 @@
     "lint": "yarn workspaces foreach --all --exclude hasura --exclude @auto-drive/models run lint",
     "backend": "yarn workspace backend",
     "auth": "yarn workspace auth",
+    "gateway": "yarn workspace gateway",
     "models": "yarn workspace @auto-drive/models"
   },
   "packageManager": "yarn@4.2.2",
