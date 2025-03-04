@@ -7,8 +7,8 @@ import {
   createMockUser,
   mockRabbitPublish,
   unmockMethods,
-} from '../../utils/mocks'
-import { uploadFile } from '../../utils/uploads'
+} from '../../utils/mocks.js'
+import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
 
 describe('Object', () => {

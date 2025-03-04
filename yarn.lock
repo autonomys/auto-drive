@@ -6517,6 +6517,7 @@ __metadata:
     eslint-plugin-eslint-plugin: "npm:^6.3.1"
     eslint-plugin-import: "npm:^2.31.0"
     eslint-plugin-prettier: "npm:^5.2.1"
+    eslint-plugin-require-extensions: "npm:^0.1.3"
     express: "npm:^4.21.2"
     jest: "npm:^29.7.0"
     jsonwebtoken: "npm:^9.0.2"
@@ -6763,6 +6764,7 @@ __metadata:
     eslint-plugin-eslint-plugin: "npm:^6.3.1"
     eslint-plugin-import: "npm:^2.31.0"
     eslint-plugin-prettier: "npm:^5.2.1"
+    eslint-plugin-require-extensions: "npm:^0.1.3"
     express: "npm:^4.19.2"
     interface-blockstore: "npm:^5.3.1"
     interface-store: "npm:^6.0.2"
@@ -8956,6 +8958,15 @@ __metadata:
   peerDependencies:
     eslint: ^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9.7
   checksum: 10c0/4acbbdb19669dfa9a162ed8847c3ad1918f6aea1ceb675ee320b5d903b4e463fdef25e15233295b6d0a726fef2ea8b015c527da769c7690932ddc52d5b82ba12
+  languageName: node
+  linkType: hard
+
+"eslint-plugin-require-extensions@npm:^0.1.3":
+  version: 0.1.3
+  resolution: "eslint-plugin-require-extensions@npm:0.1.3"
+  peerDependencies:
+    eslint: "*"
+  checksum: 10c0/79aec6ac25139edd7e085c40dae0e7699b66a0f253333a80e5a2857762f258d8cf8c89fc873b9ada7c9d8d7722c0386164783eb979361c5bc02c5e7fc1175403
   languageName: node
   linkType: hard
 

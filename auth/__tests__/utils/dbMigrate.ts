@@ -1,4 +1,4 @@
-import { closeDatabase, getDatabase } from '../../src/drivers/pg'
+import { closeDatabase, getDatabase } from '../../src/drivers/pg.js'
 import dbMigrate from 'db-migrate'
 
 let dbMigrateInstance: ReturnType<typeof dbMigrate.getInstance>

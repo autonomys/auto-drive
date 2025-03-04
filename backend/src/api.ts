@@ -31,13 +31,13 @@ const createServer = async () => {
       }),
     )
   }
-  if (config.monitoring.active) {
-    app.use(requestTrace)
-  }
 
   app.use('/objects', objectController)
   app.use('/subscriptions', subscriptionController)
   app.use('/uploads', uploadController)
+  if (config.monitoring.active) {
+    app.use(requestTrace)
+  }
 
   app.get('/health', (_req, res) => {
     res.sendStatus(204)
