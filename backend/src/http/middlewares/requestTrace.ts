@@ -11,9 +11,20 @@ export const requestTrace: RequestHandler = (req, res) => {
       ? req.headers['x-auth-provider']
       : 'unknown'
 
+  const tags = {
+    chain: config.monitoring.metricEnvironmentTag,
+    method,
+    path,
+    provider,
+  }
+
+  const tag = Object.entries(tags)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(',')
+
   const metric: Metric = {
     measurement: 'auto_drive_api_request',
-    tag: config.monitoring.metricEnvironmentTag,
+    tag,
     fields: {
       status: res.statusCode,
       method,
