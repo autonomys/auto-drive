@@ -8,7 +8,6 @@ import { handleAuth } from './services/auth/express.js'
 import { uploadController } from './http/controllers/upload.js'
 import { config } from './config.js'
 import { logger } from './drivers/logger.js'
-import { requestTrace } from './http/middlewares/requestTrace.js'
 
 const createServer = async () => {
   const app = express()

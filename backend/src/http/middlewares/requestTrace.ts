@@ -1,14 +1,8 @@
 import { RequestHandler } from 'express'
 import { Metric, sendMetricToVictoria } from '../../drivers/vmetrics.js'
 import { config } from '../../config.js'
-import { logger } from '../../drivers/logger.js'
 
-export const requestTrace: RequestHandler = (req, res, next) => {
-  console.log('Request trace', {
-    path: req.route?.path,
-    method: req.method,
-    provider: req.headers['x-auth-provider'],
-  })
+export const requestTrace: RequestHandler = (req, res) => {
   const path = req.route?.path
 
   const method = req.method
