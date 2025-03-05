@@ -7,9 +7,7 @@ export const handleDownloadResponseHeaders = (
   metadata: OffchainMetadata,
 ) => {
   const safeName = encodeURIComponent(metadata.name || 'download')
-  const isExpectedDocument =
-    req.headers['sec-fetch-dest'] === 'document' ||
-    req.headers['sec-fetch-dest'] === 'iframe'
+  const isExpectedDocument = req.headers['sec-fetch-site'] === 'none'
 
   if (metadata.type === 'file') {
     res.set('Content-Type', metadata.mimeType || 'application/octet-stream')
