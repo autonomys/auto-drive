@@ -47,13 +47,13 @@ export const config = {
     url: env('RABBITMQ_URL'),
   },
   monitoring: {
-    active: env('MONITORING_ENABLED', 'false') === 'true',
+    active: env('VICTORIA_ACTIVE', 'false') === 'true',
     victoriaEndpoint: process.env.VICTORIA_ENDPOINT,
     auth: {
-      username: process.env.VICTORIA_AUTH_USERNAME,
-      password: process.env.VICTORIA_AUTH_PASSWORD,
+      username: process.env.VICTORIA_USERNAME,
+      password: process.env.VICTORIA_PASSWORD,
     },
-    metricEnvironmentTag: env('ENVIRONMENT_TAG', 'chain=unknown'),
+    metricEnvironmentTag: env('METRIC_ENVIRONMENT_TAG', 'chain=unknown'),
   },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),

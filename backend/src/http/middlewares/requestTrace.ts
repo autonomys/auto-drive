@@ -4,36 +4,29 @@ import { config } from '../../config.js'
 import { logger } from '../../drivers/logger.js'
 
 export const requestTrace: RequestHandler = (req, res, next) => {
+  console.log('Request trace', {
+    path: req.route?.path,
+    method: req.method,
+    provider: req.headers['x-auth-provider'],
+  })
   const path = req.route?.path
 
-  if (!path) {
-    logger.debug('No path found for request', {
-      method: req.method,
-      url: req.url,
-    })
-    return next()
+  const method = req.method
+  const provider =
+    typeof req.headers['x-auth-provider'] === 'string'
+      ? req.headers['x-auth-provider']
+      : 'unknown'
+
+  const metric: Metric = {
+    measurement: 'auto_drive_api_request',
+    tag: config.monitoring.metricEnvironmentTag,
+    fields: {
+      status: res.statusCode,
+      method,
+      path,
+      provider,
+    },
   }
 
-  res.once('finish', () => {
-    const method = req.method
-    const provider =
-      typeof req.headers['x-auth-provider'] === 'string'
-        ? req.headers['x-auth-provider']
-        : 'unknown'
-
-    const metric: Metric = {
-      measurement: 'auto_drive_api_request',
-      tag: config.monitoring.metricEnvironmentTag,
-      fields: {
-        status: res.statusCode,
-        method,
-        path,
-        provider,
-      },
-    }
-
-    sendMetricToVictoria(metric).catch(console.error)
-  })
-
-  next()
+  sendMetricToVictoria(metric).catch(console.error)
 }
