@@ -9,6 +9,10 @@ export const handleDownloadResponseHeaders = (
   const safeName = encodeURIComponent(metadata.name || 'download')
   const isExpectedDocument = req.headers['sec-fetch-site'] === 'none'
 
+  const shouldHandleEncoding = req.query.ignoreEncoding
+    ? req.query.ignoreEncoding !== 'true'
+    : isExpectedDocument
+
   if (metadata.type === 'file') {
     res.set('Content-Type', metadata.mimeType || 'application/octet-stream')
     res.set(
@@ -17,7 +21,7 @@ export const handleDownloadResponseHeaders = (
     )
     const compressedButNoEncrypted =
       metadata.uploadOptions?.compression && !metadata.uploadOptions?.encryption
-    if (compressedButNoEncrypted && isExpectedDocument) {
+    if (compressedButNoEncrypted && shouldHandleEncoding) {
       res.set('Content-Encoding', 'deflate')
     }
     res.set('Content-Length', metadata.totalSize.toString())

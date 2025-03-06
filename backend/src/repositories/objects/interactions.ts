@@ -51,6 +51,8 @@ const getInteractionsBySubscriptionIdAndTypeInTimeRange = async (
     [subscriptionId, type, start.toISOString(), end.toISOString()],
   )
 
+  console.log(interactions.rows)
+
   return mapRows(interactions.rows)
 }
 
