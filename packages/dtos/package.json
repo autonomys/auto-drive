@@ -1,0 +1,24 @@
+{
+  "name": "@auto-drive/dtos",
+  "packageManager": "yarn@4.2.2",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@auto-drive/models": "workspace:*",
+    "@autonomys/auto-drive": "^1.3.4"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-eslint-plugin": "^6.3.1",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "prettier": "^3.5.2",
+    "typescript": "^5.8.2"
+  }
+}

@@ -13,6 +13,7 @@
     "lint": "eslint . "
   },
   "dependencies": {
+    "@auto-drive/dtos": "workspace:*",
     "@auto-drive/models": "workspace:*",
     "@autonomys/auto-dag-data": "^1.0.8",
     "@autonomys/auto-drive": "^1.0.5",

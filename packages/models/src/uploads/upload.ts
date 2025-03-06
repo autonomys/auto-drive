@@ -1,38 +1,38 @@
-import { z } from "zod";
-import { FolderTreeFolder, FolderTreeFolderSchema } from "../objects/index.js";
+import { z } from 'zod'
+import { FolderTreeFolder, FolderTreeFolderSchema } from '../objects/index.js'
 import {
   CompressionAlgorithm,
   EncryptionAlgorithm,
   FileUploadOptions,
   OffchainFileMetadata,
   OffchainFolderMetadata,
-} from "@autonomys/auto-dag-data";
+} from '@autonomys/auto-dag-data'
 
 export enum UploadType {
-  FILE = "file",
-  FOLDER = "folder",
+  FILE = 'file',
+  FOLDER = 'folder',
 }
 
 export enum UploadStatus {
-  PENDING = "pending",
-  MIGRATING = "migrating",
-  CANCELLED = "cancelled",
-  FAILED = "failed",
+  PENDING = 'pending',
+  MIGRATING = 'migrating',
+  CANCELLED = 'cancelled',
+  FAILED = 'failed',
 }
 
 export type UploadEntry = {
-  id: string;
-  type: UploadType;
-  status: UploadStatus;
-  name: string;
-  file_tree: FolderTreeFolder | null;
-  mime_type: string | null;
-  root_upload_id: string;
-  relative_id: string | null;
-  oauth_provider: string;
-  oauth_user_id: string;
-  upload_options: FileUploadOptions | null;
-};
+  id: string
+  type: UploadType
+  status: UploadStatus
+  name: string
+  file_tree: FolderTreeFolder | null
+  mime_type: string | null
+  root_upload_id: string
+  relative_id: string | null
+  oauth_provider: string
+  oauth_user_id: string
+  upload_options: FileUploadOptions | null
+}
 
 export const uploadOptionsSchema = z.object({
   compression: z
@@ -47,11 +47,11 @@ export const uploadOptionsSchema = z.object({
       chunkSize: z.number().optional(),
     })
     .optional(),
-});
+})
 
 // & operator is used for ensure it represents a FileUploadOptions object
 export type UploadOptions = z.infer<typeof uploadOptionsSchema> &
-  FileUploadOptions;
+  FileUploadOptions
 
 export const fileUploadSchema = z.object({
   id: z.string(),
@@ -64,21 +64,21 @@ export const fileUploadSchema = z.object({
   mimeType: z.string().nullable(),
   oauthProvider: z.string(),
   oauthUserId: z.string(),
-});
+})
 
 export type FileUpload = {
-  id: string;
-  rootId: string;
-  relativeId: string | null;
-  type: UploadType;
-  status: UploadStatus;
-  fileTree: null;
-  name: string;
-  mimeType: string | null;
-  oauthProvider: string;
-  oauthUserId: string;
-  uploadOptions: FileUploadOptions | null;
-};
+  id: string
+  rootId: string
+  relativeId: string | null
+  type: UploadType
+  status: UploadStatus
+  fileTree: null
+  name: string
+  mimeType: string | null
+  oauthProvider: string
+  oauthUserId: string
+  uploadOptions: FileUploadOptions | null
+}
 
 export const mapModelToTable = (upload: Upload): UploadEntry => {
   return {
@@ -93,8 +93,8 @@ export const mapModelToTable = (upload: Upload): UploadEntry => {
     oauth_provider: upload.oauthProvider,
     oauth_user_id: upload.oauthUserId,
     upload_options: upload.uploadOptions,
-  };
-};
+  }
+}
 
 export const folderUploadSchema = z.object({
   id: z.string(),
@@ -108,18 +108,18 @@ export const folderUploadSchema = z.object({
   oauthProvider: z.string(),
   oauthUserId: z.string(),
   uploadOptions: z.null(),
-});
+})
 
-export type FolderUpload = z.infer<typeof folderUploadSchema>;
-export type Upload = FileUpload | FolderUpload;
+export type FolderUpload = z.infer<typeof folderUploadSchema>
+export type Upload = FileUpload | FolderUpload
 
-export type UploadArtifacts = FileArtifacts | FolderArtifacts;
+export type UploadArtifacts = FileArtifacts | FolderArtifacts
 
 export type FileArtifacts = {
-  metadata: OffchainFileMetadata;
-};
+  metadata: OffchainFileMetadata
+}
 
 export type FolderArtifacts = {
-  metadata: OffchainFolderMetadata;
-  childrenArtifacts: UploadArtifacts[];
-};
+  metadata: OffchainFolderMetadata
+  childrenArtifacts: UploadArtifacts[]
+}

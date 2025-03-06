@@ -23,7 +23,9 @@
     "backend": "yarn workspace backend",
     "auth": "yarn workspace auth",
     "gateway": "yarn workspace gateway",
-    "models": "yarn workspace @auto-drive/models"
+    "models": "yarn workspace @auto-drive/models",
+    "dtos": "yarn workspace @auto-drive/dtos",
+    "packages": "yarn workspaces list --json | grep -E '\\\"name\\\":\\\"@auto-drive/[^\\\"]+\\\"'  | sed -E 's/.*\\\"name\\\":\\\"([^\\\"]+)\\\".*/\\1/' | xargs -t -I {} yarn workspace {}"
   },
   "packageManager": "yarn@4.2.2",
   "devDependencies": {

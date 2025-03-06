@@ -23,8 +23,6 @@
   "additionalProperties": true,
   "compilerOptions": {
     "baseUrl": ".",
-    "paths": {
-      "@auto-drive/models": ["../node_modules/@auto-drive/models"]
-    }
+    "include": ["src/**/*.ts"]
   }
 }

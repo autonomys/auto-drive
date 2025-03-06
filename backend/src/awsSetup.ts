@@ -26,3 +26,5 @@ export const setupFinished = new Promise<void>((resolve) => {
     resolve()
   })
 })
+
+export type UploadType = 'file' | 'folder'

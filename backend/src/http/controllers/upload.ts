@@ -9,27 +9,34 @@ import {
   UploadedFile,
   FormField,
   Security,
+  Response,
 } from 'tsoa'
 import { Request as TRequest } from 'express'
 
 import { AuthType, handleAuth } from '../../services/auth/express.js'
 import { UploadsUseCases } from '../../useCases/uploads/uploads.js'
 import {
-  FileUpload,
   FolderTreeFolderSchema,
   uploadOptionsSchema,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { z } from 'zod'
 import { logger } from '../../drivers/logger.js'
+import {
+  FolderUpload,
+  FileUpload,
+  ApiResponse,
+  ErrorResponse,
+} from '@auto-drive/dtos'
 
-type AuthenticatedRequest = TRequest & {
+interface AuthenticatedRequest extends TRequest {
   user: UserWithOrganization
 }
 
 @Route('/uploads')
 export class UploadController extends Controller {
   @SuccessResponse(200, 'File upload created')
+  @Response<ErrorResponse>(400, 'Bad Request')
   @Post('/file')
   @Security(AuthType.Auth)
   public async createFileUpload(
@@ -40,7 +47,7 @@ export class UploadController extends Controller {
       uploadOptions?: unknown
     },
     @Request() request: AuthenticatedRequest,
-  ): Promise<{ error?: string } | FileUpload> {
+  ): Promise<ApiResponse<FileUpload>> {
     const user = await handleAuth(request)
     if (!user) {
       this.setStatus(401)
@@ -51,7 +58,9 @@ export class UploadController extends Controller {
 
     if (typeof filename !== 'string') {
       this.setStatus(400)
-      return { error: 'Invalid or missing filename' }
+      return {
+        error: 'Invalid or missing filename',
+      }
     }
 
     const safeUploadOptions = z
@@ -80,11 +89,12 @@ export class UploadController extends Controller {
   }
 
   @SuccessResponse(200, 'Folder upload created')
+  @Response<ErrorResponse>(400, 'Bad Request')
   @Post('/folder')
   public async createFolderUpload(
     @Body() requestBody: { fileTree: unknown; uploadOptions?: unknown },
     @Request() request: AuthenticatedRequest,
-  ): Promise<unknown> {
+  ): Promise<ApiResponse<FolderUpload>> {
     const { fileTree, uploadOptions } = requestBody
     const safeFileTree = FolderTreeFolderSchema.safeParse(fileTree)
     if (!safeFileTree.success) {
@@ -118,6 +128,8 @@ export class UploadController extends Controller {
   }
 
   @SuccessResponse(200, 'File in folder upload created')
+  @Response<ErrorResponse>(400, 'Bad Request')
+  @Response<ErrorResponse>(500, 'Internal Server Error')
   @Post('/folder/{uploadId}/file')
   public async createFileInFolder(
     @Path() uploadId: string,
@@ -129,7 +141,7 @@ export class UploadController extends Controller {
       uploadOptions?: unknown
     },
     @Request() request: AuthenticatedRequest,
-  ): Promise<unknown> {
+  ): Promise<ApiResponse<FileUpload>> {
     const { name, mimeType, relativeId, uploadOptions } = requestBody
 
     if (typeof name !== 'string') {
@@ -176,7 +188,7 @@ export class UploadController extends Controller {
     @UploadedFile('file') file: Express.Multer.File,
     @FormField() index: string,
     @Request() request: AuthenticatedRequest,
-  ): Promise<unknown> {
+  ): Promise<ApiResponse<{}>> {
     const chunk = file?.buffer
     const parsedIndex = parseInt(index)
 
@@ -199,7 +211,7 @@ export class UploadController extends Controller {
       )
 
       this.setStatus(200)
-      return { message: 'Chunk uploaded' }
+      return {}
     } catch (error) {
       logger.error(error)
       this.setStatus(500)
@@ -209,10 +221,11 @@ export class UploadController extends Controller {
 
   @SuccessResponse(200, 'Upload completed')
   @Post('/{uploadId}/complete')
+  @Response<ErrorResponse>(500, 'Internal Server Error')
   public async completeUpload(
     @Path() uploadId: string,
     @Request() request: AuthenticatedRequest,
-  ): Promise<unknown> {
+  ): Promise<ApiResponse<{ cid: string }>> {
     try {
       const cid = await UploadsUseCases.completeUpload(request.user, uploadId)
 
