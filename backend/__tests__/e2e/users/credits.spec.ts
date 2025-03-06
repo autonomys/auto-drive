@@ -12,7 +12,7 @@ import { SubscriptionsUseCases } from '../../../src/useCases/index.js'
 describe('CreditsUseCases', () => {
   let mockUser: UserWithOrganization
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     mockRabbitPublish()
     await getDatabase()
     await dbMigration.up()
@@ -21,7 +21,7 @@ describe('CreditsUseCases', () => {
     if (!result) throw new PreconditionError('Failed to setup test user')
   })
 
-  afterAll(async () => {
+  afterEach(async () => {
     unmockMethods()
     await closeDatabase()
     await dbMigration.down()
