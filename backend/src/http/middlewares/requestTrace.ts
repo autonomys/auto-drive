@@ -33,5 +33,5 @@ export const requestTrace: RequestHandler = (req, res) => {
     },
   }
 
-  sendMetricToVictoria(metric).catch(console.error)
+  sendMetricToVictoria(metric)
 }
