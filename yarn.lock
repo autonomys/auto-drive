@@ -205,25 +205,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-utils@npm:^1.3.1":
-  version: 1.3.1
-  resolution: "@autonomys/auto-utils@npm:1.3.1"
+"@autonomys/auto-utils@npm:^1.3.1, @autonomys/auto-utils@npm:^1.3.2":
+  version: 1.3.4
+  resolution: "@autonomys/auto-utils@npm:1.3.4"
   dependencies:
     "@polkadot/api": "npm:^14.3.1"
     "@polkadot/extension-dapp": "npm:^0.56.2"
     fs: "npm:^0.0.1-security"
-  checksum: 10c0/b85c73089e74b45b5b8f33e43acff3c1a10bdcea22611eb51dd2574354d6baec784335d0c9412ea1687f0d032b0e1e5ac686630b1339d03b0ce57b698a5635c5
-  languageName: node
-  linkType: hard
-
-"@autonomys/auto-utils@npm:^1.3.2":
-  version: 1.3.2
-  resolution: "@autonomys/auto-utils@npm:1.3.2"
-  dependencies:
-    "@polkadot/api": "npm:^14.3.1"
-    "@polkadot/extension-dapp": "npm:^0.56.2"
-    fs: "npm:^0.0.1-security"
-  checksum: 10c0/1659b6d579f9a23b76df5997c98224e554dadc6666d802dbb24c65f58c8eb4423facb20aa66be5c65371ac47b63bbf8c7e4cdd4547b0f6c80a005d77029d871a
+  checksum: 10c0/3e558a46e1cdb371f985b61e0bd4637faf1a840e3fe2b69773bbdb51657c1cfb2d2ceda86d66d617579a142fa0600c11ac80e4fd4bf44caf647c80c3dc47f341
   languageName: node
   linkType: hard
 
