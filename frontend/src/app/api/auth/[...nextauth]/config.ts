@@ -77,6 +77,22 @@ export const authOptions: AuthOptions = {
   session: {
     strategy: 'jwt',
   },
+  cookies: {
+    sessionToken: {
+      name:
+        process.env.NODE_ENV === 'production'
+          ? `__Secure-next-auth.session-token`
+          : `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: true,
+        // 7 days
+        maxAge: 60 * 60 * 24 * 7,
+      },
+    },
+  },
   events: {
     async signOut({ token }) {
       if (token.refreshToken) {
