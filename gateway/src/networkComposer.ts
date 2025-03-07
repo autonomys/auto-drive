@@ -17,9 +17,9 @@ export const getFileNetwork = async (cid: string) => {
         const object = await api.searchByNameOrCID(cid);
         const fileExists = object.length > 0;
         const endpoint = ApiPatternByNetwork[network]?.replace("{cid}", cid);
-        const url = `${endpoint}?ignoreEncoding=false`;
 
         if (fileExists && endpoint) {
+          const url = `${endpoint}?ignoreEncoding=false`;
           const file = object[0];
           return {
             type: file.type,
