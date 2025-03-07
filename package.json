@@ -25,7 +25,7 @@
     "gateway": "yarn workspace gateway",
     "models": "yarn workspace @auto-drive/models"
   },
-  "packageManager": "yarn@4.2.2",
+  "packageManager": "yarn@4.7.0",
   "devDependencies": {
     "eslint-plugin-import": "^2.31.0"
   }
