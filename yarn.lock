@@ -5115,11 +5115,11 @@ __metadata:
   linkType: hard
 
 "@types/amqplib@npm:^0.10.6":
-  version: 0.10.6
-  resolution: "@types/amqplib@npm:0.10.6"
+  version: 0.10.7
+  resolution: "@types/amqplib@npm:0.10.7"
   dependencies:
     "@types/node": "npm:*"
-  checksum: 10c0/9a3252013cb6f52d9716aa98a63260832435492a8010a5e7d1013483aa86866a7fe28f035895528bfe8387ce4697db6f39b94655eafd2735d066613164493a36
+  checksum: 10c0/058f466ef31df65e4d1b72f4d2ba41801e3b7227329cd1651f83eb98be3610aa2e116fbbccbbb65e062ad1358e59b32dfe9c69dd58cf3893bb8429d78e6653f5
   languageName: node
   linkType: hard
 
