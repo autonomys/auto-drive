@@ -1,4 +1,4 @@
-import { defaultNetworkId, NetworkId } from './networks';
+import { defaultNetworkId, NetworkId } from 'constants/networks';
 
 export const EXTERNAL_ROUTES = {
   autonomys: 'https://autonomys.xyz/',
@@ -25,6 +25,8 @@ export const EXTERNAL_ROUTES = {
   subscan: 'https://autonomys.subscan.io/',
   spaceAcres:
     'https://api.github.com/repos/autonomys/space-acres/releases/latest',
+  astral: 'https://astral.autonomys.xyz/',
+  farmerDocs: 'https://docs.autonomys.xyz/category/farming',
 };
 
 export const ROUTES = {
@@ -40,5 +42,6 @@ export const ROUTES = {
   shared: (networkId: NetworkId) => `/${networkId}/drive/shared`,
   trash: (networkId: NetworkId) => `/${networkId}/drive/trash`,
   profile: (networkId: NetworkId) => `/${networkId}/drive/profile`,
+  developers: (networkId: NetworkId) => `/${networkId}/drive/developers`,
   admin: (networkId: NetworkId) => `/${networkId}/drive/admin`,
 };

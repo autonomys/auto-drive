@@ -1,6 +1,6 @@
 'use client';
 
-import { GlobalFiles } from '../../../../views/GlobalFiles';
+import { GlobalFiles } from '@/components/FileTables/GlobalFiles';
 
 export default function Page() {
   return <GlobalFiles />;

@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { cn } from '../../../utils/cn';
 
 export const Table = ({
   children,
@@ -8,15 +9,8 @@ export const Table = ({
   className?: string;
 }) => {
   return (
-    <div
-      className='border-separate rounded-lg border'
-      style={{ borderSpacing: '0px' }}
-    >
-      <table
-        className={`min-w-full border-collapse rounded-lg ${className ?? ''}`}
-      >
-        {children}
-      </table>
+    <div className='w-full border-separate rounded-lg border'>
+      <table className={cn('w-full', className)}>{children}</table>
     </div>
   );
 };

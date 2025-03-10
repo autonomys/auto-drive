@@ -1,11 +1,12 @@
 volumes:
   node-data: {}
   postgres_db: {}
+  files_cache: {}
 
 services:
   # Hasura GraphQL Engine
   hasura:
-    image: hasura/graphql-engine:v2.40.0
+    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
     depends_on:
       backend:
         condition: service_healthy
@@ -63,11 +64,10 @@ services:
       - rabbit
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    working_dir: /usr/src/app
+      context: .
+      dockerfile: ./backend/Dockerfile
     volumes:
-      - ./backend:/usr/src/app
+      - files_cache:/usr/src/app/.cache
     ports:
       - "3000:3000"
     restart: unless-stopped

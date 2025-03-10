@@ -1,7 +1,7 @@
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAuth } from './services/auth/jwt';
-import { UserInfo } from './models/User';
+import { checkAuth } from 'services/auth/jwt';
+import { MaybeUser } from '@auto-drive/models';
 import { cookies } from 'next/headers';
 
 export async function middleware(req: NextRequest) {
@@ -23,20 +23,20 @@ export async function middleware(req: NextRequest) {
       : NextResponse.next();
   }
 
-  const userInfo: UserInfo | null = await checkAuth(
+  const userInfo: MaybeUser | null = await checkAuth(
     session.authProvider,
     session.accessToken,
   ).catch(() => null);
 
+  console.log('userInfo', userInfo);
+
   if (!userInfo) {
-    console.log('redirecting to home: 2');
     return pathname !== '/'
       ? NextResponse.redirect(new URL('/', req.url))
       : NextResponse.next();
   }
 
   if (!userInfo.onboarded) {
-    console.log('redirecting to onboarding');
     return pathname.startsWith('/onboarding')
       ? NextResponse.next()
       : NextResponse.redirect(new URL('/onboarding', req.url));

@@ -1,6 +1,6 @@
 import bytes from 'bytes';
 import { Download, Upload } from 'lucide-react';
-import { Button } from '../common/Button';
+import { Button } from 'components/common/Button';
 
 interface CreditLimitsProps {
   uploadPending: number;
@@ -26,19 +26,14 @@ export const RemainingCreditTracker = ({
   const downloadPercentage = (downloadUsed / downloadLimit) * 100;
 
   return (
-    <div className='mx-auto w-full max-w-sm overflow-hidden rounded-lg bg-white'>
+    <div className='mx-auto w-full max-w-sm overflow-hidden rounded-lg bg-white dark:bg-darkWhite dark:text-darkBlack'>
       <div className='py-4'>
         <div className='space-y-6'>
           <div>
-            <div className='mb-1 flex justify-between text-sm text-gray-600'>
+            <div className='mb-1 flex justify-between text-sm text-gray-600 dark:text-darkBlack'>
               <span>
-                <span className='text-primary'>
-                  {bytes(Number(uploadUsed))}
-                </span>
-                /
-                <span className='text-gray-500'>
-                  {bytes(Number(uploadLimit))}
-                </span>
+                <span>{bytes(Number(uploadUsed))}</span>/
+                <span>{bytes(Number(uploadLimit))}</span>
               </span>
               <span className='text-secondary px-2'>
                 <Upload className='h-4 w-4' />
@@ -46,7 +41,7 @@ export const RemainingCreditTracker = ({
             </div>
             <div className='h-2.5 w-full rounded-full bg-gray-200'>
               <div
-                className='h-2.5 w-32 rounded-full bg-primary'
+                className='h-2.5 w-32 rounded-full bg-primary dark:bg-darkPrimary'
                 style={{ width: `${uploadPercentage}%` }}
                 role='progressbar'
                 aria-valuenow={uploadUsed}
@@ -57,10 +52,12 @@ export const RemainingCreditTracker = ({
           </div>
 
           <div>
-            <div className='mb-1 flex justify-between text-sm text-gray-600'>
+            <div className='mb-1 flex justify-between text-sm text-gray-600 text-primary dark:text-darkBlack'>
               <span>
-                <span className='text-primary'>{bytes(downloadUsed)}</span>/
-                <span className='text-gray-500'>{bytes(downloadLimit)}</span>
+                <span>{bytes(downloadUsed)}</span>/
+                <span className='text-gray-500 dark:text-darkBlack'>
+                  {bytes(downloadLimit)}
+                </span>
               </span>
               <span className='text-secondary px-2'>
                 <Download className='h-4 w-4' />
@@ -68,7 +65,7 @@ export const RemainingCreditTracker = ({
             </div>
             <div className='h-2.5 w-8 w-full rounded-full bg-gray-200'>
               <div
-                className='h-2.5 w-full rounded-full bg-primary'
+                className='h-2.5 w-full rounded-full bg-primary dark:bg-darkPrimary'
                 style={{ width: `${downloadPercentage}%` }}
                 role='progressbar'
                 aria-valuenow={downloadUsed}
@@ -79,8 +76,10 @@ export const RemainingCreditTracker = ({
           </div>
         </div>
         <div className='mt-2 flex flex-col text-center'>
-          <span className='text-sm text-gray-400'>Credit for period</span>
-          <div className='text-center text-sm text-gray-600'>
+          <span className='text-sm text-gray-400 dark:text-darkBlack'>
+            Credit for period
+          </span>
+          <div className='text-center text-sm text-gray-600 dark:text-darkBlack'>
             {startDate} - {endDate}
           </div>
         </div>

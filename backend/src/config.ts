@@ -46,6 +46,15 @@ export const config = {
   rabbitmq: {
     url: env('RABBITMQ_URL'),
   },
+  monitoring: {
+    active: env('VICTORIA_ACTIVE', 'false') === 'true',
+    victoriaEndpoint: process.env.VICTORIA_ENDPOINT,
+    auth: {
+      username: process.env.VICTORIA_USERNAME,
+      password: process.env.VICTORIA_PASSWORD,
+    },
+    metricEnvironmentTag: env('METRIC_ENVIRONMENT_TAG', 'chain=unknown'),
+  },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
     maxUploadNodesPerBatch: Number(env('MAX_UPLOAD_NODES_PER_BATCH', '20')),

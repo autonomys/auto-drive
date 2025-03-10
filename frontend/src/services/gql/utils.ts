@@ -1,31 +1,35 @@
 import {
   GetAllUsersWithSubscriptionsQuery,
   GetMetadataByHeadCidQuery,
-} from '../../../gql/graphql';
+} from 'gql/graphql';
 import {
   SubscriptionGranularity,
   SubscriptionWithUser,
-} from '../../models/Subscriptions';
-import {
+  UserRole,
+  ObjectInformation,
   OwnerRole,
-  UploadedObjectMetadata,
-} from '../../models/UploadedObjectMetadata';
-import { UserRole } from '../../models/User';
+} from '@auto-drive/models';
 
 export const mapObjectInformationFromQueryResult = (
   result: GetMetadataByHeadCidQuery,
-): UploadedObjectMetadata => {
-  const metadata = result.metadata[0];
+): ObjectInformation => {
+  const metadata = result.metadata.at(0);
+  if (!metadata) {
+    throw new Error('Metadata not found');
+  }
+
   return {
+    cid: metadata.head_cid,
     metadata: metadata.metadata,
+    createdAt: metadata.created_at,
     uploadStatus: {
       uploadedNodes: metadata.publishedNodes?.aggregate?.count ?? 0,
       totalNodes: metadata.totalNodes?.aggregate?.count ?? 0,
       archivedNodes: metadata.archivedNodes?.aggregate?.count ?? 0,
       minimumBlockDepth:
-        metadata.minimumBlockDepth[0]?.transaction_result?.blockNumber ?? null,
+        metadata.minimumBlockDepth?.[0]?.block_published_on ?? null,
       maximumBlockDepth:
-        metadata.maximumBlockDepth[0]?.transaction_result?.blockNumber ?? null,
+        metadata.maximumBlockDepth?.[0]?.block_published_on ?? null,
     },
     owners: metadata.object_ownership.map((owner) => ({
       role: owner.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,

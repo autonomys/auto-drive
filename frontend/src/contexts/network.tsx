@@ -1,18 +1,18 @@
 import { createContext, useContext, useEffect, useMemo } from 'react';
-import { Network } from '../constants/networks';
-import { Api, createApiService } from '../services/api';
+import { Network } from 'constants/networks';
+import { Api, createApiService } from 'services/api';
 import {
   ApolloClient,
   ApolloProvider,
   NormalizedCacheObject,
 } from '@apollo/client';
-import { createGQLClient } from '../services/gql';
+import { createGQLClient } from 'services/gql';
 import {
   createDownloadService,
   DownloadApi as DownloadService,
-} from '../services/download';
-import { createUploadService, UploadService } from '../services/upload';
-import { useUserStore } from '../states/user';
+} from 'services/download';
+import { createUploadService, UploadService } from 'services/upload';
+import { useUserStore } from 'globalStates/user';
 
 interface NetworkArtifact {
   network: Network;

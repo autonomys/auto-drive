@@ -37,7 +37,18 @@ export const metadata: Metadata = {
     'data persistence',
   ],
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      {
+        media: '(prefers-color-scheme: light)',
+        url: '/favicon.ico',
+        href: '/favicon.ico',
+      },
+      {
+        media: '(prefers-color-scheme: dark)',
+        url: '/favicon-dark.ico',
+        href: '/favicon-dark.ico',
+      },
+    ],
   },
   openGraph: {
     title: 'Auto Drive',

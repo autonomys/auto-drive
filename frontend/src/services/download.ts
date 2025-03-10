@@ -1,8 +1,8 @@
-import { handleFileDownload } from '../utils/file';
-import { openDatabase } from '../utils/indexedb';
-import { bufferToIterable } from '../utils/async';
-import { useNetwork } from '../contexts/network';
-import { Api } from './api';
+import { handleFileDownload } from 'utils/file';
+import { openDatabase } from 'utils/indexedb';
+import { bufferToIterable } from 'utils/async';
+import { useNetwork } from 'contexts/network';
+import { Api } from 'services/api';
 
 export interface DownloadApi {
   fetchFile: (cid: string, password?: string) => Promise<void>;
@@ -13,7 +13,6 @@ export const createDownloadService = (api: Api) => {
     const fileInCache = await hasFileInCache(cid);
 
     if (fileInCache) {
-      console.log('Fetching file from cache', cid);
       return fetchFromCache(cid);
     }
 

@@ -12,13 +12,12 @@ import { CID } from 'multiformats'
 import { nodesRepository } from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/index.js'
-import { ObjectMapping } from '../../models/objects/objectMappings.js'
 import {
   asyncIterableForEach,
   asyncIterableToPromiseOfArray,
 } from '../../utils/async.js'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
-import { UploadType } from '../../models/uploads/upload.js'
+import { UploadType, ObjectMapping, TransactionResult } from '@auto-drive/models'
 import { ObjectUseCases } from './object.js'
 import { logger } from '../../drivers/logger.js'
 import { Node } from '../../repositories/objects/nodes.js'
@@ -54,6 +53,8 @@ const saveNode = async (
     cid: cidString,
     type,
     encoded_node: encodedNode,
+    block_published_on: null,
+    tx_published_on: null,
   })
 }
 
@@ -145,6 +146,8 @@ const migrateFromBlockstoreToNodesTable = async (
             head_cid: cidToString(rootCID),
             type: decodeIPLDNodeData(Buffer.from(e.block)).type,
             encoded_node: Buffer.from(e.block).toString('base64'),
+            block_published_on: null,
+            tx_published_on: null,
           })),
         )
       },
@@ -198,14 +201,32 @@ const scheduleNodeArchiving = async (
   TaskManager.publish(tasks)
 }
 
-export const getCidsByRootCid = async (rootCid: string): Promise<string[]> => {
+const getCidsByRootCid = async (rootCid: string): Promise<string[]> => {
   return nodesRepository
     .getNodesByRootCid(rootCid)
     .then((e) => e.map((e) => e.cid))
 }
 
-export const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
+const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
   return nodesRepository.getNodesByCids(cids)
+}
+
+const setPublishedOn = async (
+  cid: string,
+  result: TransactionResult,
+): Promise<void> => {
+  if (!result.blockNumber || !result.txHash) {
+    logger.error(`No block number or tx hash for ${cid}`)
+    throw new Error(`No block number or tx hash for ${cid}`)
+  }
+
+  await nodesRepository.updateNodePublishedOn(
+    cid,
+    result.blockNumber,
+    result.txHash,
+  )
+
+  return
 }
 
 export const NodesUseCases = {
@@ -218,4 +239,5 @@ export const NodesUseCases = {
   getCidsByRootCid,
   getNodesByCids,
   scheduleNodeArchiving,
+  setPublishedOn,
 }

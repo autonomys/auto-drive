@@ -1,15 +1,11 @@
+import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
-  AuthProvider,
-  createAutoDriveApi,
-  downloadFile,
-} from '@autonomys/auto-drive';
-import {
-  SubscriptionGranularity,
   SubscriptionInfo,
-} from '../models/Subscriptions';
-import { UploadedObjectMetadata } from '../models/UploadedObjectMetadata';
-import { getAuthSession } from '../utils/auth';
-import { uploadFileContent } from '../utils/file';
+  SubscriptionGranularity,
+  ObjectInformation,
+} from '@auto-drive/models';
+import { getAuthSession } from 'utils/auth';
+import { uploadFileContent } from 'utils/file';
 
 export interface UploadResponse {
   cid: string;
@@ -89,7 +85,7 @@ export const createApiService = (apiBaseUrl: string) => ({
   },
   fetchUploadedObjectMetadata: async (
     cid: string,
-  ): Promise<UploadedObjectMetadata> => {
+  ): Promise<ObjectInformation> => {
     const response = await fetch(`${apiBaseUrl}/objects/${cid}`);
 
     if (!response.ok) {
@@ -113,7 +109,7 @@ export const createApiService = (apiBaseUrl: string) => ({
       apiKey: session.accessToken,
     });
 
-    return downloadFile(api, cid, password);
+    return api.downloadFile(cid, password);
   },
   shareObject: async (dataCid: string, publicId: string): Promise<void> => {
     const session = await getAuthSession();
@@ -199,18 +195,12 @@ export const createApiService = (apiBaseUrl: string) => ({
       throw new Error('No session');
     }
 
-    const response = await fetch(`${apiBaseUrl}/objects/${cid}/publish`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-      },
+    const apiDrive = createAutoDriveApi({
+      provider: session.authProvider as AuthProvider,
+      apiKey: session.accessToken,
+      url: apiBaseUrl,
     });
 
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.json().then((data) => data.result);
+    return apiDrive.publishObject(cid);
   },
 });

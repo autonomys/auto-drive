@@ -1,6 +1,7 @@
-import { NetworkId } from '@/constants/networks';
-import { ROUTES } from '@/constants/routes';
+import { NetworkId } from 'constants/networks';
+import { ROUTES } from 'constants/routes';
 import {
+  CodeXmlIcon,
   Earth,
   HomeIcon,
   SettingsIcon,
@@ -9,10 +10,10 @@ import {
   UsersIcon,
 } from 'lucide-react';
 import React, { useMemo } from 'react';
-import { RoleProtected } from '../RoleProtected';
-import { UserRole } from '@/models/User';
-import { RemainingCreditTracker } from '../RemainingCreditTracker';
-import { useUserStore } from '@/states/user';
+import { RoleProtected } from 'components/RoleProtected';
+import { UserRole } from '@auto-drive/models';
+import { RemainingCreditTracker } from 'components/RemainingCreditTracker';
+import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';
 import { NavItem } from './NavItem';
 
@@ -36,6 +37,11 @@ export const NAV_ITEMS = [
     href: (networkId: NetworkId) => ROUTES.trash(networkId),
     icon: TrashIcon,
     label: 'Trash',
+  },
+  {
+    href: (networkId: NetworkId) => ROUTES.developers(networkId),
+    icon: CodeXmlIcon,
+    label: 'Developers',
   },
   {
     href: (networkId: NetworkId) => ROUTES.profile(networkId),

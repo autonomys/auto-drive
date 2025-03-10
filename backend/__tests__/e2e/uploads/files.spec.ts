@@ -1,4 +1,3 @@
-import { UserWithOrganization } from '../../../src/models/users/index.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   createMockUser,
@@ -7,10 +6,14 @@ import {
 } from '../../utils/mocks.js'
 import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
 import {
+  UserWithOrganization,
   Upload,
   UploadStatus,
   UploadType,
-} from '../../../src/models/uploads/upload.js'
+  InteractionType,
+  OwnerRole,
+  TransactionStatus,
+} from '@auto-drive/models'
 import { blockstoreRepository } from '../../../src/repositories/uploads/index.js'
 import { MemoryBlockstore } from 'blockstore-core'
 import {
@@ -28,19 +31,13 @@ import {
   FilesUseCases,
   NodesUseCases,
   SubscriptionsUseCases,
-  TransactionResultsUseCases,
 } from '../../../src/useCases/index.js'
 import {
   interactionsRepository,
   metadataRepository,
   nodesRepository,
 } from '../../../src/repositories/index.js'
-import { InteractionType } from '../../../src/models/objects/interactions.js'
 import { memoryDownloadCache } from '../../../src/services/download/memoryDownloadCache/index.js'
-import {
-  OwnerRole,
-  TransactionStatus,
-} from '../../../src/models/objects/index.js'
 import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
 import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
@@ -262,6 +259,8 @@ files.map((file, index) => {
       })
 
       it('download cache should be updated', async () => {
+        // Wait for the async context to finish
+        await new Promise((resolve) => setTimeout(resolve, 300))
         const asyncFromDatabase = await fsCache.get(cid)
         expect(asyncFromDatabase).not.toBeNull()
         const fileArrayFromDatabase = await asyncIterableToPromiseOfArray(
@@ -309,7 +308,7 @@ files.map((file, index) => {
         // Mocking publishing onchain
         const nodes = await nodesRepository.getNodesByHeadCid(cid)
         const transactionResults = nodes.map((node) =>
-          TransactionResultsUseCases.setTransactionResults(node.cid, {
+          NodesUseCases.setPublishedOn(node.cid, {
             success: true,
             txHash: '0x123',
             status: TransactionStatus.CONFIRMED,

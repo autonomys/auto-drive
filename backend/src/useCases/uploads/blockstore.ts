@@ -13,9 +13,9 @@ import {
   Upload,
   UploadStatus,
   UploadType,
-} from '../../models/uploads/upload.js'
+  FolderTreeFolder,
+} from '@auto-drive/models'
 import { UploadsUseCases } from './uploads.js'
-import { FolderTreeFolder } from '../../models/objects/index.js'
 import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 
@@ -25,7 +25,9 @@ const getFileUploadIdCID = async (uploadId: string): Promise<CID> => {
     MetadataType.File,
   )
   if (blockstoreEntry.length !== 1) {
-    throw new Error('Invalid number of blockstore entries')
+    throw new Error(
+      `Invalid number of blockstore entries for file upload with id=${uploadId}`,
+    )
   }
   const cid = blockstoreEntry[0].cid
 
@@ -38,7 +40,9 @@ const getFolderUploadIdCID = async (uploadId: string): Promise<CID> => {
     MetadataType.Folder,
   )
   if (blockstoreEntry.length !== 1) {
-    throw new Error('Invalid number of blockstore entries')
+    throw new Error(
+      `Invalid number of blockstore entries for folder upload with id=${uploadId}`,
+    )
   }
   const cid = blockstoreEntry[0].cid
 

@@ -9,9 +9,9 @@ import {
   Upload,
   UploadStatus,
   UploadType,
-} from '../../models/uploads/upload.js'
-import { FolderTreeFolder } from '../../models/objects/folderTree.js'
-import { UserWithOrganization } from '../../models/users/user.js'
+  FolderTreeFolder,
+  UserWithOrganization,
+} from '@auto-drive/models'
 import { filePartsRepository } from '../../repositories/uploads/fileParts.js'
 import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../repositories/uploads/fileProcessingInfo.js'
@@ -195,7 +195,10 @@ const completeUpload = async (
 
   await uploadsRepository.updateUploadEntry(updatedUpload)
 
-  await scheduleNodeMigration(uploadId)
+  const isRootUpload = upload.root_upload_id === uploadId
+  if (isRootUpload) {
+    await scheduleNodeMigration(uploadId)
+  }
 
   return cidToString(cid)
 }

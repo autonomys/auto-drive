@@ -29,7 +29,7 @@ export const createFileCache = (config: BaseCacheConfig) => {
 
   const filepathCache = createCache({
     stores: config.stores,
-    nonBlocking: true,
+    nonBlocking: false,
   })
 
   const deserialize = (data: Omit<FileResponse, 'data'> | null) => {

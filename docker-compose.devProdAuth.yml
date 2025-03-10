@@ -29,27 +29,17 @@ services:
       - RABBITMQ_DEFAULT_PASS=guest
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/Dockerfile
     depends_on:
       - rabbitmq
       - postgres
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
-      RPC_ENDPOINT: ${RPC_ENDPOINT}
-      PRIVATE_KEYS_PATH: ${PRIVATE_KEYS_PATH}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
-      OBJECT_MAPPING_ARCHIVER_URL: ${OBJECT_MAPPING_ARCHIVER_URL}
-      MAX_CACHE_SIZE: ${MAX_CACHE_SIZE}
-      JWT_SECRET: ${JWT_SECRET}
-      FILES_GATEWAY_URL: ${FILES_GATEWAY_URL}
-      FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}
-      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
-      AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      OPTIONAL_AUTH: ${OPTIONAL_AUTH}
-      MAX_CONCURRENT_UPLOADS: ${MAX_CONCURRENT_UPLOADS}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 15s
@@ -58,12 +48,12 @@ services:
     ports:
       - "${PORT}:3000"
   hasura:
-    image: hasura/graphql-engine:v2.40.0
+    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
     depends_on:
       backend:
         condition: service_healthy
     volumes:
-      - ./hasura/metadata:/hasura-metadata
+      - ./hasura:/app
     restart: unless-stopped
     environment:
       # Essential Environment Variables
@@ -96,9 +86,7 @@ services:
       HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false" # Disable query allowlisting
 
       # Hasura Migrations and Metadata
-      HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
+      HASURA_GRAPHQL_METADATA_DIR: /app/metadata
+      HASURA_GRAPHQL_MIGRATIONS_DIR: /app/migrations
     ports:
       - "${HASURA_GRAPHQL_PORT}:8080"
-    command:
-      - graphql-engine
-      - serve

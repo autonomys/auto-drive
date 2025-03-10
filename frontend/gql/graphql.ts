@@ -657,6 +657,126 @@ export type Metadata_Order_By = {
   updated_at?: InputMaybe<Order_By>;
 };
 
+/** columns and relationships of "metadata_roots" */
+export type Metadata_Roots = {
+  __typename?: 'metadata_roots';
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  head_cid?: Maybe<Scalars['String']['output']>;
+  /** An object relationship */
+  inner_metadata?: Maybe<Metadata>;
+  metadata?: Maybe<Scalars['jsonb']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  root_cid?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamp']['output']>;
+};
+
+
+/** columns and relationships of "metadata_roots" */
+export type Metadata_RootsMetadataArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "metadata_roots" */
+export type Metadata_Roots_Aggregate = {
+  __typename?: 'metadata_roots_aggregate';
+  aggregate?: Maybe<Metadata_Roots_Aggregate_Fields>;
+  nodes: Array<Metadata_Roots>;
+};
+
+/** aggregate fields of "metadata_roots" */
+export type Metadata_Roots_Aggregate_Fields = {
+  __typename?: 'metadata_roots_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Metadata_Roots_Max_Fields>;
+  min?: Maybe<Metadata_Roots_Min_Fields>;
+};
+
+
+/** aggregate fields of "metadata_roots" */
+export type Metadata_Roots_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Metadata_Roots_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** Boolean expression to filter rows from the table "metadata_roots". All fields are combined with a logical 'AND'. */
+export type Metadata_Roots_Bool_Exp = {
+  _and?: InputMaybe<Array<Metadata_Roots_Bool_Exp>>;
+  _not?: InputMaybe<Metadata_Roots_Bool_Exp>;
+  _or?: InputMaybe<Array<Metadata_Roots_Bool_Exp>>;
+  created_at?: InputMaybe<Timestamp_Comparison_Exp>;
+  head_cid?: InputMaybe<String_Comparison_Exp>;
+  inner_metadata?: InputMaybe<Metadata_Bool_Exp>;
+  metadata?: InputMaybe<Jsonb_Comparison_Exp>;
+  name?: InputMaybe<String_Comparison_Exp>;
+  root_cid?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
+};
+
+/** aggregate max on columns */
+export type Metadata_Roots_Max_Fields = {
+  __typename?: 'metadata_roots_max_fields';
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  head_cid?: Maybe<Scalars['String']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  root_cid?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamp']['output']>;
+};
+
+/** aggregate min on columns */
+export type Metadata_Roots_Min_Fields = {
+  __typename?: 'metadata_roots_min_fields';
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  head_cid?: Maybe<Scalars['String']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  root_cid?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamp']['output']>;
+};
+
+/** Ordering options when selecting data from "metadata_roots". */
+export type Metadata_Roots_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  head_cid?: InputMaybe<Order_By>;
+  inner_metadata?: InputMaybe<Metadata_Order_By>;
+  metadata?: InputMaybe<Order_By>;
+  name?: InputMaybe<Order_By>;
+  root_cid?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** select columns of table "metadata_roots" */
+export enum Metadata_Roots_Select_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  HeadCid = 'head_cid',
+  /** column name */
+  Metadata = 'metadata',
+  /** column name */
+  Name = 'name',
+  /** column name */
+  RootCid = 'root_cid',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+/** Streaming cursor of the table "metadata_roots" */
+export type Metadata_Roots_Stream_Cursor_Input = {
+  /** Stream column input with initial value */
+  initial_value: Metadata_Roots_Stream_Cursor_Value_Input;
+  /** cursor ordering */
+  ordering?: InputMaybe<Cursor_Ordering>;
+};
+
+/** Initial value of the column from where the streaming should start */
+export type Metadata_Roots_Stream_Cursor_Value_Input = {
+  created_at?: InputMaybe<Scalars['timestamp']['input']>;
+  head_cid?: InputMaybe<Scalars['String']['input']>;
+  metadata?: InputMaybe<Scalars['jsonb']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  root_cid?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
+};
+
 /** select columns of table "metadata" */
 export enum Metadata_Select_Column {
   /** column name */
@@ -694,6 +814,7 @@ export type Metadata_Stream_Cursor_Value_Input = {
 /** columns and relationships of "nodes" */
 export type Nodes = {
   __typename?: 'nodes';
+  block_published_on?: Maybe<Scalars['Int']['output']>;
   cid: Scalars['String']['output'];
   encoded_node?: Maybe<Scalars['String']['output']>;
   head_cid?: Maybe<Scalars['String']['output']>;
@@ -706,8 +827,7 @@ export type Nodes = {
   /** An object relationship */
   root?: Maybe<Nodes>;
   root_cid?: Maybe<Scalars['String']['output']>;
-  /** An object relationship */
-  transaction_result?: Maybe<Transaction_Results>;
+  tx_published_on?: Maybe<Scalars['String']['output']>;
   type?: Maybe<Scalars['String']['output']>;
 };
 
@@ -790,12 +910,14 @@ export type Nodes_Aggregate_Order_By = {
 /** aggregate avg on columns */
 export type Nodes_Avg_Fields = {
   __typename?: 'nodes_avg_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by avg() on columns of table "nodes" */
 export type Nodes_Avg_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -805,6 +927,7 @@ export type Nodes_Bool_Exp = {
   _and?: InputMaybe<Array<Nodes_Bool_Exp>>;
   _not?: InputMaybe<Nodes_Bool_Exp>;
   _or?: InputMaybe<Array<Nodes_Bool_Exp>>;
+  block_published_on?: InputMaybe<Int_Comparison_Exp>;
   cid?: InputMaybe<String_Comparison_Exp>;
   encoded_node?: InputMaybe<String_Comparison_Exp>;
   head_cid?: InputMaybe<String_Comparison_Exp>;
@@ -814,58 +937,67 @@ export type Nodes_Bool_Exp = {
   piece_offset?: InputMaybe<Int_Comparison_Exp>;
   root?: InputMaybe<Nodes_Bool_Exp>;
   root_cid?: InputMaybe<String_Comparison_Exp>;
-  transaction_result?: InputMaybe<Transaction_Results_Bool_Exp>;
+  tx_published_on?: InputMaybe<String_Comparison_Exp>;
   type?: InputMaybe<String_Comparison_Exp>;
 };
 
 /** aggregate max on columns */
 export type Nodes_Max_Fields = {
   __typename?: 'nodes_max_fields';
+  block_published_on?: Maybe<Scalars['Int']['output']>;
   cid?: Maybe<Scalars['String']['output']>;
   encoded_node?: Maybe<Scalars['String']['output']>;
   head_cid?: Maybe<Scalars['String']['output']>;
   piece_index?: Maybe<Scalars['Int']['output']>;
   piece_offset?: Maybe<Scalars['Int']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
+  tx_published_on?: Maybe<Scalars['String']['output']>;
   type?: Maybe<Scalars['String']['output']>;
 };
 
 /** order by max() on columns of table "nodes" */
 export type Nodes_Max_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   cid?: InputMaybe<Order_By>;
   encoded_node?: InputMaybe<Order_By>;
   head_cid?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
+  tx_published_on?: InputMaybe<Order_By>;
   type?: InputMaybe<Order_By>;
 };
 
 /** aggregate min on columns */
 export type Nodes_Min_Fields = {
   __typename?: 'nodes_min_fields';
+  block_published_on?: Maybe<Scalars['Int']['output']>;
   cid?: Maybe<Scalars['String']['output']>;
   encoded_node?: Maybe<Scalars['String']['output']>;
   head_cid?: Maybe<Scalars['String']['output']>;
   piece_index?: Maybe<Scalars['Int']['output']>;
   piece_offset?: Maybe<Scalars['Int']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
+  tx_published_on?: Maybe<Scalars['String']['output']>;
   type?: Maybe<Scalars['String']['output']>;
 };
 
 /** order by min() on columns of table "nodes" */
 export type Nodes_Min_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   cid?: InputMaybe<Order_By>;
   encoded_node?: InputMaybe<Order_By>;
   head_cid?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
+  tx_published_on?: InputMaybe<Order_By>;
   type?: InputMaybe<Order_By>;
 };
 
 /** Ordering options when selecting data from "nodes". */
 export type Nodes_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   cid?: InputMaybe<Order_By>;
   encoded_node?: InputMaybe<Order_By>;
   head_cid?: InputMaybe<Order_By>;
@@ -874,12 +1006,14 @@ export type Nodes_Order_By = {
   piece_offset?: InputMaybe<Order_By>;
   root?: InputMaybe<Nodes_Order_By>;
   root_cid?: InputMaybe<Order_By>;
-  transaction_result?: InputMaybe<Transaction_Results_Order_By>;
+  tx_published_on?: InputMaybe<Order_By>;
   type?: InputMaybe<Order_By>;
 };
 
 /** select columns of table "nodes" */
 export enum Nodes_Select_Column {
+  /** column name */
+  BlockPublishedOn = 'block_published_on',
   /** column name */
   Cid = 'cid',
   /** column name */
@@ -893,18 +1027,22 @@ export enum Nodes_Select_Column {
   /** column name */
   RootCid = 'root_cid',
   /** column name */
+  TxPublishedOn = 'tx_published_on',
+  /** column name */
   Type = 'type'
 }
 
 /** aggregate stddev on columns */
 export type Nodes_Stddev_Fields = {
   __typename?: 'nodes_stddev_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by stddev() on columns of table "nodes" */
 export type Nodes_Stddev_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -912,12 +1050,14 @@ export type Nodes_Stddev_Order_By = {
 /** aggregate stddev_pop on columns */
 export type Nodes_Stddev_Pop_Fields = {
   __typename?: 'nodes_stddev_pop_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by stddev_pop() on columns of table "nodes" */
 export type Nodes_Stddev_Pop_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -925,12 +1065,14 @@ export type Nodes_Stddev_Pop_Order_By = {
 /** aggregate stddev_samp on columns */
 export type Nodes_Stddev_Samp_Fields = {
   __typename?: 'nodes_stddev_samp_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by stddev_samp() on columns of table "nodes" */
 export type Nodes_Stddev_Samp_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -945,24 +1087,28 @@ export type Nodes_Stream_Cursor_Input = {
 
 /** Initial value of the column from where the streaming should start */
 export type Nodes_Stream_Cursor_Value_Input = {
+  block_published_on?: InputMaybe<Scalars['Int']['input']>;
   cid?: InputMaybe<Scalars['String']['input']>;
   encoded_node?: InputMaybe<Scalars['String']['input']>;
   head_cid?: InputMaybe<Scalars['String']['input']>;
   piece_index?: InputMaybe<Scalars['Int']['input']>;
   piece_offset?: InputMaybe<Scalars['Int']['input']>;
   root_cid?: InputMaybe<Scalars['String']['input']>;
+  tx_published_on?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** aggregate sum on columns */
 export type Nodes_Sum_Fields = {
   __typename?: 'nodes_sum_fields';
+  block_published_on?: Maybe<Scalars['Int']['output']>;
   piece_index?: Maybe<Scalars['Int']['output']>;
   piece_offset?: Maybe<Scalars['Int']['output']>;
 };
 
 /** order by sum() on columns of table "nodes" */
 export type Nodes_Sum_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -970,12 +1116,14 @@ export type Nodes_Sum_Order_By = {
 /** aggregate var_pop on columns */
 export type Nodes_Var_Pop_Fields = {
   __typename?: 'nodes_var_pop_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by var_pop() on columns of table "nodes" */
 export type Nodes_Var_Pop_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -983,12 +1131,14 @@ export type Nodes_Var_Pop_Order_By = {
 /** aggregate var_samp on columns */
 export type Nodes_Var_Samp_Fields = {
   __typename?: 'nodes_var_samp_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by var_samp() on columns of table "nodes" */
 export type Nodes_Var_Samp_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -996,12 +1146,14 @@ export type Nodes_Var_Samp_Order_By = {
 /** aggregate variance on columns */
 export type Nodes_Variance_Fields = {
   __typename?: 'nodes_variance_fields';
+  block_published_on?: Maybe<Scalars['Float']['output']>;
   piece_index?: Maybe<Scalars['Float']['output']>;
   piece_offset?: Maybe<Scalars['Float']['output']>;
 };
 
 /** order by variance() on columns of table "nodes" */
 export type Nodes_Variance_Order_By = {
+  block_published_on?: InputMaybe<Order_By>;
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
@@ -1416,9 +1568,9 @@ export type Published_Objects_Stream_Cursor_Value_Input = {
 
 export type Query_Root = {
   __typename?: 'query_root';
-  /** An array relationship */
+  /** fetch data from the table: "api_keys" */
   api_keys: Array<Api_Keys>;
-  /** An aggregate relationship */
+  /** fetch aggregated fields from the table: "api_keys" */
   api_keys_aggregate: Api_Keys_Aggregate;
   /** fetch data from the table: "api_keys" using primary key columns */
   api_keys_by_pk?: Maybe<Api_Keys>;
@@ -1432,6 +1584,10 @@ export type Query_Root = {
   metadata_aggregate: Metadata_Aggregate;
   /** fetch data from the table: "metadata" using primary key columns */
   metadata_by_pk?: Maybe<Metadata>;
+  /** fetch data from the table: "metadata_roots" */
+  metadata_roots: Array<Metadata_Roots>;
+  /** fetch aggregated fields from the table: "metadata_roots" */
+  metadata_roots_aggregate: Metadata_Roots_Aggregate;
   /** An array relationship */
   nodes: Array<Nodes>;
   /** An aggregate relationship */
@@ -1462,12 +1618,6 @@ export type Query_Root = {
   subscriptions_aggregate: Subscriptions_Aggregate;
   /** fetch data from the table: "subscriptions" using primary key columns */
   subscriptions_by_pk?: Maybe<Subscriptions>;
-  /** fetch data from the table: "transaction_results" */
-  transaction_results: Array<Transaction_Results>;
-  /** fetch aggregated fields from the table: "transaction_results" */
-  transaction_results_aggregate: Transaction_Results_Aggregate;
-  /** fetch data from the table: "transaction_results" using primary key columns */
-  transaction_results_by_pk?: Maybe<Transaction_Results>;
   /** An array relationship */
   users: Array<Users>;
   /** An aggregate relationship */
@@ -1543,6 +1693,24 @@ export type Query_RootMetadata_AggregateArgs = {
 export type Query_RootMetadata_By_PkArgs = {
   head_cid: Scalars['String']['input'];
   root_cid: Scalars['String']['input'];
+};
+
+
+export type Query_RootMetadata_RootsArgs = {
+  distinct_on?: InputMaybe<Array<Metadata_Roots_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Metadata_Roots_Order_By>>;
+  where?: InputMaybe<Metadata_Roots_Bool_Exp>;
+};
+
+
+export type Query_RootMetadata_Roots_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Metadata_Roots_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Metadata_Roots_Order_By>>;
+  where?: InputMaybe<Metadata_Roots_Bool_Exp>;
 };
 
 
@@ -1663,29 +1831,6 @@ export type Query_RootSubscriptions_By_PkArgs = {
 };
 
 
-export type Query_RootTransaction_ResultsArgs = {
-  distinct_on?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Transaction_Results_Order_By>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
-};
-
-
-export type Query_RootTransaction_Results_AggregateArgs = {
-  distinct_on?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Transaction_Results_Order_By>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
-};
-
-
-export type Query_RootTransaction_Results_By_PkArgs = {
-  cid: Scalars['String']['input'];
-};
-
-
 export type Query_RootUsersArgs = {
   distinct_on?: InputMaybe<Array<Users_Select_Column>>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -1729,9 +1874,9 @@ export type Query_RootUsers_Organizations_AggregateArgs = {
 
 export type Subscription_Root = {
   __typename?: 'subscription_root';
-  /** An array relationship */
+  /** fetch data from the table: "api_keys" */
   api_keys: Array<Api_Keys>;
-  /** An aggregate relationship */
+  /** fetch aggregated fields from the table: "api_keys" */
   api_keys_aggregate: Api_Keys_Aggregate;
   /** fetch data from the table: "api_keys" using primary key columns */
   api_keys_by_pk?: Maybe<Api_Keys>;
@@ -1749,6 +1894,12 @@ export type Subscription_Root = {
   metadata_aggregate: Metadata_Aggregate;
   /** fetch data from the table: "metadata" using primary key columns */
   metadata_by_pk?: Maybe<Metadata>;
+  /** fetch data from the table: "metadata_roots" */
+  metadata_roots: Array<Metadata_Roots>;
+  /** fetch aggregated fields from the table: "metadata_roots" */
+  metadata_roots_aggregate: Metadata_Roots_Aggregate;
+  /** fetch data from the table in a streaming manner: "metadata_roots" */
+  metadata_roots_stream: Array<Metadata_Roots>;
   /** fetch data from the table in a streaming manner: "metadata" */
   metadata_stream: Array<Metadata>;
   /** An array relationship */
@@ -1791,14 +1942,6 @@ export type Subscription_Root = {
   subscriptions_by_pk?: Maybe<Subscriptions>;
   /** fetch data from the table in a streaming manner: "subscriptions" */
   subscriptions_stream: Array<Subscriptions>;
-  /** fetch data from the table: "transaction_results" */
-  transaction_results: Array<Transaction_Results>;
-  /** fetch aggregated fields from the table: "transaction_results" */
-  transaction_results_aggregate: Transaction_Results_Aggregate;
-  /** fetch data from the table: "transaction_results" using primary key columns */
-  transaction_results_by_pk?: Maybe<Transaction_Results>;
-  /** fetch data from the table in a streaming manner: "transaction_results" */
-  transaction_results_stream: Array<Transaction_Results>;
   /** An array relationship */
   users: Array<Users>;
   /** An aggregate relationship */
@@ -1892,6 +2035,31 @@ export type Subscription_RootMetadata_AggregateArgs = {
 export type Subscription_RootMetadata_By_PkArgs = {
   head_cid: Scalars['String']['input'];
   root_cid: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootMetadata_RootsArgs = {
+  distinct_on?: InputMaybe<Array<Metadata_Roots_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Metadata_Roots_Order_By>>;
+  where?: InputMaybe<Metadata_Roots_Bool_Exp>;
+};
+
+
+export type Subscription_RootMetadata_Roots_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Metadata_Roots_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Metadata_Roots_Order_By>>;
+  where?: InputMaybe<Metadata_Roots_Bool_Exp>;
+};
+
+
+export type Subscription_RootMetadata_Roots_StreamArgs = {
+  batch_size: Scalars['Int']['input'];
+  cursor: Array<InputMaybe<Metadata_Roots_Stream_Cursor_Input>>;
+  where?: InputMaybe<Metadata_Roots_Bool_Exp>;
 };
 
 
@@ -2051,36 +2219,6 @@ export type Subscription_RootSubscriptions_StreamArgs = {
   batch_size: Scalars['Int']['input'];
   cursor: Array<InputMaybe<Subscriptions_Stream_Cursor_Input>>;
   where?: InputMaybe<Subscriptions_Bool_Exp>;
-};
-
-
-export type Subscription_RootTransaction_ResultsArgs = {
-  distinct_on?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Transaction_Results_Order_By>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
-};
-
-
-export type Subscription_RootTransaction_Results_AggregateArgs = {
-  distinct_on?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Transaction_Results_Order_By>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
-};
-
-
-export type Subscription_RootTransaction_Results_By_PkArgs = {
-  cid: Scalars['String']['input'];
-};
-
-
-export type Subscription_RootTransaction_Results_StreamArgs = {
-  batch_size: Scalars['Int']['input'];
-  cursor: Array<InputMaybe<Transaction_Results_Stream_Cursor_Input>>;
-  where?: InputMaybe<Transaction_Results_Bool_Exp>;
 };
 
 
@@ -2336,116 +2474,12 @@ export type Timestamp_Comparison_Exp = {
   _nin?: InputMaybe<Array<Scalars['timestamp']['input']>>;
 };
 
-/** columns and relationships of "transaction_results" */
-export type Transaction_Results = {
-  __typename?: 'transaction_results';
-  cid: Scalars['String']['output'];
-  created_at?: Maybe<Scalars['timestamp']['output']>;
-  /** An object relationship */
-  node?: Maybe<Nodes>;
-  transaction_result?: Maybe<Scalars['jsonb']['output']>;
-  updated_at: Scalars['timestamp']['output'];
-};
-
-
-/** columns and relationships of "transaction_results" */
-export type Transaction_ResultsTransaction_ResultArgs = {
-  path?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** aggregated selection of "transaction_results" */
-export type Transaction_Results_Aggregate = {
-  __typename?: 'transaction_results_aggregate';
-  aggregate?: Maybe<Transaction_Results_Aggregate_Fields>;
-  nodes: Array<Transaction_Results>;
-};
-
-/** aggregate fields of "transaction_results" */
-export type Transaction_Results_Aggregate_Fields = {
-  __typename?: 'transaction_results_aggregate_fields';
-  count: Scalars['Int']['output'];
-  max?: Maybe<Transaction_Results_Max_Fields>;
-  min?: Maybe<Transaction_Results_Min_Fields>;
-};
-
-
-/** aggregate fields of "transaction_results" */
-export type Transaction_Results_Aggregate_FieldsCountArgs = {
-  columns?: InputMaybe<Array<Transaction_Results_Select_Column>>;
-  distinct?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-/** Boolean expression to filter rows from the table "transaction_results". All fields are combined with a logical 'AND'. */
-export type Transaction_Results_Bool_Exp = {
-  _and?: InputMaybe<Array<Transaction_Results_Bool_Exp>>;
-  _not?: InputMaybe<Transaction_Results_Bool_Exp>;
-  _or?: InputMaybe<Array<Transaction_Results_Bool_Exp>>;
-  cid?: InputMaybe<String_Comparison_Exp>;
-  created_at?: InputMaybe<Timestamp_Comparison_Exp>;
-  node?: InputMaybe<Nodes_Bool_Exp>;
-  transaction_result?: InputMaybe<Jsonb_Comparison_Exp>;
-  updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
-};
-
-/** aggregate max on columns */
-export type Transaction_Results_Max_Fields = {
-  __typename?: 'transaction_results_max_fields';
-  cid?: Maybe<Scalars['String']['output']>;
-  created_at?: Maybe<Scalars['timestamp']['output']>;
-  updated_at?: Maybe<Scalars['timestamp']['output']>;
-};
-
-/** aggregate min on columns */
-export type Transaction_Results_Min_Fields = {
-  __typename?: 'transaction_results_min_fields';
-  cid?: Maybe<Scalars['String']['output']>;
-  created_at?: Maybe<Scalars['timestamp']['output']>;
-  updated_at?: Maybe<Scalars['timestamp']['output']>;
-};
-
-/** Ordering options when selecting data from "transaction_results". */
-export type Transaction_Results_Order_By = {
-  cid?: InputMaybe<Order_By>;
-  created_at?: InputMaybe<Order_By>;
-  node?: InputMaybe<Nodes_Order_By>;
-  transaction_result?: InputMaybe<Order_By>;
-  updated_at?: InputMaybe<Order_By>;
-};
-
-/** select columns of table "transaction_results" */
-export enum Transaction_Results_Select_Column {
-  /** column name */
-  Cid = 'cid',
-  /** column name */
-  CreatedAt = 'created_at',
-  /** column name */
-  TransactionResult = 'transaction_result',
-  /** column name */
-  UpdatedAt = 'updated_at'
-}
-
-/** Streaming cursor of the table "transaction_results" */
-export type Transaction_Results_Stream_Cursor_Input = {
-  /** Stream column input with initial value */
-  initial_value: Transaction_Results_Stream_Cursor_Value_Input;
-  /** cursor ordering */
-  ordering?: InputMaybe<Cursor_Ordering>;
-};
-
-/** Initial value of the column from where the streaming should start */
-export type Transaction_Results_Stream_Cursor_Value_Input = {
-  cid?: InputMaybe<Scalars['String']['input']>;
-  created_at?: InputMaybe<Scalars['timestamp']['input']>;
-  transaction_result?: InputMaybe<Scalars['jsonb']['input']>;
-  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
-};
-
 /** columns and relationships of "users" */
 export type Users = {
   __typename?: 'users';
-  /** An array relationship */
+  /** fetch data from the table: "api_keys" */
   api_keys: Array<Api_Keys>;
-  /** An aggregate relationship */
+  /** fetch aggregated fields from the table: "api_keys" */
   api_keys_aggregate: Api_Keys_Aggregate;
   created_at?: Maybe<Scalars['timestamp']['output']>;
   oauth_provider: Scalars['String']['output'];
@@ -2756,12 +2790,54 @@ export type Users_Stream_Cursor_Value_Input = {
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
 
+export type GetGlobalFilesQueryVariables = Exact<{
+  limit: Scalars['Int']['input'];
+  offset: Scalars['Int']['input'];
+  orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
+}>;
+
+
+export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, oauth_provider: string, oauth_user_id: string }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+
+export type GetSharedFilesQueryVariables = Exact<{
+  oauthUserId: Scalars['String']['input'];
+  oauthProvider: Scalars['String']['input'];
+  limit: Scalars['Int']['input'];
+  offset: Scalars['Int']['input'];
+  orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
+}>;
+
+
+export type GetSharedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+
+export type GetTrashedFilesQueryVariables = Exact<{
+  oauthUserId: Scalars['String']['input'];
+  oauthProvider: Scalars['String']['input'];
+  limit: Scalars['Int']['input'];
+  offset: Scalars['Int']['input'];
+  orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
+}>;
+
+
+export type GetTrashedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+
+export type GetMyFilesQueryVariables = Exact<{
+  oauthUserId: Scalars['String']['input'];
+  oauthProvider: Scalars['String']['input'];
+  limit: Scalars['Int']['input'];
+  offset: Scalars['Int']['input'];
+  orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
+}>;
+
+
+export type GetMyFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+
 export type GetMetadataByHeadCidQueryVariables = Exact<{
   headCid: Scalars['String']['input'];
 }>;
 
 
-export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', metadata?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
+export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', head_cid: string, metadata?: any | null, created_at?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
 
 export type SearchGlobalMetadataByCidOrNameQueryVariables = Exact<{
   search: Scalars['String']['input'];
@@ -2786,79 +2862,430 @@ export type GetAllUsersWithSubscriptionsQueryVariables = Exact<{ [key: string]: 
 
 export type GetAllUsersWithSubscriptionsQuery = { __typename?: 'query_root', users: Array<{ __typename?: 'users', role: string, publicId?: string | null, oauthProvider: string, oauthUserId: string, user_membership?: { __typename?: 'users_organizations', subscription?: { __typename?: 'subscriptions', id: string, granularity: string, organizationId: string, uploadLimit: any, downloadLimit: any } | null } | null }> };
 
-export type GetGlobalFilesQueryVariables = Exact<{
-  limit: Scalars['Int']['input'];
-  offset: Scalars['Int']['input'];
-}>;
 
+export const GetGlobalFilesDocument = gql`
+    query GetGlobalFiles($limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
+  metadata_roots(
+    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}}
+    limit: $limit
+    offset: $offset
+    order_by: $orderBy
+  ) {
+    cid: head_cid
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    children: metadata(path: "children")
+    createdAt: created_at
+    inner_metadata {
+      maximumBlockDepth: nodes(
+        order_by: {block_published_on: desc_nulls_last}
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      minimumBlockDepth: nodes(
+        order_by: {block_published_on: desc_nulls_last}
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
+        aggregate {
+          count
+        }
+      }
+      archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
+        aggregate {
+          count
+        }
+      }
+      totalNodes: nodes_aggregate {
+        aggregate {
+          count
+        }
+      }
+      object_ownership {
+        is_admin
+        oauth_provider
+        oauth_user_id
+      }
+    }
+  }
+  metadata_roots_aggregate(
+    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}}
+  ) {
+    aggregate {
+      count
+    }
+  }
+}
+    `;
 
-export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, oauth_provider: string, oauth_user_id: string }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
+/**
+ * __useGetGlobalFilesQuery__
+ *
+ * To run a query within a React component, call `useGetGlobalFilesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetGlobalFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetGlobalFilesQuery({
+ *   variables: {
+ *      limit: // value for 'limit'
+ *      offset: // value for 'offset'
+ *      orderBy: // value for 'orderBy'
+ *   },
+ * });
+ */
+export function useGetGlobalFilesQuery(baseOptions: Apollo.QueryHookOptions<GetGlobalFilesQuery, GetGlobalFilesQueryVariables> & ({ variables: GetGlobalFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>(GetGlobalFilesDocument, options);
+      }
+export function useGetGlobalFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>(GetGlobalFilesDocument, options);
+        }
+export function useGetGlobalFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>(GetGlobalFilesDocument, options);
+        }
+export type GetGlobalFilesQueryHookResult = ReturnType<typeof useGetGlobalFilesQuery>;
+export type GetGlobalFilesLazyQueryHookResult = ReturnType<typeof useGetGlobalFilesLazyQuery>;
+export type GetGlobalFilesSuspenseQueryHookResult = ReturnType<typeof useGetGlobalFilesSuspenseQuery>;
+export type GetGlobalFilesQueryResult = Apollo.QueryResult<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>;
+export const GetSharedFilesDocument = gql`
+    query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
+  metadata_roots(
+    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}
+    limit: $limit
+    offset: $offset
+    order_by: $orderBy
+  ) {
+    cid: head_cid
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    children: metadata(path: "children")
+    createdAt: created_at
+    inner_metadata {
+      maximumBlockDepth: nodes(
+        order_by: {block_published_on: desc_nulls_last}
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      minimumBlockDepth: nodes(
+        order_by: {block_published_on: desc_nulls_last}
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
+        aggregate {
+          count
+        }
+      }
+      archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
+        aggregate {
+          count
+        }
+      }
+      totalNodes: nodes_aggregate {
+        aggregate {
+          count
+        }
+      }
+      object_ownership {
+        oauth_provider
+        oauth_user_id
+        is_admin
+      }
+    }
+  }
+  metadata_roots_aggregate(
+    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}
+  ) {
+    aggregate {
+      count
+    }
+  }
+}
+    `;
 
-export type GetProfileQueryVariables = Exact<{ [key: string]: never; }>;
+/**
+ * __useGetSharedFilesQuery__
+ *
+ * To run a query within a React component, call `useGetSharedFilesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetSharedFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetSharedFilesQuery({
+ *   variables: {
+ *      oauthUserId: // value for 'oauthUserId'
+ *      oauthProvider: // value for 'oauthProvider'
+ *      limit: // value for 'limit'
+ *      offset: // value for 'offset'
+ *      orderBy: // value for 'orderBy'
+ *   },
+ * });
+ */
+export function useGetSharedFilesQuery(baseOptions: Apollo.QueryHookOptions<GetSharedFilesQuery, GetSharedFilesQueryVariables> & ({ variables: GetSharedFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetSharedFilesQuery, GetSharedFilesQueryVariables>(GetSharedFilesDocument, options);
+      }
+export function useGetSharedFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetSharedFilesQuery, GetSharedFilesQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetSharedFilesQuery, GetSharedFilesQueryVariables>(GetSharedFilesDocument, options);
+        }
+export function useGetSharedFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetSharedFilesQuery, GetSharedFilesQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetSharedFilesQuery, GetSharedFilesQueryVariables>(GetSharedFilesDocument, options);
+        }
+export type GetSharedFilesQueryHookResult = ReturnType<typeof useGetSharedFilesQuery>;
+export type GetSharedFilesLazyQueryHookResult = ReturnType<typeof useGetSharedFilesLazyQuery>;
+export type GetSharedFilesSuspenseQueryHookResult = ReturnType<typeof useGetSharedFilesSuspenseQuery>;
+export type GetSharedFilesQueryResult = Apollo.QueryResult<GetSharedFilesQuery, GetSharedFilesQueryVariables>;
+export const GetTrashedFilesDocument = gql`
+    query GetTrashedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
+  metadata_roots(
+    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: false}}}}}
+    limit: $limit
+    offset: $offset
+    order_by: $orderBy
+  ) {
+    cid: head_cid
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    children: metadata(path: "children")
+    created_at
+    inner_metadata {
+      published_objects {
+        id
+      }
+      maximumBlockDepth: nodes(
+        order_by: {block_published_on: desc_nulls_last}
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      minimumBlockDepth: nodes(
+        order_by: {block_published_on: desc_nulls_last}
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
+        aggregate {
+          count
+        }
+      }
+      archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
+        aggregate {
+          count
+        }
+      }
+      totalNodes: nodes_aggregate {
+        aggregate {
+          count
+        }
+      }
+      object_ownership {
+        oauth_provider
+        oauth_user_id
+        is_admin
+      }
+    }
+  }
+  metadata_roots_aggregate(
+    distinct_on: root_cid
+    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: false}}}}}
+  ) {
+    aggregate {
+      count
+    }
+  }
+}
+    `;
 
+/**
+ * __useGetTrashedFilesQuery__
+ *
+ * To run a query within a React component, call `useGetTrashedFilesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetTrashedFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetTrashedFilesQuery({
+ *   variables: {
+ *      oauthUserId: // value for 'oauthUserId'
+ *      oauthProvider: // value for 'oauthProvider'
+ *      limit: // value for 'limit'
+ *      offset: // value for 'offset'
+ *      orderBy: // value for 'orderBy'
+ *   },
+ * });
+ */
+export function useGetTrashedFilesQuery(baseOptions: Apollo.QueryHookOptions<GetTrashedFilesQuery, GetTrashedFilesQueryVariables> & ({ variables: GetTrashedFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>(GetTrashedFilesDocument, options);
+      }
+export function useGetTrashedFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>(GetTrashedFilesDocument, options);
+        }
+export function useGetTrashedFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>(GetTrashedFilesDocument, options);
+        }
+export type GetTrashedFilesQueryHookResult = ReturnType<typeof useGetTrashedFilesQuery>;
+export type GetTrashedFilesLazyQueryHookResult = ReturnType<typeof useGetTrashedFilesLazyQuery>;
+export type GetTrashedFilesSuspenseQueryHookResult = ReturnType<typeof useGetTrashedFilesSuspenseQuery>;
+export type GetTrashedFilesQueryResult = Apollo.QueryResult<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>;
+export const GetMyFilesDocument = gql`
+    query GetMyFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
+  metadata_roots(
+    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}}
+    limit: $limit
+    offset: $offset
+    order_by: $orderBy
+  ) {
+    cid: head_cid
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    children: metadata(path: "children")
+    created_at
+    inner_metadata {
+      published_objects {
+        id
+      }
+      maximumBlockDepth: nodes(
+        order_by: {block_published_on: desc_nulls_last}
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      minimumBlockDepth: nodes(
+        order_by: {block_published_on: desc_nulls_last}
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
+        aggregate {
+          count
+        }
+      }
+      archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
+        aggregate {
+          count
+        }
+      }
+      totalNodes: nodes_aggregate {
+        aggregate {
+          count
+        }
+      }
+      object_ownership {
+        oauth_provider
+        oauth_user_id
+        is_admin
+      }
+    }
+  }
+  metadata_roots_aggregate(
+    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}}
+  ) {
+    aggregate {
+      count
+    }
+  }
+}
+    `;
 
-export type GetProfileQuery = { __typename?: 'query_root', users: Array<{ __typename?: 'users', public_id?: string | null, oauth_user_id: string, oauth_provider: string, api_keys: Array<{ __typename?: 'api_keys', id: string, oauth_user_id: string, oauth_provider: string, created_at?: any | null, deleted_at?: any | null }> }> };
-
-export type GetSharedFilesQueryVariables = Exact<{
-  oauthUserId: Scalars['String']['input'];
-  oauthProvider: Scalars['String']['input'];
-  limit: Scalars['Int']['input'];
-  offset: Scalars['Int']['input'];
-}>;
-
-
-export type GetSharedFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
-
-export type GetTrashedFilesQueryVariables = Exact<{
-  oauthUserId: Scalars['String']['input'];
-  oauthProvider: Scalars['String']['input'];
-  limit: Scalars['Int']['input'];
-  offset: Scalars['Int']['input'];
-}>;
-
-
-export type GetTrashedFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
-
-export type GetMyFilesQueryVariables = Exact<{
-  oauthUserId: Scalars['String']['input'];
-  oauthProvider: Scalars['String']['input'];
-  limit: Scalars['Int']['input'];
-  offset: Scalars['Int']['input'];
-}>;
-
-
-export type GetMyFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', root_metadata?: { __typename?: 'metadata', cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', transaction_result?: { __typename?: 'transaction_results', blockNumber?: any | null } | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
-
-
+/**
+ * __useGetMyFilesQuery__
+ *
+ * To run a query within a React component, call `useGetMyFilesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetMyFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetMyFilesQuery({
+ *   variables: {
+ *      oauthUserId: // value for 'oauthUserId'
+ *      oauthProvider: // value for 'oauthProvider'
+ *      limit: // value for 'limit'
+ *      offset: // value for 'offset'
+ *      orderBy: // value for 'orderBy'
+ *   },
+ * });
+ */
+export function useGetMyFilesQuery(baseOptions: Apollo.QueryHookOptions<GetMyFilesQuery, GetMyFilesQueryVariables> & ({ variables: GetMyFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetMyFilesQuery, GetMyFilesQueryVariables>(GetMyFilesDocument, options);
+      }
+export function useGetMyFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetMyFilesQuery, GetMyFilesQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetMyFilesQuery, GetMyFilesQueryVariables>(GetMyFilesDocument, options);
+        }
+export function useGetMyFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetMyFilesQuery, GetMyFilesQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetMyFilesQuery, GetMyFilesQueryVariables>(GetMyFilesDocument, options);
+        }
+export type GetMyFilesQueryHookResult = ReturnType<typeof useGetMyFilesQuery>;
+export type GetMyFilesLazyQueryHookResult = ReturnType<typeof useGetMyFilesLazyQuery>;
+export type GetMyFilesSuspenseQueryHookResult = ReturnType<typeof useGetMyFilesSuspenseQuery>;
+export type GetMyFilesQueryResult = Apollo.QueryResult<GetMyFilesQuery, GetMyFilesQueryVariables>;
 export const GetMetadataByHeadCidDocument = gql`
     query GetMetadataByHeadCID($headCid: String!) {
   metadata(
-    distinct_on: root_cid
     where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
   ) {
+    head_cid
     metadata
+    created_at
     published_objects {
       id
     }
     maximumBlockDepth: nodes(
-      order_by: {transaction_result: {created_at: desc_nulls_first}}
+      order_by: {block_published_on: desc_nulls_last}
       limit: 1
     ) {
-      transaction_result {
-        blockNumber: transaction_result(path: "blockNumber")
-      }
+      block_published_on
+      tx_published_on
     }
     minimumBlockDepth: nodes(
-      order_by: {transaction_result: {created_at: asc}}
+      order_by: {block_published_on: desc_nulls_last}
       limit: 1
     ) {
-      transaction_result {
-        blockNumber: transaction_result(path: "blockNumber")
-      }
+      block_published_on
+      tx_published_on
     }
-    publishedNodes: nodes_aggregate(
-      where: {transaction_result: {transaction_result: {_is_null: false}}}
-    ) {
+    publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
       aggregate {
         count
       }
@@ -3063,456 +3490,3 @@ export type GetAllUsersWithSubscriptionsQueryHookResult = ReturnType<typeof useG
 export type GetAllUsersWithSubscriptionsLazyQueryHookResult = ReturnType<typeof useGetAllUsersWithSubscriptionsLazyQuery>;
 export type GetAllUsersWithSubscriptionsSuspenseQueryHookResult = ReturnType<typeof useGetAllUsersWithSubscriptionsSuspenseQuery>;
 export type GetAllUsersWithSubscriptionsQueryResult = Apollo.QueryResult<GetAllUsersWithSubscriptionsQuery, GetAllUsersWithSubscriptionsQueryVariables>;
-export const GetGlobalFilesDocument = gql`
-    query GetGlobalFiles($limit: Int!, $offset: Int!) {
-  metadata(
-    distinct_on: root_cid
-    where: {root_metadata: {object_ownership: {_and: {is_admin: {_eq: true}}}}}
-    limit: $limit
-    offset: $offset
-  ) {
-    root_metadata {
-      cid: head_cid
-      type: metadata(path: "type")
-      name: metadata(path: "name")
-      mimeType: metadata(path: "mimeType")
-      size: metadata(path: "totalSize")
-      children: metadata(path: "children")
-      maximumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: desc_nulls_first}}
-        limit: 1
-      ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
-      }
-      minimumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: asc}}
-        limit: 1
-      ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
-      }
-      publishedNodes: nodes_aggregate(
-        where: {transaction_result: {transaction_result: {_is_null: false}}}
-      ) {
-        aggregate {
-          count
-        }
-      }
-      archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
-        aggregate {
-          count
-        }
-      }
-      totalNodes: nodes_aggregate {
-        aggregate {
-          count
-        }
-      }
-      object_ownership {
-        is_admin
-        oauth_provider
-        oauth_user_id
-      }
-    }
-  }
-  metadata_aggregate(
-    distinct_on: root_cid
-    where: {root_metadata: {object_ownership: {_and: {is_admin: {_eq: true}}}}}
-  ) {
-    aggregate {
-      count
-    }
-  }
-}
-    `;
-
-/**
- * __useGetGlobalFilesQuery__
- *
- * To run a query within a React component, call `useGetGlobalFilesQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetGlobalFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetGlobalFilesQuery({
- *   variables: {
- *      limit: // value for 'limit'
- *      offset: // value for 'offset'
- *   },
- * });
- */
-export function useGetGlobalFilesQuery(baseOptions: Apollo.QueryHookOptions<GetGlobalFilesQuery, GetGlobalFilesQueryVariables> & ({ variables: GetGlobalFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>(GetGlobalFilesDocument, options);
-      }
-export function useGetGlobalFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>(GetGlobalFilesDocument, options);
-        }
-export function useGetGlobalFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>(GetGlobalFilesDocument, options);
-        }
-export type GetGlobalFilesQueryHookResult = ReturnType<typeof useGetGlobalFilesQuery>;
-export type GetGlobalFilesLazyQueryHookResult = ReturnType<typeof useGetGlobalFilesLazyQuery>;
-export type GetGlobalFilesSuspenseQueryHookResult = ReturnType<typeof useGetGlobalFilesSuspenseQuery>;
-export type GetGlobalFilesQueryResult = Apollo.QueryResult<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>;
-export const GetProfileDocument = gql`
-    query GetProfile {
-  users {
-    public_id
-    oauth_user_id
-    oauth_provider
-    api_keys(where: {deleted_at: {_is_null: true}}) {
-      id
-      oauth_user_id
-      oauth_provider
-      created_at
-      deleted_at
-    }
-  }
-}
-    `;
-
-/**
- * __useGetProfileQuery__
- *
- * To run a query within a React component, call `useGetProfileQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetProfileQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetProfileQuery({
- *   variables: {
- *   },
- * });
- */
-export function useGetProfileQuery(baseOptions?: Apollo.QueryHookOptions<GetProfileQuery, GetProfileQueryVariables>) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<GetProfileQuery, GetProfileQueryVariables>(GetProfileDocument, options);
-      }
-export function useGetProfileLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetProfileQuery, GetProfileQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<GetProfileQuery, GetProfileQueryVariables>(GetProfileDocument, options);
-        }
-export function useGetProfileSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetProfileQuery, GetProfileQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<GetProfileQuery, GetProfileQueryVariables>(GetProfileDocument, options);
-        }
-export type GetProfileQueryHookResult = ReturnType<typeof useGetProfileQuery>;
-export type GetProfileLazyQueryHookResult = ReturnType<typeof useGetProfileLazyQuery>;
-export type GetProfileSuspenseQueryHookResult = ReturnType<typeof useGetProfileSuspenseQuery>;
-export type GetProfileQueryResult = Apollo.QueryResult<GetProfileQuery, GetProfileQueryVariables>;
-export const GetSharedFilesDocument = gql`
-    query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!) {
-  metadata(
-    distinct_on: root_cid
-    where: {root_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}
-    limit: $limit
-    offset: $offset
-  ) {
-    root_metadata {
-      cid: head_cid
-      type: metadata(path: "type")
-      name: metadata(path: "name")
-      mimeType: metadata(path: "mimeType")
-      size: metadata(path: "totalSize")
-      children: metadata(path: "children")
-      maximumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: desc_nulls_first}}
-        limit: 1
-      ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
-      }
-      minimumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: asc}}
-        limit: 1
-      ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
-      }
-      publishedNodes: nodes_aggregate(
-        where: {transaction_result: {transaction_result: {_is_null: false}}}
-      ) {
-        aggregate {
-          count
-        }
-      }
-      archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
-        aggregate {
-          count
-        }
-      }
-      totalNodes: nodes_aggregate {
-        aggregate {
-          count
-        }
-      }
-      object_ownership {
-        oauth_provider
-        oauth_user_id
-        is_admin
-      }
-    }
-  }
-  metadata_aggregate(
-    distinct_on: root_cid
-    where: {root_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}}}}}
-  ) {
-    aggregate {
-      count
-    }
-  }
-}
-    `;
-
-/**
- * __useGetSharedFilesQuery__
- *
- * To run a query within a React component, call `useGetSharedFilesQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetSharedFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetSharedFilesQuery({
- *   variables: {
- *      oauthUserId: // value for 'oauthUserId'
- *      oauthProvider: // value for 'oauthProvider'
- *      limit: // value for 'limit'
- *      offset: // value for 'offset'
- *   },
- * });
- */
-export function useGetSharedFilesQuery(baseOptions: Apollo.QueryHookOptions<GetSharedFilesQuery, GetSharedFilesQueryVariables> & ({ variables: GetSharedFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<GetSharedFilesQuery, GetSharedFilesQueryVariables>(GetSharedFilesDocument, options);
-      }
-export function useGetSharedFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetSharedFilesQuery, GetSharedFilesQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<GetSharedFilesQuery, GetSharedFilesQueryVariables>(GetSharedFilesDocument, options);
-        }
-export function useGetSharedFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetSharedFilesQuery, GetSharedFilesQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<GetSharedFilesQuery, GetSharedFilesQueryVariables>(GetSharedFilesDocument, options);
-        }
-export type GetSharedFilesQueryHookResult = ReturnType<typeof useGetSharedFilesQuery>;
-export type GetSharedFilesLazyQueryHookResult = ReturnType<typeof useGetSharedFilesLazyQuery>;
-export type GetSharedFilesSuspenseQueryHookResult = ReturnType<typeof useGetSharedFilesSuspenseQuery>;
-export type GetSharedFilesQueryResult = Apollo.QueryResult<GetSharedFilesQuery, GetSharedFilesQueryVariables>;
-export const GetTrashedFilesDocument = gql`
-    query GetTrashedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!) {
-  metadata(
-    distinct_on: root_cid
-    where: {root_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: false}}}}}
-    limit: $limit
-    offset: $offset
-  ) {
-    root_metadata {
-      cid: head_cid
-      type: metadata(path: "type")
-      name: metadata(path: "name")
-      mimeType: metadata(path: "mimeType")
-      size: metadata(path: "totalSize")
-      children: metadata(path: "children")
-      maximumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: desc_nulls_first}}
-        limit: 1
-      ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
-      }
-      minimumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: asc}}
-        limit: 1
-      ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
-      }
-      publishedNodes: nodes_aggregate(
-        where: {transaction_result: {transaction_result: {_is_null: false}}}
-      ) {
-        aggregate {
-          count
-        }
-      }
-      archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
-        aggregate {
-          count
-        }
-      }
-      totalNodes: nodes_aggregate {
-        aggregate {
-          count
-        }
-      }
-      object_ownership {
-        oauth_provider
-        oauth_user_id
-        is_admin
-      }
-    }
-  }
-  metadata_aggregate(
-    distinct_on: root_cid
-    where: {root_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: false}}}}}
-  ) {
-    aggregate {
-      count
-    }
-  }
-}
-    `;
-
-/**
- * __useGetTrashedFilesQuery__
- *
- * To run a query within a React component, call `useGetTrashedFilesQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetTrashedFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetTrashedFilesQuery({
- *   variables: {
- *      oauthUserId: // value for 'oauthUserId'
- *      oauthProvider: // value for 'oauthProvider'
- *      limit: // value for 'limit'
- *      offset: // value for 'offset'
- *   },
- * });
- */
-export function useGetTrashedFilesQuery(baseOptions: Apollo.QueryHookOptions<GetTrashedFilesQuery, GetTrashedFilesQueryVariables> & ({ variables: GetTrashedFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>(GetTrashedFilesDocument, options);
-      }
-export function useGetTrashedFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>(GetTrashedFilesDocument, options);
-        }
-export function useGetTrashedFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>(GetTrashedFilesDocument, options);
-        }
-export type GetTrashedFilesQueryHookResult = ReturnType<typeof useGetTrashedFilesQuery>;
-export type GetTrashedFilesLazyQueryHookResult = ReturnType<typeof useGetTrashedFilesLazyQuery>;
-export type GetTrashedFilesSuspenseQueryHookResult = ReturnType<typeof useGetTrashedFilesSuspenseQuery>;
-export type GetTrashedFilesQueryResult = Apollo.QueryResult<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>;
-export const GetMyFilesDocument = gql`
-    query GetMyFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!) {
-  metadata(
-    distinct_on: root_cid
-    where: {root_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}}
-    limit: $limit
-    offset: $offset
-  ) {
-    root_metadata {
-      cid: head_cid
-      type: metadata(path: "type")
-      name: metadata(path: "name")
-      mimeType: metadata(path: "mimeType")
-      size: metadata(path: "totalSize")
-      children: metadata(path: "children")
-      published_objects {
-        id
-      }
-      maximumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: desc_nulls_first}}
-        limit: 1
-      ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
-      }
-      minimumBlockDepth: nodes(
-        order_by: {transaction_result: {created_at: asc}}
-        limit: 1
-      ) {
-        transaction_result {
-          blockNumber: transaction_result(path: "blockNumber")
-        }
-      }
-      publishedNodes: nodes_aggregate(
-        where: {transaction_result: {transaction_result: {_is_null: false}}}
-      ) {
-        aggregate {
-          count
-        }
-      }
-      archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
-        aggregate {
-          count
-        }
-      }
-      totalNodes: nodes_aggregate {
-        aggregate {
-          count
-        }
-      }
-      object_ownership {
-        oauth_provider
-        oauth_user_id
-        is_admin
-      }
-    }
-  }
-  metadata_aggregate(
-    distinct_on: root_cid
-    where: {root_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}}}}}
-  ) {
-    aggregate {
-      count
-    }
-  }
-}
-    `;
-
-/**
- * __useGetMyFilesQuery__
- *
- * To run a query within a React component, call `useGetMyFilesQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetMyFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetMyFilesQuery({
- *   variables: {
- *      oauthUserId: // value for 'oauthUserId'
- *      oauthProvider: // value for 'oauthProvider'
- *      limit: // value for 'limit'
- *      offset: // value for 'offset'
- *   },
- * });
- */
-export function useGetMyFilesQuery(baseOptions: Apollo.QueryHookOptions<GetMyFilesQuery, GetMyFilesQueryVariables> & ({ variables: GetMyFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
-        const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<GetMyFilesQuery, GetMyFilesQueryVariables>(GetMyFilesDocument, options);
-      }
-export function useGetMyFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetMyFilesQuery, GetMyFilesQueryVariables>) {
-          const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<GetMyFilesQuery, GetMyFilesQueryVariables>(GetMyFilesDocument, options);
-        }
-export function useGetMyFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetMyFilesQuery, GetMyFilesQueryVariables>) {
-          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<GetMyFilesQuery, GetMyFilesQueryVariables>(GetMyFilesDocument, options);
-        }
-export type GetMyFilesQueryHookResult = ReturnType<typeof useGetMyFilesQuery>;
-export type GetMyFilesLazyQueryHookResult = ReturnType<typeof useGetMyFilesLazyQuery>;
-export type GetMyFilesSuspenseQueryHookResult = ReturnType<typeof useGetMyFilesSuspenseQuery>;
-export type GetMyFilesQueryResult = Apollo.QueryResult<GetMyFilesQuery, GetMyFilesQueryVariables>;

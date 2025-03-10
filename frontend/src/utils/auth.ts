@@ -1,6 +1,6 @@
 import { type Session } from 'next-auth';
 import { redirect } from 'next/navigation';
-import { authOptions } from '../app/api/auth/[...nextauth]/config';
+import { authOptions } from 'app/api/auth/[...nextauth]/config';
 
 export const getAuthSession = async (): Promise<Session | null> => {
   const internalSession = await (typeof window === 'undefined'

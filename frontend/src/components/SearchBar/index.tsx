@@ -4,20 +4,18 @@ import { Transition } from '@headlessui/react';
 import { SearchIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ObjectSearchResult } from '../../models/ObjectSearchResult';
-import { handleEnterOrSpace } from '../../utils/eventHandler';
+import { ObjectSearchResult } from '@auto-drive/models';
+import { handleEnterOrSpace } from 'utils/eventHandler';
 import { useQuery } from '@apollo/client';
-import {
-  SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME,
-  SEARCH_USER_METADATA_BY_CID_OR_NAME,
-} from '../../services/gql/common/query';
 import { useSession } from 'next-auth/react';
 import {
+  SearchGlobalMetadataByCidOrNameDocument,
   SearchGlobalMetadataByCidOrNameQuery,
+  SearchUserMetadataByCidOrNameDocument,
   SearchUserMetadataByCidOrNameQuery,
-} from '../../../gql/graphql';
-import { ROUTES } from '../../constants/routes';
-import { useNetwork } from '../../contexts/network';
+} from 'gql/graphql';
+import { ROUTES } from 'constants/routes';
+import { useNetwork } from 'contexts/network';
 
 export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   const [query, setQuery] = useState('');
@@ -34,8 +32,8 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
 
   const gqlQuery =
     scope === 'global'
-      ? SEARCH_GLOBAL_METADATA_BY_CID_OR_NAME
-      : SEARCH_USER_METADATA_BY_CID_OR_NAME;
+      ? SearchGlobalMetadataByCidOrNameDocument
+      : SearchUserMetadataByCidOrNameDocument;
 
   useQuery(gqlQuery, {
     variables: {
@@ -49,8 +47,6 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
       data: SearchGlobalMetadataByCidOrNameQuery &
         SearchUserMetadataByCidOrNameQuery,
     ) => {
-      console.log('data', data);
-
       setRecommendations(
         data.metadata.map((e) => ({
           cid: e.cid,
@@ -118,7 +114,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
 
     if (error) {
       return (
-        <li className='relative cursor-default select-none px-4 py-2 text-red-500'>
+        <li className='relative cursor-default select-none px-4 py-2 text-red-500 dark:text-darkBlack'>
           {error}
         </li>
       );
@@ -126,7 +122,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
 
     if (recommendations && recommendations.length === 0) {
       return (
-        <li className='relative cursor-default select-none px-4 py-2 text-gray-700'>
+        <li className='relative cursor-default select-none px-4 py-2 text-gray-700 dark:text-darkBlack'>
           Nothing found.
         </li>
       );
@@ -143,7 +139,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
           tabIndex={0}
           key={item.cid}
           onKeyDown={handleEnterOrSpace(() => handleSelectItem(item.cid))}
-          className='relative cursor-pointer select-none overflow-hidden text-ellipsis px-4 py-2 font-semibold text-gray-900 hover:bg-blue-600 hover:text-white'
+          className='relative cursor-pointer select-none overflow-hidden text-ellipsis px-4 py-2 font-semibold text-gray-900 hover:bg-blue-600 hover:text-white dark:text-darkBlack'
           onClick={() => handleSelectItem(item.cid)}
         >
           {displayText}
@@ -152,19 +148,27 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
     });
   }, [query, recommendations, error, handleSelectItem]);
 
+  const placeholder = useMemo(() => {
+    if (scope === 'global') {
+      return 'Search by Name or CID';
+    }
+
+    return 'Search by Name or CID within your files';
+  }, [scope]);
+
   return (
-    <div className='mx-auto w-full max-w-md'>
+    <div className='mx-auto w-full max-w-md dark:text-darkBlack'>
       <div className='relative mt-1'>
         <div className='relative w-full'>
           <input
             ref={inputRef}
             type='text'
-            className='w-full rounded-lg border border-[#BCC1CA] bg-white py-2 pl-3 pr-10 text-sm leading-5 text-black text-gray-900 placeholder:text-black focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+            className='w-full rounded-lg border border-[#BCC1CA] bg-white py-2 pl-3 pr-10 text-sm leading-5 text-black text-gray-900 placeholder:text-black focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-darkWhite dark:text-darkBlack dark:placeholder:text-darkBlack'
             value={query}
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder='Search by Name or CID'
+            placeholder={placeholder}
           />
           <button
             type='button'
@@ -186,7 +190,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
           >
             <ul
               ref={dropdownRef}
-              className='absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm'
+              className='absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm dark:bg-darkWhite'
             >
               {searchBarResult}
             </ul>

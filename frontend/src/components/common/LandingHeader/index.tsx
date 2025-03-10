@@ -10,7 +10,9 @@ export const LandingHeader = () => {
   const getLinkClass = useCallback(
     (path: string) => {
       return `rounded-lg px-8 py-2 font-medium ${
-        pathname === path ? 'bg-white' : 'bg-transparent hover:cursor-pointer'
+        pathname === path
+          ? 'bg-white dark:bg-darkWhite dark:text-darkBlack'
+          : 'bg-transparent hover:cursor-pointer dark:text-darkBlack'
       }`;
     },
     [pathname],

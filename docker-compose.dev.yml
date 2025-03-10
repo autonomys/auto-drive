@@ -21,9 +21,14 @@ services:
       retries: 5
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/Dockerfile
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
       RPC_ENDPOINT: ${RPC_ENDPOINT}
@@ -45,7 +50,7 @@ services:
       timeout: 2s
       retries: 3
   hasura:
-    image: hasura/graphql-engine:v2.40.0
+    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
     depends_on:
       backend:
         condition: service_healthy
@@ -97,10 +102,15 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   auth:
     build:
-      context: ./auth
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./auth/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:

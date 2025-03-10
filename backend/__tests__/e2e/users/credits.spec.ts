@@ -1,19 +1,18 @@
-import { InteractionType } from '../../../src/models/objects/interactions'
-import { PreconditionError } from '../../utils/error'
-import { closeDatabase, getDatabase } from '../../../src/drivers/pg'
-import { UserWithOrganization } from '../../../src/models/users'
+import { InteractionType, UserWithOrganization } from '@auto-drive/models'
+import { PreconditionError } from '../../utils/error.js'
+import { closeDatabase, getDatabase } from '../../../src/drivers/pg.js'
 import {
   createMockUser,
   mockRabbitPublish,
   unmockMethods,
-} from '../../utils/mocks'
-import { dbMigration } from '../../utils/dbMigrate'
-import { SubscriptionsUseCases } from '../../../src/useCases'
+} from '../../utils/mocks.js'
+import { dbMigration } from '../../utils/dbMigrate.js'
+import { SubscriptionsUseCases } from '../../../src/useCases/index.js'
 
 describe('CreditsUseCases', () => {
   let mockUser: UserWithOrganization
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     mockRabbitPublish()
     await getDatabase()
     await dbMigration.up()
@@ -22,7 +21,7 @@ describe('CreditsUseCases', () => {
     if (!result) throw new PreconditionError('Failed to setup test user')
   })
 
-  afterAll(async () => {
+  afterEach(async () => {
     unmockMethods()
     await closeDatabase()
     await dbMigration.down()

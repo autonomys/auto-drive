@@ -1,4 +1,4 @@
-import { AdminPanel } from '../../../../views/AdminPanel';
+import { AdminPanel } from '@/components/AdminPanel';
 
 export const dynamic = 'force-dynamic';
 
