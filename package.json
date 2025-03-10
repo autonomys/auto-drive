@@ -28,5 +28,9 @@
   "packageManager": "yarn@4.2.2",
   "devDependencies": {
     "eslint-plugin-import": "^2.31.0"
+  },
+  "dependencies": {
+    "ethers": "^6.13.5",
+    "siwe": "^3.0.0"
   }
 }
