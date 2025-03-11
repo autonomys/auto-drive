@@ -9,6 +9,7 @@
     "start:server": "node --loader ts-node/esm src/server.ts",
     "start": "node dist/server.js",
     "start:prod": "node dist/server.prod.js",
+    "start:docs": "node --loader ts-node/esm src/http/controllers/docs.ts",
     "test": "node --experimental-vm-modules ../node_modules/jest/bin/jest.js --runInBand --coverage",
     "lint": "eslint . "
   },
@@ -31,7 +32,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "keyv": "^5.2.1",
+    "keyv": "^5.3.1",
     "lru-cache": "^11.0.2",
     "multer": "^1.4.5-lts.1",
     "multiformats": "^13.2.2",
