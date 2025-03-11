@@ -28,8 +28,6 @@ export async function middleware(req: NextRequest) {
     session.accessToken,
   ).catch(() => null);
 
-  console.log('userInfo', userInfo);
-
   if (!userInfo) {
     return pathname !== '/'
       ? NextResponse.redirect(new URL('/', req.url))

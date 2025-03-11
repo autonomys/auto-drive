@@ -4,13 +4,15 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import GithubProvider from 'next-auth/providers/github';
 import DiscordProvider from 'next-auth/providers/discord';
-import { getCsrfToken } from 'next-auth/react';
 import { SiweMessage, VerifyOpts, VerifyParams } from 'siwe';
 import {
+  emptyToken,
   generateAccessToken,
   invalidateRefreshToken,
   refreshAccessToken,
 } from './jwt';
+import { encodeWalletProofInJWT } from './web3';
+import { redirect, RedirectType } from 'next/navigation';
 
 // 1 minute before the token expires
 const refreshingTokenThresholdInSeconds = process.env.REFRESHING_TOKEN_THRESHOLD
@@ -71,8 +73,10 @@ export const authOptions: AuthOptions = {
             throw new Error('Invalid signature');
 
           return {
-            id: 'evm:' + credentials.address,
-            name: credentials.address,
+            id: credentials.address,
+            provider: 'auto-evm',
+            providerAccountId: credentials.address,
+            userId: credentials.address,
           };
         } catch (error) {
           console.error('Nova authorize error', error);
@@ -126,7 +130,19 @@ export const authOptions: AuthOptions = {
       session.authUserId = token.authUserId;
       session.underlyingProvider = token.underlyingProvider;
       session.underlyingUserId = token.underlyingUserId;
+
       return session;
+    },
+    async signIn({ account, credentials, user }) {
+      if (user.provider === 'auto-evm') {
+        if (!account) throw new Error('No account found');
+        if (!credentials) throw new Error('No credentials found');
+        account.access_token = encodeWalletProofInJWT(credentials);
+        account.provider = user.provider;
+        account.providerAccountId = user.id;
+      }
+
+      return true;
     },
   },
   session: {
