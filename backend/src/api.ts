@@ -8,6 +8,7 @@ import { handleAuth } from './services/auth/express.js'
 import { uploadController } from './http/controllers/upload.js'
 import { config } from './config.js'
 import { logger } from './drivers/logger.js'
+import { docsController } from './http/controllers/docs.js'
 
 const createServer = async () => {
   const app = express()
@@ -34,6 +35,7 @@ const createServer = async () => {
   app.use('/objects', objectController)
   app.use('/subscriptions', subscriptionController)
   app.use('/uploads', uploadController)
+  app.use('/docs', docsController)
 
   app.get('/health', (_req, res) => {
     res.sendStatus(204)
