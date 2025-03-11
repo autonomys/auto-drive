@@ -1,4 +1,4 @@
-import express, { Router } from 'express'
+import { Router } from 'express'
 import { swagger } from '../../docs/reference/index.js'
 import { docsView } from '../../docs/view.js'
 
@@ -10,12 +10,4 @@ docsController.get('/', (req, res) => {
 
 docsController.get('/raw', (req, res) => {
   res.json(swagger)
-})
-
-const app = express()
-
-app.use('/docs', docsController)
-
-app.listen(3000, () => {
-  console.log('Docs server is running on port 3000')
 })
