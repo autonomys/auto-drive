@@ -9,6 +9,7 @@ import { DiscordIcon } from '../../components/common/DiscordIcon';
 import { GoogleIcon } from '../../components/common/GoogleIcon';
 import { WalletIcon } from '../../components/common/WalletIcon';
 import { GithubIcon } from '../common/GithubIcon';
+import { getMessageToSign } from '../../app/api/auth/[...nextauth]/web3';
 
 export const SigningInButtons = () => {
   const { openConnectModal } = useConnectModal();
@@ -31,17 +32,7 @@ export const SigningInButtons = () => {
     if (openConnectModal) openConnectModal();
 
     if (address) {
-      const siweMessage = new SiweMessage({
-        address,
-        chainId: 490000,
-        domain: window.location.host,
-        statement: 'Sign in to Auto Drive.',
-        uri: window.location.origin,
-        version: '1',
-        nonce: await getCsrfToken(),
-        issuedAt: new Date().toISOString(),
-      });
-      const message = siweMessage.prepareMessage();
+      const message = await getMessageToSign(address);
       const signature = await signMessageAsync({
         message,
       });
