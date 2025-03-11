@@ -12,7 +12,7 @@ export const docsView = `
       <body>
 
         <elements-api
-          apiDescriptionUrl="/docs/raw"
+          apiDescriptionUrl="${process.env.API_DESCRIPTION_URL}"
           router="hash"
         />
 
