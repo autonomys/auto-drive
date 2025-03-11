@@ -17,7 +17,11 @@ import {
   asyncIterableToPromiseOfArray,
 } from '../../utils/async.js'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
-import { UploadType, ObjectMapping, TransactionResult } from '@auto-drive/models'
+import {
+  UploadType,
+  ObjectMapping,
+  TransactionResult,
+} from '@auto-drive/models'
 import { ObjectUseCases } from './object.js'
 import { logger } from '../../drivers/logger.js'
 import { Node } from '../../repositories/objects/nodes.js'
@@ -79,7 +83,7 @@ const getChunkData = async (cid: string | CID): Promise<Buffer | undefined> => {
     return undefined
   }
 
-  return Buffer.from(chunkData.data ?? '')
+  return chunkData.data ? Buffer.from(chunkData.data) : undefined
 }
 
 const saveNodes = async (
