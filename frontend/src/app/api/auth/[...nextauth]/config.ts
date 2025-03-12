@@ -6,13 +6,11 @@ import GithubProvider from 'next-auth/providers/github';
 import DiscordProvider from 'next-auth/providers/discord';
 import { SiweMessage, VerifyOpts, VerifyParams } from 'siwe';
 import {
-  emptyToken,
   generateAccessToken,
   invalidateRefreshToken,
   refreshAccessToken,
 } from './jwt';
 import { encodeWalletProofInJWT } from './web3';
-import { redirect, RedirectType } from 'next/navigation';
 
 // 1 minute before the token expires
 const refreshingTokenThresholdInSeconds = process.env.REFRESHING_TOKEN_THRESHOLD
@@ -137,6 +135,7 @@ export const authOptions: AuthOptions = {
       if (user.provider === 'auto-evm') {
         if (!account) throw new Error('No account found');
         if (!credentials) throw new Error('No credentials found');
+        // eslint-disable-next-line camelcase
         account.access_token = encodeWalletProofInJWT(credentials);
         account.provider = user.provider;
         account.providerAccountId = user.id;

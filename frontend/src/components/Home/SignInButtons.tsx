@@ -3,7 +3,6 @@ import { LoaderCircle } from 'lucide-react';
 import { BuiltInProviderType } from 'next-auth/providers';
 import { getCsrfToken, signIn } from 'next-auth/react';
 import { useCallback, useState } from 'react';
-import { SiweMessage } from 'siwe';
 import { useAccount, useSignMessage } from 'wagmi';
 import { DiscordIcon } from '../../components/common/DiscordIcon';
 import { GoogleIcon } from '../../components/common/GoogleIcon';
