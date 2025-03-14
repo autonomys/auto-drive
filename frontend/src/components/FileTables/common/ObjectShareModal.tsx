@@ -77,7 +77,7 @@ export const ObjectShareModal = ({
     }
 
     navigator.clipboard.writeText(
-      `${window.location.origin}/${ROUTES.objectDetails(
+      `${window.location.origin}${ROUTES.objectDetails(
         network.network.id,
         metadata?.metadata.dataCid,
       )}`,
