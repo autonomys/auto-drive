@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@auto-drive/models": "workspace:*",
+    "@autonomys/asynchronous": "^1.4.1",
     "@autonomys/auto-dag-data": "^1.0.8",
     "@autonomys/auto-drive": "^1.0.5",
     "@keyvhq/sqlite": "^2.1.6",
