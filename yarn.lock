@@ -139,7 +139,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autonomys/asynchronous@npm:^1.4.1":
+"@autonomys/asynchronous@npm:1.4.1, @autonomys/asynchronous@npm:^1.4.1":
   version: 1.4.1
   resolution: "@autonomys/asynchronous@npm:1.4.1"
   checksum: 10c0/f16f8f936e08a3ae38645eea0a1b01ee8ca4c8f9fcceebc4ecde3ec7ede3cb18c8f86fa41d5f7c9e3879448597980a0e829d00a9928375a21eed04f8d61134a1
@@ -164,55 +164,42 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.3.2":
-  version: 1.3.2
-  resolution: "@autonomys/auto-dag-data@npm:1.3.2"
+"@autonomys/auto-dag-data@npm:^1.4.1":
+  version: 1.4.1
+  resolution: "@autonomys/auto-dag-data@npm:1.4.1"
   dependencies:
-    "@ipld/dag-pb": "npm:^4.1.2"
+    "@autonomys/asynchronous": "npm:1.4.1"
+    "@ipld/dag-pb": "npm:^4.1.3"
     "@peculiar/webcrypto": "npm:^1.5.0"
     "@webbuf/blake3": "npm:^3.0.26"
     "@webbuf/fixedbuf": "npm:^3.0.26"
     "@webbuf/webbuf": "npm:^3.0.26"
     fflate: "npm:^0.8.2"
-    multiformats: "npm:^13.2.2"
+    multiformats: "npm:^13.3.2"
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/0bcefa246e04476c5bf468cfbf8094791bcede1a7598b41366a2a3fb6248868b4417b9a66e0957528126abd1dbc916219ec49eea8e3ae50c2f4cff8abae531bb
+  checksum: 10c0/191141299cd038669056bcad233a88630410041fb5a6d8bcc5848a4183d59ce7e3d7300be070d12d3a31166effd730377c47bdf1d3a0f00651f3aed98b95683b
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.0.5, @autonomys/auto-drive@npm:^1.3.0":
-  version: 1.3.1
-  resolution: "@autonomys/auto-drive@npm:1.3.1"
+"@autonomys/auto-drive@npm:^1.0.5, @autonomys/auto-drive@npm:^1.3.0, @autonomys/auto-drive@npm:^1.3.2":
+  version: 1.4.1
+  resolution: "@autonomys/auto-drive@npm:1.4.1"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.3.1"
-    "@autonomys/auto-utils": "npm:^1.3.1"
+    "@autonomys/asynchronous": "npm:1.4.1"
+    "@autonomys/auto-dag-data": "npm:^1.4.1"
+    "@autonomys/auto-utils": "npm:^1.4.1"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^2.1.35"
     process: "npm:^0.11.10"
     stream: "npm:^0.0.3"
-    zod: "npm:^3.23.8"
-  checksum: 10c0/53fae44c71be7651b17372c39ea1b034f398c90677854b5a510febdcf8e6840ea4db2aae667a851637deefcbf043c3298c1bba51e6a2b69e7906644e9f2d6470
+    zod: "npm:^3.24.2"
+  checksum: 10c0/53541b0a508af2259a0ee8ac5339ffbf6d356fb58b5f2da4f1fb3ee42937311218cea9aa2b90a7159348cb48771d0b962d56960b623bac381e63cc4c7c98cad1
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.3.2":
-  version: 1.3.2
-  resolution: "@autonomys/auto-drive@npm:1.3.2"
-  dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.3.2"
-    "@autonomys/auto-utils": "npm:^1.3.2"
-    jszip: "npm:^3.10.1"
-    mime-types: "npm:^2.1.35"
-    process: "npm:^0.11.10"
-    stream: "npm:^0.0.3"
-    zod: "npm:^3.23.8"
-  checksum: 10c0/fe555357d2c5be80289cae9a652e67b6384137219d897e9146b36193179d6e6d91c3251fac1eb734966215e27d6e727072ba107455a59aad6cca28f3d35f3196
-  languageName: node
-  linkType: hard
-
-"@autonomys/auto-utils@npm:^1.3.1, @autonomys/auto-utils@npm:^1.3.2":
+"@autonomys/auto-utils@npm:^1.3.2":
   version: 1.3.4
   resolution: "@autonomys/auto-utils@npm:1.3.4"
   dependencies:
@@ -220,6 +207,17 @@ __metadata:
     "@polkadot/extension-dapp": "npm:^0.56.2"
     fs: "npm:^0.0.1-security"
   checksum: 10c0/3e558a46e1cdb371f985b61e0bd4637faf1a840e3fe2b69773bbdb51657c1cfb2d2ceda86d66d617579a142fa0600c11ac80e4fd4bf44caf647c80c3dc47f341
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-utils@npm:^1.4.1":
+  version: 1.4.1
+  resolution: "@autonomys/auto-utils@npm:1.4.1"
+  dependencies:
+    "@polkadot/api": "npm:^15.8.1"
+    "@polkadot/extension-dapp": "npm:^0.58.5"
+    fs: "npm:^0.0.1-security"
+  checksum: 10c0/ab77568ce0fd8f80b779588616750c53bc764f771777c6f9d85cb0159f3d41b6cd6bd8272b7499622324277fd7514f418f7acc653f8396a2b7faa5a8caebf2a0
   languageName: node
   linkType: hard
 
@@ -2746,7 +2744,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@ipld/dag-pb@npm:^4.1.2":
+"@ipld/dag-pb@npm:^4.1.2, @ipld/dag-pb@npm:^4.1.3":
   version: 4.1.3
   resolution: "@ipld/dag-pb@npm:4.1.3"
   dependencies:
@@ -3588,7 +3586,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polkadot/api@npm:15.8.1, @polkadot/api@npm:^15.8.1":
+"@polkadot/api@npm:15.8.1, @polkadot/api@npm:^15.7.2, @polkadot/api@npm:^15.8.1":
   version: 15.8.1
   resolution: "@polkadot/api@npm:15.8.1"
   dependencies:
@@ -3629,6 +3627,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@polkadot/extension-dapp@npm:^0.58.5":
+  version: 0.58.5
+  resolution: "@polkadot/extension-dapp@npm:0.58.5"
+  dependencies:
+    "@polkadot/extension-inject": "npm:0.58.5"
+    "@polkadot/util": "npm:^13.4.3"
+    "@polkadot/util-crypto": "npm:^13.4.3"
+    tslib: "npm:^2.8.1"
+  peerDependencies:
+    "@polkadot/api": "*"
+    "@polkadot/util": "*"
+    "@polkadot/util-crypto": "*"
+  checksum: 10c0/28f73bce512818fbd5483f735441d2d6178694b24d5f53857030da6e9a9b51fdc51f978d0c13110b3708362a26c31969bfa70eeff2b46097293ab7bf274e18da
+  languageName: node
+  linkType: hard
+
 "@polkadot/extension-inject@npm:0.56.2":
   version: 0.56.2
   resolution: "@polkadot/extension-inject@npm:0.56.2"
@@ -3644,6 +3658,24 @@ __metadata:
     "@polkadot/api": "*"
     "@polkadot/util": "*"
   checksum: 10c0/7ac1f01ea1df2fb09e1837e77a339ddf50a561de3ca564523b3e5e7d7f7008a4648a349e5a4204146bd50b92ac058680c34682bbabedba050234db39f22131b1
+  languageName: node
+  linkType: hard
+
+"@polkadot/extension-inject@npm:0.58.5":
+  version: 0.58.5
+  resolution: "@polkadot/extension-inject@npm:0.58.5"
+  dependencies:
+    "@polkadot/api": "npm:^15.7.2"
+    "@polkadot/rpc-provider": "npm:^15.7.2"
+    "@polkadot/types": "npm:^15.7.2"
+    "@polkadot/util": "npm:^13.4.3"
+    "@polkadot/util-crypto": "npm:^13.4.3"
+    "@polkadot/x-global": "npm:^13.4.3"
+    tslib: "npm:^2.8.1"
+  peerDependencies:
+    "@polkadot/api": "*"
+    "@polkadot/util": "*"
+  checksum: 10c0/e8f5942086d264fc3d61e437c00c19b3378597415e193738e7067ee1d2ba4923ee0abe589681cf9273853f71001be1f2e0e52c7c657b3a2e1adc37354dc53adf
   languageName: node
   linkType: hard
 
@@ -3750,7 +3782,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polkadot/rpc-provider@npm:15.8.1":
+"@polkadot/rpc-provider@npm:15.8.1, @polkadot/rpc-provider@npm:^15.7.2":
   version: 15.8.1
   resolution: "@polkadot/rpc-provider@npm:15.8.1"
   dependencies:
@@ -3906,7 +3938,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polkadot/types@npm:15.8.1, @polkadot/types@npm:^15.8.1":
+"@polkadot/types@npm:15.8.1, @polkadot/types@npm:^15.7.2, @polkadot/types@npm:^15.8.1":
   version: 15.8.1
   resolution: "@polkadot/types@npm:15.8.1"
   dependencies:
@@ -12494,7 +12526,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"multiformats@npm:^13.0.0, multiformats@npm:^13.1.0, multiformats@npm:^13.2.2, multiformats@npm:^13.2.3, multiformats@npm:^13.3.1":
+"multiformats@npm:^13.0.0, multiformats@npm:^13.1.0, multiformats@npm:^13.2.2, multiformats@npm:^13.2.3, multiformats@npm:^13.3.1, multiformats@npm:^13.3.2":
   version: 13.3.2
   resolution: "multiformats@npm:13.3.2"
   checksum: 10c0/a2c6f17b04d6a9cd5d0cb7d07e32dc4f3be82804d44fc056357a98e449340a7ad37d0789da41186ccd8c953e0cf783be3b71f03a00b0a84788689f544ecade46
