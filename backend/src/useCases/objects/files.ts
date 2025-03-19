@@ -27,7 +27,7 @@ import { BlockstoreUseCases } from '../uploads/blockstore.js'
 import {
   asyncIterableToPromiseOfArray,
   bufferToAsyncIterable,
-} from '../../utils/async.js'
+} from '@autonomys/asynchronous'
 import { downloadService } from '../../services/download/index.js'
 import { FileGateway } from '../../services/dsn/fileGateway/index.js'
 import { config } from '../../config.js'

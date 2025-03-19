@@ -15,7 +15,7 @@ import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/
 import {
   asyncIterableForEach,
   asyncIterableToPromiseOfArray,
-} from '../../utils/async.js'
+} from '@autonomys/asynchronous'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
 import {
   UploadType,

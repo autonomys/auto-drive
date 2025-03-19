@@ -3,7 +3,7 @@ import { FilesUseCases, ObjectUseCases } from '../../useCases/index.js'
 import { memoryDownloadCache } from './memoryDownloadCache/index.js'
 import { AwaitIterable } from 'interface-store'
 import { fsCache } from './fsCache/singleton.js'
-import { forkAsyncIterable } from '../../utils/async.js'
+import { forkAsyncIterable } from '@autonomys/asynchronous'
 
 export const downloadService = {
   download: async (cid: string): Promise<AwaitIterable<Buffer>> => {

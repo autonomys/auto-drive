@@ -30,7 +30,7 @@ import {
 import { MemoryBlockstore } from 'blockstore-core'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
 import { nodesRepository } from '../../../src/repositories/index.js'
-import { asyncIterableToPromiseOfArray } from '../../../src/utils/async.js'
+import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import PizZip from 'pizzip'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 import { Rabbit } from '../../../src/drivers/rabbit.js'

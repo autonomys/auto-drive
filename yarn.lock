@@ -139,6 +139,13 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@autonomys/asynchronous@npm:^1.4.1":
+  version: 1.4.1
+  resolution: "@autonomys/asynchronous@npm:1.4.1"
+  checksum: 10c0/f16f8f936e08a3ae38645eea0a1b01ee8ca4c8f9fcceebc4ecde3ec7ede3cb18c8f86fa41d5f7c9e3879448597980a0e829d00a9928375a21eed04f8d61134a1
+  languageName: node
+  linkType: hard
+
 "@autonomys/auto-dag-data@npm:^1.0.7, @autonomys/auto-dag-data@npm:^1.0.8, @autonomys/auto-dag-data@npm:^1.3.1":
   version: 1.3.1
   resolution: "@autonomys/auto-dag-data@npm:1.3.1"
@@ -6664,6 +6671,7 @@ __metadata:
   resolution: "backend@workspace:backend"
   dependencies:
     "@auto-drive/models": "workspace:*"
+    "@autonomys/asynchronous": "npm:^1.4.1"
     "@autonomys/auto-dag-data": "npm:^1.0.8"
     "@autonomys/auto-drive": "npm:^1.0.5"
     "@faker-js/faker": "npm:^9.2.0"
