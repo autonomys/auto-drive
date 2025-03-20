@@ -38,7 +38,6 @@ app.get("/folder/:cid", async (req, res) => {
 
 spdy
   .createServer(
-    {},
     {
       spdy: {
         protocols: ["h2", "http/1.1"],
