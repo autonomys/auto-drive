@@ -27,6 +27,7 @@
   },
   "packageManager": "yarn@4.2.2",
   "devDependencies": {
+    "@types/spdy": "^3.4.9",
     "eslint-plugin-import": "^2.31.0"
   },
   "dependencies": {

@@ -5544,6 +5544,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/spdy@npm:^3.4.9":
+  version: 3.4.9
+  resolution: "@types/spdy@npm:3.4.9"
+  dependencies:
+    "@types/node": "npm:*"
+  checksum: 10c0/d57aef78048ea694901a68e525d77b0e3629371b8d32b911293723ab43ce1d49b51d6a7d21d5af53e86dc890db1843697e7facc12450d78b2d2761b5603e53d0
+  languageName: node
+  linkType: hard
+
 "@types/ssh2-streams@npm:*":
   version: 0.1.12
   resolution: "@types/ssh2-streams@npm:0.1.12"
@@ -6503,6 +6512,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "auto-drive@workspace:."
   dependencies:
+    "@types/spdy": "npm:^3.4.9"
     cache-manager: "npm:^6.4.1"
     eslint-plugin-import: "npm:^2.31.0"
     keyv: "npm:^5.3.1"
