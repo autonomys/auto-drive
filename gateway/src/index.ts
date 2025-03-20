@@ -2,7 +2,6 @@ import express from "express";
 import { getFileNetwork } from "./networkComposer";
 import { config } from "./config";
 import { internalRedirect } from "./http";
-import spdy from "spdy";
 
 const app = express();
 
@@ -36,15 +35,6 @@ app.get("/folder/:cid", async (req, res) => {
   internalRedirect(req, res, result.url);
 });
 
-spdy
-  .createServer(
-    {
-      spdy: {
-        protocols: ["h2", "http/1.1"],
-      },
-    },
-    app
-  )
-  .listen(config.port, () => {
-    console.log(`Server is running on port ${config.port}`);
-  });
+app.listen(config.port, () => {
+  console.log(`Server is running on port ${config.port}`);
+});

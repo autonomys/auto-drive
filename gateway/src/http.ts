@@ -16,7 +16,7 @@ export const internalRedirect = async (
     headers,
   });
 
-  const whitelistedHeaders = ["content-length", "content-type"];
+  const whitelistedHeaders = ["content-type"];
   for (const [key, value] of response.headers.entries()) {
     if (whitelistedHeaders.includes(key.toLowerCase())) {
       res.setHeader(key, value);
