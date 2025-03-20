@@ -20,6 +20,7 @@
     "typescript": "^5.8.2"
   },
   "devDependencies": {
+    "@types/spdy": "^3.4.9",
     "ts-node": "^10.9.2"
   }
 }
