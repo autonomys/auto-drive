@@ -5058,20 +5058,20 @@ __metadata:
   linkType: hard
 
 "@testcontainers/postgresql@npm:^10.14.0, @testcontainers/postgresql@npm:^10.16.0":
-  version: 10.18.0
-  resolution: "@testcontainers/postgresql@npm:10.18.0"
+  version: 10.21.0
+  resolution: "@testcontainers/postgresql@npm:10.21.0"
   dependencies:
-    testcontainers: "npm:^10.18.0"
-  checksum: 10c0/4a51de5423a6af0c8c7ef8d8500f767d4ceba4e4674e703c72a54cf1173c3faf249074323080cf8ba2fd80d9276ae57c3e00b3f562c6fb6ab723ae206d3c8f0c
+    testcontainers: "npm:^10.21.0"
+  checksum: 10c0/5eec7e702e67d6a3b097b8ba2ae9708b3ea033aa2816b1c7e519584fbfa6110c0a34392fdaa4d325fbebe9e88961460b612c72e24318ee4400ae92edd3ed73e3
   languageName: node
   linkType: hard
 
 "@testcontainers/rabbitmq@npm:^10.17.2":
-  version: 10.18.0
-  resolution: "@testcontainers/rabbitmq@npm:10.18.0"
+  version: 10.21.0
+  resolution: "@testcontainers/rabbitmq@npm:10.21.0"
   dependencies:
-    testcontainers: "npm:^10.18.0"
-  checksum: 10c0/f9b46aa3cb5e9b40f64db757553c502f0a2f1ec071903f866ddcdd878a597802c9fa214dd930a1a48e8fdbdbe4d28990d2305047862f0553ec1b81e626029c33
+    testcontainers: "npm:^10.21.0"
+  checksum: 10c0/c28274dd432b305998681eed9ee202d1c962dc0b075267f2861aa13236159c5c74cb71d3fed94f729e40e295343455138e40e3cee205450e90c5f66dd92d1f08
   languageName: node
   linkType: hard
 
@@ -15876,9 +15876,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"testcontainers@npm:^10.18.0":
-  version: 10.18.0
-  resolution: "testcontainers@npm:10.18.0"
+"testcontainers@npm:^10.21.0":
+  version: 10.21.0
+  resolution: "testcontainers@npm:10.21.0"
   dependencies:
     "@balena/dockerignore": "npm:^1.0.2"
     "@types/dockerode": "npm:^3.3.29"
@@ -15895,7 +15895,7 @@ __metadata:
     tar-fs: "npm:^3.0.6"
     tmp: "npm:^0.2.3"
     undici: "npm:^5.28.5"
-  checksum: 10c0/efd4ca00c38d0b4152da5630525e236769c04b9ca726d124403107a6eedbfdfca79dda7f73770a0ea18ac34a55353953f3337d7543ec11a659b8c96219f39d8c
+  checksum: 10c0/4c6463cee8a2adc512fbcb8c5d0a623609a659825012dd0948f4b7ecacefcf1ec0743aa574c2a88dec42414d5a8ba6376f0647c8526903c9287a4d6331a158ae
   languageName: node
   linkType: hard
 
