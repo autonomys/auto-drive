@@ -16,6 +16,7 @@
     "@autonomys/auto-utils": "^1.3.2",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "spdy": "^4.0.2",
     "typescript": "^5.8.2"
   },
   "devDependencies": {
