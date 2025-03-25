@@ -2,8 +2,20 @@ import { logger } from '../../drivers/logger.js'
 import { FilesUseCases, ObjectUseCases } from '../../useCases/index.js'
 import { memoryDownloadCache } from './memoryDownloadCache/index.js'
 import { AwaitIterable } from 'interface-store'
-import { fsCache } from './fsCache/singleton.js'
 import { forkAsyncIterable } from '@autonomys/asynchronous'
+import {
+  createFileCache,
+  defaultMemoryAndSqliteConfig,
+} from '@autonomys/file-caching'
+import { config } from '../../config.js'
+
+const fsCache = createFileCache(
+  defaultMemoryAndSqliteConfig({
+    cacheMaxSize: config.cache.maxSize,
+    cacheTtl: config.cache.ttl,
+    dirname: config.cache.dir,
+  }),
+)
 
 export const downloadService = {
   download: async (cid: string): Promise<AwaitIterable<Buffer>> => {
@@ -41,4 +53,5 @@ export const downloadService = {
 
     return stream4
   },
+  fsCache,
 }
