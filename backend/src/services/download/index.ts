@@ -53,4 +53,5 @@ export const downloadService = {
 
     return stream4
   },
+  fsCache,
 }
