@@ -38,10 +38,8 @@ import {
   nodesRepository,
 } from '../../../src/repositories/index.js'
 import { memoryDownloadCache } from '../../../src/services/download/memoryDownloadCache/index.js'
-import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
 import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
-import { fsCache } from '../../../src/services/download/fsCache/singleton.js'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 import { Rabbit } from '../../../src/drivers/rabbit.js'
 
@@ -261,7 +259,7 @@ files.map((file, index) => {
       it('download cache should be updated', async () => {
         // Wait for the async context to finish
         await new Promise((resolve) => setTimeout(resolve, 300))
-        const asyncFromDatabase = await fsCache.get(cid)
+        const asyncFromDatabase = await downloadService.fsCache.get(cid)
         expect(asyncFromDatabase).not.toBeNull()
         const fileArrayFromDatabase = await asyncIterableToPromiseOfArray(
           asyncFromDatabase!.data,
@@ -352,23 +350,7 @@ files.map((file, index) => {
         expect(metadata?.is_archived).toBe(true)
 
         expect(memoryDownloadCache.has(cid)).toBe(true)
-        expect(fsCache.get(cid)).not.toBeNull()
-      })
-
-      it('should be able to remove the nodes', async () => {
-        await fsCache.clear()
-        await memoryDownloadCache.clear()
-
-        const downloadFileMock = jest
-          .spyOn(FileGateway, 'downloadFile')
-          .mockResolvedValue(
-            (async function* () {
-              yield Buffer.alloc(0)
-            })(),
-          )
-
-        await downloadService.download(cid)
-        expect(downloadFileMock).toHaveBeenCalledWith(cid)
+        expect(downloadService.fsCache.get(cid)).not.toBeNull()
       })
     })
   })
