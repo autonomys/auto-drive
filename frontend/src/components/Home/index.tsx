@@ -229,7 +229,9 @@ export const Home = () => {
           <SigningInButtons />
         </div>
       </div>
-      <Footer />
+      <div className='mt-10 flex w-full justify-center'>
+        <Footer />
+      </div>
     </div>
   );
 };
