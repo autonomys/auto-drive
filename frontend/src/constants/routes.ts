@@ -10,6 +10,7 @@ export const EXTERNAL_ROUTES = {
   operatorDocs: 'https://docs.autonomys.xyz/staking/operator/register',
   autoDriveDocs:
     'https://github.com/autonomys/auto-sdk/tree/main/packages/auto-drive',
+  autoDriveApiDocs: 'https://mainnet.auto-drive.autonomys.xyz/api/docs',
   social: {
     twitter: 'https://x.com/AutonomysNet',
     discord: 'https://autonomys.xyz/discord',
