@@ -277,6 +277,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@autonomys/rpc@npm:^1.4.5":
+  version: 1.4.5
+  resolution: "@autonomys/rpc@npm:1.4.5"
+  dependencies:
+    websocket: "npm:^1.0.35"
+    zod: "npm:^3.24.2"
+  checksum: 10c0/ee9c0988d34367ff249efa295681fbb65f8e052809073ae247c5d3aed8f88fa9d180ef165dbc798c0857b86293f42fd636856db3e6a57d0b37b5694dfee7ebd1
+  languageName: node
+  linkType: hard
+
 "@aws-crypto/sha256-browser@npm:5.2.0":
   version: 5.2.0
   resolution: "@aws-crypto/sha256-browser@npm:5.2.0"
@@ -6587,6 +6597,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "auto-drive@workspace:."
   dependencies:
+    "@autonomys/rpc": "npm:^1.4.5"
     "@types/spdy": "npm:^3.4.9"
     cache-manager: "npm:^6.4.1"
     eslint-plugin-import: "npm:^2.31.0"
