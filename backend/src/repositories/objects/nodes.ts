@@ -214,7 +214,7 @@ const getFirstNotArchivedNode = async () => {
 
   return db
     .query<Node>({
-      text: 'SELECT cid FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL LIMIT 1',
+      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL LIMIT 1',
     })
     .then((e) => e.rows.at(0))
 }
