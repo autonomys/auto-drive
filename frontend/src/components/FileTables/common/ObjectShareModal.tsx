@@ -13,8 +13,7 @@ import { Button } from 'components/common/Button';
 import { Download, Link } from 'lucide-react';
 import { useGetMetadataByHeadCidQuery } from 'gql/graphql';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
-import { ROUTES } from 'constants/routes';
-import { networks } from 'constants/networks';
+import { EXTERNAL_ROUTES, ROUTES } from 'constants/routes';
 
 export const ObjectShareModal = ({
   cid,
@@ -41,35 +40,12 @@ export const ObjectShareModal = ({
   });
 
   const copyDownloadLink = useCallback(async () => {
-    if (!metadata?.metadata.dataCid) {
-      toast.error('Some error occurred');
-      return;
-    }
-    const apiUrl = networks[network.network.id]?.http;
-    if (!apiUrl) {
-      toast.error('Some error occurred');
+    if (!cid) {
       return;
     }
 
-    const toastId = toast.loading('Copying link to clipboard...');
-    let link = metadata.publishedObjectId
-      ? `${apiUrl}/objects/${metadata.publishedObjectId}/public`
-      : null;
-    if (!link) {
-      link = await network.api.publishObject(metadata.metadata.dataCid);
-    }
-
-    navigator.clipboard.writeText(link);
-
-    toast.success('Link copied to clipboard', {
-      id: toastId,
-    });
-  }, [
-    metadata?.metadata.dataCid,
-    metadata?.publishedObjectId,
-    network.api,
-    network.network.id,
-  ]);
+    toast.success(EXTERNAL_ROUTES.gatewayObjectDownload(cid));
+  }, [cid]);
 
   const copyDetailsLink = useCallback(() => {
     if (!metadata?.metadata.dataCid) {

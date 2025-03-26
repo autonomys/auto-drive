@@ -28,6 +28,8 @@ export const EXTERNAL_ROUTES = {
     'https://api.github.com/repos/autonomys/space-acres/releases/latest',
   astral: 'https://astral.autonomys.xyz/',
   farmerDocs: 'https://docs.autonomys.xyz/category/farming',
+  gatewayObjectDownload: (cid: string) =>
+    `https://gateway.autonomys.xyz/file/${cid}`,
 };
 
 export const ROUTES = {
