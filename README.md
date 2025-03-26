@@ -10,9 +10,8 @@ Auto Drive offers a user-friendly interface for uploading and downloading files,
 
 ### Prerequisites
 
-- Node.js (v14 or later)
+- Node.js (v20 or later)
 - Yarn
-- Access to an Autonomys Network node
 
 ### Installation
 
