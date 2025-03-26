@@ -35,7 +35,7 @@ Auto Drive offers a user-friendly interface for uploading and downloading files,
    yarn build
    ```
 
-4. Launch backend (requires backend):
+4. Launch backend (requires docker):
 
    ```
    docker compose up --env-file .env.dev -f docker-compose.dev.yml up -d
