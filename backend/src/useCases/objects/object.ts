@@ -365,11 +365,16 @@ const checkObjectsArchivalStatus = async () => {
 
   for (const cid of cids) {
     const allNodesArchived = await hasAllNodesArchived(cid)
+    // When archived, populate the cache with the file
     if (allNodesArchived) {
       await downloadService.download(cid)
       await processArchival(cid)
     }
   }
+}
+
+const addTag = async (cid: string, tag: string) => {
+  await metadataRepository.addTag(cid, tag)
 }
 
 export const ObjectUseCases = {
@@ -394,4 +399,5 @@ export const ObjectUseCases = {
   downloadPublishedObject,
   unpublishObject,
   checkObjectsArchivalStatus,
+  addTag,
 }

@@ -29,7 +29,10 @@ import {
 } from '../../utils/mocks.js'
 import { MemoryBlockstore } from 'blockstore-core'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
-import { nodesRepository } from '../../../src/repositories/index.js'
+import {
+  metadataRepository,
+  nodesRepository,
+} from '../../../src/repositories/index.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import PizZip from 'pizzip'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
@@ -59,7 +62,7 @@ describe('Folder Upload', () => {
 
   const folderName = 'test'
   const folderId = folderName
-  const subfileName = 'test.txt'
+  const subfileName = 'test.exe'
   const subfileId = subfileName
   const subfileMimeType = 'text/plain'
   const subfileSize = 100
@@ -258,6 +261,13 @@ describe('Folder Upload', () => {
         UploadsUseCases.processMigration(folderUpload.id),
       ).resolves.not.toThrow()
 
+      expect(rabbitMock).toHaveBeenCalledWith({
+        id: 'tag-upload',
+        params: {
+          cid: cidToString(cid),
+        },
+      })
+
       const node = await nodesRepository.getNode(cidToString(cid))
       expect(node).not.toBeNull()
 
@@ -269,6 +279,14 @@ describe('Folder Upload', () => {
         params: {
           nodes: expect.arrayContaining([cidToString(cid)]),
         },
+      })
+    })
+
+    it('tagging folder should mark subfile as insecure', async () => {
+      await UploadsUseCases.tagUpload(folderCID)
+      const metadata = await metadataRepository.getMetadata(subfileCID)
+      expect(metadata).toMatchObject({
+        tags: ['insecure'],
       })
     })
 

@@ -5,6 +5,7 @@ query GetMetadataByHeadCID($headCid: String!) {
     }
   ) {
     head_cid
+    tags
     metadata
     created_at
     published_objects {

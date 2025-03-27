@@ -220,6 +220,13 @@ files.map((file, index) => {
           },
         })
 
+        expect(rabbitMock).toHaveBeenCalledWith({
+          id: 'tag-upload',
+          params: {
+            cid: cidToString(cid),
+          },
+        })
+
         const node = await nodesRepository.getNode(cidToString(cid))
         expect(node).not.toBeNull()
 

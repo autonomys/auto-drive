@@ -71,5 +71,6 @@ export const config = {
         env('DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT', FIVE_GB.toString()),
       ),
     },
+    forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
   },
 }
