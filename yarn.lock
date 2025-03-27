@@ -10205,6 +10205,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"hasura@npm:^2.0.1":
+  version: 2.0.1
+  resolution: "hasura@npm:2.0.1"
+  checksum: 10c0/ad09dc1eff12066f5d825041313fc9c6c8de7b1f3fe8897989b2a43e53f3a017729429bf6c1428bf393e59fcc0abfc0e6dfc17525276da6d36c8015b2076f6ea
+  languageName: node
+  linkType: hard
+
+"hasura@workspace:hasura":
+  version: 0.0.0-use.local
+  resolution: "hasura@workspace:hasura"
+  dependencies:
+    hasura: "npm:^2.0.1"
+  languageName: unknown
+  linkType: soft
+
 "header-case@npm:^2.0.4":
   version: 2.0.4
   resolution: "header-case@npm:2.0.4"
