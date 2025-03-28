@@ -391,7 +391,7 @@
         e.preventDefault();
         const cid = cidInput.value.trim();
         if (cid) {
-          window.location.href = `/file/${cid}`;
+          window.open(`/file/${cid}`, "_blank");
         }
       });
     </script>
