@@ -8,6 +8,7 @@ export interface ObjectInformation {
   uploadStatus: ObjectUploadStatus;
   owners: Owner[];
   publishedObjectId: string | null;
+  tags: string[];
 }
 
 export interface ObjectUploadStatus {
@@ -36,6 +37,7 @@ export type ObjectSearchResult = {
 
 export type ObjectSummary = {
   headCid: string;
+  tags: string[];
   name?: string;
   size: string;
   owners: Owner[];
@@ -65,6 +67,7 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
         children: object.metadata.children,
         uploadStatus: object.uploadStatus,
         createdAt: object.createdAt,
+        tags: object.tags,
       }
     : {
         headCid: object.metadata.dataCid,
@@ -75,6 +78,7 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
         uploadStatus: object.uploadStatus,
         owners: object.owners,
         createdAt: object.createdAt,
+        tags: object.tags,
       };
 };
 

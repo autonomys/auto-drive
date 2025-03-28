@@ -222,6 +222,7 @@ const getObjectInformation = async (
   return {
     cid,
     metadata: metadata.metadata,
+    tags: metadata.tags,
     uploadStatus,
     owners,
     publishedObjectId: publishedObjectId?.id ?? null,
