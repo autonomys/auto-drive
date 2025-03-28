@@ -114,7 +114,7 @@ export const ObjectDownloadModal = ({
       return (
         <div className='flex flex-col items-center gap-2'>
           <div className='flex flex-col items-center gap-2'>
-            <span className='rounded-lg border bg-red-500 p-2 text-center text-sm font-bold text-white'>
+            <span className='rounded-lg border bg-orange-500 p-2 text-center text-sm font-bold text-white'>
               Auto-Drive has detected this file as insecure, are you sure you
               want to download it?
             </span>
