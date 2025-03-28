@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A unified gateway solution designed to seamlessly connect and access files or folders permanently stored on Autonomys Mainnet&Tesnet through a single, streamlined interface."
+    />
+    <title>Auto Drive Gateway | Autonomys</title>
+    <link
+      rel="icon"
+      href="https://ai3.storage/favicon.ico"
+      type="image/x-icon"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: "#5870b3",
+              "brand-hover": "#405991",
+              "brand-secondary": "#1d2c57",
+              "muted-foreground": "hsl(240 3.8% 46.1%)",
+              "background-light": "#ebeffc",
+              "gray-light": "#ebeffc",
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="bg-background-light min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+      <!-- Header -->
+      <header class="flex justify-between items-center mb-12">
+        <div class="flex items-center">
+          <img
+            src="https://cdn.prod.website-files.com/66d7181179fbc331d39e9df0/672d74015bf9fde9733f3505_new_autonomys-dark.svg"
+            alt="Autonomys Gateway"
+            class="w-auto h-10"
+          />
+        </div>
+      </header>
+
+      <!-- Hero Section -->
+      <section class="text-center mb-16">
+        <h2 class="text-4xl md:text-5xl font-bold mb-4 text-brand-secondary">
+          Auto Drive Getaway
+        </h2>
+        <p class="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
+          A unified gateway solution designed to seamlessly connect and access
+          files or folders permanently stored on Autonomys Mainnet & Tesnet
+          through a single, streamlined interface.
+        </p>
+      </section>
+
+      <!-- Search Section -->
+      <section class="max-w-2xl mx-auto mb-16">
+        <div class="bg-white p-6 rounded-xl shadow-lg">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-2xl font-semibold text-brand-secondary">
+              Find Your File or Folder
+            </h3>
+            <a
+              href="https://ai3.storage"
+              target="_blank"
+              class="inline-flex items-center text-sm text-brand hover:underline group relative"
+            >
+              Get your CID's from here
+              <svg
+                width="16px"
+                height="16px"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                stroke="#405991"
+                class="ml-1"
+              >
+                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                <g
+                  id="SVGRepo_tracerCarrier"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></g>
+                <g id="SVGRepo_iconCarrier">
+                  <g id="Interface / External_Link">
+                    <path
+                      id="Vector"
+                      d="M10.0002 5H8.2002C7.08009 5 6.51962 5 6.0918 5.21799C5.71547 5.40973 5.40973 5.71547 5.21799 6.0918C5 6.51962 5 7.08009 5 8.2002V15.8002C5 16.9203 5 17.4801 5.21799 17.9079C5.40973 18.2842 5.71547 18.5905 6.0918 18.7822C6.5192 19 7.07899 19 8.19691 19H15.8031C16.921 19 17.48 19 17.9074 18.7822C18.2837 18.5905 18.5905 18.2839 18.7822 17.9076C19 17.4802 19 16.921 19 15.8031V14M20 9V4M20 4H15M20 4L13 11"
+                      stroke="#405991"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    ></path>
+                  </g>
+                </g>
+              </svg>
+
+              <!-- Tooltip -->
+              <span
+                class="absolute -top-8 right-0 scale-0 group-hover:scale-100 transition transform bg-black text-white text-xs px-2 py-1 rounded-md shadow-md z-10"
+              >
+                Open ai3.storage
+              </span>
+            </a>
+          </div>
+
+          <p class="text-muted-foreground mb-6">
+            Enter your Content Identifier (CID) to download your file or folder
+          </p>
+
+          <form id="search-form" class="space-y-4">
+            <div class="relative">
+              <input
+                type="text"
+                id="cid-input"
+                placeholder="Enter CID..."
+                class="w-full px-4 py-3 rounded-lg border border-gray-light focus:outline-none focus:ring-2 focus:ring-brand"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              class="w-full bg-brand hover:bg-brand-hover text-white font-medium py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center"
+            >
+              <svg
+                width="20px"
+                height="20px"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                class="mr-2"
+              >
+                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                <g
+                  id="SVGRepo_tracerCarrier"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></g>
+                <g id="SVGRepo_iconCarrier">
+                  <path
+                    d="M15.0007 12C15.0007 13.6569 13.6576 15 12.0007 15C10.3439 15 9.00073 13.6569 9.00073 12C9.00073 10.3431 10.3439 9 12.0007 9C13.6576 9 15.0007 10.3431 15.0007 12Z"
+                    stroke="#ffffff"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  ></path>
+                  <path
+                    d="M12.0012 5C7.52354 5 3.73326 7.94288 2.45898 12C3.73324 16.0571 7.52354 19 12.0012 19C16.4788 19 20.2691 16.0571 21.5434 12C20.2691 7.94291 16.4788 5 12.0012 5Z"
+                    stroke="#ffffff"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  ></path>
+                </g>
+              </svg>
+              View
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Info Section -->
+      <section class="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
+        <div class="bg-white p-6 rounded-xl shadow-md">
+          <h3 class="text-xl font-semibold mb-4 text-brand-secondary">
+            Retrieve File by CID
+          </h3>
+          <p class="text-muted-foreground mb-4">
+            Endpoint:
+            <code class="bg-gray-light px-2 py-1 rounded">GET /file/:cid</code>
+          </p>
+          <p class="text-muted-foreground">
+            Retrieves a file based on its Content Identifier (CID). If the CID
+            corresponds to a folder, the request is redirected to the folder
+            endpoint.
+          </p>
+
+          <div class="mt-4 space-y-2">
+            <p class="font-medium text-brand-secondary">Responses:</p>
+            <ul class="list-disc pl-5 text-muted-foreground">
+              <li>
+                <code>302 Redirect</code>: Redirects to /folder/:cid if the CID
+                corresponds to a folder.
+              </li>
+              <li>
+                <code>404 Not Found</code>: If no file or folder is found for
+                the provided CID.
+              </li>
+              <li>
+                <code>200 OK</code>: Successfully retrieves and serves the
+                requested file.
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-md">
+          <h3 class="text-xl font-semibold mb-4 text-brand-secondary">
+            Retrieve Folder by CID
+          </h3>
+          <p class="text-muted-foreground mb-4">
+            Endpoint:
+            <code class="bg-gray-light px-2 py-1 rounded"
+              >GET /folder/:cid</code
+            >
+          </p>
+          <p class="text-muted-foreground">
+            Retrieves a folder based on its Content Identifier (CID). If the CID
+            corresponds to a file, the request is redirected to the file
+            endpoint.
+          </p>
+
+          <div class="mt-4 space-y-2">
+            <p class="font-medium text-brand-secondary">Responses:</p>
+            <ul class="list-disc pl-5 text-muted-foreground">
+              <li>
+                <code>302 Redirect</code>: Redirects to /file/:cid if the CID
+                corresponds to a file.
+              </li>
+              <li>
+                <code>404 Not Found</code>: If no folder or file is found for
+                the provided CID.
+              </li>
+              <li>
+                <code>200 OK</code>: Successfully retrieves and serves the
+                requested folder.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="mt-16 bg-brand text-white rounded-lg p-10">
+        <div class="px-4 grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Logo & Copyright -->
+          <div class="flex flex-col justify-between h-full">
+            <div class="w-100">
+              <img
+                src="https://cdn.prod.website-files.com/66d7181179fbc331d39e9df0/672d7401d7cd2056faa4ecad_new_autonomys-light.svg"
+                alt="Autonomys"
+                class="h-6 mb-4 w-100"
+              />
+            </div>
+
+            <p class="text-xs text-gray-300 mt-auto">
+              © 2025 Autonomys Labs, Inc. All Rights Reserved
+            </p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-8">
+            <!-- Links -->
+            <div>
+              <h4 class="font-semibold mb-6 text-xs">LINKS:</h4>
+              <ul class="space-y-4 text-gray-300 text-xs">
+                <li>
+                  <a
+                    href="https://academy.autonomys.xyz/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Academy</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://forum.autonomys.xyz/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Forum</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://docs.autonomys.xyz/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Docs</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://autonomys.xyz/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Website</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://ai3.storage/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Auto Drive</a
+                  >
+                </li>
+              </ul>
+            </div>
+
+            <!-- Social -->
+            <div>
+              <h4 class="font-semibold mb-6 text-xs">SOCIAL:</h4>
+              <div class="grid grid-cols-2 gap-x-6 text-gray-300 text-xs">
+                <ul class="space-y-4 flex flex-col">
+                  <li>
+                    <a
+                      href="https://x.com/AutonomysNet"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      Twitter
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://discord.com/invite/subspace-network"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      Discord
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://t.me/subspace_network"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      Telegram
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://github.com/autonomys"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      GitHub
+                    </a>
+                  </li>
+                </ul>
+                <ul class="space-y-4 flex flex-col">
+                  <li>
+                    <a
+                      href="https://medium.com/subspace-network"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      Medium
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://www.youtube.com/@AutonomysNetwork"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      YouTube
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://www.linkedin.com/company/autonomys/"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      LinkedIn
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+    <script>
+      const searchForm = document.getElementById("search-form");
+      const cidInput = document.getElementById("cid-input");
+      searchForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const cid = cidInput.value.trim();
+        if (cid) {
+          window.location.href = `/file/${cid}`;
+        }
+      });
+    </script>
+  </body>
+</html>

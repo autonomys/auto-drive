@@ -35,6 +35,10 @@ app.get("/folder/:cid", async (req, res) => {
   internalRedirect(req, res, result.url);
 });
 
+app.get("/", (req, res) => {
+  res.sendFile("index.html", { root: "public" });
+});
+
 app.listen(config.port, () => {
   console.log(`Server is running on port ${config.port}`);
 });
