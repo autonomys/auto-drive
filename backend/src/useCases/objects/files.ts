@@ -215,9 +215,10 @@ const retrieveAndReassembleFolderAsZip = async (
 const downloadObjectByUser = async (
   reader: UserWithOrganization,
   cid: string,
+  blockingTags?: string[],
 ): Promise<FileDownload> => {
-  const metadata = await ObjectUseCases.getMetadata(cid)
-  if (!metadata) {
+  const information = await ObjectUseCases.getObjectInformation(cid)
+  if (!information) {
     throw new Error(`Metadata with CID ${cid} not found`)
   }
 
@@ -226,9 +227,14 @@ const downloadObjectByUser = async (
       reader,
       InteractionType.Download,
     )
+  const { metadata, tags } = information
 
   if (pendingCredits < metadata.totalSize) {
     throw new Error('Not enough download credits')
+  }
+
+  if (blockingTags && tags.some((tag) => blockingTags.includes(tag))) {
+    throw new Error('File is blocked')
   }
 
   return {
@@ -249,13 +255,18 @@ const downloadObjectByUser = async (
 
 const downloadObjectByAnonymous = async (
   cid: string,
+  blockingTags?: string[],
 ): Promise<FileDownload> => {
-  const metadata = await ObjectUseCases.getMetadata(cid)
-  if (!metadata) {
+  const information = await ObjectUseCases.getObjectInformation(cid)
+  if (!information) {
     throw new Error(`Metadata with CID ${cid} not found`)
   }
+  const { metadata, tags } = information
   if (metadata.totalSize > config.params.maxAnonymousDownloadSize) {
     throw new Error('File too large to be downloaded anonymously.')
+  }
+  if (blockingTags && tags.some((tag) => blockingTags.includes(tag))) {
+    throw new Error('File is blocked')
   }
 
   return {

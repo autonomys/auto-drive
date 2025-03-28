@@ -10,6 +10,7 @@ query GetGlobalFiles(
     order_by: $orderBy
   ) {
     cid: head_cid
+    tags
     type: metadata(path: "type")
     name: metadata(path: "name")
     mimeType: metadata(path: "mimeType")

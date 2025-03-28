@@ -222,6 +222,7 @@ const getObjectInformation = async (
   return {
     cid,
     metadata: metadata.metadata,
+    tags: metadata.tags,
     uploadStatus,
     owners,
     publishedObjectId: publishedObjectId?.id ?? null,
@@ -331,7 +332,7 @@ const publishObject = async (user: UserWithOrganization, cid: string) => {
   return publishedObject
 }
 
-const downloadPublishedObject = async (id: string) => {
+const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
   const publishedObject =
     await publishedObjectsRepository.getPublishedObjectById(id)
   if (!publishedObject) {
@@ -343,7 +344,11 @@ const downloadPublishedObject = async (id: string) => {
     throw new Error('User does not have a subscription')
   }
 
-  return FilesUseCases.downloadObjectByUser(user, publishedObject.cid)
+  return FilesUseCases.downloadObjectByUser(
+    user,
+    publishedObject.cid,
+    blockingTags,
+  )
 }
 
 const unpublishObject = async (user: User, cid: string) => {
@@ -365,11 +370,16 @@ const checkObjectsArchivalStatus = async () => {
 
   for (const cid of cids) {
     const allNodesArchived = await hasAllNodesArchived(cid)
+    // When archived, populate the cache with the file
     if (allNodesArchived) {
       await downloadService.download(cid)
       await processArchival(cid)
     }
   }
+}
+
+const addTag = async (cid: string, tag: string) => {
+  await metadataRepository.addTag(cid, tag)
 }
 
 export const ObjectUseCases = {
@@ -394,4 +404,5 @@ export const ObjectUseCases = {
   downloadPublishedObject,
   unpublishObject,
   checkObjectsArchivalStatus,
+  addTag,
 }

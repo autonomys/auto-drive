@@ -16,7 +16,7 @@ import { filePartsRepository } from '../../repositories/uploads/fileParts.js'
 import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../repositories/uploads/fileProcessingInfo.js'
 import { FilesUseCases } from '../objects/files.js'
-import { NodesUseCases } from '../objects/index.js'
+import { NodesUseCases, ObjectUseCases } from '../objects/index.js'
 import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
 import { TaskManager } from '../../services/taskManager/index.js'
 import { Task } from '../../services/taskManager/tasks.js'
@@ -290,16 +290,46 @@ const scheduleNodesPublish = async (uploadId: string): Promise<void> => {
   TaskManager.publish(tasks)
 }
 
+const scheduleUploadTagging = async (cid: string): Promise<void> => {
+  const tasks: Task[] = [
+    {
+      id: 'tag-upload',
+      params: {
+        cid,
+      },
+    },
+  ]
+
+  TaskManager.publish(tasks)
+}
+
+const tagUpload = async (cid: string): Promise<void> => {
+  const metadata = await ObjectUseCases.getMetadata(cid)
+  if (metadata?.type === 'folder') {
+    await Promise.all(metadata.children.map((child) => tagUpload(child.cid)))
+  } else {
+    const fileExtension = metadata?.name?.split('.').pop()
+    const isFileInsecure =
+      fileExtension &&
+      config.params.forbiddenExtensions.some((ext) => ext.match(fileExtension))
+    if (isFileInsecure) {
+      await ObjectUseCases.addTag(cid, 'insecure')
+    }
+  }
+}
+
 const processMigration = async (uploadId: string): Promise<void> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
     throw new Error('Upload not found')
   }
 
+  const cid = await BlockstoreUseCases.getUploadCID(uploadId)
   await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId)
 
   await scheduleNodesPublish(uploadId)
   await removeUploadArtifacts(uploadId)
+  await scheduleUploadTagging(cidToString(cid))
 }
 
 export const UploadsUseCases = {
@@ -313,4 +343,6 @@ export const UploadsUseCases = {
   processMigration,
   createSubFolderUpload,
   scheduleNodesPublish,
+  scheduleUploadTagging,
+  tagUpload,
 }

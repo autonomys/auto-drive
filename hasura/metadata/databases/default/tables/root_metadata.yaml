@@ -10,6 +10,7 @@ select_permissions:
         - head_cid
         - name
         - metadata
+        - tags
         - created_at
         - updated_at
       filter: {}

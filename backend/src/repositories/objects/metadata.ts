@@ -10,6 +10,7 @@ export interface MetadataEntry {
   metadata: OffchainMetadata
   is_archived: boolean
   created_at: Date
+  tags: string[]
 }
 
 type MetadataEntryWithTotalCount = MetadataEntry & {
@@ -283,6 +284,15 @@ const getMetadataByIsArchived = async (
   return result.rows
 }
 
+const addTag = async (cid: string, tag: string) => {
+  const db = await getDatabase()
+
+  await db.query({
+    text: 'UPDATE metadata SET tags = array_append(tags, $1) WHERE head_cid = $2',
+    values: [tag, cid],
+  })
+}
+
 export const metadataRepository = {
   getMetadata,
   setMetadata,
@@ -299,4 +309,5 @@ export const metadataRepository = {
   getMarkedAsDeletedRootObjectsByUser,
   markAsArchived,
   getMetadataByIsArchived,
+  addTag,
 }

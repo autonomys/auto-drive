@@ -162,6 +162,11 @@ export const FileTableRow = ({
                       ? shortenString(file.name, 30)
                       : `No name (${file.headCid.slice(0, 12)})`}
                   </span>
+                  <ConditionalRender condition={file.tags.includes('insecure')}>
+                    <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+                      Insecure
+                    </span>
+                  </ConditionalRender>
                   <InternalLink
                     href={ROUTES.objectDetails(network.id, file.headCid)}
                   >

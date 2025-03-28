@@ -31,6 +31,7 @@ export const mapObjectInformationFromQueryResult = (
       maximumBlockDepth:
         metadata.maximumBlockDepth?.[0]?.block_published_on ?? null,
     },
+    tags: metadata.tags ?? [],
     owners: metadata.object_ownership.map((owner) => ({
       role: owner.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
       oauthProvider: owner.oauth_provider ?? '',

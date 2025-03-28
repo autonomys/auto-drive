@@ -36,6 +36,8 @@ const processTask = ({ id, params }: Task) => {
     return NodesUseCases.processNodeArchived(params.objects)
   } else if (id === 'publish-nodes') {
     return OnchainPublisher.publishNodes(params.nodes)
+  } else if (id === 'tag-upload') {
+    return UploadsUseCases.tagUpload(params.cid)
   } else {
     return exhaustiveCheck(id)
   }

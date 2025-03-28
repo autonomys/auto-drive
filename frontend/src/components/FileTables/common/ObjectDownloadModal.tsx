@@ -31,6 +31,7 @@ export const ObjectDownloadModal = ({
   const [passwordConfirmed, setPasswordConfirmed] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [wrongPassword, setWrongPassword] = useState<boolean>(false);
+  const [insecure, setInsecure] = useState<boolean>(false);
   const defaultPassword = useEncryptionStore((store) => store.password);
   const session = useSession();
   const network = useNetwork();
@@ -51,10 +52,12 @@ export const ObjectDownloadModal = ({
     },
     skip: !cid || !session.data?.accessToken,
     onCompleted: (data) => {
-      setMetadata(mapObjectInformationFromQueryResult(data).metadata);
+      const summary = mapObjectInformationFromQueryResult(data);
+      setMetadata(summary.metadata);
       setPassword(undefined);
       setPasswordConfirmed(false);
       setIsDownloading(false);
+      setInsecure(summary.tags.includes('insecure'));
       if (defaultPassword && !wrongPassword) {
         setPassword(defaultPassword);
         setPasswordConfirmed(true);
@@ -90,11 +93,11 @@ export const ObjectDownloadModal = ({
     passwordConfirmed;
 
   useEffect(() => {
-    if (passwordOrNotEncrypted && !isDownloading) {
+    if (passwordOrNotEncrypted && !isDownloading && !insecure) {
       setIsDownloading(true);
       onDownload();
     }
-  }, [passwordOrNotEncrypted, onDownload, isDownloading]);
+  }, [passwordOrNotEncrypted, onDownload, isDownloading, insecure]);
 
   useEffect(() => {
     if (wrongPassword) {
@@ -105,6 +108,28 @@ export const ObjectDownloadModal = ({
   const view = useMemo(() => {
     if (!metadata) {
       return null;
+    }
+
+    if (insecure) {
+      return (
+        <div className='flex flex-col items-center gap-2'>
+          <div className='flex flex-col items-center gap-2'>
+            <span className='rounded-lg border bg-orange-500 p-2 text-center text-sm font-bold text-white'>
+              Auto-Drive has detected this file as insecure, are you sure you
+              want to download it?
+            </span>
+          </div>
+          <div className='flex w-full justify-center gap-2'>
+            <Button
+              variant='primary'
+              className='w-[50%] text-xs'
+              onClick={() => setInsecure(false)}
+            >
+              Download Anyway
+            </Button>
+          </div>
+        </div>
+      );
     }
 
     if (passwordOrNotEncrypted) {
@@ -150,7 +175,8 @@ export const ObjectDownloadModal = ({
       <div className='flex flex-col gap-4'>
         <span className='text-sm text-gray-500'>
           Folder &quot;{shortenString(metadata.name ?? '', 20)}&quot; includes
-          encrypted files. This will download a zip file with files encrypted.{' '}
+          encrypted files. This will download a zip file with files
+          encrypted.{' '}
         </span>
         <span className='text-sm font-bold text-gray-500'>
           For downloading the plain files, download individual files, providing

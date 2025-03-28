@@ -6,6 +6,7 @@ export const objectSummaryFromTrashedFilesQuery = (
 ): ObjectSummary[] => {
   return e.metadata_roots.map((m) => ({
     headCid: m.cid ?? '',
+    tags: m.tags ?? [],
     size: m.size ?? 0,
     owners: m.inner_metadata!.object_ownership.map((o) => ({
       oauthProvider: o.oauth_provider,

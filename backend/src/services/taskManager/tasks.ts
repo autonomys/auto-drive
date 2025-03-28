@@ -20,6 +20,12 @@ export const TaskSchema = z.discriminatedUnion('id', [
       nodes: z.array(z.string()),
     }),
   }),
+  z.object({
+    id: z.literal('tag-upload'),
+    params: z.object({
+      cid: z.string(),
+    }),
+  }),
 ])
 
 export type MigrateUploadTask = z.infer<typeof TaskSchema>
