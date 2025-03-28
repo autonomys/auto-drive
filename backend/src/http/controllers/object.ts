@@ -222,6 +222,12 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     try {
       const { cid } = req.params
+      const { blockObjectsWithTags } = req.query
+
+      const blockingTags = blockObjectsWithTags
+        ?.toString()
+        .split(',')
+        .filter((e) => e.trim())
 
       const optionalAuthResult = await handleOptionalAuth(req, res)
       if (!optionalAuthResult) {
@@ -234,8 +240,8 @@ objectController.get(
         typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
 
       const { metadata, startDownload } = !user
-        ? await FilesUseCases.downloadObjectByAnonymous(cid)
-        : await FilesUseCases.downloadObjectByUser(user, cid)
+        ? await FilesUseCases.downloadObjectByAnonymous(cid, blockingTags)
+        : await FilesUseCases.downloadObjectByUser(user, cid, blockingTags)
 
       if (!metadata) {
         res.status(404).json({
@@ -353,9 +359,13 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     try {
       const { id } = req.params
+      const blockingTags = req.query.blockObjectsWithTags
+        ?.toString()
+        .split(',')
+        .filter((e) => e.trim())
 
       const { metadata, startDownload } =
-        await ObjectUseCases.downloadPublishedObject(id)
+        await ObjectUseCases.downloadPublishedObject(id, blockingTags)
       if (!metadata) {
         res.status(404).json({
           error: 'Published object not found',

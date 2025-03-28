@@ -332,7 +332,7 @@ const publishObject = async (user: UserWithOrganization, cid: string) => {
   return publishedObject
 }
 
-const downloadPublishedObject = async (id: string) => {
+const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
   const publishedObject =
     await publishedObjectsRepository.getPublishedObjectById(id)
   if (!publishedObject) {
@@ -344,7 +344,11 @@ const downloadPublishedObject = async (id: string) => {
     throw new Error('User does not have a subscription')
   }
 
-  return FilesUseCases.downloadObjectByUser(user, publishedObject.cid)
+  return FilesUseCases.downloadObjectByUser(
+    user,
+    publishedObject.cid,
+    blockingTags,
+  )
 }
 
 const unpublishObject = async (user: User, cid: string) => {
