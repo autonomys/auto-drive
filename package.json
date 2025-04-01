@@ -26,8 +26,7 @@
     "hasura": "yarn workspace hasura",
     "auth": "yarn workspace auth",
     "gateway": "yarn workspace gateway",
-    "models": "yarn workspace @auto-drive/models",
-    "auto-files-gateway": "yarn workspace submodules/files-gateway"
+    "models": "yarn workspace @auto-drive/models"
   },
   "packageManager": "yarn@4.2.2",
   "devDependencies": {
