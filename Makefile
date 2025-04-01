@@ -9,6 +9,7 @@ gateway:
 
 submodules:
 	git submodules update --init --recursive
+	yarn auto-files-gateway install
 	yarn auto-files-gateway build
 
 common: submodules models
