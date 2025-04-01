@@ -14,4 +14,13 @@ submodules:
 
 common: submodules models
 
+test:
+	yarn backend test
+	yarn auth test
+
+lint:
+	yarn backend lint
+	yarn auth lint
+	yarn frontend lint
+
 all: submodules models frontend gateway backend
