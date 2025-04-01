@@ -1,10 +1,7 @@
-import { z } from 'zod'
-import { ObjectMappingListEntrySchema } from '@auto-drive/models'
 import { NodesUseCases } from '../../../useCases/index.js'
 import { config } from '../../../config.js'
 import { logger } from '../../../drivers/logger.js'
 import { nodesRepository } from '../../../repositories/index.js'
-import { ApiClientType } from '@autonomys/rpc'
 import { ObjectMappingIndexerRPCApi } from '@auto-files/rpc-apis'
 
 type ObjectMappingIndexerRpcClient = ReturnType<
