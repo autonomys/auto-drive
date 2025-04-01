@@ -1,0 +1,4 @@
+[submodule "submodules/files-gateway"]
+	path = submodules/files-gateway
+	url = https://github.com/autonomys/auto-files-gateway.git
+	branch = fix-rpc-listen
