@@ -18,7 +18,7 @@
     "build:backend": "yarn workspace backend build",
     "build:frontend": "yarn workspace frontend build",
     "build:auth": "yarn workspace auth build",
-    "build": "yarn workspaces foreach --all --exclude hasura run build",
+    "build": "make all",
     "test": "yarn workspaces foreach --all --exclude hasura --exclude @auto-drive/models run test",
     "frontend": "yarn workspace frontend",
     "lint": "yarn workspaces foreach --all --exclude hasura --exclude @auto-drive/models run lint",

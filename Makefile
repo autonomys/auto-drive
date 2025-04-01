@@ -14,3 +14,4 @@ submodules:
 
 common: submodules models
 
+all: submodules models frontend gateway backend
