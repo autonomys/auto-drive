@@ -209,12 +209,12 @@ const getUploadedNodesByRootCid = async (rootCid: string) => {
     .then((e) => e.rows)
 }
 
-const getFirstNotArchivedNode = async () => {
+const getLastArchivedPieceNode = async () => {
   const db = await getDatabase()
 
   return db
     .query<Node>({
-      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL LIMIT 1',
+      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL ORDER BY block_published_on DESC LIMIT 1',
     })
     .then((e) => e.rows.at(0))
 }
@@ -232,5 +232,5 @@ export const nodesRepository = {
   getNodesByCids,
   updateNodePublishedOn,
   getUploadedNodesByRootCid,
-  getFirstNotArchivedNode,
+  getLastArchivedPieceNode,
 }
