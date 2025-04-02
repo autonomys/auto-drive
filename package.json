@@ -19,7 +19,7 @@
     "build:frontend": "yarn workspace frontend build",
     "build:auth": "yarn workspace auth build",
     "build": "make all",
-    "test": "make test  ",
+    "test": "make test",
     "frontend": "yarn workspace frontend",
     "lint": "yarn workspaces foreach --all --exclude hasura --exclude @auto-drive/models run lint",
     "backend": "yarn workspace backend",
