@@ -214,13 +214,6 @@ files.map((file, index) => {
         ).resolves.not.toThrow()
 
         expect(rabbitMock).toHaveBeenCalledWith({
-          id: 'publish-nodes',
-          params: {
-            nodes: expect.arrayContaining([cidToString(cid)]),
-          },
-        })
-
-        expect(rabbitMock).toHaveBeenCalledWith({
           id: 'tag-upload',
           params: {
             cid: cidToString(cid),
@@ -234,6 +227,15 @@ files.map((file, index) => {
           upload.id,
         )
         expect(uploadEntry).toBeNull()
+
+        // Tag the upload
+        await UploadsUseCases.tagUpload(cidToString(cid))
+        expect(rabbitMock).toHaveBeenCalledWith({
+          id: 'publish-nodes',
+          params: {
+            nodes: expect.arrayContaining([cidToString(cid)]),
+          },
+        })
       })
     })
 

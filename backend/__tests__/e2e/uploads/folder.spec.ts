@@ -273,13 +273,6 @@ describe('Folder Upload', () => {
 
       const uploads = await uploadsRepository.getUploadsByRoot(folderUpload.id)
       expect(uploads).toHaveLength(0)
-
-      expect(rabbitMock).toHaveBeenCalledWith({
-        id: 'publish-nodes',
-        params: {
-          nodes: expect.arrayContaining([cidToString(cid)]),
-        },
-      })
     })
 
     it('tagging folder should mark subfile as insecure', async () => {
@@ -287,6 +280,13 @@ describe('Folder Upload', () => {
       const metadata = await metadataRepository.getMetadata(subfileCID)
       expect(metadata).toMatchObject({
         tags: ['insecure'],
+      })
+
+      expect(rabbitMock).toHaveBeenCalledWith({
+        id: 'publish-nodes',
+        params: {
+          nodes: expect.arrayContaining([folderCID, subfileCID, subfolderCid]),
+        },
       })
     })
 
