@@ -247,16 +247,5 @@
         </div>
       </footer>
     </div>
-    <script>
-      const searchForm = document.getElementById("search-form");
-      const cidInput = document.getElementById("cid-input");
-      searchForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const cid = cidInput.value.trim();
-        if (cid) {
-          window.open(`/file/${cid}`, "_blank");
-        }
-      });
-    </script>
   </body>
 </html>
