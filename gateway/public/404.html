@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A unified gateway solution designed to seamlessly connect and access files or folders permanently stored on Autonomys Mainnet & Taurus Testnet through a single, streamlined interface."
+    />
+    <title>Auto Drive Gateway | Autonomys</title>
+    <link
+      rel="icon"
+      href="https://ai3.storage/favicon.ico"
+      type="image/x-icon"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: "#5870b3",
+              "brand-hover": "#405991",
+              "brand-secondary": "#1d2c57",
+              "muted-foreground": "hsl(240 3.8% 46.1%)",
+              "background-light": "#ebeffc",
+              "gray-light": "#ebeffc",
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="bg-background-light min-h-screen">
+    <div class="container mx-auto px-4 py-8 flex flex-col items-center">
+      <!-- Hero Section -->
+      <section
+        class="text-center mb-16 h-[25vh] flex items-center justify-center flex-col"
+      >
+        <h2 class="text-4xl md:text-5xl font-bold mb-4 text-brand-secondary">
+          File Not Found
+        </h2>
+        <p class="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
+          The file or folder you are looking for does not exist. This could be
+          due to the file not being archived yet or the CID being incorrect.
+        </p>
+      </section>
+
+      <!-- Search Section -->
+      <section class="max-w-2xl mx-auto mb-16 flex flex-row gap-4 w-1/2">
+        <a href="/" class="content flex flex-1">
+          <button
+            type="submit"
+            onclick="window.location.href = '/'"
+            class="w-full bg-white hover:bg-white-hover text-brand font-medium py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center"
+          >
+            <svg
+              width="24px"
+              height="24px"
+              fill="none"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+              class="mr-2"
+            >
+              <path
+                d="M2 12.2039C2 9.91549 2 8.77128 2.5192 7.82274C3.0384 6.87421 3.98695 6.28551 5.88403 5.10813L7.88403 3.86687C9.88939 2.62229 10.8921 2 12 2C13.1079 2 14.1106 2.62229 16.116 3.86687L18.116 5.10812C20.0131 6.28551 20.9616 6.87421 21.4808 7.82274C22 8.77128 22 9.91549 22 12.2039V13.725C22 17.6258 22 19.5763 20.8284 20.7881C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.7881C2 19.5763 2 17.6258 2 13.725V12.2039Z"
+                stroke="#000"
+                stroke-width="1.5"
+              />
+              <path
+                d="M9 16C9.85038 16.6303 10.8846 17 12 17C13.1154 17 14.1496 16.6303 15 16"
+                stroke="#000"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+            </svg>
+            Go Home
+          </button>
+        </a>
+        <a
+          href="https://ai3.storage/"
+          target="_blank"
+          class="content flex flex-1"
+        >
+          <button
+            type="submit"
+            class="w-full bg-white hover:bg-white-hover text-brand font-medium py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center"
+          >
+            <img
+              src="https://ai3.storage/favicon.ico"
+              alt="Autonomys"
+              class="mr-2 w-4 h-4"
+            />
+            Explore files in Auto-Drive
+          </button>
+        </a>
+      </section>
+
+      <!-- Footer -->
+      <footer class="mt-16 bg-brand text-white rounded-lg p-10 w-[80%]">
+        <div class="px-4 grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Logo & Copyright -->
+          <div class="flex flex-col justify-between h-full">
+            <div class="w-100">
+              <img
+                src="https://cdn.prod.website-files.com/66d7181179fbc331d39e9df0/672d7401d7cd2056faa4ecad_new_autonomys-light.svg"
+                alt="Autonomys"
+                class="h-6 mb-4 w-100"
+              />
+            </div>
+
+            <p class="text-xs text-gray-300 mt-auto">
+              © 2025 Autonomys Labs, Inc. All Rights Reserved
+            </p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-8">
+            <!-- Links -->
+            <div>
+              <h4 class="font-semibold mb-6 text-xs">LINKS:</h4>
+              <ul class="space-y-4 text-gray-300 text-xs">
+                <li>
+                  <a
+                    href="https://academy.autonomys.xyz/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Academy</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://forum.autonomys.xyz/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Forum</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://docs.autonomys.xyz/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Docs</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://autonomys.xyz/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Website</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://ai3.storage/"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Auto Drive</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://explorer.autonomys.xyz"
+                    class="hover:text-white hover:underline"
+                    target="_blank"
+                    >Explorer</a
+                  >
+                </li>
+              </ul>
+            </div>
+
+            <!-- Social -->
+            <div>
+              <h4 class="font-semibold mb-6 text-xs">SOCIAL:</h4>
+              <div class="grid grid-cols-2 gap-x-6 text-gray-300 text-xs">
+                <ul class="space-y-4 flex flex-col">
+                  <li>
+                    <a
+                      href="https://x.com/AutonomysNet"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      Twitter
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://discord.com/invite/subspace-network"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      Discord
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://t.me/subspace_network"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      Telegram
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://github.com/autonomys"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      GitHub
+                    </a>
+                  </li>
+                </ul>
+                <ul class="space-y-4 flex flex-col">
+                  <li>
+                    <a
+                      href="https://medium.com/subspace-network"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      Medium
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://www.youtube.com/@AutonomysNetwork"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      YouTube
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://www.linkedin.com/company/autonomys/"
+                      target="_blank"
+                      class="hover:text-white flex items-center hover:underline"
+                    >
+                      LinkedIn
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+    <script>
+      const searchForm = document.getElementById("search-form");
+      const cidInput = document.getElementById("cid-input");
+      searchForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const cid = cidInput.value.trim();
+        if (cid) {
+          window.open(`/file/${cid}`, "_blank");
+        }
+      });
+    </script>
+  </body>
+</html>
