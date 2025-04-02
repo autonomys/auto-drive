@@ -187,6 +187,7 @@ export const ObjectDownloadModal = ({
     );
   }, [
     metadata,
+    insecure,
     passwordOrNotEncrypted,
     passwordConfirmed,
     password,
