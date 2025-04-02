@@ -273,9 +273,8 @@ const removeUploadArtifacts = async (uploadId: string): Promise<void> => {
   await fileProcessingInfoRepository.deleteFileProcessingInfo(uploadId)
 }
 
-const scheduleNodesPublish = async (uploadId: string): Promise<void> => {
-  const cid = await BlockstoreUseCases.getUploadCID(uploadId)
-  const nodes = await NodesUseCases.getCidsByRootCid(cidToString(cid))
+const scheduleNodesPublish = async (cid: string): Promise<void> => {
+  const nodes = await NodesUseCases.getCidsByRootCid(cid)
 
   const tasks: Task[] = chunkArray(
     nodes,
@@ -316,6 +315,8 @@ const tagUpload = async (cid: string): Promise<void> => {
       await ObjectUseCases.addTag(cid, 'insecure')
     }
   }
+
+  await scheduleNodesPublish(cid)
 }
 
 const processMigration = async (uploadId: string): Promise<void> => {
@@ -327,7 +328,6 @@ const processMigration = async (uploadId: string): Promise<void> => {
   const cid = await BlockstoreUseCases.getUploadCID(uploadId)
   await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId)
 
-  await scheduleNodesPublish(uploadId)
   await removeUploadArtifacts(uploadId)
   await scheduleUploadTagging(cidToString(cid))
 }
