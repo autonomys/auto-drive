@@ -15,6 +15,10 @@ const createDB = async (): Promise<pg.Pool> => {
       : {}),
   })
 
+  pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err)
+  })
+
   await pool.connect()
 
   return pool
