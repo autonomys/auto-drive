@@ -174,6 +174,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@autonomys/asynchronous@npm:^1.4.13":
+  version: 1.4.13
+  resolution: "@autonomys/asynchronous@npm:1.4.13"
+  checksum: 10c0/087d867d0b2b118218ba5f9f433cfce543459cf4ee6f55bcf1f1eed2f342d289f408a783ee24afcf3576a1ffeee7e44230808bc15e99287c76b3d9785fad7594
+  languageName: node
+  linkType: hard
+
 "@autonomys/asynchronous@npm:^1.4.3":
   version: 1.4.3
   resolution: "@autonomys/asynchronous@npm:1.4.3"
@@ -241,6 +248,25 @@ __metadata:
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
   checksum: 10c0/191141299cd038669056bcad233a88630410041fb5a6d8bcc5848a4183d59ce7e3d7300be070d12d3a31166effd730377c47bdf1d3a0f00651f3aed98b95683b
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-dag-data@npm:^1.4.13":
+  version: 1.4.13
+  resolution: "@autonomys/auto-dag-data@npm:1.4.13"
+  dependencies:
+    "@autonomys/asynchronous": "npm:^1.4.13"
+    "@ipld/dag-pb": "npm:^4.1.3"
+    "@peculiar/webcrypto": "npm:^1.5.0"
+    "@webbuf/blake3": "npm:^3.0.26"
+    "@webbuf/fixedbuf": "npm:^3.0.26"
+    "@webbuf/webbuf": "npm:^3.0.26"
+    fflate: "npm:^0.8.2"
+    multiformats: "npm:^13.3.2"
+    protobufjs: "npm:^7.4.0"
+    protons: "npm:^7.6.0"
+    protons-runtime: "npm:^5.5.0"
+  checksum: 10c0/9df1860cc1861534dc8508707daa73c82d25a7533b505dbc2aefc22e40d9f39d31c7574197e94f9b01c175350a0c2cdc7d1f9555a9ba4d6a099b239c52fe650a
   languageName: node
   linkType: hard
 
@@ -348,6 +374,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@autonomys/auto-utils@npm:^1.4.13":
+  version: 1.4.13
+  resolution: "@autonomys/auto-utils@npm:1.4.13"
+  dependencies:
+    "@polkadot/api": "npm:^15.8.1"
+    "@polkadot/extension-dapp": "npm:^0.58.6"
+    fs: "npm:^0.0.1-security"
+  checksum: 10c0/17c9c93cc4dcd781f89bb5218b2a0eb929e99a1f737661f23f0a3b1a948d929d1351e82175027d755a4a33ba78ce2fbf8516eb2a19ac99f9c6448bfe51d72533
+  languageName: node
+  linkType: hard
+
 "@autonomys/auto-utils@npm:^1.4.3":
   version: 1.4.3
   resolution: "@autonomys/auto-utils@npm:1.4.3"
@@ -367,6 +404,25 @@ __metadata:
     "@polkadot/extension-dapp": "npm:^0.58.5"
     fs: "npm:^0.0.1-security"
   checksum: 10c0/03ff085471146233d5e554fc28fb2e09f85baa7c161921f5d4060ab6fa1097b070cab865f24501ef3fc45f530137673e5a48efd4f30515299b4121d3beaecb25
+  languageName: node
+  linkType: hard
+
+"@autonomys/file-caching@npm:^1.4.13":
+  version: 1.4.13
+  resolution: "@autonomys/file-caching@npm:1.4.13"
+  dependencies:
+    "@autonomys/asynchronous": "npm:^1.4.13"
+    "@autonomys/auto-dag-data": "npm:^1.4.13"
+    "@autonomys/auto-utils": "npm:^1.4.13"
+    "@keyvhq/sqlite": "npm:^2.1.7"
+    cache-manager: "npm:^6.4.1"
+    jszip: "npm:^3.10.1"
+    keyv: "npm:^5.3.2"
+    mime-types: "npm:^3.0.1"
+    process: "npm:^0.11.10"
+    stream: "npm:^0.0.3"
+    zod: "npm:^3.24.2"
+  checksum: 10c0/3303df269b138e8e5f875a3c7fc8f6bab7ccf8a3dc04af26b73ec2735379a310ff38183fe5b545828143b0a72885a697d2f1705b94dd3d8bb012e3ceb2cd5138
   languageName: node
   linkType: hard
 
@@ -7390,7 +7446,7 @@ __metadata:
     "@autonomys/asynchronous": "npm:^1.4.1"
     "@autonomys/auto-dag-data": "npm:^1.0.8"
     "@autonomys/auto-drive": "npm:^1.0.5"
-    "@autonomys/file-caching": "npm:^1.4.3"
+    "@autonomys/file-caching": "npm:^1.4.13"
     "@autonomys/rpc": "npm:^1.4.11"
     "@faker-js/faker": "npm:^9.2.0"
     "@keyvhq/sqlite": "npm:^2.1.6"
@@ -13289,12 +13345,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"mime-db@npm:^1.54.0":
+  version: 1.54.0
+  resolution: "mime-db@npm:1.54.0"
+  checksum: 10c0/8d907917bc2a90fa2df842cdf5dfeaf509adc15fe0531e07bb2f6ab15992416479015828d6a74200041c492e42cce3ebf78e5ce714388a0a538ea9c53eece284
+  languageName: node
+  linkType: hard
+
 "mime-types@npm:^2.1.12, mime-types@npm:^2.1.35, mime-types@npm:~2.1.24, mime-types@npm:~2.1.34":
   version: 2.1.35
   resolution: "mime-types@npm:2.1.35"
   dependencies:
     mime-db: "npm:1.52.0"
   checksum: 10c0/82fb07ec56d8ff1fc999a84f2f217aa46cb6ed1033fefaabd5785b9a974ed225c90dc72fff460259e66b95b73648596dbcc50d51ed69cdf464af2d237d3149b2
+  languageName: node
+  linkType: hard
+
+"mime-types@npm:^3.0.1":
+  version: 3.0.1
+  resolution: "mime-types@npm:3.0.1"
+  dependencies:
+    mime-db: "npm:^1.54.0"
+  checksum: 10c0/bd8c20d3694548089cf229016124f8f40e6a60bbb600161ae13e45f793a2d5bb40f96bbc61f275836696179c77c1d6bf4967b2a75e0a8ad40fe31f4ed5be4da5
   languageName: node
   linkType: hard
 

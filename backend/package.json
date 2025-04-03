@@ -19,7 +19,7 @@
     "@autonomys/asynchronous": "^1.4.1",
     "@autonomys/auto-dag-data": "^1.0.8",
     "@autonomys/auto-drive": "^1.0.5",
-    "@autonomys/file-caching": "^1.4.3",
+    "@autonomys/file-caching": "^1.4.13",
     "@autonomys/rpc": "^1.4.11",
     "@keyvhq/sqlite": "^2.1.6",
     "@polkadot/api": "^15.8.1",
