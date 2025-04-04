@@ -1,4 +1,4 @@
 [submodule "files-gateway"]
 	path = submodules/files-gateway
 	url = https://github.com/autonomys/auto-files-gateway.git
-	branch = tags/v1.0.0
+	branch = tags/v1.0.1
