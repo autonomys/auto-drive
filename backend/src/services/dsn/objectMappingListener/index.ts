@@ -8,6 +8,8 @@ type ObjectMappingIndexerRpcClient = ReturnType<
   typeof ObjectMappingIndexerRPCApi.createClient
 >
 
+const ONE_MINUTE = 60_000
+
 const start = async () => {
   const initSubscription = async (client: ObjectMappingIndexerRpcClient) => {
     const node = await nodesRepository.getLastArchivedPieceNode()
@@ -24,18 +26,23 @@ const start = async () => {
 
   const ws = ObjectMappingIndexerRPCApi.createClient({
     endpoint: config.objectMappingArchiver.url,
-    reconnectInterval: 1_000,
+    reconnectInterval: ONE_MINUTE,
     callbacks: {
-      onReconnection: () => {
+      onEveryOpen: () => {
+        logger.info('Connected to object mapping archiver')
         initSubscription(ws)
       },
-      onOpen: () => {
-        initSubscription(ws)
+      onReconnection: () => {
+        logger.debug('Reconnected to object mapping archiver')
+      },
+      onClose: () => {
+        logger.debug('Closed connection to object mapping archiver')
       },
     },
   })
 
   ws.onNotification('object_mapping_list', async (message) => {
+    logger.debug('Received object mapping list', message)
     if (message.length > 0) {
       logger.info(
         `Processing object mapping list entry of length ${message.length}`,

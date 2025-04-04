@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { env } from './utils/misc.js'
 
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
