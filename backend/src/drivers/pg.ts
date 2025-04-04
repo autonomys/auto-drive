@@ -1,10 +1,10 @@
 import pg from 'pg'
 import { config } from '../config.js'
 
-let db: pg.Client | undefined
+let db: pg.Pool | undefined
 
-const createDB = async (): Promise<pg.Client> => {
-  const client = new pg.Client({
+const createDB = async (): Promise<pg.Pool> => {
+  const pool = new pg.Pool({
     connectionString: config.postgres.url,
     ...(process.env.ACCEPT_UNAUTHORIZED_CERTS === 'true'
       ? {
@@ -15,9 +15,9 @@ const createDB = async (): Promise<pg.Client> => {
       : {}),
   })
 
-  await client.connect()
+  await pool.connect()
 
-  return client
+  return pool
 }
 
 export const getDatabase = async () => {
