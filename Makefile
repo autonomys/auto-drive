@@ -1,4 +1,4 @@
-SUBMODULES_VERSION := v1.0.1
+SUBMODULES_VERSION := v1.0.2
 
 install:
 	yarn install
@@ -15,8 +15,8 @@ gateway:
 submodules:
 	git submodule update --init --recursive
 	git submodule foreach git checkout $(SUBMODULES_VERSION)
-	git submodule foreach yarn install
-	git submodule foreach yarn build
+	yarn auto-files-gateway install
+	yarn auto-files-gateway build
 
 common: install submodules models
 
