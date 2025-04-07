@@ -35,13 +35,13 @@ jobs:
         run: corepack enable
 
       - name: Build submodules
-        run: make submodules
+        run: make -B submodules
 
       - name: Install dependencies
         run: corepack use yarn@4.2.2
 
       - name: Build all services
-        run: make all
+        run: make -B all
 
       - name: Run lint
         run: make lint
