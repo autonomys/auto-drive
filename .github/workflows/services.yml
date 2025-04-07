@@ -40,14 +40,11 @@ jobs:
       - name: Install dependencies
         run: corepack use yarn@4.2.2
 
-      - name: Build common
+      - name: Build all services
         run: make all
 
       - name: Run lint
-        run: yarn lint
-
-      - name: Run build
-        run: yarn build
+        run: make lint
 
       - name: Run tests
-        run: yarn test
+        run: make test
