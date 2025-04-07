@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - main
-  # TODO: Remove this once we have finished the PR
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 env:
