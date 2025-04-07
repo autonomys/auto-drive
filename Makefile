@@ -13,8 +13,8 @@ gateway:
 	yarn gateway build
 
 submodules:
-	git submodule update --init --recursive
-	git submodule foreach git checkout $(SUBMODULES_VERSION)
+	# Ignore errors if submodules are already initialized
+	git submodule update --init --recursive || true
 	yarn auto-files-gateway install
 	yarn auto-files-gateway build
 
