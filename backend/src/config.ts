@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { env } from './utils/misc.js'
+import { optionalBoolEnvironmentVariable, env } from './utils/misc.js'
 
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 
@@ -73,5 +73,15 @@ export const config = {
       ),
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
+  },
+  services: {
+    taskManager:
+      (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
+        optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+      !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
+    objectMappingArchiver:
+      (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
+        optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+      !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
   },
 }
