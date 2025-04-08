@@ -79,7 +79,6 @@ export const authOptions: AuthOptions = {
   session: {
     strategy: 'jwt',
     maxAge: ONE_WEEK_IN_SECONDS,
-    updateAge: 0,
   },
   jwt: {
     maxAge: ONE_WEEK_IN_SECONDS,
