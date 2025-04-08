@@ -309,7 +309,7 @@ describe('Folder Upload', () => {
       const objectInformation =
         await ObjectUseCases.getObjectInformation(folderCID)
       expect(objectInformation).toMatchObject({
-        uploadStatus: {
+        uploadState: {
           totalNodes: totalNodes,
           uploadedNodes: totalNodes,
           archivedNodes: 0,
@@ -334,7 +334,7 @@ describe('Folder Upload', () => {
       const objectInformation =
         await ObjectUseCases.getObjectInformation(folderCID)
       expect(objectInformation).toMatchObject({
-        uploadStatus: {
+        uploadState: {
           totalNodes,
           uploadedNodes: totalNodes,
           archivedNodes: totalNodes,

@@ -8,6 +8,7 @@ import {
   PaginatedResult,
   User,
   UserWithOrganization,
+  objectStatus,
 } from '@auto-drive/models'
 import {
   metadataRepository,
@@ -214,7 +215,7 @@ const getObjectInformation = async (
     return undefined
   }
 
-  const uploadStatus = await UploadStatusUseCases.getUploadStatus(cid)
+  const uploadState = await UploadStatusUseCases.getUploadStatus(cid)
   const owners: Owner[] = await OwnershipUseCases.getOwners(cid)
   const publishedObjectId =
     await publishedObjectsRepository.getPublishedObjectByCid(cid)
@@ -223,8 +224,9 @@ const getObjectInformation = async (
     cid,
     metadata: metadata.metadata,
     tags: metadata.tags,
-    uploadStatus,
+    uploadState: uploadState,
     owners,
+    status: objectStatus(uploadState),
     publishedObjectId: publishedObjectId?.id ?? null,
     createdAt: metadata.created_at.toISOString(),
   }

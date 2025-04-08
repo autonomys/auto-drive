@@ -13,6 +13,7 @@ import {
   InteractionType,
   OwnerRole,
   TransactionStatus,
+  ObjectStatus,
 } from '@auto-drive/models'
 import { blockstoreRepository } from '../../../src/repositories/uploads/index.js'
 import { MemoryBlockstore } from 'blockstore-core'
@@ -302,13 +303,14 @@ files.map((file, index) => {
             role: OwnerRole.ADMIN,
           },
         ])
-        expect(objectInformation?.uploadStatus).toEqual({
+        expect(objectInformation?.uploadState).toEqual({
           uploadedNodes: 0,
           totalNodes: nodes.length,
           archivedNodes: 0,
           minimumBlockDepth: null,
           maximumBlockDepth: null,
         })
+        expect(objectInformation?.status).toBe(ObjectStatus.Processing)
       })
 
       it('object information should be updated on publishing', async () => {
@@ -327,13 +329,14 @@ files.map((file, index) => {
 
         const objectInformation = await ObjectUseCases.getObjectInformation(cid)
         expect(objectInformation).not.toBeNull()
-        expect(objectInformation?.uploadStatus).toEqual({
+        expect(objectInformation?.uploadState).toEqual({
           uploadedNodes: nodes.length,
           totalNodes: nodes.length,
           archivedNodes: 0,
           minimumBlockDepth: PUBLISH_ON_BLOCK,
           maximumBlockDepth: PUBLISH_ON_BLOCK,
         })
+        expect(objectInformation?.status).toBe(ObjectStatus.Archiving)
       })
 
       it('object information should be updated on archiving', async () => {
