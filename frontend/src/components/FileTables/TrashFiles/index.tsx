@@ -13,6 +13,7 @@ import { useUserStore } from 'globalStates/user';
 import { objectSummaryFromTrashedFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
+import { useRouteChange } from '@/hooks/useRouteChange';
 
 export const TrashFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -20,11 +21,14 @@ export const TrashFiles = () => {
   const page = useFileTableState((e) => e.page);
   const limit = useFileTableState((e) => e.limit);
   const setTotal = useFileTableState((e) => e.setTotal);
-  const resetPagination = useFileTableState((e) => e.resetPagination);
   const sortBy = useFileTableState((e) => e.sortBy);
+  const resetState = useFileTableState((e) => e.resetState);
 
   const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
+
+  // Reset the file table state when the route changes
+  useRouteChange(resetState); // Monitor for route changes
 
   const fetcher: Fetcher = useCallback(
     async (page, limit, sortBy) => {
@@ -49,10 +53,9 @@ export const TrashFiles = () => {
   );
 
   useEffect(() => {
-    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, resetPagination, setFetcher, setObjects]);
+  }, [fetcher, gql, setFetcher, setObjects]);
 
   useGetTrashedFilesQuery({
     fetchPolicy: 'cache-and-network',

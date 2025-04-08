@@ -4,6 +4,8 @@ import { Metadata_Roots_Order_By, Order_By } from '../../../../../gql/graphql';
 import { TableHeadCell } from '../../../common/Table/TableHead';
 import { useFileTableState } from '../../state';
 import { useCallback } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { updateSortParams } from '@/utils/table';
 
 interface SortableTableColumnProps {
   name: string;
@@ -16,6 +18,11 @@ export const SortableTableColumn = ({
 }: SortableTableColumnProps) => {
   const sortedBy = useFileTableState((v) => v.sortBy);
   const setSortBy = useFileTableState((v) => v.setSortBy);
+  const isInitialized = useFileTableState((v) => v.isInitialized);
+  
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const isActive = sortedBy[sortingKey];
   const isAsc = isActive && isActive === Order_By.AscNullsLast;
@@ -28,10 +35,16 @@ export const SortableTableColumn = ({
   ) : null;
 
   const toggleSort = useCallback(() => {
+    // Only update if initialization is complete
+    if (!isInitialized) return;
+    const newSortOrder = isDesc ? Order_By.AscNullsLast : Order_By.DescNullsLast;
+    // Update the sort state
     setSortBy({
-      [sortingKey]: isDesc ? Order_By.AscNullsLast : Order_By.DescNullsLast,
+      [sortingKey]: newSortOrder,
     });
-  }, [sortingKey, setSortBy, isDesc]);
+    // Update URL with sort parameters
+    updateSortParams(pathname, searchParams, sortingKey, newSortOrder, router);
+  }, [sortingKey, setSortBy, isDesc, router, pathname, searchParams, isInitialized]);
 
   return (
     <TableHeadCell

@@ -18,15 +18,18 @@ import {
 import { objectSummaryFromUserFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
-
+import { useRouteChange } from '@/hooks/useRouteChange';
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
   const setTotal = useFileTableState((e) => e.setTotal);
   const setFetcher = useFileTableState((e) => e.setFetcher);
   const limit = useFileTableState((e) => e.limit);
   const page = useFileTableState((e) => e.page);
+  const resetState = useFileTableState((e) => e.resetState);
 
-  const resetPagination = useFileTableState((e) => e.resetPagination);
+  // Reset the file table state when the route changes
+  useRouteChange(resetState); // Monitor for route changes
+
   const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
 
@@ -53,10 +56,9 @@ export const UserFiles = () => {
   );
 
   useEffect(() => {
-    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, setFetcher, setObjects, resetPagination]);
+  }, [fetcher, gql, setFetcher, setObjects]);
 
   useGetMyFilesQuery({
     fetchPolicy: 'cache-and-network',

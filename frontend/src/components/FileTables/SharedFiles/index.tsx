@@ -11,6 +11,7 @@ import { objectSummaryFromSharedFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
 import { useUserStore } from 'globalStates/user';
+import { useRouteChange } from '@/hooks/useRouteChange';
 
 export const SharedFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -19,11 +20,12 @@ export const SharedFiles = () => {
   const limit = useFileTableState((e) => e.limit);
   const page = useFileTableState((e) => e.page);
   const sortBy = useFileTableState((e) => e.sortBy);
-
-  const resetPagination = useFileTableState((e) => e.resetPagination);
-
+  const resetState = useFileTableState((e) => e.resetState);
   const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
+
+  // Reset the file table state when the route changes
+  useRouteChange(resetState); // Monitor for route changes
 
   const fetcher: Fetcher = useCallback(
     async (page: number, limit: number, sortBy) => {
@@ -48,10 +50,9 @@ export const SharedFiles = () => {
   );
 
   useEffect(() => {
-    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, setFetcher, setObjects, resetPagination]);
+  }, [fetcher, gql, setFetcher, setObjects]);
 
   useGetSharedFilesQuery({
     fetchPolicy: 'cache-and-network',
