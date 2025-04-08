@@ -80,9 +80,6 @@ export const authOptions: AuthOptions = {
     strategy: 'jwt',
     maxAge: ONE_WEEK_IN_SECONDS,
   },
-  jwt: {
-    maxAge: ONE_WEEK_IN_SECONDS,
-  },
   events: {
     async signOut({ token }) {
       if (token.refreshToken) {
