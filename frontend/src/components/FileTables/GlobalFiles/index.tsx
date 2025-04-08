@@ -13,7 +13,6 @@ import {
 import { objectSummaryFromGlobalFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
-import { useRouteChange } from '@/hooks/useRouteChange';
 
 export const GlobalFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -22,10 +21,6 @@ export const GlobalFiles = () => {
   const page = useFileTableState((e) => e.page);
   const limit = useFileTableState((e) => e.limit);
   const setTotal = useFileTableState((e) => e.setTotal);
-  const resetState = useFileTableState((e) => e.resetState);
-
-  // Reset the file table state when the route changes
-  useRouteChange(resetState); // Monitor for route changes
 
   const { gql } = useNetwork();
 
