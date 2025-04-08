@@ -14,7 +14,7 @@ const refreshingTokenThresholdInSeconds = process.env.REFRESHING_TOKEN_THRESHOLD
   : 60;
 
 const ONE_WEEK_IN_SECONDS = 60 * 60 * 24 * 7;
-const ONE_DAY_IN_SECONDS = 60 * 60 * 24;
+
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
@@ -82,7 +82,7 @@ export const authOptions: AuthOptions = {
     updateAge: 0,
   },
   jwt: {
-    maxAge: ONE_DAY_IN_SECONDS,
+    maxAge: ONE_WEEK_IN_SECONDS,
   },
   events: {
     async signOut({ token }) {
