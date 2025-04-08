@@ -46,5 +46,4 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:${{ env.SHORT_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: |
-            linux/amd64
+          platforms: linux/amd64
