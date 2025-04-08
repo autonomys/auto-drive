@@ -26,7 +26,7 @@ export const TablePaginator = () => {
   const searchParams = useSearchParams();
 
   const [pageInput, setPageInput] = useState<string>((page + 1).toString());
-  
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   // Initialize from URL params on mount
@@ -45,19 +45,17 @@ export const TablePaginator = () => {
     updateUrlParams(pathname, searchParams, page, limit, router);
   }, [page, limit, pathname, router, searchParams, isInitialized]);
 
-  // Handle direct page input
-  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPageInput(e.target.value);
-  };
-
   const goToPage = () => {
     const newPage = parseInt(pageInput);
     if (!isNaN(newPage) && newPage >= 1 && newPage <= totalPages) {
-      setInternalPage(newPage - 1); // Convert to 0-based index
+      setInternalPage(newPage - 1);
     } else {
-      // Reset input to current page if invalid
       setPageInput((page + 1).toString());
     }
+  };
+
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPageInput(e.target.value);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -90,7 +88,6 @@ export const TablePaginator = () => {
         </span>
       </div>
       <div className='flex items-center gap-2'>
-        {/* First page button */}
         <button
           disabled={page === 0}
           className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-50 dark:text-darkBlack'
@@ -99,8 +96,6 @@ export const TablePaginator = () => {
         >
           <ChevronsLeftIcon className='h-4 w-4' />
         </button>
-
-        {/* Previous page button */}
         <button
           disabled={page === 0}
           className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-50 dark:text-darkBlack'
@@ -109,8 +104,6 @@ export const TablePaginator = () => {
         >
           <ChevronLeftIcon className='h-4 w-4' />
         </button>
-
-        {/* Page input */}
         <div className='flex items-center gap-1'>
           <input
             type='text'
@@ -123,8 +116,6 @@ export const TablePaginator = () => {
           />
           <span>of {totalPages}</span>
         </div>
-
-        {/* Next page button */}
         <button
           disabled={page >= totalPages - 1}
           className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-50 dark:text-darkBlack'
@@ -133,8 +124,6 @@ export const TablePaginator = () => {
         >
           <ChevronRightIcon className='h-4 w-4' />
         </button>
-
-        {/* Last page button */}
         <button
           disabled={page >= totalPages - 1}
           className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-50 dark:text-darkBlack'
