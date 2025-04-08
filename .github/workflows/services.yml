@@ -23,7 +23,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          submodules: true
+          submodules: recursive
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -33,17 +34,17 @@ jobs:
       - name: Install Yarn
         run: corepack enable
 
+      - name: Build submodules
+        run: make -B submodules
+
       - name: Install dependencies
         run: corepack use yarn@4.2.2
 
-      - name: Build common
-        run: make common
+      - name: Build all services
+        run: make -B all
 
       - name: Run lint
-        run: yarn lint
-
-      - name: Run build
-        run: yarn build
+        run: make lint
 
       - name: Run tests
-        run: yarn test
+        run: make test

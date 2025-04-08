@@ -1,4 +1,9 @@
-backend:
+SUBMODULES_VERSION := v1.0.2
+
+install:
+	yarn install
+
+backend: common
 	yarn backend build
 models:
 	yarn models build
@@ -8,17 +13,18 @@ gateway:
 	yarn gateway build
 
 submodules:
-	git submodules update --init --recursive
+	# Ignore errors if submodules are already initialized
+	git submodule update --init --recursive || true
 	yarn auto-files-gateway install
 	yarn auto-files-gateway build
 
-common: submodules models
+common: install submodules models
 
-test:
+test: install
 	yarn backend test
 	yarn auth test
 
-lint:
+lint: install
 	yarn backend lint
 	yarn auth lint
 	yarn frontend lint
