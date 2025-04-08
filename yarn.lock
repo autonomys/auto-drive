@@ -143,7 +143,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@auto-files/models@workspace:submodules/files-gateway/common/models"
   dependencies:
-    "@autonomys/rpc": "npm:^1.4.9"
+    "@autonomys/rpc": "npm:^1.4.14"
     typescript: "npm:^5.6.3"
     zod: "npm:^3.24.2"
   languageName: unknown
@@ -154,7 +154,7 @@ __metadata:
   resolution: "@auto-files/rpc-apis@workspace:submodules/files-gateway/common/rpc-apis"
   dependencies:
     "@auto-files/models": "workspace:*"
-    "@autonomys/rpc": "npm:^1.4.11"
+    "@autonomys/rpc": "npm:^1.4.14"
     typescript: "npm:^5.6.3"
     zod: "npm:^3.24.2"
   languageName: unknown
@@ -459,16 +459,6 @@ __metadata:
     stream: "npm:^0.0.3"
     zod: "npm:^3.24.2"
   checksum: 10c0/5cfba6365f0a4961fcb51d05b51b1eacaf3e9c2d0da00a9801a6df91cb4b1f4748c7009ad8ed3c596d24f591012c9adf9cc014e744faecce2a679e968f4a114f
-  languageName: node
-  linkType: hard
-
-"@autonomys/rpc@npm:^1.4.11, @autonomys/rpc@npm:^1.4.9":
-  version: 1.4.11
-  resolution: "@autonomys/rpc@npm:1.4.11"
-  dependencies:
-    websocket: "npm:^1.0.35"
-    zod: "npm:^3.24.2"
-  checksum: 10c0/b3d0ba256431a6ca876a06a1a7724482b5cd5b72923cd948554e74c3b84526637300b1886c7a0c0cc47b5b4f243c3229daca8cecd32e89b64f58d8dd3b1163c1
   languageName: node
   linkType: hard
 
@@ -7272,7 +7262,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "auto-files-gateway@workspace:submodules/files-gateway"
   dependencies:
-    "@autonomys/rpc": "npm:^1.4.11"
+    "@autonomys/rpc": "npm:^1.4.14"
     "@types/k6": "npm:^1.0.0"
     "@types/node": "npm:^22.10.2"
     axios: "npm:^1.7.9"
@@ -14059,7 +14049,7 @@ __metadata:
     "@auto-files/models": "workspace:*"
     "@auto-files/rpc-apis": "workspace:*"
     "@autonomys/auto-dag-data": "npm:^1.0.5"
-    "@autonomys/rpc": "npm:^1.4.11"
+    "@autonomys/rpc": "npm:^1.4.14"
     "@peculiar/webcrypto": "npm:^1.5.0"
     "@types/cors": "npm:^2.8.17"
     "@types/express": "npm:^5.0.0"
