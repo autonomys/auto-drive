@@ -41,6 +41,10 @@ const createServer = async () => {
     res.sendStatus(204)
   })
 
+  app.get('/services', (_req, res) => {
+    res.json(config.services)
+  })
+
   app.get('/auth/session', async (req, res) => {
     try {
       const user = await handleAuth(req, res)
