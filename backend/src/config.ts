@@ -76,10 +76,12 @@ export const config = {
   },
   services: {
     taskManager:
-      optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
-      optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE'),
+      (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
+        optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+      !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
     objectMappingArchiver:
-      optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
-      optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE'),
+      (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
+        optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+      !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
   },
 }
