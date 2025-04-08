@@ -21,7 +21,6 @@ export const GlobalFiles = () => {
   const page = useFileTableState((e) => e.page);
   const limit = useFileTableState((e) => e.limit);
   const setTotal = useFileTableState((e) => e.setTotal);
-  const resetPagination = useFileTableState((e) => e.resetPagination);
 
   const { gql } = useNetwork();
 
@@ -46,10 +45,9 @@ export const GlobalFiles = () => {
   );
 
   useEffect(() => {
-    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, resetPagination, setFetcher, setObjects]);
+  }, [fetcher, gql, setFetcher, setObjects]);
 
   useGetGlobalFilesQuery({
     fetchPolicy: 'cache-and-network',

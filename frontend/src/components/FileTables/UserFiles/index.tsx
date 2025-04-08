@@ -26,7 +26,6 @@ export const UserFiles = () => {
   const limit = useFileTableState((e) => e.limit);
   const page = useFileTableState((e) => e.page);
 
-  const resetPagination = useFileTableState((e) => e.resetPagination);
   const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
 
@@ -53,10 +52,9 @@ export const UserFiles = () => {
   );
 
   useEffect(() => {
-    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, setFetcher, setObjects, resetPagination]);
+  }, [fetcher, gql, setFetcher, setObjects]);
 
   useGetMyFilesQuery({
     fetchPolicy: 'cache-and-network',

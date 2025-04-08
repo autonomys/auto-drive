@@ -11,6 +11,7 @@ import { redirect } from 'next/navigation';
 import { TopNavbar } from 'components/Navbar/TopNavbar';
 import { SideNavbar } from 'components/Navbar/SideNavbar';
 import { AuthService } from 'services/auth/auth';
+import { TableRouteChangeListener } from '@/components/FileTables/common/FileTable/TableRouteChangeListener';
 
 export default function AppLayout({
   children,
@@ -47,7 +48,10 @@ export default function AppLayout({
             <SideNavbar networkId={params.chain} />
             <main className='flex-1 overflow-auto p-6'>
               <SessionProvider>
-                <NetworkProvider network={network}>{children}</NetworkProvider>
+                <NetworkProvider network={network}>
+                  <TableRouteChangeListener />
+                  {children}
+                </NetworkProvider>
               </SessionProvider>
             </main>
           </UserEnsurer>
