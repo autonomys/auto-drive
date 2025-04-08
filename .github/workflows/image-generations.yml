@@ -12,10 +12,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      release-version: ${{ steps.output-step.outputs.release-version }}
-      short-sha: ${{ steps.output-step.outputs.short-sha }}
-
     strategy:
       matrix:
         app: [backend]
