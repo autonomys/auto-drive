@@ -8,6 +8,7 @@ import {
   UserRole,
   ObjectInformation,
   OwnerRole,
+  objectStatus,
 } from '@auto-drive/models';
 
 export const mapObjectInformationFromQueryResult = (
@@ -18,19 +19,20 @@ export const mapObjectInformationFromQueryResult = (
     throw new Error('Metadata not found');
   }
 
+  const uploadState = {
+    uploadedNodes: metadata.publishedNodes?.aggregate?.count ?? 0,
+    totalNodes: metadata.totalNodes?.aggregate?.count ?? 0,
+    archivedNodes: metadata.archivedNodes?.aggregate?.count ?? 0,
+    minimumBlockDepth: metadata.minimumBlockDepth?.[0]?.block_published_on ?? null,
+    maximumBlockDepth: metadata.maximumBlockDepth?.[0]?.block_published_on ?? null,
+  };
+
   return {
     cid: metadata.head_cid,
     metadata: metadata.metadata,
     createdAt: metadata.created_at,
-    uploadStatus: {
-      uploadedNodes: metadata.publishedNodes?.aggregate?.count ?? 0,
-      totalNodes: metadata.totalNodes?.aggregate?.count ?? 0,
-      archivedNodes: metadata.archivedNodes?.aggregate?.count ?? 0,
-      minimumBlockDepth:
-        metadata.minimumBlockDepth?.[0]?.block_published_on ?? null,
-      maximumBlockDepth:
-        metadata.maximumBlockDepth?.[0]?.block_published_on ?? null,
-    },
+    status: objectStatus(uploadState),
+    uploadState,
     tags: metadata.tags ?? [],
     owners: metadata.object_ownership.map((owner) => ({
       role: owner.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,

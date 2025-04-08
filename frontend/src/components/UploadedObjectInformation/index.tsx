@@ -120,25 +120,25 @@ export const UploadedObjectInformation = ({
         <div className='flex'>
           <span>Total Nodes: </span>
           <span className='ml-[4px]'>
-            {object.uploadStatus.totalNodes ?? 'Processing'}
+            {object.uploadState.totalNodes ?? 'Processing'}
           </span>
         </div>
         <div className='flex'>
           <span>Uploaded Nodes: </span>
           <span className='ml-[4px]'>
-            {object.uploadStatus.uploadedNodes ?? 'N/A'}
+            {object.uploadState.uploadedNodes ?? 'N/A'}
           </span>
         </div>
         <div className='flex'>
           <span>Minimum block depth:</span>
           <span className='ml-[4px]'>
-            {object.uploadStatus.minimumBlockDepth ?? 'N/A'}
+            {object.uploadState.minimumBlockDepth ?? 'N/A'}
           </span>
         </div>
         <div className='flex'>
           <span>Maximum block depth:</span>
           <span className='ml-[4px]'>
-            {object.uploadStatus.maximumBlockDepth ?? 'N/A'}
+            {object.uploadState.maximumBlockDepth ?? 'N/A'}
           </span>
         </div>
         <div className='flex'>
@@ -150,22 +150,22 @@ export const UploadedObjectInformation = ({
       <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-4 font-medium text-primary dark:bg-darkWhiteHover dark:text-darkBlack'>
         <div className='flex'>
           <span>Total Nodes: </span>
-          <span className='ml-[4px]'>{object.uploadStatus.totalNodes}</span>
+          <span className='ml-[4px]'>{object.uploadState.totalNodes}</span>
         </div>
         <div className='flex'>
           <span>Uploaded Nodes: </span>
-          <span className='ml-[4px]'>{object.uploadStatus.uploadedNodes}</span>
+          <span className='ml-[4px]'>{object.uploadState.uploadedNodes}</span>
         </div>
         <div className='flex'>
           <span>Minimum block depth:</span>
           <span className='ml-[4px]'>
-            {object.uploadStatus.minimumBlockDepth ?? 'N/A'}
+            {object.uploadState.minimumBlockDepth ?? 'N/A'}
           </span>
         </div>
         <div className='flex'>
           <span>Maximum block depth:</span>
           <span className='ml-[4px]'>
-            {object.uploadStatus.maximumBlockDepth ?? 'N/A'}
+            {object.uploadState.maximumBlockDepth ?? 'N/A'}
           </span>
         </div>
         <div className='flex'>

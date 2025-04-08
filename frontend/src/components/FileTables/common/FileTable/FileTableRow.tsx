@@ -209,7 +209,7 @@ export const FileTableRow = ({
               <Button
                 variant='lightAccent'
                 className='mr-2 text-xs outline-none focus:ring-0'
-                disabled={file.uploadStatus.totalNodes === null}
+                disabled={file.uploadState.totalNodes === null}
                 onClick={() => onDownloadFile(file.headCid)}
               >
                 Download
@@ -225,7 +225,7 @@ export const FileTableRow = ({
                 leaveTo='opacity-0 translate-y-1'
               >
                 <div className='absolute bottom-0 left-0 z-10 translate-y-full'>
-                  {file.uploadStatus.totalNodes === null && (
+                  {file.uploadState.totalNodes === null && (
                     <div className='rounded-lg bg-white p-2 shadow-md dark:bg-darkWhite'>
                       <span className='text-sm text-gray-700'>
                         Processing upload...

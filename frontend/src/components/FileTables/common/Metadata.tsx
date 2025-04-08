@@ -14,8 +14,8 @@ export const Metadata = ({ object }: { object: ObjectSummary }) => {
           <h4 className='text-wrap text-sm font-medium text-black dark:text-darkBlack'>
             {object.name}
           </h4>
-          {object.uploadStatus.archivedNodes ===
-            object.uploadStatus.totalNodes && (
+          {object.uploadState.archivedNodes ===
+            object.uploadState.totalNodes && (
             <span className='h-fit rounded-md bg-green-300 px-2 py-1 font-semibold text-black'>
               ARCHIVED
             </span>
@@ -39,28 +39,28 @@ export const Metadata = ({ object }: { object: ObjectSummary }) => {
         </div>
         <div className='flex'>
           <span>Total Nodes: </span>
-          <span className='ml-[4px]'>{object.uploadStatus.totalNodes}</span>
+          <span className='ml-[4px]'>{object.uploadState.totalNodes}</span>
         </div>
         <div className='flex'>
           <span>Uploaded Nodes: </span>
-          <span className='ml-[4px]'>{object.uploadStatus.uploadedNodes}</span>
+          <span className='ml-[4px]'>{object.uploadState.uploadedNodes}</span>
         </div>
         <div className='flex'>
           <span>Minimum block depth:</span>
           <span className='ml-[4px]'>
-            {object.uploadStatus.minimumBlockDepth ?? 'N/A'}
+            {object.uploadState.minimumBlockDepth ?? 'N/A'}
           </span>
         </div>
         <div className='flex'>
           <span>Maximum block depth:</span>
           <span className='ml-[4px]'>
-            {object.uploadStatus.maximumBlockDepth ?? 'N/A'}
+            {object.uploadState.maximumBlockDepth ?? 'N/A'}
           </span>
         </div>
         <div className='flex'>
           <span>Archive blocks count:</span>
           <span className='ml-[4px]'>
-            {object.uploadStatus.archivedNodes ?? 'N/A'}
+            {object.uploadState.archivedNodes ?? 'N/A'}
           </span>
         </div>
       </div>

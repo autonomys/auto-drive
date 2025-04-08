@@ -5,13 +5,21 @@ export interface ObjectInformation {
   cid: string;
   createdAt: string;
   metadata: OffchainMetadata;
-  uploadStatus: ObjectUploadStatus;
+  status: ObjectStatus;
+  uploadState: ObjectUploadState;
   owners: Owner[];
   publishedObjectId: string | null;
   tags: string[];
 }
 
-export interface ObjectUploadStatus {
+export enum ObjectStatus {
+  Processing = "Processing",
+  Publishing = "Publishing",
+  Archiving = "Archiving",
+  Archived = "Archived",
+}
+
+export interface ObjectUploadState {
   uploadedNodes: number | null;
   totalNodes: number | null;
   archivedNodes: number | null;
@@ -40,8 +48,9 @@ export type ObjectSummary = {
   tags: string[];
   name?: string;
   size: string;
+  status: ObjectStatus;
   owners: Owner[];
-  uploadStatus: ObjectUploadStatus;
+  uploadState: ObjectUploadState;
   createdAt: string;
 } & (
   | {
@@ -56,6 +65,22 @@ export type ObjectSummary = {
     }
 );
 
+export const objectStatus = (uploadState: ObjectUploadState) => {
+  if (uploadState.archivedNodes === uploadState.totalNodes) {
+    return ObjectStatus.Archived;
+  }
+
+  if (uploadState.uploadedNodes === uploadState.totalNodes) {
+    return ObjectStatus.Archiving;
+  }
+
+  if (uploadState.uploadedNodes === null || uploadState.uploadedNodes === 0) {
+    return ObjectStatus.Processing;
+  }
+
+  return ObjectStatus.Publishing;
+};
+
 export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
   return object.metadata.type === "folder"
     ? {
@@ -65,7 +90,8 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
         size: object.metadata.totalSize.toString(),
         owners: object.owners,
         children: object.metadata.children,
-        uploadStatus: object.uploadStatus,
+        uploadState: object.uploadState,
+        status: objectStatus(object.uploadState),
         createdAt: object.createdAt,
         tags: object.tags,
       }
@@ -75,7 +101,8 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
         type: object.metadata.type,
         size: object.metadata.totalSize.toString(),
         mimeType: object.metadata.mimeType,
-        uploadStatus: object.uploadStatus,
+        uploadState: object.uploadState,
+        status: objectStatus(object.uploadState),
         owners: object.owners,
         createdAt: object.createdAt,
         tags: object.tags,
