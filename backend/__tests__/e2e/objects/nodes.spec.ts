@@ -1,5 +1,5 @@
 import { v4 } from 'uuid'
-import { NodesUseCases } from '../../../src/useCases/index.js'
+import { NodesUseCases, ObjectUseCases } from '../../../src/useCases/index.js'
 import {
   blake3HashFromCid,
   cidOfNode,
@@ -9,11 +9,19 @@ import {
   createSingleFileIpldNode,
   encodeNode,
   MetadataType,
+  OffchainMetadata,
 } from '@autonomys/auto-dag-data'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { nodesRepository } from '../../../src/repositories/index.js'
+import {
+  metadataRepository,
+  Node,
+  nodesRepository,
+} from '../../../src/repositories/index.js'
 import { ObjectMappingListEntry } from '@auto-drive/models'
 import { mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
+import { downloadService } from '../../../src/services/download/index.js'
+import { bufferToAsyncIterable } from '@autonomys/asynchronous'
+import { jest } from '@jest/globals'
 
 describe('Nodes', () => {
   const id = v4()
@@ -33,6 +41,7 @@ describe('Nodes', () => {
   afterAll(async () => {
     await dbMigration.down()
     unmockMethods()
+    jest.clearAllMocks()
   })
 
   it('should be able to save node', async () => {
@@ -130,5 +139,58 @@ describe('Nodes', () => {
       piece_index: 1,
       piece_offset: 1,
     })
+  })
+
+  it('double processed node archival should not fail', async () => {
+    const text = 'some_random_text'
+    const node = createSingleFileIpldNode(Buffer.from(text), text)
+    const cid = cidOfNode(node)
+    const nodes: Node[] = [
+      {
+        cid: cidToString(cid),
+        head_cid: cidToString(cid),
+        root_cid: cidToString(cid),
+        type: MetadataType.File,
+        encoded_node: Buffer.from(encodeNode(node)).toString('base64'),
+        block_published_on: 0,
+        tx_published_on: '0x0',
+        piece_index: null,
+        piece_offset: null,
+      },
+      {
+        cid: cidToString(cid),
+        head_cid: cidToString(cid),
+        root_cid: cidToString(cid),
+        type: MetadataType.File,
+        encoded_node: Buffer.from(encodeNode(node)).toString('base64'),
+        block_published_on: 1,
+        tx_published_on: '0x1',
+        piece_index: null,
+        piece_offset: null,
+      },
+    ]
+
+    await Promise.all(nodes.map((node) => nodesRepository.saveNode(node)))
+
+    await metadataRepository.setMetadata(
+      cidToString(cid),
+      cidToString(cid),
+      // Mock the metadata
+      {} as unknown as OffchainMetadata,
+    )
+
+    const processArchivalSpy = jest
+      .spyOn(ObjectUseCases, 'processArchival')
+      .mockResolvedValue()
+    const downloadServiceSpy = jest
+      .spyOn(downloadService, 'download')
+      .mockResolvedValue(bufferToAsyncIterable(Buffer.from(encodeNode(node))))
+    const hash = Buffer.from(blake3HashFromCid(cid)).toString('hex')
+    await NodesUseCases.processNodeArchived([[hash, 1, 1]])
+
+    expect(processArchivalSpy).toHaveBeenCalledWith(cidToString(cid))
+    expect(downloadServiceSpy).toHaveBeenCalledWith(cidToString(cid))
+    expect(processArchivalSpy).toHaveBeenCalledTimes(1)
+    expect(downloadServiceSpy).toHaveBeenCalledTimes(1)
   })
 })

@@ -384,7 +384,7 @@ const checkObjectsArchivalStatus = async () => {
   await Promise.all(
     cidsToArchive.map(async (cid) => {
       await downloadService.download(cid)
-      await processArchival(cid)
+      await ObjectUseCases.processArchival(cid)
     }),
   )
 }
