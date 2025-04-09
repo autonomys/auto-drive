@@ -52,3 +52,8 @@ export const updateSortParams = (
   const newUrl = `${pathname}?${params.toString()}`;
   router.replace(newUrl, { scroll: false });
 };
+
+export const formatCid = (cid: string) => {
+  if (cid.length <= 15) return cid;
+  return `${cid.slice(0, 10)}...${cid.slice(-5)}`;
+};

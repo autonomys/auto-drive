@@ -40,7 +40,7 @@ export default function AppLayout({
   }
 
   return (
-    <div className='min-h-screen bg-white dark:bg-darkWhite dark:bg-gray-900'>
+    <div className='min-h-screen bg-white dark:bg-darkWhite'>
       <div className='flex h-screen flex-col rounded-lg bg-white dark:bg-darkWhite dark:text-white'>
         <TopNavbar networkId={params.chain} />
         <div className='flex flex-1 overflow-hidden px-10'>

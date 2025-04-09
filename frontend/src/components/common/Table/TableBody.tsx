@@ -1,3 +1,4 @@
+import { cn } from '@/utils/cn';
 import { ReactNode } from 'react';
 
 export const TableBody = ({ children }: { children: ReactNode }) => {
@@ -15,7 +16,10 @@ export const TableBodyRow = ({
 }) => {
   return (
     <tr
-      className={`w-full border border-gray-200 bg-white hover:bg-gray-100 dark:bg-darkWhite dark:hover:bg-darkWhiteHover ${className ?? ''}`}
+      className={cn(
+        'w-full border border-gray-200 bg-white hover:bg-gray-50 dark:bg-darkWhite dark:hover:bg-darkWhiteHover',
+        className,
+      )}
       onClick={onClick}
     >
       {children}
@@ -34,7 +38,10 @@ export const TableBodyCell = ({
 }) => {
   return (
     <td
-      className={`px-6 py-4 text-sm text-primary dark:text-darkBlack ${className ?? ''}`}
+      className={cn(
+        'px-6 py-4 text-sm text-primary dark:text-darkBlack',
+        className,
+      )}
       colSpan={colSpan}
     >
       {children}

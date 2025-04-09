@@ -116,7 +116,8 @@ export const FileTable: FC<{
             <TableHead>
               <TableHeadRow>
                 <SortableTableColumn name='Name' sortingKey='name' />
-                <TableHeadCell>Type</TableHeadCell>
+                <TableHeadCell>CID</TableHeadCell>
+                <TableHeadCell>Status</TableHeadCell>
                 <TableHeadCell>Size</TableHeadCell>
                 <SortableTableColumn name='Date' sortingKey='created_at' />
                 <TableHeadCell className='text-right'>Actions</TableHeadCell>
