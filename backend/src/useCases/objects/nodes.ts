@@ -164,20 +164,23 @@ const processNodeArchived = async (objectMappings: ObjectMapping[]) => {
   const nodes = await nodesRepository.getArchivingNodesCID()
 
   const objects = objectMappings
-    .map((e) => {
+    .filter((e) => {
+      // Transform the object mapping hash to a cid
       const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
 
+      // Check if the cid is in the nodes array
       const isCidArchiving = nodes.includes(cid)
 
-      if (isCidArchiving) {
-        return {
-          cid,
-          pieceIndex: e[1],
-          pieceOffset: e[2],
-        }
+      return isCidArchiving
+    })
+    .map((e) => {
+      const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
+      return {
+        cid,
+        pieceIndex: e[1],
+        pieceOffset: e[2],
       }
     })
-    .filter((e) => e !== undefined)
 
   await Promise.all(objects.map((e) => nodesRepository.setNodeArchivingData(e)))
   await ObjectUseCases.checkObjectsArchivalStatus()
