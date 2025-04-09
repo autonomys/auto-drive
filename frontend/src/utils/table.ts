@@ -1,5 +1,8 @@
 /* eslint-disable camelcase */
-import { DEFAULT_PAGE_PARAM_UI } from '@/constants/table';
+import {
+  DEFAULT_PAGE_PARAM_INTERNAL,
+  DEFAULT_PAGE_PARAM_UI,
+} from '@/constants/table';
 import { Order_By } from 'gql/graphql';
 import { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 
@@ -56,4 +59,25 @@ export const updateSortParams = (
 export const formatCid = (cid: string) => {
   if (cid.length <= 15) return cid;
   return `${cid.slice(0, 10)}...${cid.slice(-5)}`;
+};
+
+export const getDisplayPageNumber = (internalPage: number) => {
+  if (internalPage < 0) {
+    return DEFAULT_PAGE_PARAM_UI.toString();
+  }
+  return (internalPage + 1).toString();
+};
+
+export const getInternalPageNumber = (displayPage: number) => {
+  if (displayPage < 1) {
+    return DEFAULT_PAGE_PARAM_INTERNAL.toString();
+  }
+  return (displayPage - 1).toString();
+};
+
+export const getTotalPages = (total: number, limit: number) => {
+  if (total <= 0 || limit <= 0) {
+    return 1;
+  }
+  return Math.ceil(total / limit);
 };

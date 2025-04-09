@@ -63,9 +63,7 @@ services:
     profiles:
       - rabbit
   backend:
-    build:
-      context: .
-      dockerfile: ./backend/Dockerfile
+    image: ${BACKEND_IMAGE}
     volumes:
       - files_cache:/usr/src/app/.cache
     ports:
