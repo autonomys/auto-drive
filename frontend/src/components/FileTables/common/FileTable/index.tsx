@@ -112,7 +112,7 @@ export const FileTable: FC<{
               </div>
             </Transition>
           </div>
-          <Table className='min-w-full rounded border border-gray-200'>
+          <Table className='min-w-full rounded-lg'>
             <TableHead>
               <TableHeadRow>
                 <SortableTableColumn name='Name' sortingKey='name' />
@@ -141,7 +141,7 @@ export const FileTable: FC<{
                 ))
               ) : (
                 <TableBodyRow>
-                  <TableBodyCell colSpan={5}>
+                  <TableBodyCell colSpan={6}>
                     <div className='flex h-10 w-full items-center justify-center'>
                       <LoaderCircle className='h-4 w-4 animate-spin' />
                     </div>
@@ -150,11 +150,11 @@ export const FileTable: FC<{
               )}
             </TableBody>
             <TableFooter>
-              <tr className='w-full'>
-                <td colSpan={5}>
+              <TableBodyRow className='hover:bg-transparent'>
+                <TableBodyCell colSpan={6} className='p-0'>
                   <TablePaginator />
-                </td>
-              </tr>
+                </TableBodyCell>
+              </TableBodyRow>
             </TableFooter>
           </Table>
         </div>

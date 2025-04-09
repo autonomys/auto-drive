@@ -9,8 +9,8 @@ export const Table = ({
   className?: string;
 }) => {
   return (
-    <div className='w-full border-separate rounded-lg border'>
-      <table className={cn('w-full', className)}>{children}</table>
+    <div className='w-full rounded-lg border border-gray-200 overflow-hidden'>
+      <table className={cn('w-full border-collapse', className)}>{children}</table>
     </div>
   );
 };

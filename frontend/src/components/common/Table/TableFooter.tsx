@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { cn } from '@/utils/cn';
 
 export const TableFooter = ({
   children,
@@ -7,5 +8,5 @@ export const TableFooter = ({
   children: ReactNode;
   className?: string;
 }) => {
-  return <tfoot className={className}>{children}</tfoot>;
+  return <tfoot className={cn('border-t border-gray-200', className)}>{children}</tfoot>;
 };

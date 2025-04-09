@@ -137,7 +137,7 @@ export const FileTableRow = ({
               readOnly={true}
               checked={selectedFiles.some((cid) => cid === file.headCid)}
               onChange={() => handleToggleSelectFile(file.headCid)}
-              className='mr-3 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500'
+              className='mr-3 h-4 w-4 rounded text-blue-600 focus:ring-blue-500'
             />
             {file.type === 'folder' && file.children && (
               <button onClick={toggleExpandClickHandler}>
@@ -305,7 +305,7 @@ export const FileTableRow = ({
                   readOnly={true}
                   checked={selectedFiles.some((f) => f === child.cid)}
                   type='checkbox'
-                  className='mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500'
+                  className='mr-3 rounded text-blue-600 focus:ring-blue-500'
                 />
                 {child.type === 'folder' ? (
                   <Folder className='mx-2 h-5 w-5 flex-shrink-0 text-blue-500' />

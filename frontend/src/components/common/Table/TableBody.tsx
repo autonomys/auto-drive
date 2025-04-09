@@ -17,7 +17,7 @@ export const TableBodyRow = ({
   return (
     <tr
       className={cn(
-        'w-full border border-gray-200 bg-white hover:bg-gray-50 dark:bg-darkWhite dark:hover:bg-darkWhiteHover',
+        'w-full bg-white hover:bg-gray-50 dark:bg-darkWhite dark:hover:bg-darkWhiteHover border-t border-gray-200',
         className,
       )}
       onClick={onClick}
