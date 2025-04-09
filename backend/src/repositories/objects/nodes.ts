@@ -11,8 +11,8 @@ export const NodeSchema = z.object({
   head_cid: z.string(),
   type: z.string(),
   encoded_node: z.string(),
-  piece_index: z.number().optional(),
-  piece_offset: z.number().optional(),
+  piece_index: z.number().nullable(),
+  piece_offset: z.number().nullable(),
   block_published_on: z.number().nullable(),
   tx_published_on: z.string().nullable(),
 })

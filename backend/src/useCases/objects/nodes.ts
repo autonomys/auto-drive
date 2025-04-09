@@ -59,6 +59,8 @@ const saveNode = async (
     encoded_node: encodedNode,
     block_published_on: null,
     tx_published_on: null,
+    piece_index: null,
+    piece_offset: null,
   })
 }
 
@@ -152,6 +154,8 @@ const migrateFromBlockstoreToNodesTable = async (
             encoded_node: Buffer.from(e.block).toString('base64'),
             block_published_on: null,
             tx_published_on: null,
+            piece_index: null,
+            piece_offset: null,
           })),
         )
       },
