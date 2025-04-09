@@ -142,10 +142,10 @@ const getArchivingNodesCID = async () => {
   const db = await getDatabase()
 
   return db
-    .query<Node>({
-      text: 'SELECT root_cid FROM nodes WHERE piece_index IS NULL and piece_offset IS NULL',
+    .query<{ cid: string }>({
+      text: 'SELECT cid FROM nodes WHERE piece_index IS NULL and piece_offset IS NULL',
     })
-    .then((e) => e.rows.map((e) => e.root_cid))
+    .then((e) => e.rows.map((e) => e.cid))
 }
 
 const setNodeArchivingData = async ({
