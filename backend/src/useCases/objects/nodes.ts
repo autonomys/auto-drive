@@ -163,27 +163,23 @@ const migrateFromBlockstoreToNodesTable = async (
 const processNodeArchived = async (objectMappings: ObjectMapping[]) => {
   const nodes = await nodesRepository.getArchivingNodesCID()
 
-  const objects = objectMappings.map((e) => {
-    const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
+  const objects = objectMappings
+    .map((e) => {
+      const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
 
-    return nodes.includes(cid)
-      ? {
+      const isCidArchiving = nodes.includes(cid)
+
+      if (isCidArchiving) {
+        return {
           cid,
           pieceIndex: e[1],
           pieceOffset: e[2],
         }
-      : undefined
-  })
+      }
+    })
+    .filter((e) => e !== undefined)
 
-  const promises = objects.map((e) => {
-    if (!e) {
-      return
-    }
-    return nodesRepository.setNodeArchivingData(e)
-  })
-
-  await Promise.all(promises)
-
+  await Promise.all(objects.map((e) => nodesRepository.setNodeArchivingData(e)))
   await ObjectUseCases.checkObjectsArchivalStatus()
 
   return objects
