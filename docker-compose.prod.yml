@@ -52,6 +52,10 @@ services:
       - serve
     profiles:
       - base
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
   rabbitmq:
     image: rabbitmq:3-management
     ports:
@@ -62,6 +66,10 @@ services:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
     profiles:
       - rabbit
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
   backend:
     build:
       context: .
@@ -80,6 +88,10 @@ services:
       retries: 3
     profiles:
       - base
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
   agent:
     container_name: newrelic-infra
     image: newrelic/infrastructure:latest
@@ -97,3 +109,7 @@ services:
     restart: unless-stopped
     profiles:
       - base
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
