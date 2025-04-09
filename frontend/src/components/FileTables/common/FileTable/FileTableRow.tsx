@@ -173,6 +173,11 @@ export const FileTableRow = ({
                     : `No name (${file.headCid.slice(0, 12)})`}
                 </span>
               </InternalLink>
+              <ConditionalRender condition={file.tags.includes('insecure')}>
+                <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+                  Insecure
+                </span>
+              </ConditionalRender>
             </span>
           </div>
         </TableBodyCell>
