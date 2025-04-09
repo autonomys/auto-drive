@@ -8,7 +8,11 @@ import { useFileTableState } from '@/components/FileTables/state';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { TABLE_ROW_LIMITS } from '@/constants/table';
-import { updateUrlParams } from '@/utils/table';
+import {
+  getDisplayPageNumber,
+  getTotalPages,
+  updateUrlParams,
+} from '@/utils/table';
 
 export const TablePaginator = () => {
   const {
@@ -25,9 +29,11 @@ export const TablePaginator = () => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [pageInput, setPageInput] = useState<string>((page + 1).toString());
+  const [pageInput, setPageInput] = useState<string>(
+    getDisplayPageNumber(page),
+  );
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const totalPages = getTotalPages(total, limit);
 
   // Initialize from URL params on mount
   useEffect(() => {
@@ -35,7 +41,7 @@ export const TablePaginator = () => {
   }, [initFromUrl]);
 
   useEffect(() => {
-    setPageInput((page + 1).toString());
+    setPageInput(getDisplayPageNumber(page));
   }, [page]);
 
   // Update URL when state changes
@@ -50,7 +56,7 @@ export const TablePaginator = () => {
     if (!isNaN(newPage) && newPage >= 1 && newPage <= totalPages) {
       setInternalPage(newPage - 1);
     } else {
-      setPageInput((page + 1).toString());
+      setPageInput(getDisplayPageNumber(page));
     }
   };
 
