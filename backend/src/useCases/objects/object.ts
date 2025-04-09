@@ -370,14 +370,23 @@ const unpublishObject = async (user: User, cid: string) => {
 const checkObjectsArchivalStatus = async () => {
   const cids = await getNonArchivedObjects()
 
-  for (const cid of cids) {
-    const allNodesArchived = await hasAllNodesArchived(cid)
-    // When archived, populate the cache with the file
-    if (allNodesArchived) {
+  const results = await Promise.all(
+    cids.map(async (cid) => {
+      const allNodesArchived = await hasAllNodesArchived(cid)
+      if (allNodesArchived) {
+        return cid
+      }
+    }),
+  ).then((e) => e.filter((e) => e !== undefined))
+
+  const cidsToArchive = [...new Set(results)]
+
+  await Promise.all(
+    cidsToArchive.map(async (cid) => {
       await downloadService.download(cid)
-      await processArchival(cid)
-    }
-  }
+      await ObjectUseCases.processArchival(cid)
+    }),
+  )
 }
 
 const addTag = async (cid: string, tag: string) => {

@@ -59,6 +59,8 @@ const saveNode = async (
     encoded_node: encodedNode,
     block_published_on: null,
     tx_published_on: null,
+    piece_index: null,
+    piece_offset: null,
   })
 }
 
@@ -152,6 +154,8 @@ const migrateFromBlockstoreToNodesTable = async (
             encoded_node: Buffer.from(e.block).toString('base64'),
             block_published_on: null,
             tx_published_on: null,
+            piece_index: null,
+            piece_offset: null,
           })),
         )
       },
@@ -163,29 +167,26 @@ const migrateFromBlockstoreToNodesTable = async (
 const processNodeArchived = async (objectMappings: ObjectMapping[]) => {
   const nodes = await nodesRepository.getArchivingNodesCID()
 
-  logger.info(`Archiving ${nodes.length} nodes`)
+  const objects = objectMappings
+    .filter((e) => {
+      // Transform the object mapping hash to a cid
+      const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
 
-  const objects = objectMappings.map((e) => {
-    const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
+      // Check if the cid is in the nodes array
+      const isCidArchiving = nodes.includes(cid)
 
-    return nodes.includes(cid)
-      ? {
-          cid,
-          pieceIndex: e[1],
-          pieceOffset: e[2],
-        }
-      : undefined
-  })
+      return isCidArchiving
+    })
+    .map((e) => {
+      const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
+      return {
+        cid,
+        pieceIndex: e[1],
+        pieceOffset: e[2],
+      }
+    })
 
-  const promises = objects.map((e) => {
-    if (!e) {
-      return
-    }
-    return nodesRepository.setNodeArchivingData(e)
-  })
-
-  await Promise.all(promises)
-
+  await Promise.all(objects.map((e) => nodesRepository.setNodeArchivingData(e)))
   await ObjectUseCases.checkObjectsArchivalStatus()
 
   return objects

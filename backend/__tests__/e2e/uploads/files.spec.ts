@@ -341,7 +341,7 @@ files.map((file, index) => {
 
       it('object information should be updated on archiving', async () => {
         // Mocking archiving onchain
-        const nodes = await nodesRepository.getNodesByHeadCid(cid)
+        const nodes = await nodesRepository.getNodesByRootCid(cid)
 
         await NodesUseCases.processNodeArchived(
           nodes.map((node) => [
