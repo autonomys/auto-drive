@@ -65,7 +65,12 @@ export const useFileTableState = create<FileTableStore>()((set, get) => ({
     );
   },
   setLimit: (limit: number) => {
-    set({ limit });
+    const { page, total } = get();
+    // Calculate the new max valid page for the new limit
+    const newTotalPages = Math.ceil(total / limit);
+    // Ensure page is valid for the new limit (0-based index)
+    const newPage = Math.min(page, Math.max(0, newTotalPages - 1));
+    set({ limit, page: newPage });
     get().fetch();
   },
   setPage: (page: number) => {

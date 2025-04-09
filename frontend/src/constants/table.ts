@@ -1,7 +1,7 @@
 /* eslint-disable camelcase */
 import { Order_By } from 'gql/graphql';
 
-export const TABLE_ROW_LIMITS = [5, 10, 20, 50, 100];
+export const TABLE_ROW_LIMITS = [10, 20, 50, 100];
 export const TABLE_SORT_KEYS = ['name', 'size', 'created_at', 'updated_at'];
 export const DEFAULT_PAGE_PARAM_INTERNAL = 0;
 export const DEFAULT_PAGE_PARAM_UI = 1;
