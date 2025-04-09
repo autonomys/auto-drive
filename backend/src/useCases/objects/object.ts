@@ -370,16 +370,16 @@ const unpublishObject = async (user: User, cid: string) => {
 const checkObjectsArchivalStatus = async () => {
   const cids = await getNonArchivedObjects()
 
-  const promises = cids.map(async (cid) => {
-    const allNodesArchived = await hasAllNodesArchived(cid)
-    if (allNodesArchived) {
-      return cid
-    }
-  })
+  const results = await Promise.all(
+    cids.map(async (cid) => {
+      const allNodesArchived = await hasAllNodesArchived(cid)
+      if (allNodesArchived) {
+        return cid
+      }
+    }),
+  ).then((e) => e.filter((e) => e !== undefined))
 
-  const results = await Promise.all(promises)
-
-  const cidsToArchive = [...new Set(results.filter((e) => e !== undefined))]
+  const cidsToArchive = [...new Set(results)]
 
   await Promise.all(
     cidsToArchive.map(async (cid) => {
@@ -387,8 +387,6 @@ const checkObjectsArchivalStatus = async () => {
       await processArchival(cid)
     }),
   )
-
-  return results.filter((e) => e !== undefined)
 }
 
 const addTag = async (cid: string, tag: string) => {
