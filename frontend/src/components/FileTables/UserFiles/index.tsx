@@ -24,9 +24,10 @@ export const UserFiles = () => {
   const setFetcher = useFileTableState((e) => e.setFetcher);
   const limit = useFileTableState((e) => e.limit);
   const page = useFileTableState((e) => e.page);
+  const sortBy = useFileTableState((e) => e.sortBy);
+  const user = useUserStore((state) => state.user);
 
   const { gql } = useNetwork();
-  const user = useUserStore((state) => state.user);
 
   const fetcher: Fetcher = useCallback(
     async (page, limit, sortBy) => {
@@ -61,6 +62,7 @@ export const UserFiles = () => {
     variables: {
       limit,
       offset: page * limit,
+      orderBy: sortBy,
       oauthUserId: user?.oauthUserId ?? '',
       oauthProvider: user?.oauthProvider ?? '',
     },
