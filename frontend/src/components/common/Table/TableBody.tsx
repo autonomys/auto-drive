@@ -17,7 +17,7 @@ export const TableBodyRow = ({
   return (
     <tr
       className={cn(
-        'w-full bg-white hover:bg-gray-50 dark:bg-darkWhite dark:hover:bg-darkWhiteHover border-t border-gray-200',
+        'w-full border-t border-gray-200 bg-white hover:bg-gray-50 dark:bg-darkWhite dark:hover:bg-darkWhiteHover',
         className,
       )}
       onClick={onClick}
@@ -39,7 +39,7 @@ export const TableBodyCell = ({
   return (
     <td
       className={cn(
-        'px-6 py-4 text-sm text-primary dark:text-darkBlack',
+        'px-6 py-4 text-sm text-gray-700 dark:text-darkBlack',
         className,
       )}
       colSpan={colSpan}

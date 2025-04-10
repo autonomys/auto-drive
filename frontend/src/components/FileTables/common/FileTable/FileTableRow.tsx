@@ -167,7 +167,7 @@ export const FileTableRow = ({
                 ) : (
                   <DocumentIcon className='mr-2 h-5 w-5 text-gray-400' />
                 )}
-                <span className='font-semibold text-gray-900 hover:cursor-pointer hover:text-accent hover:underline'>
+                <span className='font-semibold text-gray-900 hover:cursor-pointer hover:text-accent hover:underline dark:text-accent'>
                   {file.name
                     ? shortenString(file.name, 30)
                     : `No name (${file.headCid.slice(0, 12)})`}
@@ -183,7 +183,7 @@ export const FileTableRow = ({
         </TableBodyCell>
         <TableBodyCell>
           <div className='group relative flex cursor-pointer items-center gap-2'>
-            <span role='button' className='text-gray-700' tabIndex={0}>
+            <span role='button' tabIndex={0}>
               {formatCid(file.headCid)}
             </span>
             <div className='relative'>
@@ -191,7 +191,7 @@ export const FileTableRow = ({
                 <Check className='h-4 w-4 text-green-500' />
               ) : (
                 <Copy
-                  className='h-4 w-4 text-gray-400 hover:text-gray-700'
+                  className='h-4 w-4 text-gray-400 hover:text-gray-700 dark:text-darkBlack dark:hover:text-gray-100'
                   onClick={(e) => {
                     e.stopPropagation();
                     copyToClipboard(file.headCid);
@@ -207,11 +207,9 @@ export const FileTableRow = ({
         <TableBodyCell>
           <Badge label={file.status} status={file.status} />
         </TableBodyCell>
+        <TableBodyCell>{bytes(Number(file.size))}</TableBodyCell>
         <TableBodyCell>
-          <div className='text-gray-700'>{bytes(Number(file.size))}</div>
-        </TableBodyCell>
-        <TableBodyCell>
-          <div className='group relative text-gray-700'>
+          <div className='group relative'>
             <span className='cursor-default'>
               {file.createdAt ? formatDate(file.createdAt) : 'Unknown'}
             </span>
