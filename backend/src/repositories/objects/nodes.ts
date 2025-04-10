@@ -11,8 +11,8 @@ export const NodeSchema = z.object({
   head_cid: z.string(),
   type: z.string(),
   encoded_node: z.string(),
-  piece_index: z.number().optional(),
-  piece_offset: z.number().optional(),
+  piece_index: z.number().nullable(),
+  piece_offset: z.number().nullable(),
   block_published_on: z.number().nullable(),
   tx_published_on: z.string().nullable(),
 })
@@ -142,7 +142,7 @@ const getArchivingNodesCID = async () => {
   const db = await getDatabase()
 
   return db
-    .query<Node>({
+    .query<{ cid: string }>({
       text: 'SELECT cid FROM nodes WHERE piece_index IS NULL and piece_offset IS NULL',
     })
     .then((e) => e.rows.map((e) => e.cid))
