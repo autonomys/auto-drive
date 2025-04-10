@@ -47,7 +47,7 @@ export default function AppLayout({
           <UserEnsurer>
             <NetworkProvider network={network}>
               <SideNavbar networkId={params.chain} />
-              <main className='flex-1 overflow-auto p-6'>
+              <main className='flex-1 overflow-auto px-6 pb-6'>
                 <SessionProvider>
                   <TableRouteChangeListener />
                   {children}
