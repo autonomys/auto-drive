@@ -6,8 +6,12 @@ import { LandingHeader } from 'components/common/LandingHeader';
 import { SigningInButtons } from './SignInButtons';
 import Image from 'next/image';
 import { EXTERNAL_ROUTES } from '../../constants/routes';
+import { getSession } from 'next-auth/react';
 
 export const Home = () => {
+  // Ensure session is refreshed
+  getSession();
+
   return (
     <div className='flex min-h-screen flex-col items-center justify-between gap-2 bg-gradient-to-b from-backgroundLight to-backgroundDark dark:bg-darkWhite dark:from-backgroundDark dark:to-backgroundDarkest dark:text-darkBlack'>
       <LandingHeader />
