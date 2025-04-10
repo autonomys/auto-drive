@@ -40,20 +40,20 @@ export default function AppLayout({
   }
 
   return (
-    <div className='min-h-screen bg-white dark:bg-darkWhite dark:bg-gray-900'>
+    <div className='min-h-screen bg-white dark:bg-darkWhite'>
       <div className='flex h-screen flex-col rounded-lg bg-white dark:bg-darkWhite dark:text-white'>
         <TopNavbar networkId={params.chain} />
         <div className='flex flex-1 overflow-hidden px-10'>
           <UserEnsurer>
-            <SideNavbar networkId={params.chain} />
-            <main className='flex-1 overflow-auto p-6'>
-              <SessionProvider>
-                <NetworkProvider network={network}>
+            <NetworkProvider network={network}>
+              <SideNavbar networkId={params.chain} />
+              <main className='flex-1 overflow-auto px-6 pb-6'>
+                <SessionProvider>
                   <TableRouteChangeListener />
                   {children}
-                </NetworkProvider>
-              </SessionProvider>
-            </main>
+                </SessionProvider>
+              </main>
+            </NetworkProvider>
           </UserEnsurer>
         </div>
       </div>
