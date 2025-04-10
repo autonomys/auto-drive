@@ -21,9 +21,9 @@ export const TrashFiles = () => {
   const limit = useFileTableState((e) => e.limit);
   const setTotal = useFileTableState((e) => e.setTotal);
   const sortBy = useFileTableState((e) => e.sortBy);
+  const user = useUserStore((state) => state.user);
 
   const { gql } = useNetwork();
-  const user = useUserStore((state) => state.user);
 
   const fetcher: Fetcher = useCallback(
     async (page, limit, sortBy) => {

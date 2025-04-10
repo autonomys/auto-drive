@@ -19,9 +19,10 @@ export const SharedFiles = () => {
   const limit = useFileTableState((e) => e.limit);
   const page = useFileTableState((e) => e.page);
   const sortBy = useFileTableState((e) => e.sortBy);
-  const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
-
+  
+  const { gql } = useNetwork();
+  
   const fetcher: Fetcher = useCallback(
     async (page: number, limit: number, sortBy) => {
       const { data } = await gql.query<GetSharedFilesQuery>({
