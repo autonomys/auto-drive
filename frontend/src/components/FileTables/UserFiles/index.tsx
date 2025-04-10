@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect } from 'react';
 import { useUserStore } from 'globalStates/user';
-import { FileDropZone } from '@/components/FileTables/common/FileDropZone';
 import { SearchBar } from 'components/SearchBar';
 import {
   FileActionButtons,
@@ -77,10 +76,7 @@ export const UserFiles = () => {
   return (
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
-        <div className='flex-1'>
-          <FileDropZone />
-        </div>
-        <div className='w-full max-w-md'>
+        <div className='flex w-full max-w-md flex-row items-center justify-between gap-4'>
           <SearchBar scope='user' />
         </div>
         <div className=''>
