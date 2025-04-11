@@ -19,7 +19,7 @@ export type FileIconProps = {
 
 export function FileIcons({
   fileType,
-  className = 'h-6 w-6 text-blue-900',
+  className = 'h-6 w-6 text-blue-900 dark:text-blue-100',
 }: FileIconProps) {
   // Helper function to check if the file type starts with a specific prefix
   const isType = (prefix: string) => fileType.toLowerCase().startsWith(prefix);

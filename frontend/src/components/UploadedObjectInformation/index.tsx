@@ -123,14 +123,14 @@ export const UploadedObjectInformation = ({
       />
       <div className='flex items-center justify-between'>
         <div className='flex items-center space-x-3'>
-          <div className='rounded-lg bg-blue-100 p-2'>
+          <div className='rounded-lg bg-blue-100 p-2 dark:bg-darkPrimary'>
             <FileIcons fileType={getTypeFromMetadata(object.metadata) ?? ''} />
           </div>
           <div>
-            <h1 className='text-xl font-semibold text-gray-900'>
+            <h1 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>
               {object.metadata.name ?? 'Unnamed'}
             </h1>
-            <p className='text-sm text-gray-500'>
+            <p className='text-sm text-gray-500 dark:text-gray-400'>
               {getTypeFromMetadata(object.metadata)} •{' '}
               {bytes(Number(object.metadata.totalSize))}
             </p>
@@ -166,8 +166,8 @@ export const UploadedObjectInformation = ({
         </div>
       </div>
       <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
-        <div className='rounded-lg bg-gray-50 p-6'>
-          <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900'>
+        <div className='rounded-lg bg-gray-50 p-6 dark:bg-darkWhite dark:border dark:border-gray-200'>
+          <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
             <IconWithTooltip
               icon={
                 <InformationCircleIcon className='mr-2 h-5 w-5 text-gray-500' />
@@ -178,43 +178,57 @@ export const UploadedObjectInformation = ({
           </h2>
           <div className='space-y-3'>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Name:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Name:
+              </span>
               <span className='text-sm font-medium'>
                 {object.metadata.name ?? 'Unnamed'}
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Type:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Type:
+              </span>
               <span className='text-sm font-medium'>
                 {getTypeFromMetadata(object.metadata)}
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Size:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Size:
+              </span>
               <span className='text-sm font-medium'>
                 {bytes(Number(object.metadata.totalSize))}
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Owner:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Owner:
+              </span>
               <span className='text-sm font-medium'>
                 {isOwner ? 'You' : 'Unknown'}
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Uploaded Nodes:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Uploaded Nodes:
+              </span>
               <span className='text-sm font-medium'>
                 {object.uploadState.uploadedNodes ?? 'Processing'}
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Total Nodes:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Total Nodes:
+              </span>
               <span className='text-sm font-medium'>
                 {object.uploadState.totalNodes ?? 'Processing'}
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Block range:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Block range:
+              </span>
               <span className='text-sm font-medium'>
                 {object.uploadState.minimumBlockDepth ? (
                   <a
@@ -236,15 +250,15 @@ export const UploadedObjectInformation = ({
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
                 Archive blocks count:
               </span>
               <span className='text-sm font-medium'>0</span>
             </div>
           </div>
         </div>
-        <div className='rounded-lg bg-gray-50 p-6'>
-          <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900'>
+        <div className='rounded-lg bg-gray-50 p-6 dark:bg-darkWhite dark:border dark:border-gray-200'>
+          <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
             <IconWithTooltip
               icon={<CloudArrowUpIcon className='mr-2 h-5 w-5 text-gray-500' />}
               tooltip='Status of file upload to the network'
@@ -253,19 +267,25 @@ export const UploadedObjectInformation = ({
           </h2>
           <div className='space-y-3'>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Total Nodes:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Total Nodes:
+              </span>
               <span className='text-sm font-medium'>
                 {object.uploadState.totalNodes}
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Uploaded Nodes:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Uploaded Nodes:
+              </span>
               <span className='text-sm font-medium'>
                 {object.uploadState.uploadedNodes}
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>Block range:</span>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
+                Block range:
+              </span>
               <span className='text-sm font-medium'>
                 {object.uploadState.minimumBlockDepth ? (
                   <a
@@ -287,7 +307,7 @@ export const UploadedObjectInformation = ({
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-sm text-gray-500'>
+              <span className='text-sm text-gray-500 dark:text-gray-400'>
                 Archive blocks count:
               </span>
               <span className='text-sm font-medium'>0</span>
@@ -295,8 +315,8 @@ export const UploadedObjectInformation = ({
           </div>
         </div>
       </div>
-      <div className='rounded-lg bg-gray-50 p-6'>
-        <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900'>
+      <div className='rounded-lg bg-gray-50 p-6 dark:bg-darkWhite dark:border dark:border-gray-200'>
+        <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
           <IconWithTooltip
             icon={
               object.metadata.uploadOptions?.encryption?.algorithm ===
@@ -317,7 +337,9 @@ export const UploadedObjectInformation = ({
         </h2>
         <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
           <div className='flex justify-between'>
-            <span className='text-sm text-gray-500'>Encryption:</span>
+            <span className='text-sm text-gray-500 dark:text-gray-400'>
+              Encryption:
+            </span>
             <span
               className={`text-sm font-medium ${
                 object.metadata.uploadOptions?.encryption?.algorithm
@@ -330,7 +352,9 @@ export const UploadedObjectInformation = ({
             </span>
           </div>
           <div className='flex justify-between'>
-            <span className='text-sm text-gray-500'>Compression:</span>
+            <span className='text-sm text-gray-500 dark:text-gray-400'>
+              Compression:
+            </span>
             <span className='text-sm font-medium'>
               {object.metadata.uploadOptions?.compression?.algorithm ||
                 'Disabled'}
@@ -338,9 +362,11 @@ export const UploadedObjectInformation = ({
           </div>
         </div>
       </div>
-      <div className='rounded-lg bg-gray-50 p-6'>
-        <h2 className='mb-4 text-lg font-medium text-gray-900'>Preview</h2>
-        <div className='overflow-hidden rounded-lg border border-gray-200'>
+      <div className='rounded-lg bg-gray-50 p-6 dark:bg-darkWhite dark:border dark:border-gray-200'>  
+        <h2 className='mb-4 text-lg font-medium text-gray-900 dark:text-gray-100'>
+          Preview
+        </h2>
+        <div className='overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800'>
           {object.metadata.type === 'file' ? (
             <FilePreview metadata={object.metadata} />
           ) : (
