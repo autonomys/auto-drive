@@ -13,10 +13,8 @@ import {
   ArrowDownTrayIcon,
   ShareIcon,
   TrashIcon,
-  DocumentIcon,
   LockClosedIcon,
   LockOpenIcon,
-  PhotoIcon,
   InformationCircleIcon,
   CloudArrowUpIcon,
 } from '@heroicons/react/24/outline';
@@ -25,6 +23,7 @@ import { NetworkId } from '@/constants/networks';
 import { useNetwork } from 'contexts/network';
 import bytes from 'bytes';
 import { formatNumberWithCommas } from '@/utils/number';
+import { FileIcons } from './FileIcons';
 
 const getBlockExplorerUrl = (
   networkId: NetworkId,
@@ -33,6 +32,24 @@ const getBlockExplorerUrl = (
   if (!blockDepth) return '#';
   return (
     EXTERNAL_ROUTES.astral + `/${networkId}/consensus/blocks/${blockDepth}`
+  );
+};
+
+const IconWithTooltip = ({
+  icon,
+  tooltip,
+}: {
+  icon: React.ReactNode;
+  tooltip: string;
+}) => {
+  return (
+    <div className='group relative inline-flex items-center'>
+      {icon}
+      <div className='invisible absolute bottom-full left-2 z-10 mb-1 -translate-x-1/4 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:visible group-hover:opacity-100'>
+        {tooltip}
+        <div className='absolute left-1/4 top-full border-4 border-transparent border-t-gray-800'></div>
+      </div>
+    </div>
   );
 };
 
@@ -90,19 +107,8 @@ export const UploadedObjectInformation = ({
     );
   }
 
-  const fileIcon =
-    object.metadata.type === 'file' ? (
-      object.metadata.mimeType?.startsWith('image/') ? (
-        <PhotoIcon className='h-6 w-6 text-blue-900' />
-      ) : (
-        <DocumentIcon className='h-6 w-6 text-blue-900' />
-      )
-    ) : (
-      <DocumentIcon className='h-6 w-6 text-blue-900' />
-    );
-
   return (
-    <div className='mx-auto flex max-w-4xl flex-grow flex-col gap-6'>
+    <div className='container mx-auto flex flex-grow flex-col gap-6'>
       <ObjectDownloadModal
         cid={downloadModalCid}
         onClose={() => setDownloadModalCid(null)}
@@ -117,7 +123,9 @@ export const UploadedObjectInformation = ({
       />
       <div className='flex items-center justify-between'>
         <div className='flex items-center space-x-3'>
-          <div className='rounded-lg bg-blue-100 p-2'>{fileIcon}</div>
+          <div className='rounded-lg bg-blue-100 p-2'>
+            <FileIcons fileType={getTypeFromMetadata(object.metadata) ?? ''} />
+          </div>
           <div>
             <h1 className='text-xl font-semibold text-gray-900'>
               {object.metadata.name ?? 'Unnamed'}
@@ -160,7 +168,12 @@ export const UploadedObjectInformation = ({
       <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
         <div className='rounded-lg bg-gray-50 p-6'>
           <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900'>
-            <InformationCircleIcon className='mr-2 h-5 w-5 text-gray-500' />
+            <IconWithTooltip
+              icon={
+                <InformationCircleIcon className='mr-2 h-5 w-5 text-gray-500' />
+              }
+              tooltip='File metadata and information'
+            />
             Metadata
           </h2>
           <div className='space-y-3'>
@@ -232,7 +245,10 @@ export const UploadedObjectInformation = ({
         </div>
         <div className='rounded-lg bg-gray-50 p-6'>
           <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900'>
-            <CloudArrowUpIcon className='mr-2 h-5 w-5 text-gray-500' />
+            <IconWithTooltip
+              icon={<CloudArrowUpIcon className='mr-2 h-5 w-5 text-gray-500' />}
+              tooltip='Status of file upload to the network'
+            />
             Upload Status
           </h2>
           <div className='space-y-3'>
@@ -281,12 +297,22 @@ export const UploadedObjectInformation = ({
       </div>
       <div className='rounded-lg bg-gray-50 p-6'>
         <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900'>
-          {object.metadata.uploadOptions?.encryption?.algorithm === undefined ||
-          object.metadata.uploadOptions?.encryption?.algorithm === null ? (
-            <LockOpenIcon className='mr-2 h-5 w-5 text-gray-500' />
-          ) : (
-            <LockClosedIcon className='mr-2 h-5 w-5 text-gray-500' />
-          )}
+          <IconWithTooltip
+            icon={
+              object.metadata.uploadOptions?.encryption?.algorithm ===
+                undefined ||
+              object.metadata.uploadOptions?.encryption?.algorithm === null ? (
+                <LockOpenIcon className='mr-2 h-5 w-5 text-gray-500' />
+              ) : (
+                <LockClosedIcon className='mr-2 h-5 w-5 text-gray-500' />
+              )
+            }
+            tooltip={
+              object.metadata.uploadOptions?.encryption?.algorithm
+                ? 'This file is encrypted'
+                : 'This file is not encrypted'
+            }
+          />
           Upload Options
         </h2>
         <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
