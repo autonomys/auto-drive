@@ -63,8 +63,8 @@ export const UploadButton = () => {
           </Button>
         </PopoverButton>
         <PopoverPanel className='relative'>
-          <div className='absolute left-0 top-0 flex text-nowrap rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-darkWhiteHover dark:text-darkBlack'>
-            <div className='p-4'>
+          <div className='absolute left-0 top-1 flex text-nowrap rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-darkWhiteHover dark:text-darkBlack'>
+            <div className='p-1'>
               <button
                 onClick={openFileDialog}
                 className='flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-darkWhite'
