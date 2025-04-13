@@ -24,6 +24,8 @@ import { useNetwork } from 'contexts/network';
 import bytes from 'bytes';
 import { formatNumberWithCommas } from '@/utils/number';
 import { FileIcons } from './FileIcons';
+import { ConditionalRender } from '../common/ConditionalRender';
+import { Badge } from 'components/common/Badge';
 
 const getBlockExplorerUrl = (
   networkId: NetworkId,
@@ -130,9 +132,15 @@ export const UploadedObjectInformation = ({
             <h1 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>
               {object.metadata.name ?? 'Unnamed'}
             </h1>
-            <p className='text-sm text-gray-500 dark:text-gray-400'>
+            <p className='flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400'>
               {getTypeFromMetadata(object.metadata)} •{' '}
               {bytes(Number(object.metadata.totalSize))}
+              <Badge label={object.status} status={object.status} />
+              <ConditionalRender condition={object.tags.includes('insecure')}>
+                <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+                  Insecure
+                </span>
+              </ConditionalRender>
             </p>
           </div>
         </div>
@@ -166,7 +174,7 @@ export const UploadedObjectInformation = ({
         </div>
       </div>
       <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
-        <div className='rounded-lg border border-gray-200 p-6 dark:bg-darkWhite dark:border-gray-200'>
+        <div className='rounded-lg border border-gray-200 p-6 dark:border-gray-200 dark:bg-darkWhite'>
           <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
             <IconWithTooltip
               icon={
@@ -315,7 +323,7 @@ export const UploadedObjectInformation = ({
           </div>
         </div>
       </div>
-      <div className='rounded-lg border border-gray-200 p-6 dark:bg-darkWhite dark:border-gray-200'>
+      <div className='rounded-lg border border-gray-200 p-6 dark:border-gray-200 dark:bg-darkWhite'>
         <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
           <IconWithTooltip
             icon={
@@ -362,7 +370,7 @@ export const UploadedObjectInformation = ({
           </div>
         </div>
       </div>
-        <div className='rounded-lg border border-gray-200 p-6 dark:bg-darkWhite'>  
+      <div className='rounded-lg border border-gray-200 p-6 dark:bg-darkWhite'>
         <h2 className='mb-4 text-lg font-medium text-gray-900 dark:text-gray-100'>
           Preview
         </h2>

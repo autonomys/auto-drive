@@ -59,42 +59,6 @@ const AudioPlayer = ({ src }: { src: string }) => {
   );
 };
 
-const JSONViewer = ({ content }: { content: string }) => {
-  try {
-    const jsonData = JSON.parse(content);
-    return (
-      <div className='relative overflow-hidden rounded-md'>
-        <div className='absolute right-2 top-2 z-10'>
-          <CodeBracketIcon className='h-5 w-5 text-gray-500 dark:text-gray-400' />
-        </div>
-        <pre className='max-h-[50vh] overflow-auto bg-gray-800 p-4 text-gray-100 dark:bg-gray-900'>
-          <code>
-            {'{\n'}
-            {Object.entries(jsonData).map(([key, value]) => (
-              <div key={key} className='ml-4'>
-                <span className='text-blue-300 dark:text-blue-400'>
-                  &quot;{key}&quot;
-                </span>
-                :
-                <span className='text-green-300 dark:text-green-400'>
-                  {typeof value === 'object'
-                    ? ' ' + JSON.stringify(value, null, 2)
-                    : ' ' + JSON.stringify(value)}
-                </span>
-                {',\n'}
-              </div>
-            ))}
-            {'}'}
-          </code>
-        </pre>
-      </div>
-    );
-  } catch (err) {
-    console.error('Failed to parse JSON:', err);
-    return <TextViewer content={content} extension='json' />;
-  }
-};
-
 const TextViewer = ({
   content,
   extension,
@@ -355,17 +319,6 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       return (
         <>
           <AudioPlayer src={fileData.uri} />
-          <DirectGatewayLink />
-        </>
-      );
-    }
-if (
-      textContent &&
-      (mimeType === 'application/json' || extension === 'json')
-    ) {
-      return (
-        <>
-          <JSONViewer content={textContent} />
           <DirectGatewayLink />
         </>
       );
