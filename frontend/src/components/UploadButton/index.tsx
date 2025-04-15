@@ -8,25 +8,25 @@ import { UploadingFileModal } from '../FileTables/common/UploadingFileModal';
 export const UploadButton = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFile, setUploadingFile] = useState<File[] | null>(null);
+  const [uploadingFolder, setUploadingFolder] = useState<FileList | null>(null);
 
   const openFileDialog = () => {
-    console.log('openFileDialog');
     fileInputRef.current?.click();
   };
 
   const openFolderDialog = () => {
-    console.log('openFolderDialog');
     folderInputRef.current?.click();
   };
-
-  const [uploadingFile, setUploadingFile] = useState<File | null>(null);
-  const [uploadingFolder, setUploadingFolder] = useState<FileList | null>(null);
 
   const handleFileInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files) {
-        const file = e.target.files[0];
-        setUploadingFile(file);
+        const filesArray = Array.from(e.target.files);
+        setUploadingFile(filesArray);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     },
     [],
@@ -46,7 +46,7 @@ export const UploadButton = () => {
     <>
       <Popover>
         <UploadingFileModal
-          file={uploadingFile}
+          files={uploadingFile}
           onClose={() => setUploadingFile(null)}
         />
         <UploadingFolderModal
