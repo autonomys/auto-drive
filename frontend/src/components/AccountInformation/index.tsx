@@ -79,7 +79,7 @@ export const AccountInformation = ({
         </div>
         <div className='mt-2 flex flex-col text-center'>
           <span className='text-sm text-gray-400 dark:text-darkBlack'>
-            Renews on {utcToLocalRelativeTime(renewalDate.toISOString())}
+            Renews in {utcToLocalRelativeTime(renewalDate.toISOString())}
           </span>
         </div>
         <div className='mt-2 flex flex-col text-center'>
