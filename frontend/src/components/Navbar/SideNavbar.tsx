@@ -16,7 +16,6 @@ import { RemainingCreditTracker } from 'components/RemainingCreditTracker';
 import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';
 import { NavItem } from './NavItem';
-import { UploadButton } from '../UploadButton';
 
 export const NAV_ITEMS = [
   {
