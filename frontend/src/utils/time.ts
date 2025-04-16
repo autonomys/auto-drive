@@ -28,6 +28,11 @@ export const utcToLocalRelativeTime = (timestamp: string): string => {
   const time = dayjs.utc(timestamp).local();
   const diffInSeconds = now.diff(time, 'second');
 
-  if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
-  return time.fromNow(true) + ' ago';
+  if (diffInSeconds > 0) {
+    if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
+    return time.fromNow(true) + ' ago';
+  } else {
+    if (diffInSeconds > -60) return `${diffInSeconds} seconds from now`;
+    return time.fromNow(true) + ' from now';
+  }
 };
