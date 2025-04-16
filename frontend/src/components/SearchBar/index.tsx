@@ -23,7 +23,7 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   }, [scope]);
 
   return (
-    <div className='mx-auto w-full max-w-md dark:text-darkBlack'>
+    <div className='w-full max-w-md dark:text-darkBlack'>
       <div className='relative mt-1'>
         <div className='relative h-fit min-w-80'>
           <input
