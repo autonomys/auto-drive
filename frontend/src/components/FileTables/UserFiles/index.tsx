@@ -27,11 +27,12 @@ export const UserFiles = () => {
   const page = useFileTableState((e) => e.page);
   const sortBy = useFileTableState((e) => e.sortBy);
   const user = useUserStore((state) => state.user);
-
+  const searchQuery = useFileTableState((e) => e.searchQuery);
+  
   const { gql } = useNetwork();
 
   const fetcher: Fetcher = useCallback(
-    async (page, limit, sortBy) => {
+    async (page, limit, sortBy, searchQuery) => {
       const { data } = await gql.query<GetMyFilesQuery>({
         query: GetMyFilesDocument,
         variables: {
@@ -40,6 +41,7 @@ export const UserFiles = () => {
           oauthUserId: user?.oauthUserId ?? '',
           oauthProvider: user?.oauthProvider ?? '',
           orderBy: sortBy,
+          search: `%${searchQuery}%`,
         },
         fetchPolicy: 'no-cache',
       });
@@ -66,6 +68,7 @@ export const UserFiles = () => {
       orderBy: sortBy,
       oauthUserId: user?.oauthUserId ?? '',
       oauthProvider: user?.oauthProvider ?? '',
+      search: `%${searchQuery}%`,
     },
     onCompleted: (data) => {
       setObjects(objectSummaryFromUserFilesQuery(data));

@@ -8,17 +8,17 @@ import { ConditionalRender } from 'components/common/ConditionalRender';
 import { FileActionButtons } from '@/components/FileTables/common/FileTable';
 import bytes from 'bytes';
 import { Button } from 'components/common/Button';
-import { handleEnterOrSpace } from 'utils/eventHandler';
-import { SquareArrowOutUpRight, Copy, Check, File, Folder } from 'lucide-react';
-import { InternalLink } from 'components/common/InternalLink';
+import { Copy, Check, File, Folder } from 'lucide-react';
 import { OwnerBadge } from './OwnerBadge';
 import { useNetwork } from 'contexts/network';
 import { ROUTES } from 'constants/routes';
-import { utcToLocalRelativeTime, formatDate } from 'utils/time';
+import { utcToLocalRelativeTime, formatLocalDate } from 'utils/time';
 import { Badge } from 'components/common/Badge';
 import { DocumentIcon } from '@heroicons/react/24/outline';
 import { formatCid } from '@/utils/table';
 import { cn } from '@/utils/cn';
+import Link from 'next/link';
+import dayjs from 'dayjs';
 
 export const FileTableRow = ({
   file,
@@ -148,37 +148,26 @@ export const FileTableRow = ({
                 )}
               </button>
             )}
-            <span
-              role='button'
-              tabIndex={0}
-              onKeyDown={handleEnterOrSpace(toggleExpand)}
-              className={`relative ml-2 flex flex-row items-center text-sm font-medium text-gray-900 dark:text-darkBlack ${
-                file.type === 'folder'
-                  ? 'hover:cursor-pointer hover:underline'
-                  : ''
-              }`}
-              onClick={(e) => e.stopPropagation()}
+            <Link
+              href={ROUTES.objectDetails(network.id, file.headCid)}
+              className='relative ml-2 flex flex-row items-center text-sm font-medium text-gray-900 dark:text-darkBlack'
             >
-              <InternalLink
-                href={ROUTES.objectDetails(network.id, file.headCid)}
-              >
-                {file.type === 'folder' ? (
-                  <Folder className='mr-2 h-5 w-5 text-gray-400' />
-                ) : (
-                  <DocumentIcon className='mr-2 h-5 w-5 text-gray-400' />
-                )}
-                <span className='font-semibold text-gray-900 hover:cursor-pointer hover:text-accent hover:underline dark:text-accent'>
-                  {file.name
-                    ? shortenString(file.name, 30)
-                    : `No name (${file.headCid.slice(0, 12)})`}
-                </span>
-              </InternalLink>
-              <ConditionalRender condition={file.tags.includes('insecure')}>
-                <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
-                  Insecure
-                </span>
-              </ConditionalRender>
-            </span>
+              {file.type === 'folder' ? (
+                <Folder className='mr-2 h-5 w-5 text-gray-400' />
+              ) : (
+                <DocumentIcon className='mr-2 h-5 w-5 text-gray-400' />
+              )}
+              <span className='font-semibold text-gray-900 hover:cursor-pointer hover:text-accent hover:underline dark:text-accent'>
+                {file.name
+                  ? shortenString(file.name, 30)
+                  : `No name (${file.headCid.slice(0, 12)})`}
+              </span>
+            </Link>
+            <ConditionalRender condition={file.tags.includes('insecure')}>
+              <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+                Insecure
+              </span>
+            </ConditionalRender>
           </div>
         </TableBodyCell>
         <TableBodyCell>
@@ -210,12 +199,15 @@ export const FileTableRow = ({
         <TableBodyCell>{bytes(Number(file.size))}</TableBodyCell>
         <TableBodyCell>
           <div className='group relative'>
-            <span className='cursor-default'>
-              {file.createdAt ? formatDate(file.createdAt) : 'Unknown'}
+            <span className='cursor-default flex items-center'>
+              {file.createdAt ? formatLocalDate(file.createdAt) : 'Unknown'}
             </span>
             {file.createdAt && (
-              <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
+              <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 dark:bg-gray-700 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
                 {utcToLocalRelativeTime(file.createdAt)}
+                <div className="text-xs opacity-75 mt-0.5">
+                  {dayjs.utc(file.createdAt).format('YYYY-MM-DD HH:mm:ss')} UTC
+                </div>
               </div>
             )}
           </div>
@@ -301,7 +293,7 @@ export const FileTableRow = ({
         file.children &&
         file.children.map((child) => (
           <TableBodyRow key={child.cid}>
-            <TableBodyCell className='w-[50%]'>
+            <TableBodyCell>
               <div className='flex items-center'>
                 <input
                   onChange={() => toggleSelectFile(child.cid)}
@@ -315,57 +307,51 @@ export const FileTableRow = ({
                 ) : (
                   <File className='mx-2 h-5 w-5 flex-shrink-0 text-accent' />
                 )}
-                <span
-                  className={`relative text-sm font-semibold text-accent ${
-                    file.type === 'folder'
-                      ? 'hover:cursor-pointer hover:underline'
-                      : ''
-                  }`}
-                >
-                  {child.name ?? `No name (${formatCid(child.cid)})`}
-                </span>
-                <InternalLink
-                  href={ROUTES.objectDetails(network.id, child.cid)}
-                >
-                  <SquareArrowOutUpRight className='ml-2 h-4 w-4 transition-all duration-200 hover:scale-105' />
-                </InternalLink>
-                <div className='group relative ml-2 flex cursor-pointer items-center'>
+
+                <Link href={ROUTES.objectDetails(network.id, child.cid)}>
                   <span
-                    className='mr-1 text-xs text-gray-500 hover:text-accent'
-                    role='button'
-                    tabIndex={0}
+                    className={`relative text-sm font-semibold text-accent ${
+                      file.type === 'folder'
+                        ? 'hover:cursor-pointer hover:underline'
+                        : ''
+                    }`}
                   >
-                    {formatCid(child.cid)}
+                    {child.name ?? `No name (${formatCid(child.cid)})`}
                   </span>
-                  <div className='relative'>
-                    {copiedCid === child.cid ? (
-                      <Check className='h-4 w-4 text-green-500' />
-                    ) : (
-                      <Copy
-                        className='h-4 w-4 text-gray-400 group-hover:text-accent'
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          copyToClipboard(child.cid);
-                        }}
-                      />
-                    )}
-                    <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
-                      {copiedCid === child.cid ? 'Copied!' : 'Copy CID'}
-                    </div>
+                </Link>
+              </div>
+            </TableBodyCell>
+            <TableBodyCell>
+              <div className='group relative flex cursor-pointer items-center gap-2'>
+                <span role='button' tabIndex={0}>
+                  {formatCid(child.cid)}
+                </span>
+                <div className='relative'>
+                  {copiedCid === child.cid ? (
+                    <Check className='h-4 w-4 text-green-500' />
+                  ) : (
+                    <Copy
+                      className='h-4 w-4 text-gray-400 hover:text-gray-700 dark:text-darkBlack dark:hover:text-gray-100'
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyToClipboard(child.cid);
+                      }}
+                    />
+                  )}
+                  <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
+                    {copiedCid === child.cid ? 'Copied!' : 'Copy CID'}
                   </div>
                 </div>
               </div>
             </TableBodyCell>
             <TableBodyCell>
-              <span>{child.type === 'file' ? 'File' : 'Folder'}</span>
-            </TableBodyCell>
-            <TableBodyCell>
-              <span>{bytes(Number(child.totalSize))}</span>
-            </TableBodyCell>
-            <TableBodyCell>
               <OwnerBadge />
             </TableBodyCell>
+            <TableBodyCell>{bytes(Number(child.totalSize))}</TableBodyCell>
             <TableBodyCell>
+              {child.type === 'file' ? 'File' : 'Folder'}
+            </TableBodyCell>
+            <TableBodyCell className='flex justify-end'>
               <Button
                 variant='lightAccent'
                 className='text-xs'
