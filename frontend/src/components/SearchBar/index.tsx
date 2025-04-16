@@ -159,11 +159,11 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   return (
     <div className='mx-auto w-full max-w-md dark:text-darkBlack'>
       <div className='relative mt-1'>
-        <div className='relative w-full'>
+        <div className='relative h-fit min-w-80'>
           <input
             ref={inputRef}
             type='text'
-            className='w-full rounded-lg border border-[#BCC1CA] bg-white py-2 pl-3 pr-10 text-sm leading-5 text-black text-gray-900 placeholder:text-black focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-darkWhite dark:text-darkBlack dark:placeholder:text-darkBlack'
+            className='w-full rounded-lg border border-[#BCC1CA] bg-white py-[.65rem] pl-3 pr-10 text-sm leading-5 text-black text-gray-900 placeholder:text-black focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-darkWhite dark:text-darkBlack dark:placeholder:text-darkBlack'
             value={query}
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}

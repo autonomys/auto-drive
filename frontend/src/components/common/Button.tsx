@@ -29,7 +29,7 @@ export const buttonVariantClasses: Record<ButtonVariant, string> = {
   lightDanger: `${baseClasses} font-medium bg-light-danger text-red-900 hover:bg-red-300 dark:bg-red-200 dark:hover:bg-red-300 disabled:opacity-50 disabled:hover disabled:hover:cursor-default`,
   danger: `${baseClasses} font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 bg-red-400 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-400 text-white font-semibold disabled:opacity-50 disabled:hover disabled:hover:cursor-default`,
   grayscale: `${baseClasses} bg-gray-button text-white opacity-80 hover:opacity-100 font-extralight disabled:opacity-50 disabled:hover disabled:hover:cursor-default`,
-  primaryOutline: `${baseClasses} bg-transparent text-primary border border-primary hover:border-primary-dark disabled:opacity-50 disabled:hover disabled:hover:cursor-default dark:bg-darkWhite hover:bg-primaryHover dark:text-darkBlack dark:hover:bg-darkWhiteHover dark:border-darkBlack`,
+  primaryOutline: `${baseClasses} bg-transparent text-primary border border-primary hover:border-primary-dark disabled:opacity-50 disabled:hover disabled:hover:cursor-default dark:bg-darkWhite hover:bg-primaryHover hover:text-white dark:text-darkBlack dark:hover:bg-darkWhiteHover dark:border-darkBlack`,
 };
 
 const mapVariantToDarkModeVariant: Record<ButtonVariant, ButtonVariant> = {

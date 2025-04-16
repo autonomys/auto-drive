@@ -77,7 +77,7 @@ export const UserFiles = () => {
   return (
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
-        <div className='flex w-full max-w-md flex-row items-center justify-between gap-4'>
+        <div className='flex w-fit flex-row items-center justify-start gap-4'>
           <SearchBar scope='user' />
           <UploadButton />
         </div>
