@@ -12,12 +12,13 @@ import { Copy, Check, File, Folder } from 'lucide-react';
 import { OwnerBadge } from './OwnerBadge';
 import { useNetwork } from 'contexts/network';
 import { ROUTES } from 'constants/routes';
-import { utcToLocalRelativeTime, formatDate } from 'utils/time';
+import { utcToLocalRelativeTime, formatLocalDate } from 'utils/time';
 import { Badge } from 'components/common/Badge';
 import { DocumentIcon } from '@heroicons/react/24/outline';
 import { formatCid } from '@/utils/table';
 import { cn } from '@/utils/cn';
 import Link from 'next/link';
+import dayjs from 'dayjs';
 
 export const FileTableRow = ({
   file,
@@ -198,12 +199,15 @@ export const FileTableRow = ({
         <TableBodyCell>{bytes(Number(file.size))}</TableBodyCell>
         <TableBodyCell>
           <div className='group relative'>
-            <span className='cursor-default'>
-              {file.createdAt ? formatDate(file.createdAt) : 'Unknown'}
+            <span className='cursor-default flex items-center'>
+              {file.createdAt ? formatLocalDate(file.createdAt) : 'Unknown'}
             </span>
             {file.createdAt && (
-              <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
+              <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 dark:bg-gray-700 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
                 {utcToLocalRelativeTime(file.createdAt)}
+                <div className="text-xs opacity-75 mt-0.5">
+                  {dayjs.utc(file.createdAt).format('YYYY-MM-DD HH:mm:ss')} UTC
+                </div>
               </div>
             )}
           </div>

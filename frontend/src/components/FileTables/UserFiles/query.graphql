@@ -4,6 +4,7 @@ query GetMyFiles(
   $limit: Int!
   $offset: Int!
   $orderBy: [metadata_roots_order_by!]
+  $search: String!
 ) {
   metadata_roots(
     where: {
@@ -17,6 +18,7 @@ query GetMyFiles(
           }
         }
       }
+      _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]
     }
     limit: $limit
     offset: $offset
