@@ -1,14 +1,14 @@
 import bytes from 'bytes';
 import { Download, Upload } from 'lucide-react';
 import { Button } from 'components/common/Button';
+import { utcToLocalRelativeTime } from '../../utils/time';
 
 interface CreditLimitsProps {
   uploadPending: number;
   uploadLimit: number;
   downloadPending: number;
   downloadLimit: number;
-  startDate: string;
-  endDate: string;
+  renewalDate: Date;
 }
 
 export const RemainingCreditTracker = ({
@@ -16,8 +16,7 @@ export const RemainingCreditTracker = ({
   uploadLimit = 1000,
   downloadPending = 0,
   downloadLimit = 2000,
-  startDate,
-  endDate,
+  renewalDate,
 }: CreditLimitsProps) => {
   const uploadUsed = uploadLimit - uploadPending;
   const downloadUsed = downloadLimit - downloadPending;
@@ -77,11 +76,8 @@ export const RemainingCreditTracker = ({
         </div>
         <div className='mt-2 flex flex-col text-center'>
           <span className='text-sm text-gray-400 dark:text-darkBlack'>
-            Credit for period
+            Credit renews on {utcToLocalRelativeTime(renewalDate.toISOString())}
           </span>
-          <div className='text-center text-sm text-gray-600 dark:text-darkBlack'>
-            {startDate} - {endDate}
-          </div>
         </div>
         <div className='mt-2 flex flex-col text-center'>
           <a
