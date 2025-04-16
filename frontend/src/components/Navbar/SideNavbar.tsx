@@ -92,9 +92,6 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
 
   return (
     <aside className='w-12 md:w-48'>
-      <div className='mb-4 flex'>
-        <UploadButton />
-      </div>
       {NAV_ITEMS.map(({ href, icon, label }) => (
         <NavItem
           key={label}

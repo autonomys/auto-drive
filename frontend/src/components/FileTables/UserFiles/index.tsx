@@ -17,6 +17,7 @@ import {
 import { objectSummaryFromUserFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
+import { UploadButton } from '../../UploadButton';
 
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -78,6 +79,7 @@ export const UserFiles = () => {
       <div className='flex w-full flex-col gap-4'>
         <div className='flex w-full max-w-md flex-row items-center justify-between gap-4'>
           <SearchBar scope='user' />
+          <UploadButton />
         </div>
         <div className=''>
           <FileTable
