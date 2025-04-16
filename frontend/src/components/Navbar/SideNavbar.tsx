@@ -16,7 +16,6 @@ import { RemainingCreditTracker } from 'components/RemainingCreditTracker';
 import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';
 import { NavItem } from './NavItem';
-import { UploadButton } from '../UploadButton';
 
 export const NAV_ITEMS = [
   {
@@ -92,9 +91,6 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
 
   return (
     <aside className='w-12 md:w-48'>
-      <div className='mb-4 flex'>
-        <UploadButton />
-      </div>
       {NAV_ITEMS.map(({ href, icon, label }) => (
         <NavItem
           key={label}

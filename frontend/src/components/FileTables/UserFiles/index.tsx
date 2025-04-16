@@ -17,6 +17,7 @@ import {
 import { objectSummaryFromUserFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
+import { UploadButton } from '../../UploadButton';
 
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -27,7 +28,6 @@ export const UserFiles = () => {
   const sortBy = useFileTableState((e) => e.sortBy);
   const user = useUserStore((state) => state.user);
   const searchQuery = useFileTableState((e) => e.searchQuery);
-  
   const { gql } = useNetwork();
 
   const fetcher: Fetcher = useCallback(
@@ -79,8 +79,9 @@ export const UserFiles = () => {
   return (
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
-        <div className='flex w-full max-w-md flex-row items-center justify-between gap-4'>
+        <div className='flex w-full flex-row items-center justify-between gap-4'>
           <SearchBar scope='user' />
+          <UploadButton />
         </div>
         <div className=''>
           <FileTable
