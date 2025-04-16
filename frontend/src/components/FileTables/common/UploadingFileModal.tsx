@@ -15,7 +15,9 @@ type FileProgress = {
 };
 
 // Maximum number of files allowed to upload at once
-const MAX_FILES_LIMIT = parseInt(process.env.MAX_FILES_LIMIT || '10');
+const MAX_FILES_LIMIT = parseInt(
+  process.env.NEXT_PUBLIC_MAX_FILES_LIMIT || '10',
+);
 
 export const UploadingFileModal = ({
   files,
