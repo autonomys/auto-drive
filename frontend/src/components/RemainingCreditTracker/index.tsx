@@ -11,7 +11,7 @@ interface CreditLimitsProps {
   renewalDate: Date;
 }
 
-export const RemainingCreditTracker = ({
+export const AccountInformation = ({
   uploadPending = 0,
   uploadLimit = 1000,
   downloadPending = 0,

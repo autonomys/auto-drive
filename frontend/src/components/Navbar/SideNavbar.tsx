@@ -12,7 +12,7 @@ import {
 import React, { useMemo } from 'react';
 import { RoleProtected } from 'components/RoleProtected';
 import { UserRole } from '@auto-drive/models';
-import { RemainingCreditTracker } from 'components/RemainingCreditTracker';
+import { AccountInformation } from 'components/RemainingCreditTracker';
 import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';
 import { NavItem } from './NavItem';
@@ -89,7 +89,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
         />
       </RoleProtected>
       {subscription && (
-        <RemainingCreditTracker
+        <AccountInformation
           uploadPending={subscription.pendingUploadCredits}
           uploadLimit={subscription.uploadLimit}
           downloadPending={subscription.pendingDownloadCredits}
