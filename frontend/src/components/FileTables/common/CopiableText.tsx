@@ -1,12 +1,17 @@
+/* eslint-disable jsx-a11y/no-static-element-interactions */
+/* eslint-disable jsx-a11y/click-events-have-key-events */
 import { Check, Copy } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { cn } from '../../../utils/cn';
 
 export const CopiableText = ({
   text,
   displayText,
+  className,
 }: {
   text: string;
   displayText?: string;
+  className?: string;
 }) => {
   const [isCopied, setIsCopied] = useState(false);
 
@@ -21,7 +26,13 @@ export const CopiableText = ({
   const displayingText = displayText ?? text;
 
   return (
-    <div className='group relative flex cursor-pointer items-center gap-2'>
+    <div
+      className={cn(
+        'group relative flex cursor-pointer items-center gap-2',
+        className,
+      )}
+      onClick={onClick}
+    >
       <span role='button' tabIndex={0}>
         {displayingText}
       </span>

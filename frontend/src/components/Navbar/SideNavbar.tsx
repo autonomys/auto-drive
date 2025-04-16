@@ -12,7 +12,7 @@ import {
 import React, { useMemo } from 'react';
 import { RoleProtected } from 'components/RoleProtected';
 import { UserRole } from '@auto-drive/models';
-import { AccountInformation } from 'components/RemainingCreditTracker';
+import { AccountInformation } from '@/components/AccountInformation';
 import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';
 import { NavItem } from './NavItem';
