@@ -1,0 +1,46 @@
+import { Check, Copy } from 'lucide-react';
+import { useCallback, useState } from 'react';
+
+export const CopiableText = ({
+  text,
+  displayText,
+}: {
+  text: string;
+  displayText?: string;
+}) => {
+  const [isCopied, setIsCopied] = useState(false);
+
+  const onClick = useCallback(() => {
+    navigator.clipboard.writeText(text);
+    setIsCopied(true);
+    setTimeout(() => {
+      setIsCopied(false);
+    }, 2_000);
+  }, [text]);
+
+  const displayingText = displayText ?? text;
+
+  return (
+    <div className='group relative flex cursor-pointer items-center gap-2'>
+      <span role='button' tabIndex={0}>
+        {displayingText}
+      </span>
+      <div className='relative'>
+        {isCopied ? (
+          <Check className='h-4 w-4 text-green-500' />
+        ) : (
+          <Copy
+            className='h-4 w-4 text-gray-400 hover:text-gray-700 dark:text-darkBlack dark:hover:text-gray-100'
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+            }}
+          />
+        )}
+        <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
+          {isCopied ? 'Copied!' : 'Copy'}
+        </div>
+      </div>
+    </div>
+  );
+};
