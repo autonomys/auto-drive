@@ -23,7 +23,6 @@ export const AccountInformation = ({
 }: CreditLimitsProps) => {
   const uploadUsed = uploadLimit - uploadPending;
   const downloadUsed = downloadLimit - downloadPending;
-  const user = useUserStore((state) => state.user);
 
   const uploadPercentage = (uploadUsed / uploadLimit) * 100;
   const downloadPercentage = (downloadUsed / downloadLimit) * 100;
@@ -31,18 +30,6 @@ export const AccountInformation = ({
   return (
     <div className='mx-auto w-full max-w-sm overflow-hidden rounded-lg bg-white dark:bg-darkWhite dark:text-darkBlack'>
       <div className='py-2'>
-        <div className='mt-2 flex w-full flex-col items-center justify-center gap-2 font-medium'>
-          <span className='text-sm text-gray-400 dark:text-darkBlack'>
-            Your public ID
-          </span>
-          <div className='flex items-center pb-2'>
-            <CopiableText
-              text={user?.publicId ?? ''}
-              displayText={formatCid(user?.publicId ?? '')}
-              className='text-sm'
-            />
-          </div>
-        </div>
         <div className='space-y-6'>
           <div>
             <div className='mb-1 flex justify-between text-sm text-gray-600 dark:text-darkBlack'>
