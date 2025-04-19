@@ -2,9 +2,6 @@ import bytes from 'bytes';
 import { Download, Upload } from 'lucide-react';
 import { Button } from 'components/common/Button';
 import { utcToLocalRelativeTime } from '../../utils/time';
-import { useUserStore } from '../../globalStates/user';
-import { CopiableText } from '../FileTables/common/CopiableText';
-import { formatCid } from '../../utils/table';
 
 interface CreditLimitsProps {
   uploadPending: number;
