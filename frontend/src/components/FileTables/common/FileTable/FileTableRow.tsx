@@ -8,7 +8,7 @@ import { ConditionalRender } from 'components/common/ConditionalRender';
 import { FileActionButtons } from '@/components/FileTables/common/FileTable';
 import bytes from 'bytes';
 import { Button } from 'components/common/Button';
-import { Copy, Check, File, Folder } from 'lucide-react';
+import { File, Folder } from 'lucide-react';
 import { OwnerBadge } from './OwnerBadge';
 import { useNetwork } from 'contexts/network';
 import { ROUTES } from 'constants/routes';
@@ -19,6 +19,7 @@ import { formatCid } from '@/utils/table';
 import { cn } from '@/utils/cn';
 import Link from 'next/link';
 import dayjs from 'dayjs';
+import { CopiableText } from '../CopiableText';
 
 export const FileTableRow = ({
   file,
@@ -45,7 +46,6 @@ export const FileTableRow = ({
 
   const [isRowExpanded, setIsRowExpanded] = useState(false);
   const [showDownloadTooltip, setShowDownloadTooltip] = useState(false);
-  const [copiedCid, setCopiedCid] = useState<string | null>(null);
 
   const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN);
   const isOwner =
@@ -112,15 +112,6 @@ export const FileTableRow = ({
     [toggleExpand, stopEventPropagation],
   );
 
-  const copyToClipboard = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedCid(text);
-    // Reset the icon after 2 seconds
-    setTimeout(() => {
-      setCopiedCid(null);
-    }, 2000);
-  }, []);
-
   return (
     <Fragment key={file.headCid}>
       <TableBodyRow
@@ -171,27 +162,10 @@ export const FileTableRow = ({
           </div>
         </TableBodyCell>
         <TableBodyCell>
-          <div className='group relative flex cursor-pointer items-center gap-2'>
-            <span role='button' tabIndex={0}>
-              {formatCid(file.headCid)}
-            </span>
-            <div className='relative'>
-              {copiedCid === file.headCid ? (
-                <Check className='h-4 w-4 text-green-500' />
-              ) : (
-                <Copy
-                  className='h-4 w-4 text-gray-400 hover:text-gray-700 dark:text-darkBlack dark:hover:text-gray-100'
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    copyToClipboard(file.headCid);
-                  }}
-                />
-              )}
-              <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
-                {copiedCid === file.headCid ? 'Copied!' : 'Copy CID'}
-              </div>
-            </div>
-          </div>
+          <CopiableText
+            text={file.headCid}
+            displayText={formatCid(file.headCid)}
+          />
         </TableBodyCell>
         <TableBodyCell>
           <Badge label={file.status} status={file.status} />
@@ -199,13 +173,13 @@ export const FileTableRow = ({
         <TableBodyCell>{bytes(Number(file.size))}</TableBodyCell>
         <TableBodyCell>
           <div className='group relative'>
-            <span className='cursor-default flex items-center'>
+            <span className='flex cursor-default items-center'>
               {file.createdAt ? formatLocalDate(file.createdAt) : 'Unknown'}
             </span>
             {file.createdAt && (
-              <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 dark:bg-gray-700 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
+              <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 dark:bg-gray-700'>
                 {utcToLocalRelativeTime(file.createdAt)}
-                <div className="text-xs opacity-75 mt-0.5">
+                <div className='mt-0.5 text-xs opacity-75'>
                   {dayjs.utc(file.createdAt).format('YYYY-MM-DD HH:mm:ss')} UTC
                 </div>
               </div>
@@ -322,27 +296,10 @@ export const FileTableRow = ({
               </div>
             </TableBodyCell>
             <TableBodyCell>
-              <div className='group relative flex cursor-pointer items-center gap-2'>
-                <span role='button' tabIndex={0}>
-                  {formatCid(child.cid)}
-                </span>
-                <div className='relative'>
-                  {copiedCid === child.cid ? (
-                    <Check className='h-4 w-4 text-green-500' />
-                  ) : (
-                    <Copy
-                      className='h-4 w-4 text-gray-400 hover:text-gray-700 dark:text-darkBlack dark:hover:text-gray-100'
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyToClipboard(child.cid);
-                      }}
-                    />
-                  )}
-                  <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
-                    {copiedCid === child.cid ? 'Copied!' : 'Copy CID'}
-                  </div>
-                </div>
-              </div>
+              <CopiableText
+                text={child.cid}
+                displayText={formatCid(child.cid)}
+              />
             </TableBodyCell>
             <TableBodyCell>
               <OwnerBadge />
