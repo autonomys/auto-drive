@@ -2,7 +2,7 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events */
 import { Check, Copy } from 'lucide-react';
 import { useCallback, useState } from 'react';
-import { cn } from '../../../utils/cn';
+import { cn } from '../../utils/cn';
 
 export const CopiableText = ({
   text,
@@ -26,7 +26,7 @@ export const CopiableText = ({
   const displayingText = displayText ?? text;
 
   return (
-    <div
+    <button
       className={cn(
         'group relative flex cursor-pointer items-center gap-2',
         className,
@@ -48,10 +48,10 @@ export const CopiableText = ({
             }}
           />
         )}
-        <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
+        <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 dark:bg-gray-700'>
           {isCopied ? 'Copied!' : 'Copy'}
         </div>
       </div>
-    </div>
+    </button>
   );
 };

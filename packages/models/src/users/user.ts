@@ -26,11 +26,17 @@ type UserBase = {
 export type OnboardedUser = UserBase & {
   publicId: string;
   onboarded: true;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
 };
 
 export type UnonboardedUser = UserBase & {
   publicId: null;
   onboarded: false;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
 };
 
 export type User = OnboardedUser;
