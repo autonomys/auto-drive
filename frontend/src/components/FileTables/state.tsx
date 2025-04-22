@@ -48,7 +48,10 @@ export const useFileTableState = create<FileTableStore>()((set, get) => ({
   objects: null,
   total: 0,
   searchQuery: '',
-  setSearchQuery: (searchQuery: string) => set({ searchQuery }),
+  setSearchQuery: (searchQuery: string) => {
+    set({ searchQuery, page: 0 });
+    get().fetch();
+  },
   setSortBy: (sortBy: Metadata_Roots_Order_By) => {
     set({ sortBy, page: 0 });
     get().fetch();
