@@ -2,6 +2,7 @@ import { OAuthUser } from '@auto-drive/models'
 
 interface DiscordUser {
   id: string
+  username: string
 }
 
 const getUserFromAccessToken = async (
@@ -25,6 +26,7 @@ const getUserFromAccessToken = async (
   return {
     provider: 'discord',
     id: discordUser.id,
+    username: discordUser.username,
   }
 }
 

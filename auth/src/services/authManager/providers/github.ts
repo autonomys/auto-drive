@@ -23,6 +23,7 @@ const getUserFromAccessToken = async (
     provider: 'github',
     // Convert numeric GitHub ID to string if you want a uniform type
     id: githubUser.id.toString(),
+    username: githubUser.login,
   }
 }
 

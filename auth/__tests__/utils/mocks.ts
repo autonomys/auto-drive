@@ -8,6 +8,7 @@ import { v4 } from 'uuid'
 export const MOCK_UNONBOARDED_USER: UnonboardedUser = {
   oauthProvider: 'google',
   oauthUserId: '123',
+  oauthUsername: 'non-onboarded-user',
   role: UserRole.User,
   publicId: null,
   onboarded: false,

@@ -25,6 +25,7 @@ const getUserByPublicId = async (
     oauthUserId: dbUser.oauth_user_id,
     publicId: dbUser.public_id,
     role: dbUser.role,
+    oauthUsername: dbUser.oauth_username,
   })
 }
 
@@ -76,13 +77,20 @@ const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
     return user
   }
 
+  console.log('onboarding user', user)
+  console.log('user.oauthUsername', user.oauthUsername)
+
   const publicId = generateUserPublicId(user)
 
   const updatedUser = await UsersUseCases.initUser(
     user.oauthProvider,
     user.oauthUserId,
+    user.oauthUsername,
     publicId,
+    UserRole.User,
   )
+
+  console.log('updatedUser', updatedUser)
 
   return updatedUser
 }
@@ -96,13 +104,20 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<MaybeUser> => {
     return userFromOAuth({
       oauthProvider: user.provider,
       oauthUserId: user.id,
+      oauthUsername: user.username,
       role: UserRole.User,
     })
   }
 
+  // If the user has a username and has been updated, update the username
+  if (user.username && dbUser.oauth_username !== user.username) {
+    await usersRepository.updateUsername(user.provider, user.id, user.username)
+  }
+
   return userFromTable({
-    oauthProvider: dbUser.oauth_provider,
-    oauthUserId: dbUser.oauth_user_id,
+    oauthProvider: user.provider,
+    oauthUserId: user.id,
+    oauthUsername: user.username,
     publicId: dbUser.public_id,
     role: dbUser.role,
   })
@@ -152,12 +167,14 @@ const updateRole = async (
 const initUser = async (
   oauthProvider: string,
   oauthUserId: string,
+  oauthUsername: string | undefined,
   publicId: string,
-  role: UserRole = UserRole.User,
+  role: UserRole,
 ): Promise<User> => {
   const user = await usersRepository.createUser(
     oauthProvider,
     oauthUserId,
+    oauthUsername,
     publicId,
     role,
   )
@@ -165,21 +182,16 @@ const initUser = async (
     throw new Error('User creation failed')
   }
 
-  await OrganizationsUseCases.initOrganization(
-    userFromTable({
-      oauthProvider,
-      oauthUserId,
-      publicId,
-      role,
-    }),
-  )
-
-  return userFromTable({
+  const onboardedUser = userFromTable({
     oauthProvider: user.oauth_provider,
     oauthUserId: user.oauth_user_id,
+    oauthUsername: user.oauth_username,
     publicId: user.public_id,
     role: user.role,
   })
+  await OrganizationsUseCases.initOrganization(onboardedUser)
+
+  return onboardedUser
 }
 
 export const getUserList = async (executor: User): Promise<User[]> => {

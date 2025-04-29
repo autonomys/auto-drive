@@ -36,12 +36,8 @@ userController.post('/@me/accessToken', async (req, res) => {
     return
   }
 
-  const { accessToken, refreshToken } = await CustomJWTAuth.createSessionTokens(
-    {
-      provider: user.oauthProvider,
-      id: user.oauthUserId,
-    },
-  )
+  const { accessToken, refreshToken } =
+    await CustomJWTAuth.createSessionTokens(user)
 
   res
     .cookie('refreshToken', refreshToken, {

@@ -14,6 +14,7 @@ describe('Admin management', () => {
     await UsersUseCases.initUser(
       admin.oauthProvider,
       admin.oauthUserId,
+      admin.oauthUsername,
       v4(),
       UserRole.Admin,
     )
@@ -28,6 +29,7 @@ describe('Admin management', () => {
     const plainUser = await UsersUseCases.initUser(
       user.oauthProvider,
       user.oauthUserId,
+      user.oauthUsername,
       v4(),
       user.role,
     )
@@ -42,6 +44,7 @@ describe('Admin management', () => {
     await usersRepository.createUser(
       user.oauthProvider,
       user.oauthUserId,
+      user.oauthUsername,
       v4(),
       user.role,
     )
