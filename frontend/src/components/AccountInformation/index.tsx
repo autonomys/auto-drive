@@ -1,23 +1,22 @@
 import bytes from 'bytes';
 import { Download, Upload } from 'lucide-react';
 import { Button } from 'components/common/Button';
+import { utcToLocalRelativeTime } from '../../utils/time';
 
 interface CreditLimitsProps {
   uploadPending: number;
   uploadLimit: number;
   downloadPending: number;
   downloadLimit: number;
-  startDate: string;
-  endDate: string;
+  renewalDate: Date;
 }
 
-export const RemainingCreditTracker = ({
+export const AccountInformation = ({
   uploadPending = 0,
   uploadLimit = 1000,
   downloadPending = 0,
   downloadLimit = 2000,
-  startDate,
-  endDate,
+  renewalDate,
 }: CreditLimitsProps) => {
   const uploadUsed = uploadLimit - uploadPending;
   const downloadUsed = downloadLimit - downloadPending;
@@ -27,7 +26,7 @@ export const RemainingCreditTracker = ({
 
   return (
     <div className='mx-auto w-full max-w-sm overflow-hidden rounded-lg bg-white dark:bg-darkWhite dark:text-darkBlack'>
-      <div className='py-4'>
+      <div className='py-2'>
         <div className='space-y-6'>
           <div>
             <div className='mb-1 flex justify-between text-sm text-gray-600 dark:text-darkBlack'>
@@ -77,11 +76,8 @@ export const RemainingCreditTracker = ({
         </div>
         <div className='mt-2 flex flex-col text-center'>
           <span className='text-sm text-gray-400 dark:text-darkBlack'>
-            Credit for period
+            Renews in {utcToLocalRelativeTime(renewalDate.toISOString())}
           </span>
-          <div className='text-center text-sm text-gray-600 dark:text-darkBlack'>
-            {startDate} - {endDate}
-          </div>
         </div>
         <div className='mt-2 flex flex-col text-center'>
           <a
