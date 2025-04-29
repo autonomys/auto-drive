@@ -12,11 +12,10 @@ import {
 import React, { useMemo } from 'react';
 import { RoleProtected } from 'components/RoleProtected';
 import { UserRole } from '@auto-drive/models';
-import { RemainingCreditTracker } from 'components/RemainingCreditTracker';
+import { AccountInformation } from '@/components/AccountInformation';
 import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';
 import { NavItem } from './NavItem';
-import { UploadButton } from '../UploadButton';
 
 export const NAV_ITEMS = [
   {
@@ -65,36 +64,13 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const pathname = usePathname();
   const subscription = useUserStore(({ subscription }) => subscription);
 
-  const startDate = useMemo(() => {
+  const renewalDate = useMemo(() => {
     const date = new Date();
-    return new Date(date.getFullYear(), date.getMonth(), 1).toLocaleDateString(
-      'en-US',
-      {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      },
-    );
-  }, []);
-
-  const endDate = useMemo(() => {
-    const date = new Date();
-    return new Date(
-      date.getFullYear(),
-      date.getMonth() + 1,
-      0,
-    ).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0);
   }, []);
 
   return (
     <aside className='w-12 md:w-48'>
-      <div className='mb-4 flex'>
-        <UploadButton />
-      </div>
       {NAV_ITEMS.map(({ href, icon, label }) => (
         <NavItem
           key={label}
@@ -113,13 +89,12 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
         />
       </RoleProtected>
       {subscription && (
-        <RemainingCreditTracker
+        <AccountInformation
           uploadPending={subscription.pendingUploadCredits}
           uploadLimit={subscription.uploadLimit}
           downloadPending={subscription.pendingDownloadCredits}
           downloadLimit={subscription.downloadLimit}
-          startDate={startDate}
-          endDate={endDate}
+          renewalDate={renewalDate}
         />
       )}
     </aside>

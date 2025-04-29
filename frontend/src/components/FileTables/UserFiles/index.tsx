@@ -17,6 +17,7 @@ import {
 import { objectSummaryFromUserFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
+import { UploadButton } from '../../UploadButton';
 
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -26,11 +27,11 @@ export const UserFiles = () => {
   const page = useFileTableState((e) => e.page);
   const sortBy = useFileTableState((e) => e.sortBy);
   const user = useUserStore((state) => state.user);
-
+  const searchQuery = useFileTableState((e) => e.searchQuery);
   const { gql } = useNetwork();
 
   const fetcher: Fetcher = useCallback(
-    async (page, limit, sortBy) => {
+    async (page, limit, sortBy, searchQuery) => {
       const { data } = await gql.query<GetMyFilesQuery>({
         query: GetMyFilesDocument,
         variables: {
@@ -39,6 +40,7 @@ export const UserFiles = () => {
           oauthUserId: user?.oauthUserId ?? '',
           oauthProvider: user?.oauthProvider ?? '',
           orderBy: sortBy,
+          search: `%${searchQuery}%`,
         },
         fetchPolicy: 'no-cache',
       });
@@ -65,6 +67,7 @@ export const UserFiles = () => {
       orderBy: sortBy,
       oauthUserId: user?.oauthUserId ?? '',
       oauthProvider: user?.oauthProvider ?? '',
+      search: `%${searchQuery}%`,
     },
     onCompleted: (data) => {
       setObjects(objectSummaryFromUserFilesQuery(data));
@@ -76,8 +79,9 @@ export const UserFiles = () => {
   return (
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
-        <div className='flex w-full max-w-md flex-row items-center justify-between gap-4'>
+        <div className='flex w-full flex-row items-center justify-between gap-4'>
           <SearchBar scope='user' />
+          <UploadButton />
         </div>
         <div className=''>
           <FileTable

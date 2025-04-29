@@ -35,7 +35,6 @@
     "eslint-plugin-import": "^2.31.0"
   },
   "dependencies": {
-    "@autonomys/rpc": "^1.4.5",
     "cache-manager": "^6.4.1",
     "keyv": "^5.3.1"
   }

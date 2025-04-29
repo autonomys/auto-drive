@@ -8,25 +8,25 @@ import { UploadingFileModal } from '../FileTables/common/UploadingFileModal';
 export const UploadButton = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFile, setUploadingFile] = useState<File[] | null>(null);
+  const [uploadingFolder, setUploadingFolder] = useState<FileList | null>(null);
 
   const openFileDialog = () => {
-    console.log('openFileDialog');
     fileInputRef.current?.click();
   };
 
   const openFolderDialog = () => {
-    console.log('openFolderDialog');
     folderInputRef.current?.click();
   };
-
-  const [uploadingFile, setUploadingFile] = useState<File | null>(null);
-  const [uploadingFolder, setUploadingFolder] = useState<FileList | null>(null);
 
   const handleFileInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files) {
-        const file = e.target.files[0];
-        setUploadingFile(file);
+        const filesArray = Array.from(e.target.files);
+        setUploadingFile(filesArray);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     },
     [],
@@ -46,7 +46,7 @@ export const UploadButton = () => {
     <>
       <Popover>
         <UploadingFileModal
-          file={uploadingFile}
+          files={uploadingFile}
           onClose={() => setUploadingFile(null)}
         />
         <UploadingFolderModal
@@ -56,15 +56,15 @@ export const UploadButton = () => {
         <PopoverButton as='div'>
           <Button
             variant='primaryOutline'
-            className='flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-gray-800 shadow-sm hover:bg-gray-200'
+            className='flex h-full items-center gap-2 rounded-full bg-gray-100 py-[.50rem] text-gray-800 shadow-sm hover:bg-gray-200'
           >
             <PlusIcon className='h-5 w-5' />
-            <span>New</span>
+            <span className='text-nowrap'>Add new file</span>
           </Button>
         </PopoverButton>
         <PopoverPanel className='relative'>
-          <div className='absolute left-0 top-0 flex text-nowrap rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-darkWhiteHover dark:text-darkBlack'>
-            <div className='p-4'>
+          <div className='absolute left-0 top-1 flex text-nowrap rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-darkWhiteHover dark:text-darkBlack'>
+            <div className='p-1'>
               <button
                 onClick={openFileDialog}
                 className='flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-darkWhite'

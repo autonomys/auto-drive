@@ -14,6 +14,7 @@ export interface Fetcher {
     page: number,
     limit: number,
     sortBy: Metadata_Roots_Order_By,
+    searchQuery: string,
   ): Promise<{ objects: ObjectSummary[]; total: number }>;
 }
 
@@ -35,6 +36,8 @@ interface FileTableStore {
   initFromUrl: () => void;
   isInitialized: boolean;
   resetState: () => void;
+  searchQuery: string;
+  setSearchQuery: (searchQuery: string) => void;
 }
 
 export const useFileTableState = create<FileTableStore>()((set, get) => ({
@@ -44,6 +47,11 @@ export const useFileTableState = create<FileTableStore>()((set, get) => ({
   isInitialized: false,
   objects: null,
   total: 0,
+  searchQuery: '',
+  setSearchQuery: (searchQuery: string) => {
+    set({ searchQuery, page: 0 });
+    get().fetch();
+  },
   setSortBy: (sortBy: Metadata_Roots_Order_By) => {
     set({ sortBy, page: 0 });
     get().fetch();
@@ -56,11 +64,12 @@ export const useFileTableState = create<FileTableStore>()((set, get) => ({
       page: number,
       limit: number,
       sortBy: Metadata_Roots_Order_By,
+      searchQuery: string,
     ) => Promise<{ objects: ObjectSummary[]; total: number }>,
   ) => set({ fetcher }),
   fetch: () => {
-    const { page, limit, fetcher, sortBy } = get();
-    fetcher?.(page, limit, sortBy)?.then((e) =>
+    const { page, limit, fetcher, sortBy, searchQuery } = get();
+    fetcher?.(page, limit, sortBy, searchQuery)?.then((e) =>
       set({ objects: e.objects, total: e.total }),
     );
   },
@@ -90,7 +99,7 @@ export const useFileTableState = create<FileTableStore>()((set, get) => ({
       objects: null,
       total: 0,
       fetcher: null,
-      isInitialized: false
+      isInitialized: false,
     });
     resetParams();
   },
