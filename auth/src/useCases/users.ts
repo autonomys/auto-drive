@@ -77,9 +77,6 @@ const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
     return user
   }
 
-  console.log('onboarding user', user)
-  console.log('user.oauthUsername', user.oauthUsername)
-
   const publicId = generateUserPublicId(user)
 
   const updatedUser = await UsersUseCases.initUser(
@@ -89,8 +86,6 @@ const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
     publicId,
     UserRole.User,
   )
-
-  console.log('updatedUser', updatedUser)
 
   return updatedUser
 }
