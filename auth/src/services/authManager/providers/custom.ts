@@ -36,6 +36,7 @@ const getUserFromAccessToken = async (
     provider: decoded.oauthProvider,
     id: decoded.oauthUserId,
     username: decoded.oauthUsername,
+    avatarUrl: decoded.oauthAvatarUrl,
   }
 }
 
@@ -47,6 +48,7 @@ const createAccessToken = async (
     provider: maybeUser.oauthProvider,
     id: maybeUser.oauthUserId,
     username: maybeUser.oauthUsername,
+    avatarUrl: maybeUser.oauthAvatarUrl,
   })
 
   const userInfo = user.onboarded
@@ -62,6 +64,7 @@ const createAccessToken = async (
     oauthProvider: user.oauthProvider,
     oauthUserId: user.oauthUserId,
     oauthUsername: user.oauthUsername,
+    oauthAvatarUrl: user.oauthAvatarUrl,
     refreshTokenId,
     'https://hasura.io/jwt/claims': {
       'x-hasura-default-role': defaultRole,
@@ -85,6 +88,7 @@ const createRefreshToken = async (user: MaybeUser) => {
     oauthProvider: user.oauthProvider,
     oauthUserId: user.oauthUserId,
     oauthUsername: user.oauthUsername,
+    oauthAvatarUrl: user.oauthAvatarUrl,
     id: v4(),
   }
 
@@ -134,6 +138,7 @@ const getUserFromRefreshToken = async (
     provider: decoded.oauthProvider,
     id: decoded.oauthUserId,
     username: decoded.oauthUsername,
+    avatarUrl: decoded.oauthAvatarUrl,
   })
 }
 

@@ -3,6 +3,7 @@ import { OAuthUser } from '@auto-drive/models'
 type GitHubUser = {
   id: number
   login: string
+  avatar_url: string
 }
 
 const getUserFromAccessToken = async (
@@ -24,6 +25,7 @@ const getUserFromAccessToken = async (
     // Convert numeric GitHub ID to string if you want a uniform type
     id: githubUser.id.toString(),
     username: githubUser.login,
+    avatarUrl: githubUser.avatar_url,
   }
 }
 

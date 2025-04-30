@@ -26,6 +26,7 @@ const getUserByPublicId = async (
     publicId: dbUser.public_id,
     role: dbUser.role,
     oauthUsername: dbUser.oauth_username,
+    oauthAvatarUrl: dbUser.oauth_avatar_url,
   })
 }
 
@@ -83,6 +84,7 @@ const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
     user.oauthProvider,
     user.oauthUserId,
     user.oauthUsername,
+    user.oauthAvatarUrl,
     publicId,
     UserRole.User,
   )
@@ -100,6 +102,7 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<MaybeUser> => {
       oauthProvider: user.provider,
       oauthUserId: user.id,
       oauthUsername: user.username,
+      oauthAvatarUrl: user.avatarUrl,
       role: UserRole.User,
     })
   }
@@ -109,10 +112,20 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<MaybeUser> => {
     await usersRepository.updateUsername(user.provider, user.id, user.username)
   }
 
+  // If the user has an avatar url and has been updated, update the avatar url
+  if (user.avatarUrl && dbUser.oauth_avatar_url !== user.avatarUrl) {
+    await usersRepository.updateAvatarUrl(
+      user.provider,
+      user.id,
+      user.avatarUrl,
+    )
+  }
+
   return userFromTable({
     oauthProvider: user.provider,
     oauthUserId: user.id,
     oauthUsername: user.username,
+    oauthAvatarUrl: user.avatarUrl,
     publicId: dbUser.public_id,
     role: dbUser.role,
   })
@@ -163,6 +176,7 @@ const initUser = async (
   oauthProvider: string,
   oauthUserId: string,
   oauthUsername: string | undefined,
+  oauthAvatarUrl: string | undefined,
   publicId: string,
   role: UserRole,
 ): Promise<User> => {
@@ -170,6 +184,7 @@ const initUser = async (
     oauthProvider,
     oauthUserId,
     oauthUsername,
+    oauthAvatarUrl,
     publicId,
     role,
   )
@@ -181,6 +196,7 @@ const initUser = async (
     oauthProvider: user.oauth_provider,
     oauthUserId: user.oauth_user_id,
     oauthUsername: user.oauth_username,
+    oauthAvatarUrl: user.oauth_avatar_url,
     publicId: user.public_id,
     role: user.role,
   })

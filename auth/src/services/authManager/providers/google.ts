@@ -29,6 +29,7 @@ const getUserFromAccessToken = async (
     provider: 'google',
     id: googleUser.id,
     username: googleUser.email,
+    avatarUrl: googleUser.picture,
   }
 }
 

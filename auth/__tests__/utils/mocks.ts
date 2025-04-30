@@ -9,6 +9,7 @@ export const MOCK_UNONBOARDED_USER: UnonboardedUser = {
   oauthProvider: 'google',
   oauthUserId: '123',
   oauthUsername: 'non-onboarded-user',
+  oauthAvatarUrl: 'https://example.com/avatar.png',
   role: UserRole.User,
   publicId: null,
   onboarded: false,

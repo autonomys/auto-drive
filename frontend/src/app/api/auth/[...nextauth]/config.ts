@@ -25,7 +25,7 @@ export const authOptions: AuthOptions = {
           // eslint-disable-next-line camelcase
           access_type: 'offline',
           prompt: 'consent',
-          scope: 'email',
+          scope: 'email profile openid',
         },
       },
     }),
