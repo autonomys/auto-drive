@@ -9,7 +9,7 @@ models:
 	yarn models build
 frontend:
 	yarn frontend build
-gateway:
+gateway: install
 	yarn gateway build
 
 submodules:
