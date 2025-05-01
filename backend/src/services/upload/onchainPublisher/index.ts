@@ -6,7 +6,7 @@ import { compactAddLength } from '@polkadot/util'
 import { nodesRepository } from '../../../repositories/objects/nodes.js'
 import { TaskManager } from '../../taskManager/index.js'
 
-const transactionManager = createTransactionManager()
+export const transactionManager = createTransactionManager()
 
 const REPUBLISH_DELAY = 10_000
 
@@ -14,8 +14,19 @@ const publishNodes = safeCallback(async (cids: string[]) => {
   logger.info(`Uploading ${cids.length} nodes`)
 
   const nodes = await nodesRepository.getNodesByCids(cids)
+  const nodeCounts = await Promise.all(
+    nodes.map((e) =>
+      nodesRepository.getNodeCount({
+        cid: e.cid,
+      }),
+    ),
+  )
 
-  const transactions = nodes.map((node) => {
+  const filteredNodes = nodes.filter(
+    (_, index) => nodeCounts[index].totalCount === 0,
+  )
+
+  const transactions = filteredNodes.map((node) => {
     const buffer = Buffer.from(node.encoded_node, 'base64')
 
     return {
