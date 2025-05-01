@@ -14,7 +14,8 @@ gateway: install
 
 submodules:
 	# Ignore errors if submodules are already initialized
-	git submodule update --init --recursive || true
+	git submodule sync
+	git submodule update --remote || true
 	yarn auto-files-gateway install
 	yarn auto-files-gateway build
 

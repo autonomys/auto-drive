@@ -30,6 +30,7 @@ export const config = {
   },
   objectMappingArchiver: {
     url: env('OBJECT_MAPPING_ARCHIVER_URL'),
+    step: Number(env('OBJECT_MAPPING_ARCHIVER_STEP', '1000')),
   },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
