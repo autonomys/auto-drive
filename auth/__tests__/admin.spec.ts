@@ -15,6 +15,7 @@ describe('Admin management', () => {
       admin.oauthProvider,
       admin.oauthUserId,
       admin.oauthUsername,
+      admin.oauthAvatarUrl,
       v4(),
       UserRole.Admin,
     )
@@ -30,6 +31,7 @@ describe('Admin management', () => {
       user.oauthProvider,
       user.oauthUserId,
       user.oauthUsername,
+      user.oauthAvatarUrl,
       v4(),
       user.role,
     )
@@ -45,6 +47,7 @@ describe('Admin management', () => {
       user.oauthProvider,
       user.oauthUserId,
       user.oauthUsername,
+      user.oauthAvatarUrl,
       v4(),
       user.role,
     )
