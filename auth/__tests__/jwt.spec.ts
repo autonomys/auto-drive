@@ -29,10 +29,7 @@ describe('JWT', () => {
   })
 
   it('should generate a JWT token', async () => {
-    const token = await CustomJWTAuth.createSessionTokens({
-      id: user.oauthUserId,
-      provider: user.oauthProvider,
-    })
+    const token = await CustomJWTAuth.createSessionTokens(user)
 
     const refreshTokenDecoded = jwt.decode(token.refreshToken)
     if (typeof refreshTokenDecoded === 'string' || !refreshTokenDecoded) {

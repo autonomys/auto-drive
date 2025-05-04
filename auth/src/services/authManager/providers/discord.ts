@@ -2,6 +2,8 @@ import { OAuthUser } from '@auto-drive/models'
 
 interface DiscordUser {
   id: string
+  username: string
+  avatar: string | null
 }
 
 const getUserFromAccessToken = async (
@@ -22,9 +24,15 @@ const getUserFromAccessToken = async (
     return response.json() as Promise<DiscordUser>
   })
 
+  const avatarUrl = discordUser.avatar
+    ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png?size=64`
+    : undefined
+
   return {
     provider: 'discord',
     id: discordUser.id,
+    username: discordUser.username,
+    avatarUrl,
   }
 }
 

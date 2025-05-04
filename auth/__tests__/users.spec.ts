@@ -63,6 +63,8 @@ describe('UsersUseCases', () => {
     expect(user.role).toBe(UserRole.User)
     expect(user.oauthProvider).toBe(MOCK_UNONBOARDED_USER.oauthProvider)
     expect(user.oauthUserId).toBe(MOCK_UNONBOARDED_USER.oauthUserId)
+    expect(user.oauthUsername).toBe(MOCK_UNONBOARDED_USER.oauthUsername)
+    expect(user.oauthAvatarUrl).toBe(MOCK_UNONBOARDED_USER.oauthAvatarUrl)
 
     const userByPublicId = await UsersUseCases.getUserByPublicId(user.publicId!)
 
