@@ -125,10 +125,12 @@ files.map((file, index) => {
           await expect(uploadedChunkPromise).resolves.not.toThrow()
         }
 
-        const postUploadedChunks = await blockstoreRepository.getByType(
-          upload.id,
-          MetadataType.FileChunk,
-        )
+        const postUploadedChunks = await blockstoreRepository.findMany({
+          where: {
+            upload_id: upload.id,
+            node_type: MetadataType.FileChunk,
+          },
+        })
 
         const PENDING_CHUNK_DUE_TO_COMPLETION = 1 // The last chunk is pending due to the upload not being completed
         const EXPECTED_CHUNKS = TOTAL_CHUNKS - PENDING_CHUNK_DUE_TO_COMPLETION
@@ -159,22 +161,28 @@ files.map((file, index) => {
       })
 
       it('should have generated expected number of chunks and file', async () => {
-        let postUploadedChunks = await blockstoreRepository.getByType(
-          upload.id,
-          MetadataType.FileChunk,
-        )
+        let postUploadedChunks = await blockstoreRepository.findMany({
+          where: {
+            upload_id: upload.id,
+            node_type: MetadataType.FileChunk,
+          },
+        })
         if (postUploadedChunks.length === 0) {
-          postUploadedChunks = await blockstoreRepository.getByType(
-            upload.id,
-            MetadataType.File,
-          )
+          postUploadedChunks = await blockstoreRepository.findMany({
+            where: {
+              upload_id: upload.id,
+              node_type: MetadataType.File,
+            },
+          })
         }
         expect(postUploadedChunks).toHaveLength(TOTAL_CHUNKS)
 
-        const postUploadedFile = await blockstoreRepository.getByType(
-          upload.id,
-          MetadataType.File,
-        )
+        const postUploadedFile = await blockstoreRepository.findMany({
+          where: {
+            upload_id: upload.id,
+            node_type: MetadataType.File,
+          },
+        })
         expect(postUploadedFile).toHaveLength(1)
       })
 

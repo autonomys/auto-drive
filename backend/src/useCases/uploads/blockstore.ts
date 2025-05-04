@@ -20,33 +20,35 @@ import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 
 const getFileUploadIdCID = async (uploadId: string): Promise<CID> => {
-  const blockstoreEntry = await blockstoreRepository.getByType(
-    uploadId,
-    MetadataType.File,
-  )
-  if (blockstoreEntry.length !== 1) {
+  const blockstoreEntry = await blockstoreRepository.findFirst({
+    where: {
+      upload_id: uploadId,
+      node_type: MetadataType.File,
+    },
+  })
+  if (!blockstoreEntry) {
     throw new Error(
       `Invalid number of blockstore entries for file upload with id=${uploadId}`,
     )
   }
-  const cid = blockstoreEntry[0].cid
 
-  return stringToCid(cid)
+  return stringToCid(blockstoreEntry.cid)
 }
 
 const getFolderUploadIdCID = async (uploadId: string): Promise<CID> => {
-  const blockstoreEntry = await blockstoreRepository.getByType(
-    uploadId,
-    MetadataType.Folder,
-  )
-  if (blockstoreEntry.length !== 1) {
+  const blockstoreEntry = await blockstoreRepository.findFirst({
+    where: {
+      upload_id: uploadId,
+      node_type: MetadataType.Folder,
+    },
+  })
+  if (!blockstoreEntry) {
     throw new Error(
       `Invalid number of blockstore entries for folder upload with id=${uploadId}`,
     )
   }
-  const cid = blockstoreEntry[0].cid
 
-  return stringToCid(cid)
+  return stringToCid(blockstoreEntry.cid)
 }
 
 const getUploadCID = async (uploadId: string): Promise<CID> => {
@@ -66,8 +68,17 @@ const getChunksByNodeType = async (
   uploadId: string,
   nodeType: MetadataType,
 ): Promise<ChunkInfo[]> => {
-  const blockstoreEntries =
-    await blockstoreRepository.getBlockstoreEntriesWithoutData(uploadId)
+  const blockstoreEntries = await blockstoreRepository.findMany({
+    select: {
+      cid: true,
+      node_size: true,
+      node_type: true,
+    },
+    where: {
+      upload_id: uploadId,
+      node_type: nodeType,
+    },
+  })
 
   return blockstoreEntries
     .filter((e) => e.node_type === nodeType)
@@ -111,7 +122,12 @@ const processFileTree = async (
   const childrenNodesLengths = await Promise.all(
     childrenCids.map((cid) =>
       blockstoreRepository
-        .getByCIDAndRootUploadId(rootUploadId, cidToString(cid))
+        .findFirst({
+          where: {
+            upload_id: rootUploadId,
+            cid: cidToString(cid),
+          },
+        })
         .then((e) => {
           if (!e) {
             throw new Error(
@@ -156,12 +172,14 @@ const processFolderUpload = async (upload: FolderUpload): Promise<CID> => {
 }
 
 const getNode = async (cid: string): Promise<Buffer | undefined> => {
-  const nodes = await blockstoreRepository.getNodesByCid(cid)
-  if (nodes.length === 0) {
+  const node = await blockstoreRepository.findFirst({
+    where: {
+      cid: cid,
+    },
+  })
+  if (!node) {
     return undefined
   }
-
-  const node = nodes[0]
 
   return Buffer.from(node.data)
 }

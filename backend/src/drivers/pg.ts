@@ -4,6 +4,7 @@ import { config } from '../config.js'
 let db: pg.Pool | undefined
 
 const createDB = async (): Promise<pg.Pool> => {
+  console.log('Creating DB: ', config.postgres.url)
   const pool = new pg.Pool({
     connectionString: config.postgres.url,
     ...(process.env.ACCEPT_UNAUTHORIZED_CERTS === 'true'

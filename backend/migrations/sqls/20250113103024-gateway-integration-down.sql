@@ -1,1 +1,0 @@
-ALTER TABLE metadata DROP COLUMN is_archived;

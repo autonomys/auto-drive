@@ -14,10 +14,12 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   constructor(private readonly uploadId: string) {}
 
   async *getFilteredMany(nodeType: MetadataType): AwaitIterable<CID> {
-    const blockstore = await blockstoreRepository.getByType(
-      this.uploadId,
-      nodeType,
-    )
+    const blockstore = await blockstoreRepository.findMany({
+      where: {
+        upload_id: this.uploadId,
+        node_type: nodeType,
+      },
+    })
 
     for (const entry of blockstore) {
       yield stringToCid(entry.cid)
@@ -25,10 +27,12 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async has(key: Pair['cid']): Promise<boolean> {
-    const block = await blockstoreRepository.getByCid(
-      this.uploadId,
-      cidToString(key),
-    )
+    const block = await blockstoreRepository.findFirst({
+      where: {
+        upload_id: this.uploadId,
+        cid: cidToString(key),
+      },
+    })
 
     return block !== null
   }
@@ -37,13 +41,15 @@ export class MultiUploadBlockstore implements BaseBlockstore {
     const decodedData = decodeIPLDNodeData(data)
     const size = decodedData.size ?? BigInt(0).valueOf()
 
-    await blockstoreRepository.addBlockstoreEntry(
-      this.uploadId,
-      cidToString(cid),
-      decodedData.type,
-      size,
-      Buffer.from(data),
-    )
+    await blockstoreRepository.create({
+      data: {
+        upload_id: this.uploadId,
+        cid: cidToString(cid),
+        node_type: decodedData.type,
+        node_size: size,
+        data: Buffer.from(data),
+      },
+    })
 
     return cid
   }
@@ -55,10 +61,12 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async get(key: Pair['cid']): Promise<Uint8Array> {
-    const block = await blockstoreRepository.getByCid(
-      this.uploadId,
-      cidToString(key),
-    )
+    const block = await blockstoreRepository.findFirst({
+      where: {
+        upload_id: this.uploadId,
+        cid: cidToString(key),
+      },
+    })
 
     return Buffer.from(block!.data)
   }
@@ -73,10 +81,16 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async delete(key: Pair['cid']): Promise<void> {
-    await blockstoreRepository.deleteBlockstoreEntry(
-      this.uploadId,
-      cidToString(key),
-    )
+    await blockstoreRepository.delete({
+      where: {
+        upload_id: this.uploadId,
+        cid: cidToString(key),
+        upload_id_cid: {
+          upload_id: this.uploadId,
+          cid: cidToString(key),
+        },
+      },
+    })
   }
 
   async *deleteMany(
@@ -89,9 +103,11 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async *getAll(): AwaitIterable<Pair> {
-    const blocks = await blockstoreRepository.getBlockstoreEntries(
-      this.uploadId,
-    )
+    const blocks = await blockstoreRepository.findMany({
+      where: {
+        upload_id: this.uploadId,
+      },
+    })
 
     for (const block of blocks) {
       yield {
@@ -102,9 +118,14 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async *getAllKeys(): AsyncIterable<Pair['cid']> {
-    const blocks = await blockstoreRepository.getBlockstoreEntriesWithoutData(
-      this.uploadId,
-    )
+    const blocks = await blockstoreRepository.findMany({
+      select: {
+        cid: true,
+      },
+      where: {
+        upload_id: this.uploadId,
+      },
+    })
 
     for (const block of blocks) {
       yield stringToCid(block.cid)
@@ -112,10 +133,15 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async getSize(key: Pair['cid']): Promise<bigint> {
-    const block = await blockstoreRepository.getByCIDWithoutData(
-      this.uploadId,
-      cidToString(key),
-    )
+    const block = await blockstoreRepository.findFirst({
+      select: {
+        node_size: true,
+      },
+      where: {
+        upload_id: this.uploadId,
+        cid: cidToString(key),
+      },
+    })
 
     return BigInt(block!.node_size).valueOf()
   }

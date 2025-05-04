@@ -267,7 +267,11 @@ const scheduleNodeMigration = async (uploadId: string): Promise<void> => {
 }
 
 const removeUploadArtifacts = async (uploadId: string): Promise<void> => {
-  await blockstoreRepository.deleteBlockstoreEntries(uploadId)
+  await blockstoreRepository.deleteMany({
+    where: {
+      upload_id: uploadId,
+    },
+  })
   await uploadsRepository.deleteEntriesByRootUploadId(uploadId)
   await filePartsRepository.deleteChunksByUploadId(uploadId)
   await fileProcessingInfoRepository.deleteFileProcessingInfo(uploadId)

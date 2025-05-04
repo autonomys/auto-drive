@@ -1,0 +1,152 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Metadata {
+  root_cid    String
+  head_cid    String
+  name        String
+  metadata    Json
+  is_archived Boolean  @default(false)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  tags        String[]
+
+  ownerships ObjectOwnership[]
+  nodes      Node[]
+
+  @@id([head_cid])
+  @@map("metadata")
+}
+
+model ObjectOwnership {
+  cid               String
+  oauth_provider    String
+  oauth_user_id     String
+  is_admin          Boolean
+  marked_as_deleted DateTime?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  metadata Metadata @relation(fields: [cid], references: [head_cid])
+
+  @@id([cid, oauth_provider, oauth_user_id])
+  @@map("object_ownership")
+}
+
+model Node {
+  cid                String   @id
+  root_cid           String
+  head_cid           String
+  type               String
+  encoded_node       String
+  piece_index        Int?
+  piece_offset       Int?
+  block_published_on Int?
+  tx_published_on    String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  metadata Metadata @relation(fields: [head_cid], references: [head_cid])
+
+  @@map("nodes")
+}
+
+model Subscription {
+  id              String   @id
+  organization_id String
+  granularity     String
+  upload_limit    BigInt
+  download_limit  BigInt
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  interactions Interaction[]
+
+  @@map("subscriptions")
+}
+
+model Interaction {
+  id              String   @id
+  subscription_id String
+  type            String
+  size            BigInt
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  subscription Subscription @relation(fields: [subscription_id], references: [id])
+
+  @@map("interactions")
+}
+
+model PublishedObject {
+  id         String   @id
+  public_id  String
+  cid        String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("published_objects")
+}
+
+model Upload {
+  id             String   @id
+  root_upload_id String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  blockstore         BlockstoreEntry[]
+  FilePart           FilePart[]
+  FileProcessingInfo FileProcessingInfo[]
+
+  @@map("uploads.uploads")
+}
+
+model FilePart {
+  upload_id  String
+  part_index Int
+  data       Bytes
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  upload Upload @relation(fields: [upload_id], references: [id])
+
+  @@id([upload_id, part_index])
+  @@map("uploads.file_parts")
+}
+
+model FileProcessingInfo {
+  upload_id                 String   @id
+  last_processed_part_index Int?
+  pending_bytes             Bytes?
+  created_at                DateTime @default(now())
+  updated_at                DateTime @updatedAt
+
+  upload Upload @relation(fields: [upload_id], references: [id])
+
+  @@map("uploads.file_processing_info")
+}
+
+model BlockstoreEntry {
+  upload_id  String
+  cid        String
+  node_type  String
+  node_size  BigInt
+  data       Bytes
+  sort_id    Int      @default(autoincrement())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  upload Upload @relation(fields: [upload_id], references: [id])
+
+  @@id([upload_id, cid])
+  @@map("uploads.blockstore")
+}
