@@ -20,9 +20,15 @@ const getUserFromAccessToken = async (
 ): Promise<OAuthUser> => {
   const decoded = jwt.verify(accessToken, JWT_SECRET, {
     algorithms: [JWT_SECRET_ALGORITHM],
-  }) as CustomAccessTokenPayload
+  })
   if (typeof decoded === 'string') {
     throw new Error('Invalid access token')
+  }
+
+  if (config.revokeTokenEmittedBeforeInSeconds > 0) {
+    if (decoded.iat && decoded.iat < config.revokeTokenEmittedBeforeInSeconds) {
+      throw new Error('Invalid access token')
+    }
   }
 
   const isPresent = await jwtTokenRegistry.isPresentOnRegistry(
