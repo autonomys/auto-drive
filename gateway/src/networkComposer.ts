@@ -23,6 +23,7 @@ export const getFileNetwork = async (cid: string) => {
           return {
             type: file.type,
             url,
+            network,
           };
         }
 
