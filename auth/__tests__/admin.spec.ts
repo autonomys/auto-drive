@@ -45,6 +45,7 @@ describe('Admin management', () => {
       user.oauthProvider,
       user.oauthUserId,
       user.oauthUsername,
+      user.oauthAvatarUrl,
       v4(),
       user.role,
     )
