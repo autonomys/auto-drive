@@ -83,12 +83,12 @@ export const ObjectDeleteModal = ({
               <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-darkWhite'>
                 <DialogTitle
                   as='h3'
-                  className='text-lg font-medium leading-6 text-gray-900'
+                  className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-100'
                 >
                   Remove &quot;{metadata?.metadata.name}&quot;
                 </DialogTitle>
                 <div className='mt-2'>
-                  <p className='text-sm text-gray-500'>
+                  <p className='text-sm text-gray-500 dark:text-gray-400'>
                     This action doesn&apos;t delete the object, it just removes
                     it from your this view and moves it to the Trash.
                   </p>
