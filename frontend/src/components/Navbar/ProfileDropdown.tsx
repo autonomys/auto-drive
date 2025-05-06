@@ -11,7 +11,7 @@ export const ProfileDropdown: React.FC = () => {
   const { user } = useUserStore((state) => state);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  console.log('user', user);
+// Removed the console.log statement as it is unnecessary in production.
 
   const toggleDropdown = () => setIsOpen(!isOpen);
 
