@@ -27,6 +27,7 @@ export const CopiableText = ({
 
   return (
     <button
+      type="button"
       className={cn(
         'group relative flex cursor-pointer items-center gap-2',
         className,
