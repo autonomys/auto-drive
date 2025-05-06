@@ -25,6 +25,8 @@ const getUserByPublicId = async (
     oauthUserId: dbUser.oauth_user_id,
     publicId: dbUser.public_id,
     role: dbUser.role,
+    oauthUsername: dbUser.oauth_username,
+    oauthAvatarUrl: dbUser.oauth_avatar_url,
   })
 }
 
@@ -81,7 +83,10 @@ const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
   const updatedUser = await UsersUseCases.initUser(
     user.oauthProvider,
     user.oauthUserId,
+    user.oauthUsername,
+    user.oauthAvatarUrl,
     publicId,
+    UserRole.User,
   )
 
   return updatedUser
@@ -96,13 +101,31 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<MaybeUser> => {
     return userFromOAuth({
       oauthProvider: user.provider,
       oauthUserId: user.id,
+      oauthUsername: user.username,
+      oauthAvatarUrl: user.avatarUrl,
       role: UserRole.User,
     })
   }
 
+  // If the user has a username and has been updated, update the username
+  if (user.username && dbUser.oauth_username !== user.username) {
+    await usersRepository.updateUsername(user.provider, user.id, user.username)
+  }
+
+  // If the user has an avatar url and has been updated, update the avatar url
+  if (user.avatarUrl && dbUser.oauth_avatar_url !== user.avatarUrl) {
+    await usersRepository.updateAvatarUrl(
+      user.provider,
+      user.id,
+      user.avatarUrl,
+    )
+  }
+
   return userFromTable({
-    oauthProvider: dbUser.oauth_provider,
-    oauthUserId: dbUser.oauth_user_id,
+    oauthProvider: user.provider,
+    oauthUserId: user.id,
+    oauthUsername: user.username,
+    oauthAvatarUrl: user.avatarUrl,
     publicId: dbUser.public_id,
     role: dbUser.role,
   })
@@ -152,12 +175,16 @@ const updateRole = async (
 const initUser = async (
   oauthProvider: string,
   oauthUserId: string,
+  oauthUsername: string | undefined,
+  oauthAvatarUrl: string | undefined,
   publicId: string,
-  role: UserRole = UserRole.User,
+  role: UserRole,
 ): Promise<User> => {
   const user = await usersRepository.createUser(
     oauthProvider,
     oauthUserId,
+    oauthUsername,
+    oauthAvatarUrl,
     publicId,
     role,
   )
@@ -165,21 +192,17 @@ const initUser = async (
     throw new Error('User creation failed')
   }
 
-  await OrganizationsUseCases.initOrganization(
-    userFromTable({
-      oauthProvider,
-      oauthUserId,
-      publicId,
-      role,
-    }),
-  )
-
-  return userFromTable({
+  const onboardedUser = userFromTable({
     oauthProvider: user.oauth_provider,
     oauthUserId: user.oauth_user_id,
+    oauthUsername: user.oauth_username,
+    oauthAvatarUrl: user.oauth_avatar_url,
     publicId: user.public_id,
     role: user.role,
   })
+  await OrganizationsUseCases.initOrganization(onboardedUser)
+
+  return onboardedUser
 }
 
 export const getUserList = async (executor: User): Promise<User[]> => {

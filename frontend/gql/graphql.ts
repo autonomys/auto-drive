@@ -2954,7 +2954,7 @@ export const GetGlobalFilesDocument = gql`
     }
   }
   metadata_roots_aggregate(
-    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}}
+    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
   ) {
     aggregate {
       count
@@ -3257,7 +3257,7 @@ export const GetMyFilesDocument = gql`
     }
   }
   metadata_roots_aggregate(
-    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}}
+    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}}
   ) {
     aggregate {
       count

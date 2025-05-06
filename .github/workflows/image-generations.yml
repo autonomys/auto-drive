@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [backend]
+        app: [backend, gateway]
 
     steps:
       - uses: actions/checkout@v4

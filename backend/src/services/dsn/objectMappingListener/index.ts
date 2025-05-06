@@ -21,6 +21,7 @@ const start = async () => {
     )
     await client.api.subscribe_recover_object_mappings({
       pieceIndex,
+      step: config.objectMappingArchiver.step,
     })
   }
 

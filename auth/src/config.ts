@@ -13,4 +13,7 @@ export const config = {
   jwtSecret: env('JWT_SECRET'),
   jwtSecretAlgorithm: env('JWT_SECRET_ALGORITHM', 'RS256'),
   apiSecret: env('API_SECRET'),
+  revokeTokenEmittedBeforeInSeconds: Number(
+    env('REVOKE_TOKEN_EMITTED_BEFORE_IN_SECONDS', '0'),
+  ),
 }

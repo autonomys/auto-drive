@@ -20,12 +20,19 @@ export const authOptions: AuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_AUTH_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_AUTH_CLIENT_SECRET as string,
-      // eslint-disable-next-line camelcase
-      authorization: { params: { access_type: 'offline', prompt: 'consent' } },
+      authorization: {
+        params: {
+          // eslint-disable-next-line camelcase
+          access_type: 'offline',
+          prompt: 'consent',
+          scope: 'email profile openid',
+        },
+      },
     }),
     DiscordProvider({
       clientId: process.env.DISCORD_AUTH_CLIENT_ID as string,
       clientSecret: process.env.DISCORD_AUTH_CLIENT_SECRET as string,
+      authorization: { params: { scope: 'identify' } },
     }),
     GithubProvider({
       clientId: process.env.GITHUB_AUTH_CLIENT_ID as string,

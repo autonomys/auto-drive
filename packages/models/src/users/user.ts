@@ -5,6 +5,8 @@ export type OAuthUser = {
   provider: string;
   id: string;
   email?: string;
+  username?: string;
+  avatarUrl?: string;
 };
 
 export enum UserRole {
@@ -19,6 +21,8 @@ export type UserOrPublicId = MaybeUser | PublicId;
 type UserBase = {
   oauthProvider: string;
   oauthUserId: string;
+  oauthUsername?: string;
+  oauthAvatarUrl?: string;
   role: UserRole;
   publicId: PublicId;
 };
