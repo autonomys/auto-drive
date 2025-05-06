@@ -17,6 +17,8 @@ app.get("/file/:cid", async (req, res) => {
     return;
   }
 
+  res.setHeader("X-Network", result.network);
+
   internalRedirect(req, res, result.url);
 });
 
@@ -31,6 +33,8 @@ app.get("/folder/:cid", async (req, res) => {
     res.redirect(`/file/${req.params.cid}`);
     return;
   }
+
+  res.setHeader("X-Network", result.network);
 
   internalRedirect(req, res, result.url);
 });
