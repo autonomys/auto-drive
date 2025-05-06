@@ -11,6 +11,8 @@ export const ProfileDropdown: React.FC = () => {
   const { user } = useUserStore((state) => state);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  console.log('user', user);
+
   const toggleDropdown = () => setIsOpen(!isOpen);
 
   useEffect(() => {
@@ -35,10 +37,10 @@ export const ProfileDropdown: React.FC = () => {
         className='my-auto flex items-center space-x-2 rounded-full focus:outline-none'
       >
         <div className='flex items-center space-x-2'>
-          {user?.avatarUrl ? (
+          {user?.oauthAvatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={user?.avatarUrl}
+              src={user?.oauthAvatarUrl}
               alt='User avatar'
               className='h-8 w-8 rounded-full border border-gray-300'
             />
@@ -53,7 +55,9 @@ export const ProfileDropdown: React.FC = () => {
       {isOpen && (
         <div className='absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md border border-gray-200 bg-white shadow-lg'>
           <div className='border-b border-gray-100 px-4 py-3 dark:border-gray-700'>
-            <p className='text-sm font-medium'>{user?.name || 'Anonymous'}</p>
+            <p className='text-sm font-medium break-words'>
+              {user?.oauthUsername || 'Anonymous'}
+            </p>
             {user?.publicId && (
               <div className='pt-1 text-xs'>
                 <CopiableText
