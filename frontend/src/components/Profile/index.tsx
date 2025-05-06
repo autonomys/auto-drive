@@ -15,8 +15,6 @@ export const Profile = () => {
   const publicId = useUserStore((s) => s.user?.publicId);
   const { user } = useUserStore((state) => state);
 
-  console.log(user);
-
   const copyPublicId = useCallback(() => {
     if (!publicId) return;
     navigator.clipboard.writeText(publicId);
