@@ -10,10 +10,13 @@ frontend:
 gateway: install
 	yarn gateway build
 
-submodules:
+init-submodules:
 	# Ignore errors if submodules are already initialized
 	git submodule sync
-	git submodule update --remote || true
+	git submodule update --remote
+
+submodules:
+	# Ignore errors if submodules are already initialized
 	yarn auto-files-gateway install
 	yarn auto-files-gateway build
 
