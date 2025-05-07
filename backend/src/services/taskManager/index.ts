@@ -11,7 +11,7 @@ export const TaskManager = {
     Rabbit.subscribe(async (obj: unknown) => {
       const task = TaskSchema.safeParse(obj)
       if (task.success) {
-        logger.debug('Received task', task.data)
+        logger.debug('Received task', JSON.stringify(task.data, null, 2))
         await processTask(task.data)
       } else {
         console.error('Invalid task', task.error)
