@@ -19,7 +19,7 @@ import { formatCid } from '@/utils/table';
 import { cn } from '@/utils/cn';
 import Link from 'next/link';
 import dayjs from 'dayjs';
-import { CopiableText } from '../CopiableText';
+import { CopiableText } from 'components/common/CopiableText';
 
 export const FileTableRow = ({
   file,
