@@ -214,7 +214,7 @@ const getLastArchivedPieceNode = async () => {
 
   return db
     .query<Node>({
-      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL ORDER BY block_published_on DESC LIMIT 1',
+      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL ORDER BY piece_index DESC LIMIT 1',
     })
     .then((e) => e.rows.at(0))
 }
