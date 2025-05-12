@@ -23,6 +23,7 @@ import { publishedObjectsRepository } from '../../repositories/objects/published
 import { v4 } from 'uuid'
 import { FilesUseCases } from './files.js'
 import { downloadService } from '../../services/download/index.js'
+import { logger } from '../../drivers/logger.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -383,7 +384,9 @@ const checkObjectsArchivalStatus = async () => {
 
   await Promise.all(
     cidsToArchive.map(async (cid) => {
-      await downloadService.download(cid)
+      await downloadService.download(cid).catch(() => {
+        logger.warn(`Failed to download object ${cid} after archival check`)
+      })
       await ObjectUseCases.processArchival(cid)
     }),
   )
