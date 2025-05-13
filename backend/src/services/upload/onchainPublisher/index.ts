@@ -41,7 +41,7 @@ const publishNodes = safeCallback(
     const someNodeFailed = results.some((result) => !result.success)
     if (someNodeFailed) {
       republishNodes(
-        nodes
+        filteredNodes
           .filter((_, index) => !results[index].success)
           .map((node) => node.cid),
         retriesLeft,
@@ -49,7 +49,7 @@ const publishNodes = safeCallback(
     }
 
     await Promise.all(
-      nodes.map((node, index) => {
+      filteredNodes.map((node, index) => {
         const isSuccess = results[index].success
         if (!isSuccess) return null
         return NodesUseCases.setPublishedOn(node.cid, results[index])
