@@ -14,7 +14,7 @@ export const TaskSchema = z.discriminatedUnion('id', [
   }),
   z.object({
     id: z.literal('archive-objects'),
-    retriesLeft: z.number().default(0),
+    retriesLeft: z.number().default(MAX_RETRIES),
     params: z.object({
       objects: z.array(ObjectMappingSchema),
     }),
@@ -37,3 +37,58 @@ export const TaskSchema = z.discriminatedUnion('id', [
 
 export type MigrateUploadTask = z.infer<typeof TaskSchema>
 export type Task = MigrateUploadTask
+
+type TaskCreateParams =
+  | {
+      id: 'migrate-upload-nodes'
+      params: {
+        uploadId: string
+      }
+    }
+  | {
+      id: 'archive-objects'
+      params: {
+        objects: z.infer<typeof ObjectMappingSchema>[]
+      }
+    }
+  | {
+      id: 'publish-nodes'
+      params: {
+        nodes: string[]
+      }
+    }
+  | {
+      id: 'tag-upload'
+      params: {
+        cid: string
+      }
+    }
+
+export const createTask = ({ id, params }: TaskCreateParams): Task => {
+  switch (id) {
+    case 'migrate-upload-nodes':
+      return {
+        id,
+        params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'archive-objects':
+      return {
+        id,
+        params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'publish-nodes':
+      return {
+        id,
+        params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'tag-upload':
+      return {
+        id,
+        params,
+        retriesLeft: MAX_RETRIES,
+      }
+  }
+}

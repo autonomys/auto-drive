@@ -41,13 +41,13 @@ export const TaskManager = {
   },
 }
 
-const processTask = ({ id, params }: Task) => {
+const processTask = ({ id, params, retriesLeft }: Task) => {
   if (id === 'migrate-upload-nodes') {
     return UploadsUseCases.processMigration(params.uploadId)
   } else if (id === 'archive-objects') {
     return NodesUseCases.processNodeArchived(params.objects)
   } else if (id === 'publish-nodes') {
-    return OnchainPublisher.publishNodes(params.nodes)
+    return OnchainPublisher.publishNodes(params.nodes, retriesLeft)
   } else if (id === 'tag-upload') {
     return UploadsUseCases.tagUpload(params.cid)
   } else {
