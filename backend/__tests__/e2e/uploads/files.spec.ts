@@ -153,6 +153,7 @@ files.map((file, index) => {
           params: {
             uploadId: upload.id,
           },
+          retriesLeft: expect.any(Number),
         })
 
         expect(cid).toBe(cidToString(expectedCID))
@@ -219,6 +220,7 @@ files.map((file, index) => {
           params: {
             cid: cidToString(cid),
           },
+          retriesLeft: expect.any(Number),
         })
 
         const node = await nodesRepository.getNode(cidToString(cid))
@@ -236,6 +238,7 @@ files.map((file, index) => {
           params: {
             nodes: expect.arrayContaining([cidToString(cid)]),
           },
+          retriesLeft: expect.any(Number),
         })
       })
     })

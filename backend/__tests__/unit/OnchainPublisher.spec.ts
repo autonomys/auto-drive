@@ -44,7 +44,10 @@ describe('OnchainPublisher', () => {
       archivedCount: 0,
     })
 
-    await OnchainPublisher.publishNodes(nodes.map((e) => e.cid))
+    await OnchainPublisher.publishNodes(
+      nodes.map((e) => e.cid),
+      3,
+    )
 
     const transactions = nodes.map((node) => {
       const buffer = Buffer.from(node.encoded_node, 'base64')
@@ -85,7 +88,10 @@ describe('OnchainPublisher', () => {
         archivedCount: 0,
       })
     })
-    await OnchainPublisher.publishNodes(nodes.map((e) => e.cid))
+    await OnchainPublisher.publishNodes(
+      nodes.map((e) => e.cid),
+      3,
+    )
 
     const transactions = nodes
       .filter((e) => !publishedNodes.includes(e.cid))
