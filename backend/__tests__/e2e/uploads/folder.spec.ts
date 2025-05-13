@@ -201,6 +201,7 @@ describe('Folder Upload', () => {
         params: {
           uploadId: folderUpload.id,
         },
+        retriesLeft: expect.any(Number),
       })
 
       expect(folderCID).toBe(expectedCID)
@@ -266,6 +267,7 @@ describe('Folder Upload', () => {
         params: {
           cid: cidToString(cid),
         },
+        retriesLeft: expect.any(Number),
       })
 
       const node = await nodesRepository.getNode(cidToString(cid))
@@ -287,6 +289,7 @@ describe('Folder Upload', () => {
         params: {
           nodes: expect.arrayContaining([folderCID, subfileCID, subfolderCid]),
         },
+        retriesLeft: expect.any(Number),
       })
     })
 

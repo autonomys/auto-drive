@@ -26,7 +26,7 @@ import { ObjectUseCases } from './object.js'
 import { logger } from '../../drivers/logger.js'
 import { Node } from '../../repositories/objects/nodes.js'
 import { TaskManager } from '../../services/taskManager/index.js'
-import { Task } from '../../services/taskManager/tasks.js'
+import { createTask, Task } from '../../services/taskManager/tasks.js'
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
@@ -196,12 +196,12 @@ const scheduleNodeArchiving = async (
   objects: ObjectMapping[],
 ): Promise<void> => {
   const tasks: Task[] = [
-    {
+    createTask({
       id: 'archive-objects',
       params: {
         objects,
       },
-    },
+    }),
   ]
   TaskManager.publish(tasks)
 }

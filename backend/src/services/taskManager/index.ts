@@ -10,11 +10,23 @@ export const TaskManager = {
   start: () => {
     Rabbit.subscribe(async (obj: unknown) => {
       const task = TaskSchema.safeParse(obj)
-      if (task.success) {
-        logger.debug('Received task', JSON.stringify(task.data, null, 2))
+      if (!task.success) {
+        logger.error('Invalid task', task.error)
+        return
+      }
+
+      try {
         await processTask(task.data)
-      } else {
-        console.error('Invalid task', task.error)
+      } catch (error) {
+        if (task.data.retriesLeft > 0) {
+          const newTask = {
+            ...task.data,
+            retriesLeft: task.data.retriesLeft - 1,
+          }
+          Rabbit.publish(newTask)
+        } else {
+          logger.error('Task failed', error)
+        }
       }
     })
   },
@@ -29,13 +41,13 @@ export const TaskManager = {
   },
 }
 
-const processTask = ({ id, params }: Task) => {
+const processTask = ({ id, params, retriesLeft }: Task) => {
   if (id === 'migrate-upload-nodes') {
     return UploadsUseCases.processMigration(params.uploadId)
   } else if (id === 'archive-objects') {
     return NodesUseCases.processNodeArchived(params.objects)
   } else if (id === 'publish-nodes') {
-    return OnchainPublisher.publishNodes(params.nodes)
+    return OnchainPublisher.publishNodes(params.nodes, retriesLeft)
   } else if (id === 'tag-upload') {
     return UploadsUseCases.tagUpload(params.cid)
   } else {

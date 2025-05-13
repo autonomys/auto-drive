@@ -19,7 +19,7 @@ import { FilesUseCases } from '../objects/files.js'
 import { NodesUseCases, ObjectUseCases } from '../objects/index.js'
 import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
 import { TaskManager } from '../../services/taskManager/index.js'
-import { Task } from '../../services/taskManager/tasks.js'
+import { createTask, Task } from '../../services/taskManager/tasks.js'
 import { chunkArray } from '../../utils/misc.js'
 import { config } from '../../config.js'
 import { blockstoreRepository } from '../../repositories/uploads/blockstore.js'
@@ -256,12 +256,12 @@ const getPendingMigrations = async (limit: number): Promise<UploadEntry[]> => {
 
 const scheduleNodeMigration = async (uploadId: string): Promise<void> => {
   const tasks: Task[] = [
-    {
+    createTask({
       id: 'migrate-upload-nodes',
       params: {
         uploadId,
       },
-    },
+    }),
   ]
   TaskManager.publish(tasks)
 }
@@ -279,24 +279,26 @@ const scheduleNodesPublish = async (cid: string): Promise<void> => {
   const tasks: Task[] = chunkArray(
     nodes,
     config.params.maxUploadNodesPerBatch,
-  ).map((nodes) => ({
-    id: 'publish-nodes',
-    params: {
-      nodes,
-    },
-  }))
+  ).map((nodes) =>
+    createTask({
+      id: 'publish-nodes',
+      params: {
+        nodes,
+      },
+    }),
+  )
 
   TaskManager.publish(tasks)
 }
 
 const scheduleUploadTagging = async (cid: string): Promise<void> => {
   const tasks: Task[] = [
-    {
+    createTask({
       id: 'tag-upload',
       params: {
         cid,
       },
-    },
+    }),
   ]
 
   TaskManager.publish(tasks)
