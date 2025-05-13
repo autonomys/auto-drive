@@ -76,13 +76,18 @@ export const config = {
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
   },
   services: {
-    taskManager:
-      (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
-        optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
-      !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
-    objectMappingArchiver:
-      (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
-        optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
-      !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
+    taskManager: {
+      active:
+        (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
+          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+        !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
+      maxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
+    },
+    objectMappingArchiver: {
+      active:
+        (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
+          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+        !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
+    },
   },
 }
