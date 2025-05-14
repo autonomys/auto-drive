@@ -249,9 +249,8 @@ files.map((file, index) => {
           user,
           cid,
         )
-        const fileArray = await asyncIterableToPromiseOfArray(
-          await startDownload(),
-        )
+        const file = await startDownload()
+        const fileArray = await asyncIterableToPromiseOfArray(file)
         const fileBuffer = Buffer.concat(fileArray)
         expect(fileBuffer).toEqual(rndBuffer)
       })
