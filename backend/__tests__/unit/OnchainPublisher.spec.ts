@@ -41,6 +41,7 @@ describe('OnchainPublisher', () => {
 
     jest.spyOn(nodesRepository, 'getNodeCount').mockResolvedValue({
       totalCount: 0,
+      publishedCount: 0,
       archivedCount: 0,
     })
 
@@ -79,12 +80,14 @@ describe('OnchainPublisher', () => {
       if (publishedNodes.includes(cid.cid!)) {
         return Promise.resolve({
           totalCount: 1,
+          publishedCount: 1,
           archivedCount: 0,
         })
       }
 
       return Promise.resolve({
-        totalCount: 0,
+        totalCount: 1,
+        publishedCount: 0,
         archivedCount: 0,
       })
     })

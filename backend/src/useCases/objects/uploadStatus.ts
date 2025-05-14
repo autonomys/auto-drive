@@ -18,9 +18,10 @@ const getUploadStatus = async (cid: string): Promise<ObjectUploadState> => {
     }
   }
 
-  const { publishedCount, archivedCount } = await nodesRepository.getNodeCount({
-    rootCid: cid,
-  })
+  const { totalCount, publishedCount, archivedCount } =
+    await nodesRepository.getNodeCount({
+      rootCid: cid,
+    })
   const uploadedNodes = await nodesRepository.getUploadedNodesByRootCid(cid)
 
   const minimumBlockDepth = uploadedNodes
@@ -39,7 +40,7 @@ const getUploadStatus = async (cid: string): Promise<ObjectUploadState> => {
 
   return {
     uploadedNodes: uploadedNodes.length,
-    totalNodes: publishedCount,
+    totalNodes: totalCount,
     archivedNodes: archivedCount,
     minimumBlockDepth,
     maximumBlockDepth,
