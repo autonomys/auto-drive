@@ -69,16 +69,17 @@ describe('Nodes', () => {
 
   it('should be able to get chunk data', async () => {
     const buffer = Buffer.from('test')
+    const cid = v4()
     await NodesUseCases.saveNode(
-      id,
-      id,
-      id,
+      cid,
+      cid,
+      cid,
       MetadataType.File,
       Buffer.from(encodeNode(createFileChunkIpldNode(buffer))).toString(
         'base64',
       ),
     )
-    const data = await NodesUseCases.getChunkData(id)
+    const data = await NodesUseCases.getChunkData(cid)
     expect(data).toEqual(buffer)
   })
 

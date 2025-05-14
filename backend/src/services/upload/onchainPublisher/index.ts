@@ -24,7 +24,8 @@ const publishNodes = safeCallback(
     )
 
     const filteredNodes = nodes.filter(
-      (_, index) => nodeCounts[index].totalCount === 0,
+      (_, index) =>
+        nodeCounts[index] && (nodeCounts[index].publishedCount ?? 0) === 0,
     )
 
     const transactions = filteredNodes.map((node) => {

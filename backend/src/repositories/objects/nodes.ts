@@ -21,7 +21,7 @@ const saveNode = async (node: Node) => {
   const db = await getDatabase()
 
   return db.query({
-    text: 'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (cid) DO UPDATE SET head_cid = EXCLUDED.head_cid, type = EXCLUDED.type, encoded_node = EXCLUDED.encoded_node',
+    text: 'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (cid) DO NOTHING',
     values: [
       node.cid,
       node.root_cid,
@@ -37,7 +37,7 @@ const saveNodes = async (nodes: Node[]) => {
 
   return db.query({
     text: pgFormat(
-      'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES %L ON CONFLICT (cid) DO UPDATE SET head_cid = EXCLUDED.head_cid, type = EXCLUDED.type, encoded_node = EXCLUDED.encoded_node',
+      'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES %L ON CONFLICT (cid) DO NOTHING',
       nodes.map((node) => [
         node.cid,
         node.root_cid,
@@ -96,7 +96,7 @@ const getNodeCount = async ({
   const db = await getDatabase()
 
   let query =
-    'SELECT count(*) as total_count, count(piece_index) as archived_count FROM nodes'
+    'SELECT count(block_published_on) as published_count, count(piece_index) as archived_count, count(*) as total_count FROM nodes'
   const params = []
   const conditions = []
 
@@ -126,14 +126,16 @@ const getNodeCount = async ({
 
   return db
     .query<{
-      total_count: string
+      published_count: string
       archived_count: string
+      total_count: string
     }>({
       text: query,
       values: params,
     })
     .then((e) => ({
       totalCount: Number(e.rows[0].total_count),
+      publishedCount: Number(e.rows[0].published_count),
       archivedCount: Number(e.rows[0].archived_count),
     }))
 }
