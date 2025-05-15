@@ -20,8 +20,8 @@ import {
 import { ObjectMappingListEntry } from '@auto-drive/models'
 import { mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
 import { downloadService } from '../../../src/services/download/index.js'
-import { bufferToAsyncIterable } from '@autonomys/asynchronous'
 import { jest } from '@jest/globals'
+import { Readable } from 'stream'
 
 describe('Nodes', () => {
   const id = v4()
@@ -185,7 +185,7 @@ describe('Nodes', () => {
       .mockResolvedValue()
     const downloadServiceSpy = jest
       .spyOn(downloadService, 'download')
-      .mockResolvedValue(bufferToAsyncIterable(Buffer.from(encodeNode(node))))
+      .mockResolvedValue(Readable.from(Buffer.from(encodeNode(node))))
     const hash = Buffer.from(blake3HashFromCid(cid)).toString('hex')
     await NodesUseCases.processNodeArchived([[hash, 1, 1]])
 
