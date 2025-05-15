@@ -321,7 +321,7 @@ const populateCaches = async (cid: string) => {
   })
 }
 
-const processArchival = async (cid: string) => {
+const onObjectArchived = async (cid: string) => {
   await populateCaches(cid)
   await metadataRepository.markAsArchived(cid)
   await nodesRepository.removeNodesByRootCid(cid)
@@ -395,7 +395,7 @@ const checkObjectsArchivalStatus = async () => {
 
   await Promise.all(
     cidsToArchive.map(async (cid) => {
-      await ObjectUseCases.processArchival(cid)
+      await ObjectUseCases.onObjectArchived(cid)
     }),
   )
 }
@@ -421,7 +421,7 @@ export const ObjectUseCases = {
   isArchived,
   hasAllNodesArchived,
   getNonArchivedObjects,
-  processArchival,
+  onObjectArchived,
   publishObject,
   downloadPublishedObject,
   unpublishObject,
