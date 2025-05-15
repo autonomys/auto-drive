@@ -19,9 +19,7 @@ import {
 } from '../../../src/repositories/index.js'
 import { ObjectMappingListEntry } from '@auto-drive/models'
 import { mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
-import { downloadService } from '../../../src/services/download/index.js'
 import { jest } from '@jest/globals'
-import { Readable } from 'stream'
 
 describe('Nodes', () => {
   const id = v4()
@@ -183,15 +181,10 @@ describe('Nodes', () => {
     const processArchivalSpy = jest
       .spyOn(ObjectUseCases, 'processArchival')
       .mockResolvedValue()
-    const downloadServiceSpy = jest
-      .spyOn(downloadService, 'download')
-      .mockResolvedValue(Readable.from(Buffer.from(encodeNode(node))))
     const hash = Buffer.from(blake3HashFromCid(cid)).toString('hex')
     await NodesUseCases.processNodeArchived([[hash, 1, 1]])
 
     expect(processArchivalSpy).toHaveBeenCalledWith(cidToString(cid))
-    expect(downloadServiceSpy).toHaveBeenCalledWith(cidToString(cid))
     expect(processArchivalSpy).toHaveBeenCalledTimes(1)
-    expect(downloadServiceSpy).toHaveBeenCalledTimes(1)
   })
 })

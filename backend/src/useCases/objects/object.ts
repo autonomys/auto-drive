@@ -24,6 +24,7 @@ import { v4 } from 'uuid'
 import { FilesUseCases } from './files.js'
 import { downloadService } from '../../services/download/index.js'
 import { logger } from '../../drivers/logger.js'
+import { FileGateway } from '../../services/dsn/fileGateway/index.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -311,7 +312,17 @@ const getNonArchivedObjects = async () => {
   return objects.map((e) => e.head_cid)
 }
 
+const populateCaches = async (cid: string) => {
+  downloadService.download(cid).catch(() => {
+    logger.warn(`Failed to download object ${cid} after archival check`)
+  })
+  FileGateway.downloadFile(cid).catch(() => {
+    logger.warn(`Failed to download object ${cid} after archival check`)
+  })
+}
+
 const processArchival = async (cid: string) => {
+  await populateCaches(cid)
   await metadataRepository.markAsArchived(cid)
   await nodesRepository.removeNodesByRootCid(cid)
 }
@@ -384,9 +395,6 @@ const checkObjectsArchivalStatus = async () => {
 
   await Promise.all(
     cidsToArchive.map(async (cid) => {
-      await downloadService.download(cid).catch(() => {
-        logger.warn(`Failed to download object ${cid} after archival check`)
-      })
       await ObjectUseCases.processArchival(cid)
     }),
   )
