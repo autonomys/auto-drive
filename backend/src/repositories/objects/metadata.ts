@@ -226,8 +226,8 @@ const getSharedRootObjectsByUser = async (
 const getMarkedAsDeletedRootObjectsByUser = async (
   provider: string,
   userId: string,
-  limit: number = 100,
-  offset: number = 0,
+  limit: number,
+  offset: number,
 ): Promise<PaginatedResult<MetadataEntry['head_cid']>> => {
   const db = await getDatabase()
 
