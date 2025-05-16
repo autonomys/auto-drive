@@ -97,7 +97,7 @@ const saveNodes = async (
     nodes.map((node) => {
       const cid = cidToString(cidOfNode(node))
       const { type } = IPLDNodeData.decode(node.Data!)
-      saveNode(
+      return saveNode(
         rootCid,
         headCid,
         cid,

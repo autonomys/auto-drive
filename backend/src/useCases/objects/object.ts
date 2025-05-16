@@ -367,7 +367,7 @@ const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
 
 const unpublishObject = async (user: User, cid: string) => {
   const publishedObject =
-    await publishedObjectsRepository.getPublishedObjectById(cid)
+    await publishedObjectsRepository.getPublishedObjectByCid(cid)
   if (!publishedObject) {
     return
   }
@@ -376,7 +376,7 @@ const unpublishObject = async (user: User, cid: string) => {
     throw new Error('User does not have access to this object')
   }
 
-  await publishedObjectsRepository.deletePublishedObject(cid)
+  await publishedObjectsRepository.deletePublishedObjectByCid(cid)
 }
 
 const checkObjectsArchivalStatus = async () => {
