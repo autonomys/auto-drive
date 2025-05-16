@@ -70,7 +70,7 @@ services:
       driver: loki
       options:
         loki-url: "https://logging.subspace.network/loki/api/v1/push"
-  backend:
+  backend-worker:
     image: ${BACKEND_IMAGE}
     volumes:
       - files_cache:/usr/src/app/.cache
@@ -90,6 +90,37 @@ services:
       driver: loki
       options:
         loki-url: "https://logging.subspace.network/loki/api/v1/push"
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:worker
+
+  backend-api:
+    image: ${BACKEND_IMAGE}
+    volumes:
+      - files_cache:/usr/src/app/.cache
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - base
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:api
   agent:
     container_name: newrelic-infra
     image: newrelic/infrastructure:latest
