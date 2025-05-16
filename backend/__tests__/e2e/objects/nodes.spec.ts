@@ -179,7 +179,7 @@ describe('Nodes', () => {
     )
 
     const processArchivalSpy = jest
-      .spyOn(ObjectUseCases, 'processArchival')
+      .spyOn(ObjectUseCases, 'onObjectArchived')
       .mockResolvedValue()
     const hash = Buffer.from(blake3HashFromCid(cid)).toString('hex')
     await NodesUseCases.processNodeArchived([[hash, 1, 1]])
