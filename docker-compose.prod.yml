@@ -77,11 +77,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 15s
-      timeout: 10s
-      retries: 3
     profiles:
       - base
     logging:
