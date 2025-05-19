@@ -11,6 +11,8 @@
     "start:prod": "node dist/server.prod.js",
     "start:docs": "node --loader ts-node/esm src/http/controllers/docs.ts",
     "test": "node --experimental-vm-modules ../node_modules/jest/bin/jest.js --runInBand --coverage --forceExit",
+    "start:worker": "node dist/worker.js",
+    "start:api": "node dist/api.js",
     "lint": "eslint . "
   },
   "dependencies": {
