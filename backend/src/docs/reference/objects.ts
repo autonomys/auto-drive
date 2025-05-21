@@ -368,6 +368,43 @@ export const objects = {
         },
       },
     },
+    '/objects/{cid}/download/async': {
+      post: {
+        summary: 'Creates an async download for an object by CID',
+        tags: ['Objects'],
+        parameters: [
+          {
+            name: 'cid',
+            in: 'path',
+            required: true,
+            schema: {
+              type: 'string',
+            },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Successfully retrieved object for download',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    downloadId: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          '404': {
+            description: 'Metadata not found',
+          },
+          '500': {
+            description: 'Failed to retrieve data',
+          },
+        },
+      },
+    },
     '/objects/{cid}/delete': {
       post: {
         summary: 'Delete an object by CID',
