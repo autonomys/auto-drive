@@ -7,8 +7,8 @@ export interface AsyncDownloadDB {
   cid: string
   status: string
   error_message: string | null
-  file_size: number | null
-  downloaded_bytes: number | null
+  file_size: bigint | null
+  downloaded_bytes: bigint | null
   created_at: Date
   updated_at: Date
 }
@@ -20,7 +20,7 @@ export interface AsyncDownload {
   cid: string
   status: string
   errorMessage: string | null
-  fileSize: number | null
+  fileSize: bigint | null
   downloadedBytes: bigint | null
   createdAt: Date
   updatedAt: Date
