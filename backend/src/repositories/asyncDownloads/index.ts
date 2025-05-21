@@ -8,7 +8,7 @@ export interface AsyncDownloadDB {
   status: string
   error_message: string | null
   file_size: bigint | null
-  downloaded_bytes: bigint | null
+  downloaded_bytes: bigint
   created_at: Date
   updated_at: Date
 }
@@ -21,7 +21,7 @@ export interface AsyncDownload {
   status: string
   errorMessage: string | null
   fileSize: bigint | null
-  downloadedBytes: bigint | null
+  downloadedBytes: bigint
   createdAt: Date
   updatedAt: Date
 }
@@ -33,10 +33,8 @@ const mapAsyncDownloadDBToAsyncDownload = (
   oauthProvider: db.oauth_provider,
   oauthUserId: db.oauth_user_id,
   errorMessage: db.error_message,
-  fileSize: db.file_size,
-  downloadedBytes: db.downloaded_bytes
-    ? BigInt(db.downloaded_bytes).valueOf()
-    : null,
+  fileSize: BigInt(db.file_size ?? 0n).valueOf(),
+  downloadedBytes: BigInt(db.downloaded_bytes ?? 0n).valueOf(),
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 })
@@ -86,12 +84,13 @@ const createDownload = async (
   oauth_user_id: string,
   cid: string,
   status: string,
+  fileSize: bigint,
 ): Promise<AsyncDownload> => {
   const db = await getDatabase()
 
   const download = await db.query<AsyncDownloadDB>(
-    'INSERT INTO public.async_downloads (id, oauth_provider, oauth_user_id, cid, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [id, oauth_provider, oauth_user_id, cid, status],
+    'INSERT INTO public.async_downloads (id, oauth_provider, oauth_user_id, cid, status, file_size) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    [id, oauth_provider, oauth_user_id, cid, status, fileSize],
   )
 
   return download.rows.map(mapAsyncDownloadDBToAsyncDownload).at(0)!
