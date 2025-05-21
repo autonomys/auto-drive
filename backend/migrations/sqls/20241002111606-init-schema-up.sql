@@ -281,7 +281,7 @@ CREATE TABLE public.users_organizations (
 
 -- DROP SCHEMA uploads;
 
-CREATE SCHEMA uploads AUTHORIZATION postgres;
+CREATE SCHEMA uploads;
 
 -- uploads.uploads definition
 
