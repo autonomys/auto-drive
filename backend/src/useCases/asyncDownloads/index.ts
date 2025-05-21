@@ -13,6 +13,7 @@ enum AsyncDownloadStatus {
   Downloading = 'downloading',
   Completed = 'completed',
   Failed = 'failed',
+  Dismissed = 'dismissed',
 }
 
 const createDownload = async (
@@ -112,10 +113,17 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
   })
 }
 
+const dismissDownload = async (
+  downloadId: string,
+): Promise<AsyncDownload | null> => {
+  return await updateStatus(downloadId, AsyncDownloadStatus.Dismissed)
+}
+
 export const AsyncDownloadsUseCases = {
   createDownload,
   getDownloadsByUser,
   updateProgress,
   updateStatus,
+  dismissDownload,
   asyncDownload,
 }
