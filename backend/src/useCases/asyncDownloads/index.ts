@@ -8,7 +8,7 @@ import { TaskManager } from '../../services/taskManager/index.js'
 import { downloadService } from '../../services/download/index.js'
 import { ObjectUseCases } from '../objects/object.js'
 
-enum AsyncDownloadStatus {
+export enum AsyncDownloadStatus {
   Pending = 'pending',
   Downloading = 'downloading',
   Completed = 'completed',
@@ -20,12 +20,18 @@ const createDownload = async (
   user: User,
   cid: string,
 ): Promise<AsyncDownload> => {
+  const metadata = await ObjectUseCases.getMetadata(cid)
+  if (!metadata) {
+    throw new Error('Object not found')
+  }
+
   const download = await asyncDownloadsRepository.createDownload(
     v4(),
     user.oauthProvider,
     user.oauthUserId,
     cid,
     AsyncDownloadStatus.Pending,
+    metadata.totalSize,
   )
 
   TaskManager.publish({
@@ -99,17 +105,24 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
   const file = await downloadService.download(download.cid)
 
   let downloadedBytes = 0n
-  file.on('data', (chunk) => {
-    downloadedBytes += chunk.length
-    updateProgress(downloadId, downloadedBytes)
-  })
+  return new Promise((resolve, reject) => {
+    file.on('data', (chunk) => {
+      downloadedBytes += BigInt(chunk.length)
+      AsyncDownloadsUseCases.updateProgress(downloadId, downloadedBytes)
+    })
 
-  file.on('end', () => {
-    updateStatus(downloadId, AsyncDownloadStatus.Completed)
-  })
+    file.on('end', () => {
+      AsyncDownloadsUseCases.updateStatus(
+        downloadId,
+        AsyncDownloadStatus.Completed,
+      )
+      resolve()
+    })
 
-  file.on('error', async (error) => {
-    await setError(downloadId, JSON.stringify(error))
+    file.on('error', async (error) => {
+      await AsyncDownloadsUseCases.setError(downloadId, JSON.stringify(error))
+      reject(error)
+    })
   })
 }
 
@@ -129,7 +142,10 @@ const dismissDownload = async (
     throw new Error('User unauthorized')
   }
 
-  return await updateStatus(downloadId, AsyncDownloadStatus.Dismissed)
+  return await AsyncDownloadsUseCases.updateStatus(
+    downloadId,
+    AsyncDownloadStatus.Dismissed,
+  )
 }
 
 export const AsyncDownloadsUseCases = {
@@ -139,4 +155,5 @@ export const AsyncDownloadsUseCases = {
   updateStatus,
   dismissDownload,
   asyncDownload,
+  setError,
 }
