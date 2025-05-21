@@ -25,7 +25,7 @@ downloadController.post(
 )
 
 downloadController.post(
-  'async/:downloadId/dismiss',
+  '/async/:downloadId/dismiss',
   asyncSafeHandler(async (req, res) => {
     const { downloadId } = req.params
     const user = await handleAuth(req, res)
