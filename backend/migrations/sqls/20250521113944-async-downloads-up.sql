@@ -9,8 +9,7 @@ CREATE TABLE public.async_downloads (
     downloaded_bytes int8 NULL,
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT async_downloads_pkey PRIMARY KEY (id),
-    CONSTRAINT fk_user_id FOREIGN KEY (oauth_provider, oauth_user_id) REFERENCES public.users(oauth_provider, oauth_user_id)
+    CONSTRAINT async_downloads_pkey PRIMARY KEY (id)
 );
 
 -- Table Triggers
