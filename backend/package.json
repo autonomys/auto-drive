@@ -6,11 +6,11 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start:server": "node --loader ts-node/esm src/server.ts",
     "start": "node dist/server.js",
     "start:prod": "node dist/server.prod.js",
     "start:docs": "node --loader ts-node/esm src/http/controllers/docs.ts",
     "test": "node --experimental-vm-modules ../node_modules/jest/bin/jest.js --runInBand --coverage --forceExit",
+    "start:server": "node dist/server.js",
     "start:worker": "node dist/worker.js",
     "start:api": "node dist/api.js",
     "lint": "eslint . "

@@ -1,1 +1,0 @@
-ALTER TABLE uploads.uploads DROP COLUMN upload_options;
