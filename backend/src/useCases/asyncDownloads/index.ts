@@ -114,8 +114,21 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
 }
 
 const dismissDownload = async (
+  user: User,
   downloadId: string,
 ): Promise<AsyncDownload | null> => {
+  const download = await asyncDownloadsRepository.getDownloadById(downloadId)
+  if (!download) {
+    throw new Error('Download not found')
+  }
+
+  if (
+    download.oauthProvider !== user.oauthProvider ||
+    download.oauthUserId !== user.oauthUserId
+  ) {
+    throw new Error('User unauthorized')
+  }
+
   return await updateStatus(downloadId, AsyncDownloadStatus.Dismissed)
 }
 
