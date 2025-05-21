@@ -335,6 +335,7 @@ export const objects = {
     },
     '/objects/{cid}/download': {
       get: {
+        deprecated: true,
         summary: 'Download an object by CID',
         tags: ['Objects'],
         parameters: [
@@ -355,43 +356,6 @@ export const objects = {
                 schema: {
                   type: 'string',
                   format: 'binary',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'Metadata not found',
-          },
-          '500': {
-            description: 'Failed to retrieve data',
-          },
-        },
-      },
-    },
-    '/objects/{cid}/download/async': {
-      post: {
-        summary: 'Creates an async download for an object by CID',
-        tags: ['Objects'],
-        parameters: [
-          {
-            name: 'cid',
-            in: 'path',
-            required: true,
-            schema: {
-              type: 'string',
-            },
-          },
-        ],
-        responses: {
-          '200': {
-            description: 'Successfully retrieved object for download',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    downloadId: { type: 'string' },
-                  },
                 },
               },
             },

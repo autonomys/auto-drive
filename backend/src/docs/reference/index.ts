@@ -1,4 +1,5 @@
 import { common } from './common.js'
+import { downloads } from './downloads.js'
 import { objects } from './objects.js'
 import { subscriptions } from './subscriptions.js'
 import { uploads } from './uploads.js'
@@ -24,6 +25,7 @@ export const swagger = {
     ...subscriptions.paths,
     ...uploads.paths,
     ...objects.paths,
+    ...downloads.paths,
   },
   security: [
     {
@@ -37,6 +39,7 @@ export const swagger = {
       ...objects.components.schemas,
       ...common.components.schemas,
       ...subscriptions.components.schemas,
+      ...downloads.components.schemas,
     },
     securitySchemes: {
       apiKey: {
