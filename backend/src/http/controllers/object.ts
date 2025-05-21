@@ -9,6 +9,7 @@ import {
 import { logger } from '../../drivers/logger.js'
 import { asyncSafeHandler } from '../../utils/express.js'
 import { handleDownloadResponseHeaders } from '../../services/download/express.js'
+import { AsyncDownloadsUseCases } from '../../useCases/asyncDownloads/index.js'
 
 const objectController = Router()
 
@@ -269,6 +270,24 @@ objectController.get(
         details: error instanceof Error ? error.message : 'Unknown error',
       })
     }
+  }),
+)
+
+objectController.post(
+  '/:cid/download/async',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+
+    res.json({
+      downloadId: download.id,
+    })
   }),
 )
 
