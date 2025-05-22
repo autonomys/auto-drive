@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS jwt_token_registry;
