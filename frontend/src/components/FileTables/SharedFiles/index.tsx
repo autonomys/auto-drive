@@ -20,9 +20,7 @@ export const SharedFiles = () => {
   const page = useFileTableState((e) => e.page);
   const sortBy = useFileTableState((e) => e.sortBy);
   const user = useUserStore((state) => state.user);
-  
   const { gql } = useNetwork();
-  
   const fetcher: Fetcher = useCallback(
     async (page: number, limit: number, sortBy) => {
       const { data } = await gql.query<GetSharedFilesQuery>({
@@ -74,6 +72,7 @@ export const SharedFiles = () => {
             actionButtons={[
               FileActionButtons.DOWNLOAD,
               FileActionButtons.DELETE,
+              FileActionButtons.ASYNC_DOWNLOAD,
             ]}
             noFilesPlaceholder={<NoSharedFilesPlaceholder />}
           />

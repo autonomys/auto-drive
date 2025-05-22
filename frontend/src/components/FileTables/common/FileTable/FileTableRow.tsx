@@ -20,6 +20,8 @@ import { cn } from '@/utils/cn';
 import Link from 'next/link';
 import dayjs from 'dayjs';
 import { CopiableText } from 'components/common/CopiableText';
+import toast from 'react-hot-toast';
+import { useUserAsyncDownloadsStore } from '../../../UserAsyncDownloads/state';
 
 export const FileTableRow = ({
   file,
@@ -46,6 +48,7 @@ export const FileTableRow = ({
 
   const [isRowExpanded, setIsRowExpanded] = useState(false);
   const [showDownloadTooltip, setShowDownloadTooltip] = useState(false);
+  const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
 
   const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN);
   const isOwner =
@@ -106,10 +109,29 @@ export const FileTableRow = ({
 
   const toggleExpand = useCallback(() => setIsRowExpanded((prev) => !prev), []);
 
+  const { api } = useNetwork();
+
   const toggleExpandClickHandler = useMemo(
     () =>
       stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(toggleExpand),
     [toggleExpand, stopEventPropagation],
+  );
+
+  const handleAsyncDownload = useMemo(
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
+        const toastId = toast.loading('Requesting async download...');
+        api
+          .createAsyncDownload(file.headCid)
+          .then(() => {
+            toast.success('Async download requested', { id: toastId });
+            updateAsyncDownloads();
+          })
+          .catch(() => {
+            toast.error('Failed to request async download', { id: toastId });
+          });
+      }),
+    [api, file.headCid, stopEventPropagation, updateAsyncDownloads],
   );
 
   return (
@@ -235,6 +257,18 @@ export const FileTableRow = ({
               onClick={handleShare}
             >
               Share
+            </Button>
+          </ConditionalRender>
+          <ConditionalRender
+            condition={actionButtons.includes(FileActionButtons.ASYNC_DOWNLOAD)}
+          >
+            <Button
+              variant='lightAccent'
+              className='mr-2 text-nowrap text-xs disabled:hidden'
+              disabled={!isOwner}
+              onClick={handleAsyncDownload}
+            >
+              Bring to Cache
             </Button>
           </ConditionalRender>
           <ConditionalRender

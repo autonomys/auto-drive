@@ -74,7 +74,10 @@ export const GlobalFiles = () => {
         </div>
         <div>
           <FileTable
-            actionButtons={[FileActionButtons.DOWNLOAD]}
+            actionButtons={[
+              FileActionButtons.DOWNLOAD,
+              FileActionButtons.ASYNC_DOWNLOAD,
+            ]}
             noFilesPlaceholder={<NoUploadsPlaceholder />}
           />
         </div>
