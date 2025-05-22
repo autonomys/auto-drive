@@ -97,4 +97,36 @@ downloadController.get(
   }),
 )
 
+downloadController.get(
+  '/async/@me',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const asyncDownloads = await AsyncDownloadsUseCases.getDownloadsByUser(user)
+
+    res.json(asyncDownloads)
+  }),
+)
+
+downloadController.get(
+  '/async/:downloadId',
+  asyncSafeHandler(async (req, res) => {
+    const { downloadId } = req.params
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const asyncDownload = await AsyncDownloadsUseCases.getDownloadById(
+      user,
+      downloadId,
+    )
+
+    res.json(asyncDownload)
+  }),
+)
+
 export { downloadController }

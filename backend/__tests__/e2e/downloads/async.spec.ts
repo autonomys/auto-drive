@@ -156,4 +156,60 @@ describe('Async Downloads', () => {
       status: AsyncDownloadStatus.Dismissed,
     } as AsyncDownload)
   })
+
+  it('should get all downloads for a user', async () => {
+    // Create multiple downloads for the same user
+    const download1 = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download2 = await AsyncDownloadsUseCases.createDownload(user, cid)
+
+    // Get all downloads for the user
+    const downloads = await AsyncDownloadsUseCases.getDownloadsByUser(user)
+
+    // Verify that the downloads include the ones we just created
+    expect(downloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: download1.id }),
+        expect.objectContaining({ id: download2.id }),
+      ]),
+    )
+  })
+
+  it('should get a specific download by id', async () => {
+    // Create a download
+    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+
+    // Get the download by id
+    const retrievedDownload = await AsyncDownloadsUseCases.getDownloadById(
+      user,
+      download.id,
+    )
+
+    // Verify the retrieved download matches the created one
+    expect(retrievedDownload).toMatchObject({
+      id: download.id,
+      cid: download.cid,
+      oauthProvider: user.oauthProvider,
+      oauthUserId: user.oauthUserId,
+      status: AsyncDownloadStatus.Pending,
+    })
+  })
+
+  it('should throw error when getting download with invalid id', async () => {
+    // Attempt to get a download with an invalid id
+    await expect(
+      AsyncDownloadsUseCases.getDownloadById(user, 'invalid-id'),
+    ).rejects.toThrow('Download not found')
+  })
+
+  it('should throw error when user tries to access another user download', async () => {
+    // Create a download
+    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+
+    // Create another user
+    const anotherUser = createMockUser()
+    // Attempt to get the download with another user
+    await expect(
+      AsyncDownloadsUseCases.getDownloadById(anotherUser, download.id),
+    ).rejects.toThrow('User unauthorized')
+  })
 })

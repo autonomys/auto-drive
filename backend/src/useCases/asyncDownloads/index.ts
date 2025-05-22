@@ -1,4 +1,4 @@
-import { AsyncDownload, User, AsyncDownloadStatus } from '@auto-drive/models'
+import { User, AsyncDownloadStatus, AsyncDownload } from '@auto-drive/models'
 import { asyncDownloadsRepository } from '../../repositories/asyncDownloads/index.js'
 import { v4 } from 'uuid'
 import { TaskManager } from '../../services/taskManager/index.js'
@@ -137,6 +137,25 @@ const dismissDownload = async (
   )
 }
 
+const getDownloadById = async (
+  user: User,
+  downloadId: string,
+): Promise<AsyncDownload | null> => {
+  const download = await asyncDownloadsRepository.getDownloadById(downloadId)
+  if (!download) {
+    throw new Error('Download not found')
+  }
+
+  if (
+    download.oauthProvider !== user.oauthProvider ||
+    download.oauthUserId !== user.oauthUserId
+  ) {
+    throw new Error('User unauthorized')
+  }
+
+  return download
+}
+
 export const AsyncDownloadsUseCases = {
   createDownload,
   getDownloadsByUser,
@@ -145,4 +164,5 @@ export const AsyncDownloadsUseCases = {
   dismissDownload,
   asyncDownload,
   setError,
+  getDownloadById,
 }
