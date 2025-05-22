@@ -35,7 +35,7 @@ const createDownload = async (
 }
 
 const getDownloadsByUser = async (user: User): Promise<AsyncDownload[]> => {
-  return asyncDownloadsRepository.getDownloadsByUser(
+  return asyncDownloadsRepository.getUndismissedDownloadsByUser(
     user.oauthProvider,
     user.oauthUserId,
   )
@@ -140,7 +140,7 @@ const dismissDownload = async (
 const getDownloadById = async (
   user: User,
   downloadId: string,
-): Promise<AsyncDownload | null> => {
+): Promise<AsyncDownload> => {
   const download = await asyncDownloadsRepository.getDownloadById(downloadId)
   if (!download) {
     throw new Error('Download not found')

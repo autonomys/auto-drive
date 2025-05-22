@@ -174,6 +174,22 @@ describe('Async Downloads', () => {
     )
   })
 
+  it('should get all downloads for a user', async () => {
+    // Create multiple downloads for the same user
+    const download1 = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download2 = await AsyncDownloadsUseCases.createDownload(user, cid)
+
+    await AsyncDownloadsUseCases.dismissDownload(user, download1.id)
+
+    // Get all downloads for the user
+    const downloads = await AsyncDownloadsUseCases.getDownloadsByUser(user)
+
+    // Verify that the downloads include the ones we just created
+    expect(downloads).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: download2.id })]),
+    )
+  })
+
   it('should get a specific download by id', async () => {
     // Create a download
     const download = await AsyncDownloadsUseCases.createDownload(user, cid)
