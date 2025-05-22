@@ -246,6 +246,214 @@ export type Api_Keys_Stream_Cursor_Value_Input = {
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
 
+/** columns and relationships of "async_downloads" */
+export type Async_Downloads = {
+  __typename?: 'async_downloads';
+  cid: Scalars['String']['output'];
+  created_at: Scalars['timestamp']['output'];
+  downloaded_bytes?: Maybe<Scalars['bigint']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  file_size?: Maybe<Scalars['bigint']['output']>;
+  id: Scalars['String']['output'];
+  oauth_provider: Scalars['String']['output'];
+  oauth_user_id: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  updated_at: Scalars['timestamp']['output'];
+};
+
+/** aggregated selection of "async_downloads" */
+export type Async_Downloads_Aggregate = {
+  __typename?: 'async_downloads_aggregate';
+  aggregate?: Maybe<Async_Downloads_Aggregate_Fields>;
+  nodes: Array<Async_Downloads>;
+};
+
+/** aggregate fields of "async_downloads" */
+export type Async_Downloads_Aggregate_Fields = {
+  __typename?: 'async_downloads_aggregate_fields';
+  avg?: Maybe<Async_Downloads_Avg_Fields>;
+  count: Scalars['Int']['output'];
+  max?: Maybe<Async_Downloads_Max_Fields>;
+  min?: Maybe<Async_Downloads_Min_Fields>;
+  stddev?: Maybe<Async_Downloads_Stddev_Fields>;
+  stddev_pop?: Maybe<Async_Downloads_Stddev_Pop_Fields>;
+  stddev_samp?: Maybe<Async_Downloads_Stddev_Samp_Fields>;
+  sum?: Maybe<Async_Downloads_Sum_Fields>;
+  var_pop?: Maybe<Async_Downloads_Var_Pop_Fields>;
+  var_samp?: Maybe<Async_Downloads_Var_Samp_Fields>;
+  variance?: Maybe<Async_Downloads_Variance_Fields>;
+};
+
+
+/** aggregate fields of "async_downloads" */
+export type Async_Downloads_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Async_Downloads_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** aggregate avg on columns */
+export type Async_Downloads_Avg_Fields = {
+  __typename?: 'async_downloads_avg_fields';
+  downloaded_bytes?: Maybe<Scalars['Float']['output']>;
+  file_size?: Maybe<Scalars['Float']['output']>;
+};
+
+/** Boolean expression to filter rows from the table "async_downloads". All fields are combined with a logical 'AND'. */
+export type Async_Downloads_Bool_Exp = {
+  _and?: InputMaybe<Array<Async_Downloads_Bool_Exp>>;
+  _not?: InputMaybe<Async_Downloads_Bool_Exp>;
+  _or?: InputMaybe<Array<Async_Downloads_Bool_Exp>>;
+  cid?: InputMaybe<String_Comparison_Exp>;
+  created_at?: InputMaybe<Timestamp_Comparison_Exp>;
+  downloaded_bytes?: InputMaybe<Bigint_Comparison_Exp>;
+  error_message?: InputMaybe<String_Comparison_Exp>;
+  file_size?: InputMaybe<Bigint_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  oauth_provider?: InputMaybe<String_Comparison_Exp>;
+  oauth_user_id?: InputMaybe<String_Comparison_Exp>;
+  status?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
+};
+
+/** aggregate max on columns */
+export type Async_Downloads_Max_Fields = {
+  __typename?: 'async_downloads_max_fields';
+  cid?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  downloaded_bytes?: Maybe<Scalars['bigint']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  file_size?: Maybe<Scalars['bigint']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  oauth_provider?: Maybe<Scalars['String']['output']>;
+  oauth_user_id?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamp']['output']>;
+};
+
+/** aggregate min on columns */
+export type Async_Downloads_Min_Fields = {
+  __typename?: 'async_downloads_min_fields';
+  cid?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  downloaded_bytes?: Maybe<Scalars['bigint']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  file_size?: Maybe<Scalars['bigint']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  oauth_provider?: Maybe<Scalars['String']['output']>;
+  oauth_user_id?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamp']['output']>;
+};
+
+/** Ordering options when selecting data from "async_downloads". */
+export type Async_Downloads_Order_By = {
+  cid?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  downloaded_bytes?: InputMaybe<Order_By>;
+  error_message?: InputMaybe<Order_By>;
+  file_size?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  oauth_provider?: InputMaybe<Order_By>;
+  oauth_user_id?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** select columns of table "async_downloads" */
+export enum Async_Downloads_Select_Column {
+  /** column name */
+  Cid = 'cid',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  DownloadedBytes = 'downloaded_bytes',
+  /** column name */
+  ErrorMessage = 'error_message',
+  /** column name */
+  FileSize = 'file_size',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  OauthProvider = 'oauth_provider',
+  /** column name */
+  OauthUserId = 'oauth_user_id',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+/** aggregate stddev on columns */
+export type Async_Downloads_Stddev_Fields = {
+  __typename?: 'async_downloads_stddev_fields';
+  downloaded_bytes?: Maybe<Scalars['Float']['output']>;
+  file_size?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_pop on columns */
+export type Async_Downloads_Stddev_Pop_Fields = {
+  __typename?: 'async_downloads_stddev_pop_fields';
+  downloaded_bytes?: Maybe<Scalars['Float']['output']>;
+  file_size?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_samp on columns */
+export type Async_Downloads_Stddev_Samp_Fields = {
+  __typename?: 'async_downloads_stddev_samp_fields';
+  downloaded_bytes?: Maybe<Scalars['Float']['output']>;
+  file_size?: Maybe<Scalars['Float']['output']>;
+};
+
+/** Streaming cursor of the table "async_downloads" */
+export type Async_Downloads_Stream_Cursor_Input = {
+  /** Stream column input with initial value */
+  initial_value: Async_Downloads_Stream_Cursor_Value_Input;
+  /** cursor ordering */
+  ordering?: InputMaybe<Cursor_Ordering>;
+};
+
+/** Initial value of the column from where the streaming should start */
+export type Async_Downloads_Stream_Cursor_Value_Input = {
+  cid?: InputMaybe<Scalars['String']['input']>;
+  created_at?: InputMaybe<Scalars['timestamp']['input']>;
+  downloaded_bytes?: InputMaybe<Scalars['bigint']['input']>;
+  error_message?: InputMaybe<Scalars['String']['input']>;
+  file_size?: InputMaybe<Scalars['bigint']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  oauth_provider?: InputMaybe<Scalars['String']['input']>;
+  oauth_user_id?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
+};
+
+/** aggregate sum on columns */
+export type Async_Downloads_Sum_Fields = {
+  __typename?: 'async_downloads_sum_fields';
+  downloaded_bytes?: Maybe<Scalars['bigint']['output']>;
+  file_size?: Maybe<Scalars['bigint']['output']>;
+};
+
+/** aggregate var_pop on columns */
+export type Async_Downloads_Var_Pop_Fields = {
+  __typename?: 'async_downloads_var_pop_fields';
+  downloaded_bytes?: Maybe<Scalars['Float']['output']>;
+  file_size?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate var_samp on columns */
+export type Async_Downloads_Var_Samp_Fields = {
+  __typename?: 'async_downloads_var_samp_fields';
+  downloaded_bytes?: Maybe<Scalars['Float']['output']>;
+  file_size?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate variance on columns */
+export type Async_Downloads_Variance_Fields = {
+  __typename?: 'async_downloads_variance_fields';
+  downloaded_bytes?: Maybe<Scalars['Float']['output']>;
+  file_size?: Maybe<Scalars['Float']['output']>;
+};
+
 /** Boolean expression to compare columns of type "bigint". All fields are combined with logical 'AND'. */
 export type Bigint_Comparison_Exp = {
   _eq?: InputMaybe<Scalars['bigint']['input']>;
@@ -1609,6 +1817,12 @@ export type Query_Root = {
   api_keys_aggregate: Api_Keys_Aggregate;
   /** fetch data from the table: "api_keys" using primary key columns */
   api_keys_by_pk?: Maybe<Api_Keys>;
+  /** fetch data from the table: "async_downloads" */
+  async_downloads: Array<Async_Downloads>;
+  /** fetch aggregated fields from the table: "async_downloads" */
+  async_downloads_aggregate: Async_Downloads_Aggregate;
+  /** fetch data from the table: "async_downloads" using primary key columns */
+  async_downloads_by_pk?: Maybe<Async_Downloads>;
   /** fetch data from the table: "interactions" */
   interactions: Array<Interactions>;
   /** fetch aggregated fields from the table: "interactions" */
@@ -1685,6 +1899,29 @@ export type Query_RootApi_Keys_AggregateArgs = {
 
 
 export type Query_RootApi_Keys_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootAsync_DownloadsArgs = {
+  distinct_on?: InputMaybe<Array<Async_Downloads_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Async_Downloads_Order_By>>;
+  where?: InputMaybe<Async_Downloads_Bool_Exp>;
+};
+
+
+export type Query_RootAsync_Downloads_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Async_Downloads_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Async_Downloads_Order_By>>;
+  where?: InputMaybe<Async_Downloads_Bool_Exp>;
+};
+
+
+export type Query_RootAsync_Downloads_By_PkArgs = {
   id: Scalars['String']['input'];
 };
 
@@ -1917,6 +2154,14 @@ export type Subscription_Root = {
   api_keys_by_pk?: Maybe<Api_Keys>;
   /** fetch data from the table in a streaming manner: "api_keys" */
   api_keys_stream: Array<Api_Keys>;
+  /** fetch data from the table: "async_downloads" */
+  async_downloads: Array<Async_Downloads>;
+  /** fetch aggregated fields from the table: "async_downloads" */
+  async_downloads_aggregate: Async_Downloads_Aggregate;
+  /** fetch data from the table: "async_downloads" using primary key columns */
+  async_downloads_by_pk?: Maybe<Async_Downloads>;
+  /** fetch data from the table in a streaming manner: "async_downloads" */
+  async_downloads_stream: Array<Async_Downloads>;
   /** fetch data from the table: "interactions" */
   interactions: Array<Interactions>;
   /** fetch aggregated fields from the table: "interactions" */
@@ -2021,6 +2266,36 @@ export type Subscription_RootApi_Keys_StreamArgs = {
   batch_size: Scalars['Int']['input'];
   cursor: Array<InputMaybe<Api_Keys_Stream_Cursor_Input>>;
   where?: InputMaybe<Api_Keys_Bool_Exp>;
+};
+
+
+export type Subscription_RootAsync_DownloadsArgs = {
+  distinct_on?: InputMaybe<Array<Async_Downloads_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Async_Downloads_Order_By>>;
+  where?: InputMaybe<Async_Downloads_Bool_Exp>;
+};
+
+
+export type Subscription_RootAsync_Downloads_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Async_Downloads_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Async_Downloads_Order_By>>;
+  where?: InputMaybe<Async_Downloads_Bool_Exp>;
+};
+
+
+export type Subscription_RootAsync_Downloads_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAsync_Downloads_StreamArgs = {
+  batch_size: Scalars['Int']['input'];
+  cursor: Array<InputMaybe<Async_Downloads_Stream_Cursor_Input>>;
+  where?: InputMaybe<Async_Downloads_Bool_Exp>;
 };
 
 
@@ -2869,6 +3144,11 @@ export type GetMyFilesQueryVariables = Exact<{
 
 export type GetMyFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
+export type MyUndismissedAsyncDownloadsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MyUndismissedAsyncDownloadsQuery = { __typename?: 'query_root', async_downloads: Array<{ __typename?: 'async_downloads', id: string, cid: string, status: string, oauthProvider: string, oauthUserId: string, errorMessage?: string | null, fileSize?: any | null, downloadedBytes?: any | null, createdAt: any, updatedAt: any }> };
+
 export type GetMetadataByHeadCidQueryVariables = Exact<{
   headCid: Scalars['String']['input'];
 }>;
@@ -3303,6 +3583,54 @@ export type GetMyFilesQueryHookResult = ReturnType<typeof useGetMyFilesQuery>;
 export type GetMyFilesLazyQueryHookResult = ReturnType<typeof useGetMyFilesLazyQuery>;
 export type GetMyFilesSuspenseQueryHookResult = ReturnType<typeof useGetMyFilesSuspenseQuery>;
 export type GetMyFilesQueryResult = Apollo.QueryResult<GetMyFilesQuery, GetMyFilesQueryVariables>;
+export const MyUndismissedAsyncDownloadsDocument = gql`
+    query MyUndismissedAsyncDownloads {
+  async_downloads(where: {_not: {status: {_eq: "dismissed"}}}) {
+    id
+    oauthProvider: oauth_provider
+    oauthUserId: oauth_user_id
+    cid
+    status
+    errorMessage: error_message
+    fileSize: file_size
+    downloadedBytes: downloaded_bytes
+    createdAt: created_at
+    updatedAt: updated_at
+  }
+}
+    `;
+
+/**
+ * __useMyUndismissedAsyncDownloadsQuery__
+ *
+ * To run a query within a React component, call `useMyUndismissedAsyncDownloadsQuery` and pass it any options that fit your needs.
+ * When your component renders, `useMyUndismissedAsyncDownloadsQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useMyUndismissedAsyncDownloadsQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useMyUndismissedAsyncDownloadsQuery(baseOptions?: Apollo.QueryHookOptions<MyUndismissedAsyncDownloadsQuery, MyUndismissedAsyncDownloadsQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<MyUndismissedAsyncDownloadsQuery, MyUndismissedAsyncDownloadsQueryVariables>(MyUndismissedAsyncDownloadsDocument, options);
+      }
+export function useMyUndismissedAsyncDownloadsLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<MyUndismissedAsyncDownloadsQuery, MyUndismissedAsyncDownloadsQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<MyUndismissedAsyncDownloadsQuery, MyUndismissedAsyncDownloadsQueryVariables>(MyUndismissedAsyncDownloadsDocument, options);
+        }
+export function useMyUndismissedAsyncDownloadsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<MyUndismissedAsyncDownloadsQuery, MyUndismissedAsyncDownloadsQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<MyUndismissedAsyncDownloadsQuery, MyUndismissedAsyncDownloadsQueryVariables>(MyUndismissedAsyncDownloadsDocument, options);
+        }
+export type MyUndismissedAsyncDownloadsQueryHookResult = ReturnType<typeof useMyUndismissedAsyncDownloadsQuery>;
+export type MyUndismissedAsyncDownloadsLazyQueryHookResult = ReturnType<typeof useMyUndismissedAsyncDownloadsLazyQuery>;
+export type MyUndismissedAsyncDownloadsSuspenseQueryHookResult = ReturnType<typeof useMyUndismissedAsyncDownloadsSuspenseQuery>;
+export type MyUndismissedAsyncDownloadsQueryResult = Apollo.QueryResult<MyUndismissedAsyncDownloadsQuery, MyUndismissedAsyncDownloadsQueryVariables>;
 export const GetMetadataByHeadCidDocument = gql`
     query GetMetadataByHeadCID($headCid: String!) {
   metadata(
