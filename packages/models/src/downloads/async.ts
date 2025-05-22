@@ -11,10 +11,10 @@ export interface AsyncDownload {
   oauthProvider: string;
   oauthUserId: string;
   cid: string;
-  status: string;
-  errorMessage: string | null;
-  fileSize: bigint | null;
-  downloadedBytes: bigint;
+  status: AsyncDownloadStatus;
+  errorMessage?: string | null | undefined;
+  fileSize?: string | null | undefined;
+  downloadedBytes?: string | null | undefined;
   createdAt: Date;
   updatedAt: Date;
 }

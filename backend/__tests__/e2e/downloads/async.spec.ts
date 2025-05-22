@@ -56,8 +56,8 @@ describe('Async Downloads', () => {
       oauthUserId: user.oauthUserId,
       cid,
       errorMessage: null,
-      downloadedBytes: 0n,
-      fileSize: 4n,
+      downloadedBytes: '0',
+      fileSize: '4',
     } as AsyncDownload)
 
     expect(mockPublish).toHaveBeenCalledWith(expectedTask)
