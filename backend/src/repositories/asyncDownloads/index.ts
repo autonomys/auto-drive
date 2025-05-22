@@ -1,6 +1,7 @@
 import { getDatabase } from '../../drivers/pg.js'
+import { AsyncDownload } from '@auto-drive/models'
 
-export interface AsyncDownloadDB {
+interface AsyncDownloadDB {
   id: string
   oauth_provider: string
   oauth_user_id: string
@@ -11,19 +12,6 @@ export interface AsyncDownloadDB {
   downloaded_bytes: bigint
   created_at: Date
   updated_at: Date
-}
-
-export interface AsyncDownload {
-  id: string
-  oauthProvider: string
-  oauthUserId: string
-  cid: string
-  status: string
-  errorMessage: string | null
-  fileSize: bigint | null
-  downloadedBytes: bigint
-  createdAt: Date
-  updatedAt: Date
 }
 
 const mapAsyncDownloadDBToAsyncDownload = (

@@ -1,20 +1,9 @@
-import { User } from '@auto-drive/models'
-import {
-  AsyncDownload,
-  asyncDownloadsRepository,
-} from '../../repositories/asyncDownloads/index.js'
+import { AsyncDownload, User, AsyncDownloadStatus } from '@auto-drive/models'
+import { asyncDownloadsRepository } from '../../repositories/asyncDownloads/index.js'
 import { v4 } from 'uuid'
 import { TaskManager } from '../../services/taskManager/index.js'
 import { downloadService } from '../../services/download/index.js'
 import { ObjectUseCases } from '../objects/object.js'
-
-export enum AsyncDownloadStatus {
-  Pending = 'pending',
-  Downloading = 'downloading',
-  Completed = 'completed',
-  Failed = 'failed',
-  Dismissed = 'dismissed',
-}
 
 const createDownload = async (
   user: User,

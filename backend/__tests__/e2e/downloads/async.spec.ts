@@ -1,15 +1,9 @@
-import { User } from '@auto-drive/models'
+import { User, AsyncDownloadStatus, AsyncDownload } from '@auto-drive/models'
 import { createMockUser } from '../../utils/mocks.js'
-import {
-  AsyncDownloadStatus,
-  AsyncDownloadsUseCases,
-} from '../../../src/useCases/asyncDownloads/index.js'
+import { AsyncDownloadsUseCases } from '../../../src/useCases/asyncDownloads/index.js'
 import { uploadFile } from '../../utils/uploads.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import {
-  AsyncDownload,
-  asyncDownloadsRepository,
-} from '../../../src/repositories/asyncDownloads/index.js'
+import { asyncDownloadsRepository } from '../../../src/repositories/asyncDownloads/index.js'
 import { Rabbit } from '../../../src/drivers/rabbit.js'
 import { jest } from '@jest/globals'
 import { createTask } from '../../../src/services/taskManager/tasks.js'
