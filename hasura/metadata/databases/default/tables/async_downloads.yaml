@@ -1,23 +1,23 @@
 table:
   name: async_downloads
   schema: public
-  select_permissions:
-    - role: user
-      permission:
-        columns:
-          - id
-          - oauth_provider
-          - oauth_user_id
-          - cid
-          - status
-          - error_message
-          - file_size
-          - downloaded_bytes
-          - created_at
-          - updated_at
-        filter:
-          {
-            oauth_provider: { _eq: "X-Hasura-Oauth-Provider" },
-            oauth_user_id: { _eq: "X-Hasura-Oauth-User-Id" },
-          }
-        allow_aggregations: true
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - oauth_provider
+        - oauth_user_id
+        - cid
+        - status
+        - error_message
+        - file_size
+        - downloaded_bytes
+        - created_at
+        - updated_at
+      filter:
+        {
+          oauth_provider: { _eq: "X-Hasura-Oauth-Provider" },
+          oauth_user_id: { _eq: "X-Hasura-Oauth-User-Id" },
+        }
+      allow_aggregations: true
