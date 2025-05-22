@@ -31,6 +31,7 @@ export enum FileActionButtons {
   SHARE = 'share',
   DELETE = 'delete',
   RESTORE = 'restore',
+  ASYNC_DOWNLOAD = 'asyncDownload',
 }
 
 export const FileTable: FC<{

@@ -18,6 +18,7 @@ import { objectSummaryFromUserFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
 import { UploadButton } from '../../UploadButton';
+import { UserAsyncDownloads } from '../../UserAsyncDownloads';
 
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -79,6 +80,7 @@ export const UserFiles = () => {
   return (
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
+        <UserAsyncDownloads />
         <div className='flex w-full flex-row items-center justify-between gap-4'>
           <SearchBar scope='user' />
           <UploadButton />
@@ -88,6 +90,7 @@ export const UserFiles = () => {
             actionButtons={[
               FileActionButtons.DOWNLOAD,
               FileActionButtons.SHARE,
+              FileActionButtons.ASYNC_DOWNLOAD,
               FileActionButtons.DELETE,
             ]}
             noFilesPlaceholder={<NoUploadsPlaceholder />}

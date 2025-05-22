@@ -203,4 +203,32 @@ export const createApiService = (apiBaseUrl: string) => ({
 
     return apiDrive.publishObject(cid);
   },
+  createAsyncDownload: async (cid: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    await fetch(`${apiBaseUrl}/downloads/async/${cid}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+  },
+  dismissAsyncDownload: async (id: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    await fetch(`${apiBaseUrl}/downloads/async/${id}/dismiss`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+  },
 });
