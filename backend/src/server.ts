@@ -1,2 +1,2 @@
-import './api.js'
+import './apis/frontend.js'
 import './worker.js'

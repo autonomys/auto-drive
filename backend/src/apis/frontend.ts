@@ -2,14 +2,14 @@ import cors from 'cors'
 import express from 'express'
 
 import 'dotenv/config.js'
-import { objectController } from './http/controllers/object.js'
-import { subscriptionController } from './http/controllers/subscriptions.js'
-import { handleAuth } from './services/auth/express.js'
-import { uploadController } from './http/controllers/upload.js'
-import { config } from './config.js'
-import { logger } from './drivers/logger.js'
-import { docsController } from './http/controllers/docs.js'
-import { downloadController } from './http/controllers/download.js'
+import { objectController } from '../http/controllers/object.js'
+import { subscriptionController } from '../http/controllers/subscriptions.js'
+import { handleAuth } from '../services/auth/express.js'
+import { uploadController } from '../http/controllers/upload.js'
+import { config } from '../config.js'
+import { logger } from '../drivers/logger.js'
+import { docsController } from '../http/controllers/docs.js'
+import { downloadController } from '../http/controllers/download.js'
 
 const createServer = async () => {
   const app = express()
