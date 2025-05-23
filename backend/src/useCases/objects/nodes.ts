@@ -25,8 +25,8 @@ import {
 import { ObjectUseCases } from './object.js'
 import { logger } from '../../drivers/logger.js'
 import { Node } from '../../repositories/objects/nodes.js'
-import { TaskManager } from '../../services/taskManager/index.js'
-import { createTask, Task } from '../../services/taskManager/tasks.js'
+import { EventRouter } from '../../services/eventRouter/index.js'
+import { createTask, Task } from '../../services/eventRouter/tasks.js'
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
@@ -203,7 +203,7 @@ const scheduleNodeArchiving = async (
       },
     }),
   ]
-  TaskManager.publish(tasks)
+  EventRouter.publish(tasks)
 }
 
 const getCidsByRootCid = async (rootCid: string): Promise<string[]> => {

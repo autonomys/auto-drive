@@ -7,37 +7,20 @@ import { exhaustiveCheck } from '../../utils/misc.js'
 import { OnchainPublisher } from '../upload/onchainPublisher/index.js'
 import { Task, TaskSchema } from './tasks.js'
 
-export const TaskManager = {
-  start: () => {
-    Rabbit.subscribe(async (obj: unknown) => {
-      const task = TaskSchema.safeParse(obj)
-      if (!task.success) {
-        logger.error('Invalid task', task.error)
-        return
-      }
-
-      try {
-        await processTask(task.data)
-      } catch (error) {
-        if (task.data.retriesLeft > 0) {
-          const newTask = {
-            ...task.data,
-            retriesLeft: task.data.retriesLeft - 1,
-          }
-          Rabbit.publish(newTask)
-        } else {
-          logger.error('Task failed', error)
-        }
-      }
-    })
+export const EventRouter = {
+  listenFrontendEvents: () => {
+    Rabbit.subscribe('task-manager', handleTaskWithRetries)
+  },
+  listenDownloadEvents: () => {
+    Rabbit.subscribe('download-manager', handleTaskWithRetries)
   },
   publish: (tasks: Task[] | Task) => {
     if (Array.isArray(tasks)) {
       tasks.forEach((task) => {
-        Rabbit.publish(task)
+        Rabbit.publish(getTargetQueueByTask(task), task)
       })
     } else {
-      Rabbit.publish(tasks)
+      Rabbit.publish(getTargetQueueByTask(tasks), tasks)
     }
   },
 }
@@ -55,5 +38,37 @@ const processTask = ({ id, params, retriesLeft }: Task) => {
     return AsyncDownloadsUseCases.asyncDownload(params.downloadId)
   } else {
     return exhaustiveCheck(id)
+  }
+}
+
+const getTargetQueueByTask = (task: Task) => {
+  switch (task.id) {
+    case 'async-download-created':
+    case 'archive-objects':
+      return 'download-manager'
+  }
+  return 'task-manager'
+}
+
+const handleTaskWithRetries = async (obj: unknown) => {
+  const task = TaskSchema.safeParse(obj)
+  if (!task.success) {
+    logger.error('Invalid task', task.error)
+    return
+  }
+
+  try {
+    await processTask(task.data)
+  } catch (error) {
+    if (task.data.retriesLeft > 0) {
+      const newTask = {
+        ...task.data,
+        retriesLeft: task.data.retriesLeft - 1,
+      }
+      const targetQueue = getTargetQueueByTask(newTask)
+      Rabbit.publish(targetQueue, newTask)
+    } else {
+      logger.error('Task failed', error)
+    }
   }
 }
