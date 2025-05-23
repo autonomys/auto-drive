@@ -1,6 +1,7 @@
 import z from 'zod'
 import { ObjectMappingSchema } from '@auto-drive/models'
 import { config } from '../../config.js'
+import { exhaustiveCheck } from '../../utils/misc.js'
 
 export const MAX_RETRIES = config.services.taskManager.maxRetries
 
@@ -33,6 +34,13 @@ export const TaskSchema = z.discriminatedUnion('id', [
       cid: z.string(),
     }),
   }),
+  z.object({
+    id: z.literal('async-download-created'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({
+      downloadId: z.string(),
+    }),
+  }),
 ])
 
 export type MigrateUploadTask = z.infer<typeof TaskSchema>
@@ -63,32 +71,46 @@ type TaskCreateParams =
         cid: string
       }
     }
+  | {
+      id: 'async-download-created'
+      params: {
+        downloadId: string
+      }
+    }
 
-export const createTask = ({ id, params }: TaskCreateParams): Task => {
-  switch (id) {
+export const createTask = (task: TaskCreateParams): Task => {
+  switch (task.id) {
     case 'migrate-upload-nodes':
       return {
-        id,
-        params,
+        id: task.id,
+        params: task.params,
         retriesLeft: MAX_RETRIES,
       }
     case 'archive-objects':
       return {
-        id,
-        params,
+        id: task.id,
+        params: task.params,
         retriesLeft: MAX_RETRIES,
       }
     case 'publish-nodes':
       return {
-        id,
-        params,
+        id: task.id,
+        params: task.params,
         retriesLeft: MAX_RETRIES,
       }
     case 'tag-upload':
       return {
-        id,
-        params,
+        id: task.id,
+        params: task.params,
         retriesLeft: MAX_RETRIES,
       }
+    case 'async-download-created':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    default:
+      return exhaustiveCheck(task)
   }
 }

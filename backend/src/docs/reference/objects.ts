@@ -335,6 +335,7 @@ export const objects = {
     },
     '/objects/{cid}/download': {
       get: {
+        deprecated: true,
         summary: 'Download an object by CID',
         tags: ['Objects'],
         parameters: [

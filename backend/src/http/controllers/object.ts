@@ -217,6 +217,7 @@ objectController.post(
   }),
 )
 
+// Deprecated: Use /downloads/:cid instead
 objectController.get(
   '/:cid/download',
   asyncSafeHandler(async (req, res) => {

@@ -19,7 +19,10 @@ const start = async () => {
     logger.info(
       `Subscribing to recover object mappings from piece ${pieceIndex}`,
     )
-    await client.api.subscribe_recover_object_mappings({
+
+    // To be properly solved later
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (client.api as any).subscribe_recover_object_mappings({
       pieceIndex,
       step: config.objectMappingArchiver.step,
     })

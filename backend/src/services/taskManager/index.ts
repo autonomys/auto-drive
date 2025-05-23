@@ -1,5 +1,6 @@
 import { logger } from '../../drivers/logger.js'
 import { Rabbit } from '../../drivers/rabbit.js'
+import { AsyncDownloadsUseCases } from '../../useCases/asyncDownloads/index.js'
 import { NodesUseCases } from '../../useCases/objects/nodes.js'
 import { UploadsUseCases } from '../../useCases/uploads/uploads.js'
 import { exhaustiveCheck } from '../../utils/misc.js'
@@ -50,6 +51,8 @@ const processTask = ({ id, params, retriesLeft }: Task) => {
     return OnchainPublisher.publishNodes(params.nodes, retriesLeft)
   } else if (id === 'tag-upload') {
     return UploadsUseCases.tagUpload(params.cid)
+  } else if (id === 'async-download-created') {
+    return AsyncDownloadsUseCases.asyncDownload(params.downloadId)
   } else {
     return exhaustiveCheck(id)
   }

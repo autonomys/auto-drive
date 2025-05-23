@@ -9,3 +9,4 @@
 - "!include users_organizations.yaml"
 - "!include published_objects.yaml"
 - "!include root_metadata.yaml"
+- "!include async_downloads.yaml"
