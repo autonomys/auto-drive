@@ -7,6 +7,7 @@ export enum NetworkId {
 export interface Network {
   id: NetworkId;
   name: string;
+  download: string;
   http: string;
   gql: string;
 }
@@ -20,6 +21,9 @@ export const networks: Partial<Record<NetworkId, Network>> = {
     http:
       process.env.NEXT_PUBLIC_TAURUS_HTTP_URL ||
       'https://demo.auto-drive.autonomys.xyz/api',
+    download:
+      process.env.NEXT_PUBLIC_TAURUS_DOWNLOAD_URL ||
+      'https://public.taurus.auto-drive.autonomys.xyz/api',
     gql:
       process.env.NEXT_PUBLIC_TAURUS_GQL_URL ||
       'https://demo.auto-drive.autonomys.xyz/hasura/v1/graphql',
@@ -30,6 +34,9 @@ export const networks: Partial<Record<NetworkId, Network>> = {
     http:
       process.env.NEXT_PUBLIC_MAINNET_HTTP_URL ||
       'https://mainnet.auto-drive.autonomys.xyz/api',
+    download:
+      process.env.NEXT_PUBLIC_MAINNET_DOWNLOAD_URL ||
+      'https://public.auto-drive.autonomys.xyz/api',
     gql:
       process.env.NEXT_PUBLIC_MAINNET_GQL_URL ||
       'https://mainnet.auto-drive.autonomys.xyz/hasura/v1/graphql',
@@ -41,6 +48,8 @@ if (process.env.NEXT_PUBLIC_ENV === 'local') {
     id: NetworkId.LOCAL,
     name: 'Local',
     http: process.env.NEXT_PUBLIC_LOCAL_RPC_URL || 'http://localhost:3000',
+    download:
+      process.env.NEXT_PUBLIC_LOCAL_DOWNLOAD_URL || 'http://localhost:3000',
     gql:
       process.env.NEXT_PUBLIC_LOCAL_GQL_URL ||
       'http://localhost:6565/v1/graphql',
