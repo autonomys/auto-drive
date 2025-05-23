@@ -1,10 +1,14 @@
 const createWorkerService = async () => {
   if (process.env.NODE_ENV === 'production') {
-    await import('./awsSetup.js').then(({ setupFinished }) => setupFinished)
+    await import('./servers/awsSetup.js').then(
+      ({ setupFinished }) => setupFinished,
+    )
   }
 
   const { config } = await import('./config.js')
-  const { TaskManager } = await import('./services/taskManager/index.js')
+  const { EventRouter: TaskManager } = await import(
+    './services/eventRouter/index.js'
+  )
   const { objectMappingArchiver } = await import(
     './services/dsn/objectMappingListener/index.js'
   )
@@ -13,7 +17,7 @@ const createWorkerService = async () => {
   }
 
   if (config.services.taskManager.active) {
-    TaskManager.start()
+    TaskManager.listenFrontendEvents()
   }
 }
 
