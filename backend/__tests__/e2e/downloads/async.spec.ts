@@ -6,7 +6,7 @@ import { dbMigration } from '../../utils/dbMigrate.js'
 import { asyncDownloadsRepository } from '../../../src/repositories/asyncDownloads/index.js'
 import { Rabbit } from '../../../src/drivers/rabbit.js'
 import { jest } from '@jest/globals'
-import { createTask } from '../../../src/services/taskManager/tasks.js'
+import { createTask } from '../../../src/services/eventRouter/tasks.js'
 import { ObjectUseCases } from '../../../src/useCases/index.js'
 import { downloadService } from '../../../src/services/download/index.js'
 import { Readable } from 'stream'
@@ -60,7 +60,7 @@ describe('Async Downloads', () => {
       fileSize: '4',
     } as AsyncDownload)
 
-    expect(mockPublish).toHaveBeenCalledWith(expectedTask)
+    expect(mockPublish).toHaveBeenCalledWith('download-manager', expectedTask)
   })
 
   it('should fail if download is not found', async () => {

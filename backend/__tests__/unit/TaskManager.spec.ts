@@ -45,15 +45,15 @@ jest.unstable_mockModule('../../src/drivers/logger.js', () => ({
 
 describe('TaskManager', () => {
   let subscribeCallback: (obj: object) => Promise<unknown>
-  let TaskManager: typeof TaskManagerT
+  let EventRouter: typeof TaskManagerT
   let Rabbit: typeof RabbitT
   let UploadsUseCases: typeof UploadsUseCasesT
   let OnchainPublisher: typeof OnchainPublisherT
   let logger: typeof LoggerT
   beforeAll(async () => {
     // Import modules after mocks
-    TaskManager = (await import('../../src/services/taskManager/index.js'))
-      .TaskManager
+    EventRouter = (await import('../../src/services/eventRouter/index.js'))
+      .EventRouter
     Rabbit = (await import('../../src/drivers/rabbit.js')).Rabbit
     UploadsUseCases = (await import('../../src/useCases/uploads/uploads.js'))
       .UploadsUseCases
@@ -67,20 +67,22 @@ describe('TaskManager', () => {
     jest.clearAllMocks()
 
     // Capture the callback passed to Rabbit.subscribe
-    jest.mocked(Rabbit.subscribe).mockImplementation(async (callback) => {
-      subscribeCallback = callback
-      return Promise.resolve(() => {})
-    })
+    jest
+      .mocked(Rabbit.subscribe)
+      .mockImplementation(async (queue, callback) => {
+        subscribeCallback = callback
+        return Promise.resolve(() => {})
+      })
   })
 
   describe('start', () => {
     it('should subscribe to the rabbit queue', () => {
-      TaskManager.start()
+      EventRouter.start()
       expect(Rabbit.subscribe).toHaveBeenCalled()
     })
 
     it('should log an error when receiving an invalid task', async () => {
-      TaskManager.start()
+      EventRouter.start()
       await subscribeCallback({})
       expect(logger.error).toHaveBeenCalledWith(
         'Invalid task',
@@ -89,7 +91,7 @@ describe('TaskManager', () => {
     })
 
     it('should process a valid task', async () => {
-      TaskManager.start()
+      EventRouter.start()
       const validTask = {
         id: 'migrate-upload-nodes',
         params: { uploadId: '123' },
@@ -102,7 +104,7 @@ describe('TaskManager', () => {
     })
 
     it('should log an error when a task fails and has no retries left', async () => {
-      TaskManager.start()
+      EventRouter.start()
       const validTask = {
         id: 'publish-nodes',
         params: { nodes: ['node1', 'node2'] },
@@ -133,7 +135,7 @@ describe('TaskManager', () => {
         retriesLeft: 3,
       }
 
-      TaskManager.publish(task)
+      EventRouter.publish(task)
 
       expect(Rabbit.publish).toHaveBeenCalledWith(task)
     })
@@ -152,7 +154,7 @@ describe('TaskManager', () => {
         },
       ]
 
-      TaskManager.publish(tasks)
+      EventRouter.publish(tasks)
 
       expect(Rabbit.publish).toHaveBeenCalledTimes(2)
       expect(Rabbit.publish).toHaveBeenCalledWith(tasks[0])

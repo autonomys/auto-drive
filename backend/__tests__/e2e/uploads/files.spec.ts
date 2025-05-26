@@ -148,7 +148,7 @@ files.map((file, index) => {
         )
         cid = await UploadsUseCases.completeUpload(user, upload.id)
 
-        expect(rabbitMock).toHaveBeenCalledWith({
+        expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
           id: 'migrate-upload-nodes',
           params: {
             uploadId: upload.id,
@@ -215,7 +215,7 @@ files.map((file, index) => {
           UploadsUseCases.processMigration(upload.id),
         ).resolves.not.toThrow()
 
-        expect(rabbitMock).toHaveBeenCalledWith({
+        expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
           id: 'tag-upload',
           params: {
             cid: cidToString(cid),
@@ -233,7 +233,7 @@ files.map((file, index) => {
 
         // Tag the upload
         await UploadsUseCases.tagUpload(cidToString(cid))
-        expect(rabbitMock).toHaveBeenCalledWith({
+        expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
           id: 'publish-nodes',
           params: {
             nodes: expect.arrayContaining([cidToString(cid)]),
