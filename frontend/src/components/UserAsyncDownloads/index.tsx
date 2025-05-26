@@ -65,6 +65,17 @@ export const UserAsyncDownloads = () => {
           className='fixed inset-0 z-10 overflow-y-auto'
           onClose={toggleModal}
         >
+          <TransitionChild
+            as={Fragment}
+            enter='ease-out duration-300'
+            enterFrom='opacity-0'
+            enterTo='opacity-100'
+            leave='ease-in duration-200'
+            leaveFrom='opacity-100'
+            leaveTo='opacity-0'
+          >
+            <div className='fixed inset-0 bg-black/25 dark:bg-darkBlack/25' />
+          </TransitionChild>
           <div className='flex min-h-screen items-center justify-center px-4 pb-20 text-center'>
             <span
               className='inline-block h-screen align-middle'
