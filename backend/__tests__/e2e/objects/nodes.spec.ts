@@ -17,10 +17,14 @@ import {
   Node,
   nodesRepository,
 } from '../../../src/repositories/index.js'
-import { ObjectMapping, ObjectMappingListEntry, TransactionResult } from '@auto-drive/models'
+import {
+  ObjectMapping,
+  ObjectMappingListEntry,
+  TransactionResult,
+} from '@auto-drive/models'
 import { mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
 import { jest } from '@jest/globals'
-import { TaskManager } from '../../../src/services/taskManager/index.js'
+import { EventRouter } from '../../../src/services/eventRouter/index.js'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 
 describe('Nodes', () => {
@@ -320,7 +324,7 @@ describe('Nodes', () => {
 
   it('should schedule node archiving', async () => {
     const publishSpy = jest
-      .spyOn(TaskManager, 'publish')
+      .spyOn(EventRouter, 'publish')
       .mockImplementation(() => {})
 
     const objects: ObjectMapping[] = [['deadbeef', 1, 2]]
