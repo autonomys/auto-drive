@@ -188,8 +188,6 @@ const processNodeArchived = async (objectMappings: ObjectMapping[]) => {
 
   await Promise.all(objects.map((e) => nodesRepository.setNodeArchivingData(e)))
   await ObjectUseCases.checkObjectsArchivalStatus()
-
-  return objects
 }
 
 const scheduleNodeArchiving = async (

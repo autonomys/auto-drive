@@ -43,6 +43,8 @@ import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 import { Rabbit } from '../../../src/drivers/rabbit.js'
+import { EventRouter } from '../../../src/services/eventRouter/index.js'
+import { MAX_RETRIES } from '../../../src/services/eventRouter/tasks.js'
 
 const files = [
   {
@@ -357,14 +359,25 @@ files.map((file, index) => {
       })
 
       it('metadata should be updated as archived', async () => {
+        const processArchivalSpy = jest
+          .spyOn(EventRouter, 'publish')
+          .mockReturnValue()
+
         await ObjectUseCases.checkObjectsArchivalStatus()
 
         const metadata = await metadataRepository.getMetadata(cid)
         expect(metadata).not.toBeNull()
-        expect(metadata?.is_archived).toBe(true)
 
         expect(memoryDownloadCache.has(cid)).toBe(true)
         expect(downloadService.fsCache.get(cid)).not.toBeNull()
+
+        expect(processArchivalSpy).toHaveBeenCalledWith({
+          id: 'object-archived',
+          params: {
+            cid,
+          },
+          retriesLeft: MAX_RETRIES,
+        })
       })
     })
   })
