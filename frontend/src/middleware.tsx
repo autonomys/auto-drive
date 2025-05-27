@@ -1,8 +1,39 @@
-import { getToken } from 'next-auth/jwt';
+import { getToken, JWT } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAuth } from 'services/auth/jwt';
 import { MaybeUser } from '@auto-drive/models';
 import { cookies } from 'next/headers';
+import { refreshAccessToken } from './app/api/auth/[...nextauth]/jwt';
+
+const getUserFromSession = async (session: JWT) => {
+  let userInfo: MaybeUser | null = await checkAuth(
+    session.authProvider,
+    session.accessToken,
+  ).catch(() => null);
+
+  if (
+    !userInfo &&
+    session.refreshToken &&
+    session.authUserId &&
+    session.authProvider &&
+    session.accessToken
+  ) {
+    const newAccessToken = await refreshAccessToken({
+      underlyingUserId: session.authUserId,
+      underlyingProvider: session.authProvider,
+      refreshToken: session.refreshToken,
+    });
+
+    if (newAccessToken) {
+      userInfo = await checkAuth(
+        session.authProvider,
+        newAccessToken.accessToken,
+      );
+    }
+  }
+
+  return userInfo;
+};
 
 export async function middleware(req: NextRequest) {
   const session = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
@@ -23,12 +54,7 @@ export async function middleware(req: NextRequest) {
       : NextResponse.next();
   }
 
-  const userInfo: MaybeUser | null = await checkAuth(
-    session.authProvider,
-    session.accessToken,
-  ).catch(() => null);
-
-  console.log('userInfo', userInfo);
+  const userInfo: MaybeUser | null = await getUserFromSession(session);
 
   if (!userInfo) {
     return pathname !== '/'
