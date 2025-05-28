@@ -8,6 +8,7 @@ import {
 } from '@autonomys/file-caching'
 import { config } from '../../config.js'
 import { Readable } from 'stream'
+import { DownloadStatus } from '@auto-drive/models'
 
 const fsCache = createFileCache(
   defaultMemoryAndSqliteConfig({
@@ -52,6 +53,14 @@ export const downloadService = {
     memoryDownloadCache.set(cid, stream3)
 
     return stream4
+  },
+  status: async (cid: string): Promise<DownloadStatus> => {
+    const file = memoryDownloadCache.get(cid)
+    if (file != null) {
+      return DownloadStatus.Cached
+    }
+
+    return DownloadStatus.NotCached
   },
   fsCache,
 }
