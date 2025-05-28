@@ -5,7 +5,11 @@ import {
 } from '../../../gql/graphql';
 import { useNetwork } from '../../contexts/network';
 import { useUserAsyncDownloadsStore } from './state';
-import { AsyncDownload } from '@auto-drive/models';
+import {
+  AsyncDownload,
+  AsyncDownloadStatus,
+  DownloadStatus,
+} from '@auto-drive/models';
 import {
   Dialog,
   DialogPanel,
@@ -21,8 +25,28 @@ import { Download } from 'lucide-react';
 export const UserAsyncDownloads = () => {
   const setFetcher = useUserAsyncDownloadsStore((e) => e.setFetcher);
   const asyncDownloads = useUserAsyncDownloadsStore((e) => e.asyncDownloads);
-  const { gql } = useNetwork();
+  const { gql, api } = useNetwork();
+  const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
   const [isOpen, setIsOpen] = useState(false);
+
+  const dismissOutdatedAsyncDownloads = useCallback(async () => {
+    let hasDismissedSome = false;
+    for (const asyncDownload of asyncDownloads) {
+      if (asyncDownload.status !== AsyncDownloadStatus.Completed) return;
+      const status = await api.checkDownloadStatus(asyncDownload.cid);
+      if (status === DownloadStatus.NotCached) {
+        api.dismissAsyncDownload(asyncDownload.id);
+        hasDismissedSome = true;
+      }
+    }
+    if (hasDismissedSome) {
+      updateAsyncDownloads();
+    }
+  }, [api, asyncDownloads, updateAsyncDownloads]);
+
+  useEffect(() => {
+    dismissOutdatedAsyncDownloads();
+  }, [dismissOutdatedAsyncDownloads]);
 
   const fetcher = useCallback(async () => {
     const { data } = await gql.query<MyUndismissedAsyncDownloadsQuery>({

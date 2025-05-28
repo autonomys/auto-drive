@@ -18,9 +18,7 @@ export const useUserAsyncDownloadsStore = create<UserAsyncDownloadsStore>(
     },
     update: () => {
       const fetcher = get().fetcher?.();
-      console.log('fetcher', fetcher);
       fetcher?.then((asyncDownloads) => {
-        console.log('asyncDownloads', asyncDownloads);
         set({ asyncDownloads });
       });
     },
