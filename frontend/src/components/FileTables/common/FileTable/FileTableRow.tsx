@@ -109,7 +109,7 @@ export const FileTableRow = ({
 
   const toggleExpand = useCallback(() => setIsRowExpanded((prev) => !prev), []);
 
-  const { api } = useNetwork();
+  const { downloadService } = useNetwork();
 
   const toggleExpandClickHandler = useMemo(
     () =>
@@ -121,7 +121,7 @@ export const FileTableRow = ({
     () =>
       stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
         const toastId = toast.loading('Requesting async download...');
-        api
+        downloadService
           .createAsyncDownload(file.headCid)
           .then(() => {
             toast.success('Async download requested', { id: toastId });
@@ -131,7 +131,7 @@ export const FileTableRow = ({
             toast.error('Failed to request async download', { id: toastId });
           });
       }),
-    [api, file.headCid, stopEventPropagation, updateAsyncDownloads],
+    [downloadService, file.headCid, stopEventPropagation, updateAsyncDownloads],
   );
 
   return (

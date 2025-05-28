@@ -25,7 +25,7 @@ import { Download } from 'lucide-react';
 export const UserAsyncDownloads = () => {
   const setFetcher = useUserAsyncDownloadsStore((e) => e.setFetcher);
   const asyncDownloads = useUserAsyncDownloadsStore((e) => e.asyncDownloads);
-  const { gql, api } = useNetwork();
+  const { gql, downloadService } = useNetwork();
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -33,16 +33,18 @@ export const UserAsyncDownloads = () => {
     let hasDismissedSome = false;
     for (const asyncDownload of asyncDownloads) {
       if (asyncDownload.status !== AsyncDownloadStatus.Completed) return;
-      const status = await api.checkDownloadStatus(asyncDownload.cid);
+      const status = await downloadService.checkDownloadStatus(
+        asyncDownload.cid,
+      );
       if (status === DownloadStatus.NotCached) {
-        api.dismissAsyncDownload(asyncDownload.id);
+        downloadService.dismissAsyncDownload(asyncDownload.id);
         hasDismissedSome = true;
       }
     }
     if (hasDismissedSome) {
       updateAsyncDownloads();
     }
-  }, [api, asyncDownloads, updateAsyncDownloads]);
+  }, [downloadService, asyncDownloads, updateAsyncDownloads]);
 
   useEffect(() => {
     dismissOutdatedAsyncDownloads();

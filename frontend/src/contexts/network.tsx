@@ -42,7 +42,11 @@ export const NetworkProvider = ({
   }, [network]);
 
   const downloadService = useMemo(() => {
-    return createDownloadService(createApiService(network.download));
+    const underlyingApi = createApiService(network.download);
+    return {
+      ...createDownloadService(underlyingApi),
+      ...underlyingApi,
+    };
   }, [network]);
 
   const uploadService = useMemo(() => {
