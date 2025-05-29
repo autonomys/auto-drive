@@ -4,7 +4,7 @@ import { bufferToIterable } from 'utils/async';
 import { useNetwork } from 'contexts/network';
 import { Api } from 'services/api';
 
-export interface DownloadApi extends Api {
+export interface DownloadApi {
   fetchFile: (cid: string, password?: string) => Promise<void>;
 }
 
