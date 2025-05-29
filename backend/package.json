@@ -12,7 +12,7 @@
     "test": "node --experimental-vm-modules ../node_modules/jest/bin/jest.js --runInBand --coverage --forceExit",
     "start:fe": "node dist/servers/frontend.js",
     "start:fe:api": "node dist/apis/frontend.js",
-    "start:fe:worker": "node dist/servers/worker.js",
+    "start:fe:worker": "node dist/servers/frontendWorker.js",
     "start:download": "node dist/servers/download.js",
     "lint": "eslint . "
   },

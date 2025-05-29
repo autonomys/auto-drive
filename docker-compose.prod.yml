@@ -72,13 +72,16 @@ services:
         loki-url: "https://logging.subspace.network/loki/api/v1/push"
   backend-worker:
     image: ${BACKEND_IMAGE}
+    ports:
+      - "${BACKEND_WORKER_PORT}:3000"
     volumes:
       - files_cache:/usr/src/app/.cache
     restart: unless-stopped
     env_file:
       - .env
     profiles:
-      - base
+      - frontend
+      - frontend-worker
     logging:
       driver: loki
       options:
@@ -87,14 +90,13 @@ services:
       - yarn
       - workspace
       - backend
-      - start:worker
-
+      - start:fe:worker
   backend-api:
     image: ${BACKEND_IMAGE}
     volumes:
       - files_cache:/usr/src/app/.cache
     ports:
-      - "3000:3000"
+      - "${BACKEND_API_PORT}:3000"
     restart: unless-stopped
     env_file:
       - .env
@@ -104,7 +106,8 @@ services:
       timeout: 10s
       retries: 3
     profiles:
-      - base
+      - frontend
+      - frontend-api
     logging:
       driver: loki
       options:
