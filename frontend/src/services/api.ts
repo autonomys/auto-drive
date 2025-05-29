@@ -188,7 +188,7 @@ export const createApiService = ({
     const apiDrive = createAutoDriveApi({
       provider: session.authProvider as AuthProvider,
       apiKey: session.accessToken,
-      url: apiBaseUrl,
+      apiUrl: apiBaseUrl,
     });
 
     return apiDrive.publishObject(cid);
@@ -204,7 +204,8 @@ export const createApiService = ({
     }
 
     const api = createAutoDriveApi({
-      url: downloadApiUrl,
+      downloadServiceUrl: downloadApiUrl,
+      apiUrl: apiBaseUrl,
       provider: session.authProvider as AuthProvider,
       apiKey: session.accessToken,
     });
