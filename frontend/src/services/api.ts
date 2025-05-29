@@ -3,6 +3,7 @@ import {
   SubscriptionInfo,
   SubscriptionGranularity,
   ObjectInformation,
+  DownloadStatus,
 } from '@auto-drive/models';
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
@@ -202,5 +203,54 @@ export const createApiService = (apiBaseUrl: string) => ({
     });
 
     return apiDrive.publishObject(cid);
+  },
+  createAsyncDownload: async (cid: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    await fetch(`${apiBaseUrl}/downloads/async/${cid}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+  },
+  dismissAsyncDownload: async (id: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    await fetch(`${apiBaseUrl}/downloads/async/${id}/dismiss`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+  },
+  checkDownloadStatus: async (cid: string): Promise<DownloadStatus> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/downloads/${cid}/status`, {
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return (response.json() as Promise<{ status: DownloadStatus }>).then(
+      (data) => data.status,
+    );
   },
 });

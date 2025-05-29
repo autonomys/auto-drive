@@ -6,8 +6,18 @@ import { handleAuth, handleOptionalAuth } from '../../services/auth/express.js'
 import { handleDownloadResponseHeaders } from '../../services/download/express.js'
 import { FilesUseCases } from '../../useCases/objects/files.js'
 import { logger } from '../../drivers/logger.js'
+import { downloadService } from '../../services/download/index.js'
 
 const downloadController = Router()
+
+downloadController.get(
+  '/:cid/status',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+    const status = await downloadService.status(cid)
+    res.json({ status })
+  }),
+)
 
 downloadController.post(
   '/async/:cid',
