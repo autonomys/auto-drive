@@ -1,7 +1,7 @@
 import { User, AsyncDownloadStatus, AsyncDownload } from '@auto-drive/models'
 import { asyncDownloadsRepository } from '../../repositories/asyncDownloads/index.js'
 import { v4 } from 'uuid'
-import { TaskManager } from '../../services/taskManager/index.js'
+import { EventRouter } from '../../services/eventRouter/index.js'
 import { downloadService } from '../../services/download/index.js'
 import { ObjectUseCases } from '../objects/object.js'
 
@@ -23,7 +23,7 @@ const createDownload = async (
     metadata.totalSize,
   )
 
-  TaskManager.publish({
+  EventRouter.publish({
     id: 'async-download-created',
     params: {
       downloadId: download.id,

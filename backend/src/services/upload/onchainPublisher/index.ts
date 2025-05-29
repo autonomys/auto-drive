@@ -4,7 +4,7 @@ import { safeCallback } from '../../../utils/safe.js'
 import { createTransactionManager } from './transactionManager.js'
 import { compactAddLength } from '@polkadot/util'
 import { nodesRepository } from '../../../repositories/objects/nodes.js'
-import { TaskManager } from '../../taskManager/index.js'
+import { EventRouter } from '../../eventRouter/index.js'
 
 export const transactionManager = createTransactionManager()
 
@@ -63,7 +63,7 @@ const republishNodes = safeCallback(
   async (nodes: string[], retriesLeft: number) => {
     await new Promise((resolve) => setTimeout(resolve, REPUBLISH_DELAY))
     if (retriesLeft > 0) {
-      TaskManager.publish({
+      EventRouter.publish({
         id: 'publish-nodes',
         retriesLeft: retriesLeft - 1,
         params: {

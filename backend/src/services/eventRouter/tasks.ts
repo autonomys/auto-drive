@@ -41,6 +41,13 @@ export const TaskSchema = z.discriminatedUnion('id', [
       downloadId: z.string(),
     }),
   }),
+  z.object({
+    id: z.literal('object-archived'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({
+      cid: z.string(),
+    }),
+  }),
 ])
 
 export type MigrateUploadTask = z.infer<typeof TaskSchema>
@@ -77,6 +84,12 @@ type TaskCreateParams =
         downloadId: string
       }
     }
+  | {
+      id: 'object-archived'
+      params: {
+        cid: string
+      }
+    }
 
 export const createTask = (task: TaskCreateParams): Task => {
   switch (task.id) {
@@ -105,6 +118,12 @@ export const createTask = (task: TaskCreateParams): Task => {
         retriesLeft: MAX_RETRIES,
       }
     case 'async-download-created':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'object-archived':
       return {
         id: task.id,
         params: task.params,

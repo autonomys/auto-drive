@@ -25,6 +25,8 @@ import { FilesUseCases } from './files.js'
 import { downloadService } from '../../services/download/index.js'
 import { logger } from '../../drivers/logger.js'
 import { FileGateway } from '../../services/dsn/fileGateway/index.js'
+import { EventRouter } from '../../services/eventRouter/index.js'
+import { createTask } from '../../services/eventRouter/tasks.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -322,7 +324,7 @@ const populateCaches = async (cid: string) => {
 }
 
 const onObjectArchived = async (cid: string) => {
-  await populateCaches(cid)
+  await ObjectUseCases.populateCaches(cid)
   await metadataRepository.markAsArchived(cid)
   await nodesRepository.removeNodesByRootCid(cid)
 }
@@ -395,7 +397,14 @@ const checkObjectsArchivalStatus = async () => {
 
   await Promise.all(
     cidsToArchive.map(async (cid) => {
-      await ObjectUseCases.onObjectArchived(cid)
+      EventRouter.publish(
+        createTask({
+          id: 'object-archived',
+          params: {
+            cid,
+          },
+        }),
+      )
     }),
   )
 }
@@ -426,5 +435,6 @@ export const ObjectUseCases = {
   downloadPublishedObject,
   unpublishObject,
   checkObjectsArchivalStatus,
+  populateCaches,
   addTag,
 }
