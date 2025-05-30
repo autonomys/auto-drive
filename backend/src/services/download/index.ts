@@ -24,7 +24,7 @@ export const downloadService = {
     if (file != null) {
       logger.debug('Downloading file from memory', cid)
       const [stream1, stream2] = await forkAsyncIterable(file)
-      await memoryDownloadCache.set(cid, stream1)
+      memoryDownloadCache.set(cid, stream1)
 
       return stream2
     }
@@ -33,7 +33,7 @@ export const downloadService = {
     if (cachedFile != null) {
       logger.debug('Reading file from file system cache', cid)
       const [stream1, stream2] = await forkStream(cachedFile.data)
-      await memoryDownloadCache.set(cid, stream1)
+      memoryDownloadCache.set(cid, stream1)
       return stream2
     }
 
