@@ -55,7 +55,7 @@ export const downloadService = {
     return stream4
   },
   status: async (cid: string): Promise<DownloadStatus> => {
-    const file = memoryDownloadCache.get(cid)
+    const file = memoryDownloadCache.has(cid)
     if (file != null) {
       return DownloadStatus.Cached
     }
