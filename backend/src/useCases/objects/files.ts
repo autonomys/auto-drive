@@ -172,7 +172,16 @@ const retrieveAndReassembleFile = async (
           return
         }
 
-        this.push(Buffer.concat(chunkedData.map((e) => e!)))
+        for (const chunk of chunkedData) {
+          if (chunk === undefined) {
+            this.destroy(new Error('Chunk not found'))
+            return
+          }
+          const canContinue = this.push(Buffer.from(chunk))
+          if (!canContinue) {
+            await new Promise((resolve) => this.once('drain', resolve))
+          }
+        }
       } catch (err) {
         this.destroy(err instanceof Error ? err : new Error(String(err)))
       }
