@@ -49,7 +49,7 @@ if (process.env.NEXT_PUBLIC_ENV === 'local') {
     name: 'Local',
     http: process.env.NEXT_PUBLIC_LOCAL_RPC_URL || 'http://localhost:3000',
     download:
-      process.env.NEXT_PUBLIC_LOCAL_DOWNLOAD_URL || 'http://localhost:3000',
+      process.env.NEXT_PUBLIC_LOCAL_DOWNLOAD_URL || 'http://localhost:3030',
     gql:
       process.env.NEXT_PUBLIC_LOCAL_GQL_URL ||
       'http://localhost:6565/v1/graphql',

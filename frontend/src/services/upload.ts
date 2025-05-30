@@ -11,7 +11,7 @@ export const createUploadService = (apiBaseUrl: string) => {
     }
 
     return createAutoDriveApi({
-      url: apiBaseUrl,
+      apiUrl: apiBaseUrl,
       provider: session.authProvider as AuthProvider,
       apiKey: session.accessToken,
     });
