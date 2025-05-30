@@ -160,7 +160,6 @@ const retrieveAndReassembleFile = async (
 
       const endIndex = currentIndex + SIMULTANEOUS_CHUNKS
       const chunks = metadata.chunks.slice(currentIndex, endIndex)
-      currentIndex = endIndex
 
       try {
         const chunkedData = await Promise.all(
@@ -172,17 +171,14 @@ const retrieveAndReassembleFile = async (
           return
         }
 
-        for (const chunk of chunkedData) {
-          if (chunk === undefined) {
-            this.destroy(new Error('Chunk not found'))
+        for (const data of chunkedData) {
+          currentIndex++
+          if (!this.push(data)) {
             return
-          }
-          const canContinue = this.push(Buffer.from(chunk))
-          if (!canContinue) {
-            await new Promise((resolve) => this.once('drain', resolve))
           }
         }
       } catch (err) {
+        console.log('Error', err)
         this.destroy(err instanceof Error ? err : new Error(String(err)))
       }
     },
