@@ -12,7 +12,7 @@ export const Profile = () => {
   const [isDefaultPasswordModalOpen, setIsDefaultPasswordModalOpen] =
     useState<boolean>(false);
 
-  const publicId = useUserStore((s) => s.user?.publicId);
+  const publicId = useUserStore((state) => state.user?.publicId);
 
   const copyPublicId = useCallback(() => {
     if (!publicId) return;

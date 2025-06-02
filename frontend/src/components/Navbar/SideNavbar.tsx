@@ -12,7 +12,8 @@ import {
 import React, { useMemo } from 'react';
 import { RoleProtected } from 'components/RoleProtected';
 import { UserRole } from '@auto-drive/models';
-import { RemainingCreditTracker } from 'components/RemainingCreditTracker';
+import dayjs from 'dayjs';
+import { AccountInformation } from '@/components/AccountInformation';
 import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';
 import { NavItem } from './NavItem';
@@ -64,29 +65,9 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const pathname = usePathname();
   const subscription = useUserStore(({ subscription }) => subscription);
 
-  const startDate = useMemo(() => {
-    const date = new Date();
-    return new Date(date.getFullYear(), date.getMonth(), 1).toLocaleDateString(
-      'en-US',
-      {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      },
-    );
-  }, []);
-
-  const endDate = useMemo(() => {
-    const date = new Date();
-    return new Date(
-      date.getFullYear(),
-      date.getMonth() + 1,
-      0,
-    ).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+  const renewalDate = useMemo(() => {
+    const date = dayjs().add(1, 'month').startOf('month');
+    return date.toDate();
   }, []);
 
   return (
@@ -109,13 +90,12 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
         />
       </RoleProtected>
       {subscription && (
-        <RemainingCreditTracker
+        <AccountInformation
           uploadPending={subscription.pendingUploadCredits}
           uploadLimit={subscription.uploadLimit}
           downloadPending={subscription.pendingDownloadCredits}
           downloadLimit={subscription.downloadLimit}
-          startDate={startDate}
-          endDate={endDate}
+          renewalDate={renewalDate}
         />
       )}
     </aside>

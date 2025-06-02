@@ -16,10 +16,10 @@ import { filePartsRepository } from '../../repositories/uploads/fileParts.js'
 import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../repositories/uploads/fileProcessingInfo.js'
 import { FilesUseCases } from '../objects/files.js'
-import { NodesUseCases } from '../objects/index.js'
+import { NodesUseCases, ObjectUseCases } from '../objects/index.js'
 import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
 import { TaskManager } from '../../services/taskManager/index.js'
-import { Task } from '../../services/taskManager/tasks.js'
+import { createTask, Task } from '../../services/taskManager/tasks.js'
 import { chunkArray } from '../../utils/misc.js'
 import { config } from '../../config.js'
 import { blockstoreRepository } from '../../repositories/uploads/blockstore.js'
@@ -256,12 +256,12 @@ const getPendingMigrations = async (limit: number): Promise<UploadEntry[]> => {
 
 const scheduleNodeMigration = async (uploadId: string): Promise<void> => {
   const tasks: Task[] = [
-    {
+    createTask({
       id: 'migrate-upload-nodes',
       params: {
         uploadId,
       },
-    },
+    }),
   ]
   TaskManager.publish(tasks)
 }
@@ -273,21 +273,52 @@ const removeUploadArtifacts = async (uploadId: string): Promise<void> => {
   await fileProcessingInfoRepository.deleteFileProcessingInfo(uploadId)
 }
 
-const scheduleNodesPublish = async (uploadId: string): Promise<void> => {
-  const cid = await BlockstoreUseCases.getUploadCID(uploadId)
-  const nodes = await NodesUseCases.getCidsByRootCid(cidToString(cid))
+const scheduleNodesPublish = async (cid: string): Promise<void> => {
+  const nodes = await NodesUseCases.getCidsByRootCid(cid)
 
   const tasks: Task[] = chunkArray(
     nodes,
     config.params.maxUploadNodesPerBatch,
-  ).map((nodes) => ({
-    id: 'publish-nodes',
-    params: {
-      nodes,
-    },
-  }))
+  ).map((nodes) =>
+    createTask({
+      id: 'publish-nodes',
+      params: {
+        nodes,
+      },
+    }),
+  )
 
   TaskManager.publish(tasks)
+}
+
+const scheduleUploadTagging = async (cid: string): Promise<void> => {
+  const tasks: Task[] = [
+    createTask({
+      id: 'tag-upload',
+      params: {
+        cid,
+      },
+    }),
+  ]
+
+  TaskManager.publish(tasks)
+}
+
+const tagUpload = async (cid: string): Promise<void> => {
+  const metadata = await ObjectUseCases.getMetadata(cid)
+  if (metadata?.type === 'folder') {
+    await Promise.all(metadata.children.map((child) => tagUpload(child.cid)))
+  } else {
+    const fileExtension = metadata?.name?.split('.').pop()
+    const isFileInsecure =
+      fileExtension &&
+      config.params.forbiddenExtensions.some((ext) => ext.match(fileExtension))
+    if (isFileInsecure) {
+      await ObjectUseCases.addTag(cid, 'insecure')
+    }
+  }
+
+  await scheduleNodesPublish(cid)
 }
 
 const processMigration = async (uploadId: string): Promise<void> => {
@@ -296,10 +327,11 @@ const processMigration = async (uploadId: string): Promise<void> => {
     throw new Error('Upload not found')
   }
 
+  const cid = await BlockstoreUseCases.getUploadCID(uploadId)
   await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId)
 
-  await scheduleNodesPublish(uploadId)
   await removeUploadArtifacts(uploadId)
+  await scheduleUploadTagging(cidToString(cid))
 }
 
 export const UploadsUseCases = {
@@ -313,4 +345,6 @@ export const UploadsUseCases = {
   processMigration,
   createSubFolderUpload,
   scheduleNodesPublish,
+  scheduleUploadTagging,
+  tagUpload,
 }

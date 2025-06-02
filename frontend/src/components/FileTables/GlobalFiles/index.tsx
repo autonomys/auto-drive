@@ -21,22 +21,21 @@ export const GlobalFiles = () => {
   const page = useFileTableState((e) => e.page);
   const limit = useFileTableState((e) => e.limit);
   const setTotal = useFileTableState((e) => e.setTotal);
-  const resetPagination = useFileTableState((e) => e.resetPagination);
-
+  const searchQuery = useFileTableState((e) => e.searchQuery);
   const { gql } = useNetwork();
 
   const fetcher: Fetcher = useCallback(
-    async (page, limit, sortBy) => {
+    async (page, limit, sortBy, searchQuery) => {
       const { data } = await gql.query<GetGlobalFilesQuery>({
         query: GetGlobalFilesDocument,
         variables: {
           limit,
           offset: page * limit,
           orderBy: sortBy,
+          search: `%${searchQuery}%`,
         },
         fetchPolicy: 'no-cache',
       });
-
       return {
         objects: objectSummaryFromGlobalFilesQuery(data),
         total: data.metadata_roots_aggregate?.aggregate?.count ?? 0,
@@ -46,10 +45,9 @@ export const GlobalFiles = () => {
   );
 
   useEffect(() => {
-    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, resetPagination, setFetcher, setObjects]);
+  }, [fetcher, gql, setFetcher, setObjects]);
 
   useGetGlobalFilesQuery({
     fetchPolicy: 'cache-and-network',
@@ -57,6 +55,7 @@ export const GlobalFiles = () => {
       limit,
       offset: page * limit,
       orderBy: sortBy,
+      search: `%${searchQuery}%`,
     },
     onCompleted: (data) => {
       setObjects(objectSummaryFromGlobalFilesQuery(data));

@@ -10,6 +10,7 @@ export const EXTERNAL_ROUTES = {
   operatorDocs: 'https://docs.autonomys.xyz/staking/operator/register',
   autoDriveDocs:
     'https://github.com/autonomys/auto-sdk/tree/main/packages/auto-drive',
+  autoDriveApiDocs: 'https://mainnet.auto-drive.autonomys.xyz/api/docs',
   social: {
     twitter: 'https://x.com/AutonomysNet',
     discord: 'https://autonomys.xyz/discord',
@@ -27,6 +28,8 @@ export const EXTERNAL_ROUTES = {
     'https://api.github.com/repos/autonomys/space-acres/releases/latest',
   astral: 'https://astral.autonomys.xyz/',
   farmerDocs: 'https://docs.autonomys.xyz/category/farming',
+  gatewayObjectDownload: (cid: string) =>
+    `https://gateway.autonomys.xyz/file/${cid}`,
 };
 
 export const ROUTES = {

@@ -42,8 +42,8 @@ export const NetworkProvider = ({
   }, [network]);
 
   const downloadService = useMemo(() => {
-    return createDownloadService(api);
-  }, [api]);
+    return createDownloadService(createApiService(network.download));
+  }, [network]);
 
   const uploadService = useMemo(() => {
     return createUploadService(network.http);

@@ -15,7 +15,7 @@ import { getUploadBlockstore } from '../../services/upload/uploadProcessorCache/
 import {
   asyncIterableForEach,
   asyncIterableToPromiseOfArray,
-} from '../../utils/async.js'
+} from '@autonomys/asynchronous'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
 import {
   UploadType,
@@ -26,7 +26,7 @@ import { ObjectUseCases } from './object.js'
 import { logger } from '../../drivers/logger.js'
 import { Node } from '../../repositories/objects/nodes.js'
 import { TaskManager } from '../../services/taskManager/index.js'
-import { Task } from '../../services/taskManager/tasks.js'
+import { createTask, Task } from '../../services/taskManager/tasks.js'
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
@@ -59,6 +59,8 @@ const saveNode = async (
     encoded_node: encodedNode,
     block_published_on: null,
     tx_published_on: null,
+    piece_index: null,
+    piece_offset: null,
   })
 }
 
@@ -95,7 +97,7 @@ const saveNodes = async (
     nodes.map((node) => {
       const cid = cidToString(cidOfNode(node))
       const { type } = IPLDNodeData.decode(node.Data!)
-      saveNode(
+      return saveNode(
         rootCid,
         headCid,
         cid,
@@ -152,6 +154,8 @@ const migrateFromBlockstoreToNodesTable = async (
             encoded_node: Buffer.from(e.block).toString('base64'),
             block_published_on: null,
             tx_published_on: null,
+            piece_index: null,
+            piece_offset: null,
           })),
         )
       },
@@ -163,29 +167,26 @@ const migrateFromBlockstoreToNodesTable = async (
 const processNodeArchived = async (objectMappings: ObjectMapping[]) => {
   const nodes = await nodesRepository.getArchivingNodesCID()
 
-  logger.info(`Archiving ${nodes.length} nodes`)
+  const objects = objectMappings
+    .filter((e) => {
+      // Transform the object mapping hash to a cid
+      const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
 
-  const objects = objectMappings.map((e) => {
-    const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
+      // Check if the cid is in the nodes array
+      const isCidArchiving = nodes.includes(cid)
 
-    return nodes.includes(cid)
-      ? {
-          cid,
-          pieceIndex: e[1],
-          pieceOffset: e[2],
-        }
-      : undefined
-  })
+      return isCidArchiving
+    })
+    .map((e) => {
+      const cid = cidToString(cidFromBlakeHash(Buffer.from(e[0], 'hex')))
+      return {
+        cid,
+        pieceIndex: e[1],
+        pieceOffset: e[2],
+      }
+    })
 
-  const promises = objects.map((e) => {
-    if (!e) {
-      return
-    }
-    return nodesRepository.setNodeArchivingData(e)
-  })
-
-  await Promise.all(promises)
-
+  await Promise.all(objects.map((e) => nodesRepository.setNodeArchivingData(e)))
   await ObjectUseCases.checkObjectsArchivalStatus()
 
   return objects
@@ -195,12 +196,12 @@ const scheduleNodeArchiving = async (
   objects: ObjectMapping[],
 ): Promise<void> => {
   const tasks: Task[] = [
-    {
+    createTask({
       id: 'archive-objects',
       params: {
         objects,
       },
-    },
+    }),
   ]
   TaskManager.publish(tasks)
 }

@@ -19,8 +19,9 @@ export const sendMetricToVictoria = async (metric: Metric): Promise<void> => {
     ).toString('base64')
 
     if (!config.monitoring.victoriaEndpoint) {
-      console.log(JSON.stringify(config.monitoring, null, 2))
-      console.error('Victoria endpoint is not set')
+      if (config.monitoring.active) {
+        console.error('Victoria endpoint is not set')
+      }
       return
     }
 

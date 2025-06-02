@@ -1,6 +1,6 @@
 import { InteractionType, UserWithOrganization } from '@auto-drive/models'
 import { PreconditionError } from '../../utils/error.js'
-import { closeDatabase, getDatabase } from '../../../src/drivers/pg.js'
+import { getDatabase } from '../../../src/drivers/pg.js'
 import {
   createMockUser,
   mockRabbitPublish,
@@ -23,7 +23,6 @@ describe('CreditsUseCases', () => {
 
   afterEach(async () => {
     unmockMethods()
-    await closeDatabase()
     await dbMigration.down()
   })
 

@@ -1,14 +1,12 @@
-import { ObjectUploadStatus, UploadStatus } from '@auto-drive/models'
+import { ObjectUploadState, UploadStatus } from '@auto-drive/models'
 import { nodesRepository } from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 
-const getUploadStatus = async (cid: string): Promise<ObjectUploadStatus> => {
+const getUploadStatus = async (cid: string): Promise<ObjectUploadState> => {
   const uploadStatus = await uploadsRepository.getStatusByCID(cid)
   const isMigratingOrPending =
     uploadStatus &&
-    [UploadStatus.MIGRATING, UploadStatus.PENDING].includes(
-      uploadStatus,
-    )
+    [UploadStatus.MIGRATING, UploadStatus.PENDING].includes(uploadStatus)
 
   if (isMigratingOrPending) {
     return {
@@ -20,9 +18,10 @@ const getUploadStatus = async (cid: string): Promise<ObjectUploadStatus> => {
     }
   }
 
-  const { totalCount, archivedCount } = await nodesRepository.getNodeCount({
-    rootCid: cid,
-  })
+  const { totalCount, publishedCount, archivedCount } =
+    await nodesRepository.getNodeCount({
+      rootCid: cid,
+    })
   const uploadedNodes = await nodesRepository.getUploadedNodesByRootCid(cid)
 
   const minimumBlockDepth = uploadedNodes
@@ -35,7 +34,7 @@ const getUploadStatus = async (cid: string): Promise<ObjectUploadStatus> => {
     .map((e) => e.block_published_on!)
     .reduce((a, b) => (a === null ? b : Math.max(a, b)), null as number | null)
 
-  const isFullyUploaded = uploadedNodes.length === totalCount
+  const isFullyUploaded = uploadedNodes.length === publishedCount
 
   const maximumBlockDepth = isFullyUploaded ? maxSeenBlockDepth : null
 

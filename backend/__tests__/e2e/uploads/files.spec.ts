@@ -13,6 +13,7 @@ import {
   InteractionType,
   OwnerRole,
   TransactionStatus,
+  ObjectStatus,
 } from '@auto-drive/models'
 import { blockstoreRepository } from '../../../src/repositories/uploads/index.js'
 import { MemoryBlockstore } from 'blockstore-core'
@@ -26,7 +27,7 @@ import {
 } from '@autonomys/auto-dag-data'
 import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
-import { asyncIterableToPromiseOfArray } from '../../../src/utils/async.js'
+import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import {
   FilesUseCases,
   NodesUseCases,
@@ -38,10 +39,8 @@ import {
   nodesRepository,
 } from '../../../src/repositories/index.js'
 import { memoryDownloadCache } from '../../../src/services/download/memoryDownloadCache/index.js'
-import { FileGateway } from '../../../src/services/dsn/fileGateway/index.js'
 import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
-import { fsCache } from '../../../src/services/download/fsCache/singleton.js'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 import { Rabbit } from '../../../src/drivers/rabbit.js'
 
@@ -154,6 +153,7 @@ files.map((file, index) => {
           params: {
             uploadId: upload.id,
           },
+          retriesLeft: expect.any(Number),
         })
 
         expect(cid).toBe(cidToString(expectedCID))
@@ -216,10 +216,11 @@ files.map((file, index) => {
         ).resolves.not.toThrow()
 
         expect(rabbitMock).toHaveBeenCalledWith({
-          id: 'publish-nodes',
+          id: 'tag-upload',
           params: {
-            nodes: expect.arrayContaining([cidToString(cid)]),
+            cid: cidToString(cid),
           },
+          retriesLeft: expect.any(Number),
         })
 
         const node = await nodesRepository.getNode(cidToString(cid))
@@ -229,6 +230,16 @@ files.map((file, index) => {
           upload.id,
         )
         expect(uploadEntry).toBeNull()
+
+        // Tag the upload
+        await UploadsUseCases.tagUpload(cidToString(cid))
+        expect(rabbitMock).toHaveBeenCalledWith({
+          id: 'publish-nodes',
+          params: {
+            nodes: expect.arrayContaining([cidToString(cid)]),
+          },
+          retriesLeft: expect.any(Number),
+        })
       })
     })
 
@@ -238,9 +249,8 @@ files.map((file, index) => {
           user,
           cid,
         )
-        const fileArray = await asyncIterableToPromiseOfArray(
-          await startDownload(),
-        )
+        const file = await startDownload()
+        const fileArray = await asyncIterableToPromiseOfArray(file)
         const fileBuffer = Buffer.concat(fileArray)
         expect(fileBuffer).toEqual(rndBuffer)
       })
@@ -261,7 +271,7 @@ files.map((file, index) => {
       it('download cache should be updated', async () => {
         // Wait for the async context to finish
         await new Promise((resolve) => setTimeout(resolve, 300))
-        const asyncFromDatabase = await fsCache.get(cid)
+        const asyncFromDatabase = await downloadService.fsCache.get(cid)
         expect(asyncFromDatabase).not.toBeNull()
         const fileArrayFromDatabase = await asyncIterableToPromiseOfArray(
           asyncFromDatabase!.data,
@@ -295,13 +305,14 @@ files.map((file, index) => {
             role: OwnerRole.ADMIN,
           },
         ])
-        expect(objectInformation?.uploadStatus).toEqual({
+        expect(objectInformation?.uploadState).toEqual({
           uploadedNodes: 0,
           totalNodes: nodes.length,
           archivedNodes: 0,
           minimumBlockDepth: null,
           maximumBlockDepth: null,
         })
+        expect(objectInformation?.status).toBe(ObjectStatus.Processing)
       })
 
       it('object information should be updated on publishing', async () => {
@@ -320,18 +331,19 @@ files.map((file, index) => {
 
         const objectInformation = await ObjectUseCases.getObjectInformation(cid)
         expect(objectInformation).not.toBeNull()
-        expect(objectInformation?.uploadStatus).toEqual({
+        expect(objectInformation?.uploadState).toEqual({
           uploadedNodes: nodes.length,
           totalNodes: nodes.length,
           archivedNodes: 0,
           minimumBlockDepth: PUBLISH_ON_BLOCK,
           maximumBlockDepth: PUBLISH_ON_BLOCK,
         })
+        expect(objectInformation?.status).toBe(ObjectStatus.Archiving)
       })
 
       it('object information should be updated on archiving', async () => {
         // Mocking archiving onchain
-        const nodes = await nodesRepository.getNodesByHeadCid(cid)
+        const nodes = await nodesRepository.getNodesByRootCid(cid)
 
         await NodesUseCases.processNodeArchived(
           nodes.map((node) => [
@@ -352,23 +364,7 @@ files.map((file, index) => {
         expect(metadata?.is_archived).toBe(true)
 
         expect(memoryDownloadCache.has(cid)).toBe(true)
-        expect(fsCache.get(cid)).not.toBeNull()
-      })
-
-      it('should be able to remove the nodes', async () => {
-        await fsCache.clear()
-        await memoryDownloadCache.clear()
-
-        const downloadFileMock = jest
-          .spyOn(FileGateway, 'downloadFile')
-          .mockResolvedValue(
-            (async function* () {
-              yield Buffer.alloc(0)
-            })(),
-          )
-
-        await downloadService.download(cid)
-        expect(downloadFileMock).toHaveBeenCalledWith(cid)
+        expect(downloadService.fsCache.get(cid)).not.toBeNull()
       })
     })
   })

@@ -20,11 +20,10 @@ export const TrashFiles = () => {
   const page = useFileTableState((e) => e.page);
   const limit = useFileTableState((e) => e.limit);
   const setTotal = useFileTableState((e) => e.setTotal);
-  const resetPagination = useFileTableState((e) => e.resetPagination);
   const sortBy = useFileTableState((e) => e.sortBy);
+  const user = useUserStore((state) => state.user);
 
   const { gql } = useNetwork();
-  const user = useUserStore((state) => state.user);
 
   const fetcher: Fetcher = useCallback(
     async (page, limit, sortBy) => {
@@ -49,10 +48,9 @@ export const TrashFiles = () => {
   );
 
   useEffect(() => {
-    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, resetPagination, setFetcher, setObjects]);
+  }, [fetcher, gql, setFetcher, setObjects]);
 
   useGetTrashedFilesQuery({
     fetchPolicy: 'cache-and-network',

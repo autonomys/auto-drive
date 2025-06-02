@@ -7,7 +7,7 @@ interface UserStore {
   subscription: SubscriptionInfo | null;
   setUser: (user: User) => void;
   clearUser: () => void;
-  setSubscription: (subcriptionInfo: SubscriptionInfo) => void;
+  setSubscription: (subscriptionInfo: SubscriptionInfo) => void;
 }
 
 export const useUserStore = create<UserStore>()(
@@ -20,9 +20,9 @@ export const useUserStore = create<UserStore>()(
           user: user,
         }),
       clearUser: () => set({ user: null, subscription: null }),
-      setSubscription: (subcriptionInfo: SubscriptionInfo) =>
+      setSubscription: (subscriptionInfo: SubscriptionInfo) =>
         set({
-          subscription: subcriptionInfo,
+          subscription: subscriptionInfo,
         }),
     }),
     {

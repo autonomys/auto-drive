@@ -16,13 +16,11 @@ export const internalRedirect = async (
     headers,
   });
 
-  const ignoreHeaders = ["content-encoding"];
+  const whitelistedHeaders = ["content-type"];
   for (const [key, value] of response.headers.entries()) {
-    if (ignoreHeaders.includes(key.toLowerCase())) {
-      continue;
+    if (whitelistedHeaders.includes(key.toLowerCase())) {
+      res.setHeader(key, value);
     }
-
-    res.setHeader(key, value);
   }
 
   // @ts-ignore

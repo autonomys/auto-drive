@@ -8,6 +8,7 @@ import {
   PaginatedResult,
   User,
   UserWithOrganization,
+  objectStatus,
 } from '@auto-drive/models'
 import {
   metadataRepository,
@@ -22,6 +23,8 @@ import { publishedObjectsRepository } from '../../repositories/objects/published
 import { v4 } from 'uuid'
 import { FilesUseCases } from './files.js'
 import { downloadService } from '../../services/download/index.js'
+import { logger } from '../../drivers/logger.js'
+import { FileGateway } from '../../services/dsn/fileGateway/index.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -214,7 +217,7 @@ const getObjectInformation = async (
     return undefined
   }
 
-  const uploadStatus = await UploadStatusUseCases.getUploadStatus(cid)
+  const uploadState = await UploadStatusUseCases.getUploadStatus(cid)
   const owners: Owner[] = await OwnershipUseCases.getOwners(cid)
   const publishedObjectId =
     await publishedObjectsRepository.getPublishedObjectByCid(cid)
@@ -222,8 +225,10 @@ const getObjectInformation = async (
   return {
     cid,
     metadata: metadata.metadata,
-    uploadStatus,
+    tags: metadata.tags,
+    uploadState: uploadState,
     owners,
+    status: objectStatus(uploadState),
     publishedObjectId: publishedObjectId?.id ?? null,
     createdAt: metadata.created_at.toISOString(),
   }
@@ -307,7 +312,17 @@ const getNonArchivedObjects = async () => {
   return objects.map((e) => e.head_cid)
 }
 
-const processArchival = async (cid: string) => {
+const populateCaches = async (cid: string) => {
+  downloadService.download(cid).catch(() => {
+    logger.warn(`Failed to download object ${cid} after archival check`)
+  })
+  FileGateway.downloadFile(cid).catch(() => {
+    logger.warn(`Failed to download object ${cid} after archival check`)
+  })
+}
+
+const onObjectArchived = async (cid: string) => {
+  await populateCaches(cid)
   await metadataRepository.markAsArchived(cid)
   await nodesRepository.removeNodesByRootCid(cid)
 }
@@ -331,7 +346,7 @@ const publishObject = async (user: UserWithOrganization, cid: string) => {
   return publishedObject
 }
 
-const downloadPublishedObject = async (id: string) => {
+const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
   const publishedObject =
     await publishedObjectsRepository.getPublishedObjectById(id)
   if (!publishedObject) {
@@ -343,12 +358,16 @@ const downloadPublishedObject = async (id: string) => {
     throw new Error('User does not have a subscription')
   }
 
-  return FilesUseCases.downloadObjectByUser(user, publishedObject.cid)
+  return FilesUseCases.downloadObjectByUser(
+    user,
+    publishedObject.cid,
+    blockingTags,
+  )
 }
 
 const unpublishObject = async (user: User, cid: string) => {
   const publishedObject =
-    await publishedObjectsRepository.getPublishedObjectById(cid)
+    await publishedObjectsRepository.getPublishedObjectByCid(cid)
   if (!publishedObject) {
     return
   }
@@ -357,19 +376,32 @@ const unpublishObject = async (user: User, cid: string) => {
     throw new Error('User does not have access to this object')
   }
 
-  await publishedObjectsRepository.deletePublishedObject(cid)
+  await publishedObjectsRepository.deletePublishedObjectByCid(cid)
 }
 
 const checkObjectsArchivalStatus = async () => {
   const cids = await getNonArchivedObjects()
 
-  for (const cid of cids) {
-    const allNodesArchived = await hasAllNodesArchived(cid)
-    if (allNodesArchived) {
-      await downloadService.download(cid)
-      await processArchival(cid)
-    }
-  }
+  const results = await Promise.all(
+    cids.map(async (cid) => {
+      const allNodesArchived = await hasAllNodesArchived(cid)
+      if (allNodesArchived) {
+        return cid
+      }
+    }),
+  ).then((e) => e.filter((e) => e !== undefined))
+
+  const cidsToArchive = [...new Set(results)]
+
+  await Promise.all(
+    cidsToArchive.map(async (cid) => {
+      await ObjectUseCases.onObjectArchived(cid)
+    }),
+  )
+}
+
+const addTag = async (cid: string, tag: string) => {
+  await metadataRepository.addTag(cid, tag)
 }
 
 export const ObjectUseCases = {
@@ -389,9 +421,10 @@ export const ObjectUseCases = {
   isArchived,
   hasAllNodesArchived,
   getNonArchivedObjects,
-  processArchival,
+  onObjectArchived,
   publishObject,
   downloadPublishedObject,
   unpublishObject,
   checkObjectsArchivalStatus,
+  addTag,
 }

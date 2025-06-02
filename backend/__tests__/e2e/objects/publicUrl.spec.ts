@@ -5,7 +5,7 @@ import {
   ObjectUseCases,
   SubscriptionsUseCases,
 } from '../../../src/useCases/index.js'
-import { asyncIterableToPromiseOfArray } from '../../../src/utils/async.js'
+import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   createMockUser,

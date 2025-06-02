@@ -26,3 +26,6 @@ export const chunkArray = <T>(array: T[], size: number): T[][] => {
   }
   return chunks
 }
+
+export const optionalBoolEnvironmentVariable = (key: string) =>
+  process.env[key] === 'true'

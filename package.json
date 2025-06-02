@@ -10,23 +10,28 @@
     "frontend",
     "auth",
     "gateway",
-    "packages/*"
+    "hasura",
+    "packages/*",
+    "submodules/*"
   ],
   "scripts": {
     "build:backend": "yarn workspace backend build",
     "build:frontend": "yarn workspace frontend build",
     "build:auth": "yarn workspace auth build",
-    "build": "yarn workspaces foreach --all --exclude hasura run build",
-    "test": "yarn workspaces foreach --all --exclude hasura --exclude @auto-drive/models run test",
+    "build": "make all",
+    "test": "make test",
     "frontend": "yarn workspace frontend",
     "lint": "yarn workspaces foreach --all --exclude hasura --exclude @auto-drive/models run lint",
     "backend": "yarn workspace backend",
+    "hasura": "yarn workspace hasura",
     "auth": "yarn workspace auth",
     "gateway": "yarn workspace gateway",
-    "models": "yarn workspace @auto-drive/models"
+    "models": "yarn workspace @auto-drive/models",
+    "auto-files-gateway": "yarn workspace auto-files-gateway"
   },
   "packageManager": "yarn@4.2.2",
   "devDependencies": {
+    "@types/spdy": "^3.4.9",
     "eslint-plugin-import": "^2.31.0"
   },
   "dependencies": {

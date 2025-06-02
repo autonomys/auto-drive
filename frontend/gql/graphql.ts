@@ -47,6 +47,23 @@ export type Int_Comparison_Exp = {
 };
 
 /** Boolean expression to compare columns of type "String". All fields are combined with logical 'AND'. */
+export type String_Array_Comparison_Exp = {
+  /** is the array contained in the given array value */
+  _contained_in?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** does the array contain the given value */
+  _contains?: InputMaybe<Array<Scalars['String']['input']>>;
+  _eq?: InputMaybe<Array<Scalars['String']['input']>>;
+  _gt?: InputMaybe<Array<Scalars['String']['input']>>;
+  _gte?: InputMaybe<Array<Scalars['String']['input']>>;
+  _in?: InputMaybe<Array<Array<Scalars['String']['input']>>>;
+  _is_null?: InputMaybe<Scalars['Boolean']['input']>;
+  _lt?: InputMaybe<Array<Scalars['String']['input']>>;
+  _lte?: InputMaybe<Array<Scalars['String']['input']>>;
+  _neq?: InputMaybe<Array<Scalars['String']['input']>>;
+  _nin?: InputMaybe<Array<Array<Scalars['String']['input']>>>;
+};
+
+/** Boolean expression to compare columns of type "String". All fields are combined with logical 'AND'. */
 export type String_Comparison_Exp = {
   _eq?: InputMaybe<Scalars['String']['input']>;
   _gt?: InputMaybe<Scalars['String']['input']>;
@@ -472,6 +489,7 @@ export type Metadata = {
   root_cid: Scalars['String']['output'];
   /** An object relationship */
   root_metadata?: Maybe<Metadata>;
+  tags?: Maybe<Array<Scalars['String']['output']>>;
   updated_at: Scalars['timestamp']['output'];
 };
 
@@ -600,6 +618,7 @@ export type Metadata_Bool_Exp = {
   published_objects?: InputMaybe<Published_Objects_Bool_Exp>;
   root_cid?: InputMaybe<String_Comparison_Exp>;
   root_metadata?: InputMaybe<Metadata_Bool_Exp>;
+  tags?: InputMaybe<String_Array_Comparison_Exp>;
   updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
 };
 
@@ -610,6 +629,7 @@ export type Metadata_Max_Fields = {
   head_cid?: Maybe<Scalars['String']['output']>;
   name?: Maybe<Scalars['String']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
+  tags?: Maybe<Array<Scalars['String']['output']>>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
 };
 
@@ -619,6 +639,7 @@ export type Metadata_Max_Order_By = {
   head_cid?: InputMaybe<Order_By>;
   name?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
+  tags?: InputMaybe<Order_By>;
   updated_at?: InputMaybe<Order_By>;
 };
 
@@ -629,6 +650,7 @@ export type Metadata_Min_Fields = {
   head_cid?: Maybe<Scalars['String']['output']>;
   name?: Maybe<Scalars['String']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
+  tags?: Maybe<Array<Scalars['String']['output']>>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
 };
 
@@ -638,6 +660,7 @@ export type Metadata_Min_Order_By = {
   head_cid?: InputMaybe<Order_By>;
   name?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
+  tags?: InputMaybe<Order_By>;
   updated_at?: InputMaybe<Order_By>;
 };
 
@@ -654,6 +677,7 @@ export type Metadata_Order_By = {
   published_objects?: InputMaybe<Published_Objects_Order_By>;
   root_cid?: InputMaybe<Order_By>;
   root_metadata?: InputMaybe<Metadata_Order_By>;
+  tags?: InputMaybe<Order_By>;
   updated_at?: InputMaybe<Order_By>;
 };
 
@@ -667,6 +691,7 @@ export type Metadata_Roots = {
   metadata?: Maybe<Scalars['jsonb']['output']>;
   name?: Maybe<Scalars['String']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
+  tags?: Maybe<Array<Scalars['String']['output']>>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
 };
 
@@ -709,6 +734,7 @@ export type Metadata_Roots_Bool_Exp = {
   metadata?: InputMaybe<Jsonb_Comparison_Exp>;
   name?: InputMaybe<String_Comparison_Exp>;
   root_cid?: InputMaybe<String_Comparison_Exp>;
+  tags?: InputMaybe<String_Array_Comparison_Exp>;
   updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
 };
 
@@ -719,6 +745,7 @@ export type Metadata_Roots_Max_Fields = {
   head_cid?: Maybe<Scalars['String']['output']>;
   name?: Maybe<Scalars['String']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
+  tags?: Maybe<Array<Scalars['String']['output']>>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
 };
 
@@ -729,6 +756,7 @@ export type Metadata_Roots_Min_Fields = {
   head_cid?: Maybe<Scalars['String']['output']>;
   name?: Maybe<Scalars['String']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
+  tags?: Maybe<Array<Scalars['String']['output']>>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
 };
 
@@ -740,6 +768,7 @@ export type Metadata_Roots_Order_By = {
   metadata?: InputMaybe<Order_By>;
   name?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
+  tags?: InputMaybe<Order_By>;
   updated_at?: InputMaybe<Order_By>;
 };
 
@@ -755,6 +784,8 @@ export enum Metadata_Roots_Select_Column {
   Name = 'name',
   /** column name */
   RootCid = 'root_cid',
+  /** column name */
+  Tags = 'tags',
   /** column name */
   UpdatedAt = 'updated_at'
 }
@@ -774,6 +805,7 @@ export type Metadata_Roots_Stream_Cursor_Value_Input = {
   metadata?: InputMaybe<Scalars['jsonb']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   root_cid?: InputMaybe<Scalars['String']['input']>;
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
 
@@ -789,6 +821,8 @@ export enum Metadata_Select_Column {
   Name = 'name',
   /** column name */
   RootCid = 'root_cid',
+  /** column name */
+  Tags = 'tags',
   /** column name */
   UpdatedAt = 'updated_at'
 }
@@ -808,6 +842,7 @@ export type Metadata_Stream_Cursor_Value_Input = {
   metadata?: InputMaybe<Scalars['jsonb']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   root_cid?: InputMaybe<Scalars['String']['input']>;
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
 
@@ -2794,10 +2829,11 @@ export type GetGlobalFilesQueryVariables = Exact<{
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
   orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
+  search: Scalars['String']['input'];
 }>;
 
 
-export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, oauth_provider: string, oauth_user_id: string }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, oauth_provider: string, oauth_user_id: string }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type GetSharedFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -2808,7 +2844,7 @@ export type GetSharedFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetSharedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetSharedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type GetTrashedFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -2819,7 +2855,7 @@ export type GetTrashedFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetTrashedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetTrashedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type GetMyFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -2827,17 +2863,18 @@ export type GetMyFilesQueryVariables = Exact<{
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
   orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
+  search: Scalars['String']['input'];
 }>;
 
 
-export type GetMyFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetMyFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type GetMetadataByHeadCidQueryVariables = Exact<{
   headCid: Scalars['String']['input'];
 }>;
 
 
-export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', head_cid: string, metadata?: any | null, created_at?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
+export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', head_cid: string, tags?: Array<string> | null, metadata?: any | null, created_at?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
 
 export type SearchGlobalMetadataByCidOrNameQueryVariables = Exact<{
   search: Scalars['String']['input'];
@@ -2864,14 +2901,15 @@ export type GetAllUsersWithSubscriptionsQuery = { __typename?: 'query_root', use
 
 
 export const GetGlobalFilesDocument = gql`
-    query GetGlobalFiles($limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
+    query GetGlobalFiles($limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String!) {
   metadata_roots(
-    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}}
+    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
     limit: $limit
     offset: $offset
     order_by: $orderBy
   ) {
     cid: head_cid
+    tags
     type: metadata(path: "type")
     name: metadata(path: "name")
     mimeType: metadata(path: "mimeType")
@@ -2916,7 +2954,7 @@ export const GetGlobalFilesDocument = gql`
     }
   }
   metadata_roots_aggregate(
-    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}}
+    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
   ) {
     aggregate {
       count
@@ -2940,6 +2978,7 @@ export const GetGlobalFilesDocument = gql`
  *      limit: // value for 'limit'
  *      offset: // value for 'offset'
  *      orderBy: // value for 'orderBy'
+ *      search: // value for 'search'
  *   },
  * });
  */
@@ -2968,6 +3007,7 @@ export const GetSharedFilesDocument = gql`
     order_by: $orderBy
   ) {
     cid: head_cid
+    tags
     type: metadata(path: "type")
     name: metadata(path: "name")
     mimeType: metadata(path: "mimeType")
@@ -3066,6 +3106,7 @@ export const GetTrashedFilesDocument = gql`
     order_by: $orderBy
   ) {
     cid: head_cid
+    tags
     type: metadata(path: "type")
     name: metadata(path: "name")
     mimeType: metadata(path: "mimeType")
@@ -3160,14 +3201,15 @@ export type GetTrashedFilesLazyQueryHookResult = ReturnType<typeof useGetTrashed
 export type GetTrashedFilesSuspenseQueryHookResult = ReturnType<typeof useGetTrashedFilesSuspenseQuery>;
 export type GetTrashedFilesQueryResult = Apollo.QueryResult<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>;
 export const GetMyFilesDocument = gql`
-    query GetMyFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
+    query GetMyFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String!) {
   metadata_roots(
-    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}}
+    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
     limit: $limit
     offset: $offset
     order_by: $orderBy
   ) {
     cid: head_cid
+    tags
     type: metadata(path: "type")
     name: metadata(path: "name")
     mimeType: metadata(path: "mimeType")
@@ -3215,7 +3257,7 @@ export const GetMyFilesDocument = gql`
     }
   }
   metadata_roots_aggregate(
-    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}}
+    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}}
   ) {
     aggregate {
       count
@@ -3241,6 +3283,7 @@ export const GetMyFilesDocument = gql`
  *      limit: // value for 'limit'
  *      offset: // value for 'offset'
  *      orderBy: // value for 'orderBy'
+ *      search: // value for 'search'
  *   },
  * });
  */
@@ -3266,6 +3309,7 @@ export const GetMetadataByHeadCidDocument = gql`
     where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
   ) {
     head_cid
+    tags
     metadata
     created_at
     published_objects {

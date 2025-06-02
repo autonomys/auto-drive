@@ -7,7 +7,10 @@ export const handleDownloadResponseHeaders = (
   metadata: OffchainMetadata,
 ) => {
   const safeName = encodeURIComponent(metadata.name || 'download')
-  const isExpectedDocument = req.headers['sec-fetch-site'] === 'none'
+  const isExpectedDocument =
+    req.headers['sec-fetch-site'] === 'none' ||
+    (req.headers['sec-fetch-site'] === 'same-site' &&
+      req.headers['sec-fetch-mode'] === 'navigate')
 
   const shouldHandleEncoding = req.query.ignoreEncoding
     ? req.query.ignoreEncoding !== 'true'

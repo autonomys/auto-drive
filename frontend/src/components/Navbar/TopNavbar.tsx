@@ -3,6 +3,8 @@ import { NetworkDropdown } from '../NetworkDropdown';
 import { redirect } from 'next/navigation';
 import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
 import { AutonomysSymbol } from 'components/common/AutonomysSymbol';
+import { ProfileDropdown } from './ProfileDropdown';
+import { useUserStore } from '@/globalStates/user';
 
 export type TopNavbarProps = {
   networkId: NetworkId;
@@ -12,6 +14,8 @@ export const TopNavbar = ({ networkId }: TopNavbarProps) => {
   const network = useMemo(() => {
     return networks[networkId] || null;
   }, [networkId]);
+  const { user } = useUserStore((state) => state);
+
   if (!network) {
     redirect(`/${defaultNetworkId}/drive`);
   }
@@ -23,12 +27,15 @@ export const TopNavbar = ({ networkId }: TopNavbarProps) => {
           <AutonomysSymbol />
           <span className='text-md font-medium'>Auto Drive</span>
         </div>
-        <NetworkDropdown
-          selected={network}
-          onChange={(value) => {
-            window.location.assign(`/${value.id}/drive`);
-          }}
-        />
+        <div className='flex items-center space-x-4'>
+          <NetworkDropdown
+            selected={network}
+            onChange={(value) => {
+              window.location.assign(`/${value.id}/drive`);
+            }}
+          />
+          {user && <ProfileDropdown />}
+        </div>
       </div>
     </header>
   );

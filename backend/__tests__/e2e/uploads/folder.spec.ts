@@ -29,8 +29,11 @@ import {
 } from '../../utils/mocks.js'
 import { MemoryBlockstore } from 'blockstore-core'
 import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
-import { nodesRepository } from '../../../src/repositories/index.js'
-import { asyncIterableToPromiseOfArray } from '../../../src/utils/async.js'
+import {
+  metadataRepository,
+  nodesRepository,
+} from '../../../src/repositories/index.js'
+import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import PizZip from 'pizzip'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 import { Rabbit } from '../../../src/drivers/rabbit.js'
@@ -59,7 +62,7 @@ describe('Folder Upload', () => {
 
   const folderName = 'test'
   const folderId = folderName
-  const subfileName = 'test.txt'
+  const subfileName = 'test.exe'
   const subfileId = subfileName
   const subfileMimeType = 'text/plain'
   const subfileSize = 100
@@ -198,6 +201,7 @@ describe('Folder Upload', () => {
         params: {
           uploadId: folderUpload.id,
         },
+        retriesLeft: expect.any(Number),
       })
 
       expect(folderCID).toBe(expectedCID)
@@ -258,17 +262,34 @@ describe('Folder Upload', () => {
         UploadsUseCases.processMigration(folderUpload.id),
       ).resolves.not.toThrow()
 
+      expect(rabbitMock).toHaveBeenCalledWith({
+        id: 'tag-upload',
+        params: {
+          cid: cidToString(cid),
+        },
+        retriesLeft: expect.any(Number),
+      })
+
       const node = await nodesRepository.getNode(cidToString(cid))
       expect(node).not.toBeNull()
 
       const uploads = await uploadsRepository.getUploadsByRoot(folderUpload.id)
       expect(uploads).toHaveLength(0)
+    })
+
+    it('tagging folder should mark subfile as insecure', async () => {
+      await UploadsUseCases.tagUpload(folderCID)
+      const metadata = await metadataRepository.getMetadata(subfileCID)
+      expect(metadata).toMatchObject({
+        tags: ['insecure'],
+      })
 
       expect(rabbitMock).toHaveBeenCalledWith({
         id: 'publish-nodes',
         params: {
-          nodes: expect.arrayContaining([cidToString(cid)]),
+          nodes: expect.arrayContaining([folderCID, subfileCID, subfolderCid]),
         },
+        retriesLeft: expect.any(Number),
       })
     })
 
@@ -291,7 +312,7 @@ describe('Folder Upload', () => {
       const objectInformation =
         await ObjectUseCases.getObjectInformation(folderCID)
       expect(objectInformation).toMatchObject({
-        uploadStatus: {
+        uploadState: {
           totalNodes: totalNodes,
           uploadedNodes: totalNodes,
           archivedNodes: 0,
@@ -316,7 +337,7 @@ describe('Folder Upload', () => {
       const objectInformation =
         await ObjectUseCases.getObjectInformation(folderCID)
       expect(objectInformation).toMatchObject({
-        uploadStatus: {
+        uploadState: {
           totalNodes,
           uploadedNodes: totalNodes,
           archivedNodes: totalNodes,

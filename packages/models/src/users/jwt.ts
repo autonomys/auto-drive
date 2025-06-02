@@ -3,6 +3,8 @@ type BaseTokenPayload = {
   isRefreshToken: boolean;
   oauthProvider: string;
   oauthUserId: string;
+  oauthUsername?: string;
+  oauthAvatarUrl?: string;
 };
 
 export type CustomAccessTokenPayload = BaseTokenPayload & {

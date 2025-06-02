@@ -1,4 +1,5 @@
-import { env } from './utils/misc.js'
+import 'dotenv/config'
+import { optionalBoolEnvironmentVariable, env } from './utils/misc.js'
 
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 
@@ -29,6 +30,7 @@ export const config = {
   },
   objectMappingArchiver: {
     url: env('OBJECT_MAPPING_ARCHIVER_URL'),
+    step: Number(env('OBJECT_MAPPING_ARCHIVER_STEP', '1000')),
   },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
@@ -70,6 +72,22 @@ export const config = {
       downloadLimit: Number(
         env('DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT', FIVE_GB.toString()),
       ),
+    },
+    forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
+  },
+  services: {
+    taskManager: {
+      active:
+        (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
+          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+        !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
+      maxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
+    },
+    objectMappingArchiver: {
+      active:
+        (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
+          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+        !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
     },
   },
 }

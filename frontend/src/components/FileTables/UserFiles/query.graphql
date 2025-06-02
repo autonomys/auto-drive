@@ -4,6 +4,7 @@ query GetMyFiles(
   $limit: Int!
   $offset: Int!
   $orderBy: [metadata_roots_order_by!]
+  $search: String!
 ) {
   metadata_roots(
     where: {
@@ -17,12 +18,14 @@ query GetMyFiles(
           }
         }
       }
+      _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]
     }
     limit: $limit
     offset: $offset
     order_by: $orderBy
   ) {
     cid: head_cid
+    tags
     type: metadata(path: "type")
     name: metadata(path: "name")
     mimeType: metadata(path: "mimeType")
@@ -84,6 +87,7 @@ query GetMyFiles(
             marked_as_deleted: { _is_null: true }
           }
         }
+        _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]
       }
     }
   ) {

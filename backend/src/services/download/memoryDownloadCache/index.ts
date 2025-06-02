@@ -2,7 +2,7 @@ import { LRUCache } from 'lru-cache'
 import {
   asyncIterableToBuffer,
   bufferToAsyncIterable,
-} from '../../../utils/async.js'
+} from '@autonomys/asynchronous'
 import { AwaitIterable } from 'interface-store'
 import { config } from '../../../config.js'
 

@@ -19,12 +19,10 @@ export const SharedFiles = () => {
   const limit = useFileTableState((e) => e.limit);
   const page = useFileTableState((e) => e.page);
   const sortBy = useFileTableState((e) => e.sortBy);
-
-  const resetPagination = useFileTableState((e) => e.resetPagination);
-
-  const { gql } = useNetwork();
   const user = useUserStore((state) => state.user);
-
+  
+  const { gql } = useNetwork();
+  
   const fetcher: Fetcher = useCallback(
     async (page: number, limit: number, sortBy) => {
       const { data } = await gql.query<GetSharedFilesQuery>({
@@ -48,10 +46,9 @@ export const SharedFiles = () => {
   );
 
   useEffect(() => {
-    resetPagination();
     setObjects(null);
     setFetcher(fetcher);
-  }, [fetcher, gql, setFetcher, setObjects, resetPagination]);
+  }, [fetcher, gql, setFetcher, setObjects]);
 
   useGetSharedFilesQuery({
     fetchPolicy: 'cache-and-network',

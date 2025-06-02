@@ -14,8 +14,8 @@ RUN apt update && apt install -y curl
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 RUN corepack prepare yarn@4.2.2 --activate
-RUN yarn install
-RUN yarn workspace backend build
+RUN npm i -g bun
+RUN make -B backend
 
 EXPOSE 3000
 

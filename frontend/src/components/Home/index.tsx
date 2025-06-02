@@ -5,8 +5,13 @@ import Footer from 'components/Footer';
 import { LandingHeader } from 'components/common/LandingHeader';
 import { SigningInButtons } from './SignInButtons';
 import Image from 'next/image';
+import { EXTERNAL_ROUTES } from '../../constants/routes';
+import { getSession } from 'next-auth/react';
 
 export const Home = () => {
+  // Ensure session is refreshed
+  getSession();
+
   return (
     <div className='flex min-h-screen flex-col items-center justify-between gap-2 bg-gradient-to-b from-backgroundLight to-backgroundDark dark:bg-darkWhite dark:from-backgroundDark dark:to-backgroundDarkest dark:text-darkBlack'>
       <LandingHeader />
@@ -99,7 +104,25 @@ export const Home = () => {
           </h1>
           <p className='text-gray max-w-[75%] text-center text-lg font-light'>
             Create API keys to access Autonomys Network decentralized permanent
-            storage, through our API.
+            storage, through our{' '}
+            <a
+              href={EXTERNAL_ROUTES.autoDriveApiDocs}
+              target='_blank'
+              rel='noreferrer'
+              className='text-accent'
+            >
+              API
+            </a>{' '}
+            or our{' '}
+            <a
+              href={EXTERNAL_ROUTES.autoDriveDocs}
+              target='_blank'
+              rel='noreferrer'
+              className='text-accent'
+            >
+              TypeScript SDK
+            </a>
+            .
           </p>
         </div>
       </div>
@@ -210,7 +233,9 @@ export const Home = () => {
           <SigningInButtons />
         </div>
       </div>
-      <Footer />
+      <div className='mt-10 flex w-full justify-center'>
+        <Footer />
+      </div>
     </div>
   );
 };

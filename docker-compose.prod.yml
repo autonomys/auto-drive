@@ -8,7 +8,7 @@ services:
   hasura:
     image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
     depends_on:
-      backend:
+      backend-api:
         condition: service_healthy
     volumes:
       - ./hasura/metadata:/hasura-metadata
@@ -52,6 +52,10 @@ services:
       - serve
     profiles:
       - base
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
   rabbitmq:
     image: rabbitmq:3-management
     ports:
@@ -62,10 +66,31 @@ services:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
     profiles:
       - rabbit
-  backend:
-    build:
-      context: .
-      dockerfile: ./backend/Dockerfile
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+  backend-worker:
+    image: ${BACKEND_IMAGE}
+    volumes:
+      - files_cache:/usr/src/app/.cache
+    restart: unless-stopped
+    env_file:
+      - .env
+    profiles:
+      - base
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:worker
+
+  backend-api:
+    image: ${BACKEND_IMAGE}
     volumes:
       - files_cache:/usr/src/app/.cache
     ports:
@@ -80,6 +105,15 @@ services:
       retries: 3
     profiles:
       - base
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:api
   agent:
     container_name: newrelic-infra
     image: newrelic/infrastructure:latest
@@ -97,3 +131,7 @@ services:
     restart: unless-stopped
     profiles:
       - base
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"

@@ -4,6 +4,8 @@ import { UserRole } from '@auto-drive/models'
 export interface User {
   oauth_provider: string
   oauth_user_id: string
+  oauth_username: string
+  oauth_avatar_url: string
   role: UserRole
   public_id: string
 }
@@ -35,14 +37,23 @@ const getUserByOAuthInformation = async (
 const createUser = async (
   oauth_provider: string,
   oauth_user_id: string,
+  oauth_username: string | undefined,
+  oauth_avatar_url: string | undefined,
   publicId: string,
   role: UserRole,
 ): Promise<User | undefined> => {
   const db = await getDatabase()
 
   const user = await db.query<User>(
-    'INSERT INTO users.users (oauth_provider, oauth_user_id, public_id, role) VALUES ($1, $2, $3, $4) RETURNING *',
-    [oauth_provider, oauth_user_id, publicId, role],
+    'INSERT INTO users.users (oauth_provider, oauth_user_id, oauth_username, oauth_avatar_url, public_id, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    [
+      oauth_provider,
+      oauth_user_id,
+      oauth_username,
+      oauth_avatar_url,
+      publicId,
+      role,
+    ],
   )
 
   return user.rows.at(0)
@@ -86,6 +97,36 @@ const getAllUsers = async (): Promise<User[]> => {
   return users.rows
 }
 
+const updateUsername = async (
+  oauth_provider: string,
+  oauth_user_id: string,
+  oauth_username: string,
+): Promise<User> => {
+  const db = await getDatabase()
+
+  const updatedUser = await db.query(
+    'UPDATE users.users SET oauth_username = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *',
+    [oauth_username, oauth_provider, oauth_user_id],
+  )
+
+  return updatedUser.rows.at(0)
+}
+
+const updateAvatarUrl = async (
+  oauth_provider: string,
+  oauth_user_id: string,
+  oauth_avatar_url: string,
+): Promise<User> => {
+  const db = await getDatabase()
+
+  const updatedUser = await db.query(
+    'UPDATE users.users SET oauth_avatar_url = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *',
+    [oauth_avatar_url, oauth_provider, oauth_user_id],
+  )
+
+  return updatedUser.rows.at(0)
+}
+
 export const usersRepository = {
   getUserByPublicId,
   createUser,
@@ -93,4 +134,6 @@ export const usersRepository = {
   searchUsersByPublicId,
   updateRole,
   getAllUsers,
+  updateUsername,
+  updateAvatarUrl,
 }

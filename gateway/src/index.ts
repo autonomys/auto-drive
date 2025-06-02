@@ -8,7 +8,7 @@ const app = express();
 app.get("/file/:cid", async (req, res) => {
   const result = await getFileNetwork(req.params.cid);
   if (!result) {
-    res.status(404).send("Folder not found");
+    res.status(404).sendFile("404.html", { root: "public" });
     return;
   }
 
@@ -17,13 +17,15 @@ app.get("/file/:cid", async (req, res) => {
     return;
   }
 
+  res.setHeader("X-Network", result.network);
+
   internalRedirect(req, res, result.url);
 });
 
 app.get("/folder/:cid", async (req, res) => {
   const result = await getFileNetwork(req.params.cid);
   if (!result) {
-    res.status(404).send("Folder not found");
+    res.status(404).sendFile("404.html", { root: "public" });
     return;
   }
 
@@ -32,7 +34,17 @@ app.get("/folder/:cid", async (req, res) => {
     return;
   }
 
+  res.setHeader("X-Network", result.network);
+
   internalRedirect(req, res, result.url);
+});
+
+app.get("/", (req, res) => {
+  res.sendFile("index.html", { root: "public" });
+});
+
+app.get("/health", (req, res) => {
+  res.send("OK");
 });
 
 app.listen(config.port, () => {

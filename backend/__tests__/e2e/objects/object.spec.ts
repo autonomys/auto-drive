@@ -10,6 +10,7 @@ import {
 } from '../../utils/mocks.js'
 import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
+import { v4 } from 'uuid'
 
 describe('Object', () => {
   let user: UserWithOrganization
@@ -35,6 +36,38 @@ describe('Object', () => {
   it('should not get listed in deleted objects', async () => {
     const summary = await ObjectUseCases.getMarkedAsDeletedRoots(user)
     expect(summary.rows.length).toBe(0)
+  })
+
+  it('for not admin user should not be able to share object', async () => {
+    const mockUser = createMockUser()
+    await expect(
+      ObjectUseCases.shareObject(mockUser, fileCid, user.publicId!),
+    ).rejects.toThrow(new Error('User is not an admin of this object'))
+  })
+
+  it('User that is not owner should not be able to delete object', async () => {
+    const mockUser = createMockUser()
+    await expect(
+      ObjectUseCases.markAsDeleted(mockUser, fileCid),
+    ).rejects.toThrow(new Error('User is not an owner of this object'))
+  })
+
+  it('User that is not owner should not be able to restore object', async () => {
+    const mockUser = createMockUser()
+    await expect(
+      ObjectUseCases.restoreObject(mockUser, fileCid),
+    ).rejects.toThrow(new Error('User is not an owner of this object'))
+  })
+
+  it('isArchived should return false for not archived object', async () => {
+    const isArchived = await ObjectUseCases.isArchived(v4())
+    expect(isArchived).toBe(false)
+  })
+
+  it('isArchived should return true for archived object', async () => {
+    await ObjectUseCases.onObjectArchived(fileCid)
+    const isArchived = await ObjectUseCases.isArchived(fileCid)
+    expect(isArchived).toBe(true)
   })
 
   it('should get listed in user objects', async () => {
@@ -134,6 +167,34 @@ describe('Object', () => {
     expect(search).toMatchObject([{ metadata }])
   })
 
+  it('should be able to see another user with user scope', async () => {
+    const metadata = await ObjectUseCases.getMetadata(fileCid)
+    if (!metadata) throw new PreconditionError('Metadata not found')
+    const mockUser = createMockUser()
+    const search = await ObjectUseCases.searchMetadataByName(
+      metadata.name!,
+      5,
+      {
+        scope: 'user',
+        user: mockUser,
+      },
+    )
+    expect(search).toMatchObject([])
+  })
+
+  it('should be able to see another user with global scope', async () => {
+    const metadata = await ObjectUseCases.getMetadata(fileCid)
+    if (!metadata) throw new PreconditionError('Metadata not found')
+    const search = await ObjectUseCases.searchMetadataByName(
+      metadata.name!,
+      5,
+      {
+        scope: 'global',
+      },
+    )
+    expect(search).toMatchObject([{ metadata }])
+  })
+
   it('should be able to search object by cid', async () => {
     const metadata = await ObjectUseCases.getMetadata(fileCid)
     if (!metadata) throw new PreconditionError('Metadata not found')
@@ -227,6 +288,31 @@ describe('Object', () => {
           headCid: randomFile,
         },
       ])
+    })
+
+    it('should be able to add tag to object', async () => {
+      await expect(
+        ObjectUseCases.addTag(fileCid, 'test'),
+      ).resolves.not.toThrow()
+    })
+
+    it('should be able to search object by tag', async () => {
+      const object = await ObjectUseCases.publishObject(user, fileCid)
+      expect(object).toBeDefined()
+    })
+
+    it('should be able to unpublish object', async () => {
+      await expect(
+        ObjectUseCases.unpublishObject(user, fileCid),
+      ).resolves.not.toThrow()
+
+      const object = await ObjectUseCases.getObjectInformation(fileCid)
+      expect(object?.publishedObjectId).toBeDefined()
+    })
+
+    it('should return undefined if object is not published', async () => {
+      const object = await ObjectUseCases.getObjectInformation(fileCid)
+      expect(object?.publishedObjectId).toBeNull()
     })
   })
 })

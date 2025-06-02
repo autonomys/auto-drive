@@ -10,6 +10,7 @@ export interface MetadataEntry {
   metadata: OffchainMetadata
   is_archived: boolean
   created_at: Date
+  tags: string[]
 }
 
 type MetadataEntryWithTotalCount = MetadataEntry & {
@@ -225,8 +226,8 @@ const getSharedRootObjectsByUser = async (
 const getMarkedAsDeletedRootObjectsByUser = async (
   provider: string,
   userId: string,
-  limit: number = 100,
-  offset: number = 0,
+  limit: number,
+  offset: number,
 ): Promise<PaginatedResult<MetadataEntry['head_cid']>> => {
   const db = await getDatabase()
 
@@ -269,18 +270,24 @@ const markAsArchived = async (cid: string) => {
   })
 }
 
-const getMetadataByIsArchived = async (
-  isArchived: boolean,
-  limit: number = 100,
-) => {
+const getMetadataByIsArchived = async (isArchived: boolean) => {
   const db = await getDatabase()
 
   const result = await db.query<MetadataEntry>({
-    text: 'SELECT * FROM metadata WHERE is_archived = $1 LIMIT $2',
-    values: [isArchived, limit],
+    text: 'SELECT * FROM metadata WHERE is_archived = $1',
+    values: [isArchived],
   })
 
   return result.rows
+}
+
+const addTag = async (cid: string, tag: string) => {
+  const db = await getDatabase()
+
+  await db.query({
+    text: 'UPDATE metadata SET tags = array_append(tags, $1) WHERE head_cid = $2',
+    values: [tag, cid],
+  })
 }
 
 export const metadataRepository = {
@@ -299,4 +306,5 @@ export const metadataRepository = {
   getMarkedAsDeletedRootObjectsByUser,
   markAsArchived,
   getMetadataByIsArchived,
+  addTag,
 }

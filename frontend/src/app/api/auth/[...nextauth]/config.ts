@@ -17,17 +17,26 @@ const refreshingTokenThresholdInSeconds = process.env.REFRESHING_TOKEN_THRESHOLD
   ? parseInt(process.env.REFRESHING_TOKEN_THRESHOLD)
   : 60;
 
+const ONE_WEEK_IN_SECONDS = 60 * 60 * 24 * 7;
+
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_AUTH_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_AUTH_CLIENT_SECRET as string,
-      // eslint-disable-next-line camelcase
-      authorization: { params: { access_type: 'offline', prompt: 'consent' } },
+      authorization: {
+        params: {
+          // eslint-disable-next-line camelcase
+          access_type: 'offline',
+          prompt: 'consent',
+          scope: 'email profile openid',
+        },
+      },
     }),
     DiscordProvider({
       clientId: process.env.DISCORD_AUTH_CLIENT_ID as string,
       clientSecret: process.env.DISCORD_AUTH_CLIENT_SECRET as string,
+      authorization: { params: { scope: 'identify' } },
     }),
     CredentialsProvider({
       id: 'auto-evm',
@@ -146,22 +155,7 @@ export const authOptions: AuthOptions = {
   },
   session: {
     strategy: 'jwt',
-  },
-  cookies: {
-    sessionToken: {
-      name:
-        process.env.NODE_ENV === 'production'
-          ? '__Secure-next-auth.session-token'
-          : 'next-auth.session-token',
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: true,
-        // 7 days
-        maxAge: 60 * 60 * 24 * 7,
-      },
-    },
+    maxAge: ONE_WEEK_IN_SECONDS,
   },
   events: {
     async signOut({ token }) {
