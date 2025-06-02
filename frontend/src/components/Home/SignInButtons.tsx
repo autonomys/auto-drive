@@ -51,7 +51,7 @@ export const SigningInButtons = () => {
   }, []);
 
   return (
-    <div className='flex flex-col gap-2'>
+    <div className='flex flex-col gap-2 py-2'>
       <button
         onClick={handleGoogleAuth}
         className='flex w-full max-w-xs transform items-center justify-center gap-2 rounded-full border-2 border-backgroundDarker bg-white px-6 py-3 font-bold text-backgroundDarker transition duration-300 ease-in-out hover:-translate-y-1 hover:scale-105 hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 dark:border-darkBlack dark:bg-darkWhite dark:text-darkBlack'
