@@ -85,6 +85,7 @@ export const refreshAccessToken = async ({
   underlyingProvider: string;
   refreshToken: string;
 }): Promise<JWT> => {
+  console.log('underlyingProvider', underlyingProvider);
   const response = await fetch(`${API_BASE_URL}/users/@me/refreshToken`, {
     method: 'POST',
     headers: {
@@ -98,6 +99,7 @@ export const refreshAccessToken = async ({
     throw new Error('No access token found');
   }
 
+  console.log('accessToken', newTokens);
   const token = ensureCorrectTokenFormation(jwt.decode(accessToken));
 
   const nextJWT: JWT = {
