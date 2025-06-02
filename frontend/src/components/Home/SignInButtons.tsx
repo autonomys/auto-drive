@@ -1,7 +1,7 @@
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { LoaderCircle } from 'lucide-react';
 import { BuiltInProviderType } from 'next-auth/providers';
-import { getCsrfToken, signIn } from 'next-auth/react';
+import { signIn } from 'next-auth/react';
 import { useCallback, useState } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
 import { DiscordIcon } from '../../components/common/DiscordIcon';
