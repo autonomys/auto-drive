@@ -7,9 +7,6 @@ services:
   # Hasura GraphQL Engine
   hasura:
     image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
-    depends_on:
-      backend-api:
-        condition: service_healthy
     volumes:
       - ./hasura/metadata:/hasura-metadata
     restart: unless-stopped
