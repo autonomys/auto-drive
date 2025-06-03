@@ -149,25 +149,38 @@ const retrieveAndReassembleFile = async (
     return Readable.from(chunkData)
   }
 
-  const CHUNK_SIZE = 100
+  const SIMULTANEOUS_CHUNKS = 100
+  let currentIndex = 0
   return new Readable({
-    read: async function () {
-      for (let i = 0; i < metadata.chunks.length; i += CHUNK_SIZE) {
-        const chunks = metadata.chunks.slice(i, i + CHUNK_SIZE)
+    async read() {
+      if (currentIndex >= metadata.chunks.length) {
+        this.push(null)
+        return
+      }
+
+      const endIndex = currentIndex + SIMULTANEOUS_CHUNKS
+      const chunks = metadata.chunks.slice(currentIndex, endIndex)
+
+      try {
         const chunkedData = await Promise.all(
           chunks.map((chunk) => NodesUseCases.getChunkData(chunk.cid)),
         )
 
         if (chunkedData.some((e) => e === undefined)) {
-          throw new Error('Chunk not found')
+          this.destroy(new Error('Chunk not found'))
+          return
         }
 
-        const canContinue = this.push(Buffer.concat(chunkedData.map((e) => e!)))
-        if (!canContinue) {
-          await new Promise((resolve) => this.once('drain', resolve))
+        for (const data of chunkedData) {
+          currentIndex++
+          if (!this.push(data)) {
+            return
+          }
         }
+      } catch (err) {
+        console.log('Error', err)
+        this.destroy(err instanceof Error ? err : new Error(String(err)))
       }
-      this.push(null)
     },
   })
 }
