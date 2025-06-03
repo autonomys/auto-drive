@@ -29,7 +29,7 @@
     "models": "yarn workspace @auto-drive/models",
     "auto-files-gateway": "yarn workspace auto-files-gateway"
   },
-  "packageManager": "yarn@4.2.2",
+  "packageManager": "yarn@4.9.2",
   "devDependencies": {
     "@types/spdy": "^3.4.9",
     "eslint-plugin-import": "^2.31.0"
