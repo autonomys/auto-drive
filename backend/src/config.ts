@@ -47,6 +47,7 @@ export const config = {
   },
   rabbitmq: {
     url: env('RABBITMQ_URL'),
+    prefetch: Number(env('RABBITMQ_PREFETCH', '10')),
   },
   monitoring: {
     active: env('VICTORIA_ACTIVE', 'false') === 'true',
