@@ -1,6 +1,6 @@
 /* eslint-disable camelcase */
 import { JWT } from 'next-auth/jwt';
-import jwt from 'jsonwebtoken';
+import * as jose from 'jose';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_AUTH_API_URL || 'http://localhost:3030';
@@ -60,7 +60,7 @@ export const generateAccessToken = async ({
   const newTokens = await response.json();
   const accessToken = newTokens.accessToken;
 
-  const token = ensureCorrectTokenFormation(jwt.decode(accessToken));
+  const token = ensureCorrectTokenFormation(jose.decodeJwt(accessToken));
   const refreshToken = getRefreshTokenFromResponse(response);
 
   const nextJWT: JWT = {
@@ -99,8 +99,7 @@ export const refreshAccessToken = async ({
     throw new Error('No access token found');
   }
 
-  console.log('accessToken', newTokens);
-  const token = ensureCorrectTokenFormation(jwt.decode(accessToken));
+  const token = ensureCorrectTokenFormation(jose.decodeJwt(accessToken));
 
   const nextJWT: JWT = {
     ...token,
