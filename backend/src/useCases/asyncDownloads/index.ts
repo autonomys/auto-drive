@@ -4,6 +4,7 @@ import { v4 } from 'uuid'
 import { EventRouter } from '../../services/eventRouter/index.js'
 import { downloadService } from '../../services/download/index.js'
 import { ObjectUseCases } from '../objects/object.js'
+import { logger } from '../../drivers/logger.js'
 
 const createDownload = async (
   user: User,
@@ -22,6 +23,7 @@ const createDownload = async (
     AsyncDownloadStatus.Pending,
     metadata.totalSize,
   )
+  logger.info(`Creating async download id=${download.id} cid=${cid}`)
 
   EventRouter.publish({
     id: 'async-download-created',
@@ -91,6 +93,7 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
     throw new Error('Object not found')
   }
 
+  logger.info(`Starting async download id=${downloadId} cid=${download.cid}`)
   AsyncDownloadsUseCases.updateProgress(downloadId, BigInt(0))
   const file = await downloadService.download(download.cid)
 
@@ -98,10 +101,14 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     file.on('data', (chunk) => {
       downloadedBytes += BigInt(chunk.length)
+      logger.debug(
+        `Downloading id=${downloadId} cid=${download.cid} ${downloadedBytes} bytes`,
+      )
       AsyncDownloadsUseCases.updateProgress(downloadId, downloadedBytes)
     })
 
     file.on('end', () => {
+      logger.info(`Download completed id=${downloadId} cid=${download.cid}`)
       AsyncDownloadsUseCases.updateStatus(
         downloadId,
         AsyncDownloadStatus.Completed,
@@ -110,6 +117,7 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
     })
 
     file.on('error', async (error) => {
+      logger.error(`Error downloading id=${downloadId} cid=${download.cid}`)
       await AsyncDownloadsUseCases.setError(downloadId, JSON.stringify(error))
       reject(error)
     })
