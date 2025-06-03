@@ -11,6 +11,7 @@ const getChannel = async () => {
     channelPromise = connect(config.rabbitmq.url).then((connection) =>
       connection.createChannel().then((channel) => {
         queues.forEach((q) => channel.assertQueue(q))
+        channel.prefetch(config.rabbitmq.prefetch)
         return channel
       }),
     )
