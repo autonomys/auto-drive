@@ -116,7 +116,7 @@ services:
       - yarn
       - workspace
       - backend
-      - start:api
+      - start:fe:api
   backend-download-worker:
     image: ${BACKEND_IMAGE}
     volumes:
