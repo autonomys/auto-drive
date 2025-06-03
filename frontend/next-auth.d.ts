@@ -10,6 +10,10 @@ declare module 'next-auth' {
     underlyingUserId?: string;
   }
 
+  interface User extends nextAuth.User {
+    provider?: string;
+  }
+
   interface Account extends nextAuth.Account {
     expires_in: number;
   }

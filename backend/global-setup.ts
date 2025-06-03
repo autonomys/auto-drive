@@ -5,7 +5,7 @@ import fsPromise from 'fs/promises'
 
 export default async () => {
   config({ path: '.env.test' })
-  const postgresContainer = new PostgreSqlContainer().withExposedPorts(54320)
+  const postgresContainer = new PostgreSqlContainer().withExposedPorts(54321)
   const service = await postgresContainer.start()
   const rabbitmqContainer = new RabbitMQContainer().withExposedPorts(
     5672,

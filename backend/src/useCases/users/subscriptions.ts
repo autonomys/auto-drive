@@ -57,7 +57,16 @@ const getOrCreateSubscription = async (
     user.organizationId,
   )
   if (!subscription) {
-    return initSubscription(user.organizationId)
+    const isWeb3User = user.oauthProvider === 'auto-evm'
+    if (isWeb3User) {
+      return initSubscription(user.organizationId, 0, 0)
+    } else {
+      return initSubscription(
+        user.organizationId,
+        config.params.defaultSubscription.uploadLimit,
+        config.params.defaultSubscription.downloadLimit,
+      )
+    }
   }
 
   return subscription
@@ -71,6 +80,8 @@ const getSubscriptionById = async (
 
 const initSubscription = async (
   organizationId: string,
+  uploadLimit: number,
+  downloadLimit: number,
 ): Promise<Subscription> => {
   const subscription =
     await subscriptionsRepository.getByOrganizationId(organizationId)
@@ -83,8 +94,8 @@ const initSubscription = async (
     organizationId,
     granularity: config.params.defaultSubscription
       .granularity as SubscriptionGranularity,
-    uploadLimit: config.params.defaultSubscription.uploadLimit,
-    downloadLimit: config.params.defaultSubscription.downloadLimit,
+    uploadLimit,
+    downloadLimit,
   }
   await subscriptionsRepository.createSubscription(
     newSubscription.id,
