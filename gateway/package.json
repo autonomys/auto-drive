@@ -1,7 +1,7 @@
 {
   "name": "gateway",
   "version": "0.1.0",
-  "packageManager": "yarn@4.2.2",
+  "packageManager": "yarn@4.9.2",
   "license": "MIT",
   "scripts": {
     "start": "node dist/index.js",
