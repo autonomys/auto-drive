@@ -17,11 +17,16 @@ import {
   Node,
   nodesRepository,
 } from '../../../src/repositories/index.js'
-import { ObjectMapping, ObjectMappingListEntry, TransactionResult } from '@auto-drive/models'
+import {
+  ObjectMapping,
+  ObjectMappingListEntry,
+  TransactionResult,
+} from '@auto-drive/models'
 import { mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
 import { jest } from '@jest/globals'
-import { TaskManager } from '../../../src/services/taskManager/index.js'
+import { EventRouter } from '../../../src/services/eventRouter/index.js'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
+import { MAX_RETRIES } from '../../../src/services/eventRouter/tasks.js'
 
 describe('Nodes', () => {
   const id = v4()
@@ -181,13 +186,30 @@ describe('Nodes', () => {
     )
 
     const processArchivalSpy = jest
-      .spyOn(ObjectUseCases, 'onObjectArchived')
-      .mockResolvedValue()
+      .spyOn(EventRouter, 'publish')
+      .mockReturnValue()
     const hash = Buffer.from(blake3HashFromCid(cid)).toString('hex')
     await NodesUseCases.processNodeArchived([[hash, 1, 1]])
 
-    expect(processArchivalSpy).toHaveBeenCalledWith(cidToString(cid))
+    expect(processArchivalSpy).toHaveBeenCalledWith({
+      id: 'object-archived',
+      params: {
+        cid: cidToString(cid),
+      },
+      retriesLeft: MAX_RETRIES,
+    })
     expect(processArchivalSpy).toHaveBeenCalledTimes(1)
+
+    const populateCachesSpy = jest
+      .spyOn(ObjectUseCases, 'populateCaches')
+      .mockResolvedValue()
+    // Mock the callback execution of the event above
+    await ObjectUseCases.onObjectArchived(cidToString(cid))
+
+    const metadata = await metadataRepository.getMetadata(cidToString(cid))
+    expect(populateCachesSpy).toHaveBeenCalledWith(cidToString(cid))
+    expect(metadata).toBeDefined()
+    expect(metadata?.is_archived).toBe(true)
   })
 
   it('should get chunk data from node repository', async () => {
@@ -320,7 +342,7 @@ describe('Nodes', () => {
 
   it('should schedule node archiving', async () => {
     const publishSpy = jest
-      .spyOn(TaskManager, 'publish')
+      .spyOn(EventRouter, 'publish')
       .mockImplementation(() => {})
 
     const objects: ObjectMapping[] = [['deadbeef', 1, 2]]
