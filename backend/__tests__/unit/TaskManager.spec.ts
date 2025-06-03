@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals'
-import { Task } from '../../src/services/taskManager/tasks.js'
+import { Task } from '../../src/services/eventRouter/tasks.js'
 import { Rabbit as RabbitT } from '../../src/drivers/rabbit.js'
-import { TaskManager as TaskManagerT } from '../../src/services/taskManager/index.js'
+import { EventRouter as EventRouterT } from '../../src/services/eventRouter/index.js'
 import { UploadsUseCases as UploadsUseCasesT } from '../../src/useCases/uploads/uploads.js'
 import { OnchainPublisher as OnchainPublisherT } from '../../src/services/upload/onchainPublisher/index.js'
 import { logger as LoggerT } from '../../src/drivers/logger.js'
@@ -45,15 +45,15 @@ jest.unstable_mockModule('../../src/drivers/logger.js', () => ({
 
 describe('TaskManager', () => {
   let subscribeCallback: (obj: object) => Promise<unknown>
-  let TaskManager: typeof TaskManagerT
+  let EventRouter: typeof EventRouterT
   let Rabbit: typeof RabbitT
   let UploadsUseCases: typeof UploadsUseCasesT
   let OnchainPublisher: typeof OnchainPublisherT
   let logger: typeof LoggerT
   beforeAll(async () => {
     // Import modules after mocks
-    TaskManager = (await import('../../src/services/taskManager/index.js'))
-      .TaskManager
+    EventRouter = (await import('../../src/services/eventRouter/index.js'))
+      .EventRouter
     Rabbit = (await import('../../src/drivers/rabbit.js')).Rabbit
     UploadsUseCases = (await import('../../src/useCases/uploads/uploads.js'))
       .UploadsUseCases
@@ -67,20 +67,33 @@ describe('TaskManager', () => {
     jest.clearAllMocks()
 
     // Capture the callback passed to Rabbit.subscribe
-    jest.mocked(Rabbit.subscribe).mockImplementation(async (callback) => {
-      subscribeCallback = callback
-      return Promise.resolve(() => {})
-    })
+    jest
+      .mocked(Rabbit.subscribe)
+      .mockImplementation(async (queue, callback) => {
+        subscribeCallback = callback
+        return Promise.resolve(() => {})
+      })
   })
 
   describe('start', () => {
-    it('should subscribe to the rabbit queue', () => {
-      TaskManager.start()
-      expect(Rabbit.subscribe).toHaveBeenCalled()
+    it('should subscribe to the task manager queue', () => {
+      EventRouter.listenFrontendEvents()
+      expect(Rabbit.subscribe).toHaveBeenCalledWith(
+        'task-manager',
+        expect.any(Function),
+      )
+    })
+
+    it('should subscribe to the download manager queue', () => {
+      EventRouter.listenDownloadEvents()
+      expect(Rabbit.subscribe).toHaveBeenCalledWith(
+        'download-manager',
+        expect.any(Function),
+      )
     })
 
     it('should log an error when receiving an invalid task', async () => {
-      TaskManager.start()
+      EventRouter.listenFrontendEvents()
       await subscribeCallback({})
       expect(logger.error).toHaveBeenCalledWith(
         'Invalid task',
@@ -89,7 +102,7 @@ describe('TaskManager', () => {
     })
 
     it('should process a valid task', async () => {
-      TaskManager.start()
+      EventRouter.listenFrontendEvents()
       const validTask = {
         id: 'migrate-upload-nodes',
         params: { uploadId: '123' },
@@ -102,7 +115,7 @@ describe('TaskManager', () => {
     })
 
     it('should log an error when a task fails and has no retries left', async () => {
-      TaskManager.start()
+      EventRouter.listenFrontendEvents()
       const validTask = {
         id: 'publish-nodes',
         params: { nodes: ['node1', 'node2'] },
@@ -133,9 +146,9 @@ describe('TaskManager', () => {
         retriesLeft: 3,
       }
 
-      TaskManager.publish(task)
+      EventRouter.publish(task)
 
-      expect(Rabbit.publish).toHaveBeenCalledWith(task)
+      expect(Rabbit.publish).toHaveBeenCalledWith('task-manager', task)
     })
 
     it('should publish multiple tasks', () => {
@@ -152,11 +165,11 @@ describe('TaskManager', () => {
         },
       ]
 
-      TaskManager.publish(tasks)
+      EventRouter.publish(tasks)
 
       expect(Rabbit.publish).toHaveBeenCalledTimes(2)
-      expect(Rabbit.publish).toHaveBeenCalledWith(tasks[0])
-      expect(Rabbit.publish).toHaveBeenCalledWith(tasks[1])
+      expect(Rabbit.publish).toHaveBeenCalledWith('task-manager', tasks[0])
+      expect(Rabbit.publish).toHaveBeenCalledWith('task-manager', tasks[1])
     })
   })
 })

@@ -1,7 +1,8 @@
 import { Channel, connect } from 'amqplib'
 import { config } from '../config.js'
 
-const queue = 'task-manager'
+export type AutoDriveQueues = (typeof queues)[number]
+const queues = ['task-manager', 'download-manager'] as const
 
 let channelPromise: Promise<Channel> | null = null
 
@@ -9,7 +10,8 @@ const getChannel = async () => {
   if (!channelPromise) {
     channelPromise = connect(config.rabbitmq.url).then((connection) =>
       connection.createChannel().then((channel) => {
-        channel.assertQueue(queue)
+        queues.forEach((q) => channel.assertQueue(q))
+        channel.prefetch(config.rabbitmq.prefetch)
         return channel
       }),
     )
@@ -18,12 +20,15 @@ const getChannel = async () => {
   return channelPromise
 }
 
-const publish = async (message: object) => {
+const publish = async (queue: (typeof queues)[number], message: object) => {
   const channel = await getChannel()
   channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)))
 }
 
-const subscribe = async (callback: (message: object) => Promise<unknown>) => {
+const subscribe = async (
+  queue: AutoDriveQueues,
+  callback: (message: object) => Promise<unknown>,
+) => {
   const channel = await getChannel()
 
   const consume = await channel.consume(queue, async (message) => {
