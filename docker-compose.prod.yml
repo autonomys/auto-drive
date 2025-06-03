@@ -79,6 +79,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - PORT=${BACKEND_WORKER_PORT}
     profiles:
       - frontend
       - frontend-worker
@@ -100,6 +102,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - PORT=${BACKEND_API_PORT}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 15s
@@ -122,8 +126,12 @@ services:
     volumes:
       - files_cache:/usr/src/app/.cache
     restart: unless-stopped
+    ports:
+      - "${BACKEND_DOWNLOAD_WORKER_PORT}:3000"
     env_file:
       - .env
+    environment:
+      - PORT=${BACKEND_DOWNLOAD_WORKER_PORT}
     profiles:
       - download-worker
       - download
@@ -145,6 +153,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - PORT=${BACKEND_DOWNLOAD_API_PORT}
     profiles:
       - download-api
       - download
