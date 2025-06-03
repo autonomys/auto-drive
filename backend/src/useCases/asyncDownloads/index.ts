@@ -91,6 +91,7 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
     throw new Error('Object not found')
   }
 
+  AsyncDownloadsUseCases.updateProgress(downloadId, BigInt(0))
   const file = await downloadService.download(download.cid)
 
   let downloadedBytes = 0n
