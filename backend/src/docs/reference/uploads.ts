@@ -195,9 +195,10 @@ export const uploads = {
         },
       },
     },
-    '/uploads/file/{uploadId}/complete': {
+    '/uploads/{uploadId}/complete': {
       post: {
-        summary: 'Uploads - Complete the upload returning the file CID',
+        summary:
+          'Uploads - Complete the upload returning the file or folder CID',
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         parameters: [
