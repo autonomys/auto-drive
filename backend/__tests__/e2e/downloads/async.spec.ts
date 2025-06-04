@@ -109,9 +109,14 @@ describe('Async Downloads', () => {
 
     await AsyncDownloadsUseCases.asyncDownload(download.id)
 
+    expect(mockUpdateProgress).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      0n,
+    )
     for (let i = 0; i < expectedChunks.length; i++) {
       expect(mockUpdateProgress).toHaveBeenNthCalledWith(
-        i + 1,
+        i + 2,
         expect.any(String),
         BigInt(i + 1) * 4n,
       )
