@@ -6,7 +6,8 @@ const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 const DEFAULT_CACHE_MAX_SIZE = 10 * 1024 ** 3 // 10GB
 const DEFAULT_CACHE_TTL = 1000000 // 1000000 seconds
 
-const HUNDRED_MB = 1024 ** 2 * 100
+const ONE_MB = 1024 ** 2
+const HUNDRED_MB = ONE_MB * 100
 const FIVE_GB = 1024 ** 3 * 5
 
 export const config = {
@@ -72,6 +73,14 @@ export const config = {
       ),
       downloadLimit: Number(
         env('DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT', FIVE_GB.toString()),
+      ),
+    },
+    web3DefaultSubscription: {
+      uploadLimit: Number(
+        env('WEB3_DEFAULT_SUBSCRIPTION_UPLOAD_LIMIT', ONE_MB.toString()),
+      ),
+      downloadLimit: Number(
+        env('WEB3_DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT', HUNDRED_MB.toString()),
       ),
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
