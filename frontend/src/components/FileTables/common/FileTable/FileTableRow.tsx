@@ -28,6 +28,7 @@ import dayjs from 'dayjs';
 import { CopiableText } from 'components/common/CopiableText';
 import toast from 'react-hot-toast';
 import { useUserAsyncDownloadsStore } from '../../../UserAsyncDownloads/state';
+import { useFileInCache } from '@/hooks/useFileInCache';
 
 export const FileTableRow = ({
   file,
@@ -57,6 +58,7 @@ export const FileTableRow = ({
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
+  const isCached = useFileInCache(file.headCid);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -289,15 +291,16 @@ export const FileTableRow = ({
                     </button>
                   )}
 
-                  {actionButtons.includes(FileActionButtons.ASYNC_DOWNLOAD) && (
-                    <button
-                      className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
-                      onClick={handleAsyncDownload}
-                      role='menuitem'
-                    >
-                      Bring to Cache
-                    </button>
-                  )}
+                  {actionButtons.includes(FileActionButtons.ASYNC_DOWNLOAD) &&
+                    !isCached && (
+                      <button
+                        className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
+                        onClick={handleAsyncDownload}
+                        role='menuitem'
+                      >
+                        Bring to Cache
+                      </button>
+                    )}
 
                   {actionButtons.includes(FileActionButtons.DOWNLOAD) && (
                     <button
