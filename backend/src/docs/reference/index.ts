@@ -11,42 +11,43 @@ export const swagger = {
     version: '1.1.0',
     description: `Auto-Drive consists of multiple APIs that are used to interact with the Auto-Drive platform.
 
-    ## Authentication
+## Authentication
 
-    All requests to the Auto-Drive APIs require authentication. The following authentication methods are supported:
+All requests to the Auto-Drive APIs require authentication. The following authentication methods are supported:
 
-    - API Key
-    - JWT Token (rarely used)
+- API Key
+- JWT Token (rarely used)
 
-    ## How to use an API key?
+## How to use an API key?
 
-    The API key is a string that is used to authenticate requests to the Auto-Drive APIs, you can create one in the [Auto-Drive Dashboard](https://ai3.storage).
+The API key is a string that is used to authenticate requests to the Auto-Drive APIs, you can create one in the [Auto-Drive Dashboard](https://ai3.storage).
 
-    To use an API key, include it in the Authorization header with the Bearer prefix:
-    
-    Authorization: Bearer your-api-key
-    X-Auth-Provider: apikey
-    
-    API keys should be kept secure and not shared with unauthorized parties.
+To use an API key, include it in the Authorization header with the Bearer prefix:
 
-    ## Auto-Drive Services
+\`\`\`
+Authorization: Bearer your-api-key
+X-Auth-Provider: apikey
+\`\`\`
 
-    Auto-Drive consists of two main services:
+API keys should be kept secure and not shared with unauthorized parties.
 
-    ### 1. Auto-Drive API
-    
-    The Storage Service handles all file operations including uploads, downloads, and object management. It provides APIs for:
-    - File uploads (single and multipart)
-    - Object metadata management
-    - Access control and permissions
-    - Subscription management
+## Auto-Drive Services
 
-    ### 2. Auto-Drive Download Gateway
-    
-    The Auto-Drive Download Gateway is a service that allows you to download files from the Auto-Drive API. It provides APIs for:
-    - File downloads
-    - Async downloads
-    `,
+Auto-Drive consists of two main services:
+
+### 1. Auto-Drive API
+
+The Storage Service handles all file operations including uploads, downloads, and object management. It provides APIs for:
+- File uploads (single and multipart)
+- Object metadata management
+- Access control and permissions
+- Subscription management
+
+### 2. Auto-Drive Download Gateway
+
+The Auto-Drive Download Gateway is a service that allows you to download files from the Auto-Drive API. It provides APIs for:
+- File downloads
+- Async downloads`,
   },
   paths: {
     ...subscriptions.paths,
