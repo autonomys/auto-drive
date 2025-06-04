@@ -59,7 +59,11 @@ const getOrCreateSubscription = async (
   if (!subscription) {
     const isWeb3User = user.oauthProvider === 'auto-evm'
     if (isWeb3User) {
-      return initSubscription(user.organizationId, 0, 0)
+      return initSubscription(
+        user.organizationId,
+        config.params.web3DefaultSubscription.uploadLimit,
+        config.params.web3DefaultSubscription.downloadLimit,
+      )
     } else {
       return initSubscription(
         user.organizationId,
