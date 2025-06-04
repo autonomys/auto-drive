@@ -24,10 +24,8 @@ export const swagger = {
 
     To use an API key, include it in the Authorization header with the Bearer prefix:
     
-    \`\`\`
     Authorization: Bearer your-api-key
     X-Auth-Provider: apikey
-    \`\`\`
     
     API keys should be kept secure and not shared with unauthorized parties.
 
