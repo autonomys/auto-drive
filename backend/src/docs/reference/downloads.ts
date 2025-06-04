@@ -1,9 +1,12 @@
+import { downloadServers } from './servers.js'
+
 export const downloads = {
   paths: {
-    '/downloads/async': {
+    '/downloads/async/{cid}': {
       post: {
-        summary: 'Creates an async download for an object by CID',
-        tags: ['Downloads'],
+        summary: 'Downloads - Create async download for an object by CID',
+        tags: ['Auto Drive Download Gateway'],
+        servers: downloadServers,
         parameters: [
           {
             name: 'cid',
@@ -31,8 +34,9 @@ export const downloads = {
     },
     '/downloads/async/{downloadId}/dismiss': {
       post: {
-        summary: 'Dismisses an async download',
-        tags: ['Downloads'],
+        summary: 'Downloads - Dismiss an async download',
+        tags: ['Auto Drive Download Gateway'],
+        servers: downloadServers,
         parameters: [
           {
             name: 'downloadId',
@@ -57,8 +61,9 @@ export const downloads = {
     },
     '/downloads/{cid}': {
       get: {
-        summary: 'Download an object by CID',
-        tags: ['Downloads'],
+        summary: 'Downloads - Download an object by CID',
+        tags: ['Auto Drive Download Gateway'],
+        servers: downloadServers,
         parameters: [
           {
             name: 'cid',
@@ -90,6 +95,82 @@ export const downloads = {
         },
       },
     },
+    '/downloads/async/{downloadId}': {
+      get: {
+        summary: 'Downloads - Get async download status',
+        tags: ['Auto Drive Download Gateway'],
+        servers: downloadServers,
+        parameters: [
+          {
+            name: 'downloadId',
+            in: 'path',
+            required: true,
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Successfully retrieved async download status',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  $ref: '#/components/schemas/AsyncDownload',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/downloads/async/{downloadId}/status': {
+      get: {
+        summary: 'Downloads - Get async download status',
+        tags: ['Auto Drive Download Gateway'],
+        servers: downloadServers,
+        parameters: [
+          {
+            name: 'downloadId',
+            in: 'path',
+            required: true,
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Successfully retrieved async download status',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  $ref: '#/components/schemas/AsyncDownloadStatus',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/downloads/async/@me': {
+      get: {
+        summary: 'Downloads - Get all async downloads for the current user',
+        tags: ['Auto Drive Download Gateway'],
+        servers: downloadServers,
+        responses: {
+          '200': {
+            description: 'Successfully retrieved all async downloads',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: {
+                    $ref: '#/components/schemas/AsyncDownload',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
   components: {
     schemas: {
@@ -115,6 +196,15 @@ export const downloads = {
           downloadedBytes: { type: 'string', nullable: true },
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      AsyncDownloadStatus: {
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['cached', 'not-cached'],
+          },
         },
       },
     },

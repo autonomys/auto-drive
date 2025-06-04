@@ -1,9 +1,12 @@
+import { autoDriveServers } from './servers.js'
+
 export const uploads = {
   paths: {
     '/uploads/file': {
       post: {
-        summary: 'Upload a file',
-        tags: ['Uploads'],
+        summary: 'Uploads - Upload a file',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         requestBody: {
           content: {
             'application/json': {
@@ -46,8 +49,9 @@ export const uploads = {
     },
     '/uploads/folder': {
       post: {
-        summary: 'Create a new folder upload',
-        tags: ['Uploads'], // Added tag
+        summary: 'Uploads - Create a new folder upload',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         requestBody: {
           content: {
             'application/json': {
@@ -89,8 +93,10 @@ export const uploads = {
     },
     '/uploads/folder/{folderUploadId}/file': {
       post: {
-        summary: 'Create a file in a folder provided by the folder upload id',
-        tags: ['Uploads'],
+        summary:
+          'Uploads - Create a file in a folder provided by the folder upload id',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'folderUploadId',
@@ -144,8 +150,9 @@ export const uploads = {
     },
     '/uploads/file/{uploadId}/chunk': {
       post: {
-        summary: 'Upload a chunk of a file',
-        tags: ['Uploads'],
+        summary: 'Uploads - Upload a chunk of a file',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'uploadId',
@@ -188,10 +195,12 @@ export const uploads = {
         },
       },
     },
-    '/uploads/file/{uploadId}/complete': {
+    '/uploads/{uploadId}/complete': {
       post: {
-        summary: 'Complete the upload returning the file CID',
-        tags: ['Uploads'],
+        summary:
+          'Uploads - Complete the upload returning the file or folder CID',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'uploadId',

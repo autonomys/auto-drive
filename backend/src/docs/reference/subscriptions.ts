@@ -1,9 +1,12 @@
+import { autoDriveServers } from './servers.js'
+
 export const subscriptions = {
   paths: {
     '/subscriptions/@me': {
       get: {
-        summary: 'Get current user subscription information',
-        tags: ['Subscriptions'],
+        summary: 'Subscriptions - Get current user subscription information',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         responses: {
           '200': {
             description: 'Successfully retrieved subscription information',
