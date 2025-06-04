@@ -14,11 +14,19 @@ export const swagger = {
   servers: [
     {
       url: 'https://mainnet.auto-drive.autonomys.xyz/api',
-      description: 'Mainnet',
+      description: 'Mainnet Auto Drive API',
     },
     {
-      url: 'https://demo.auto-drive.autonomys.xyz/api',
-      description: 'Testnet',
+      url: 'https://taurus.auto-drive.autonomys.xyz/api',
+      description: 'Testnet Auto Drive API',
+    },
+    {
+      url: 'https://public.auto-drive.autonomys.xyz/api',
+      description: 'Download Auto Drive Gateway (Mainnet)',
+    },
+    {
+      url: 'https://public.taurus.auto-drive.autonomys.xyz/api',
+      description: 'Download Auto Drive Gateway (Testnet)',
     },
   ],
   paths: {

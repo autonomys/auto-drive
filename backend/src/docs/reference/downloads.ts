@@ -1,9 +1,12 @@
+import { downloadServers } from './servers.js'
+
 export const downloads = {
   paths: {
     '/downloads/async': {
       post: {
-        summary: 'Creates an async download for an object by CID',
-        tags: ['Downloads'],
+        summary: 'Downloads - Create async download for an object by CID',
+        tags: ['Auto Drive Download Gateway'],
+        servers: downloadServers,
         parameters: [
           {
             name: 'cid',
@@ -31,8 +34,9 @@ export const downloads = {
     },
     '/downloads/async/{downloadId}/dismiss': {
       post: {
-        summary: 'Dismisses an async download',
-        tags: ['Downloads'],
+        summary: 'Downloads - Dismiss an async download',
+        tags: ['Auto Drive Download Gateway'],
+        servers: downloadServers,
         parameters: [
           {
             name: 'downloadId',
@@ -57,8 +61,9 @@ export const downloads = {
     },
     '/downloads/{cid}': {
       get: {
-        summary: 'Download an object by CID',
-        tags: ['Downloads'],
+        summary: 'Downloads - Download an object by CID',
+        tags: ['Auto Drive Download Gateway'],
+        servers: downloadServers,
         parameters: [
           {
             name: 'cid',
