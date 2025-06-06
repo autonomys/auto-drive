@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Copy } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { CreditsUpdateModal } from './CreditsUpdateModal';
-import { SubscriptionWithUser } from '@auto-drive/models';
+import { SubscriptionInfoWithUser } from '@auto-drive/models';
 import { UpdateRoleModal } from './UpdateRoleModal';
 import { useUserStore } from 'globalStates/user';
 import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';
@@ -13,7 +13,7 @@ import { shortenString } from 'utils/misc';
 import { handleEnterOrSpace } from 'utils/eventHandler';
 
 type UserTableRowProps = {
-  subscriptionWithUser: SubscriptionWithUser;
+  subscriptionWithUser: SubscriptionInfoWithUser;
 };
 
 export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
@@ -85,7 +85,21 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-sm text-black dark:text-darkBlack'>
+          {bytes(Number(subscriptionWithUser.pendingUploadCredits || 0), {
+            unitSeparator: ' ',
+          })}
+        </div>
+      </TableBodyCell>
+      <TableBodyCell>
+        <div className='text-sm text-black dark:text-darkBlack'>
           {bytes(Number(subscriptionWithUser.downloadLimit), {
+            unitSeparator: ' ',
+          })}
+        </div>
+      </TableBodyCell>
+      <TableBodyCell>
+        <div className='text-sm text-black dark:text-darkBlack'>
+          {bytes(Number(subscriptionWithUser.pendingDownloadCredits || 0), {
             unitSeparator: ' ',
           })}
         </div>
