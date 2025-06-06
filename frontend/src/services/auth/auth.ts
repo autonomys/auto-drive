@@ -3,6 +3,7 @@ import {
   ApiKeyWithoutSecret,
   MaybeUser,
   OnboardedUser,
+  PaginatedResult,
   User,
 } from '@auto-drive/models';
 import { getAuthSession } from 'utils/auth';
@@ -149,13 +150,38 @@ export const AuthService = {
 
     return response.json() as Promise<ApiKeyWithoutSecret[]>;
   },
-  getUserList: async (): Promise<OnboardedUser[]> => {
+  getUserList: async (
+    page: number,
+    limit: number,
+  ): Promise<PaginatedResult<OnboardedUser>> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/list`, {
+    const response = await fetch(
+      `${API_BASE_URL}/users/list?page=${page}&limit=${limit}&api`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  getUserByPublicId: async (publicId: string): Promise<OnboardedUser> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/${publicId}`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,

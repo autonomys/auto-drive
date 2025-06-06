@@ -4,7 +4,7 @@ import {
 } from 'gql/graphql';
 import {
   SubscriptionGranularity,
-  SubscriptionWithUser,
+  SubscriptionInfoWithUser,
   UserRole,
   ObjectInformation,
   OwnerRole,
@@ -23,8 +23,10 @@ export const mapObjectInformationFromQueryResult = (
     uploadedNodes: metadata.publishedNodes?.aggregate?.count ?? 0,
     totalNodes: metadata.totalNodes?.aggregate?.count ?? 0,
     archivedNodes: metadata.archivedNodes?.aggregate?.count ?? 0,
-    minimumBlockDepth: metadata.minimumBlockDepth?.[0]?.block_published_on ?? null,
-    maximumBlockDepth: metadata.maximumBlockDepth?.[0]?.block_published_on ?? null,
+    minimumBlockDepth:
+      metadata.minimumBlockDepth?.[0]?.block_published_on ?? null,
+    maximumBlockDepth:
+      metadata.maximumBlockDepth?.[0]?.block_published_on ?? null,
   };
 
   return {
@@ -45,7 +47,7 @@ export const mapObjectInformationFromQueryResult = (
 
 export const mapUsersFromQueryResult = (
   result: GetAllUsersWithSubscriptionsQuery,
-): SubscriptionWithUser[] => {
+): SubscriptionInfoWithUser[] => {
   return result.users.map((user) => ({
     id: user.user_membership!.subscription!.id,
     organizationId: user.user_membership!.subscription!.organizationId,
@@ -65,5 +67,7 @@ export const mapUsersFromQueryResult = (
       uploadCredits: 0,
       onboarded: true,
     },
+    pendingUploadCredits: 0,
+    pendingDownloadCredits: 0,
   }));
 };
