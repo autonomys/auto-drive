@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import {
-  handleApiSecretAuth,
+  handleAdminAuth,
   handleAuth,
   handleAuthIgnoreOnboarding,
   refreshAccessToken,
@@ -258,7 +258,7 @@ userController.get('/list', async (req, res) => {
 userController.get('/:publicId', async (req, res) => {
   const { publicId } = req.params
 
-  const isAdmin = await handleApiSecretAuth(req, res)
+  const isAdmin = await handleAdminAuth(req, res)
   if (!isAdmin) {
     return
   }
