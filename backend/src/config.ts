@@ -9,7 +9,7 @@ const DEFAULT_CACHE_TTL = 1000000 // 1000000 seconds
 const HUNDRED_MB = 1024 ** 2 * 100
 const FIVE_GB = 1024 ** 3 * 5
 
-export const config = {
+export const commonConfig = {
   logLevel: env('LOG_LEVEL', 'info'),
   postgres: {
     url: env('DATABASE_URL'),
@@ -21,34 +21,31 @@ export const config = {
   },
   chain: {
     endpoint: env('RPC_ENDPOINT', 'ws://localhost:9944'),
-    privateKeysPath: env('PRIVATE_KEYS_PATH', '//Alice'),
+    privateKeysPath: env('PRIVATE_KEYS_PATH', '//Alice'), // Might be worth it to limit this to the workers
   },
+  // Only for APIs, once /objects/${cid}/download is removed only Download API
   memoryDownloadCache: {
     maxCacheSize: Number(
       env('MEMORY_DOWNLOAD_CACHE_MAX_SIZE', DEFAULT_MAX_CACHE_SIZE.toString()),
     ),
   },
-  objectMappingArchiver: {
-    url: env('OBJECT_MAPPING_ARCHIVER_URL'),
-    step: Number(env('OBJECT_MAPPING_ARCHIVER_STEP', '1000')),
-  },
+  // Only Download Service
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),
   },
-  authService: {
-    url: env('AUTH_SERVICE_URL', 'http://localhost:3030'),
-    token: env('AUTH_SERVICE_API_KEY'),
-  },
+  // Currently, for all except frontend worker
   cache: {
     dir: env('CACHE_DIR', './.cache'),
     maxSize: Number(env('CACHE_MAX_SIZE', DEFAULT_CACHE_MAX_SIZE.toString())),
     ttl: Number(env('CACHE_TTL', DEFAULT_CACHE_TTL.toString())),
   },
+  // Common for all
   rabbitmq: {
     url: env('RABBITMQ_URL'),
     prefetch: Number(env('RABBITMQ_PREFETCH', '10')),
   },
+  // Common for all
   monitoring: {
     active: env('VICTORIA_ACTIVE', 'false') === 'true',
     victoriaEndpoint: process.env.VICTORIA_ENDPOINT,
@@ -57,6 +54,19 @@ export const config = {
       password: process.env.VICTORIA_PASSWORD,
     },
     metricEnvironmentTag: env('METRIC_ENVIRONMENT_TAG', 'chain=unknown'),
+  },
+}
+
+export const config = {
+  // Only frontend worker
+  objectMappingArchiver: {
+    url: env('OBJECT_MAPPING_ARCHIVER_URL'),
+    step: Number(env('OBJECT_MAPPING_ARCHIVER_STEP', '1000')),
+  },
+  // Currently only Frontend API but might be required in the Download API once we require users to pay
+  authService: {
+    url: env('AUTH_SERVICE_URL', 'http://localhost:3030'),
+    token: env('AUTH_SERVICE_API_KEY'),
   },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
@@ -76,6 +86,7 @@ export const config = {
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
   },
+  // Only frontend worker
   services: {
     taskManager: {
       active:

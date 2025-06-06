@@ -6,15 +6,15 @@ import {
   createFileCache,
   defaultMemoryAndSqliteConfig,
 } from '@autonomys/file-caching'
-import { config } from '../../config.js'
+import { config as commonConfig } from '../../config.js'
 import { Readable } from 'stream'
 import { DownloadStatus } from '@auto-drive/models'
 
 const fsCache = createFileCache(
   defaultMemoryAndSqliteConfig({
-    cacheMaxSize: config.cache.maxSize,
-    cacheTtl: config.cache.ttl,
-    dirname: config.cache.dir,
+    cacheMaxSize: commonConfig.cache.maxSize,
+    cacheTtl: commonConfig.cache.ttl,
+    dirname: commonConfig.cache.dir,
   }),
 )
 

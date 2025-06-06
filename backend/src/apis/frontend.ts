@@ -6,7 +6,7 @@ import { objectController } from '../http/controllers/object.js'
 import { subscriptionController } from '../http/controllers/subscriptions.js'
 import { handleAuth } from '../services/auth/express.js'
 import { uploadController } from '../http/controllers/upload.js'
-import { config } from '../config.js'
+import { commonConfig } from '../config.js'
 import { logger } from '../drivers/logger.js'
 import { docsController } from '../http/controllers/docs.js'
 
@@ -15,19 +15,19 @@ const createServer = async () => {
 
   app.use(
     express.json({
-      limit: config.express.requestSizeLimit,
+      limit: commonConfig.express.requestSizeLimit,
     }),
   )
   app.use(
     express.urlencoded({
-      limit: config.express.requestSizeLimit,
+      limit: commonConfig.express.requestSizeLimit,
       extended: true,
     }),
   )
-  if (config.express.corsAllowedOrigins) {
+  if (commonConfig.express.corsAllowedOrigins) {
     app.use(
       cors({
-        origin: config.express.corsAllowedOrigins,
+        origin: commonConfig.express.corsAllowedOrigins,
       }),
     )
   }
@@ -39,10 +39,6 @@ const createServer = async () => {
 
   app.get('/health', (_req, res) => {
     res.sendStatus(204)
-  })
-
-  app.get('/services', (_req, res) => {
-    res.json(config.services)
   })
 
   app.get('/auth/session', async (req, res) => {
@@ -61,8 +57,10 @@ const createServer = async () => {
     }
   })
 
-  app.listen(config.express.port, () => {
-    logger.info(`Server running at http://localhost:${config.express.port}`)
+  app.listen(commonConfig.express.port, () => {
+    logger.info(
+      `Server running at http://localhost:${commonConfig.express.port}`,
+    )
   })
 }
 

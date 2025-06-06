@@ -1,5 +1,5 @@
 import { Channel, connect } from 'amqplib'
-import { config } from '../config.js'
+import { commonConfig } from '../config.js'
 
 export type AutoDriveQueues = (typeof queues)[number]
 const queues = ['task-manager', 'download-manager'] as const
@@ -8,10 +8,10 @@ let channelPromise: Promise<Channel> | null = null
 
 const getChannel = async () => {
   if (!channelPromise) {
-    channelPromise = connect(config.rabbitmq.url).then((connection) =>
+    channelPromise = connect(commonConfig.rabbitmq.url).then((connection) =>
       connection.createChannel().then((channel) => {
         queues.forEach((q) => channel.assertQueue(q))
-        channel.prefetch(config.rabbitmq.prefetch)
+        channel.prefetch(commonConfig.rabbitmq.prefetch)
         return channel
       }),
     )

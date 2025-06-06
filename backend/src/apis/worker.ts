@@ -2,7 +2,7 @@ import cors from 'cors'
 import express from 'express'
 
 import 'dotenv/config.js'
-import { config } from '../config.js'
+import { commonConfig } from '../config.js'
 import { logger } from '../drivers/logger.js'
 
 const createServer = async () => {
@@ -10,19 +10,19 @@ const createServer = async () => {
 
   app.use(
     express.json({
-      limit: config.express.requestSizeLimit,
+      limit: commonConfig.express.requestSizeLimit,
     }),
   )
   app.use(
     express.urlencoded({
-      limit: config.express.requestSizeLimit,
+      limit: commonConfig.express.requestSizeLimit,
       extended: true,
     }),
   )
-  if (config.express.corsAllowedOrigins) {
+  if (commonConfig.express.corsAllowedOrigins) {
     app.use(
       cors({
-        origin: config.express.corsAllowedOrigins,
+        origin: commonConfig.express.corsAllowedOrigins,
       }),
     )
   }
@@ -31,8 +31,10 @@ const createServer = async () => {
     res.sendStatus(204)
   })
 
-  app.listen(config.express.port, () => {
-    logger.info(`Server running at http://localhost:${config.express.port}`)
+  app.listen(commonConfig.express.port, () => {
+    logger.info(
+      `Server running at http://localhost:${commonConfig.express.port}`,
+    )
   })
 }
 
