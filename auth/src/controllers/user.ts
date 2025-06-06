@@ -225,9 +225,27 @@ userController.get('/list', async (req, res) => {
   }
 
   try {
-    const users = await UsersUseCases.getUserList(user)
+    const page = req.query.page ? parseInt(req.query.page as string) : undefined
+    const limit = req.query.limit
+      ? parseInt(req.query.limit as string)
+      : undefined
 
-    res.json(users)
+    // Validate pagination parameters
+    if (page !== undefined && (isNaN(page) || page < 1)) {
+      res.status(400).json({ error: 'Invalid page parameter' })
+
+      if (limit !== undefined && (isNaN(limit) || limit < 1 || limit > 100)) {
+        res.status(400).json({
+          error: 'Invalid limit parameter (must be between 1 and 100)',
+        })
+        return
+      }
+      return
+    }
+
+    const result = await UsersUseCases.getPaginatedUserList(user, page, limit)
+
+    res.json(result)
   } catch (error) {
     console.error(error)
     res.status(500).json({
