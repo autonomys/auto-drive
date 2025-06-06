@@ -19,6 +19,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    profiles:
+      - infrastructure
   backend:
     build:
       context: .
@@ -49,11 +51,10 @@ services:
       interval: 20s
       timeout: 2s
       retries: 3
+    profiles:
+      - backend
   hasura:
     image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
-    depends_on:
-      backend-api:
-        condition: service_healthy
     volumes:
       - ./hasura/metadata:/hasura-metadata
     restart: unless-stopped
@@ -94,6 +95,8 @@ services:
     command:
       - graphql-engine
       - serve
+    profiles:
+      - infrastructure
   rabbitmq:
     image: rabbitmq:3-management
     ports:
@@ -107,6 +110,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    profiles:
+      - infrastructure
   auth:
     build:
       context: .
@@ -124,3 +129,5 @@ services:
       - JWT_SECRET_ALGORITHM=${JWT_SECRET_ALGORITHM}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
       - API_SECRET=${API_SECRET}
+    profiles:
+      - auth

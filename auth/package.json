@@ -29,12 +29,14 @@
     "jsonwebtoken": "^9.0.2",
     "prettier": "^3.5.2",
     "serverless-http": "^3.2.0",
+    "siwe": "^3.0.0",
     "typescript": "^5.7.3",
     "uuid": "^11.0.5",
     "winston": "^3.17.0"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^10.16.0",
+    "@testcontainers/postgresql": "^10.14.0",
+    "@testcontainers/rabbitmq": "^10.17.2",
     "@types/cors": "^2.8.17",
     "@types/jest": "^29.5.14",
     "db-migrate-plugin-typescript": "^2.0.0",
