@@ -77,7 +77,7 @@ services:
     env_file:
       - .env
     environment:
-      - PORT=${BACKEND_WORKER_PORT}
+      - PORT=3000
     profiles:
       - frontend
       - frontend-worker
@@ -100,7 +100,7 @@ services:
     env_file:
       - .env
     environment:
-      - PORT=${BACKEND_API_PORT}
+      - PORT=3000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 15s
@@ -128,7 +128,7 @@ services:
     env_file:
       - .env
     environment:
-      - PORT=${BACKEND_DOWNLOAD_WORKER_PORT}
+      - PORT=3000
     profiles:
       - download-worker
       - download
@@ -151,7 +151,7 @@ services:
     env_file:
       - .env
     environment:
-      - PORT=${BACKEND_DOWNLOAD_API_PORT}
+      - PORT=3000
     profiles:
       - download-api
       - download
