@@ -1,10 +1,9 @@
-import { JsonRpcProvider } from 'ethers';
 import { AuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import GithubProvider from 'next-auth/providers/github';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import DiscordProvider from 'next-auth/providers/discord';
-import { SiweMessage, VerifyOpts, VerifyParams } from 'siwe';
+import { SiweMessage, VerifyParams } from 'siwe';
 import {
   generateAccessToken,
   invalidateRefreshToken,
@@ -52,9 +51,6 @@ export const authOptions: AuthOptions = {
       },
       authorize: async (credentials) => {
         try {
-          if (!process.env.NEXT_PUBLIC_RPC_ENDPOINT)
-            throw new Error('Missing Auto-EVM RPC URL');
-
           if (
             !credentials ||
             !credentials.address ||
@@ -74,9 +70,7 @@ export const authOptions: AuthOptions = {
             nonce: message.nonce,
             domain: message.domain,
           };
-
-          const verifyOpts: VerifyOpts = {
-            provider: new JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_ENDPOINT),
+          const verifyOpts = {
             suppressExceptions: false,
           };
 
