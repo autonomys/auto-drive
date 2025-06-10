@@ -9,36 +9,12 @@ import '@rainbow-me/rainbowkit/styles.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FC, ReactNode, useState } from 'react';
 import { WagmiProvider } from 'wagmi';
-import { Chain } from 'wagmi/chains';
-
-export const nova: Chain = {
-  id: 490000,
-  name: 'Auto EVM - Autonomys Testnet',
-  nativeCurrency: {
-    decimals: 18,
-    name: 'tAI3',
-    symbol: 'tAI3',
-  },
-  rpcUrls: {
-    default: {
-      http: [process.env.NEXT_PUBLIC_RPC_ENDPOINT || ''],
-    },
-    public: {
-      http: [process.env.NEXT_PUBLIC_RPC_ENDPOINT || ''],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: 'Auto EVM Explorer',
-      url: 'https://blockscout.taurus.autonomys.xyz/',
-    },
-  },
-};
+import { mainnet } from 'wagmi/chains';
 
 const config = getDefaultConfig({
   appName: 'Auto Drive',
   projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
-  chains: [nova],
+  chains: [mainnet],
   ssr: true,
 });
 
