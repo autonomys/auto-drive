@@ -232,6 +232,14 @@ export const getUserList = async (executor: User): Promise<User[]> => {
   )
 }
 
+const updateEmail = async (executor: User, email: string): Promise<void> => {
+  await usersRepository.updateEmail(
+    executor.oauthProvider,
+    executor.oauthUserId,
+    email,
+  )
+}
+
 export const UsersUseCases = {
   onboardUser,
   getUserByOAuthUser,
@@ -243,4 +251,5 @@ export const UsersUseCases = {
   initUser,
   getUserWithOrganization,
   getUserList,
+  updateEmail,
 }

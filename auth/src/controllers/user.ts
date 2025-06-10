@@ -103,6 +103,33 @@ userController.get('/@me', async (req, res) => {
   }
 })
 
+userController.put('/@me/email', async (req, res) => {
+  const user = await handleAuth(req, res)
+  if (!user) {
+    return
+  }
+
+  const { email } = req.body
+
+  if (typeof email !== 'string') {
+    res.status(400).json({
+      error: 'Missing or invalid attribute `email` in body',
+    })
+    return
+  }
+
+  try {
+    await UsersUseCases.updateEmail(user, email)
+
+    res.sendStatus(200)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({
+      error: 'Failed to update email',
+    })
+  }
+})
+
 userController.get('/@me/apiKeys', async (req, res) => {
   const user = await handleAuth(req, res)
   if (!user) {
