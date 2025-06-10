@@ -35,11 +35,16 @@ export const authOptions: AuthOptions = {
     DiscordProvider({
       clientId: process.env.DISCORD_AUTH_CLIENT_ID as string,
       clientSecret: process.env.DISCORD_AUTH_CLIENT_SECRET as string,
-      authorization: { params: { scope: 'identify' } },
+      authorization: { params: { scope: 'identify email' } },
     }),
     GithubProvider({
       clientId: process.env.GITHUB_AUTH_CLIENT_ID as string,
       clientSecret: process.env.GITHUB_AUTH_CLIENT_SECRET as string,
+      authorization: {
+        params: {
+          scope: 'user:email read:user',
+        },
+      },
     }),
     CredentialsProvider({
       id: 'web3-wallet',
