@@ -1,5 +1,8 @@
 import { ObjectUploadState, UploadStatus } from '@auto-drive/models'
-import { nodesRepository } from '../../repositories/index.js'
+import {
+  metadataRepository,
+  nodesRepository,
+} from '../../repositories/index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
 
 const getUploadStatus = async (cid: string): Promise<ObjectUploadState> => {
@@ -8,20 +11,25 @@ const getUploadStatus = async (cid: string): Promise<ObjectUploadState> => {
     uploadStatus &&
     [UploadStatus.MIGRATING, UploadStatus.PENDING].includes(uploadStatus)
 
+  const metadata = await metadataRepository.getMetadata(cid)
+  const totalNodes =
+    metadata?.metadata.type === 'file'
+      ? metadata.metadata.totalChunks
+      : (metadata?.metadata.children.length ?? null)
+
   if (isMigratingOrPending) {
     return {
       uploadedNodes: null,
-      totalNodes: null,
+      totalNodes,
       archivedNodes: null,
       minimumBlockDepth: null,
       maximumBlockDepth: null,
     }
   }
 
-  const { totalCount, publishedCount, archivedCount } =
-    await nodesRepository.getNodeCount({
-      rootCid: cid,
-    })
+  const { publishedCount, archivedCount } = await nodesRepository.getNodeCount({
+    rootCid: cid,
+  })
   const uploadedNodes = await nodesRepository.getUploadedNodesByRootCid(cid)
 
   const minimumBlockDepth = uploadedNodes
@@ -40,7 +48,7 @@ const getUploadStatus = async (cid: string): Promise<ObjectUploadState> => {
 
   return {
     uploadedNodes: uploadedNodes.length,
-    totalNodes: totalCount,
+    totalNodes,
     archivedNodes: archivedCount,
     minimumBlockDepth,
     maximumBlockDepth,
