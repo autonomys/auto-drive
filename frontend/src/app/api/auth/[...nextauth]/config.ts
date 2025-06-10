@@ -42,8 +42,8 @@ export const authOptions: AuthOptions = {
       clientSecret: process.env.GITHUB_AUTH_CLIENT_SECRET as string,
     }),
     CredentialsProvider({
-      id: 'auto-evm',
-      name: 'Auto-EVM',
+      id: 'web3-wallet',
+      name: 'Wallet',
       credentials: {
         address: { label: 'EVM Address', type: 'text', placeholder: '0x...' },
         message: { label: 'Message', type: 'text', placeholder: '0x...' },
@@ -79,7 +79,7 @@ export const authOptions: AuthOptions = {
 
           return {
             id: credentials.address,
-            provider: 'auto-evm',
+            provider: 'web3-wallet',
             providerAccountId: credentials.address,
             userId: credentials.address,
           };
@@ -135,7 +135,7 @@ export const authOptions: AuthOptions = {
       return session;
     },
     async signIn({ account, credentials, user }) {
-      if (user.provider === 'auto-evm') {
+      if (user.provider === 'web3-wallet') {
         if (!account) throw new Error('No account found');
         if (!credentials) throw new Error('No credentials found');
         // eslint-disable-next-line camelcase

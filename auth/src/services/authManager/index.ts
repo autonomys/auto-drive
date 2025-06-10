@@ -23,7 +23,7 @@ const getUserFromAccessToken = async (
       return CustomJWTAuth.getUserFromAccessToken(accessToken)
     case 'github':
       return GitHubAuth.getUserFromAccessToken(accessToken)
-    case 'auto-evm':
+    case 'web3-wallet':
       return Web3Auth.getUserFromAccessToken(accessToken)
     default:
       throw new Error('Invalid provider')

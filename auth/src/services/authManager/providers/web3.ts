@@ -26,7 +26,7 @@ export const getUserFromAccessToken = async (
   if (!success) throw new Error(`Invalid signature: ${error}`)
 
   return {
-    provider: 'auto-evm',
+    provider: 'web3-wallet',
     id: address,
     username: address,
   }

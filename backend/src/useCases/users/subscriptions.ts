@@ -57,7 +57,7 @@ const getOrCreateSubscription = async (
     user.organizationId,
   )
   if (!subscription) {
-    const isWeb3User = user.oauthProvider === 'auto-evm'
+    const isWeb3User = user.oauthProvider === 'web3-wallet'
     if (isWeb3User) {
       return initSubscription(
         user.organizationId,
