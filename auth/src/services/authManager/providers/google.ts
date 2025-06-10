@@ -30,6 +30,7 @@ const getUserFromAccessToken = async (
     id: googleUser.id,
     username: googleUser.email,
     avatarUrl: googleUser.picture,
+    email: googleUser.email,
   }
 }
 

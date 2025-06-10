@@ -8,6 +8,7 @@ export interface User {
   oauth_avatar_url: string
   role: UserRole
   public_id: string
+  email: string
 }
 
 const getUserByPublicId = async (publicId: string): Promise<User | null> => {
@@ -39,18 +40,20 @@ const createUser = async (
   oauth_user_id: string,
   oauth_username: string | undefined,
   oauth_avatar_url: string | undefined,
+  email: string | undefined,
   publicId: string,
   role: UserRole,
 ): Promise<User | undefined> => {
   const db = await getDatabase()
 
   const user = await db.query<User>(
-    'INSERT INTO users.users (oauth_provider, oauth_user_id, oauth_username, oauth_avatar_url, public_id, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    'INSERT INTO users.users (oauth_provider, oauth_user_id, oauth_username, oauth_avatar_url, email, public_id, role) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
     [
       oauth_provider,
       oauth_user_id,
       oauth_username,
       oauth_avatar_url,
+      email,
       publicId,
       role,
     ],
@@ -127,6 +130,21 @@ const updateAvatarUrl = async (
   return updatedUser.rows.at(0)
 }
 
+const updateEmail = async (
+  oauth_provider: string,
+  oauth_user_id: string,
+  email: string,
+): Promise<User> => {
+  const db = await getDatabase()
+
+  const updatedUser = await db.query(
+    'UPDATE users.users SET email = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *',
+    [email, oauth_provider, oauth_user_id],
+  )
+
+  return updatedUser.rows.at(0)
+}
+
 export const usersRepository = {
   getUserByPublicId,
   createUser,
@@ -136,4 +154,5 @@ export const usersRepository = {
   getAllUsers,
   updateUsername,
   updateAvatarUrl,
+  updateEmail,
 }

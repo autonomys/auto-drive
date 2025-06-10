@@ -4,6 +4,7 @@ type GitHubUser = {
   id: number
   login: string
   avatar_url: string
+  email: string
 }
 
 const getUserFromAccessToken = async (
@@ -26,6 +27,7 @@ const getUserFromAccessToken = async (
     id: githubUser.id.toString(),
     username: githubUser.login,
     avatarUrl: githubUser.avatar_url,
+    email: githubUser.email,
   }
 }
 

@@ -3,6 +3,7 @@ import { OAuthUser } from '@auto-drive/models'
 interface DiscordUser {
   id: string
   username: string
+  email: string
   avatar: string | null
 }
 

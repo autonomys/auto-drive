@@ -27,6 +27,7 @@ const getUserByPublicId = async (
     role: dbUser.role,
     oauthUsername: dbUser.oauth_username,
     oauthAvatarUrl: dbUser.oauth_avatar_url,
+    email: dbUser.email,
   })
 }
 
@@ -85,6 +86,7 @@ const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
     user.oauthUserId,
     user.oauthUsername,
     user.oauthAvatarUrl,
+    user.email,
     publicId,
     UserRole.User,
   )
@@ -119,6 +121,11 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<MaybeUser> => {
       user.id,
       user.avatarUrl,
     )
+  }
+
+  // If the user has an email and has no email in the database, update the email
+  if (user.email && !dbUser.email) {
+    await usersRepository.updateEmail(user.provider, user.id, user.email)
   }
 
   return userFromTable({
@@ -177,6 +184,7 @@ const initUser = async (
   oauthUserId: string,
   oauthUsername: string | undefined,
   oauthAvatarUrl: string | undefined,
+  email: string | undefined,
   publicId: string,
   role: UserRole,
 ): Promise<User> => {
@@ -185,6 +193,7 @@ const initUser = async (
     oauthUserId,
     oauthUsername,
     oauthAvatarUrl,
+    email,
     publicId,
     role,
   )

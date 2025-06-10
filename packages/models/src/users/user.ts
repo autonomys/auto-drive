@@ -23,6 +23,7 @@ type UserBase = {
   oauthUserId: string;
   oauthUsername?: string;
   oauthAvatarUrl?: string;
+  email?: string;
   role: UserRole;
   publicId: PublicId;
 };
