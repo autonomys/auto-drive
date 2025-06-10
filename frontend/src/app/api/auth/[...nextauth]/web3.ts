@@ -11,10 +11,6 @@ export const encodeWalletProofInJWT = (walletProof: object) => {
   });
 };
 
-export const decodeWalletProofFromJWT = (token: string) => {
-  return jwt.verify(token, '', {});
-};
-
 export const getMessageToSign = async (address: string) => {
   const siweMessage = new SiweMessage({
     address,
