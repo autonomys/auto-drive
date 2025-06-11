@@ -20,6 +20,11 @@ export const createDownloadService = (api: Api) => {
   };
 
   const hasFileInCache = async (cid: string) => {
+    const isClient = typeof window !== 'undefined';
+    if (!isClient) {
+      return false;
+    }
+
     const db = await openDatabase();
 
     const transaction = db.transaction('files', 'readonly');
@@ -49,6 +54,11 @@ export const createDownloadService = (api: Api) => {
   };
 
   const saveFileToCache = async (cid: string, buffer: Buffer) => {
+    const isClient = typeof window !== 'undefined';
+    if (!isClient) {
+      return;
+    }
+
     const db = await openDatabase();
     const transaction = db.transaction('files', 'readwrite');
     const store = transaction.objectStore('files');
@@ -94,6 +104,11 @@ export const createDownloadService = (api: Api) => {
   };
 
   const fetchFromCache = async (cid: string) => {
+    const isClient = typeof window !== 'undefined';
+    if (!isClient) {
+      throw new Error('Fetching from cache is not supported on the server');
+    }
+
     const db = await openDatabase();
     const transaction = db.transaction('files', 'readonly');
     const store = transaction.objectStore('files');
