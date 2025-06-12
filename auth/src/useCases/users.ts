@@ -216,16 +216,6 @@ export const getPaginatedUserList = async (
     throw new Error('User does not have admin privileges')
   }
 
-  if (page < 1) {
-    throw new Error('Invalid page parameter (must be a number greater than 0)')
-  }
-
-  if (limit < 1 || limit > 100) {
-    throw new Error(
-      'Invalid limit parameter (must be a number between 1 and 100)',
-    )
-  }
-
   const { totalCount, rows } = await usersRepository.getPaginatedUsers(
     page,
     limit,
