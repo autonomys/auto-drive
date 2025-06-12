@@ -231,15 +231,16 @@ userController.get('/list', async (req, res) => {
       : undefined
 
     // Validate pagination parameters
-    if (page !== undefined && (isNaN(page) || page < 1)) {
+    if (page !== undefined && !isNaN(page)) {
       res.status(400).json({ error: 'Invalid page parameter' })
 
-      if (limit !== undefined && (isNaN(limit) || limit < 1 || limit > 100)) {
-        res.status(400).json({
-          error: 'Invalid limit parameter (must be between 1 and 100)',
-        })
-        return
-      }
+      return
+    }
+
+    if (limit !== undefined && !isNaN(limit)) {
+      res.status(400).json({
+        error: 'Invalid limit parameter (must be a number)',
+      })
       return
     }
 
