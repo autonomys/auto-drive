@@ -1,5 +1,5 @@
 import { getDatabase } from '../drivers/pg.js'
-import { UserRole } from '@auto-drive/models'
+import { PaginatedResult, UserRole } from '@auto-drive/models'
 
 export interface User {
   oauth_provider: string
@@ -97,6 +97,31 @@ const getAllUsers = async (): Promise<User[]> => {
   return users.rows
 }
 
+const getPaginatedUsers = async (
+  page: number = 1,
+  limit: number = 10,
+): Promise<PaginatedResult<User>> => {
+  const db = await getDatabase()
+  const offset = (page - 1) * limit
+
+  // Get total count
+  const countResult = await db.query(
+    'SELECT COUNT(*) as total FROM users.users',
+  )
+  const total = parseInt(countResult.rows[0].total)
+
+  // Get paginated users
+  const users = await db.query(
+    'SELECT * FROM users.users ORDER BY public_id LIMIT $1 OFFSET $2',
+    [limit, offset],
+  )
+
+  return {
+    totalCount: total,
+    rows: users.rows,
+  }
+}
+
 const updateUsername = async (
   oauth_provider: string,
   oauth_user_id: string,
@@ -136,4 +161,5 @@ export const usersRepository = {
   getAllUsers,
   updateUsername,
   updateAvatarUrl,
+  getPaginatedUsers,
 }
