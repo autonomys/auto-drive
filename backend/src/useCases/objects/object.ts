@@ -318,7 +318,7 @@ const populateCaches = async (cid: string) => {
   downloadService.download(cid).catch(() => {
     logger.warn(`Failed to download object ${cid} after archival check`)
   })
-  FileGateway.downloadFile(cid).catch(() => {
+  FileGateway.getFile(cid).catch(() => {
     logger.warn(`Failed to download object ${cid} after archival check`)
   })
 }
