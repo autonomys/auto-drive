@@ -73,7 +73,7 @@
     "@types/streamsaver": "^2",
     "@typescript-eslint/eslint-plugin": "^8.13.0",
     "@typescript-eslint/parser": "^8.13.0",
-    "eslint": "8.57.1",
+    "eslint": "9.29.0",
     "eslint-config-next": "14.2.25",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
