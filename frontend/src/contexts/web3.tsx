@@ -11,15 +11,16 @@ import { FC, ReactNode, useState } from 'react';
 import { WagmiProvider } from 'wagmi';
 import { mainnet } from 'wagmi/chains';
 
-const config = getDefaultConfig({
-  appName: 'Auto Drive',
-  projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
-  chains: [mainnet],
-  ssr: true,
-});
-
 export const Web3Provider: FC<{ children: ReactNode }> = ({ children }) => {
   const [queryClient] = useState(() => new QueryClient());
+  const [config] = useState(() =>
+    getDefaultConfig({
+      appName: 'Auto Drive',
+      projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
+      chains: [mainnet],
+      ssr: false,
+    }),
+  );
 
   return (
     <WagmiProvider config={config}>
