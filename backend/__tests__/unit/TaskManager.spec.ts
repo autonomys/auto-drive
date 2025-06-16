@@ -134,7 +134,10 @@ describe('TaskManager', () => {
         'Task failed',
         expect.anything(),
       )
-      expect(Rabbit.publish).not.toHaveBeenCalled()
+      expect(Rabbit.publish).toHaveBeenCalledWith(
+        'frontend-errors',
+        expect.any(Object),
+      )
     })
   })
 
