@@ -1,4 +1,3 @@
-import { logger } from '../drivers/logger.js'
 ;(async () => {
   if (process.env.NODE_ENV === 'production') {
     await import('./awsSetup.js').then(({ setupFinished }) => setupFinished)
@@ -10,6 +9,7 @@ import { logger } from '../drivers/logger.js'
   const { objectMappingArchiver } = await import(
     '../services/dsn/objectMappingListener/index.js'
   )
+  const { logger } = await import('../drivers/logger.js')
 
   if (config.services.taskManager.active) {
     EventRouter.listenFrontendEvents()
