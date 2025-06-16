@@ -17,4 +17,7 @@ export const processDownloadTask = createHandlerWithRetries(
       throw new Error(`Received task ${id} but no handler found.`)
     }
   },
+  {
+    errorPublishQueue: 'download-errors',
+  },
 )
