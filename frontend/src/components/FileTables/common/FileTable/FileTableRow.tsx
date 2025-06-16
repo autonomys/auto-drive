@@ -1,14 +1,20 @@
-import { Fragment, useCallback, useMemo, useState } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useMemo,
+  useState,
+  useRef,
+  useEffect,
+} from 'react';
 import { ObjectSummary, OwnerRole, User } from '@auto-drive/models';
 import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';
 import { DisplayerIcon } from 'components/common/Triangle';
-import { Transition } from '@headlessui/react';
 import { shortenString } from 'utils/misc';
 import { ConditionalRender } from 'components/common/ConditionalRender';
 import { FileActionButtons } from '@/components/FileTables/common/FileTable';
 import bytes from 'bytes';
 import { Button } from 'components/common/Button';
-import { File, Folder } from 'lucide-react';
+import { File, Folder, MoreVertical } from 'lucide-react';
 import { OwnerBadge } from './OwnerBadge';
 import { useNetwork } from 'contexts/network';
 import { ROUTES } from 'constants/routes';
@@ -22,6 +28,7 @@ import dayjs from 'dayjs';
 import { CopiableText } from 'components/common/CopiableText';
 import toast from 'react-hot-toast';
 import { useUserAsyncDownloadsStore } from '../../../UserAsyncDownloads/state';
+import { useFileInCache } from '@/hooks/useFileInCache';
 
 export const FileTableRow = ({
   file,
@@ -47,8 +54,31 @@ export const FileTableRow = ({
   const { network } = useNetwork();
 
   const [isRowExpanded, setIsRowExpanded] = useState(false);
-  const [showDownloadTooltip, setShowDownloadTooltip] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLDivElement>(null);
+  const isCached = useFileInCache(file.headCid);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        showActionsMenu &&
+        actionsMenuRef.current &&
+        buttonRef.current &&
+        !actionsMenuRef.current.contains(event.target as Node) &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
+        setShowActionsMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showActionsMenu]);
 
   const owner = file.owners.find((o) => o.role === OwnerRole.ADMIN);
   const isOwner =
@@ -78,25 +108,28 @@ export const FileTableRow = ({
 
   const handleShare = useMemo(
     () =>
-      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() =>
-        onShareFile(file.headCid),
-      ),
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
+        setShowActionsMenu(false);
+        onShareFile(file.headCid);
+      }),
     [onShareFile, file.headCid, stopEventPropagation],
   );
 
   const handleDelete = useMemo(
     () =>
-      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() =>
-        onDeleteFile(file.headCid),
-      ),
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
+        setShowActionsMenu(false);
+        onDeleteFile(file.headCid);
+      }),
     [onDeleteFile, file.headCid, stopEventPropagation],
   );
 
   const handleRestore = useMemo(
     () =>
-      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() =>
-        onRestoreFile(file.headCid),
-      ),
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
+        setShowActionsMenu(false);
+        onRestoreFile(file.headCid);
+      }),
     [onRestoreFile, file.headCid, stopEventPropagation],
   );
 
@@ -120,6 +153,7 @@ export const FileTableRow = ({
   const handleAsyncDownload = useMemo(
     () =>
       stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
+        setShowActionsMenu(false);
         const toastId = toast.loading('Requesting async download...');
         api
           .createAsyncDownload(file.headCid)
@@ -132,6 +166,23 @@ export const FileTableRow = ({
           });
       }),
     [api, file.headCid, stopEventPropagation, updateAsyncDownloads],
+  );
+
+  const handleDownload = useMemo(
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
+        setShowActionsMenu(false);
+        onDownloadFile(file.headCid);
+      }),
+    [onDownloadFile, file.headCid, stopEventPropagation],
+  );
+
+  const toggleActionsMenu = useMemo(
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
+        setShowActionsMenu((prev) => !prev);
+      }),
+    [stopEventPropagation],
   );
 
   return (
@@ -209,91 +260,95 @@ export const FileTableRow = ({
           </div>
         </TableBodyCell>
         <TableBodyCell className='flex justify-end'>
-          <ConditionalRender
-            condition={actionButtons.includes(FileActionButtons.DOWNLOAD)}
-          >
-            <div
-              className='relative'
-              onMouseEnter={() => setShowDownloadTooltip(true)}
-              onMouseLeave={() => setShowDownloadTooltip(false)}
-            >
+          <div className='relative'>
+            <div ref={buttonRef}>
               <Button
                 variant='lightAccent'
-                className='mr-2 text-xs outline-none focus:ring-0'
-                disabled={file.uploadState.totalNodes === null}
-                onClick={() => onDownloadFile(file.headCid)}
+                className='p-1'
+                onClick={toggleActionsMenu}
               >
-                Download
+                <MoreVertical className='h-5 w-5' />
               </Button>
-              <Transition
-                show={showDownloadTooltip}
-                as={Fragment}
-                enter='transition ease-out delay-250'
-                enterFrom='opacity-0 translate-y-1'
-                enterTo='opacity-100 translate-y-0'
-                leave='transition ease-in duration-300'
-                leaveFrom='opacity-100 translate-y-0'
-                leaveTo='opacity-0 translate-y-1'
+            </div>
+
+            {showActionsMenu && (
+              <div
+                className='absolute right-0 top-full z-10 mt-1 w-36 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-darkWhite'
+                ref={actionsMenuRef}
               >
-                <div className='absolute bottom-0 left-0 z-10 translate-y-full'>
-                  {file.uploadState.totalNodes === null && (
-                    <div className='rounded-lg bg-white p-2 shadow-md dark:bg-darkWhite'>
-                      <span className='text-sm text-gray-700'>
-                        Processing upload...
-                      </span>
-                    </div>
+                <div className='py-1' role='menu' aria-orientation='vertical'>
+                  {actionButtons.includes(FileActionButtons.SHARE) && (
+                    <button
+                      className={cn(
+                        'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
+                        !isOwner && 'cursor-not-allowed opacity-50',
+                      )}
+                      disabled={!isOwner}
+                      onClick={handleShare}
+                      role='menuitem'
+                    >
+                      Share
+                    </button>
+                  )}
+
+                  {actionButtons.includes(FileActionButtons.ASYNC_DOWNLOAD) &&
+                    !isCached && (
+                      <button
+                        className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
+                        onClick={handleAsyncDownload}
+                        role='menuitem'
+                      >
+                        Bring to Cache
+                      </button>
+                    )}
+
+                  {actionButtons.includes(FileActionButtons.DOWNLOAD) && (
+                    <button
+                      className={cn(
+                        'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
+                        file.uploadState.totalNodes === null &&
+                          'cursor-not-allowed opacity-50',
+                      )}
+                      disabled={file.uploadState.totalNodes === null}
+                      onClick={handleDownload}
+                      role='menuitem'
+                    >
+                      Download
+                      {file.uploadState.totalNodes === null && (
+                        <div className='mt-1 text-xs text-gray-500'>
+                          Processing upload...
+                        </div>
+                      )}
+                    </button>
+                  )}
+
+                  {actionButtons.includes(FileActionButtons.DELETE) && (
+                    <button
+                      className={cn(
+                        'block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-200',
+                        !hasFileOwnership && 'cursor-not-allowed opacity-50',
+                      )}
+                      disabled={!hasFileOwnership}
+                      onClick={handleDelete}
+                      role='menuitem'
+                    >
+                      Remove
+                    </button>
+                  )}
+
+                  {actionButtons.includes(FileActionButtons.RESTORE) && (
+                    <button
+                      className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
+                      onClick={handleRestore}
+                      role='menuitem'
+                    >
+                      Restore
+                    </button>
                   )}
                 </div>
-              </Transition>
-            </div>
-          </ConditionalRender>
-          <ConditionalRender
-            condition={actionButtons.includes(FileActionButtons.SHARE)}
-          >
-            <Button
-              variant='lightAccent'
-              className='mr-2 text-xs disabled:hidden'
-              disabled={!isOwner}
-              onClick={handleShare}
-            >
-              Share
-            </Button>
-          </ConditionalRender>
-          <ConditionalRender
-            condition={actionButtons.includes(FileActionButtons.ASYNC_DOWNLOAD)}
-          >
-            <Button
-              variant='lightAccent'
-              className='mr-2 text-nowrap text-xs disabled:hidden'
-              disabled={!isOwner}
-              onClick={handleAsyncDownload}
-            >
-              Bring to Cache
-            </Button>
-          </ConditionalRender>
-          <ConditionalRender
-            condition={actionButtons.includes(FileActionButtons.DELETE)}
-          >
-            <Button
-              variant='lightDanger'
-              className='text-xs disabled:hidden'
-              disabled={!hasFileOwnership}
-              onClick={handleDelete}
-            >
-              Remove
-            </Button>
-          </ConditionalRender>
-          <ConditionalRender
-            condition={actionButtons.includes(FileActionButtons.RESTORE)}
-          >
-            <Button
-              variant='lightAccent'
-              className='text-xs disabled:hidden'
-              onClick={handleRestore}
-            >
-              Restore
-            </Button>
-          </ConditionalRender>
+              </div>
+            )}
+          </div>
         </TableBodyCell>
       </TableBodyRow>
       {isRowExpanded &&
