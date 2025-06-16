@@ -1,8 +1,7 @@
 import { Channel, connect } from 'amqplib'
 import { config } from '../config.js'
 
-export type AutoDriveQueues = (typeof queues)[number]
-const queues = ['task-manager', 'download-manager'] as const
+const queues = ['task-manager', 'download-manager']
 
 let channelPromise: Promise<Channel> | null = null
 
@@ -20,13 +19,14 @@ const getChannel = async () => {
   return channelPromise
 }
 
-const publish = async (queue: (typeof queues)[number], message: object) => {
+const publish = async (queue: string, message: object) => {
   const channel = await getChannel()
+  channel.assertQueue(queue)
   channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)))
 }
 
 const subscribe = async (
-  queue: AutoDriveQueues,
+  queue: string,
   callback: (message: object) => Promise<unknown>,
 ) => {
   const channel = await getChannel()
