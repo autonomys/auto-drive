@@ -26,7 +26,7 @@ describe('Nodes Repository', () => {
     // Clean up the database before each test
     const nodes = await nodesRepository.getNodesByRootCid('test-root-cid')
     for (const node of nodes) {
-      await nodesRepository.removeNodesByRootCid(node.root_cid)
+      await nodesRepository.removeNodeByRootCid(node.root_cid)
     }
   })
 
@@ -398,11 +398,14 @@ describe('Nodes Repository', () => {
     ]
 
     await nodesRepository.saveNodes(nodes)
-    await nodesRepository.removeNodesByRootCid(rootCid)
-
+    await nodesRepository.removeNodeDataByRootCid(rootCid)
     const results = await nodesRepository.getNodesByRootCid(rootCid)
-
-    expect(results.length).toBe(0)
+    const fullNodes = await Promise.all(
+      results.map((r) => nodesRepository.getNode(r.cid)),
+    )
+    fullNodes.forEach((n) => {
+      expect(n?.encoded_node).toBeNull()
+    })
   })
 
   it('should get nodes by CIDs', async () => {

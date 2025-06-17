@@ -180,6 +180,14 @@ const removeNodeDataByRootCid = async (rootCid: string) => {
   })
 }
 
+const removeNodeByRootCid = async (rootCid: string) => {
+  const db = await getDatabase()
+
+  return db.query({
+    text: 'DELETE FROM nodes WHERE root_cid = $1',
+    values: [rootCid],
+  })
+}
 const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
   const db = await getDatabase()
 
@@ -239,4 +247,5 @@ export const nodesRepository = {
   updateNodePublishedOn,
   getUploadedNodesByRootCid,
   getLastArchivedPieceNode,
+  removeNodeByRootCid,
 }
