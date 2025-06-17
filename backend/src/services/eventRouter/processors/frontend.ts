@@ -18,4 +18,7 @@ export const processFrontendTask = createHandlerWithRetries(
       throw new Error(`Received task ${id} but no handler found.`)
     }
   },
+  {
+    errorPublishQueue: 'frontend-errors',
+  },
 )
