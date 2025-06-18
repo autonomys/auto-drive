@@ -326,7 +326,7 @@ const populateCaches = async (cid: string) => {
 const onObjectArchived = async (cid: string) => {
   await ObjectUseCases.populateCaches(cid)
   await metadataRepository.markAsArchived(cid)
-  await nodesRepository.removeNodesByRootCid(cid)
+  await nodesRepository.removeNodeDataByRootCid(cid)
 }
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {

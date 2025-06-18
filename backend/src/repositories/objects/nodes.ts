@@ -171,7 +171,16 @@ const setNodeArchivingData = async ({
   })
 }
 
-const removeNodesByRootCid = async (rootCid: string) => {
+const removeNodeDataByRootCid = async (rootCid: string) => {
+  const db = await getDatabase()
+
+  return db.query({
+    text: 'UPDATE nodes SET encoded_node = NULL WHERE root_cid = $1',
+    values: [rootCid],
+  })
+}
+
+const removeNodeByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
 
   return db.query({
@@ -179,7 +188,6 @@ const removeNodesByRootCid = async (rootCid: string) => {
     values: [rootCid],
   })
 }
-
 const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
   const db = await getDatabase()
 
@@ -234,9 +242,10 @@ export const nodesRepository = {
   setNodeArchivingData,
   getNodesByHeadCid,
   getNodesByRootCid,
-  removeNodesByRootCid,
+  removeNodeDataByRootCid,
   getNodesByCids,
   updateNodePublishedOn,
   getUploadedNodesByRootCid,
   getLastArchivedPieceNode,
+  removeNodeByRootCid,
 }
