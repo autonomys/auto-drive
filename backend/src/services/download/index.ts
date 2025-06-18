@@ -24,12 +24,21 @@ export const downloadService = {
     if (file != null) {
       logger.debug('Downloading file from memory', cid)
       const [stream1, stream2] = await forkAsyncIterable(file)
-      memoryDownloadCache.set(cid, stream1)
+
+      // Cache the file in the file system cache
+      ObjectUseCases.getMetadata(cid).then(async (metadata) => {
+        const [stream3, stream4] = await forkStream(stream1)
+        fsCache.set(cid, {
+          data: stream3,
+          size: BigInt(metadata?.totalSize ?? 0).valueOf(),
+        })
+        memoryDownloadCache.set(cid, stream4)
+      })
 
       return stream2
     }
 
-    const cachedFile = await fsCache.get(cid)
+    const cachedFile = await fsCache.get(cid).catch(() => null)
     if (cachedFile != null) {
       logger.debug('Reading file from file system cache', cid)
       const [stream1, stream2] = await forkStream(cachedFile.data)
@@ -44,19 +53,26 @@ export const downloadService = {
 
     const data = await FilesUseCases.retrieveObject(metadata)
 
-    const [stream1, stream2] = await forkStream(data)
-    fsCache.set(cid, {
-      data: stream1,
-      size: metadata.totalSize,
-    })
-    const [stream3, stream4] = await forkStream(stream2)
-    memoryDownloadCache.set(cid, stream3)
+    const [returningStream, stream2] = await forkStream(data)
 
-    return stream4
+    forkStream(stream2).then(([stream3, stream4]) => {
+      memoryDownloadCache.set(cid, stream3)
+      fsCache.set(cid, {
+        data: stream4,
+        size: BigInt(metadata.totalSize).valueOf(),
+      })
+    })
+
+    return returningStream
   },
   status: async (cid: string): Promise<DownloadStatus> => {
     const file = memoryDownloadCache.has(cid)
-    if (file != null) {
+    if (file) {
+      return DownloadStatus.Cached
+    }
+
+    const cachedFile = await fsCache.has(cid)
+    if (cachedFile) {
       return DownloadStatus.Cached
     }
 
