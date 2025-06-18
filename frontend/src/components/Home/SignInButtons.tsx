@@ -2,7 +2,7 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { LoaderCircle } from 'lucide-react';
 import { BuiltInProviderType } from 'next-auth/providers';
 import { signIn } from 'next-auth/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DiscordIcon } from 'components/common/DiscordIcon';
 import { GoogleIcon } from 'components/common/GoogleIcon';
 import { useAccount, useSignMessage } from 'wagmi';
@@ -29,21 +29,29 @@ export const SigningInButtons = () => {
   const handleAutoEVM = useCallback(async () => {
     setIsClicked('web3-wallet');
     if (openConnectModal) openConnectModal();
+  }, [openConnectModal]);
 
-    if (address) {
-      const message = await getMessageToSign(address);
-      const signature = await signMessageAsync({
-        message,
-      });
-      signIn('web3-wallet', {
-        address,
-        message,
-        signature,
-        redirect: true,
-        callbackUrl: '/drive',
-      });
+  const signInWithWallet = useCallback(async () => {
+    if (!address) return;
+
+    const message = await getMessageToSign(address);
+    const signature = await signMessageAsync({
+      message,
+    });
+    signIn('web3-wallet', {
+      address,
+      message,
+      signature,
+      redirect: true,
+      callbackUrl: '/drive',
+    });
+  }, [address, signMessageAsync]);
+
+  useEffect(() => {
+    if (address && isClicked === 'web3-wallet') {
+      signInWithWallet();
     }
-  }, [openConnectModal, address, signMessageAsync]);
+  }, [address, signInWithWallet, isClicked]);
 
   const handleGithubAuth = useCallback(() => {
     setIsClicked('github');
