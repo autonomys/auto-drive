@@ -24,9 +24,9 @@ import { v4 } from 'uuid'
 import { FilesUseCases } from './files.js'
 import { downloadService } from '../../services/download/index.js'
 import { logger } from '../../drivers/logger.js'
-import { FileGateway } from '../../services/dsn/fileGateway/index.js'
 import { EventRouter } from '../../services/eventRouter/index.js'
 import { createTask } from '../../services/eventRouter/tasks.js'
+import { consumeStream } from '../../utils/misc.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -315,12 +315,19 @@ const getNonArchivedObjects = async () => {
 }
 
 const populateCaches = async (cid: string) => {
-  downloadService.download(cid).catch(() => {
-    logger.warn(`Failed to download object ${cid} after archival check`)
-  })
-  FileGateway.getFile(cid).catch(() => {
-    logger.warn(`Failed to download object ${cid} after archival check`)
-  })
+  downloadService
+    .download(cid)
+    .then((stream) => {
+      logger.debug(
+        `Downloaded object (cid=${cid}) from DB after archival check`,
+      )
+      consumeStream(stream)
+    })
+    .catch(() => {
+      logger.warn(
+        `Failed to download object (cid=${cid}) from DB after archival check`,
+      )
+    })
 }
 
 const onObjectArchived = async (cid: string) => {

@@ -1,3 +1,5 @@
+import { Readable } from 'stream'
+
 export const stringify = (value: unknown) => {
   return JSON.stringify(value, (key, value) =>
     typeof value === 'bigint' ? value.toString() : value,
@@ -29,3 +31,10 @@ export const chunkArray = <T>(array: T[], size: number): T[][] => {
 
 export const optionalBoolEnvironmentVariable = (key: string) =>
   process.env[key] === 'true'
+
+export const consumeStream = async (stream: Readable) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  for await (const _ of stream) {
+    // do nothing
+  }
+}
