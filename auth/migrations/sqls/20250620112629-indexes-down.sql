@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS users.idx_users_public_id;
