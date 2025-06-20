@@ -6,19 +6,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- public.jwt_token_registry definition
-
--- Drop table
-
--- DROP TABLE public.jwt_token_registry;
-
-CREATE TABLE public.jwt_token_registry (
-	id text NOT NULL,
-	createdat timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT jwt_token_registry_pkey PRIMARY KEY (id)
-);
-
-
 -- public.metadata definition
 
 -- Drop table
@@ -101,28 +88,6 @@ update
     public.object_ownership for each row execute function trigger_set_timestamp();
 
 
--- public.organizations definition
-
--- Drop table
-
--- DROP TABLE public.organizations;
-
-CREATE TABLE public.organizations (
-	id text NOT NULL,
-	"name" text NOT NULL,
-	created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT organizations_pkey PRIMARY KEY (id)
-);
-
--- Table Triggers
-
-create trigger set_timestamp before
-update
-    on
-    public.organizations for each row execute function trigger_set_timestamp();
-
-
 -- public.published_objects definition
 
 -- Drop table
@@ -188,57 +153,6 @@ update
     public.transaction_results for each row execute function trigger_set_timestamp();
 
 
--- public.users definition
-
--- Drop table
-
--- DROP TABLE public.users;
-
-CREATE TABLE public.users (
-	oauth_provider text NOT NULL,
-	oauth_user_id text NOT NULL,
-	public_id text NULL,
-	"role" text NOT NULL DEFAULT 'User'::text,
-	created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT users_handle_key UNIQUE (public_id),
-	CONSTRAINT users_pkey PRIMARY KEY (oauth_provider, oauth_user_id)
-);
-
--- Table Triggers
-
-create trigger set_timestamp before
-update
-    on
-    public.users for each row execute function trigger_set_timestamp();
-
-
--- public.api_keys definition
-
--- Drop table
-
--- DROP TABLE public.api_keys;
-
-CREATE TABLE public.api_keys (
-	id text NOT NULL,
-	secret text NOT NULL,
-	oauth_provider text NOT NULL,
-	oauth_user_id text NOT NULL,
-	deleted_at timestamp NULL,
-	created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT api_keys_pkey PRIMARY KEY (id),
-	CONSTRAINT fk_user_id FOREIGN KEY (oauth_provider,oauth_user_id) REFERENCES public.users(oauth_provider,oauth_user_id)
-);
-
--- Table Triggers
-
-create trigger set_timestamp before
-update
-    on
-    public.api_keys for each row execute function trigger_set_timestamp();
-
-
 -- public.interactions definition
 
 -- Drop table
@@ -262,22 +176,6 @@ update
     on
     public.interactions for each row execute function trigger_set_timestamp();
 
-
--- public.users_organizations definition
-
--- Drop table
-
--- DROP TABLE public.users_organizations;
-
-CREATE TABLE public.users_organizations (
-	oauth_provider text NOT NULL,
-	oauth_user_id text NOT NULL,
-	organization_id text NOT NULL,
-	created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT fk_organization_id FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-	CONSTRAINT fk_user_id FOREIGN KEY (oauth_provider,oauth_user_id) REFERENCES public.users(oauth_provider,oauth_user_id)
-);
 
 -- DROP SCHEMA uploads;
 
