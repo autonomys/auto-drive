@@ -1,4 +1,0 @@
-CREATE TABLE jwt_token_registry (
-    id TEXT PRIMARY KEY,
-    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);

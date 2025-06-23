@@ -3,6 +3,7 @@ import {
   SubscriptionInfo,
   SubscriptionGranularity,
   ObjectInformation,
+  DownloadStatus,
 } from '@auto-drive/models';
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
@@ -13,7 +14,13 @@ export interface UploadResponse {
 
 export type Api = ReturnType<typeof createApiService>;
 
-export const createApiService = (apiBaseUrl: string) => ({
+export const createApiService = ({
+  apiBaseUrl,
+  downloadApiUrl,
+}: {
+  apiBaseUrl: string;
+  downloadApiUrl: string;
+}) => ({
   getSubscription: async (): Promise<SubscriptionInfo> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
@@ -93,23 +100,6 @@ export const createApiService = (apiBaseUrl: string) => ({
     }
 
     return response.json();
-  },
-  downloadObject: async (
-    cid: string,
-    password?: string,
-  ): Promise<AsyncIterable<Buffer>> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const api = createAutoDriveApi({
-      url: apiBaseUrl,
-      provider: session.authProvider as AuthProvider,
-      apiKey: session.accessToken,
-    });
-
-    return api.downloadFile(cid, password);
   },
   shareObject: async (dataCid: string, publicId: string): Promise<void> => {
     const session = await getAuthSession();
@@ -198,9 +188,77 @@ export const createApiService = (apiBaseUrl: string) => ({
     const apiDrive = createAutoDriveApi({
       provider: session.authProvider as AuthProvider,
       apiKey: session.accessToken,
-      url: apiBaseUrl,
+      apiUrl: apiBaseUrl,
     });
 
     return apiDrive.publishObject(cid);
+  },
+  // Download
+  downloadObject: async (
+    cid: string,
+    password?: string,
+  ): Promise<AsyncIterable<Buffer>> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const api = createAutoDriveApi({
+      downloadServiceUrl: downloadApiUrl,
+      apiUrl: apiBaseUrl,
+      provider: session.authProvider as AuthProvider,
+      apiKey: session.accessToken,
+    });
+
+    return api.downloadFile(cid, password);
+  },
+  createAsyncDownload: async (cid: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    await fetch(`${downloadApiUrl}/downloads/async/${cid}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+  },
+  dismissAsyncDownload: async (id: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    await fetch(`${downloadApiUrl}/downloads/async/${id}/dismiss`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+  },
+  checkDownloadStatus: async (cid: string): Promise<DownloadStatus> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${downloadApiUrl}/downloads/${cid}/status`, {
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return (response.json() as Promise<{ status: DownloadStatus }>).then(
+      (data) => data.status,
+    );
   },
 });

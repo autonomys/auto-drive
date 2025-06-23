@@ -12,6 +12,8 @@ services:
       POSTGRES_DB: postgres
     ports:
       - "127.0.0.1:5432:5432"
+    profiles:
+      - infrastructure
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,6 +26,8 @@ services:
     ports:
       - "${RABBITMQ_PORT}:5672"
       - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+    profiles:
+      - infrastructure
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
@@ -47,18 +51,18 @@ services:
       retries: 3
     ports:
       - "${PORT}:3000"
+    profiles:
+      - backend
+    command: ["yarn", "start:server"]
   hasura:
     image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
-    depends_on:
-      backend:
-        condition: service_healthy
     volumes:
       - ./hasura:/app
     restart: unless-stopped
     environment:
       # Essential Environment Variables
-      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
-      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgres://postgres:postgres@postgres:5432/auto-drive-dev
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/auto-drive-dev
       HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET} # Admin access secret
       HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET} # JWT authentication secret
 
@@ -88,5 +92,7 @@ services:
       # Hasura Migrations and Metadata
       HASURA_GRAPHQL_METADATA_DIR: /app/metadata
       HASURA_GRAPHQL_MIGRATIONS_DIR: /app/migrations
+    profiles:
+      - infrastructure
     ports:
       - "${HASURA_GRAPHQL_PORT}:8080"

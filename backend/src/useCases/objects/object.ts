@@ -23,6 +23,10 @@ import { publishedObjectsRepository } from '../../repositories/objects/published
 import { v4 } from 'uuid'
 import { FilesUseCases } from './files.js'
 import { downloadService } from '../../services/download/index.js'
+import { logger } from '../../drivers/logger.js'
+import { EventRouter } from '../../services/eventRouter/index.js'
+import { createTask } from '../../services/eventRouter/tasks.js'
+import { consumeStream } from '../../utils/misc.js'
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
@@ -310,9 +314,26 @@ const getNonArchivedObjects = async () => {
   return objects.map((e) => e.head_cid)
 }
 
-const processArchival = async (cid: string) => {
+const populateCaches = async (cid: string) => {
+  downloadService
+    .download(cid)
+    .then((stream) => {
+      logger.debug(
+        `Downloaded object (cid=${cid}) from DB after archival check`,
+      )
+      consumeStream(stream)
+    })
+    .catch(() => {
+      logger.warn(
+        `Failed to download object (cid=${cid}) from DB after archival check`,
+      )
+    })
+}
+
+const onObjectArchived = async (cid: string) => {
+  await ObjectUseCases.populateCaches(cid)
   await metadataRepository.markAsArchived(cid)
-  await nodesRepository.removeNodesByRootCid(cid)
+  await nodesRepository.removeNodeDataByRootCid(cid)
 }
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
@@ -355,7 +376,7 @@ const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
 
 const unpublishObject = async (user: User, cid: string) => {
   const publishedObject =
-    await publishedObjectsRepository.getPublishedObjectById(cid)
+    await publishedObjectsRepository.getPublishedObjectByCid(cid)
   if (!publishedObject) {
     return
   }
@@ -364,7 +385,7 @@ const unpublishObject = async (user: User, cid: string) => {
     throw new Error('User does not have access to this object')
   }
 
-  await publishedObjectsRepository.deletePublishedObject(cid)
+  await publishedObjectsRepository.deletePublishedObjectByCid(cid)
 }
 
 const checkObjectsArchivalStatus = async () => {
@@ -383,8 +404,14 @@ const checkObjectsArchivalStatus = async () => {
 
   await Promise.all(
     cidsToArchive.map(async (cid) => {
-      await downloadService.download(cid)
-      await ObjectUseCases.processArchival(cid)
+      EventRouter.publish(
+        createTask({
+          id: 'object-archived',
+          params: {
+            cid,
+          },
+        }),
+      )
     }),
   )
 }
@@ -410,10 +437,11 @@ export const ObjectUseCases = {
   isArchived,
   hasAllNodesArchived,
   getNonArchivedObjects,
-  processArchival,
+  onObjectArchived,
   publishObject,
   downloadPublishedObject,
   unpublishObject,
   checkObjectsArchivalStatus,
+  populateCaches,
   addTag,
 }

@@ -7,9 +7,6 @@ services:
   # Hasura GraphQL Engine
   hasura:
     image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
-    depends_on:
-      backend:
-        condition: service_healthy
     volumes:
       - ./hasura/metadata:/hasura-metadata
     restart: unless-stopped
@@ -70,26 +67,103 @@ services:
       driver: loki
       options:
         loki-url: "https://logging.subspace.network/loki/api/v1/push"
-  backend:
+  backend-worker:
     image: ${BACKEND_IMAGE}
-    volumes:
-      - files_cache:/usr/src/app/.cache
     ports:
-      - "3000:3000"
+      - "${BACKEND_WORKER_PORT}:3000"
+    volumes:
+      - files_cache:/usr/src/app/backend/.cache
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - PORT=3000
+    profiles:
+      - frontend
+      - frontend-worker
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:fe:worker
+  backend-api:
+    image: ${BACKEND_IMAGE}
+    volumes:
+      - files_cache:/usr/src/app/backend/.cache
+    ports:
+      - "${BACKEND_API_PORT}:3000"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 15s
       timeout: 10s
       retries: 3
     profiles:
-      - base
+      - frontend
+      - frontend-api
     logging:
       driver: loki
       options:
         loki-url: "https://logging.subspace.network/loki/api/v1/push"
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:fe:api
+  backend-download-worker:
+    image: ${BACKEND_IMAGE}
+    volumes:
+      - files_cache:/usr/src/app/backend/.cache
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_DOWNLOAD_WORKER_PORT}:3000"
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+    profiles:
+      - download-worker
+      - download
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:download:worker
+  backend-download-api:
+    image: ${BACKEND_IMAGE}
+    volumes:
+      - files_cache:/usr/src/app/backend/.cache
+    ports:
+      - "${BACKEND_DOWNLOAD_API_PORT}:3000"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+    profiles:
+      - download-api
+      - download
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:download:api
   agent:
     container_name: newrelic-infra
     image: newrelic/infrastructure:latest

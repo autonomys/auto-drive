@@ -72,15 +72,15 @@ const updatePublishedObject = async (
   return result.rows.map(mapToPublishedObject)[0]
 }
 
-const deletePublishedObject = async (id: string): Promise<void> => {
+const deletePublishedObjectByCid = async (cid: string): Promise<void> => {
   const db = await getDatabase()
-  await db.query('DELETE FROM public.published_objects WHERE id = $1', [id])
+  await db.query('DELETE FROM public.published_objects WHERE cid = $1', [cid])
 }
 
 export const publishedObjectsRepository = {
   createPublishedObject,
   getPublishedObjectById,
   updatePublishedObject,
-  deletePublishedObject,
+  deletePublishedObjectByCid,
   getPublishedObjectByCid,
 }

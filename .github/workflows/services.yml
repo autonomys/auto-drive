@@ -15,6 +15,9 @@ on:
       - ".github/**"
   workflow_dispatch:
 
+env:
+  NEXT_PUBLIC_PROJECT_ID: "mocked-value-for-CI/CD"
+
 jobs:
   backend-build-check:
     name: Services Build, Test and Lint Check

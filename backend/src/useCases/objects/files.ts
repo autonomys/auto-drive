@@ -22,15 +22,12 @@ import {
   SubscriptionsUseCases,
 } from '../index.js'
 import { uploadsRepository } from '../../repositories/uploads/uploads.js'
-import { AwaitIterable } from 'interface-store'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
-import {
-  asyncIterableToPromiseOfArray,
-  bufferToAsyncIterable,
-} from '@autonomys/asynchronous'
+import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import { downloadService } from '../../services/download/index.js'
 import { FileGateway } from '../../services/dsn/fileGateway/index.js'
 import { config } from '../../config.js'
+import { Readable } from 'stream'
 
 const generateFileArtifacts = async (
   uploadId: string,
@@ -140,38 +137,58 @@ const generateArtifacts = async (
     : generateFolderArtifacts(uploadId)
 }
 
-const retrieveAndReassembleFile = async function* (
+const retrieveAndReassembleFile = async (
   metadata: OffchainFileMetadata,
-): AwaitIterable<Buffer> {
+): Promise<Readable> => {
   if (metadata.totalChunks === 1) {
     const chunkData = await NodesUseCases.getChunkData(metadata.chunks[0].cid)
     if (!chunkData) {
       throw new Error('Chunk not found')
     }
 
-    yield chunkData
-    return
+    return Readable.from(chunkData)
   }
 
-  const CHUNK_SIZE = 100
-  for (let i = 0; i < metadata.chunks.length; i += CHUNK_SIZE) {
-    const chunks = metadata.chunks.slice(i, i + CHUNK_SIZE)
-    const chunkedData = await Promise.all(
-      chunks.map((chunk) => NodesUseCases.getChunkData(chunk.cid)),
-    )
+  const SIMULTANEOUS_CHUNKS = 100
+  let currentIndex = 0
+  return new Readable({
+    async read() {
+      if (currentIndex >= metadata.chunks.length) {
+        this.push(null)
+        return
+      }
 
-    if (chunkedData.some((e) => e === undefined)) {
-      throw new Error('Chunk not found')
-    }
+      const endIndex = currentIndex + SIMULTANEOUS_CHUNKS
+      const chunks = metadata.chunks.slice(currentIndex, endIndex)
 
-    yield Buffer.concat(chunkedData.map((e) => e!))
-  }
+      try {
+        const chunkedData = await Promise.all(
+          chunks.map((chunk) => NodesUseCases.getChunkData(chunk.cid)),
+        )
+
+        if (chunkedData.some((e) => e === undefined)) {
+          this.destroy(new Error('Chunk not found'))
+          return
+        }
+
+        for (const data of chunkedData) {
+          currentIndex++
+          if (!this.push(data)) {
+            return
+          }
+        }
+      } catch (err) {
+        console.log('Error', err)
+        this.destroy(err instanceof Error ? err : new Error(String(err)))
+      }
+    },
+  })
 }
 
 const retrieveAndReassembleFolderAsZip = async (
   parent: PizZip,
   cid: string,
-): Promise<AwaitIterable<Buffer>> => {
+): Promise<Readable> => {
   const metadata = await ObjectUseCases.getMetadata(cid)
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`)
@@ -209,7 +226,7 @@ const retrieveAndReassembleFolderAsZip = async (
       }),
   ])
 
-  return bufferToAsyncIterable(folder.generate({ type: 'nodebuffer' }))
+  return Readable.from(folder.generate({ type: 'nodebuffer' }))
 }
 
 const downloadObjectByUser = async (
@@ -335,11 +352,11 @@ const handleFolderUploadFinalization = async (
 
 const retrieveObject = async (
   metadata: OffchainMetadata,
-): Promise<AwaitIterable<Uint8Array>> => {
+): Promise<Readable> => {
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
 
   if (isArchived) {
-    return FileGateway.downloadFile(metadata.dataCid)
+    return FileGateway.getFile(metadata.dataCid)
   }
 
   return metadata.type === 'folder'
