@@ -356,7 +356,7 @@ const retrieveObject = async (
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
 
   if (isArchived) {
-    return FileGateway.getFile(metadata.dataCid).then((file) => file.data)
+    return FileGateway.getFile(metadata.dataCid)
   }
 
   return metadata.type === 'folder'
