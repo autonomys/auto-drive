@@ -18,8 +18,8 @@ import { fileProcessingInfoRepository } from '../../repositories/uploads/filePro
 import { FilesUseCases } from '../objects/files.js'
 import { NodesUseCases, ObjectUseCases } from '../objects/index.js'
 import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
-import { TaskManager } from '../../services/taskManager/index.js'
-import { Task } from '../../services/taskManager/tasks.js'
+import { EventRouter } from '../../services/eventRouter/index.js'
+import { createTask, Task } from '../../services/eventRouter/tasks.js'
 import { chunkArray } from '../../utils/misc.js'
 import { config } from '../../config.js'
 import { blockstoreRepository } from '../../repositories/uploads/blockstore.js'
@@ -256,14 +256,14 @@ const getPendingMigrations = async (limit: number): Promise<UploadEntry[]> => {
 
 const scheduleNodeMigration = async (uploadId: string): Promise<void> => {
   const tasks: Task[] = [
-    {
+    createTask({
       id: 'migrate-upload-nodes',
       params: {
         uploadId,
       },
-    },
+    }),
   ]
-  TaskManager.publish(tasks)
+  EventRouter.publish(tasks)
 }
 
 const removeUploadArtifacts = async (uploadId: string): Promise<void> => {
@@ -279,27 +279,29 @@ const scheduleNodesPublish = async (cid: string): Promise<void> => {
   const tasks: Task[] = chunkArray(
     nodes,
     config.params.maxUploadNodesPerBatch,
-  ).map((nodes) => ({
-    id: 'publish-nodes',
-    params: {
-      nodes,
-    },
-  }))
+  ).map((nodes) =>
+    createTask({
+      id: 'publish-nodes',
+      params: {
+        nodes,
+      },
+    }),
+  )
 
-  TaskManager.publish(tasks)
+  EventRouter.publish(tasks)
 }
 
 const scheduleUploadTagging = async (cid: string): Promise<void> => {
   const tasks: Task[] = [
-    {
+    createTask({
       id: 'tag-upload',
       params: {
         cid,
       },
-    },
+    }),
   ]
 
-  TaskManager.publish(tasks)
+  EventRouter.publish(tasks)
 }
 
 const tagUpload = async (cid: string): Promise<void> => {

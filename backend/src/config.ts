@@ -6,8 +6,9 @@ const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 const DEFAULT_CACHE_MAX_SIZE = 10 * 1024 ** 3 // 10GB
 const DEFAULT_CACHE_TTL = 1000000 // 1000000 seconds
 
-const HUNDRED_MB = 1024 ** 2 * 100
-const FIVE_GB = 1024 ** 3 * 5
+const ONE_MiB = 1024 ** 2
+const ONE_HUNDRED_MiB = ONE_MiB * 100
+const FIVE_GiB = 1024 ** 3 * 5
 
 export const config = {
   logLevel: env('LOG_LEVEL', 'info'),
@@ -47,6 +48,7 @@ export const config = {
   },
   rabbitmq: {
     url: env('RABBITMQ_URL'),
+    prefetch: Number(env('RABBITMQ_PREFETCH', '10')),
   },
   monitoring: {
     active: env('VICTORIA_ACTIVE', 'false') === 'true',
@@ -61,28 +63,44 @@ export const config = {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
     maxUploadNodesPerBatch: Number(env('MAX_UPLOAD_NODES_PER_BATCH', '20')),
     maxAnonymousDownloadSize: Number(
-      env('MAX_ANONYMOUS_DOWNLOAD_SIZE', HUNDRED_MB.toString()),
+      env('MAX_ANONYMOUS_DOWNLOAD_SIZE', ONE_HUNDRED_MiB.toString()),
     ),
     optionalAuth: env('OPTIONAL_AUTH', 'false') === 'true',
     defaultSubscription: {
       granularity: env('DEFAULT_SUBSCRIPTION_GRANULARITY', 'monthly'),
       uploadLimit: Number(
-        env('DEFAULT_SUBSCRIPTION_UPLOAD_LIMIT', HUNDRED_MB.toString()),
+        env('DEFAULT_SUBSCRIPTION_UPLOAD_LIMIT', ONE_HUNDRED_MiB.toString()),
       ),
       downloadLimit: Number(
-        env('DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT', FIVE_GB.toString()),
+        env('DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT', FIVE_GiB.toString()),
+      ),
+    },
+    web3DefaultSubscription: {
+      uploadLimit: Number(
+        env('WEB3_DEFAULT_SUBSCRIPTION_UPLOAD_LIMIT', ONE_MiB.toString()),
+      ),
+      downloadLimit: Number(
+        env(
+          'WEB3_DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT',
+          ONE_HUNDRED_MiB.toString(),
+        ),
       ),
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
   },
   services: {
-    taskManager:
-      (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
-        optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
-      !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
-    objectMappingArchiver:
-      (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
-        optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
-      !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
+    taskManager: {
+      active:
+        (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
+          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+        !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
+      maxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
+    },
+    objectMappingArchiver: {
+      active:
+        (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
+          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+        !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
+    },
   },
 }

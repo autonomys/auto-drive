@@ -34,7 +34,10 @@ export const NetworkProvider = ({
   network: Network;
 }) => {
   const api = useMemo(() => {
-    return createApiService(network.http);
+    return createApiService({
+      apiBaseUrl: network.http,
+      downloadApiUrl: network.download,
+    });
   }, [network]);
 
   const gql = useMemo(() => {

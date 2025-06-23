@@ -12,6 +12,7 @@ import {
 import React, { useMemo } from 'react';
 import { RoleProtected } from 'components/RoleProtected';
 import { UserRole } from '@auto-drive/models';
+import dayjs from 'dayjs';
 import { AccountInformation } from '@/components/AccountInformation';
 import { useUserStore } from 'globalStates/user';
 import { usePathname } from 'next/navigation';
@@ -65,8 +66,8 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const subscription = useUserStore(({ subscription }) => subscription);
 
   const renewalDate = useMemo(() => {
-    const date = new Date();
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    const date = dayjs().add(1, 'month').startOf('month');
+    return date.toDate();
   }, []);
 
   return (

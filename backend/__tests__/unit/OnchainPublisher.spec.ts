@@ -41,10 +41,14 @@ describe('OnchainPublisher', () => {
 
     jest.spyOn(nodesRepository, 'getNodeCount').mockResolvedValue({
       totalCount: 0,
+      publishedCount: 0,
       archivedCount: 0,
     })
 
-    await OnchainPublisher.publishNodes(nodes.map((e) => e.cid))
+    await OnchainPublisher.publishNodes(
+      nodes.map((e) => e.cid),
+      3,
+    )
 
     const transactions = nodes.map((node) => {
       const buffer = Buffer.from(node.encoded_node, 'base64')
@@ -76,16 +80,21 @@ describe('OnchainPublisher', () => {
       if (publishedNodes.includes(cid.cid!)) {
         return Promise.resolve({
           totalCount: 1,
+          publishedCount: 1,
           archivedCount: 0,
         })
       }
 
       return Promise.resolve({
-        totalCount: 0,
+        totalCount: 1,
+        publishedCount: 0,
         archivedCount: 0,
       })
     })
-    await OnchainPublisher.publishNodes(nodes.map((e) => e.cid))
+    await OnchainPublisher.publishNodes(
+      nodes.map((e) => e.cid),
+      3,
+    )
 
     const transactions = nodes
       .filter((e) => !publishedNodes.includes(e.cid))

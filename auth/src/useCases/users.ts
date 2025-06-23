@@ -2,6 +2,7 @@ import {
   MaybeUser,
   MaybeUserWithOrganization,
   OAuthUser,
+  PaginatedResult,
   User,
   userFromOAuth,
   userFromTable,
@@ -205,22 +206,32 @@ const initUser = async (
   return onboardedUser
 }
 
-export const getUserList = async (executor: User): Promise<User[]> => {
+export const getPaginatedUserList = async (
+  executor: User,
+  page: number = 1,
+  limit: number = 10,
+): Promise<PaginatedResult<User>> => {
   const isAdmin = await isAdminUser(executor)
   if (!isAdmin) {
     throw new Error('User does not have admin privileges')
   }
 
-  const users = await usersRepository.getAllUsers()
-
-  return users.map((user) =>
-    userFromTable({
-      oauthProvider: user.oauth_provider,
-      oauthUserId: user.oauth_user_id,
-      publicId: user.public_id,
-      role: user.role,
-    }),
+  const { totalCount, rows } = await usersRepository.getPaginatedUsers(
+    page,
+    limit,
   )
+
+  return {
+    totalCount,
+    rows: rows.map((user) =>
+      userFromTable({
+        oauthProvider: user.oauth_provider,
+        oauthUserId: user.oauth_user_id,
+        publicId: user.public_id,
+        role: user.role,
+      }),
+    ),
+  }
 }
 
 export const UsersUseCases = {
@@ -233,5 +244,5 @@ export const UsersUseCases = {
   resolveUser,
   initUser,
   getUserWithOrganization,
-  getUserList,
+  getPaginatedUserList,
 }

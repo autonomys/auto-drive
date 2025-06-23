@@ -43,6 +43,10 @@ app.get("/", (req, res) => {
   res.sendFile("index.html", { root: "public" });
 });
 
+app.get("/health", (req, res) => {
+  res.send("OK");
+});
+
 app.listen(config.port, () => {
   console.log(`Server is running on port ${config.port}`);
 });

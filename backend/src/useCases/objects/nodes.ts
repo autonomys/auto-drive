@@ -25,8 +25,8 @@ import {
 import { ObjectUseCases } from './object.js'
 import { logger } from '../../drivers/logger.js'
 import { Node } from '../../repositories/objects/nodes.js'
-import { TaskManager } from '../../services/taskManager/index.js'
-import { Task } from '../../services/taskManager/tasks.js'
+import { EventRouter } from '../../services/eventRouter/index.js'
+import { createTask, Task } from '../../services/eventRouter/tasks.js'
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
@@ -97,7 +97,7 @@ const saveNodes = async (
     nodes.map((node) => {
       const cid = cidToString(cidOfNode(node))
       const { type } = IPLDNodeData.decode(node.Data!)
-      saveNode(
+      return saveNode(
         rootCid,
         headCid,
         cid,
@@ -188,22 +188,20 @@ const processNodeArchived = async (objectMappings: ObjectMapping[]) => {
 
   await Promise.all(objects.map((e) => nodesRepository.setNodeArchivingData(e)))
   await ObjectUseCases.checkObjectsArchivalStatus()
-
-  return objects
 }
 
 const scheduleNodeArchiving = async (
   objects: ObjectMapping[],
 ): Promise<void> => {
   const tasks: Task[] = [
-    {
+    createTask({
       id: 'archive-objects',
       params: {
         objects,
       },
-    },
+    }),
   ]
-  TaskManager.publish(tasks)
+  EventRouter.publish(tasks)
 }
 
 const getCidsByRootCid = async (rootCid: string): Promise<string[]> => {

@@ -1,0 +1,14 @@
+query MyUndismissedAsyncDownloads {
+  async_downloads(where: { _not: { status: { _eq: "dismissed" } } }) {
+    id
+    oauthProvider: oauth_provider
+    oauthUserId: oauth_user_id
+    cid
+    status
+    errorMessage: error_message
+    fileSize: file_size
+    downloadedBytes: downloaded_bytes
+    createdAt: created_at
+    updatedAt: updated_at
+  }
+}

@@ -21,7 +21,7 @@ const saveNode = async (node: Node) => {
   const db = await getDatabase()
 
   return db.query({
-    text: 'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (cid) DO UPDATE SET head_cid = EXCLUDED.head_cid, type = EXCLUDED.type, encoded_node = EXCLUDED.encoded_node',
+    text: 'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (cid) DO NOTHING',
     values: [
       node.cid,
       node.root_cid,
@@ -37,13 +37,17 @@ const saveNodes = async (nodes: Node[]) => {
 
   return db.query({
     text: pgFormat(
-      'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES %L ON CONFLICT (cid) DO UPDATE SET head_cid = EXCLUDED.head_cid, type = EXCLUDED.type, encoded_node = EXCLUDED.encoded_node',
+      'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node, piece_index, piece_offset, block_published_on, tx_published_on) VALUES %L ON CONFLICT (cid) DO NOTHING',
       nodes.map((node) => [
         node.cid,
         node.root_cid,
         node.head_cid,
         node.type,
         node.encoded_node,
+        node.piece_index,
+        node.piece_offset,
+        node.block_published_on,
+        node.tx_published_on,
       ]),
     ),
   })
@@ -96,7 +100,7 @@ const getNodeCount = async ({
   const db = await getDatabase()
 
   let query =
-    'SELECT count(*) as total_count, count(piece_index) as archived_count FROM nodes'
+    'SELECT count(block_published_on) as published_count, count(piece_index) as archived_count, count(*) as total_count FROM nodes'
   const params = []
   const conditions = []
 
@@ -126,14 +130,16 @@ const getNodeCount = async ({
 
   return db
     .query<{
-      total_count: string
+      published_count: string
       archived_count: string
+      total_count: string
     }>({
       text: query,
       values: params,
     })
     .then((e) => ({
       totalCount: Number(e.rows[0].total_count),
+      publishedCount: Number(e.rows[0].published_count),
       archivedCount: Number(e.rows[0].archived_count),
     }))
 }
@@ -165,7 +171,16 @@ const setNodeArchivingData = async ({
   })
 }
 
-const removeNodesByRootCid = async (rootCid: string) => {
+const removeNodeDataByRootCid = async (rootCid: string) => {
+  const db = await getDatabase()
+
+  return db.query({
+    text: 'UPDATE nodes SET encoded_node = NULL WHERE root_cid = $1',
+    values: [rootCid],
+  })
+}
+
+const removeNodeByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
 
   return db.query({
@@ -173,7 +188,6 @@ const removeNodesByRootCid = async (rootCid: string) => {
     values: [rootCid],
   })
 }
-
 const getNodesByCids = async (cids: string[]): Promise<Node[]> => {
   const db = await getDatabase()
 
@@ -214,7 +228,7 @@ const getLastArchivedPieceNode = async () => {
 
   return db
     .query<Node>({
-      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL ORDER BY block_published_on DESC LIMIT 1',
+      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL ORDER BY piece_index DESC LIMIT 1',
     })
     .then((e) => e.rows.at(0))
 }
@@ -228,9 +242,10 @@ export const nodesRepository = {
   setNodeArchivingData,
   getNodesByHeadCid,
   getNodesByRootCid,
-  removeNodesByRootCid,
+  removeNodeDataByRootCid,
   getNodesByCids,
   updateNodePublishedOn,
   getUploadedNodesByRootCid,
   getLastArchivedPieceNode,
+  removeNodeByRootCid,
 }

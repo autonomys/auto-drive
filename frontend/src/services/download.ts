@@ -1,3 +1,5 @@
+'use client';
+
 import { handleFileDownload } from 'utils/file';
 import { openDatabase } from 'utils/indexedb';
 import { bufferToIterable } from 'utils/async';
@@ -20,18 +22,23 @@ export const createDownloadService = (api: Api) => {
   };
 
   const hasFileInCache = async (cid: string) => {
-    const db = await openDatabase();
+    try {
+      const db = await openDatabase();
 
-    const transaction = db.transaction('files', 'readonly');
+      const transaction = db.transaction('files', 'readonly');
 
-    const store = transaction.objectStore('files');
+      const store = transaction.objectStore('files');
 
-    const request = store.count(cid);
+      const request = store.count(cid);
 
-    return new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result > 0);
-      request.onerror = () => reject('Error checking cache');
-    });
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result > 0);
+        request.onerror = () => reject('Error checking cache');
+      });
+    } catch (error) {
+      console.warn('Cache check failed:', error);
+      return false;
+    }
   };
 
   const addFileToCache = async function* (
@@ -49,21 +56,25 @@ export const createDownloadService = (api: Api) => {
   };
 
   const saveFileToCache = async (cid: string, buffer: Buffer) => {
-    const db = await openDatabase();
-    const transaction = db.transaction('files', 'readwrite');
-    const store = transaction.objectStore('files');
-    store.put({ cid, buffer });
+    try {
+      const db = await openDatabase();
+      const transaction = db.transaction('files', 'readwrite');
+      const store = transaction.objectStore('files');
+      store.put({ cid, buffer });
 
-    return new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-      transaction.onerror = () => {
-        db.close();
-        reject('Error saving file to cache');
-      };
-    });
+      return new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          db.close();
+          reject('Error saving file to cache');
+        };
+      });
+    } catch (error) {
+      console.warn('Saving to cache failed:', error);
+    }
   };
 
   const MB = 1024 * 1024;
@@ -94,29 +105,35 @@ export const createDownloadService = (api: Api) => {
   };
 
   const fetchFromCache = async (cid: string) => {
-    const db = await openDatabase();
-    const transaction = db.transaction('files', 'readonly');
-    const store = transaction.objectStore('files');
-    const request = store.get(cid);
+    try {
+      const db = await openDatabase();
+      const transaction = db.transaction('files', 'readonly');
+      const store = transaction.objectStore('files');
+      const request = store.get(cid);
 
-    const buffer = await new Promise<Buffer>((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result.buffer);
-      request.onerror = () => reject('Error fetching file from cache');
-    });
+      const buffer = await new Promise<Buffer>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result.buffer);
+        request.onerror = () => reject('Error fetching file from cache');
+      });
 
-    const { metadata } = await api.fetchUploadedObjectMetadata(cid);
+      const { metadata } = await api.fetchUploadedObjectMetadata(cid);
 
-    const StreamSaver = await import('streamsaver');
+      const StreamSaver = await import('streamsaver');
 
-    // Create a writable stream using StreamSaver
-    const fileStream = StreamSaver.createWriteStream(
-      metadata.type === 'file' ? metadata.name! : `${metadata.name!}.zip`,
-      { size: Number(metadata.totalSize) },
-    );
-    const writer = fileStream.getWriter();
-    writer.write(Buffer.alloc(0));
+      // Create a writable stream using StreamSaver
+      const fileStream = StreamSaver.createWriteStream(
+        metadata.type === 'file' ? metadata.name! : `${metadata.name!}.zip`,
+        { size: Number(metadata.totalSize) },
+      );
+      const writer = fileStream.getWriter();
+      writer.write(Buffer.alloc(0));
 
-    await handleFileDownload(bufferToIterable(buffer), writer);
+      await handleFileDownload(bufferToIterable(buffer), writer);
+    } catch (error) {
+      console.error('Fetching from cache failed:', error);
+      // Fall back to API fetch
+      await fetchFromApi(cid);
+    }
   };
 
   return {

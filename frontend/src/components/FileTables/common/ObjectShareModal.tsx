@@ -13,7 +13,7 @@ import { Button } from 'components/common/Button';
 import { Download, Link } from 'lucide-react';
 import { useGetMetadataByHeadCidQuery } from 'gql/graphql';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
-import { ROUTES } from 'constants/routes';
+import { EXTERNAL_ROUTES, ROUTES } from 'constants/routes';
 
 export const ObjectShareModal = ({
   cid,
@@ -44,6 +44,7 @@ export const ObjectShareModal = ({
       return;
     }
 
+    navigator.clipboard.writeText(EXTERNAL_ROUTES.gatewayObjectDownload(cid));
     toast.success('Link copied to clipboard');
   }, [cid]);
 

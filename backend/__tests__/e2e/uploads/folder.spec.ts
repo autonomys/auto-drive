@@ -196,11 +196,12 @@ describe('Folder Upload', () => {
 
       folderCID = await UploadsUseCases.completeUpload(user, folderUpload.id)
 
-      expect(rabbitMock).toHaveBeenCalledWith({
+      expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
         id: 'migrate-upload-nodes',
         params: {
           uploadId: folderUpload.id,
         },
+        retriesLeft: expect.any(Number),
       })
 
       expect(folderCID).toBe(expectedCID)
@@ -261,11 +262,12 @@ describe('Folder Upload', () => {
         UploadsUseCases.processMigration(folderUpload.id),
       ).resolves.not.toThrow()
 
-      expect(rabbitMock).toHaveBeenCalledWith({
+      expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
         id: 'tag-upload',
         params: {
           cid: cidToString(cid),
         },
+        retriesLeft: expect.any(Number),
       })
 
       const node = await nodesRepository.getNode(cidToString(cid))
@@ -282,11 +284,12 @@ describe('Folder Upload', () => {
         tags: ['insecure'],
       })
 
-      expect(rabbitMock).toHaveBeenCalledWith({
+      expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
         id: 'publish-nodes',
         params: {
           nodes: expect.arrayContaining([folderCID, subfileCID, subfolderCid]),
         },
+        retriesLeft: expect.any(Number),
       })
     })
 

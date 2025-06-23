@@ -1,9 +1,12 @@
+import { autoDriveServers } from './servers.js'
+
 export const objects = {
   paths: {
     '/objects/roots': {
       get: {
-        summary: 'Get root objects',
-        tags: ['Objects'],
+        summary: 'Objects - Get root objects',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'scope',
@@ -54,8 +57,9 @@ export const objects = {
     },
     '/objects/roots/shared': {
       get: {
-        summary: 'Get shared root objects',
-        tags: ['Objects'],
+        summary: 'Objects - Get shared root objects',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'limit',
@@ -97,8 +101,9 @@ export const objects = {
     },
     '/objects/roots/deleted': {
       get: {
-        summary: 'Get deleted root objects',
-        tags: ['Objects'],
+        summary: 'Objects - Get deleted root objects',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'limit',
@@ -140,8 +145,9 @@ export const objects = {
     },
     '/objects/search': {
       get: {
-        summary: 'Search for objects by CID or name',
-        tags: ['Objects'],
+        summary: 'Objects - Search for objects by CID or name',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'cid',
@@ -195,8 +201,9 @@ export const objects = {
     },
     '/objects/{cid}/summary': {
       get: {
-        summary: 'Get summary of an object by CID',
-        tags: ['Objects'],
+        summary: 'Objects - Get summary of an object by CID',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'cid',
@@ -229,8 +236,9 @@ export const objects = {
     },
     '/objects/{cid}/metadata': {
       get: {
-        summary: 'Get metadata of an object by CID',
-        tags: ['Objects'],
+        summary: 'Objects - Get metadata of an object by CID',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'cid',
@@ -263,8 +271,9 @@ export const objects = {
     },
     '/objects/{cid}/status': {
       get: {
-        summary: 'Get upload status of an object by CID',
-        tags: ['Objects'],
+        summary: 'Objects - Get upload status of an object by CID',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'cid',
@@ -292,8 +301,8 @@ export const objects = {
     },
     '/objects/{cid}/share': {
       post: {
-        summary: 'Share an object by CID',
-        tags: ['Objects'],
+        summary: 'Objects - Share an object by CID',
+        tags: ['Auto Drive API'],
         parameters: [
           {
             name: 'cid',
@@ -335,8 +344,10 @@ export const objects = {
     },
     '/objects/{cid}/download': {
       get: {
-        summary: 'Download an object by CID',
-        tags: ['Objects'],
+        deprecated: true,
+        summary: 'Objects - Download an object by CID',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'cid',
@@ -370,8 +381,9 @@ export const objects = {
     },
     '/objects/{cid}/delete': {
       post: {
-        summary: 'Delete an object by CID',
-        tags: ['Objects'],
+        summary: 'Objects - Delete an object by CID',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'cid',
@@ -397,8 +409,9 @@ export const objects = {
     },
     '/objects/{cid}/restore': {
       post: {
-        summary: 'Restore a deleted object by CID',
-        tags: ['Objects'],
+        summary: 'Objects - Restore a deleted object by CID',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'cid',
@@ -424,8 +437,9 @@ export const objects = {
     },
     '/objects/{cid}/publish': {
       post: {
-        summary: 'Publish an object by CID and return the object id',
-        tags: ['Objects'],
+        summary: 'Objects - Publish an object by CID and return the object id',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'cid',
@@ -461,8 +475,9 @@ export const objects = {
     },
     '/objects/{cid}/unpublish': {
       post: {
-        summary: 'Unpublish an object by CID',
-        tags: ['Objects'],
+        summary: 'Objects - Unpublish an object by CID',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'cid',
@@ -488,8 +503,9 @@ export const objects = {
     },
     '/objects/{id}/public': {
       get: {
-        summary: 'Download a published object by id',
-        tags: ['Objects'],
+        summary: 'Objects - Download a published object by id',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
         parameters: [
           {
             name: 'id',

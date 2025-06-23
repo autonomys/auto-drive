@@ -43,6 +43,8 @@ import { jest } from '@jest/globals'
 import { downloadService } from '../../../src/services/download/index.js'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 import { Rabbit } from '../../../src/drivers/rabbit.js'
+import { EventRouter } from '../../../src/services/eventRouter/index.js'
+import { MAX_RETRIES } from '../../../src/services/eventRouter/tasks.js'
 
 const files = [
   {
@@ -148,11 +150,12 @@ files.map((file, index) => {
         )
         cid = await UploadsUseCases.completeUpload(user, upload.id)
 
-        expect(rabbitMock).toHaveBeenCalledWith({
+        expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
           id: 'migrate-upload-nodes',
           params: {
             uploadId: upload.id,
           },
+          retriesLeft: expect.any(Number),
         })
 
         expect(cid).toBe(cidToString(expectedCID))
@@ -214,11 +217,12 @@ files.map((file, index) => {
           UploadsUseCases.processMigration(upload.id),
         ).resolves.not.toThrow()
 
-        expect(rabbitMock).toHaveBeenCalledWith({
+        expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
           id: 'tag-upload',
           params: {
             cid: cidToString(cid),
           },
+          retriesLeft: expect.any(Number),
         })
 
         const node = await nodesRepository.getNode(cidToString(cid))
@@ -231,11 +235,12 @@ files.map((file, index) => {
 
         // Tag the upload
         await UploadsUseCases.tagUpload(cidToString(cid))
-        expect(rabbitMock).toHaveBeenCalledWith({
+        expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
           id: 'publish-nodes',
           params: {
             nodes: expect.arrayContaining([cidToString(cid)]),
           },
+          retriesLeft: expect.any(Number),
         })
       })
     })
@@ -246,9 +251,8 @@ files.map((file, index) => {
           user,
           cid,
         )
-        const fileArray = await asyncIterableToPromiseOfArray(
-          await startDownload(),
-        )
+        const file = await startDownload()
+        const fileArray = await asyncIterableToPromiseOfArray(file)
         const fileBuffer = Buffer.concat(fileArray)
         expect(fileBuffer).toEqual(rndBuffer)
       })
@@ -355,14 +359,25 @@ files.map((file, index) => {
       })
 
       it('metadata should be updated as archived', async () => {
+        const processArchivalSpy = jest
+          .spyOn(EventRouter, 'publish')
+          .mockReturnValue()
+
         await ObjectUseCases.checkObjectsArchivalStatus()
 
         const metadata = await metadataRepository.getMetadata(cid)
         expect(metadata).not.toBeNull()
-        expect(metadata?.is_archived).toBe(true)
 
         expect(memoryDownloadCache.has(cid)).toBe(true)
         expect(downloadService.fsCache.get(cid)).not.toBeNull()
+
+        expect(processArchivalSpy).toHaveBeenCalledWith({
+          id: 'object-archived',
+          params: {
+            cid,
+          },
+          retriesLeft: MAX_RETRIES,
+        })
       })
     })
   })

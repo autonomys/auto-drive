@@ -147,10 +147,6 @@ export const UploadingFileModal = ({
       // Wait for all uploads to complete (whether success or failure)
       await Promise.allSettled(uploadPromises);
 
-      const successCount = results.filter((r) => r.success).length;
-      console.log(
-        `Upload completed: ${successCount}/${files.length} files successful`,
-      );
       refetch();
       setTimeout(() => {
         handleClose();
