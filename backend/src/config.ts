@@ -4,7 +4,7 @@ import { optionalBoolEnvironmentVariable, env } from './utils/misc.js'
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 
 const DEFAULT_CACHE_MAX_SIZE = 10 * 1024 ** 3 // 10GB
-const DEFAULT_CACHE_TTL = 1000000 // 1000000 seconds
+const DEFAULT_CACHE_TTL = 0 // No TTL
 
 const ONE_MiB = 1024 ** 2
 const ONE_HUNDRED_MiB = ONE_MiB * 100
