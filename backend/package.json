@@ -24,7 +24,7 @@
     "@autonomys/asynchronous": "^1.5.1",
     "@autonomys/auto-dag-data": "^1.5.1",
     "@autonomys/auto-drive": "^1.5.1",
-    "@autonomys/auto-files": "^1.5.1",
+    "@autonomys/auto-files": "^1.5.2",
     "@autonomys/file-caching": "^1.5.1",
     "@autonomys/rpc": "^1.5.1",
     "@keyvhq/sqlite": "^2.1.6",

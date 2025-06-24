@@ -181,6 +181,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@autonomys/asynchronous@npm:^1.5.2":
+  version: 1.5.2
+  resolution: "@autonomys/asynchronous@npm:1.5.2"
+  dependencies:
+    stream-fork: "npm:^1.0.5"
+  checksum: 10c0/5ed3c1ad4d36cded1bf37240bfd8b83891f124e04f29e68a3458bfc670fee347f5ca854fc624f4211c7644998e6aa9b6c6677f60640ca544593b8851c283ebd0
+  languageName: node
+  linkType: hard
+
 "@autonomys/auto-dag-data@npm:^1.0.12, @autonomys/auto-dag-data@npm:^1.0.5, @autonomys/auto-dag-data@npm:^1.4.35":
   version: 1.4.35
   resolution: "@autonomys/auto-dag-data@npm:1.4.35"
@@ -237,6 +246,25 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@autonomys/auto-dag-data@npm:^1.5.2":
+  version: 1.5.2
+  resolution: "@autonomys/auto-dag-data@npm:1.5.2"
+  dependencies:
+    "@autonomys/asynchronous": "npm:^1.5.2"
+    "@ipld/dag-pb": "npm:^4.1.3"
+    "@peculiar/webcrypto": "npm:^1.5.0"
+    "@webbuf/blake3": "npm:^3.0.26"
+    "@webbuf/fixedbuf": "npm:^3.0.26"
+    "@webbuf/webbuf": "npm:^3.0.26"
+    fflate: "npm:^0.8.2"
+    multiformats: "npm:^13.3.2"
+    protobufjs: "npm:^7.4.0"
+    protons: "npm:^7.6.0"
+    protons-runtime: "npm:^5.5.0"
+  checksum: 10c0/9aedc7937de0a8aa9edde5d15809211ea16881e0123d655426dc37d3b81c41fea3acf77ff42004a4c80c8eb442d4e0241f110a3fcfa68df6bce7d6f4b5da50a8
+  languageName: node
+  linkType: hard
+
 "@autonomys/auto-drive@npm:^1.3.2, @autonomys/auto-drive@npm:^1.4.35":
   version: 1.4.35
   resolution: "@autonomys/auto-drive@npm:1.4.35"
@@ -271,12 +299,29 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-files@npm:^1.5.1":
-  version: 1.5.1
-  resolution: "@autonomys/auto-files@npm:1.5.1"
+"@autonomys/auto-drive@npm:^1.5.2":
+  version: 1.5.2
+  resolution: "@autonomys/auto-drive@npm:1.5.2"
   dependencies:
-    "@autonomys/auto-drive": "npm:^1.5.1"
-  checksum: 10c0/03715bc09f837f05897441d81d8a07467f8a4cee0069f31ed74fd3a7b9ea08e65a6f52137abc02ef5dabf86d3ac5bd0c39e8c4233183d31a37259728591fb934
+    "@autonomys/asynchronous": "npm:^1.5.2"
+    "@autonomys/auto-dag-data": "npm:^1.5.2"
+    "@autonomys/auto-utils": "npm:^1.5.2"
+    blockstore-core: "npm:^5.0.2"
+    jszip: "npm:^3.10.1"
+    mime-types: "npm:^3.0.1"
+    process: "npm:^0.11.10"
+    stream: "npm:^0.0.3"
+    zod: "npm:^3.24.2"
+  checksum: 10c0/a60407d517f9d4bb2d3f90caf3323b7c8f875f87cbe1da93c5109a0ca30e9572eb497faed43bc4aa8fbc6ba1a6348e6972fa8cc0121edd315669b381f0de142f
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-files@npm:^1.5.2":
+  version: 1.5.2
+  resolution: "@autonomys/auto-files@npm:1.5.2"
+  dependencies:
+    "@autonomys/auto-drive": "npm:^1.5.2"
+  checksum: 10c0/e6146f05e05840e462c1d4705d5a500346cec64bc404b6a957c59c9a6e15d319da30a67a5b4732903b8fd0a9e53de6940a9905c072a80d8b35e3e85d991b2fda
   languageName: node
   linkType: hard
 
@@ -308,6 +353,16 @@ __metadata:
     "@polkadot/api": "npm:^15.8.1"
     "@polkadot/extension-dapp": "npm:^0.58.6"
   checksum: 10c0/def181b010dfcdb26b2458eb2034d16da91a02f9b16da80ae66af6c6b9346696d92b16c21ac13ab80136165695759b5e277cc9ea86cdd051500229ede2e8daef
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-utils@npm:^1.5.2":
+  version: 1.5.2
+  resolution: "@autonomys/auto-utils@npm:1.5.2"
+  dependencies:
+    "@polkadot/api": "npm:^15.8.1"
+    "@polkadot/extension-dapp": "npm:^0.58.6"
+  checksum: 10c0/0c3b769f56d2109dd9e8faca531197d9f9286b336b61ebd5f0915681bfa79657d5c7efc41a054f885ff8558b70aee70ca56955469c3dfde4d56d7b7a9a96ec79
   languageName: node
   linkType: hard
 
@@ -9123,7 +9178,7 @@ __metadata:
     "@autonomys/asynchronous": "npm:^1.5.1"
     "@autonomys/auto-dag-data": "npm:^1.5.1"
     "@autonomys/auto-drive": "npm:^1.5.1"
-    "@autonomys/auto-files": "npm:^1.5.1"
+    "@autonomys/auto-files": "npm:^1.5.2"
     "@autonomys/file-caching": "npm:^1.5.1"
     "@autonomys/rpc": "npm:^1.5.1"
     "@faker-js/faker": "npm:^9.2.0"
