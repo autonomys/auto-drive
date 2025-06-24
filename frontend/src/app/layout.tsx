@@ -3,6 +3,7 @@ import localFont from 'next/font/local';
 import './globals.css';
 import { ToasterSetup } from 'components/ToasterSetup';
 import dynamic from 'next/dynamic';
+import NextTopLoader from 'nextjs-toploader';
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -91,6 +92,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <NextTopLoader color='#1949D2' height={2} showSpinner={false} />
         <WalletProvider>{children}</WalletProvider>
         <ToasterSetup />
       </body>

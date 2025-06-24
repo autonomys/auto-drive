@@ -1,7 +1,7 @@
 'use client';
 
 import { Checkbox, Transition } from '@headlessui/react';
-import { LoaderCircle, Square, SquareCheck } from 'lucide-react';
+import { Square, SquareCheck } from 'lucide-react';
 import { FC, useCallback, useState } from 'react';
 import { ObjectShareModal } from '@/components/FileTables/common/ObjectShareModal';
 import { ObjectDeleteModal } from '@/components/FileTables/common/ObjectDeleteModal';
@@ -25,6 +25,7 @@ import { ObjectRestoreModal } from '../ObjectRestoreModal';
 import { FileTableRow } from './FileTableRow';
 import { useFileTableState } from '@/components/FileTables/state';
 import { SortableTableColumn } from './SortableTableColumn';
+import { FileTableRowSkeleton } from './FileTableRowSkeleton';
 
 export enum FileActionButtons {
   DOWNLOAD = 'download',
@@ -47,6 +48,8 @@ export const FileTable: FC<{
 
   const objects = useFileTableState((v) => v.objects);
   const refetch = useFileTableState((v) => v.fetch);
+  const isLoading = useFileTableState((v) => v.isLoading);
+  const limit = useFileTableState((v) => v.limit);
 
   const onClose = useCallback(() => {
     setShareCID(null);
@@ -125,30 +128,24 @@ export const FileTable: FC<{
               </TableHeadRow>
             </TableHead>
             <TableBody>
-              {objects ? (
-                objects.map((file) => (
-                  <FileTableRow
-                    key={file.headCid}
-                    file={file}
-                    user={user!}
-                    selectedFiles={selectedFiles}
-                    toggleSelectFile={toggleSelectFile}
-                    actionButtons={actionButtons}
-                    onDownloadFile={setDownloadingCID}
-                    onShareFile={setShareCID}
-                    onDeleteFile={setDeleteCID}
-                    onRestoreFile={setRestoreCID}
-                  />
-                ))
-              ) : (
-                <TableBodyRow>
-                  <TableBodyCell colSpan={6}>
-                    <div className='flex h-10 w-full items-center justify-center'>
-                      <LoaderCircle className='h-4 w-4 animate-spin' />
-                    </div>
-                  </TableBodyCell>
-                </TableBodyRow>
-              )}
+              {objects && !isLoading
+                ? objects.map((file) => (
+                    <FileTableRow
+                      key={file.headCid}
+                      file={file}
+                      user={user!}
+                      selectedFiles={selectedFiles}
+                      toggleSelectFile={toggleSelectFile}
+                      actionButtons={actionButtons}
+                      onDownloadFile={setDownloadingCID}
+                      onShareFile={setShareCID}
+                      onDeleteFile={setDeleteCID}
+                      onRestoreFile={setRestoreCID}
+                    />
+                  ))
+                : Array.from({ length: limit }).map((_, index) => (
+                    <FileTableRowSkeleton key={index} />
+                  ))}
             </TableBody>
             <TableFooter>
               <TableBodyRow className='hover:bg-transparent'>
