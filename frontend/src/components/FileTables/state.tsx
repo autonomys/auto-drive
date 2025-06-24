@@ -35,133 +35,151 @@ interface FileTableStore {
   resetPagination: () => void;
   initFromUrl: () => void;
   isInitialized: boolean;
+  isLoading: boolean;
   resetState: () => void;
   searchQuery: string;
   setSearchQuery: (searchQuery: string) => void;
+  currentRequestId: number;
 }
 
-export const useFileTableState = create<FileTableStore>()((set, get) => ({
-  sortBy: defaultParams.sortBy,
-  page: defaultParams.page,
-  limit: defaultParams.limit,
-  isInitialized: false,
-  objects: null,
-  total: 0,
-  searchQuery: '',
-  setSearchQuery: (searchQuery: string) => {
-    set({ searchQuery, page: 0 });
-    get().fetch();
-  },
-  setSortBy: (sortBy: Metadata_Roots_Order_By) => {
-    set({ sortBy, page: 0 });
-    get().fetch();
-  },
-  setObjects: (objects: ObjectSummary[] | null) => set({ objects }),
-  setTotal: (total: number) => set({ total }),
-  fetcher: null,
-  setFetcher: (
-    fetcher: (
-      page: number,
-      limit: number,
-      sortBy: Metadata_Roots_Order_By,
-      searchQuery: string,
-    ) => Promise<{ objects: ObjectSummary[]; total: number }>,
-  ) => set({ fetcher }),
-  fetch: () => {
-    const { page, limit, fetcher, sortBy, searchQuery } = get();
-    fetcher?.(page, limit, sortBy, searchQuery)?.then((e) =>
-      set({ objects: e.objects, total: e.total }),
-    );
-  },
-  setLimit: (limit: number) => {
-    const { page, total } = get();
-    // Calculate new max valid page for the new limit
-    const newTotalPages = Math.ceil(total / limit);
-    // Ensure page is valid for the new limit (0-based index)
-    const newPage = Math.min(page, Math.max(0, newTotalPages - 1));
-    set({ limit, page: newPage });
-    get().fetch();
-  },
-  setPage: (page: number) => {
-    set({ page });
-    get().fetch();
-  },
-  resetPagination: () => {
-    set({
-      ...defaultParams,
-      isInitialized: true,
-    });
-    resetParams();
-  },
-  resetState: () => {
-    set({
-      ...defaultParams,
-      objects: null,
-      total: 0,
-      fetcher: null,
-      isInitialized: false,
-    });
-    resetParams();
-  },
-  initFromUrl: () => {
-    if (get().isInitialized) return;
-    if (typeof window === 'undefined') return;
+export const useFileTableState = create<FileTableStore>()((set, get) => {
+  return {
+    sortBy: defaultParams.sortBy,
+    page: defaultParams.page,
+    limit: defaultParams.limit,
+    isInitialized: false,
+    isLoading: true,
+    objects: null,
+    total: 0,
+    searchQuery: '',
+    currentRequestId: 0,
+    setSearchQuery: (searchQuery: string) => {
+      set({ searchQuery, page: 0 });
+      get().fetch();
+    },
+    setSortBy: (sortBy: Metadata_Roots_Order_By) => {
+      set({ sortBy, page: 0 });
+      get().fetch();
+    },
+    setObjects: (objects: ObjectSummary[] | null) => set({ objects }),
+    setTotal: (total: number) => set({ total }),
+    fetcher: null,
+    setFetcher: (
+      fetcher: (
+        page: number,
+        limit: number,
+        sortBy: Metadata_Roots_Order_By,
+        searchQuery: string,
+      ) => Promise<{ objects: ObjectSummary[]; total: number }>,
+    ) => set({ fetcher }),
+    fetch: () => {
+      const { page, limit, fetcher, sortBy, searchQuery, currentRequestId } =
+        get();
+      const requestId = currentRequestId + 1;
 
-    try {
-      const searchParams = new URLSearchParams(window.location.search);
-      let paramsChanged = false;
-      const state = get();
+      set({ isLoading: true, currentRequestId: requestId });
 
-      let newPage = state.page;
-      let newLimit = state.limit;
-      let newSortBy = state.sortBy;
-
-      const pageParam = searchParams.get('page');
-      if (pageParam) {
-        const parsedPage = parseInt(pageParam);
-        if (!isNaN(parsedPage) && parsedPage > 0) {
-          newPage = parsedPage - 1;
-          paramsChanged = true;
-        }
-      }
-
-      const limitParam = searchParams.get('limit');
-      if (limitParam) {
-        const parsedLimit = parseInt(limitParam);
-        if (!isNaN(parsedLimit) && TABLE_ROW_LIMITS.includes(parsedLimit)) {
-          newLimit = parsedLimit;
-          paramsChanged = true;
-        }
-      }
-
-      const sortKeyParam = searchParams.get('sortKey');
-      const sortOrderParam = searchParams.get('sortOrder') as Order_By;
-
-      if (
-        sortKeyParam &&
-        TABLE_SORT_KEYS.includes(sortKeyParam) &&
-        (sortOrderParam === Order_By.AscNullsLast ||
-          sortOrderParam === Order_By.DescNullsLast)
-      ) {
-        newSortBy = {
-          [sortKeyParam]: sortOrderParam,
-        } as Metadata_Roots_Order_By;
-        paramsChanged = true;
-      }
-
-      if (paramsChanged) {
-        set({
-          page: newPage,
-          limit: newLimit,
-          sortBy: newSortBy,
-          isInitialized: true,
+      fetcher?.(page, limit, sortBy, searchQuery)
+        ?.then((e) => {
+          // Only update state if this is still the current request
+          if (requestId === get().currentRequestId) {
+            set({ objects: e.objects, total: e.total, isLoading: false });
+          }
+        })
+        .catch(() => {
+          // Ignore all errors, including aborted requests
         });
-      } else {
+    },
+    setLimit: (limit: number) => {
+      const { page, total } = get();
+      // Calculate new max valid page for the new limit
+      const newTotalPages = Math.ceil(total / limit);
+      // Ensure page is valid for the new limit (0-based index)
+      const newPage = Math.min(page, Math.max(0, newTotalPages - 1));
+      set({ limit, page: newPage });
+      get().fetch();
+    },
+    setPage: (page: number) => {
+      set({ page });
+      get().fetch();
+    },
+    resetPagination: () => {
+      set({
+        ...defaultParams,
+        isInitialized: true,
+      });
+      resetParams();
+    },
+    resetState: () => {
+      set({
+        ...defaultParams,
+        objects: null,
+        total: 0,
+        fetcher: null,
+        isInitialized: false,
+      });
+      resetParams();
+    },
+    initFromUrl: () => {
+      if (get().isInitialized) return;
+      if (typeof window === 'undefined') return;
+
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        let paramsChanged = false;
+        const state = get();
+
+        let newPage = state.page;
+        let newLimit = state.limit;
+        let newSortBy = state.sortBy;
+
+        const pageParam = searchParams.get('page');
+        if (pageParam) {
+          const parsedPage = parseInt(pageParam);
+          if (!isNaN(parsedPage) && parsedPage > 0) {
+            newPage = parsedPage - 1;
+            paramsChanged = true;
+          }
+        }
+
+        const limitParam = searchParams.get('limit');
+        if (limitParam) {
+          const parsedLimit = parseInt(limitParam);
+          if (!isNaN(parsedLimit) && TABLE_ROW_LIMITS.includes(parsedLimit)) {
+            newLimit = parsedLimit;
+            paramsChanged = true;
+          }
+        }
+
+        const sortKeyParam = searchParams.get('sortKey');
+        const sortOrderParam = searchParams.get('sortOrder') as Order_By;
+
+        if (
+          sortKeyParam &&
+          TABLE_SORT_KEYS.includes(sortKeyParam) &&
+          (sortOrderParam === Order_By.AscNullsLast ||
+            sortOrderParam === Order_By.DescNullsLast)
+        ) {
+          newSortBy = {
+            [sortKeyParam]: sortOrderParam,
+          } as Metadata_Roots_Order_By;
+          paramsChanged = true;
+        }
+
+        if (paramsChanged) {
+          set({
+            page: newPage,
+            limit: newLimit,
+            sortBy: newSortBy,
+            isInitialized: true,
+          });
+        } else {
+          set({ isInitialized: true });
+        }
+      } catch (error) {
         set({ isInitialized: true });
+        console.error('Error initializing table from URL:', error);
       }
-    } catch (error) {
-      set({ isInitialized: true });
-      console.error('Error initializing table from URL:', error);
-    }
-  },
-}));
+    },
+  };
+});
