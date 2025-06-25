@@ -38,7 +38,12 @@ export const downloadService = {
       return stream2
     }
 
-    const cachedFile = await fsCache.get(cid).catch(() => null)
+    const cachedFile = await fsCache.get(cid).catch((e) => {
+      logger.error(
+        `Error getting file from file system cache: ${e} for cid: ${cid}. Ignoring error and retrieving file from source.`,
+      )
+      return null
+    })
     if (cachedFile != null) {
       logger.debug('Reading file from file system cache', cid)
       const [stream1, stream2] = await forkStream(cachedFile.data)
