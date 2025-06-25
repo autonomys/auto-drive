@@ -16,8 +16,11 @@ export const handleDownloadResponseHeaders = (
     ? req.query.ignoreEncoding !== 'true'
     : isExpectedDocument
 
+  const isEncrypted = !!metadata.uploadOptions?.encryption?.algorithm
   if (metadata.type === 'file') {
-    res.set('Content-Type', metadata.mimeType || 'application/octet-stream')
+    const contentType =
+      (!isEncrypted && metadata.mimeType) || 'application/octet-stream'
+    res.set('Content-Type', contentType)
     res.set(
       'Content-Disposition',
       `filename="${safeName}"; ${isExpectedDocument ? 'inline' : 'attachment'}`,
@@ -29,7 +32,10 @@ export const handleDownloadResponseHeaders = (
     }
     res.set('Content-Length', metadata.totalSize.toString())
   } else {
-    res.set('Content-Type', 'application/zip')
+    const contentType = isEncrypted
+      ? 'application/octet-stream'
+      : 'application/zip'
+    res.set('Content-Type', contentType)
     res.set(
       'Content-Disposition',
       `filename="${safeName}.zip; ${isExpectedDocument ? 'inline' : 'attachment'}`,
