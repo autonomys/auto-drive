@@ -64,14 +64,10 @@ export const useFileTableState = create<FileTableStore>()((set, get) => {
     setObjects: (objects: ObjectSummary[] | null) => set({ objects }),
     setTotal: (total: number) => set({ total }),
     fetcher: null,
-    setFetcher: (
-      fetcher: (
-        page: number,
-        limit: number,
-        sortBy: Metadata_Roots_Order_By,
-        searchQuery: string,
-      ) => Promise<{ objects: ObjectSummary[]; total: number }>,
-    ) => set({ fetcher }),
+    setFetcher: (fetcher: Fetcher) => {
+      set({ fetcher });
+      get().fetch();
+    },
     fetch: () => {
       const { page, limit, fetcher, sortBy, searchQuery, currentRequestId } =
         get();
