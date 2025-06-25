@@ -323,9 +323,9 @@ const populateCaches = async (cid: string) => {
       )
       consumeStream(stream)
     })
-    .catch(() => {
+    .catch((e) => {
       logger.warn(
-        `Failed to download object (cid=${cid}) from DB after archival check`,
+        `Failed to download object (cid=${cid}) from DB after archival check: ${e}`,
       )
     })
 }
