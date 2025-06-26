@@ -327,6 +327,7 @@ const populateCaches = async (cid: string) => {
       logger.warn(
         `Failed to download object (cid=${cid}) from DB after archival check: ${e}`,
       )
+      throw e
     })
 }
 
