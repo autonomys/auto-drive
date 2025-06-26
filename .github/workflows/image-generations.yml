@@ -5,6 +5,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Generate prerelease build with branch name and snapshot tags"
+        required: false
+        default: false
+        type: boolean
 
 env:
   TAG_NAME: latest
@@ -35,8 +41,12 @@ jobs:
       - name: Add SHORT_SHA env property with commit short sha
         run: echo "SHORT_SHA=${GITHUB_SHA::8}" >> $GITHUB_ENV
 
-      - name: Build and push Docker image
+      - name: Add BRANCH_NAME env property with branch name
+        run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+
+      - name: Build and push Docker image (release)
         uses: docker/build-push-action@v5
+        if: ${{ inputs.prerelease == 'false' }}
         with:
           context: .
           file: ./${{ matrix.app }}/Dockerfile
@@ -44,6 +54,20 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:${{ env.TAG_NAME }}
             ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:${{ env.SHORT_SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Build and push Docker image (prerelease)
+        uses: docker/build-push-action@v5
+        if: ${{ inputs.prerelease == 'true' }}
+        with:
+          context: .
+          file: ./${{ matrix.app }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:${{ env.BRANCH_NAME }}
+            ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:snapshot-${{ env.SHORT_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
