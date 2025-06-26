@@ -39,7 +39,7 @@ jobs:
           password: ${{ github.token }}
 
       - name: Add SHORT_SHA env property with commit short sha
-        run: echo "SHORT_SHA=${GITHUB_SHA::8}" >> $GITHUB_ENV
+        run: echo "SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-8)" >> $GITHUB_ENV
 
       - name: Add BRANCH_NAME env property with branch name
         run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
