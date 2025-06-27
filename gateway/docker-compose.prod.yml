@@ -15,3 +15,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+    logging:
+      driver: loki
+      options:
+        loki-url: "https://logging.subspace.network/loki/api/v1/push"
