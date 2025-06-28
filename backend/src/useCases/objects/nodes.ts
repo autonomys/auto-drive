@@ -69,7 +69,13 @@ const getChunkData = async (cid: string | CID): Promise<Buffer | undefined> => {
 
   let ipldNodeBytes: Buffer | undefined = await nodesRepository
     .getNode(cidString)
-    .then((e) => (e ? Buffer.from(e.encoded_node, 'base64') : undefined))
+    .then((e) => {
+      if (!e || !e.encoded_node) {
+        return undefined
+      }
+
+      return Buffer.from(e.encoded_node, 'base64')
+    })
 
   if (!ipldNodeBytes) {
     ipldNodeBytes = await BlockstoreUseCases.getNode(cidString)
