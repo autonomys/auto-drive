@@ -143,7 +143,7 @@ const retrieveAndReassembleFile = async (
   if (metadata.totalChunks === 1) {
     const chunkData = await NodesUseCases.getChunkData(metadata.chunks[0].cid)
     if (!chunkData) {
-      throw new Error('Chunk not found')
+      throw new Error(`Chunk not found: cid=${metadata.chunks[0].cid}`)
     }
 
     return Readable.from(chunkData)
@@ -167,7 +167,7 @@ const retrieveAndReassembleFile = async (
         )
 
         if (chunkedData.some((e) => e === undefined)) {
-          this.destroy(new Error('Chunk not found'))
+          this.destroy(new Error(`Chunk not found: cid=${chunks[0].cid}`))
           return
         }
 

@@ -1,0 +1,12 @@
+/var/log/auto-drive-backend.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    notifempty
+    create 0644 ubuntu ubuntu
+    su ubuntu ubuntu
+    postrotate
+        systemctl restart auto-drive-backend.service > /dev/null 2>/dev/null || true
+    endscript
+}

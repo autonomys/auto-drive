@@ -1,0 +1,21 @@
+[Unit]
+Description=Auto Drive Backend Service
+After=network.target
+
+[Service]
+User=ubuntu
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+WorkingDirectory=/home/ubuntu/deploy
+ExecStart=/usr/bin/docker compose --env-file /home/ubuntu/deploy/auto-drive/.env -f /home/ubuntu/deploy/auto-drive/docker-compose.prod.yml up -d --remove-orphans
+Restart=always
+RestartSec=5
+SyslogIdentifier=auto-drive-backend
+StandardOutput=append:/var/log/auto-drive-backend.log
+StandardError=append:/var/log/auto-drive-backend.log
+
+# Resource limits
+CPUQuota=90%
+MemoryMax=4G
+
+[Install]
+WantedBy=multi-user.target
