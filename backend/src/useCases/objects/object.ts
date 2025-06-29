@@ -315,20 +315,19 @@ const getNonArchivedObjects = async () => {
 }
 
 const populateCaches = async (cid: string) => {
-  downloadService
-    .download(cid)
-    .then((stream) => {
-      logger.debug(
-        `Downloaded object (cid=${cid}) from DB after archival check`,
-      )
-      consumeStream(stream)
-    })
-    .catch((e) => {
-      logger.warn(
-        `Failed to download object (cid=${cid}) from DB after archival check: ${e}`,
-      )
-      throw e
-    })
+  try {
+    const stream = await downloadService.download(cid)
+
+    logger.debug(`Downloaded object (cid=${cid}) from DB after archival check`)
+
+    // Wait until the entire stream has been consumed (and therefore cached)
+    await consumeStream(stream)
+  } catch (e) {
+    logger.warn(
+      `Failed to download object (cid=${cid}) from DB after archival check: ${e}`,
+    )
+    throw e
+  }
 }
 
 const onObjectArchived = async (cid: string) => {
