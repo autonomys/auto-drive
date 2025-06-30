@@ -121,7 +121,7 @@ objectController.get(
       )
       res.json(results)
     } catch (error: unknown) {
-      console.error('Error searching metadata:', error)
+      logger.error('Error searching metadata:', error)
       res.status(500).json({
         error: 'Failed to search metadata',
         details: error instanceof Error ? error.message : 'Unknown error',
@@ -145,7 +145,7 @@ objectController.get(
 
       res.json(summary)
     } catch (error: unknown) {
-      console.error('Error retrieving metadata:', error)
+      logger.error('Error retrieving metadata:', error)
       res.status(500).json({
         error: 'Failed to retrieve metadata',
         details: error instanceof Error ? error.message : 'Unknown error',
@@ -169,7 +169,7 @@ objectController.get(
 
       res.json(metadata)
     } catch (error: unknown) {
-      console.error('Error retrieving metadata:', error)
+      logger.error('Error retrieving metadata:', error)
       res.status(500).json({
         error: 'Failed to retrieve metadata',
         details: error instanceof Error ? error.message : 'Unknown error',
@@ -210,7 +210,7 @@ objectController.post(
       await ObjectUseCases.shareObject(user, cid, publicId)
       res.sendStatus(200)
     } catch (error: unknown) {
-      console.error('Error sharing object:', error)
+      logger.error('Error sharing object:', error)
       res.status(500).json({
         error: 'Failed to share object',
         details: error instanceof Error ? error.message : 'Unknown error',
@@ -258,7 +258,7 @@ objectController.get(
       pipeline(await startDownload(), res, (err) => {
         if (err) {
           if (res.headersSent) return
-          console.error('Error streaming data:', err)
+          logger.error('Error streaming data:', err)
           res.status(500).json({
             error: 'Failed to stream data',
             details: err.message,
@@ -266,7 +266,7 @@ objectController.get(
         }
       })
     } catch (error: unknown) {
-      console.error('Error retrieving data:', error)
+      logger.error('Error retrieving data:', error)
       res.status(500).json({
         error: 'Failed to retrieve data',
         details: error instanceof Error ? error.message : 'Unknown error',
@@ -290,7 +290,7 @@ objectController.post(
 
       res.sendStatus(200)
     } catch (error: unknown) {
-      console.error('Error deleting object:', error)
+      logger.error('Error deleting object:', error)
       res.status(500).json({
         error: 'Failed to delete object',
         details: error instanceof Error ? error.message : 'Unknown error',
@@ -314,7 +314,7 @@ objectController.post(
 
       res.sendStatus(200)
     } catch (error: unknown) {
-      console.error('Error deleting object:', error)
+      logger.error('Error deleting object:', error)
       res.status(500).json({
         error: 'Failed to delete object',
         details: error instanceof Error ? error.message : 'Unknown error',
@@ -381,7 +381,7 @@ objectController.get(
       pipeline(await startDownload(), res, (err) => {
         if (err) {
           if (res.headersSent) return
-          console.error('Error streaming data:', err)
+          logger.error('Error streaming data:', err)
           res.status(500).json({
             error: 'Failed to stream data',
             details: err.message,
@@ -389,7 +389,7 @@ objectController.get(
         }
       })
     } catch (error: unknown) {
-      console.error('Error retrieving data:', error)
+      logger.error('Error retrieving data:', error)
       res.status(500).json({
         error: 'Failed to retrieve data',
         details: error instanceof Error ? error.message : 'Unknown error',

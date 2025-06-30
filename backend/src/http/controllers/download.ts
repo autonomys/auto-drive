@@ -89,10 +89,10 @@ downloadController.get(
 
       handleDownloadResponseHeaders(req, res, metadata)
 
-      pipeline(await startDownload(), res, (err) => {
+      pipeline(await startDownload(), res, (err: Error | null) => {
         if (err) {
           if (res.headersSent) return
-          console.error('Error streaming data:', err)
+          logger.error('Error streaming data', err)
           res.status(500).json({
             error: 'Failed to stream data',
             details: err.message,
@@ -100,7 +100,7 @@ downloadController.get(
         }
       })
     } catch (error: unknown) {
-      console.error('Error retrieving data:', error)
+      logger.error('Error retrieving data', error)
       res.status(500).json({
         error: 'Failed to retrieve data',
         details: error instanceof Error ? error.message : 'Unknown error',

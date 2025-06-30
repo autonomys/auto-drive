@@ -23,6 +23,9 @@ import {
 } from '../../repositories/uploads/uploads.js'
 import { filePartsRepository } from '../../repositories/uploads/fileParts.js'
 import { CID } from 'multiformats'
+import { createLogger } from '../../drivers/logger.js'
+
+const logger = createLogger('useCases:uploads:uploadProcessing')
 
 const getUnprocessedChunkFromLatestFilePart = async (
   fileProcessingInfo: FileProcessingInfo,
@@ -35,10 +38,16 @@ const processChunk = async (
   chunkData: Buffer,
   index: number,
 ) => {
+  logger.trace(
+    'processChunk invoked (uploadId=%s, partIndex=%d)',
+    uploadId,
+    index,
+  )
   const fileProcessingInfo =
     await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(uploadId)
 
   if (!fileProcessingInfo) {
+    logger.error('File processing info not found (uploadId=%s)', uploadId)
     throw new Error('File processing info not found')
   }
 
@@ -70,12 +79,14 @@ const processChunk = async (
 }
 
 const completeFileProcessing = async (uploadId: string): Promise<CID> => {
+  logger.debug('completeFileProcessing invoked (uploadId=%s)', uploadId)
   const fileProcessingInfo =
     await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(uploadId)
 
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
 
   if (!fileProcessingInfo) {
+    logger.error('File processing info not found (uploadId=%s)', uploadId)
     throw new Error('File processing info not found')
   }
 
@@ -98,7 +109,7 @@ const completeFileProcessing = async (uploadId: string): Promise<CID> => {
     ...(upload?.upload_options ?? {}),
   }
 
-  return processBufferToIPLDFormatFromChunks(
+  const cidOfNodeId = await processBufferToIPLDFormatFromChunks(
     blockstore,
     blockstore.getFilteredMany(MetadataType.FileChunk),
     upload?.name,
@@ -106,9 +117,22 @@ const completeFileProcessing = async (uploadId: string): Promise<CID> => {
     fileBuilders,
     uploadOptions,
   )
+
+  logger.debug(
+    'File processing completed (uploadId=%s, cid=%s)',
+    uploadId,
+    cidOfNodeId,
+  )
+
+  return cidOfNodeId
 }
 
 const completeUploadProcessing = async (upload: UploadEntry): Promise<CID> => {
+  logger.debug(
+    'completeUploadProcessing invoked (uploadId=%s, type=%s)',
+    upload.id,
+    upload.type,
+  )
   if (upload.type === UploadType.FILE) {
     return completeFileProcessing(upload.id)
   } else if (upload.type === UploadType.FOLDER) {
@@ -116,6 +140,11 @@ const completeUploadProcessing = async (upload: UploadEntry): Promise<CID> => {
       mapTableToModel(upload) as FolderUpload,
     )
   } else {
+    logger.error(
+      'Invalid upload type (uploadId=%s, type=%s)',
+      upload.id,
+      upload.type,
+    )
     throw new Error('Invalid upload type')
   }
 }

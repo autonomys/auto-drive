@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import {
   handleAdminAuth,
   handleAuth,
@@ -15,7 +15,7 @@ const logger = createLogger('controllers:user')
 
 const userController = Router()
 
-userController.post('/@me/onboard', async (req, res) => {
+userController.post('/@me/onboard', async (req: Request, res: Response) => {
   const user = await handleAuthIgnoreOnboarding(req, res)
   if (!user) {
     return
@@ -25,14 +25,14 @@ userController.post('/@me/onboard', async (req, res) => {
     const onboardedUser = await UsersUseCases.onboardUser(user)
     res.json(onboardedUser)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to onboard user',
     })
   }
 })
 
-userController.post('/@me/accessToken', async (req, res) => {
+userController.post('/@me/accessToken', async (req: Request, res: Response) => {
   const user = await handleAuthIgnoreOnboarding(req, res)
   if (!user) {
     return
@@ -50,42 +50,49 @@ userController.post('/@me/accessToken', async (req, res) => {
     .json({ accessToken })
 })
 
-userController.post('/@me/refreshToken', async (req, res) => {
-  try {
-    const refreshToken = req.headers.cookie?.match(/refreshToken=([^;]+)/)?.[1]
-    if (!refreshToken) {
-      res.status(401).json({
-        error: 'Unauthorized',
+userController.post(
+  '/@me/refreshToken',
+  async (req: Request, res: Response) => {
+    try {
+      const refreshToken =
+        req.headers.cookie?.match(/refreshToken=([^;]+)/)?.[1]
+      if (!refreshToken) {
+        res.status(401).json({
+          error: 'Unauthorized',
+        })
+        return
+      }
+
+      const accessToken = await refreshAccessToken(refreshToken)
+
+      res.json({ accessToken })
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({ error: 'Failed to refresh access token' })
+      return
+    }
+  },
+)
+
+userController.delete(
+  '/@me/invalidateToken',
+  async (req: Request, res: Response) => {
+    const token = req.body.token
+
+    if (typeof token !== 'string') {
+      res.status(400).json({
+        error: 'Missing or invalid attribute `token` in body',
       })
       return
     }
 
-    const accessToken = await refreshAccessToken(refreshToken)
+    await CustomJWTAuth.invalidateRefreshToken(token)
 
-    res.json({ accessToken })
-  } catch (error) {
-    console.error(error)
-    res.status(500).json({ error: 'Failed to refresh access token' })
-    return
-  }
-})
+    res.sendStatus(200)
+  },
+)
 
-userController.delete('/@me/invalidateToken', async (req, res) => {
-  const token = req.body.token
-
-  if (typeof token !== 'string') {
-    res.status(400).json({
-      error: 'Missing or invalid attribute `token` in body',
-    })
-    return
-  }
-
-  await CustomJWTAuth.invalidateRefreshToken(token)
-
-  res.sendStatus(200)
-})
-
-userController.get('/@me', async (req, res) => {
+userController.get('/@me', async (req: Request, res: Response) => {
   const user = await handleAuthIgnoreOnboarding(req, res)
   if (!user) {
     logger.warn('User not found')
@@ -97,7 +104,7 @@ userController.get('/@me', async (req, res) => {
 
     res.json(userInfo)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to get user info',
     })
@@ -105,7 +112,7 @@ userController.get('/@me', async (req, res) => {
   }
 })
 
-userController.get('/@me/apiKeys', async (req, res) => {
+userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -116,7 +123,7 @@ userController.get('/@me/apiKeys', async (req, res) => {
 
     res.json(apiKeys)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to get API keys',
     })
@@ -124,47 +131,53 @@ userController.get('/@me/apiKeys', async (req, res) => {
   }
 })
 
-userController.post('/@me/apiKeys/create', async (req, res) => {
-  const user = await handleAuth(req, res)
-  if (!user) {
-    return
-  }
+userController.post(
+  '/@me/apiKeys/create',
+  async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
 
-  try {
-    const apiKey = await ApiKeysUseCases.createApiKey(user)
+    try {
+      const apiKey = await ApiKeysUseCases.createApiKey(user)
 
-    res.json(apiKey)
-  } catch (error) {
-    console.error(error)
-    res.status(500).json({
-      error: 'Failed to create API key',
-    })
-    return
-  }
-})
+      res.json(apiKey)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({
+        error: 'Failed to create API key',
+      })
+      return
+    }
+  },
+)
 
-userController.delete('/@me/apiKeys/:id', async (req, res) => {
-  const user = await handleAuth(req, res)
-  if (!user) {
-    return
-  }
+userController.delete(
+  '/@me/apiKeys/:id',
+  async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
 
-  const { id } = req.params
+    const { id } = req.params
 
-  try {
-    await ApiKeysUseCases.deleteApiKey(user, id)
+    try {
+      await ApiKeysUseCases.deleteApiKey(user, id)
 
-    res.sendStatus(200)
-  } catch (error) {
-    console.error(error)
-    res.status(500).json({
-      error: 'Failed to delete API key',
-    })
-    return
-  }
-})
+      res.sendStatus(200)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({
+        error: 'Failed to delete API key',
+      })
+      return
+    }
+  },
+)
 
-userController.post('/admin/add', async (req, res) => {
+userController.post('/admin/add', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -184,7 +197,7 @@ userController.post('/admin/add', async (req, res) => {
 
     res.sendStatus(200)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to add user to admins',
     })
@@ -192,7 +205,7 @@ userController.post('/admin/add', async (req, res) => {
   }
 })
 
-userController.post('/admin/remove', async (req, res) => {
+userController.post('/admin/remove', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -212,7 +225,7 @@ userController.post('/admin/remove', async (req, res) => {
 
     res.sendStatus(200)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to remove user from admins',
     })
@@ -220,7 +233,7 @@ userController.post('/admin/remove', async (req, res) => {
   }
 })
 
-userController.get('/list', async (req, res) => {
+userController.get('/list', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -250,7 +263,7 @@ userController.get('/list', async (req, res) => {
 
     res.json(result)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to get user list',
     })
@@ -258,7 +271,7 @@ userController.get('/list', async (req, res) => {
   }
 })
 
-userController.get('/:publicId', async (req, res) => {
+userController.get('/:publicId', async (req: Request, res: Response) => {
   const { publicId } = req.params
 
   const isAdmin = await handleAdminAuth(req, res)

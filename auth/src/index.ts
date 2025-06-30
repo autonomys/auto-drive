@@ -1,9 +1,9 @@
 import 'dotenv/config'
-import express from 'express'
 import cors from 'cors'
 import { userController } from './controllers/user.js'
 import { config } from './config.js'
 import { createLogger } from './drivers/logger.js'
+import express, { Request, Response, NextFunction } from 'express'
 
 const logger = createLogger('auth:server')
 
@@ -11,8 +11,13 @@ const app = express()
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
-app.use((req, _, next) => {
-  logger.info(`Request: ${req.method} ${req.url}`)
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const start = Date.now()
+  logger.trace('START %s %s', req.method, req.url)
+  res.on('finish', () => {
+    const ms = Date.now() - start
+    logger.trace('END   %s %s %d %dms', req.method, req.url, res.statusCode, ms)
+  })
   next()
 })
 
@@ -27,7 +32,7 @@ if (config.corsAllowedOrigins) {
 app.use('/users', userController)
 
 app.listen(config.port, () => {
-  console.log(`Server is running on port ${config.port}`)
+  logger.info('Server is running on port %d', config.port)
 })
 
 export { app }

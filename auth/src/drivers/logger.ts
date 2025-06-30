@@ -15,6 +15,7 @@ export interface Logger {
   error: (...message: Any[]) => void
   warn: (...message: Any[]) => void
   debug: (...message: Any[]) => void
+  trace: (...message: Any[]) => void
 }
 
 function wrapLog(log: Log): Logger {
@@ -30,6 +31,9 @@ function wrapLog(log: Log): Logger {
     },
     debug: (...message: Any[]) => {
       log.debug(...message)
+    },
+    trace: (...message: Any[]) => {
+      log.trace(...message)
     },
   }
 }

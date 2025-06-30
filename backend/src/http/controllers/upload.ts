@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { handleAuth } from '../../services/auth/express.js'
 import { UploadsUseCases } from '../../useCases/uploads/uploads.js'
 import multer from 'multer'
@@ -13,7 +13,7 @@ const uploadController = Router()
 
 uploadController.post(
   '/file',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
       return
@@ -61,7 +61,7 @@ uploadController.post(
 
 uploadController.post(
   '/folder',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
       return
@@ -107,7 +107,7 @@ uploadController.post(
 
 uploadController.post(
   '/folder/:uploadId/file',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
       return
@@ -165,7 +165,7 @@ uploadController.post(
 uploadController.post(
   '/file/:uploadId/chunk',
   multer().single('file'),
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
       return
@@ -209,7 +209,7 @@ uploadController.post(
 
 uploadController.post(
   '/:uploadId/complete',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
       return
