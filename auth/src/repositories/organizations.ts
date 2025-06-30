@@ -1,5 +1,4 @@
 import { getDatabase } from '../drivers/pg.js'
-import { Organization } from '@auto-drive/models'
 import { createLogger } from '../drivers/logger.js'
 
 type DBOrganization = {
