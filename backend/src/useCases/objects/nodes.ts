@@ -32,8 +32,10 @@ const logger = createLogger('useCases:objects:nodes')
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
+  logger.debug('Fetching node (cid=%s)', cidString)
   const node = await nodesRepository.getNode(cidString)
   if (!node) {
+    logger.warn('Node not found (cid=%s)', cidString)
     return undefined
   }
 
@@ -117,14 +119,24 @@ const saveNodes = async (
 }
 
 const getUploadCID = async (uploadId: string): Promise<CID> => {
+  logger.debug('Getting CID for upload (uploadId=%s)', uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
+    logger.error('Upload object not found (uploadId=%s)', uploadId)
     throw new Error(`Upload object not found ${uploadId}`)
   }
 
-  return upload.type === UploadType.FILE
-    ? BlockstoreUseCases.getFileUploadIdCID(uploadId)
-    : BlockstoreUseCases.getFolderUploadIdCID(uploadId)
+  const cid =
+    upload.type === UploadType.FILE
+      ? await BlockstoreUseCases.getFileUploadIdCID(uploadId)
+      : await BlockstoreUseCases.getFolderUploadIdCID(uploadId)
+
+  logger.trace(
+    'Retrieved CID for upload (uploadId=%s, cid=%s)',
+    uploadId,
+    cidToString(cid),
+  )
+  return cid
 }
 
 const migrateFromBlockstoreToNodesTable = async (
@@ -226,8 +238,9 @@ const setPublishedOn = async (
   cid: string,
   result: TransactionResult,
 ): Promise<void> => {
+  logger.debug('Setting published transaction details for node (cid=%s)', cid)
   if (!result.blockNumber || !result.txHash) {
-    logger.error('No block number or tx hash for %s', cid)
+    logger.error('No block number or tx hash for node (cid=%s)', cid)
     throw new Error(`No block number or tx hash for ${cid}`)
   }
 
@@ -235,6 +248,12 @@ const setPublishedOn = async (
     cid,
     result.blockNumber,
     result.txHash,
+  )
+  logger.info(
+    'Node published transaction details updated (cid=%s, txHash=%s, blockNumber=%d)',
+    cid,
+    result.txHash,
+    result.blockNumber,
   )
 
   return

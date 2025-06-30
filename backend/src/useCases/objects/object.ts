@@ -31,8 +31,10 @@ import { consumeStream } from '../../utils/misc.js'
 const logger = createLogger('useCases:objects:object')
 
 const getMetadata = async (cid: string) => {
+  logger.debug('Fetching metadata for object (cid=%s)', cid)
   const entry = await metadataRepository.getMetadata(cid)
   if (!entry) {
+    logger.info('No metadata found for object (cid=%s)', cid)
     return undefined
   }
 
@@ -44,6 +46,7 @@ const saveMetadata = async (
   cid: string,
   metadata: OffchainMetadata,
 ) => {
+  logger.debug('Saving metadata (rootCid=%s, cid=%s)', rootCid, cid)
   return metadataRepository.setMetadata(rootCid, cid, metadata)
 }
 
@@ -59,6 +62,12 @@ const searchMetadataByCID = async (
         scope: 'global'
       },
 ): Promise<MetadataEntry[]> => {
+  logger.debug(
+    'Searching metadata by CID (cid=%s, limit=%d, scope=%s)',
+    cid,
+    limit,
+    filter.scope,
+  )
   if (filter.scope === 'user') {
     return metadataRepository.searchMetadataByCIDAndUser(
       cid,
@@ -239,6 +248,11 @@ const getObjectInformation = async (
 }
 
 const shareObject = async (executor: User, cid: string, publicId: string) => {
+  logger.debug(
+    'Attempting to share object (cid=%s) with user (publicId=%s)',
+    cid,
+    publicId,
+  )
   const admins = await OwnershipUseCases.getAdmins(cid)
   const isUserAdmin = admins.find(
     (admin) =>
@@ -246,22 +260,41 @@ const shareObject = async (executor: User, cid: string, publicId: string) => {
       admin.oauth_user_id === executor.oauthUserId,
   )
   if (!isUserAdmin) {
+    logger.warn(
+      'User (%s) attempted to share object without admin rights (cid=%s)',
+      executor.oauthUserId,
+      cid,
+    )
     throw new Error('User is not an admin of this object')
   }
 
   const user = await AuthManager.getUserFromPublicId(publicId)
   if (!user) {
+    logger.warn(
+      'Failed to share object - target user not found (publicId=%s)',
+      publicId,
+    )
     throw new Error('User not found')
   }
 
   if (user.publicId === null) {
+    logger.warn(
+      'Failed to share object - target user has no public ID (publicId=%s)',
+      publicId,
+    )
     throw new Error('User public ID is required')
   }
 
   await OwnershipUseCases.setUserAsOwner(user, cid)
+  logger.info(
+    'Object shared successfully (cid=%s, sharedWith=%s)',
+    cid,
+    publicId,
+  )
 }
 
 const markAsDeleted = async (executor: User, cid: string) => {
+  logger.debug('Attempting to mark object as deleted (cid=%s)', cid)
   const ownerships = await ownershipRepository.getOwnerships(cid)
   const isUserOwner = ownerships.find(
     (owner) =>
@@ -270,13 +303,20 @@ const markAsDeleted = async (executor: User, cid: string) => {
   )
 
   if (!isUserOwner) {
+    logger.warn(
+      'User (%s) attempted to delete object without ownership (cid=%s)',
+      executor.oauthUserId,
+      cid,
+    )
     throw new Error('User is not an owner of this object')
   }
 
   await OwnershipUseCases.setObjectAsDeleted(executor, cid)
+  logger.info('Object marked as deleted (cid=%s)', cid)
 }
 
 const restoreObject = async (executor: User, cid: string) => {
+  logger.debug('Attempting to restore object (cid=%s)', cid)
   const deletedOwnerships = await ownershipRepository.getDeletedOwnerships(cid)
   const isUserOwner = deletedOwnerships.find(
     (owner) =>
@@ -285,10 +325,16 @@ const restoreObject = async (executor: User, cid: string) => {
   )
 
   if (!isUserOwner) {
+    logger.warn(
+      'User (%s) attempted to restore object without ownership (cid=%s)',
+      executor.oauthUserId,
+      cid,
+    )
     throw new Error('User is not an owner of this object')
   }
 
   await OwnershipUseCases.restoreObject(executor, cid)
+  logger.info('Object restored successfully (cid=%s)', cid)
 }
 
 const isArchived = async (cid: string) => {
@@ -341,11 +387,17 @@ const onObjectArchived = async (cid: string) => {
 }
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
+  logger.debug('Attempting to publish object (cid=%s)', cid)
   const objects = await publishedObjectsRepository.getPublishedObjectById(cid)
   if (objects) {
+    logger.debug('Object already published (cid=%s)', cid)
     return objects
   }
   if (!user.publicId) {
+    logger.warn(
+      'Failed to publish object - user has no public ID (userId=%s)',
+      user.oauthUserId,
+    )
     throw new Error('User public ID is required')
   }
 
@@ -355,22 +407,34 @@ const publishObject = async (user: UserWithOrganization, cid: string) => {
       user.publicId,
       cid,
     )
+  logger.info('Object published successfully (cid=%s)', cid)
 
   return publishedObject
 }
 
 const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
+  logger.debug('Attempting to download published object (id=%s)', id)
   const publishedObject =
     await publishedObjectsRepository.getPublishedObjectById(id)
   if (!publishedObject) {
+    logger.warn('Published object not found (id=%s)', id)
     throw new Error('Published object not found')
   }
 
   const user = await AuthManager.getUserFromPublicId(publishedObject.publicId)
   if (!user) {
+    logger.warn(
+      'User not found or has no subscription (publicId=%s)',
+      publishedObject.publicId,
+    )
     throw new Error('User does not have a subscription')
   }
 
+  logger.trace(
+    'Starting download of published object (id=%s, cid=%s)',
+    id,
+    publishedObject.cid,
+  )
   return FilesUseCases.downloadObjectByUser(
     user,
     publishedObject.cid,
@@ -379,35 +443,48 @@ const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
 }
 
 const unpublishObject = async (user: User, cid: string) => {
+  logger.debug('Attempting to unpublish object (cid=%s)', cid)
   const publishedObject =
     await publishedObjectsRepository.getPublishedObjectByCid(cid)
   if (!publishedObject) {
+    logger.debug('Object not published, nothing to unpublish (cid=%s)', cid)
     return
   }
 
   if (publishedObject.publicId !== user.publicId) {
+    logger.warn(
+      'User (%s) attempted to unpublish object without access (cid=%s)',
+      user.publicId,
+      cid,
+    )
     throw new Error('User does not have access to this object')
   }
 
   await publishedObjectsRepository.deletePublishedObjectByCid(cid)
+  logger.info('Object unpublished successfully (cid=%s)', cid)
 }
 
 const checkObjectsArchivalStatus = async () => {
+  logger.debug('Starting archival status check for all objects')
   const cids = await getNonArchivedObjects()
+  logger.trace('Found %d non-archived objects to check', cids.length)
 
   const results = await Promise.all(
     cids.map(async (cid) => {
       const allNodesArchived = await hasAllNodesArchived(cid)
       if (allNodesArchived) {
+        logger.debug('Object ready for archival (cid=%s)', cid)
         return cid
       }
     }),
   ).then((e) => e.filter((e) => e !== undefined))
 
   const cidsToArchive = [...new Set(results)]
+  logger.info('Found %d objects ready for archival', cidsToArchive.length)
 
   await Promise.all(
     cidsToArchive.map(async (cid) => {
+      logger.debug('Publishing archival task for object (cid=%s)', cid)
       EventRouter.publish(
         createTask({
           id: 'object-archived',
