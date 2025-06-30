@@ -55,6 +55,7 @@
     "@types/uuid": "^9.0.0",
     "@types/multer": "^1.4.7",
     "@types/zod": "^3.20.0",
+    "@types/aws-sdk": "^2.7.0",
     "ts-jest": "^29.2.6",
     "ts-node": "^10.9.2"
   }
