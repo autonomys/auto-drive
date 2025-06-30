@@ -89,7 +89,7 @@ downloadController.get(
 
       handleDownloadResponseHeaders(req, res, metadata)
 
-      pipeline(await startDownload(), res, (err) => {
+      pipeline(await startDownload(), res, (err: Error | null) => {
         if (err) {
           if (res.headersSent) return
           logger.error('Error streaming data', err)

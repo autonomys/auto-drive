@@ -1,5 +1,6 @@
 import cors from 'cors'
 import express from 'express'
+import type { Request, Response } from 'express'
 
 import 'dotenv/config.js'
 import { handleAuth } from '../services/auth/express.js'
@@ -32,7 +33,7 @@ const createServer = async () => {
   }
 
   app.use('/downloads', downloadController)
-  app.get('/health', (_req, res) => {
+  app.get('/health', (_req: Request, res: Response) => {
     res.sendStatus(204)
   })
 
@@ -40,7 +41,7 @@ const createServer = async () => {
     res.json(config.services)
   })
 
-  app.get('/auth/session', async (req, res) => {
+  app.get('/auth/session', async (req: Request, res: Response) => {
     try {
       const user = await handleAuth(req, res)
       if (!user) {

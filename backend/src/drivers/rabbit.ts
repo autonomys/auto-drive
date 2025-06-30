@@ -30,11 +30,11 @@ const publish = async (queue: string, message: object) => {
 
 const subscribe = async (
   queue: string,
-  callback: (message: object) => Promise<unknown>,
+  callback: (message: Record<string, unknown>) => Promise<unknown>,
 ) => {
   const channel = await getChannel()
 
-  const consume = await channel.consume(queue, async (message) => {
+  const consume = await channel.consume(queue, async (message): Promise<void> => {
     if (message) {
       try {
         const payload = JSON.parse(message.content.toString())
