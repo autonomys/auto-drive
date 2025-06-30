@@ -104,18 +104,4 @@ subscriptionController.post(
   }),
 )
 
-subscriptionController.get('/', async (_req, res) => {
-  try {
-    logger.trace('GET /subscriptions')
-    const subscriptions = await SubscriptionsUseCases.getAll()
-
-    res.json(subscriptions)
-  } catch (error) {
-    logger.error('Failed to get subscriptions', error)
-    res.status(500).json({
-      error: 'Failed to get subscriptions',
-    })
-  }
-})
-
 export { subscriptionController }
