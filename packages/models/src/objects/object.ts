@@ -66,16 +66,16 @@ export type ObjectSummary = {
 );
 
 export const objectStatus = (uploadState: ObjectUploadState) => {
+  if (uploadState.uploadedNodes === null || uploadState.uploadedNodes === 0) {
+    return ObjectStatus.Processing;
+  }
+
   if (uploadState.archivedNodes === uploadState.totalNodes) {
     return ObjectStatus.Archived;
   }
 
   if (uploadState.uploadedNodes === uploadState.totalNodes) {
     return ObjectStatus.Archiving;
-  }
-
-  if (uploadState.uploadedNodes === null || uploadState.uploadedNodes === 0) {
-    return ObjectStatus.Processing;
   }
 
   return ObjectStatus.Publishing;
