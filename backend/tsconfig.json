@@ -10,7 +10,6 @@
     "rootDir": "./src",
     "baseUrl": "src",
     "paths": {
-      "@auto-drive/models": ["../packages/models/src/index.ts"],
       "*": ["*"]
     },
     "strict": true,
