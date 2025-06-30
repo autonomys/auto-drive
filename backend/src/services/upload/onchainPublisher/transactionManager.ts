@@ -58,9 +58,9 @@ const submitTransaction = (
           const { status, dispatchError } = result
 
           logger.debug(
-            `Current status: ${
-              status.type
-            }, Tx hash: ${transaction.hash.toString()}`,
+            'Current status: %s, Tx hash: %s',
+            status.type,
+            transaction.hash.toString(),
           )
 
           if (status.isInBlock || status.isFinalized) {
@@ -84,7 +84,7 @@ const submitTransaction = (
                 error: errorMessage,
               })
             } else {
-              logger.info(`In block: ${status.asInBlock.toString()}`)
+              logger.info('In block: %s', status.asInBlock.toString())
               const blockHash = status.asInBlock.toString()
               const { block } = await api.rpc.chain.getBlock(blockHash)
               resolve({
@@ -114,7 +114,7 @@ const submitTransaction = (
         unsubscribe = unsub
       })
       .catch((error) => {
-        logger.error(`Error submitting transaction: ${error}`)
+        logger.error(error as Error, 'Error submitting transaction')
         cleanup()
         reject(error)
       })
@@ -156,7 +156,7 @@ export const createTransactionManager = () => {
         return pLimitted(() =>
           submitTransaction(api, account, trx, nonce)
             .catch((error) => {
-              logger.error('Transaction submitted failed', error)
+              logger.error(error as Error, 'Transaction submission failed')
               return {
                 success: false,
                 error: error.message,

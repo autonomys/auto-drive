@@ -57,7 +57,7 @@ const createServer = async () => {
   })
 
   app.listen(config.express.port, () => {
-    logger.info(`Server running at http://localhost:${config.express.port}`)
+    logger.info('Server running at http://localhost:%d', config.express.port)
   })
 }
 

@@ -104,8 +104,8 @@ describe('TaskManager', () => {
       EventRouter.listenFrontendEvents()
       await subscribeCallback({})
       expect(logger.error).toHaveBeenCalledWith(
+        expect.any(Error),
         'Invalid task',
-        expect.anything(),
       )
     })
 
@@ -139,8 +139,8 @@ describe('TaskManager', () => {
       await subscribeCallback(validTask)
 
       expect(logger.error).toHaveBeenCalledWith(
+        expect.any(Error),
         'Task failed',
-        expect.anything(),
       )
       expect(Rabbit.publish).toHaveBeenCalledWith(
         'frontend-errors',

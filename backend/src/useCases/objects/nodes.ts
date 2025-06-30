@@ -227,7 +227,7 @@ const setPublishedOn = async (
   result: TransactionResult,
 ): Promise<void> => {
   if (!result.blockNumber || !result.txHash) {
-    logger.error(`No block number or tx hash for ${cid}`)
+    logger.error('No block number or tx hash for %s', cid)
     throw new Error(`No block number or tx hash for ${cid}`)
   }
 

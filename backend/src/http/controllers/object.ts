@@ -237,7 +237,7 @@ objectController.get(
         return
       }
 
-      logger.info(`Attempting to retrieve data for metadataCid: ${cid}`)
+      logger.info('Attempting to retrieve data for metadataCid: %s', cid)
 
       const user =
         typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
