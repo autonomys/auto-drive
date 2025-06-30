@@ -74,6 +74,7 @@
     "@types/pg-format": "^1",
     "@types/uuid": "^10",
     "@types/websocket": "^1",
+    "@types/debug-level": "^4.1.1",
     "@typescript-eslint/eslint-plugin": "^8.13.0",
     "@typescript-eslint/parser": "^8.13.0",
     "blockstore-core": "^5.0.2",

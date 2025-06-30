@@ -1,0 +1,8 @@
+{
+  "name": "@types/debug-level",
+  "version": "4.1.1",
+  "description": "Stub TypeScript definitions for debug-level (provided by library)",
+  "license": "MIT",
+  "private": true,
+  "types": "index.d.ts"
+}

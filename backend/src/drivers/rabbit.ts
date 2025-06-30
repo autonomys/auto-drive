@@ -1,5 +1,8 @@
 import { Channel, connect } from 'amqplib'
 import { config } from '../config.js'
+import { createLogger } from './logger.js'
+
+const logger = createLogger('drivers:rabbit')
 
 const queues = ['task-manager', 'download-manager']
 
@@ -34,14 +37,17 @@ const subscribe = async (
   const consume = await channel.consume(queue, async (message) => {
     if (message) {
       try {
-        await callback(JSON.parse(message.content.toString()))
+        const payload = JSON.parse(message.content.toString())
+        logger.debug('Received message from %s', queue)
+        await callback(payload)
+        logger.debug('Message processed successfully for %s', queue)
         channel.ack(message)
       } catch (error) {
-        console.error('Error processing message', error)
+        logger.error('Error processing message from %s', queue, error)
         channel.nack(message, false, true)
       }
     } else {
-      console.error('No message received')
+      logger.warn('No message received from %s', queue)
     }
   })
 
