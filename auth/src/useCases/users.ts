@@ -47,6 +47,7 @@ const resolveUser = async (
     ? await getUserByPublicId(userOrPublicId)
     : userOrPublicId
   if (!user) {
+    logger.warn('User not found %s', userOrPublicId)
     throw new Error('User not found')
   }
 
@@ -93,6 +94,13 @@ const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
     user.oauthAvatarUrl,
     publicId,
     UserRole.User,
+  )
+
+  logger.debug(
+    'Onboarded user %s:%s with publicId %s',
+    user.oauthProvider,
+    user.oauthUserId,
+    publicId,
   )
 
   return updatedUser
@@ -218,7 +226,12 @@ export const getPaginatedUserList = async (
   page: number = 1,
   limit: number = 10,
 ): Promise<PaginatedResult<User>> => {
-  logger.trace('Paginated user list requested by %s page=%d limit=%d', executor.publicId, page, limit)
+  logger.trace(
+    'Paginated user list requested by %s page=%d limit=%d',
+    executor.publicId,
+    page,
+    limit,
+  )
   const isAdmin = await isAdminUser(executor)
   if (!isAdmin) {
     throw new Error('User does not have admin privileges')
