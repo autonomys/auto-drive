@@ -49,7 +49,7 @@ uploadController.post(
       res.status(200).json(upload)
       return
     } catch (error) {
-      logger.error(error as string)
+      logger.error(error as Error, 'Failed to create upload')
 
       res.status(500).json({
         error: 'Failed to create upload',

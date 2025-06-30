@@ -19,7 +19,8 @@ const start = async () => {
     const pieceIndex = node?.piece_index ?? 0
 
     logger.info(
-      `Subscribing to recover object mappings from piece ${pieceIndex}`,
+      'Subscribing to recover object mappings from piece %d',
+      pieceIndex,
     )
 
     // To be properly solved later
@@ -51,7 +52,8 @@ const start = async () => {
     logger.debug('Received object mapping list', message)
     if (message.length > 0) {
       logger.info(
-        `Processing object mapping list entry of length ${message.length}`,
+        'Processing object mapping list entry of length %d',
+        message.length,
       )
       await NodesUseCases.scheduleNodeArchiving(message)
     }

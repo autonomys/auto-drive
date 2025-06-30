@@ -14,7 +14,8 @@ export const processDownloadTask = createHandlerWithRetries(
       return ObjectUseCases.onObjectArchived(params.cid)
     } else {
       logger.error(
-        `Received task ${id} but no handler found. (processors/download.ts)`,
+        'Received task %s but no handler found (processors/download.ts)',
+        id,
       )
       throw new Error(`Received task ${id} but no handler found.`)
     }

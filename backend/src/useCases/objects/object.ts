@@ -320,13 +320,15 @@ const populateCaches = async (cid: string) => {
   try {
     const stream = await downloadService.download(cid)
 
-    logger.debug(`Downloaded object (cid=${cid}) from DB after archival check`)
+    logger.debug('Downloaded object from DB after archival check (cid=%s)', cid)
 
     // Wait until the entire stream has been consumed (and therefore cached)
     await consumeStream(stream)
   } catch (e) {
     logger.warn(
-      `Failed to download object (cid=${cid}) from DB after archival check: ${e}`,
+      e as Error,
+      'Failed to download object from DB after archival check (cid=%s)',
+      cid,
     )
     throw e
   }

@@ -14,7 +14,7 @@ const REPUBLISH_DELAY = 10_000
 
 const publishNodes = safeCallback(
   async (cids: string[], retriesLeft: number) => {
-    logger.info(`Uploading ${cids.length} nodes`)
+    logger.info('Uploading %d nodes', cids.length)
 
     const nodes = await nodesRepository.getNodesByCids(cids)
     const nodeCounts = await Promise.all(
