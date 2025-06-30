@@ -6,6 +6,7 @@ import { EventRouter as EventRouterT } from '../../src/services/eventRouter/inde
 import { UploadsUseCases as UploadsUseCasesT } from '../../src/useCases/uploads/uploads.js'
 import { OnchainPublisher as OnchainPublisherT } from '../../src/services/upload/onchainPublisher/index.js'
 import type { Logger } from '../../src/drivers/logger.js'
+import { closeDatabase } from '../../src/drivers/pg.js'
 
 // Mock dependencies before imports
 jest.unstable_mockModule('../../src/drivers/rabbit.js', () => ({
@@ -52,7 +53,7 @@ jest.unstable_mockModule('../../src/drivers/logger.js', () => {
 })
 
 describe('TaskManager', () => {
-  let subscribeCallback: (obj: object) => Promise<unknown>
+  let subscribeCallback: (obj: Record<string, unknown>) => Promise<unknown>
   let EventRouter: typeof EventRouterT
   let Rabbit: typeof RabbitT
   let UploadsUseCases: typeof UploadsUseCasesT
@@ -81,6 +82,10 @@ describe('TaskManager', () => {
         subscribeCallback = callback
         return Promise.resolve(() => {})
       })
+  })
+
+  afterAll(async () => {
+    await closeDatabase()
   })
 
   describe('start', () => {

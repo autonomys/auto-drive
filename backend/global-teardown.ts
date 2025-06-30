@@ -4,6 +4,7 @@ export default async () => {
       setTimeout(() => {
         global.__POSTGRES_CONTAINER__.stop()
         global.__RABBITMQ_CONTAINER__.stop()
+        process.emit('beforeExit', 0)
         resolve(true)
       }, 2_000)
     })

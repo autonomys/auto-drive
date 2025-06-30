@@ -1,13 +1,16 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { handleAuth } from '../../services/auth/express.js'
 import { SubscriptionsUseCases } from '../../useCases/users/subscriptions.js'
 import { asyncSafeHandler } from '../../utils/express.js'
+import { createLogger } from '../../drivers/logger.js'
+
+const logger = createLogger('http:controllers:subscriptions')
 
 const subscriptionController = Router()
 
 subscriptionController.get(
   '/@me',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
       return
@@ -19,7 +22,7 @@ subscriptionController.get(
 
       res.json(subscriptionInfo)
     } catch (error) {
-      console.error(error)
+      logger.error('Failed to get user info', error)
       res.status(500).json({
         error: 'Failed to get user info',
       })
@@ -30,7 +33,7 @@ subscriptionController.get(
 
 subscriptionController.post(
   '/list',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
       return
@@ -52,7 +55,7 @@ subscriptionController.post(
 
 subscriptionController.post(
   '/update',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const executor = await handleAuth(req, res)
     if (!executor) {
       return

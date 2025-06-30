@@ -9,7 +9,7 @@
     "build": "tsc",
     "dev": "nodemon src/index.ts",
     "migrate": "db-migrate -t auth_migrations",
-    "test": "node --experimental-vm-modules ../node_modules/jest/bin/jest.js --runInBand --coverage",
+    "test": "NODE_OPTIONS='--max-old-space-size=4096' node --experimental-vm-modules ../node_modules/jest/bin/jest.js --runInBand --coverage --forceExit",
     "lint": "eslint .",
     "lambda:build": "yarn build && ../node_modules/.bin/esbuild src/lambda.ts --bundle --platform=node --target=node18 --outfile=build/index.js"
   },
@@ -37,8 +37,13 @@
   "devDependencies": {
     "@testcontainers/postgresql": "^10.14.0",
     "@testcontainers/rabbitmq": "^10.17.2",
+    "@types/amqplib": "^0.10.6",
+    "@types/aws-sdk": "^2.7.0",
     "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
+    "@types/multer": "^1.4.12",
+    "@types/uuid": "^9.0.0",
     "db-migrate-plugin-typescript": "^2.0.0",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",

@@ -12,6 +12,7 @@ export const handleAuth = async (
   req: Request,
   res: Response,
 ): Promise<User | null> => {
+  logger.trace('handleAuth called')
   const user = await handleAuthIgnoreOnboarding(req, res)
 
   if (!user?.onboarded) {
@@ -25,6 +26,7 @@ export const handleAuthIgnoreOnboarding = async (
   req: Request,
   res: Response,
 ): Promise<MaybeUser | null> => {
+  logger.trace('handleAuthIgnoreOnboarding called')
   const accessToken = req.headers.authorization?.split(' ')[1]
   if (!accessToken) {
     res.status(401).json({
@@ -46,7 +48,7 @@ export const handleAuthIgnoreOnboarding = async (
     provider,
     accessToken,
   ).catch((e) => {
-    console.error(e)
+    logger.error('Failed to get user from access token', e)
     return null
   })
 

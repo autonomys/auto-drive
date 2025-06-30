@@ -1,5 +1,8 @@
-import { Channel, connect } from 'amqplib'
+import { Channel, ConsumeMessage, connect } from 'amqplib'
 import { config } from '../config.js'
+import { createLogger } from './logger.js'
+
+const logger = createLogger('drivers:rabbit')
 
 const queues = ['task-manager', 'download-manager']
 
@@ -27,23 +30,29 @@ const publish = async (queue: string, message: object) => {
 
 const subscribe = async (
   queue: string,
-  callback: (message: object) => Promise<unknown>,
+  callback: (message: Record<string, unknown>) => Promise<unknown>,
 ) => {
   const channel = await getChannel()
 
-  const consume = await channel.consume(queue, async (message) => {
-    if (message) {
-      try {
-        await callback(JSON.parse(message.content.toString()))
-        channel.ack(message)
-      } catch (error) {
-        console.error('Error processing message', error)
-        channel.nack(message, false, true)
+  const consume = await channel.consume(
+    queue,
+    async (message: ConsumeMessage | null): Promise<void> => {
+      if (message) {
+        try {
+          const payload = JSON.parse(message.content.toString())
+          logger.debug('Received message from %s', queue)
+          await callback(payload)
+          logger.debug('Message processed successfully for %s', queue)
+          channel.ack(message)
+        } catch (error) {
+          logger.error('Error processing message from %s', queue, error)
+          channel.nack(message, false, true)
+        }
+      } else {
+        logger.warn('No message received from %s', queue)
       }
-    } else {
-      console.error('No message received')
-    }
-  })
+    },
+  )
 
   return () => {
     channel.cancel(consume.consumerTag)
