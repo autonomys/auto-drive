@@ -3,7 +3,9 @@ import express from 'express'
 import cors from 'cors'
 import { userController } from './controllers/user.js'
 import { config } from './config.js'
-import { logger } from './drivers/logger.js'
+import { createLogger } from './drivers/logger.js'
+
+const logger = createLogger('auth:server')
 
 const app = express()
 

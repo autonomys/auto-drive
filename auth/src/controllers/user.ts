@@ -9,7 +9,9 @@ import { UsersUseCases } from '../useCases/index.js'
 import { ApiKeysUseCases } from '../useCases/apikeys.js'
 import { UserRole } from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
-import { logger } from '../drivers/logger.js'
+import { createLogger } from '../drivers/logger.js'
+
+const logger = createLogger('controllers:user')
 
 const userController = Router()
 

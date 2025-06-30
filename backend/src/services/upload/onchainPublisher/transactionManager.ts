@@ -7,10 +7,12 @@ import { KeyringPair } from '@polkadot/keyring/types'
 import { waitReady } from '@polkadot/wasm-crypto'
 import { createConnection } from '../../../drivers/substrate.js'
 import { Transaction, TransactionResult } from '@auto-drive/models'
-import { logger } from '../../../drivers/logger.js'
+import { createLogger } from '../../../drivers/logger.js'
 import { createAccountManager } from './accounts.js'
 import pLimit from 'p-limit'
 import { config } from '../../../config.js'
+
+const logger = createLogger('upload:transactionManager')
 
 const submitTransaction = (
   api: ApiPromise,

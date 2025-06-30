@@ -6,9 +6,11 @@ import {
   ObjectUseCases,
   UploadStatusUseCases,
 } from '../../useCases/index.js'
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
 import { asyncSafeHandler } from '../../utils/express.js'
 import { handleDownloadResponseHeaders } from '../../services/download/express.js'
+
+const logger = createLogger('http:controllers:object')
 
 const objectController = Router()
 

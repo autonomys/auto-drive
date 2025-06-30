@@ -1,10 +1,12 @@
-import { logger } from '../../../drivers/logger.js'
+import { createLogger } from '../../../drivers/logger.js'
 import { NodesUseCases } from '../../../useCases/index.js'
 import { safeCallback } from '../../../utils/safe.js'
 import { createTransactionManager } from './transactionManager.js'
 import { compactAddLength } from '@polkadot/util'
 import { nodesRepository } from '../../../repositories/objects/nodes.js'
 import { EventRouter } from '../../eventRouter/index.js'
+
+const logger = createLogger('upload:onchainPublisher')
 
 export const transactionManager = createTransactionManager()
 

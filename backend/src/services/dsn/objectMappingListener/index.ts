@@ -1,8 +1,10 @@
 import { NodesUseCases } from '../../../useCases/index.js'
 import { config } from '../../../config.js'
-import { logger } from '../../../drivers/logger.js'
+import { createLogger } from '../../../drivers/logger.js'
 import { nodesRepository } from '../../../repositories/index.js'
 import { ObjectMappingIndexerRPCApi } from '@auto-files/rpc-apis'
+
+const logger = createLogger('dsn:objectMappingListener')
 
 type ObjectMappingIndexerRpcClient = ReturnType<
   typeof ObjectMappingIndexerRPCApi.createClient

@@ -23,10 +23,12 @@ import { publishedObjectsRepository } from '../../repositories/objects/published
 import { v4 } from 'uuid'
 import { FilesUseCases } from './files.js'
 import { downloadService } from '../../services/download/index.js'
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
 import { EventRouter } from '../../services/eventRouter/index.js'
 import { createTask } from '../../services/eventRouter/tasks.js'
 import { consumeStream } from '../../utils/misc.js'
+
+const logger = createLogger('useCases:objects:object')
 
 const getMetadata = async (cid: string) => {
   const entry = await metadataRepository.getMetadata(cid)
