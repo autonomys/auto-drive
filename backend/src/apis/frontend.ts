@@ -1,5 +1,6 @@
 import cors from 'cors'
 import express from 'express'
+import type { Request, Response } from 'express'
 
 import 'dotenv/config.js'
 import { objectController } from '../http/controllers/object.js'
@@ -47,7 +48,7 @@ const createServer = async () => {
     res.json(config.services)
   })
 
-  app.get('/auth/session', async (req, res) => {
+  app.get('/auth/session', async (req: Request, res: Response) => {
     try {
       const user = await handleAuth(req, res)
       if (!user) {

@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import type { Request, Response } from 'express'
 import {
   handleAdminAuth,
   handleAuth,
@@ -15,7 +16,7 @@ const logger = createLogger('controllers:user')
 
 const userController = Router()
 
-userController.post('/@me/onboard', async (req, res) => {
+userController.post('/@me/onboard', async (req: Request, res: Response) => {
   const user = await handleAuthIgnoreOnboarding(req, res)
   if (!user) {
     return
@@ -32,7 +33,7 @@ userController.post('/@me/onboard', async (req, res) => {
   }
 })
 
-userController.post('/@me/accessToken', async (req, res) => {
+userController.post('/@me/accessToken', async (req: Request, res: Response) => {
   const user = await handleAuthIgnoreOnboarding(req, res)
   if (!user) {
     return
@@ -50,7 +51,7 @@ userController.post('/@me/accessToken', async (req, res) => {
     .json({ accessToken })
 })
 
-userController.post('/@me/refreshToken', async (req, res) => {
+userController.post('/@me/refreshToken', async (req: Request, res: Response) => {
   try {
     const refreshToken = req.headers.cookie?.match(/refreshToken=([^;]+)/)?.[1]
     if (!refreshToken) {
@@ -70,7 +71,7 @@ userController.post('/@me/refreshToken', async (req, res) => {
   }
 })
 
-userController.delete('/@me/invalidateToken', async (req, res) => {
+userController.delete('/@me/invalidateToken', async (req: Request, res: Response) => {
   const token = req.body.token
 
   if (typeof token !== 'string') {
@@ -85,7 +86,7 @@ userController.delete('/@me/invalidateToken', async (req, res) => {
   res.sendStatus(200)
 })
 
-userController.get('/@me', async (req, res) => {
+userController.get('/@me', async (req: Request, res: Response) => {
   const user = await handleAuthIgnoreOnboarding(req, res)
   if (!user) {
     logger.warn('User not found')
@@ -105,7 +106,7 @@ userController.get('/@me', async (req, res) => {
   }
 })
 
-userController.get('/@me/apiKeys', async (req, res) => {
+userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -124,7 +125,7 @@ userController.get('/@me/apiKeys', async (req, res) => {
   }
 })
 
-userController.post('/@me/apiKeys/create', async (req, res) => {
+userController.post('/@me/apiKeys/create', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -143,7 +144,7 @@ userController.post('/@me/apiKeys/create', async (req, res) => {
   }
 })
 
-userController.delete('/@me/apiKeys/:id', async (req, res) => {
+userController.delete('/@me/apiKeys/:id', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -164,7 +165,7 @@ userController.delete('/@me/apiKeys/:id', async (req, res) => {
   }
 })
 
-userController.post('/admin/add', async (req, res) => {
+userController.post('/admin/add', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -192,7 +193,7 @@ userController.post('/admin/add', async (req, res) => {
   }
 })
 
-userController.post('/admin/remove', async (req, res) => {
+userController.post('/admin/remove', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -220,7 +221,7 @@ userController.post('/admin/remove', async (req, res) => {
   }
 })
 
-userController.get('/list', async (req, res) => {
+userController.get('/list', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)
   if (!user) {
     return
@@ -258,7 +259,7 @@ userController.get('/list', async (req, res) => {
   }
 })
 
-userController.get('/:publicId', async (req, res) => {
+userController.get('/:publicId', async (req: Request, res: Response) => {
   const { publicId } = req.params
 
   const isAdmin = await handleAdminAuth(req, res)
