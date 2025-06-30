@@ -2,6 +2,9 @@ import { Router } from 'express'
 import { handleAuth } from '../../services/auth/express.js'
 import { SubscriptionsUseCases } from '../../useCases/users/subscriptions.js'
 import { asyncSafeHandler } from '../../utils/express.js'
+import { createLogger } from '../../drivers/logger.js'
+
+const logger = createLogger('http:controllers:subscriptions')
 
 const subscriptionController = Router()
 
@@ -19,7 +22,7 @@ subscriptionController.get(
 
       res.json(subscriptionInfo)
     } catch (error) {
-      console.error(error)
+      logger.error('Failed to get user info', error)
       res.status(500).json({
         error: 'Failed to get user info',
       })
@@ -100,5 +103,19 @@ subscriptionController.post(
     res.json(subscription)
   }),
 )
+
+subscriptionController.get('/', async (_req, res) => {
+  try {
+    logger.trace('GET /subscriptions')
+    const subscriptions = await SubscriptionsUseCases.getAll()
+
+    res.json(subscriptions)
+  } catch (error) {
+    logger.error('Failed to get subscriptions', error)
+    res.status(500).json({
+      error: 'Failed to get subscriptions',
+    })
+  }
+})
 
 export { subscriptionController }
