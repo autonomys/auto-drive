@@ -26,7 +26,7 @@ userController.post('/@me/onboard', async (req: Request, res: Response) => {
     const onboardedUser = await UsersUseCases.onboardUser(user)
     res.json(onboardedUser)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to onboard user',
     })
@@ -65,7 +65,7 @@ userController.post('/@me/refreshToken', async (req: Request, res: Response) => 
 
     res.json({ accessToken })
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({ error: 'Failed to refresh access token' })
     return
   }
@@ -98,7 +98,7 @@ userController.get('/@me', async (req: Request, res: Response) => {
 
     res.json(userInfo)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to get user info',
     })
@@ -117,7 +117,7 @@ userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
 
     res.json(apiKeys)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to get API keys',
     })
@@ -136,7 +136,7 @@ userController.post('/@me/apiKeys/create', async (req: Request, res: Response) =
 
     res.json(apiKey)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to create API key',
     })
@@ -157,7 +157,7 @@ userController.delete('/@me/apiKeys/:id', async (req: Request, res: Response) =>
 
     res.sendStatus(200)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to delete API key',
     })
@@ -185,7 +185,7 @@ userController.post('/admin/add', async (req: Request, res: Response) => {
 
     res.sendStatus(200)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to add user to admins',
     })
@@ -213,7 +213,7 @@ userController.post('/admin/remove', async (req: Request, res: Response) => {
 
     res.sendStatus(200)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to remove user from admins',
     })
@@ -251,7 +251,7 @@ userController.get('/list', async (req: Request, res: Response) => {
 
     res.json(result)
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     res.status(500).json({
       error: 'Failed to get user list',
     })
