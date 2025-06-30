@@ -1,4 +1,5 @@
-import { Channel, connect } from 'amqplib'
+import type { Channel, Connection } from 'amqplib'
+import { connect } from 'amqplib'
 import { config } from '../config.js'
 import { createLogger } from './logger.js'
 
