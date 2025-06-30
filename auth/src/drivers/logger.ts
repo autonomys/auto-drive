@@ -1,7 +1,6 @@
-import { createLogger, format, transports } from 'winston'
-import { config } from '../config.js'
+import { Log } from 'debug-level'
 
-type Any =
+export type Any =
   | object
   | string
   | number
@@ -12,29 +11,32 @@ type Any =
   | unknown
 
 export interface Logger {
-  info: (...message: Any[]) => Promise<void>
-  error: (...message: Any[]) => Promise<void>
-  warn: (...message: Any[]) => Promise<void>
-  debug: (...message: Any[]) => Promise<void>
+  info: (...message: Any[]) => void
+  error: (...message: Any[]) => void
+  warn: (...message: Any[]) => void
+  debug: (...message: Any[]) => void
+  trace: (...message: Any[]) => void
 }
 
-const winstonLogger = createLogger({
-  level: config.logLevel,
-  format: format.combine(format.timestamp(), format.json()),
-  transports: [new transports.Console()],
-})
-
-export const logger: Logger = {
-  info: async (...message: Any[]) => {
-    winstonLogger.info(message.join(' '))
-  },
-  error: async (...message: Any[]) => {
-    winstonLogger.error(message.join(' '))
-  },
-  warn: async (...message: Any[]) => {
-    winstonLogger.warn(message.join(' '))
-  },
-  debug: async (...message: Any[]) => {
-    winstonLogger.debug(message.join(' '))
-  },
+function wrapLog(log: Log): Logger {
+  return {
+    info: (...message: Any[]) => {
+      log.info(...message)
+    },
+    error: (...message: Any[]) => {
+      log.error(...message)
+    },
+    warn: (...message: Any[]) => {
+      log.warn(...message)
+    },
+    debug: (...message: Any[]) => {
+      log.debug(...message)
+    },
+    trace: (...message: Any[]) => {
+      log.trace(...message)
+    },
+  }
 }
+
+export const createLogger = (namespace: string): Logger =>
+  wrapLog(new Log(namespace))

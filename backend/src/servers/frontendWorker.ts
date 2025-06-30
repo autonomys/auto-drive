@@ -9,7 +9,8 @@
   const { objectMappingArchiver } = await import(
     '../services/dsn/objectMappingListener/index.js'
   )
-  const { logger } = await import('../drivers/logger.js')
+  const { createLogger } = await import('../drivers/logger.js')
+  const logger = createLogger('servers:frontendWorker')
 
   if (config.services.taskManager.active) {
     EventRouter.listenFrontendEvents()

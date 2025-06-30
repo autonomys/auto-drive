@@ -1,4 +1,4 @@
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
 import { FilesUseCases, ObjectUseCases } from '../../useCases/index.js'
 import { memoryDownloadCache } from './memoryDownloadCache/index.js'
 import { forkAsyncIterable, forkStream } from '@autonomys/asynchronous'
@@ -9,6 +9,8 @@ import {
 import { config } from '../../config.js'
 import { Readable } from 'stream'
 import { DownloadStatus } from '@auto-drive/models'
+
+const logger = createLogger('download-service')
 
 const fsCache = createFileCache(
   defaultMemoryAndSqliteConfig({
@@ -22,7 +24,8 @@ export const downloadService = {
   download: async (cid: string): Promise<Readable> => {
     const file = memoryDownloadCache.get(cid)
     if (file != null) {
-      logger.debug('Downloading file from memory', cid)
+      logger.debug('Downloading file from memory %s', cid)
+      
       const [stream1, stream2] = await forkAsyncIterable(file)
 
       // Cache the file in the file system cache
@@ -40,12 +43,14 @@ export const downloadService = {
 
     const cachedFile = await fsCache.get(cid).catch((e) => {
       logger.error(
-        `Error getting file from file system cache: ${e} for cid: ${cid}. Ignoring error and retrieving file from source.`,
+        e as Error,
+        'Error getting file from file system cache for cid %s. Ignoring error and retrieving file from source.',
+        cid,
       )
       return null
     })
     if (cachedFile != null) {
-      logger.debug('Reading file from file system cache', cid)
+      logger.debug('Reading file from file system cache %s', cid)
       const [stream1, stream2] = await forkStream(cachedFile.data)
       memoryDownloadCache.set(cid, stream1)
       return stream2

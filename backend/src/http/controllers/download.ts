@@ -5,8 +5,10 @@ import { AsyncDownloadsUseCases } from '../../useCases/asyncDownloads/index.js'
 import { handleAuth, handleOptionalAuth } from '../../services/auth/express.js'
 import { handleDownloadResponseHeaders } from '../../services/download/express.js'
 import { FilesUseCases } from '../../useCases/objects/files.js'
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
 import { downloadService } from '../../services/download/index.js'
+
+const logger = createLogger('http:controllers:download')
 
 const downloadController = Router()
 
@@ -69,7 +71,7 @@ downloadController.get(
         return
       }
 
-      logger.info(`Attempting to retrieve data for metadataCid: ${cid}`)
+      logger.info('Attempting to retrieve data for metadataCid: %s', cid)
 
       const user =
         typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
@@ -87,10 +89,10 @@ downloadController.get(
 
       handleDownloadResponseHeaders(req, res, metadata)
 
-      pipeline(await startDownload(), res, (err) => {
+      pipeline(await startDownload(), res, (err: Error | null) => {
         if (err) {
           if (res.headersSent) return
-          console.error('Error streaming data:', err)
+          logger.error('Error streaming data', err)
           res.status(500).json({
             error: 'Failed to stream data',
             details: err.message,
@@ -98,7 +100,7 @@ downloadController.get(
         }
       })
     } catch (error: unknown) {
-      console.error('Error retrieving data:', error)
+      logger.error('Error retrieving data', error)
       res.status(500).json({
         error: 'Failed to retrieve data',
         details: error instanceof Error ? error.message : 'Unknown error',

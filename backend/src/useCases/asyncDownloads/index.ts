@@ -4,7 +4,9 @@ import { v4 } from 'uuid'
 import { EventRouter } from '../../services/eventRouter/index.js'
 import { downloadService } from '../../services/download/index.js'
 import { ObjectUseCases } from '../objects/object.js'
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
+
+const logger = createLogger('useCases:asyncDownloads')
 
 const createDownload = async (
   user: User,
@@ -23,7 +25,7 @@ const createDownload = async (
     AsyncDownloadStatus.Pending,
     metadata.totalSize,
   )
-  logger.info(`Creating async download id=${download.id} cid=${cid}`)
+  logger.info('Creating async download id=%s cid=%s', download.id, cid)
 
   EventRouter.publish({
     id: 'async-download-created',
@@ -56,6 +58,12 @@ const updateProgress = async (
   if (!metadata) {
     throw new Error('Object not found')
   }
+  logger.trace(
+    'Updating progress for download id=%s cid=%s, bytes downloaded: %s',
+    downloadId,
+    download.cid,
+    downloadedBytes.toString(),
+  )
 
   return asyncDownloadsRepository.updateDownloadProgress(
     downloadId,
@@ -75,6 +83,17 @@ const setError = async (
   downloadId: string,
   error: string,
 ): Promise<AsyncDownload | null> => {
+  const download = await asyncDownloadsRepository.getDownloadById(downloadId)
+  if (!download) {
+    throw new Error('Download not found')
+  }
+
+  logger.warn(
+    'Setting error for download id=%s cid=%s, error: %s',
+    downloadId,
+    download.cid,
+    error,
+  )
   return asyncDownloadsRepository.updateDownloadStatus(
     downloadId,
     AsyncDownloadStatus.Failed,
@@ -93,7 +112,7 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
     throw new Error('Object not found')
   }
 
-  logger.info(`Starting async download id=${downloadId} cid=${download.cid}`)
+  logger.info('Starting async download id=%s cid=%s', downloadId, download.cid)
   AsyncDownloadsUseCases.updateProgress(downloadId, BigInt(0))
   const file = await downloadService.download(download.cid)
 
@@ -102,13 +121,16 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
     file.on('data', (chunk) => {
       downloadedBytes += BigInt(chunk.length)
       logger.debug(
-        `Downloading id=${downloadId} cid=${download.cid} ${downloadedBytes} bytes`,
+        'Async download id=%s cid=%s, bytes downloaded: %s',
+        downloadId,
+        download.cid,
+        downloadedBytes.toString(),
       )
       AsyncDownloadsUseCases.updateProgress(downloadId, downloadedBytes)
     })
 
     file.on('end', () => {
-      logger.info(`Download completed id=${downloadId} cid=${download.cid}`)
+      logger.info('Download completed id=%s cid=%s', downloadId, download.cid)
       AsyncDownloadsUseCases.updateStatus(
         downloadId,
         AsyncDownloadStatus.Completed,
@@ -117,7 +139,7 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
     })
 
     file.on('error', async (error) => {
-      logger.error(`Error downloading id=${downloadId} cid=${download.cid}`)
+      logger.error('Error downloading id=%s cid=%s', downloadId, download.cid)
       await AsyncDownloadsUseCases.setError(downloadId, JSON.stringify(error))
       reject(error)
     })

@@ -7,6 +7,8 @@ export const safeCallback =
       try {
         return await callback(...args)
       } catch (error) {
-        console.error(error)
+        const { createLogger } = await import('../drivers/logger.js')
+        const logger = createLogger('utils:safe')
+        logger.error('Unhandled error in safeCallback', error)
       }
     }

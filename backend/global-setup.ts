@@ -12,7 +12,10 @@ export default async () => {
     Wait.forLogMessage('database system is ready to accept connections'),
   )
   const service = await postgresContainer.start()
-  const rabbitmqContainer = new RabbitMQContainer().withExposedPorts(5672, 15672)
+  const rabbitmqContainer = new RabbitMQContainer().withExposedPorts(
+    5672,
+    15672,
+  )
   const rabbitmqService = await rabbitmqContainer.start()
 
   // Wiping the cache directory for not having any cache from previous tests
