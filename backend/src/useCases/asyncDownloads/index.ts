@@ -58,6 +58,12 @@ const updateProgress = async (
   if (!metadata) {
     throw new Error('Object not found')
   }
+  logger.trace(
+    'Updating progress for download id=%s cid=%s, bytes downloaded: %s',
+    downloadId,
+    download.cid,
+    downloadedBytes.toString(),
+  )
 
   return asyncDownloadsRepository.updateDownloadProgress(
     downloadId,
@@ -77,6 +83,17 @@ const setError = async (
   downloadId: string,
   error: string,
 ): Promise<AsyncDownload | null> => {
+  const download = await asyncDownloadsRepository.getDownloadById(downloadId)
+  if (!download) {
+    throw new Error('Download not found')
+  }
+
+  logger.warn(
+    'Setting error for download id=%s cid=%s, error: %s',
+    downloadId,
+    download.cid,
+    error,
+  )
   return asyncDownloadsRepository.updateDownloadStatus(
     downloadId,
     AsyncDownloadStatus.Failed,
