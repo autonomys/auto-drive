@@ -20,6 +20,7 @@ export interface Logger {
   error: (...message: Any[]) => void
   warn: (...message: Any[]) => void
   debug: (...message: Any[]) => void
+  trace: (...message: Any[]) => void
 }
 
 /**
@@ -40,6 +41,9 @@ function wrapLog(log: Log): Logger {
     debug: (...message: Any[]) => {
       log.debug(...message)
     },
+    trace: (...message: Any[]) => {
+      log.trace(...message)
+    },
   }
 }
 
@@ -48,3 +52,9 @@ function wrapLog(log: Log): Logger {
  */
 export const createLogger = (namespace: string): Logger =>
   wrapLog(new Log(namespace))
+
+// Ensure that any direct console.* usage inside the codebase is automatically
+// forwarded through debug-level so that it respects the configured log level
+// and formatting. This effectively upgrades legacy console statements without
+// having to touch every call site.
+Log.wrapConsole()
