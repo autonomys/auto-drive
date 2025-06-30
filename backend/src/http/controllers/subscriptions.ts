@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import type { Request, Response } from 'express'
 import { handleAuth } from '../../services/auth/express.js'
 import { SubscriptionsUseCases } from '../../useCases/users/subscriptions.js'
 import { asyncSafeHandler } from '../../utils/express.js'
@@ -10,7 +11,7 @@ const subscriptionController = Router()
 
 subscriptionController.get(
   '/@me',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
       return
@@ -33,7 +34,7 @@ subscriptionController.get(
 
 subscriptionController.post(
   '/list',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
       return
@@ -55,7 +56,7 @@ subscriptionController.post(
 
 subscriptionController.post(
   '/update',
-  asyncSafeHandler(async (req, res) => {
+  asyncSafeHandler(async (req: Request, res: Response) => {
     const executor = await handleAuth(req, res)
     if (!executor) {
       return
