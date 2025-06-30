@@ -49,7 +49,7 @@ const createServer = async () => {
 
       res.json(user)
     } catch (error) {
-      console.error('Error retrieving session:', error)
+      logger.error('Error retrieving session:', error)
       res.status(500).json({
         error: 'Failed to retrieve session',
       })
