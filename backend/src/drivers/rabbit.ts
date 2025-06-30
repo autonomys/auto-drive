@@ -1,4 +1,4 @@
-import type { Channel, Connection } from 'amqplib'
+import type { Channel, Connection, ConsumeMessage } from 'amqplib'
 import { connect } from 'amqplib'
 import { config } from '../config.js'
 import { createLogger } from './logger.js'
@@ -35,7 +35,7 @@ const subscribe = async (
 ) => {
   const channel = await getChannel()
 
-  const consume = await channel.consume(queue, async (message): Promise<void> => {
+  const consume = await channel.consume(queue, async (message: ConsumeMessage | null): Promise<void> => {
     if (message) {
       try {
         const payload = JSON.parse(message.content.toString())
