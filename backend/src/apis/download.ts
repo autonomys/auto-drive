@@ -4,8 +4,10 @@ import express from 'express'
 import 'dotenv/config.js'
 import { handleAuth } from '../services/auth/express.js'
 import { config } from '../config.js'
-import { logger } from '../drivers/logger.js'
+import { createLogger } from '../drivers/logger.js'
 import { downloadController } from '../http/controllers/download.js'
+
+const logger = createLogger('api:download')
 
 const createServer = async () => {
   const app = express()

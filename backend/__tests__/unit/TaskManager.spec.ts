@@ -5,7 +5,7 @@ import { Rabbit as RabbitT } from '../../src/drivers/rabbit.js'
 import { EventRouter as EventRouterT } from '../../src/services/eventRouter/index.js'
 import { UploadsUseCases as UploadsUseCasesT } from '../../src/useCases/uploads/uploads.js'
 import { OnchainPublisher as OnchainPublisherT } from '../../src/services/upload/onchainPublisher/index.js'
-import { logger as LoggerT } from '../../src/drivers/logger.js'
+import type { Logger } from '../../src/drivers/logger.js'
 
 // Mock dependencies before imports
 jest.unstable_mockModule('../../src/drivers/rabbit.js', () => ({
@@ -37,11 +37,19 @@ jest.unstable_mockModule(
   }),
 )
 
-jest.unstable_mockModule('../../src/drivers/logger.js', () => ({
-  logger: {
+jest.unstable_mockModule('../../src/drivers/logger.js', () => {
+  // Return a mock createLogger that yields a mocked logger instance
+  const mockedLogger = {
     error: jest.fn(),
-  },
-}))
+    warn: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
+  }
+  return {
+    createLogger: jest.fn().mockImplementation(() => mockedLogger),
+    // Re-export Logger type for TS but not necessary at runtime
+  }
+})
 
 describe('TaskManager', () => {
   let subscribeCallback: (obj: object) => Promise<unknown>
@@ -49,7 +57,7 @@ describe('TaskManager', () => {
   let Rabbit: typeof RabbitT
   let UploadsUseCases: typeof UploadsUseCasesT
   let OnchainPublisher: typeof OnchainPublisherT
-  let logger: typeof LoggerT
+  let logger: Logger
   beforeAll(async () => {
     // Import modules after mocks
     EventRouter = (await import('../../src/services/eventRouter/index.js'))
@@ -60,7 +68,7 @@ describe('TaskManager', () => {
     OnchainPublisher = (
       await import('../../src/services/upload/onchainPublisher/index.js')
     ).OnchainPublisher
-    logger = (await import('../../src/drivers/logger.js')).logger
+    logger = (await import('../../src/drivers/logger.js')).createLogger('test')
   })
 
   beforeEach(() => {

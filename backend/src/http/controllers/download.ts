@@ -5,8 +5,10 @@ import { AsyncDownloadsUseCases } from '../../useCases/asyncDownloads/index.js'
 import { handleAuth, handleOptionalAuth } from '../../services/auth/express.js'
 import { handleDownloadResponseHeaders } from '../../services/download/express.js'
 import { FilesUseCases } from '../../useCases/objects/files.js'
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
 import { downloadService } from '../../services/download/index.js'
+
+const logger = createLogger('http:controllers:download')
 
 const downloadController = Router()
 

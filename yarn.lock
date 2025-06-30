@@ -8890,6 +8890,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"asyncc@npm:^2.0.7":
+  version: 2.0.9
+  resolution: "asyncc@npm:2.0.9"
+  checksum: 10c0/9ca967ef806a466effbbf40eb3b6619cd75b01d36615bc39b75ba05f594364dc97d92155072d5d19e73f771d23c70aa54ad5647164ce7b6e20148bb44f6b4ed3
+  languageName: node
+  linkType: hard
+
 "asynckit@npm:^0.4.0":
   version: 0.4.0
   resolution: "asynckit@npm:0.4.0"
@@ -8922,6 +8929,7 @@ __metadata:
     db-migrate: "npm:^0.11.14"
     db-migrate-pg: "npm:^1.5.2"
     db-migrate-plugin-typescript: "npm:^2.0.0"
+    debug-level: "npm:^4.1.1"
     dotenv: "npm:^16.4.7"
     esbuild: "npm:^0.25.0"
     eslint: "npm:^8.57.1"
@@ -8942,7 +8950,6 @@ __metadata:
     ts-node: "npm:^10.9.2"
     typescript: "npm:^5.7.3"
     uuid: "npm:^11.0.5"
-    winston: "npm:^3.17.0"
   languageName: unknown
   linkType: soft
 
@@ -9214,6 +9221,7 @@ __metadata:
     db-migrate: "npm:^0.11.14"
     db-migrate-pg: "npm:^1.5.2"
     db-migrate-plugin-typescript: "npm:^2.0.0"
+    debug-level: "npm:^4.1.1"
     dotenv: "npm:^16.4.5"
     eslint: "npm:^8.57.1"
     eslint-config-prettier: "npm:^9.1.0"
@@ -9241,7 +9249,6 @@ __metadata:
     typescript: "npm:^5.6.3"
     uuid: "npm:^10.0.0"
     websocket: "npm:^1.0.35"
-    winston: "npm:^3.17.0"
     zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft
@@ -9889,7 +9896,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"chalk@npm:^4.0.0, chalk@npm:^4.0.2, chalk@npm:^4.1.0, chalk@npm:^4.1.1":
+"chalk@npm:^4.0.0, chalk@npm:^4.0.2, chalk@npm:^4.1.0, chalk@npm:^4.1.1, chalk@npm:^4.1.2":
   version: 4.1.2
   resolution: "chalk@npm:4.1.2"
   dependencies:
@@ -10712,6 +10719,25 @@ __metadata:
   version: 1.2.1
   resolution: "debounce@npm:1.2.1"
   checksum: 10c0/6c9320aa0973fc42050814621a7a8a78146c1975799b5b3cc1becf1f77ba9a5aa583987884230da0842a03f385def452fad5d60db97c3d1c8b824e38a8edf500
+  languageName: node
+  linkType: hard
+
+"debug-level@npm:^4.1.1":
+  version: 4.1.1
+  resolution: "debug-level@npm:4.1.1"
+  dependencies:
+    asyncc: "npm:^2.0.7"
+    chalk: "npm:^4.1.2"
+    debug: "npm:^4.3.1"
+    fast-safe-stringify: "npm:^2.1.1"
+    flatstr: "npm:^1.0.12"
+    map-lru: "npm:^2.1.0"
+    ms: "npm:^2.1.3"
+    sonic-boom: "npm:^4.2.0"
+  dependenciesMeta:
+    debug:
+      optional: true
+  checksum: 10c0/0bbab8c4047dd1c582d71a76067184c1c55ad6cbab433c21ffd4757cf94540b8ddddda551e75dec165b9b36a7dd5c20edf6ce1971c5a8753352a0980c1a6d2b4
   languageName: node
   linkType: hard
 
@@ -12730,6 +12756,13 @@ __metadata:
     flatted: "npm:^3.2.9"
     keyv: "npm:^4.5.4"
   checksum: 10c0/2c59d93e9faa2523e4fda6b4ada749bed432cfa28c8e251f33b25795e426a1c6dbada777afb1f74fcfff33934fdbdea921ee738fcc33e71adc9d6eca984a1cfc
+  languageName: node
+  linkType: hard
+
+"flatstr@npm:^1.0.12":
+  version: 1.0.12
+  resolution: "flatstr@npm:1.0.12"
+  checksum: 10c0/f99cf801fd3606e8b4aa96b93ec09caab42bc304526ff55a80db03db0ef73c9a014e983a6d72009c4f1bc50e2483d137041fae18a325dc0d851d045c4d6929a9
   languageName: node
   linkType: hard
 
@@ -15630,6 +15663,13 @@ __metadata:
   version: 0.2.2
   resolution: "map-cache@npm:0.2.2"
   checksum: 10c0/05e3eb005c1b80b9f949ca007687640e8c5d0fc88dc45c3c3ab4902a3bec79d66a58f3e3b04d6985d90cd267c629c7b46c977e9c34433e8c11ecfcbb9f0fa290
+  languageName: node
+  linkType: hard
+
+"map-lru@npm:^2.1.0":
+  version: 2.1.0
+  resolution: "map-lru@npm:2.1.0"
+  checksum: 10c0/aaa9f85825d720d0a4eecb993b335394bcdfdf741ebc53cdf3316226279de77b237a62ca639d9b6c813167d8abc814fd83d4eaf8eda4aedbf293e005d498b2de
   languageName: node
   linkType: hard
 
@@ -19329,7 +19369,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"sonic-boom@npm:^4.0.1":
+"sonic-boom@npm:^4.0.1, sonic-boom@npm:^4.2.0":
   version: 4.2.0
   resolution: "sonic-boom@npm:4.2.0"
   dependencies:

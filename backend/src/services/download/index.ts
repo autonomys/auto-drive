@@ -1,4 +1,4 @@
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
 import { FilesUseCases, ObjectUseCases } from '../../useCases/index.js'
 import { memoryDownloadCache } from './memoryDownloadCache/index.js'
 import { forkAsyncIterable, forkStream } from '@autonomys/asynchronous'
@@ -9,6 +9,8 @@ import {
 import { config } from '../../config.js'
 import { Readable } from 'stream'
 import { DownloadStatus } from '@auto-drive/models'
+
+const logger = createLogger('download-service')
 
 const fsCache = createFileCache(
   defaultMemoryAndSqliteConfig({

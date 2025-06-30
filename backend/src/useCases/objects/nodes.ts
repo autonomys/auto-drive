@@ -23,10 +23,12 @@ import {
   TransactionResult,
 } from '@auto-drive/models'
 import { ObjectUseCases } from './object.js'
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
 import { Node } from '../../repositories/objects/nodes.js'
 import { EventRouter } from '../../services/eventRouter/index.js'
 import { createTask, Task } from '../../services/eventRouter/tasks.js'
+
+const logger = createLogger('useCases:objects:nodes')
 
 const getNode = async (cid: string | CID): Promise<string | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)

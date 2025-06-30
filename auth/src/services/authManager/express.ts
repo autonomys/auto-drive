@@ -4,7 +4,9 @@ import { UsersUseCases } from '../../useCases/index.js'
 import { AuthManager } from './index.js'
 import { CustomJWTAuth } from './providers/custom.js'
 import { config } from '../../config.js'
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
+
+const logger = createLogger('authManager:express')
 
 export const handleAuth = async (
   req: Request,

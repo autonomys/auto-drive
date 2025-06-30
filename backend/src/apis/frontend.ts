@@ -7,8 +7,10 @@ import { subscriptionController } from '../http/controllers/subscriptions.js'
 import { handleAuth } from '../services/auth/express.js'
 import { uploadController } from '../http/controllers/upload.js'
 import { config } from '../config.js'
-import { logger } from '../drivers/logger.js'
+import { createLogger } from '../drivers/logger.js'
 import { docsController } from '../http/controllers/docs.js'
+
+const logger = createLogger('api:frontend')
 
 const createServer = async () => {
   const app = express()

@@ -3,7 +3,9 @@ import express from 'express'
 
 import 'dotenv/config.js'
 import { config } from '../config.js'
-import { logger } from '../drivers/logger.js'
+import { createLogger } from '../drivers/logger.js'
+
+const logger = createLogger('api:worker')
 
 const createServer = async () => {
   const app = express()

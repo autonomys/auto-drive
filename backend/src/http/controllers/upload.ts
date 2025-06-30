@@ -4,8 +4,10 @@ import { UploadsUseCases } from '../../useCases/uploads/uploads.js'
 import multer from 'multer'
 import { FolderTreeFolderSchema, uploadOptionsSchema } from '@auto-drive/models'
 import { z } from 'zod'
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
 import { asyncSafeHandler } from '../../utils/express.js'
+
+const logger = createLogger('http:controllers:upload')
 
 const uploadController = Router()
 

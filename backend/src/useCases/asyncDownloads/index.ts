@@ -4,7 +4,9 @@ import { v4 } from 'uuid'
 import { EventRouter } from '../../services/eventRouter/index.js'
 import { downloadService } from '../../services/download/index.js'
 import { ObjectUseCases } from '../objects/object.js'
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
+
+const logger = createLogger('useCases:asyncDownloads')
 
 const createDownload = async (
   user: User,
