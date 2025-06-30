@@ -2,8 +2,11 @@ import pg from 'pg'
 import { config } from '../config.js'
 import { DsqlSigner } from '@aws-sdk/dsql-signer'
 import { env } from '../utils/misc.js'
+import { createLogger } from './logger.js'
 
 let db: pg.Client | undefined
+
+const logger = createLogger('auth:pg')
 
 export const createPgDB = async (
   dbConfig: string | pg.ClientConfig = config.postgres.url,
@@ -11,6 +14,14 @@ export const createPgDB = async (
   const client = new pg.Client(dbConfig)
 
   await client.connect()
+
+  logger.info('Connected to PostgreSQL')
+
+  const origQuery = client.query.bind(client)
+  client.query = ((text: unknown, params?: unknown) => {
+    logger.trace('SQL Query: %s', typeof text === 'string' ? text : '<prepared>')
+    return origQuery(text as any, params as any)
+  }) as typeof client.query
 
   return client
 }
@@ -33,6 +44,14 @@ export const createDSQLConnection = async (): Promise<pg.Client> => {
   })
 
   await client.connect()
+
+  logger.info('Connected to DSQL cluster')
+
+  const origQuery2 = client.query.bind(client)
+  client.query = ((text: unknown, params?: unknown) => {
+    logger.trace('SQL (DSQL) Query: %s', typeof text === 'string' ? text : '<prepared>')
+    return origQuery2(text as any, params as any)
+  }) as typeof client.query
 
   return client
 }
