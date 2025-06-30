@@ -13,6 +13,7 @@ import { docsController } from '../http/controllers/docs.js'
 const logger = createLogger('api:frontend')
 
 const createServer = async () => {
+  logger.debug('Initializing frontend API server')
   const app = express()
 
   app.use(
@@ -26,7 +27,15 @@ const createServer = async () => {
       extended: true,
     }),
   )
+  logger.trace(
+    'URL-encoded parser middleware configured with limit: %s',
+    config.express.requestSizeLimit,
+  )
   if (config.express.corsAllowedOrigins) {
+    logger.debug(
+      'Configuring CORS with allowed origins: %j',
+      config.express.corsAllowedOrigins,
+    )
     app.use(
       cors({
         origin: config.express.corsAllowedOrigins,
@@ -40,10 +49,12 @@ const createServer = async () => {
   app.use('/docs', docsController)
 
   app.get('/health', (_req, res) => {
+    logger.trace('Health check request received')
     res.sendStatus(204)
   })
 
   app.get('/services', (_req, res) => {
+    logger.trace('Services configuration requested')
     res.json(config.services)
   })
 
@@ -51,9 +62,11 @@ const createServer = async () => {
     try {
       const user = await handleAuth(req, res)
       if (!user) {
+        logger.warn('Authentication failed - no user found')
         return
       }
 
+      logger.trace('User authenticated successfully: %j', user)
       res.json(user)
     } catch (error) {
       logger.error('Error retrieving session:', error)
