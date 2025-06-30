@@ -24,34 +24,9 @@ export interface Logger {
 }
 
 /**
- * Internal helper that converts a debug-level Log instance into the Logger
- * shape expected by the codebase.
- */
-function wrapLog(log: Log): Logger {
-  return {
-    info: (...message: Any[]) => {
-      log.info(...message)
-    },
-    error: (...message: Any[]) => {
-      log.error(...message)
-    },
-    warn: (...message: Any[]) => {
-      log.warn(...message)
-    },
-    debug: (...message: Any[]) => {
-      log.debug(...message)
-    },
-    trace: (...message: Any[]) => {
-      log.trace(...message)
-    },
-  }
-}
-
-/**
  * Returns a Logger for the given namespace.
  */
-export const createLogger = (namespace: string): Logger =>
-  wrapLog(new Log(namespace))
+export const createLogger = (namespace: string): Logger => new Log(namespace)
 
 // Ensure that any direct console.* usage inside the codebase is automatically
 // forwarded through debug-level so that it respects the configured log level
