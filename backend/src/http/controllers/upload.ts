@@ -1,5 +1,4 @@
-import { Router } from 'express'
-import type { Request, Response } from 'express'
+import { Router, Request, Response } from 'express'
 import { handleAuth } from '../../services/auth/express.js'
 import { UploadsUseCases } from '../../useCases/uploads/uploads.js'
 import multer from 'multer'

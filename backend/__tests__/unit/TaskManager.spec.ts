@@ -52,7 +52,7 @@ jest.unstable_mockModule('../../src/drivers/logger.js', () => {
 })
 
 describe('TaskManager', () => {
-  let subscribeCallback: (obj: object) => Promise<unknown>
+  let subscribeCallback: (obj: Record<string, unknown>) => Promise<unknown>
   let EventRouter: typeof EventRouterT
   let Rabbit: typeof RabbitT
   let UploadsUseCases: typeof UploadsUseCasesT

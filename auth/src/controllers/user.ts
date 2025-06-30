@@ -1,5 +1,4 @@
-import { Router } from 'express'
-import type { Request, Response } from 'express'
+import { Router, Request, Response } from 'express'
 import {
   handleAdminAuth,
   handleAuth,
@@ -51,40 +50,47 @@ userController.post('/@me/accessToken', async (req: Request, res: Response) => {
     .json({ accessToken })
 })
 
-userController.post('/@me/refreshToken', async (req: Request, res: Response) => {
-  try {
-    const refreshToken = req.headers.cookie?.match(/refreshToken=([^;]+)/)?.[1]
-    if (!refreshToken) {
-      res.status(401).json({
-        error: 'Unauthorized',
+userController.post(
+  '/@me/refreshToken',
+  async (req: Request, res: Response) => {
+    try {
+      const refreshToken =
+        req.headers.cookie?.match(/refreshToken=([^;]+)/)?.[1]
+      if (!refreshToken) {
+        res.status(401).json({
+          error: 'Unauthorized',
+        })
+        return
+      }
+
+      const accessToken = await refreshAccessToken(refreshToken)
+
+      res.json({ accessToken })
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({ error: 'Failed to refresh access token' })
+      return
+    }
+  },
+)
+
+userController.delete(
+  '/@me/invalidateToken',
+  async (req: Request, res: Response) => {
+    const token = req.body.token
+
+    if (typeof token !== 'string') {
+      res.status(400).json({
+        error: 'Missing or invalid attribute `token` in body',
       })
       return
     }
 
-    const accessToken = await refreshAccessToken(refreshToken)
+    await CustomJWTAuth.invalidateRefreshToken(token)
 
-    res.json({ accessToken })
-  } catch (error) {
-    logger.error(error)
-    res.status(500).json({ error: 'Failed to refresh access token' })
-    return
-  }
-})
-
-userController.delete('/@me/invalidateToken', async (req: Request, res: Response) => {
-  const token = req.body.token
-
-  if (typeof token !== 'string') {
-    res.status(400).json({
-      error: 'Missing or invalid attribute `token` in body',
-    })
-    return
-  }
-
-  await CustomJWTAuth.invalidateRefreshToken(token)
-
-  res.sendStatus(200)
-})
+    res.sendStatus(200)
+  },
+)
 
 userController.get('/@me', async (req: Request, res: Response) => {
   const user = await handleAuthIgnoreOnboarding(req, res)
@@ -125,45 +131,51 @@ userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
   }
 })
 
-userController.post('/@me/apiKeys/create', async (req: Request, res: Response) => {
-  const user = await handleAuth(req, res)
-  if (!user) {
-    return
-  }
+userController.post(
+  '/@me/apiKeys/create',
+  async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
 
-  try {
-    const apiKey = await ApiKeysUseCases.createApiKey(user)
+    try {
+      const apiKey = await ApiKeysUseCases.createApiKey(user)
 
-    res.json(apiKey)
-  } catch (error) {
-    logger.error(error)
-    res.status(500).json({
-      error: 'Failed to create API key',
-    })
-    return
-  }
-})
+      res.json(apiKey)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({
+        error: 'Failed to create API key',
+      })
+      return
+    }
+  },
+)
 
-userController.delete('/@me/apiKeys/:id', async (req: Request, res: Response) => {
-  const user = await handleAuth(req, res)
-  if (!user) {
-    return
-  }
+userController.delete(
+  '/@me/apiKeys/:id',
+  async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
 
-  const { id } = req.params
+    const { id } = req.params
 
-  try {
-    await ApiKeysUseCases.deleteApiKey(user, id)
+    try {
+      await ApiKeysUseCases.deleteApiKey(user, id)
 
-    res.sendStatus(200)
-  } catch (error) {
-    logger.error(error)
-    res.status(500).json({
-      error: 'Failed to delete API key',
-    })
-    return
-  }
-})
+      res.sendStatus(200)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({
+        error: 'Failed to delete API key',
+      })
+      return
+    }
+  },
+)
 
 userController.post('/admin/add', async (req: Request, res: Response) => {
   const user = await handleAuth(req, res)

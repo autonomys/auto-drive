@@ -1,10 +1,9 @@
 import 'dotenv/config'
-import express from 'express'
 import cors from 'cors'
 import { userController } from './controllers/user.js'
 import { config } from './config.js'
 import { createLogger } from './drivers/logger.js'
-import type { Request, Response, NextFunction } from 'express'
+import express, { Request, Response, NextFunction } from 'express'
 
 const logger = createLogger('auth:server')
 
