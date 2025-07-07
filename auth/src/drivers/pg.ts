@@ -17,13 +17,13 @@ export const createPgDB = async (
 
   logger.info('Connected to PostgreSQL')
 
-  const origQuery = client.query.bind(client)
+  const originalPgQuery = client.query.bind(client)
   client.query = ((...args: Parameters<typeof client.query>) => {
     logger.trace(
       'SQL Query: %s',
       typeof args[0] === 'string' ? args[0] : '<prepared>',
     )
-    return origQuery(...args)
+    return originalPgQuery(...args)
   }) as typeof client.query
 
   return client
@@ -50,13 +50,13 @@ export const createDSQLConnection = async (): Promise<pg.Client> => {
 
   logger.info('Connected to DSQL cluster')
 
-  const origQuery2 = client.query.bind(client)
+  const originalDsqlQuery = client.query.bind(client)
   client.query = ((...args: Parameters<typeof client.query>) => {
     logger.trace(
       'SQL (DSQL) Query: %s',
       typeof args[0] === 'string' ? args[0] : '<prepared>',
     )
-    return origQuery2(...args)
+    return originalDsqlQuery(...args)
   }) as typeof client.query
 
   return client
