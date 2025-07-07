@@ -25,13 +25,3 @@ object_relationships:
         remote_table:
           name: metadata
       schema: public
-  - name: user
-    using:
-      manual_configuration:
-        column_mapping:
-          oauth_provider: oauth_provider
-          oauth_user_id: oauth_user_id
-        insertion_order: null
-        remote_table:
-          name: users
-          schema: public
