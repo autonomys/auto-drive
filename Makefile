@@ -12,6 +12,7 @@ gateway: install
 
 init-submodules:
 	# Ignore errors if submodules are already initialized
+	git submodule init
 	git submodule sync
 	git submodule update --remote
 
