@@ -7,8 +7,7 @@ import { ObjectShareModal } from '@/components/FileTables/common/ObjectShareModa
 import { ObjectDeleteModal } from '@/components/FileTables/common/ObjectDeleteModal';
 import { Loader } from 'lucide-react';
 import { ObjectDownloadModal } from '@/components/FileTables/common/ObjectDownloadModal';
-import { FilePreview } from '@/components/ObjectDetails/FilePreview';
-import { FolderPreview } from '../ObjectDetails/FolderPreview';
+import { FilePreview } from '@/components/FilePreview';
 import {
   ArrowDownTrayIcon,
   ShareIcon,
@@ -375,11 +374,7 @@ export const UploadedObjectInformation = ({
           Preview
         </h2>
         <div className='overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800'>
-          {object.metadata.type === 'file' ? (
-            <FilePreview metadata={object.metadata} />
-          ) : (
-            <FolderPreview metadata={object.metadata} />
-          )}
+          <FilePreview metadata={object.metadata} />
         </div>
       </div>
     </div>
