@@ -1,0 +1,54 @@
+---
+- name: Pull new image, update ssecret, and reboot
+  hosts: "{{ target_machines }}"
+  vars:
+    image_tag: "{{ image_tag }}"
+    env_file_path: ~/deploy/auto-drive/.env
+  tasks:
+    - name: Show current host information
+      ansible.builtin.debug:
+        msg: |
+          Current target machines: {{ target_machines }}
+          Current inventory hostname: {{ inventory_hostname }}
+          Current system hostname: {{ ansible_hostname }}
+          Current connection host: {{ ansible_host }}
+
+    - name: Import environment variables
+      ansible.builtin.include_vars:
+        file: environment.yaml
+
+    - name: Login to Infisical and get access token
+      ansible.builtin.shell: >
+        infisical login \
+          --method=universal-auth \
+          --client-id={{ infisical_client_id }} \
+          --client-secret={{ infisical_token }} \
+          --plain
+      register: login_cmd
+
+    - name: Update image to backend container image to {{ image_tag }}
+      ansible.builtin.shell: |
+        infisical secrets --projectId {{ infisical_project_id }} --path /{{ target_machines }} --env prod --token {{ login_cmd.stdout }} set BACKEND_IMAGE={{ image_tag }}
+      register: hello_output
+
+    - name: Update .env
+      ansible.builtin.shell: |
+        env_file=$(infisical export --projectId {{ infisical_project_id }} --path /{{ target_machines }} --env prod --token {{ login_cmd.stdout }})
+        # Create all necessary directories
+        mkdir -p ~/deploy/auto-drive/gateway/
+        mkdir -p "$HOME/env-archives"
+        timestamp=$(date +%s)
+        # Only try to backup existing .env if it exists
+        if [ -f ~/deploy/auto-drive/gateway/.env ]; then
+          cat ~/deploy/auto-drive/gateway/.env > "$HOME/env-archives/{{ ansible_hostname }}.${timestamp}.txt"
+        fi
+        echo "$env_file" > ~/deploy/auto-drive/gateway/.env
+      register: env_output
+
+    - name: Launch docker compose
+      ansible.builtin.shell: |
+        /usr/bin/docker compose --env-file {{ env_file_path }} -f ~/deploy/auto-drive/docker-compose.prod.yml up -d --remove-orphans
+
+    - name: Show env output
+      ansible.builtin.debug:
+        var: env_output.stderr

@@ -41,3 +41,5 @@ coverage/
 .cache/
 database.sqlite
 .cursorrules
+hosts.ini
+environment.yaml
