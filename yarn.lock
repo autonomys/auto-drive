@@ -163,19 +163,20 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autonomys/asynchronous@portal:/Users/carloslostao/Autonomys/auto-sdk/packages/utility/asynchronous::locator=auto-drive%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@autonomys/asynchronous@portal:/Users/carloslostao/Autonomys/auto-sdk/packages/utility/asynchronous::locator=auto-drive%40workspace%3A."
+"@autonomys/asynchronous@npm:^1.4.1, @autonomys/asynchronous@npm:^1.4.35, @autonomys/asynchronous@npm:^1.5.1, @autonomys/asynchronous@npm:^1.5.2, @autonomys/asynchronous@npm:^1.5.7":
+  version: 1.5.7
+  resolution: "@autonomys/asynchronous@npm:1.5.7"
   dependencies:
     stream-fork: "npm:^1.0.5"
+  checksum: 10c0/be7f11aa160b83c0ba5d8ecd6757eb8bfee24043a41e38f5881ee61c825b2cfcd26f238115023fc46c4d679106fac26447aeebd2be1460733b9cccdd2f6cc4cd
   languageName: node
-  linkType: soft
+  linkType: hard
 
-"@autonomys/auto-dag-data@portal:/Users/carloslostao/Autonomys/auto-sdk/packages/auto-dag-data::locator=auto-drive%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@autonomys/auto-dag-data@portal:/Users/carloslostao/Autonomys/auto-sdk/packages/auto-dag-data::locator=auto-drive%40workspace%3A."
+"@autonomys/auto-dag-data@npm:^1.0.12, @autonomys/auto-dag-data@npm:^1.0.5, @autonomys/auto-dag-data@npm:^1.3.1, @autonomys/auto-dag-data@npm:^1.4.35, @autonomys/auto-dag-data@npm:^1.5.1, @autonomys/auto-dag-data@npm:^1.5.2, @autonomys/auto-dag-data@npm:^1.5.7":
+  version: 1.5.7
+  resolution: "@autonomys/auto-dag-data@npm:1.5.7"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.5"
+    "@autonomys/asynchronous": "npm:^1.5.7"
     "@ipld/dag-pb": "npm:^4.1.3"
     "@peculiar/webcrypto": "npm:^1.5.0"
     "@webbuf/blake3": "npm:^3.0.26"
@@ -186,14 +187,15 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
+  checksum: 10c0/4cc3f0c5f10834b79846a8ebe392c4854c2ebc7c9baf21004012f646c0e648a7f8c93367f454be34d52d7974e916d22525da5d790d4f733c5bcf7ae69d890459
   languageName: node
-  linkType: soft
+  linkType: hard
 
-"@autonomys/auto-design-system@portal:/Users/carloslostao/Autonomys/auto-sdk/packages/auto-design-system::locator=auto-drive%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@autonomys/auto-design-system@portal:/Users/carloslostao/Autonomys/auto-sdk/packages/auto-design-system::locator=auto-drive%40workspace%3A."
+"@autonomys/auto-design-system@npm:^1.5.7":
+  version: 1.5.7
+  resolution: "@autonomys/auto-design-system@npm:1.5.7"
   dependencies:
-    "@autonomys/design-tokens": "npm:^1.5.5"
+    "@autonomys/design-tokens": "npm:^1.5.7"
     "@floating-ui/react": "npm:^0.27.8"
     "@headlessui/react": "npm:^2.2.3"
     "@heroicons/react": "npm:^2.2.0"
@@ -216,8 +218,9 @@ __metadata:
   peerDependencies:
     react: ^18.2.0
     react-dom: ^18.2.0
+  checksum: 10c0/7e05c954af3755a35d891b26e06d18ddc219ef8708e8cf1731981ab16ebe49e6d4b0a49cca590efdd0ff68b541e81a78f256b0c3caab69d441693cdffa0aa59e
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@autonomys/auto-drive@npm:^1.3.2":
   version: 1.4.35
@@ -270,20 +273,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.5.5":
-  version: 1.5.5
-  resolution: "@autonomys/auto-drive@npm:1.5.5"
+"@autonomys/auto-drive@npm:^1.5.7":
+  version: 1.5.7
+  resolution: "@autonomys/auto-drive@npm:1.5.7"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.5"
-    "@autonomys/auto-dag-data": "npm:^1.5.5"
-    "@autonomys/auto-utils": "npm:^1.5.5"
+    "@autonomys/asynchronous": "npm:^1.5.7"
+    "@autonomys/auto-dag-data": "npm:^1.5.7"
+    "@autonomys/auto-utils": "npm:^1.5.7"
     blockstore-core: "npm:^5.0.2"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^3.0.1"
     process: "npm:^0.11.10"
     stream: "npm:^0.0.3"
     zod: "npm:^3.24.2"
-  checksum: 10c0/98dbcbdb5ac10ac39db9f6afb7d1a1950fcaa0f771bc0ea621071e1253d33165475af9652ee05876fd7b9aa93f1c9f424aae75ea394fb438cb3a06efd809a66b
+  checksum: 10c0/c0f3c21d600299248d9af639ff861dc7dda6df1bd7ac95b97be44f39311473319aea9a3a6e397aec797be814f9596a73cebd763344cc2c340221f6a36f75daad
   languageName: node
   linkType: hard
 
@@ -337,23 +340,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-utils@npm:^1.5.5":
-  version: 1.5.5
-  resolution: "@autonomys/auto-utils@npm:1.5.5"
+"@autonomys/auto-utils@npm:^1.5.7":
+  version: 1.5.7
+  resolution: "@autonomys/auto-utils@npm:1.5.7"
   dependencies:
     "@polkadot/api": "npm:^15.8.1"
     "@polkadot/extension-dapp": "npm:^0.58.6"
-  checksum: 10c0/bf492a04675c7b580a0592bf7c4560694e283c42caf9aba4c7473b93f7804656cfdfd99616d0ba650acea7f21a358b26a8e89fd608100fdbf21ec6de2ee06361
+  checksum: 10c0/e783993bf981a573ddc9b3604136fe9f7c71c8be1fc02ce08384bc9da997b8c6762e67320393a4e36cc0e3164e46ad24a40542a547d0c5e72abe7e57c8b91fa1
   languageName: node
   linkType: hard
 
-"@autonomys/design-tokens@npm:^1.5.5":
-  version: 1.5.5
-  resolution: "@autonomys/design-tokens@npm:1.5.5"
+"@autonomys/design-tokens@npm:^1.5.7":
+  version: 1.5.7
+  resolution: "@autonomys/design-tokens@npm:1.5.7"
   dependencies:
     "@tailwindcss/forms": "npm:^0.5.7"
     tailwindcss: "npm:^3.3.5"
-  checksum: 10c0/167a0cb61a0fe81f2a3f400da3e15b25acc83e00fde08da183fb64c6e23fcf6bdcb820f262152ac83785a721f9662efcfb64d13b199e42a1f61652395c09cf43
+  checksum: 10c0/bffe1d4ac149de02823d536d12f61a6eff2bfab4fab77238746d52dcb1ae96d96a15f21e189d937956d96209999c24909184a9f505e68b2953ad52c1b7482bef
   languageName: node
   linkType: hard
 
@@ -3277,7 +3280,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@headlessui/react@npm:2.2.4":
+"@headlessui/react@npm:^2.1.8, @headlessui/react@npm:^2.2.3":
   version: 2.2.4
   resolution: "@headlessui/react@npm:2.2.4"
   dependencies:
@@ -4269,6 +4272,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@next/env@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/env@npm:14.2.30"
+  checksum: 10c0/b5ff1dc9aeb03f998694c9ec309d3b4a75bfad315d77e61a729b19fdc96c409f850efb4917440657fd69bf1f8aa9f63a5ee4f18626d4c66cb86c77e901759a58
+  languageName: node
+  linkType: hard
+
 "@next/env@npm:15.3.5":
   version: 15.3.5
   resolution: "@next/env@npm:15.3.5"
@@ -4294,10 +4304,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@next/swc-darwin-arm64@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/swc-darwin-arm64@npm:14.2.30"
+  conditions: os=darwin & cpu=arm64
+  languageName: node
+  linkType: hard
+
 "@next/swc-darwin-arm64@npm:15.3.5":
   version: 15.3.5
   resolution: "@next/swc-darwin-arm64@npm:15.3.5"
   conditions: os=darwin & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@next/swc-darwin-x64@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/swc-darwin-x64@npm:14.2.30"
+  conditions: os=darwin & cpu=x64
   languageName: node
   linkType: hard
 
@@ -4308,10 +4332,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@next/swc-linux-arm64-gnu@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/swc-linux-arm64-gnu@npm:14.2.30"
+  conditions: os=linux & cpu=arm64 & libc=glibc
+  languageName: node
+  linkType: hard
+
 "@next/swc-linux-arm64-gnu@npm:15.3.5":
   version: 15.3.5
   resolution: "@next/swc-linux-arm64-gnu@npm:15.3.5"
   conditions: os=linux & cpu=arm64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"@next/swc-linux-arm64-musl@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/swc-linux-arm64-musl@npm:14.2.30"
+  conditions: os=linux & cpu=arm64 & libc=musl
   languageName: node
   linkType: hard
 
@@ -4322,10 +4360,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@next/swc-linux-x64-gnu@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/swc-linux-x64-gnu@npm:14.2.30"
+  conditions: os=linux & cpu=x64 & libc=glibc
+  languageName: node
+  linkType: hard
+
 "@next/swc-linux-x64-gnu@npm:15.3.5":
   version: 15.3.5
   resolution: "@next/swc-linux-x64-gnu@npm:15.3.5"
   conditions: os=linux & cpu=x64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"@next/swc-linux-x64-musl@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/swc-linux-x64-musl@npm:14.2.30"
+  conditions: os=linux & cpu=x64 & libc=musl
   languageName: node
   linkType: hard
 
@@ -4336,10 +4388,31 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@next/swc-win32-arm64-msvc@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/swc-win32-arm64-msvc@npm:14.2.30"
+  conditions: os=win32 & cpu=arm64
+  languageName: node
+  linkType: hard
+
 "@next/swc-win32-arm64-msvc@npm:15.3.5":
   version: 15.3.5
   resolution: "@next/swc-win32-arm64-msvc@npm:15.3.5"
   conditions: os=win32 & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@next/swc-win32-ia32-msvc@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/swc-win32-ia32-msvc@npm:14.2.30"
+  conditions: os=win32 & cpu=ia32
+  languageName: node
+  linkType: hard
+
+"@next/swc-win32-x64-msvc@npm:14.2.30":
+  version: 14.2.30
+  resolution: "@next/swc-win32-x64-msvc@npm:14.2.30"
+  conditions: os=win32 & cpu=x64
   languageName: node
   linkType: hard
 
@@ -7540,6 +7613,16 @@ __metadata:
   dependencies:
     tslib: "npm:^2.8.0"
   checksum: 10c0/33002f74f6f885f04c132960835fdfc474186983ea567606db62e86acd0680ca82f34647e8e610f4e1e422d1c16fce729dde22cd3b797ab1fd9061a825dabca4
+  languageName: node
+  linkType: hard
+
+"@swc/helpers@npm:0.5.5":
+  version: 0.5.5
+  resolution: "@swc/helpers@npm:0.5.5"
+  dependencies:
+    "@swc/counter": "npm:^0.1.3"
+    tslib: "npm:^2.4.0"
+  checksum: 10c0/21a9b9cfe7e00865f9c9f3eb4c1cc5b397143464f7abee76a2c5366e591e06b0155b5aac93fe8269ef8d548df253f6fd931e9ddfc0fd12efd405f90f45506e7d
   languageName: node
   linkType: hard
 
@@ -13793,9 +13876,9 @@ __metadata:
   dependencies:
     "@apollo/client": "npm:^3.11.10"
     "@auto-drive/models": "workspace:*"
-    "@autonomys/auto-dag-data": "npm:^1.5.5"
-    "@autonomys/auto-design-system": "npm:^1.5.5"
-    "@autonomys/auto-drive": "npm:^1.5.5"
+    "@autonomys/auto-dag-data": "npm:^1.5.7"
+    "@autonomys/auto-design-system": "npm:^1.5.7"
+    "@autonomys/auto-drive": "npm:^1.5.7"
     "@cyntler/react-doc-viewer": "npm:^1.17.0"
     "@graphql-codegen/cli": "npm:^5.0.3"
     "@graphql-codegen/introspection": "npm:^4.0.3"
@@ -14205,7 +14288,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"graceful-fs@npm:^4.1.9, graceful-fs@npm:^4.2.0, graceful-fs@npm:^4.2.4, graceful-fs@npm:^4.2.6, graceful-fs@npm:^4.2.9":
+"graceful-fs@npm:^4.1.9, graceful-fs@npm:^4.2.0, graceful-fs@npm:^4.2.11, graceful-fs@npm:^4.2.4, graceful-fs@npm:^4.2.6, graceful-fs@npm:^4.2.9":
   version: 4.2.11
   resolution: "graceful-fs@npm:4.2.11"
   checksum: 10c0/386d011a553e02bc594ac2ca0bd6d9e4c22d7fa8cfbfc448a6d148c59ea881b092db9dbe3547ae4b88e55f1b01f7c4a2ecc53b310c042793e63aa44cf6c257f2
@@ -16528,7 +16611,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lucide-react@npm:0.510.0":
+"lucide-react@npm:^0.439.0":
+  version: 0.439.0
+  resolution: "lucide-react@npm:0.439.0"
+  peerDependencies:
+    react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
+  checksum: 10c0/153c6da6a1bdcc03c47080b00a50a341b7e485ccbb479a742c0fb606355acf93c136630626dad2d57cafe1f5c691dd4f2fcd0f2b7c813e7c9e0e1f065cf62be0
+  languageName: node
+  linkType: hard
+
+"lucide-react@npm:^0.510.0":
   version: 0.510.0
   resolution: "lucide-react@npm:0.510.0"
   peerDependencies:
@@ -17191,7 +17283,65 @@ __metadata:
   languageName: node
   linkType: hard
 
-"next@npm:15.3.5":
+"next@npm:^14.2.17":
+  version: 14.2.30
+  resolution: "next@npm:14.2.30"
+  dependencies:
+    "@next/env": "npm:14.2.30"
+    "@next/swc-darwin-arm64": "npm:14.2.30"
+    "@next/swc-darwin-x64": "npm:14.2.30"
+    "@next/swc-linux-arm64-gnu": "npm:14.2.30"
+    "@next/swc-linux-arm64-musl": "npm:14.2.30"
+    "@next/swc-linux-x64-gnu": "npm:14.2.30"
+    "@next/swc-linux-x64-musl": "npm:14.2.30"
+    "@next/swc-win32-arm64-msvc": "npm:14.2.30"
+    "@next/swc-win32-ia32-msvc": "npm:14.2.30"
+    "@next/swc-win32-x64-msvc": "npm:14.2.30"
+    "@swc/helpers": "npm:0.5.5"
+    busboy: "npm:1.6.0"
+    caniuse-lite: "npm:^1.0.30001579"
+    graceful-fs: "npm:^4.2.11"
+    postcss: "npm:8.4.31"
+    styled-jsx: "npm:5.1.1"
+  peerDependencies:
+    "@opentelemetry/api": ^1.1.0
+    "@playwright/test": ^1.41.2
+    react: ^18.2.0
+    react-dom: ^18.2.0
+    sass: ^1.3.0
+  dependenciesMeta:
+    "@next/swc-darwin-arm64":
+      optional: true
+    "@next/swc-darwin-x64":
+      optional: true
+    "@next/swc-linux-arm64-gnu":
+      optional: true
+    "@next/swc-linux-arm64-musl":
+      optional: true
+    "@next/swc-linux-x64-gnu":
+      optional: true
+    "@next/swc-linux-x64-musl":
+      optional: true
+    "@next/swc-win32-arm64-msvc":
+      optional: true
+    "@next/swc-win32-ia32-msvc":
+      optional: true
+    "@next/swc-win32-x64-msvc":
+      optional: true
+  peerDependenciesMeta:
+    "@opentelemetry/api":
+      optional: true
+    "@playwright/test":
+      optional: true
+    sass:
+      optional: true
+  bin:
+    next: dist/bin/next
+  checksum: 10c0/47b6a1e96d9263894da150bbb2c98c123b1630a0a88eb55c2129938557c51e8e55edf1d43364f7721b472fb4977e9567541f9c504a69ccf8138d0128cb682561
+  languageName: node
+  linkType: hard
+
+"next@npm:^15.3.2":
   version: 15.3.5
   resolution: "next@npm:15.3.5"
   dependencies:
@@ -20921,6 +21071,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"styled-jsx@npm:5.1.1":
+  version: 5.1.1
+  resolution: "styled-jsx@npm:5.1.1"
+  dependencies:
+    client-only: "npm:0.0.1"
+  peerDependencies:
+    react: ">= 16.8.0 || 17.x.x || ^18.0.0-0"
+  peerDependenciesMeta:
+    "@babel/core":
+      optional: true
+    babel-plugin-macros:
+      optional: true
+  checksum: 10c0/42655cdadfa5388f8a48bb282d6b450df7d7b8cf066ac37038bd0499d3c9f084815ebd9ff9dfa12a218fd4441338851db79603498d7557207009c1cf4d609835
+  languageName: node
+  linkType: hard
+
 "styled-jsx@npm:5.1.6":
   version: 5.1.6
   resolution: "styled-jsx@npm:5.1.6"
@@ -21054,10 +21220,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tailwind-merge@npm:3.2.0":
-  version: 3.2.0
-  resolution: "tailwind-merge@npm:3.2.0"
-  checksum: 10c0/294f6c2db0df74405bff126107107426c3126a70a1717d78e8d6811db65546c9bb3d61282bdb8d9fbded23f6bc8ec3e8e61031a4f53265f90b7f3dba558f88f4
+"tailwind-merge@npm:^2.2.1":
+  version: 2.6.0
+  resolution: "tailwind-merge@npm:2.6.0"
+  checksum: 10c0/fc8a5535524de9f4dacf1c16ab298581c7bb757d68a95faaf28942b1c555a619bba9d4c6726fe83986e44973b315410c1a5226e5354c30ba82353bd6d2288fa5
+  languageName: node
+  linkType: hard
+
+"tailwind-merge@npm:^3.0.1":
+  version: 3.3.1
+  resolution: "tailwind-merge@npm:3.3.1"
+  checksum: 10c0/b84c6a78d4669fa12bf5ab8f0cdc4400a3ce0a7c006511af4af4be70bb664a27466dbe13ee9e3b31f50ddf6c51d380e8192ce0ec9effce23ca729d71a9f63818
   languageName: node
   linkType: hard
 

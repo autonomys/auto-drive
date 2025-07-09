@@ -75,8 +75,11 @@ export const metadata: Metadata = {
   },
 };
 
-const WalletProvider = dynamic(() =>
-  import('@/contexts/web3').then((mod) => mod.Web3Provider),
+const WalletProvider = dynamic(
+  () => import('@/contexts/web3').then((mod) => mod.Web3Provider),
+  {
+    ssr: false,
+  },
 );
 
 export default function RootLayout({

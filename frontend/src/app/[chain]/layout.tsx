@@ -2,7 +2,7 @@
 
 import '../globals.css';
 import { UserEnsurer } from 'components/UserEnsurer';
-import { use, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useUserStore } from 'globalStates/user';
 import { SessionProvider } from 'next-auth/react';
 import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
@@ -15,13 +15,11 @@ import { TableRouteChangeListener } from '@/components/FileTables/common/FileTab
 
 export default function AppLayout({
   children,
-  params: paramsPromise,
+  params,
 }: Readonly<{
   children: React.ReactNode;
-  params: Promise<{ chain: NetworkId }>;
+  params: { chain: NetworkId };
 }>) {
-  const params = use(paramsPromise);
-
   const setUser = useUserStore(({ setUser }) => setUser);
 
   useEffect(() => {
