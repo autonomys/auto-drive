@@ -1,8 +1,10 @@
 import { ObjectUseCases } from '../../../useCases/index.js'
 import { AsyncDownloadsUseCases } from '../../../useCases/asyncDownloads/index.js'
 import { Task } from '../tasks.js'
-import { logger } from '../../../drivers/logger.js'
+import { createLogger } from '../../../drivers/logger.js'
 import { createHandlerWithRetries } from '../utils.js'
+
+const logger = createLogger('eventRouter:processor:download')
 
 export const processDownloadTask = createHandlerWithRetries(
   ({ id, params }: Task) => {
@@ -12,7 +14,8 @@ export const processDownloadTask = createHandlerWithRetries(
       return ObjectUseCases.onObjectArchived(params.cid)
     } else {
       logger.error(
-        `Received task ${id} but no handler found. (processors/download.ts)`,
+        'Received task %s but no handler found (processors/download.ts)',
+        id,
       )
       throw new Error(`Received task ${id} but no handler found.`)
     }
