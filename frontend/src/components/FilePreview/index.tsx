@@ -11,6 +11,7 @@ import { useNetwork } from '../../contexts/network';
 import { NetworkId as AutoDriveNetworkId } from '../../constants/networks';
 import { NetworkId as AutoUtilsNetworkId } from '@autonomys/auto-utils';
 import { EXTERNAL_ROUTES } from '../../constants/routes';
+import { sanitizeHTML } from '../../utils/sanitizeHTML';
 
 export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   const { network } = useNetwork();
@@ -21,6 +22,10 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   const [decryptionError, setDecryptionError] = useState<string | null>(null);
   const [file, setFile] = useState<Blob | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
+
+  const safeSetTextContent = useCallback((text: string) => {
+    setTextContent(sanitizeHTML(text));
+  }, []);
 
   const networkId = useMemo(() => {
     switch (network.id) {
@@ -69,7 +74,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         // For text-based files, also read the content
         if (needsContentParsing(metadata)) {
           const text = await blob.text();
-          setTextContent(text);
+          safeSetTextContent(text);
         }
         // Handle decryption if needed
         if (metadata.uploadOptions?.encryption && password) {
