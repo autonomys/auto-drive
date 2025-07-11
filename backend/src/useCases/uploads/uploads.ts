@@ -24,6 +24,9 @@ import { chunkArray } from '../../utils/misc.js'
 import { config } from '../../config.js'
 import { blockstoreRepository } from '../../repositories/uploads/blockstore.js'
 import { BlockstoreUseCases } from './blockstore.js'
+import { createLogger } from '../../drivers/logger.js'
+
+const logger = createLogger('useCases:uploads:uploads')
 
 export const mapTableToModel = (upload: UploadEntry): Upload => {
   return {
@@ -71,6 +74,11 @@ const createFileUpload = async (
   rootId?: string | null,
   relativeId?: string | null,
 ): Promise<FileUpload> => {
+  logger.debug(
+    'createFileUpload invoked (userId=%s, name=%s)',
+    user.oauthUserId,
+    name,
+  )
   rootId = rootId ?? null
   relativeId = relativeId ?? null
 
@@ -153,8 +161,15 @@ const uploadChunk = async (
   index: number,
   chunkData: Buffer,
 ): Promise<void> => {
+  logger.trace(
+    'uploadChunk invoked (uploadId=%s, partIndex=%d, userId=%s)',
+    uploadId,
+    index,
+    user.oauthUserId,
+  )
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
+    logger.error('Upload not found (uploadId=%s)', uploadId)
     throw new Error('Upload not found')
   }
   await checkPermissions(upload, user)
@@ -174,8 +189,14 @@ const completeUpload = async (
   user: UserWithOrganization,
   uploadId: string,
 ): Promise<string> => {
+  logger.debug(
+    'completeUpload invoked (uploadId=%s, userId=%s)',
+    uploadId,
+    user.oauthUserId,
+  )
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
+    logger.warn('Upload not found (uploadId=%s)', uploadId)
     throw new Error('Upload not found')
   }
   await checkPermissions(upload, user)
@@ -200,6 +221,11 @@ const completeUpload = async (
     await scheduleNodeMigration(uploadId)
   }
 
+  logger.debug(
+    'Upload completed (uploadId=%s, cid=%s, isRootUpload=%s)',
+    uploadId,
+    cidToString(cid),
+  )
   return cidToString(cid)
 }
 
@@ -322,8 +348,10 @@ const tagUpload = async (cid: string): Promise<void> => {
 }
 
 const processMigration = async (uploadId: string): Promise<void> => {
+  logger.debug('processMigration invoked (uploadId=%s)', uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
+    logger.error('Upload not found (uploadId=%s)', uploadId)
     throw new Error('Upload not found')
   }
 

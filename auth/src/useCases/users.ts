@@ -12,10 +12,14 @@ import {
 import { usersRepository } from '../repositories/users.js'
 import { OrganizationsUseCases } from './organizations.js'
 import { v5 } from 'uuid'
+import { createLogger } from '../drivers/logger.js'
+
+const logger = createLogger('useCases:users')
 
 const getUserByPublicId = async (
   publicId: string,
 ): Promise<User | undefined> => {
+  logger.trace('Fetching user by publicId %s', publicId)
   const dbUser = await usersRepository.getUserByPublicId(publicId)
   if (!dbUser) {
     return undefined
@@ -43,6 +47,7 @@ const resolveUser = async (
     ? await getUserByPublicId(userOrPublicId)
     : userOrPublicId
   if (!user) {
+    logger.warn('User not found %s', userOrPublicId)
     throw new Error('User not found')
   }
 
@@ -75,6 +80,7 @@ const getUserWithOrganization = async (
 }
 
 const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
+  logger.debug('Onboarding user %s:%s', user.oauthProvider, user.oauthUserId)
   if (user.onboarded) {
     return user
   }
@@ -88,6 +94,13 @@ const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
     user.oauthAvatarUrl,
     publicId,
     UserRole.User,
+  )
+
+  logger.debug(
+    'Onboarded user %s:%s with publicId %s',
+    user.oauthProvider,
+    user.oauthUserId,
+    publicId,
   )
 
   return updatedUser
@@ -160,6 +173,7 @@ const updateRole = async (
   userOrPublicId: UserOrPublicId,
   role: UserRole,
 ) => {
+  logger.info('Updating role to %s by admin %s', role, executor.publicId)
   const isAdmin = await isAdminUser(executor)
   if (!isAdmin) {
     throw new Error('User does not have admin privileges')
@@ -181,6 +195,7 @@ const initUser = async (
   publicId: string,
   role: UserRole,
 ): Promise<User> => {
+  logger.info('Initializing new user %s', publicId)
   const user = await usersRepository.createUser(
     oauthProvider,
     oauthUserId,
@@ -211,6 +226,12 @@ export const getPaginatedUserList = async (
   page: number = 1,
   limit: number = 10,
 ): Promise<PaginatedResult<User>> => {
+  logger.trace(
+    'Paginated user list requested by %s page=%d limit=%d',
+    executor.publicId,
+    page,
+    limit,
+  )
   const isAdmin = await isAdminUser(executor)
   if (!isAdmin) {
     throw new Error('User does not have admin privileges')

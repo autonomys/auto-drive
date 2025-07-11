@@ -1,7 +1,10 @@
 import pg from 'pg'
 import { config } from '../config.js'
+import { createLogger } from './logger.js'
 
 let db: pg.Pool | undefined
+
+const logger = createLogger('drivers:pg')
 
 const createDB = async (): Promise<pg.Pool> => {
   const pool = new pg.Pool({
@@ -16,6 +19,18 @@ const createDB = async (): Promise<pg.Pool> => {
   })
 
   await pool.connect()
+
+  logger.info('Connected to PostgreSQL at %s', config.postgres.url)
+
+  // DEBUG: wrap query for tracing
+  const origQuery = pool.query.bind(pool)
+  pool.query = ((...args: Parameters<typeof pool.query>) => {
+    logger.trace(
+      'SQL Query: %s',
+      typeof args[0] === 'string' ? args[0] : '<prepared>',
+    )
+    return origQuery(...args)
+  }) as typeof pool.query
 
   return pool
 }
@@ -34,3 +49,5 @@ export const closeDatabase = async () => {
     db = undefined
   }
 }
+
+process.on('beforeExit', closeDatabase)

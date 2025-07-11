@@ -11,7 +11,6 @@ const ONE_HUNDRED_MiB = ONE_MiB * 100
 const FIVE_GiB = 1024 ** 3 * 5
 
 export const config = {
-  logLevel: env('LOG_LEVEL', 'info'),
   postgres: {
     url: env('DATABASE_URL'),
   },

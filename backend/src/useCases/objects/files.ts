@@ -28,19 +28,26 @@ import { downloadService } from '../../services/download/index.js'
 import { FileGateway } from '../../services/dsn/fileGateway/index.js'
 import { config } from '../../config.js'
 import { Readable } from 'stream'
+import { createLogger } from '../../drivers/logger.js'
+
+const logger = createLogger('useCases:objects:files')
 
 const generateFileArtifacts = async (
   uploadId: string,
 ): Promise<FileArtifacts> => {
+  logger.debug('generateFileArtifacts called (uploadId=%s)', uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
+    logger.error('Upload not found (uploadId=%s)', uploadId)
     throw new Error('Upload not found')
   }
   if (upload.type !== UploadType.FILE) {
+    logger.error('Upload is not a file (uploadId=%s)', uploadId)
     throw new Error('Upload is not a file')
   }
 
   const cid = await BlockstoreUseCases.getFileUploadIdCID(uploadId)
+  logger.trace('Resolved file CID (uploadId=%s, cid=%s)', uploadId, cid)
 
   let chunks = await BlockstoreUseCases.getChunksByNodeType(
     uploadId,
@@ -67,6 +74,7 @@ const generateFileArtifacts = async (
     upload.upload_options ?? undefined,
   )
 
+  logger.debug('File metadata generated (cid=%s, totalSize=%d)', cid, totalSize)
   return {
     metadata,
   }
@@ -75,11 +83,14 @@ const generateFileArtifacts = async (
 const generateFolderArtifacts = async (
   uploadId: string,
 ): Promise<FolderArtifacts> => {
+  logger.debug('generateFolderArtifacts called (uploadId=%s)', uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
+    logger.error('Upload not found (uploadId=%s)', uploadId)
     throw new Error('Upload not found')
   }
   if (upload.type !== UploadType.FOLDER) {
+    logger.error('Upload is not a folder (uploadId=%s)', uploadId)
     throw new Error('Upload is not a folder')
   }
   if (!upload.file_tree) {
@@ -119,6 +130,11 @@ const generateFolderArtifacts = async (
     upload.upload_options ?? undefined,
   )
 
+  logger.debug(
+    'Folder metadata generated (cid=%s, children=%d)',
+    metadata.dataCid,
+    childrenMetadata.length,
+  )
   return {
     metadata,
     childrenArtifacts,
@@ -128,8 +144,10 @@ const generateFolderArtifacts = async (
 const generateArtifacts = async (
   uploadId: string,
 ): Promise<UploadArtifacts> => {
+  logger.debug('generateArtifacts called (uploadId=%s)', uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
+    logger.error('Upload not found (uploadId=%s)', uploadId)
     throw new Error('Upload not found')
   }
   return upload.type === UploadType.FILE
@@ -140,6 +158,7 @@ const generateArtifacts = async (
 const retrieveAndReassembleFile = async (
   metadata: OffchainFileMetadata,
 ): Promise<Readable> => {
+  logger.debug('retrieveAndReassembleFile called (cid=%s)', metadata.dataCid)
   if (metadata.totalChunks === 1) {
     const chunkData = await NodesUseCases.getChunkData(metadata.chunks[0].cid)
     if (!chunkData) {
@@ -189,6 +208,7 @@ const retrieveAndReassembleFolderAsZip = async (
   parent: PizZip,
   cid: string,
 ): Promise<Readable> => {
+  logger.debug('retrieveAndReassembleFolderAsZip called (cid=%s)', cid)
   const metadata = await ObjectUseCases.getMetadata(cid)
   if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`)
@@ -234,6 +254,11 @@ const downloadObjectByUser = async (
   cid: string,
   blockingTags?: string[],
 ): Promise<FileDownload> => {
+  logger.debug(
+    'downloadObjectByUser requested (cid=%s, userId=%s)',
+    cid,
+    reader.oauthUserId,
+  )
   const information = await ObjectUseCases.getObjectInformation(cid)
   if (!information) {
     throw new Error(`Metadata with CID ${cid} not found`)
@@ -254,9 +279,19 @@ const downloadObjectByUser = async (
     throw new Error('File is blocked')
   }
 
+  logger.info(
+    'downloadObjectByUser authorized (cid=%s, userId=%s)',
+    cid,
+    reader.oauthUserId,
+  )
   return {
     metadata,
     startDownload: async () => {
+      logger.trace(
+        'downloadObjectByUser starting stream (cid=%s, userId=%s)',
+        cid,
+        reader.oauthUserId,
+      )
       await SubscriptionsUseCases.registerInteraction(
         reader,
         InteractionType.Download,
@@ -274,6 +309,7 @@ const downloadObjectByAnonymous = async (
   cid: string,
   blockingTags?: string[],
 ): Promise<FileDownload> => {
+  logger.debug('downloadObjectByAnonymous requested (cid=%s)', cid)
   const information = await ObjectUseCases.getObjectInformation(cid)
   if (!information) {
     throw new Error(`Metadata with CID ${cid} not found`)
@@ -286,9 +322,13 @@ const downloadObjectByAnonymous = async (
     throw new Error('File is blocked')
   }
 
+  logger.info('downloadObjectByAnonymous authorized (cid=%s)', cid)
   return {
     metadata,
-    startDownload: async () => downloadService.download(cid),
+    startDownload: async () => {
+      logger.trace('downloadObjectByAnonymous starting stream (cid=%s)', cid)
+      return downloadService.download(cid)
+    },
   }
 }
 
@@ -296,6 +336,11 @@ const handleFileUploadFinalization = async (
   user: UserWithOrganization,
   uploadId: string,
 ): Promise<string> => {
+  logger.debug(
+    'handleFileUploadFinalization called (uploadId=%s, userId=%s)',
+    uploadId,
+    user.oauthUserId,
+  )
   const pendingCredits =
     await SubscriptionsUseCases.getPendingCreditsByUserAndType(
       user,
@@ -324,6 +369,11 @@ const handleFileUploadFinalization = async (
     metadata.totalSize.valueOf(),
   )
 
+  logger.info(
+    'handleFileUploadFinalization completed (cid=%s, userId=%s)',
+    metadata.dataCid,
+    user.oauthUserId,
+  )
   return metadata.dataCid
 }
 
@@ -331,6 +381,11 @@ const handleFolderUploadFinalization = async (
   user: UserWithOrganization,
   uploadId: string,
 ): Promise<string> => {
+  logger.debug(
+    'handleFolderUploadFinalization called (uploadId=%s, userId=%s)',
+    uploadId,
+    user.oauthUserId,
+  )
   const { metadata, childrenArtifacts } =
     await generateFolderArtifacts(uploadId)
 
@@ -347,12 +402,22 @@ const handleFolderUploadFinalization = async (
 
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid)
 
+  logger.info(
+    'handleFolderUploadFinalization completed (cid=%s, userId=%s)',
+    metadata.dataCid,
+    user.oauthUserId,
+  )
   return metadata.dataCid
 }
 
 const retrieveObject = async (
   metadata: OffchainMetadata,
 ): Promise<Readable> => {
+  logger.debug(
+    'retrieveObject called (cid=%s, type=%s)',
+    metadata.dataCid,
+    metadata.type,
+  )
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
 
   if (isArchived) {
