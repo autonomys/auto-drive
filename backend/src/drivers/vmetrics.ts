@@ -1,4 +1,7 @@
 import { config } from '../config.js'
+import { createLogger } from './logger.js'
+
+const logger = createLogger('drivers:metrics')
 
 export interface Metric {
   measurement: string
@@ -20,7 +23,7 @@ export const sendMetricToVictoria = async (metric: Metric): Promise<void> => {
 
     if (!config.monitoring.victoriaEndpoint) {
       if (config.monitoring.active) {
-        console.error('Victoria endpoint is not set')
+        logger.warn('Victoria endpoint is not set')
       }
       return
     }
@@ -36,8 +39,10 @@ export const sendMetricToVictoria = async (metric: Metric): Promise<void> => {
       throw new Error(
         `Failed to send metric to Victoria: ${response.statusText}`,
       )
+    } else {
+      logger.debug('Metric %s sent to Victoria', metric.measurement)
     }
   } catch (error) {
-    console.error('Failed to send metric to Victoria', error)
+    logger.error('Failed to send metric to Victoria', error)
   }
 }

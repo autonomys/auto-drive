@@ -1,7 +1,9 @@
-import { logger } from '../../drivers/logger.js'
+import { createLogger } from '../../drivers/logger.js'
 import { Rabbit } from '../../drivers/rabbit.js'
 import { EventRouter } from './index.js'
 import { Task, TaskSchema } from './tasks.js'
+
+const logger = createLogger('eventRouter:utils')
 
 type Handler = (task: Task) => Promise<unknown>
 
@@ -16,7 +18,7 @@ export const createHandlerWithRetries =
   async (obj: unknown) => {
     const task = TaskSchema.safeParse(obj)
     if (!task.success) {
-      logger.error('Invalid task', task.error)
+      logger.error(task.error as Error, 'Invalid task')
       return
     }
 
@@ -36,7 +38,7 @@ export const createHandlerWithRetries =
             retriesLeft: errorRetries,
           })
         }
-        logger.error('Task failed', error)
+        logger.error(error as Error, 'Task failed')
       }
     }
   }
