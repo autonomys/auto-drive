@@ -95,90 +95,33 @@ infisical_project_id: "your-project-id"
 # Additional environment-specific variables
 ```
 
-### 2. Create Inventory File
+### 2. Configure Inventory File
 
-Create an `inventory.yml` file defining your target machines:
+The `hosts.ini` file is already created in the `ansible/` directory with all target machine tags. Update it with your actual host information:
 
-```yaml
-all:
-  children:
-    auto_drive_mainnet_private:
-      hosts:
-        mainnet-private-1:
-          ansible_host: 10.0.1.10
-        mainnet-private-2:
-          ansible_host: 10.0.1.11
-    
-    auto_drive_mainnet_public:
-      hosts:
-        mainnet-public-1:
-          ansible_host: 10.0.2.10
-        mainnet-public-2:
-          ansible_host: 10.0.2.11
-    
-    auto_drive_taurus_private:
-      hosts:
-        taurus-private-1:
-          ansible_host: 10.0.3.10
-    
-    auto_drive_taurus_public:
-      hosts:
-        taurus-public-1:
-          ansible_host: 10.0.4.10
-    
-    auto_drive_taurus_staging:
-      hosts:
-        taurus-staging-1:
-          ansible_host: 10.0.5.10
-    
-    auto_drive_mainnet_staging:
-      hosts:
-        mainnet-staging-1:
-          ansible_host: 10.0.6.10
-    
-    auto_drive_multinetwork_gateway:
-      hosts:
-        gateway-1:
-          ansible_host: 10.0.7.10
-    
-    files_gateway_taurus_staging:
-      hosts:
-        files-taurus-staging-1:
-          ansible_host: 10.0.8.10
-    
-    files_gateway_mainnet_staging:
-      hosts:
-        files-mainnet-staging-1:
-          ansible_host: 10.0.9.10
-    
-    files_gateway_taurus_production:
-      hosts:
-        files-taurus-prod-1:
-          ansible_host: 10.0.10.10
-    
-    files_gateway_mainnet_production:
-      hosts:
-        files-mainnet-prod-1:
-          ansible_host: 10.0.11.10
-```
+1. **Uncomment and configure hosts** as needed for your environment
+2. **Replace placeholder IP addresses** with actual values
+3. **Adjust hostnames** to match your infrastructure
 
-### 3. Set Up Ansible Configuration
-
-Create `ansible.cfg` in the `ansible/` directory:
-
+Example configuration:
 ```ini
-[defaults]
-inventory = inventory.yml
-remote_user = ubuntu
-host_key_checking = False
-timeout = 30
-gathering = smart
-fact_caching = memory
+[auto_drive_mainnet_private]
+mainnet-private-1 ansible_host=10.0.1.10 ansible_user=ubuntu
+mainnet-private-2 ansible_host=10.0.1.11 ansible_user=ubuntu
 
-[ssh_connection]
-ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
-pipelining = True
+[auto_drive_mainnet_public]
+mainnet-public-1 ansible_host=10.0.2.10 ansible_user=ubuntu
 ```
+
+The inventory includes:
+- **Individual target machine groups** for each service
+- **Logical groupings** (production, staging, mainnet, taurus)
+- **Environment-specific variables** for each group
+- **Common variables** for all hosts
+
+### 3. Ansible Configuration
+
+The `ansible.cfg` file is configured to use the `hosts.ini` inventory and includes optimized settings for deployment operations.
 
 ## Deployment Procedures
 
@@ -188,10 +131,10 @@ First, set up Infisical on all target machines:
 
 ```bash
 # Setup Infisical on specific target machines
-ansible-playbook -i inventory.yml setup-infisical.yml -e "target_machines=auto_drive_mainnet_private"
+ansible-playbook setup-infisical.yml -e "target_machines=auto_drive_mainnet_private"
 
 # Setup Infisical on all machines
-ansible-playbook -i inventory.yml setup-infisical.yml -e "target_machines=all"
+ansible-playbook setup-infisical.yml -e "target_machines=all"
 ```
 
 ### 2. Auto Drive Services Deployment
@@ -200,31 +143,31 @@ Deploy to specific environments:
 
 ```bash
 # Deploy to mainnet private
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=auto_drive_mainnet_private" \
   -e "image_tag=latest"
 
 # Deploy to mainnet public
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=auto_drive_mainnet_public" \
   -e "image_tag=v1.2.3"
 
 # Deploy to taurus private
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=auto_drive_taurus_private" \
   -e "image_tag=latest"
 
 # Deploy to taurus public
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=auto_drive_taurus_public" \
   -e "image_tag=v1.2.3"
 
 # Deploy to staging environments
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=auto_drive_mainnet_staging" \
   -e "image_tag=staging-latest"
 
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=auto_drive_taurus_staging" \
   -e "image_tag=staging-latest"
 ```
@@ -235,7 +178,7 @@ Deploy the multinetwork gateway:
 
 ```bash
 # Deploy multinetwork gateway
-ansible-playbook -i inventory.yml auto-drive-multinetwork-gateway.yml \
+ansible-playbook auto-drive-multinetwork-gateway.yml \
   -e "image_tag=gateway-v1.0.0"
 ```
 
@@ -245,20 +188,20 @@ For files gateway services, use the main deployment playbook with appropriate ta
 
 ```bash
 # Deploy files gateway staging
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=files_gateway_taurus_staging" \
   -e "image_tag=files-gateway-staging"
 
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=files_gateway_mainnet_staging" \
   -e "image_tag=files-gateway-staging"
 
 # Deploy files gateway production
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=files_gateway_taurus_production" \
   -e "image_tag=files-gateway-v1.0.0"
 
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=files_gateway_mainnet_production" \
   -e "image_tag=files-gateway-v1.0.0"
 ```
@@ -269,14 +212,45 @@ Deploy to multiple environments simultaneously:
 
 ```bash
 # Deploy to all staging environments
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=auto_drive_mainnet_staging,auto_drive_taurus_staging" \
   -e "image_tag=staging-latest"
 
 # Deploy to all production environments
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=auto_drive_mainnet_private,auto_drive_mainnet_public,auto_drive_taurus_private,auto_drive_taurus_public" \
   -e "image_tag=v1.2.3"
+```
+
+### 6. Group-Based Deployments
+
+Use the logical groupings defined in the inventory:
+
+```bash
+# Deploy to all auto drive production environments
+ansible-playbook auto-drive-deployment.yml \
+  -e "target_machines=auto_drive_production" \
+  -e "image_tag=v1.2.3"
+
+# Deploy to all staging environments
+ansible-playbook auto-drive-deployment.yml \
+  -e "target_machines=auto_drive_staging" \
+  -e "image_tag=staging-latest"
+
+# Deploy to all mainnet services
+ansible-playbook auto-drive-deployment.yml \
+  -e "target_machines=mainnet_services" \
+  -e "image_tag=mainnet-v1.0.0"
+
+# Deploy to all taurus services
+ansible-playbook auto-drive-deployment.yml \
+  -e "target_machines=taurus_services" \
+  -e "image_tag=taurus-v1.0.0"
+
+# Deploy to all files gateway production
+ansible-playbook auto-drive-deployment.yml \
+  -e "target_machines=files_gateway_production" \
+  -e "image_tag=files-gateway-v1.0.0"
 ```
 
 ## Service Components
@@ -370,10 +344,10 @@ The deployment automatically:
 3. **SSH Connection Issues**
    ```bash
    # Test SSH connectivity
-   ansible all -i inventory.yml -m ping
+   ansible all -m ping
    
    # Check specific host
-   ansible [hostname] -i inventory.yml -m ping
+   ansible [hostname] -m ping
    ```
 
 4. **Environment Variable Issues**
@@ -391,7 +365,7 @@ Enable verbose output:
 
 ```bash
 # Run with increased verbosity
-ansible-playbook -i inventory.yml auto-drive-deployment.yml \
+ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=auto_drive_mainnet_private" \
   -e "image_tag=latest" \
   -vvv
@@ -401,10 +375,10 @@ Check deployment status:
 
 ```bash
 # Check running containers
-ansible all -i inventory.yml -m shell -a "docker ps"
+ansible all -m shell -a "docker ps"
 
 # Check service health
-ansible all -i inventory.yml -m shell -a "docker compose ps"
+ansible all -m shell -a "docker compose ps"
 ```
 
 ## Best Practices
@@ -450,19 +424,19 @@ ansible all -i inventory.yml -m shell -a "docker compose ps"
 
 ```bash
 # Check all hosts
-ansible all -i inventory.yml -m ping
+ansible all -m ping
 
 # Deploy to staging
-ansible-playbook -i inventory.yml auto-drive-deployment.yml -e "target_machines=auto_drive_mainnet_staging" -e "image_tag=staging-latest"
+ansible-playbook auto-drive-deployment.yml -e "target_machines=auto_drive_mainnet_staging" -e "image_tag=staging-latest"
 
 # Deploy gateway
-ansible-playbook -i inventory.yml auto-drive-multinetwork-gateway.yml -e "image_tag=gateway-latest"
+ansible-playbook auto-drive-multinetwork-gateway.yml -e "image_tag=gateway-latest"
 
 # Setup new machines
-ansible-playbook -i inventory.yml setup-infisical.yml -e "target_machines=new_machine_group"
+ansible-playbook setup-infisical.yml -e "target_machines=new_machine_group"
 
 # Check service status
-ansible all -i inventory.yml -m shell -a "docker compose ps"
+ansible all -m shell -a "docker compose ps"
 ```
 
 ### Environment Tag Reference
