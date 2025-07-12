@@ -21,8 +21,7 @@ This guide provides comprehensive instructions for managing deployments of the A
 The Auto Drive system consists of two main components:
 
 1. **Auto Drive Services**: Main storage and data access layer services
-2. **Files Gateway Services**: Unified gateway for file access across networks
-3. **Multinetwork Gateway**: Connects and manages multiple networks
+2. **Multinetwork Gateway**: Connects and manages multiple networks
 
 ## Target Machine Tags
 
@@ -40,16 +39,6 @@ The Auto Drive system consists of two main components:
 
 #### Gateway Services
 - **`auto_drive_multinetwork_gateway`**: Unified gateway connecting multiple networks
-
-### Files Gateway Services
-
-#### Staging Environments
-- **`files_gateway_taurus_staging`**: Files gateway staging on taurus network
-- **`files_gateway_mainnet_staging`**: Files gateway staging on mainnet
-
-#### Production Environments
-- **`files_gateway_taurus_production`**: Files gateway production on taurus network
-- **`files_gateway_mainnet_production`**: Files gateway production on mainnet
 
 ## Prerequisites
 
@@ -112,9 +101,6 @@ user@mainnet-private-2
 [auto_drive_mainnet_public]
 user@mainnet-public-1
 user@mainnet-public-2
-
-[files_gateway_mainnet_production]
-user@xx-xx-xx-xx
 ```
 
 The format is `user@hostname` or `user@ip-address` for each host entry.
@@ -188,31 +174,7 @@ ansible-playbook auto-drive-multinetwork-gateway.yml \
   -e "image_tag=gateway-v1.0.0"
 ```
 
-### 4. Files Gateway Services Deployment
-
-For files gateway services, use the main deployment playbook with appropriate target machines:
-
-```bash
-# Deploy files gateway staging
-ansible-playbook auto-drive-deployment.yml \
-  -e "target_machines=files_gateway_taurus_staging" \
-  -e "image_tag=files-gateway-staging"
-
-ansible-playbook auto-drive-deployment.yml \
-  -e "target_machines=files_gateway_mainnet_staging" \
-  -e "image_tag=files-gateway-staging"
-
-# Deploy files gateway production
-ansible-playbook auto-drive-deployment.yml \
-  -e "target_machines=files_gateway_taurus_production" \
-  -e "image_tag=files-gateway-v1.0.0"
-
-ansible-playbook auto-drive-deployment.yml \
-  -e "target_machines=files_gateway_mainnet_production" \
-  -e "image_tag=files-gateway-v1.0.0"
-```
-
-### 5. Batch Deployments
+### 4. Batch Deployments
 
 Deploy to multiple environments simultaneously:
 
@@ -228,7 +190,7 @@ ansible-playbook auto-drive-deployment.yml \
   -e "image_tag=v1.2.3"
 ```
 
-### 6. Group-Based Deployments
+### 5. Group-Based Deployments
 
 Use the logical groupings defined in the inventory:
 
@@ -252,11 +214,6 @@ ansible-playbook auto-drive-deployment.yml \
 ansible-playbook auto-drive-deployment.yml \
   -e "target_machines=taurus_services" \
   -e "image_tag=taurus-v1.0.0"
-
-# Deploy to all files gateway production
-ansible-playbook auto-drive-deployment.yml \
-  -e "target_machines=files_gateway_production" \
-  -e "image_tag=files-gateway-v1.0.0"
 ```
 
 ## Service Components
@@ -456,10 +413,6 @@ ansible all -m shell -a "docker compose ps"
 | `auto_drive_mainnet_staging` | Mainnet staging | Mainnet | Staging |
 | `auto_drive_taurus_staging` | Taurus staging | Taurus | Staging |
 | `auto_drive_multinetwork_gateway` | Multi-network gateway | Multi | Production |
-| `files_gateway_taurus_staging` | Files gateway staging | Taurus | Staging |
-| `files_gateway_mainnet_staging` | Files gateway staging | Mainnet | Staging |
-| `files_gateway_taurus_production` | Files gateway production | Taurus | Production |
-| `files_gateway_mainnet_production` | Files gateway production | Mainnet | Production |
 
 ---
 
