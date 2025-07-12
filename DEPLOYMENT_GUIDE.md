@@ -106,12 +106,18 @@ The `hosts.ini` file is already created in the `ansible/` directory with all tar
 Example configuration:
 ```ini
 [auto_drive_mainnet_private]
-mainnet-private-1 ansible_host=10.0.1.10 ansible_user=ubuntu
-mainnet-private-2 ansible_host=10.0.1.11 ansible_user=ubuntu
+user@mainnet-private-1
+user@mainnet-private-2
 
 [auto_drive_mainnet_public]
-mainnet-public-1 ansible_host=10.0.2.10 ansible_user=ubuntu
+user@mainnet-public-1
+user@mainnet-public-2
+
+[files_gateway_mainnet_production]
+user@xx-xx-xx-xx
 ```
+
+The format is `user@hostname` or `user@ip-address` for each host entry.
 
 The inventory includes:
 - **Individual target machine groups** for each service
