@@ -46,7 +46,7 @@ jobs:
 
       - name: Build and push Docker image (release)
         uses: docker/build-push-action@v5
-        if: ${{ inputs.prerelease == 'false' }}
+        if: ${{ !inputs.prerelease }}
         with:
           context: .
           file: ./${{ matrix.app }}/Dockerfile
@@ -60,7 +60,7 @@ jobs:
 
       - name: Build and push Docker image (prerelease)
         uses: docker/build-push-action@v5
-        if: ${{ inputs.prerelease == 'true' }}
+        if: ${{ inputs.prerelease }}
         with:
           context: .
           file: ./${{ matrix.app }}/Dockerfile
