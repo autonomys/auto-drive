@@ -1,0 +1,47 @@
+---
+- name: Pull new image, update ssecret, and reboot
+  hosts: auto_drive_multinetwork_gateway
+  vars:
+    image_tag: "{{ image_tag }}"
+    env_file_path: ~/deploy/auto-drive/gateway/.env
+  tasks:
+    - name: Import environment variables
+      ansible.builtin.include_vars:
+        file: environment.yaml
+
+    - name: Login to Infisical and get access token
+      ansible.builtin.shell: >
+        infisical login \
+          --method=universal-auth \
+          --client-id={{ infisical_client_id }} \
+          --client-secret={{ infisical_token }} \
+          --plain
+      register: login_cmd
+
+    - name: Update image to backend container image to {{ image_tag }}
+      ansible.builtin.shell: |
+        infisical secrets --projectId {{ infisical_project_id }} --path /auto_drive_multinetwork_gateway --env prod --token {{ login_cmd.stdout }} set GATEWAY_IMAGE={{ image_tag }}
+      register: hello_output
+
+    - name: Update .env
+      ansible.builtin.shell: |
+        env_file=$(infisical export --projectId {{ infisical_project_id }} --path /auto_drive_multinetwork_gateway --env prod --token {{ login_cmd.stdout }})
+        # ensure ~/env-archives directory exists
+        mkdir -p ~/env-archives
+        timestamp=$(date +%s)
+        cat {{ env_file_path }} > "$HOME/env-archives/{{ ansible_hostname }}.${timestamp}.txt"
+        echo "$env_file" > {{ env_file_path }}
+      register: env_output
+
+    - name: Launch docker compose
+      ansible.builtin.shell: |
+        /usr/bin/docker compose --env-file {{ env_file_path }} -f ~/deploy/auto-drive/gateway/docker-compose.prod.yml up -d
+      register: docker_compose_output
+
+    - name: Show docker compose output
+      ansible.builtin.debug:
+        var: docker_compose_output.stdout
+
+    - name: Show docker compose error output
+      ansible.builtin.debug:
+        var: docker_compose_output.stderr
