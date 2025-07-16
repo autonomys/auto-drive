@@ -12,9 +12,23 @@
           Current system hostname: {{ ansible_hostname }}
           Current connection host: {{ ansible_host }}
 
-    - name: Import environment variables
+    - name: Set matched group name for this host
+      ansible.builtin.set_fact:
+        matched_group: "{{ group_names | select('match', target_machines ) | first | default('undefined') }}"
+
+    - name: Import environment variables from file
       ansible.builtin.include_vars:
         file: environment.yaml
+      ignore_errors: yes
+
+    - name: Validate required variables
+      ansible.builtin.fail:
+        msg: "Missing required variable: {{ item }}"
+      when: vars[item] is undefined or vars[item] == ''
+      loop:
+        - infisical_client_id
+        - infisical_token
+        - infisical_project_id
 
     - name: Login to Infisical and get access token
       ansible.builtin.shell: >
@@ -25,7 +39,7 @@
           --plain
       register: login_cmd
 
-    - name: Update image to backend container key BACKEND_IMAGE in folder '/{{ target_machines }}' image to {{ image_tag }}
+    - name: Update image to backend container key BACKEND_IMAGE in folder '/{{ matched_group }}' image to {{ image_tag }}
       ansible.builtin.shell: |
         infisical secrets --projectId {{ infisical_project_id }} --path /{{ target_machines }} --env prod --token {{ login_cmd.stdout }} set BACKEND_IMAGE={{ image_tag }}
       when: image_tag is defined and image_tag != ''
@@ -33,7 +47,7 @@
 
     - name: Update .env
       ansible.builtin.shell: |
-        env_file=$(infisical export --projectId {{ infisical_project_id }} --path /{{ target_machines }} --env prod --token {{ login_cmd.stdout }})
+        env_file=$(infisical export --projectId {{ infisical_project_id }} --path /{{ matched_group }} --env prod --token {{ login_cmd.stdout }})
         # Create all necessary directories
         mkdir -p ~/env-archives
         timestamp=$(date +%s)

@@ -5,9 +5,19 @@
     image_tag: "{{ image_tag }}"
     env_file_path: ~/deploy/auto-drive/gateway/.env
   tasks:
-    - name: Import environment variables
+    - name: Import environment variables from file (for local development)
       ansible.builtin.include_vars:
         file: environment.yaml
+      ignore_errors: yes
+
+    - name: Validate required variables
+      ansible.builtin.fail:
+        msg: "Missing required variable: {{ item }}"
+      when: vars[item] is undefined or vars[item] == ''
+      loop:
+        - infisical_client_id
+        - infisical_token
+        - infisical_project_id
 
     - name: Login to Infisical and get access token
       ansible.builtin.shell: >
@@ -21,6 +31,7 @@
     - name: Update image to backend container image to {{ image_tag }}
       ansible.builtin.shell: |
         infisical secrets --projectId {{ infisical_project_id }} --path /auto_drive_multinetwork_gateway --env prod --token {{ login_cmd.stdout }} set GATEWAY_IMAGE={{ image_tag }}
+      when: image_tag is defined and image_tag != ""
       register: hello_output
 
     - name: Update .env
