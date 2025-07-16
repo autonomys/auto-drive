@@ -5,6 +5,7 @@ import { createTransactionManager } from './transactionManager.js'
 import { compactAddLength } from '@polkadot/util'
 import { nodesRepository } from '../../../repositories/objects/nodes.js'
 import { EventRouter } from '../../eventRouter/index.js'
+import { MAX_RETRIES } from '../../eventRouter/tasks.js'
 
 const logger = createLogger('upload:onchainPublisher')
 
@@ -68,6 +69,17 @@ const republishNodes = safeCallback(
       EventRouter.publish({
         id: 'publish-nodes',
         retriesLeft: retriesLeft - 1,
+        params: {
+          nodes,
+        },
+      })
+    } else {
+      logger.error('Failed to publish nodes after %d retries', retriesLeft)
+      logger.info('Publishing failed task to event router')
+      logger.debug('Nodes: %s', nodes.join(', '))
+      EventRouter.publishFailedTask({
+        id: 'publish-nodes',
+        retriesLeft: MAX_RETRIES,
         params: {
           nodes,
         },

@@ -6,6 +6,8 @@ import { createHandlerWithRetries } from '../utils.js'
 
 const logger = createLogger('eventRouter:processor:download')
 
+export const downloadErrorPublishedQueue = 'download-errors'
+
 export const processDownloadTask = createHandlerWithRetries(
   ({ id, params }: Task) => {
     if (id === 'async-download-created') {
