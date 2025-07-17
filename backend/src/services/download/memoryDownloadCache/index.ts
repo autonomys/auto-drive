@@ -5,6 +5,7 @@ import {
 } from '@autonomys/asynchronous'
 import { AwaitIterable } from 'interface-store'
 import { config } from '../../../config.js'
+import { DownloadServiceOptions } from '@auto-drive/models'
 
 const cache = new LRUCache<string, Buffer>({
   maxSize: config.memoryDownloadCache.maxCacheSize,
@@ -15,13 +16,22 @@ const has = (cid: string) => {
   return has
 }
 
-const get = (cid: string) => {
+const get = (cid: string, options?: DownloadServiceOptions) => {
   const value = cache.get(cid)
   if (!value) {
     return null
   }
 
-  return bufferToAsyncIterable(value)
+  const byteRange = options?.byteRange ?? [0, value.length]
+
+  return bufferToAsyncIterable(
+    Buffer.from(
+      value.buffer.slice(
+        byteRange[0],
+        byteRange[1] !== undefined ? byteRange[1] + 1 : undefined,
+      ),
+    ),
+  )
 }
 
 const set = async (
