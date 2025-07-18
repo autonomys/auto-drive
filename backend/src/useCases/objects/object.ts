@@ -554,8 +554,8 @@ const shouldBlockDownload = async (cid: string, blockingTags: string[]) => {
 
 const getReportingList = async (limit: number, offset: number) => {
   const metadata = await metadataRepository.getMetadataByTagIncludeExclude(
-    ObjectTag.Reported,
-    ObjectTag.Banned,
+    [ObjectTag.Reported],
+    [ObjectTag.Banned, ObjectTag.ReportDismissed],
     limit,
     offset,
   )

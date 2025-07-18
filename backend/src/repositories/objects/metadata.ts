@@ -291,8 +291,8 @@ const addTag = async (cid: string, tag: string) => {
 }
 
 const getMetadataByTagIncludeExclude = async (
-  tagIncludes: string,
-  tagToExclude: string,
+  tagIncludes: string[],
+  tagToExclude: string[],
   limit: number,
   offset: number,
 ) => {
@@ -302,7 +302,7 @@ const getMetadataByTagIncludeExclude = async (
       SELECT * FROM metadata WHERE tags @> $1 AND NOT tags @> $2
       LIMIT $3 OFFSET $4
     `,
-    values: [[tagIncludes], [tagToExclude], limit, offset],
+    values: [tagIncludes, tagToExclude, limit, offset],
   })
 }
 
