@@ -15,7 +15,7 @@ import {
 import { filePartsRepository } from '../../repositories/uploads/fileParts.js'
 import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../repositories/uploads/fileProcessingInfo.js'
-import { FilesUseCases } from '../objects/files.js'
+import { FilesUseCases } from '../objects/files/index.js'
 import { NodesUseCases, ObjectUseCases } from '../objects/index.js'
 import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
 import { EventRouter } from '../../services/eventRouter/index.js'

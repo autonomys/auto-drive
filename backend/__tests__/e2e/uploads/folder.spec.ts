@@ -14,11 +14,7 @@ import {
   UploadType,
   UserWithOrganization,
 } from '@auto-drive/models'
-import {
-  FilesUseCases,
-  NodesUseCases,
-  ObjectUseCases,
-} from '../../../src/useCases/index.js'
+import { NodesUseCases, ObjectUseCases } from '../../../src/useCases/index.js'
 import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { PreconditionError } from '../../utils/error.js'
@@ -37,6 +33,7 @@ import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import PizZip from 'pizzip'
 import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
 import { Rabbit } from '../../../src/drivers/rabbit.js'
+import { DownloadUseCase } from '../../../src/useCases/objects/downloads.js'
 
 describe('Folder Upload', () => {
   let user: UserWithOrganization
@@ -365,7 +362,7 @@ describe('Folder Upload', () => {
     })
 
     it('should be able to download folder as zip', async () => {
-      const zip = await FilesUseCases.downloadObjectByUser(user, folderCID)
+      const zip = await DownloadUseCase.downloadObjectByUser(user, folderCID)
       const dataStream = await zip.startDownload()
       const zipArray = await asyncIterableToPromiseOfArray(dataStream)
       const zipBuffer = Buffer.concat(zipArray)

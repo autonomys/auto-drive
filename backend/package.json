@@ -25,7 +25,7 @@
     "@autonomys/auto-dag-data": "^1.5.1",
     "@autonomys/auto-drive": "^1.5.1",
     "@autonomys/auto-files": "^1.5.2",
-    "@autonomys/file-caching": "^1.5.1",
+    "@autonomys/file-caching": "^1.5.10",
     "@autonomys/rpc": "^1.5.1",
     "@keyvhq/sqlite": "^2.1.6",
     "@polkadot/api": "^15.8.1",
@@ -52,7 +52,7 @@
     "pg-format": "^1.0.4",
     "pizzip": "^3.1.7",
     "tar": "^7.4.3",
-    "uuid": "^10.0.0",
+    "uuid": "^11.1.0",
     "websocket": "^1.0.35",
     "zod": "^3.23.8"
   },

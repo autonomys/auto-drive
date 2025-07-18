@@ -1,14 +1,12 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
 import { handleAuth, handleOptionalAuth } from '../../services/auth/express.js'
-import {
-  FilesUseCases,
-  ObjectUseCases,
-  UploadStatusUseCases,
-} from '../../useCases/index.js'
+import { ObjectUseCases, UploadStatusUseCases } from '../../useCases/index.js'
 import { createLogger } from '../../drivers/logger.js'
 import { asyncSafeHandler } from '../../utils/express.js'
 import { handleDownloadResponseHeaders } from '../../services/download/express.js'
+import { getByteRange } from '../../utils/http.js'
+import { DownloadUseCase } from '../../useCases/objects/downloads.js'
 
 const logger = createLogger('http:controllers:object')
 
@@ -231,6 +229,11 @@ objectController.get(
         ?.toString()
         .split(',')
         .filter((e) => e.trim())
+      const byteRange = getByteRange(req)
+      const downloadOptions = {
+        blockingTags,
+        byteRange,
+      }
 
       const optionalAuthResult = await handleOptionalAuth(req, res)
       if (!optionalAuthResult) {
@@ -242,9 +245,13 @@ objectController.get(
       const user =
         typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
 
-      const { metadata, startDownload } = !user
-        ? await FilesUseCases.downloadObjectByAnonymous(cid, blockingTags)
-        : await FilesUseCases.downloadObjectByUser(user, cid, blockingTags)
+      const {
+        metadata,
+        startDownload,
+        byteRange: resultingByteRange,
+      } = !user
+        ? await DownloadUseCase.downloadObjectByAnonymous(cid, downloadOptions)
+        : await DownloadUseCase.downloadObjectByUser(user, cid, downloadOptions)
 
       if (!metadata) {
         res.status(404).json({
@@ -253,7 +260,7 @@ objectController.get(
         return
       }
 
-      handleDownloadResponseHeaders(req, res, metadata)
+      handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
 
       pipeline(await startDownload(), res, (err) => {
         if (err) {
@@ -367,8 +374,11 @@ objectController.get(
         .split(',')
         .filter((e) => e.trim())
 
-      const { metadata, startDownload } =
-        await ObjectUseCases.downloadPublishedObject(id, blockingTags)
+      const {
+        metadata,
+        startDownload,
+        byteRange: resultingByteRange,
+      } = await ObjectUseCases.downloadPublishedObject(id, blockingTags)
       if (!metadata) {
         res.status(404).json({
           error: 'Published object not found',
@@ -376,7 +386,7 @@ objectController.get(
         return
       }
 
-      handleDownloadResponseHeaders(req, res, metadata)
+      handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
 
       pipeline(await startDownload(), res, (err) => {
         if (err) {
