@@ -10,7 +10,7 @@ export interface MetadataEntry {
   metadata: OffchainMetadata
   is_archived: boolean
   created_at: Date
-  tags: string[]
+  tags: string[] | null
 }
 
 type MetadataEntryWithTotalCount = MetadataEntry & {

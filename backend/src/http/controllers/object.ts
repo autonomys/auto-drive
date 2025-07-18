@@ -440,7 +440,7 @@ objectController.post(
       return
     }
 
-    await ObjectUseCases.reportObject(executor, cid)
+    await ObjectUseCases.reportObject(cid)
     res.sendStatus(204)
   }),
 )
@@ -461,17 +461,17 @@ objectController.post(
 )
 
 objectController.get(
-  '/reporting/list',
+  '/to-be-reviewed/list',
   asyncSafeHandler(async (req, res) => {
     const { limit, offset } = req.query
     const limitNumber = limit ? parseInt(limit as string) : 100
     const offsetNumber = offset ? parseInt(offset as string) : 0
 
-    const reportingList = await ObjectUseCases.getReportingList(
+    const toBeReviewedList = await ObjectUseCases.getToBeReviewedList(
       limitNumber,
       offsetNumber,
     )
-    res.json(reportingList)
+    res.json(toBeReviewedList)
   }),
 )
 

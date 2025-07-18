@@ -240,7 +240,7 @@ const getObjectInformation = async (
   return {
     cid,
     metadata: metadata.metadata,
-    tags: metadata.tags,
+    tags: metadata.tags ?? [],
     uploadState: uploadState,
     owners,
     status: objectStatus(uploadState),
@@ -519,9 +519,9 @@ const banObject = async (executor: User, cid: string) => {
   logger.info('Object banned successfully (cid=%s)', cid)
 }
 
-const reportObject = async (executor: User, cid: string) => {
+const reportObject = async (cid: string) => {
   logger.debug('Attempting to report object (cid=%s)', cid)
-  await ObjectUseCases.addTag(cid, ObjectTag.Reported)
+  await ObjectUseCases.addTag(cid, ObjectTag.ToBeReviewed)
 
   logger.info('Object reported successfully (cid=%s)', cid)
 }
@@ -552,9 +552,9 @@ const shouldBlockDownload = async (cid: string, blockingTags: string[]) => {
   return (metadata.tags ?? []).some((tag) => actualBlockingsTags.includes(tag))
 }
 
-const getReportingList = async (limit: number, offset: number) => {
+const getToBeReviewedList = async (limit: number, offset: number) => {
   const metadata = await metadataRepository.getMetadataByTagIncludeExclude(
-    [ObjectTag.Reported],
+    [ObjectTag.ToBeReviewed],
     [ObjectTag.Banned, ObjectTag.ReportDismissed],
     limit,
     offset,
@@ -590,5 +590,5 @@ export const ObjectUseCases = {
   reportObject,
   dismissReport,
   shouldBlockDownload,
-  getReportingList,
+  getToBeReviewedList,
 }
