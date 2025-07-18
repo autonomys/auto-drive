@@ -101,21 +101,3 @@ query SearchUserMetadataByCIDOrName(
     cid: head_cid
   }
 }
-
-query GetAllUsersWithSubscriptions {
-  users {
-    publicId: public_id
-    role
-    oauthProvider: oauth_provider
-    oauthUserId: oauth_user_id
-    user_membership {
-      subscription {
-        id
-        organizationId: organization_id
-        uploadLimit: upload_limit
-        downloadLimit: download_limit
-        granularity
-      }
-    }
-  }
-}

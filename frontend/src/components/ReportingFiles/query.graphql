@@ -1,0 +1,19 @@
+query ReportingFiles(
+  $includingTag: String!
+  $excludingTag: String!
+  $limit: Int!
+  $offset: Int!
+) {
+  metadata_roots(
+    where: {
+      _and: [
+        { tags: { _contains: [$includingTag] } }
+        { _not: { tags: { _contains: [$excludingTag] } } }
+      ]
+    }
+    limit: $limit
+    offset: $offset
+  ) {
+    headCid: head_cid
+  }
+}

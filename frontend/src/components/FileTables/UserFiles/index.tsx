@@ -92,6 +92,7 @@ export const UserFiles = () => {
               FileActionButtons.SHARE,
               FileActionButtons.ASYNC_DOWNLOAD,
               FileActionButtons.DELETE,
+              FileActionButtons.REPORT,
             ]}
             noFilesPlaceholder={<NoUploadsPlaceholder />}
           />

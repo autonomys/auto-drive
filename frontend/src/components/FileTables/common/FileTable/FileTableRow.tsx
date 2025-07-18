@@ -6,7 +6,7 @@ import {
   useRef,
   useEffect,
 } from 'react';
-import { ObjectSummary, OwnerRole, User } from '@auto-drive/models';
+import { ObjectSummary, ObjectTag, OwnerRole, User } from '@auto-drive/models';
 import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';
 import { DisplayerIcon } from 'components/common/Triangle';
 import { shortenString } from 'utils/misc';
@@ -40,6 +40,7 @@ export const FileTableRow = ({
   onShareFile,
   onDeleteFile,
   onRestoreFile,
+  onReportFile,
 }: {
   file: ObjectSummary;
   user: User;
@@ -50,6 +51,7 @@ export const FileTableRow = ({
   onShareFile: (cid: string) => void;
   onDeleteFile: (cid: string) => void;
   onRestoreFile: (cid: string) => void;
+  onReportFile: (cid: string) => void;
 }) => {
   const { network } = useNetwork();
 
@@ -131,6 +133,15 @@ export const FileTableRow = ({
         onRestoreFile(file.headCid);
       }),
     [onRestoreFile, file.headCid, stopEventPropagation],
+  );
+
+  const handleReport = useMemo(
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
+        setShowActionsMenu(false);
+        onReportFile(file.headCid);
+      }),
+    [onReportFile, file.headCid, stopEventPropagation],
   );
 
   const handleToggleSelectFile = useMemo(
@@ -227,11 +238,24 @@ export const FileTableRow = ({
                   : `No name (${file.headCid.slice(0, 12)})`}
               </span>
             </Link>
-            <ConditionalRender condition={file.tags.includes('insecure')}>
+            <ConditionalRender
+              condition={file.tags.includes(ObjectTag.Insecure)}
+            >
               <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
                 Insecure
               </span>
             </ConditionalRender>
+            {file.tags.includes(ObjectTag.Reported) &&
+              !file.tags.includes(ObjectTag.Banned) && (
+                <span className='ml-2 rounded-lg bg-red-300 p-1 text-xs font-semibold text-white'>
+                  Reported
+                </span>
+              )}
+            {file.tags.includes(ObjectTag.Banned) && (
+              <span className='ml-2 rounded-lg bg-gray-500 p-1 text-xs font-semibold text-white'>
+                Banned
+              </span>
+            )}
           </div>
         </TableBodyCell>
         <TableBodyCell>
@@ -345,6 +369,16 @@ export const FileTableRow = ({
                       Restore
                     </button>
                   )}
+                  {actionButtons.includes(FileActionButtons.REPORT) &&
+                    !file.tags.includes(ObjectTag.Reported) && (
+                      <button
+                        className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
+                        onClick={handleReport}
+                        role='menuitem'
+                      >
+                        Report
+                      </button>
+                    )}
                 </div>
               </div>
             )}

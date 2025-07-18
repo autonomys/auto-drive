@@ -14,6 +14,7 @@ import { objectSummaryFromGlobalFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
 import { UserAsyncDownloads } from '../../UserAsyncDownloads';
+import { ReportingFiles } from '../../ReportingFiles';
 
 export const GlobalFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -69,6 +70,7 @@ export const GlobalFiles = () => {
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
         <UserAsyncDownloads />
+        <ReportingFiles />
         <div className='flex w-full items-center justify-start gap-4'>
           <div className='w-full max-w-md'>
             <SearchBar scope='global' />
@@ -79,6 +81,7 @@ export const GlobalFiles = () => {
             actionButtons={[
               FileActionButtons.DOWNLOAD,
               FileActionButtons.ASYNC_DOWNLOAD,
+              FileActionButtons.REPORT,
             ]}
             noFilesPlaceholder={<NoUploadsPlaceholder />}
           />
