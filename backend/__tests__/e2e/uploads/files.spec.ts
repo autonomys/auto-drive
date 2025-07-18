@@ -42,7 +42,7 @@ import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
 import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../../src/infrastructure/eventRouter/tasks.js'
-import { DownloadUseCase } from '../../../src/core/objects/downloads.js'
+import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { downloadService } from '../../../src/infrastructure/services/download/index.js'
 
 const files = [

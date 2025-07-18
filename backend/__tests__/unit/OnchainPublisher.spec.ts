@@ -1,9 +1,12 @@
-import { Node, nodesRepository } from '../../src/repositories/index.js'
+import {
+  Node,
+  nodesRepository,
+} from '../../src/infrastructure/repositories/objects/nodes.js'
 import { compactAddLength } from '@polkadot/util'
 import {
   OnchainPublisher,
   transactionManager,
-} from '../../src/services/upload/onchainPublisher/index.js'
+} from '../../src/infrastructure/services/upload/onchainPublisher/index.js'
 import { jest } from '@jest/globals'
 import { dbMigration } from '../utils/dbMigrate.js'
 

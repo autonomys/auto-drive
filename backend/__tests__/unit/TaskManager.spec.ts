@@ -9,20 +9,20 @@ import type { Logger } from '../../src/infrastructure/drivers/logger.js'
 import { closeDatabase } from '../../src/infrastructure/drivers/pg.js'
 
 // Mock dependencies before imports
-jest.unstable_mockModule('../../src/drivers/rabbit.js', () => ({
+jest.unstable_mockModule('../../src/infrastructure/drivers/rabbit.js', () => ({
   Rabbit: {
     subscribe: jest.fn(),
     publish: jest.fn(),
   },
 }))
 
-jest.unstable_mockModule('../../src/useCases/objects/nodes.js', () => ({
+jest.unstable_mockModule('../../src/core/objects/index.js', () => ({
   NodesUseCases: {
     processNodeArchived: jest.fn(),
   },
 }))
 
-jest.unstable_mockModule('../../src/useCases/uploads/uploads.js', () => ({
+jest.unstable_mockModule('../../src/core/uploads/uploads.js', () => ({
   UploadsUseCases: {
     processMigration: jest.fn(),
     tagUpload: jest.fn(),
@@ -30,7 +30,7 @@ jest.unstable_mockModule('../../src/useCases/uploads/uploads.js', () => ({
 }))
 
 jest.unstable_mockModule(
-  '../../src/services/upload/onchainPublisher/index.js',
+  '../../src/infrastructure/services/upload/onchainPublisher/index.js',
   () => ({
     OnchainPublisher: {
       publishNodes: jest.fn(),
@@ -38,7 +38,7 @@ jest.unstable_mockModule(
   }),
 )
 
-jest.unstable_mockModule('../../src/drivers/logger.js', () => {
+jest.unstable_mockModule('../../src/infrastructure/drivers/logger.js', () => {
   // Return a mock createLogger that yields a mocked logger instance
   const mockedLogger = {
     error: jest.fn(),

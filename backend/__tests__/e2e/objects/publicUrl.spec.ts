@@ -1,10 +1,10 @@
 import { InteractionType, UserWithOrganization } from '@auto-drive/models'
-import { PublishedObject } from '../../../src/repositories/objects/publishedObjects.js'
-import { AuthManager } from '../../../src/services/auth/index.js'
+import { PublishedObject } from '../../../src/infrastructure/repositories/objects/publishedObjects.js'
+import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import {
   ObjectUseCases,
   SubscriptionsUseCases,
-} from '../../../src/useCases/index.js'
+} from '../../../src/core/index.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {

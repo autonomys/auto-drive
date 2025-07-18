@@ -1,4 +1,4 @@
-import { ObjectUseCases } from '../../../core/index.js'
+import { ObjectUseCases } from '../../../core/objects/object.js'
 import { AsyncDownloadsUseCases } from '../../../core/downloads/index.js'
 import { Task } from '../tasks.js'
 import { createLogger } from '../../drivers/logger.js'
