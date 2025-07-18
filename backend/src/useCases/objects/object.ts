@@ -549,7 +549,7 @@ const shouldBlockDownload = async (cid: string, blockingTags: string[]) => {
 
   const actualBlockingsTags = [...blockingTags, ObjectTag.Banned]
 
-  return metadata.tags.some((tag) => actualBlockingsTags.includes(tag))
+  return (metadata.tags ?? []).some((tag) => actualBlockingsTags.includes(tag))
 }
 
 const getReportingList = async (limit: number, offset: number) => {
