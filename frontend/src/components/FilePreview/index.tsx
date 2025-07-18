@@ -108,7 +108,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         setLoading(false);
       }
     },
-    [metadata, gatewayUrl, isDecrypted],
+    [metadata, isDecrypted, gatewayUrl, safeSetTextContent],
   );
 
   useEffect(() => {
