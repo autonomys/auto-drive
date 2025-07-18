@@ -1,4 +1,4 @@
-import { OwnerRole, ObjectInformation } from '@auto-drive/models';
+import { OwnerRole, ObjectInformation, ObjectTag } from '@auto-drive/models';
 import { getTypeFromMetadata } from 'utils/file';
 import { useUserStore } from 'globalStates/user';
 import { useCallback, useMemo, useState } from 'react';
@@ -25,6 +25,7 @@ import { formatNumberWithCommas } from '@/utils/number';
 import { FileIcons } from './FileIcons';
 import { ConditionalRender } from '../common/ConditionalRender';
 import { Badge } from 'components/common/Badge';
+import { cn } from '@/utils/cn';
 
 const getBlockExplorerUrl = (
   networkId: NetworkId,
@@ -135,9 +136,28 @@ export const UploadedObjectInformation = ({
               {getTypeFromMetadata(object.metadata)} •{' '}
               {bytes(Number(object.metadata.totalSize))}
               <Badge label={object.status} status={object.status} />
-              <ConditionalRender condition={object.tags.includes('insecure')}>
+              <ConditionalRender
+                condition={object.tags.includes(ObjectTag.Insecure)}
+              >
                 <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
                   Insecure
+                </span>
+              </ConditionalRender>
+              <ConditionalRender
+                condition={
+                  object.tags.includes(ObjectTag.Reported) &&
+                  !object.tags.includes(ObjectTag.Banned)
+                }
+              >
+                <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+                  Reported
+                </span>
+              </ConditionalRender>
+              <ConditionalRender
+                condition={object.tags.includes(ObjectTag.Banned)}
+              >
+                <span className='ml-2 rounded-lg bg-red-500 p-1 text-xs font-semibold text-white'>
+                  Banned
                 </span>
               </ConditionalRender>
             </p>
@@ -146,11 +166,21 @@ export const UploadedObjectInformation = ({
         <div className='flex space-x-2'>
           <Button
             variant='lightAccent'
-            className='inline-flex items-center text-sm'
+            className={cn(
+              'inline-flex items-center text-sm',
+              object.tags.includes(ObjectTag.Banned) &&
+                'cursor-not-allowed opacity-50',
+            )}
+            disabled={object.tags.includes(ObjectTag.Banned)}
             onClick={handleDownload}
           >
             <ArrowDownTrayIcon className='mr-2 h-4 w-4' />
             Download
+            {object.tags.includes(ObjectTag.Banned) && (
+              <span className='ml-2 text-xs text-gray-500'>
+                (File is banned)
+              </span>
+            )}
           </Button>
           <Button
             variant='lightAccent'

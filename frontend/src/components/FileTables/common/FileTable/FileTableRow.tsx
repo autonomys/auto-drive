@@ -247,12 +247,12 @@ export const FileTableRow = ({
             </ConditionalRender>
             {file.tags.includes(ObjectTag.Reported) &&
               !file.tags.includes(ObjectTag.Banned) && (
-                <span className='ml-2 rounded-lg bg-red-300 p-1 text-xs font-semibold text-white'>
+                <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
                   Reported
                 </span>
               )}
             {file.tags.includes(ObjectTag.Banned) && (
-              <span className='ml-2 rounded-lg bg-gray-500 p-1 text-xs font-semibold text-white'>
+              <span className='ml-2 rounded-lg bg-red-500 p-1 text-xs font-semibold text-white'>
                 Banned
               </span>
             )}
@@ -318,11 +318,21 @@ export const FileTableRow = ({
                   {actionButtons.includes(FileActionButtons.ASYNC_DOWNLOAD) &&
                     !isCached && (
                       <button
-                        className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
+                        className={cn(
+                          'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
+                          file.tags.includes(ObjectTag.Banned) &&
+                            'cursor-not-allowed opacity-50',
+                        )}
+                        disabled={file.tags.includes(ObjectTag.Banned)}
                         onClick={handleAsyncDownload}
                         role='menuitem'
                       >
                         Bring to Cache
+                        {file.tags.includes(ObjectTag.Banned) && (
+                          <div className='mt-1 text-xs text-gray-500'>
+                            File is banned
+                          </div>
+                        )}
                       </button>
                     )}
 
@@ -330,10 +340,14 @@ export const FileTableRow = ({
                     <button
                       className={cn(
                         'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
-                        file.uploadState.totalNodes === null &&
+                        (file.uploadState.totalNodes === null ||
+                          file.tags.includes(ObjectTag.Banned)) &&
                           'cursor-not-allowed opacity-50',
                       )}
-                      disabled={file.uploadState.totalNodes === null}
+                      disabled={
+                        file.uploadState.totalNodes === null ||
+                        file.tags.includes(ObjectTag.Banned)
+                      }
                       onClick={handleDownload}
                       role='menuitem'
                     >
@@ -341,6 +355,11 @@ export const FileTableRow = ({
                       {file.uploadState.totalNodes === null && (
                         <div className='mt-1 text-xs text-gray-500'>
                           Processing upload...
+                        </div>
+                      )}
+                      {file.tags.includes(ObjectTag.Banned) && (
+                        <div className='mt-1 text-xs text-gray-500'>
+                          File is banned
                         </div>
                       )}
                     </button>
@@ -434,7 +453,12 @@ export const FileTableRow = ({
             <TableBodyCell className='flex justify-end'>
               <Button
                 variant='lightAccent'
-                className='text-xs'
+                className={cn(
+                  'text-xs',
+                  file.tags.includes(ObjectTag.Banned) &&
+                    'cursor-not-allowed opacity-50',
+                )}
+                disabled={file.tags.includes(ObjectTag.Banned)}
                 onClick={() => onDownloadFile(child.cid)}
               >
                 Download

@@ -99,7 +99,7 @@ export const ReportingFileRow = ({ headCid }: { headCid: string }) => {
                   <div className='mt-2'>
                     <p className='text-sm text-gray-500 dark:text-gray-400'>
                       Are you sure you want to ban this file? This action will
-                      mark the file as banned and remove it from reports.
+                      mark the file as banned.
                     </p>
                     <p className='mt-2 break-all font-mono text-sm text-gray-600 dark:text-gray-300'>
                       {headCid}
