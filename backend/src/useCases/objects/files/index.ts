@@ -18,15 +18,15 @@ import {
   ObjectUseCases,
   OwnershipUseCases,
   SubscriptionsUseCases,
-} from '../index.js'
-import { uploadsRepository } from '../../repositories/uploads/uploads.js'
-import { BlockstoreUseCases } from '../uploads/blockstore.js'
+} from '../../index.js'
+import { uploadsRepository } from '../../../repositories/uploads/uploads.js'
+import { BlockstoreUseCases } from '../../uploads/blockstore.js'
 import { Readable } from 'stream'
-import { createLogger } from '../../drivers/logger.js'
+import { createLogger } from '../../../drivers/logger.js'
 import { ByteRange } from '@autonomys/file-caching'
-import { sliceReadable } from '../../utils/readable.js'
-import { DBObjectFetcher, FileGatewayObjectFetcher } from './files/fetchers.js'
-import { composeNodesDataAsFileReadable } from './files/nodeComposer.js'
+import { sliceReadable } from '../../../utils/readable.js'
+import { DBObjectFetcher, FileGatewayObjectFetcher } from './fetchers.js'
+import { composeNodesDataAsFileReadable } from './nodeComposer.js'
 
 const logger = createLogger('useCases:objects:files')
 
@@ -308,6 +308,7 @@ const retrieveFileByteRange = async (
 
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
   const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+
   const reader = await composeNodesDataAsFileReadable({
     fetcher,
     chunks: nodes,
