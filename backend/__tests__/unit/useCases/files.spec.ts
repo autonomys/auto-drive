@@ -1,12 +1,12 @@
 import { jest } from '@jest/globals'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
+import { FilesUseCases } from '../../../src/core/objects/files/index.js'
+import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { ObjectStatus } from '@auto-drive/models'
 import { ByteRange } from '@autonomys/file-caching'
-import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
-import { FilesUseCases } from '../../../src/core/objects/files/index.js'
 
-jest.unstable_mockModule('../../../src/useCases/objects/object.js', () => ({
+jest.unstable_mockModule('../../../src/core/objects/object.js', () => ({
   ObjectUseCases: {
     getObjectInformation: jest.fn(),
   },

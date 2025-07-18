@@ -1,7 +1,7 @@
 import { Readable } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { ObjectFetcher } from './fetchers.js'
-import { ObjectUseCases } from '../index.js'
+import { ObjectUseCases } from '../object.js'
 import { downloadService } from '../../../infrastructure/services/download/index.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import PizZip from 'pizzip'

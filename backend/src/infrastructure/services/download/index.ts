@@ -1,5 +1,6 @@
 import { createLogger } from '../../drivers/logger.js'
-import { FilesUseCases, ObjectUseCases } from '../../../core/index.js'
+import { FilesUseCases } from '../../../core/objects/files/index.js'
+import { ObjectUseCases } from '../../../core/objects/object.js'
 import { memoryDownloadCache } from './memoryDownloadCache/index.js'
 import { forkAsyncIterable, forkStream } from '@autonomys/asynchronous'
 import {

@@ -14,16 +14,25 @@ import {
   processBufferToIPLDFormatFromChunks,
   processChunksToIPLDFormat,
 } from '@autonomys/auto-dag-data'
-import { FolderUpload, UploadType } from '@auto-drive/models'
+import {
+  FolderUpload,
+  InteractionType,
+  UploadType,
+  UserWithOrganization,
+} from '@auto-drive/models'
 import { BlockstoreUseCases } from './blockstore.js'
 import { mapTableToModel } from './uploads.js'
 import {
   UploadEntry,
   uploadsRepository,
 } from '../../infrastructure/repositories/uploads/uploads.js'
+import { ObjectUseCases } from '../objects/object.js'
+import { OwnershipUseCases } from '../objects/ownership.js'
 import { filePartsRepository } from '../../infrastructure/repositories/uploads/fileParts.js'
+import { UploadArtifactsUseCase } from './artifacts.js'
 import { CID } from 'multiformats'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { SubscriptionsUseCases } from '../users/subscriptions.js'
 
 const logger = createLogger('useCases:uploads:uploadProcessing')
 
@@ -149,7 +158,88 @@ const completeUploadProcessing = async (upload: UploadEntry): Promise<CID> => {
   }
 }
 
-export const FileProcessingUseCase = {
+const handleFileUploadFinalization = async (
+  user: UserWithOrganization,
+  uploadId: string,
+): Promise<string> => {
+  logger.debug(
+    'handleFileUploadFinalization called (uploadId=%s, userId=%s)',
+    uploadId,
+    user.oauthUserId,
+  )
+  const pendingCredits =
+    await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      user,
+      InteractionType.Upload,
+    )
+  const { metadata } =
+    await UploadArtifactsUseCase.generateFileArtifacts(uploadId)
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
+  if (pendingCredits < metadata.totalSize) {
+    throw new Error('Not enough upload credits')
+  }
+
+  await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid)
+
+  const isRootUpload = upload?.root_upload_id === uploadId
+  if (isRootUpload) {
+    await ObjectUseCases.saveMetadata(
+      metadata.dataCid,
+      metadata.dataCid,
+      metadata,
+    )
+  }
+
+  await SubscriptionsUseCases.registerInteraction(
+    user,
+    InteractionType.Upload,
+    metadata.totalSize.valueOf(),
+  )
+
+  logger.info(
+    'handleFileUploadFinalization completed (cid=%s, userId=%s)',
+    metadata.dataCid,
+    user.oauthUserId,
+  )
+  return metadata.dataCid
+}
+
+const handleFolderUploadFinalization = async (
+  user: UserWithOrganization,
+  uploadId: string,
+): Promise<string> => {
+  logger.debug(
+    'handleFolderUploadFinalization called (uploadId=%s, userId=%s)',
+    uploadId,
+    user.oauthUserId,
+  )
+  const { metadata, childrenArtifacts } =
+    await UploadArtifactsUseCase.generateFolderArtifacts(uploadId)
+
+  const fullMetadata = [metadata, ...childrenArtifacts.map((e) => e.metadata)]
+  await Promise.all(
+    fullMetadata.map((childMetadata) =>
+      ObjectUseCases.saveMetadata(
+        metadata.dataCid,
+        childMetadata.dataCid,
+        childMetadata,
+      ),
+    ),
+  )
+
+  await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid)
+
+  logger.info(
+    'handleFolderUploadFinalization completed (cid=%s, userId=%s)',
+    metadata.dataCid,
+    user.oauthUserId,
+  )
+  return metadata.dataCid
+}
+
+export const UploadFileProcessingUseCase = {
   processChunk,
   completeUploadProcessing,
+  handleFileUploadFinalization,
+  handleFolderUploadFinalization,
 }

@@ -1,4 +1,4 @@
-import { NodesUseCases } from '../../../../core/index.js'
+import { NodesUseCases } from '../../../../core/objects/nodes.js'
 import { config } from '../../../../config.js'
 import { createLogger } from '../../../drivers/logger.js'
 import { nodesRepository } from '../../../repositories/index.js'

@@ -33,7 +33,7 @@ import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import PizZip from 'pizzip'
 import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
 import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
-import { DownloadUseCase } from '../../../src/core/objects/downloads.js'
+import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 
 describe('Folder Upload', () => {
   let user: UserWithOrganization

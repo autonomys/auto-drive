@@ -13,10 +13,10 @@ import {
   UserWithOrganization,
 } from '@auto-drive/models'
 import { filePartsRepository } from '../../infrastructure/repositories/uploads/fileParts.js'
-import { FileProcessingUseCase as UploadingProcessingUseCase } from './uploadProcessing.js'
+import { UploadFileProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../infrastructure/repositories/uploads/fileProcessingInfo.js'
-import { FilesUseCases } from '../objects/files/index.js'
-import { NodesUseCases, ObjectUseCases } from '../objects/index.js'
+import { NodesUseCases } from '../objects/nodes.js'
+import { ObjectUseCases } from '../objects/object.js'
 import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { createTask, Task } from '../../infrastructure/eventRouter/tasks.js'
@@ -174,7 +174,7 @@ const uploadChunk = async (
   }
   await checkPermissions(upload, user)
 
-  await UploadingProcessingUseCase.processChunk(uploadId, chunkData, index)
+  await UploadFileProcessingUseCase.processChunk(uploadId, chunkData, index)
 
   await filePartsRepository.addChunk({
     upload_id: uploadId,
@@ -201,12 +201,18 @@ const completeUpload = async (
   }
   await checkPermissions(upload, user)
 
-  const cid = await UploadingProcessingUseCase.completeUploadProcessing(upload)
+  const cid = await UploadFileProcessingUseCase.completeUploadProcessing(upload)
 
   if (upload.type === UploadType.FILE) {
-    await FilesUseCases.handleFileUploadFinalization(user, uploadId)
+    await UploadFileProcessingUseCase.handleFileUploadFinalization(
+      user,
+      uploadId,
+    )
   } else if (upload.type === UploadType.FOLDER) {
-    await FilesUseCases.handleFolderUploadFinalization(user, uploadId)
+    await UploadFileProcessingUseCase.handleFolderUploadFinalization(
+      user,
+      uploadId,
+    )
   }
 
   const updatedUpload = {

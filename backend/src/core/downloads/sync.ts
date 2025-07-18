@@ -8,7 +8,7 @@ import {
 } from '@auto-drive/models'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { ObjectUseCases } from '../objects/index.js'
+import { ObjectUseCases } from '../objects/object.js'
 import { SubscriptionsUseCases } from '../users/subscriptions.js'
 import { config } from '../../config.js'
 

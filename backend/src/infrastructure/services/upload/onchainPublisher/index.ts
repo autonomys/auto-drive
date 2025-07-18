@@ -1,5 +1,5 @@
 import { createLogger } from '../../../drivers/logger.js'
-import { NodesUseCases } from '../../../../core/index.js'
+import { NodesUseCases } from '../../../../core/objects/nodes.js'
 import { safeCallback } from '../../../../shared/utils/safe.js'
 import { createTransactionManager } from './transactionManager.js'
 import { compactAddLength } from '@polkadot/util'

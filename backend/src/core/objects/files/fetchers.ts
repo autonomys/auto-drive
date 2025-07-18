@@ -5,7 +5,7 @@ import {
 } from './nodeComposer.js'
 import { NodesUseCases } from '../nodes.js'
 import { FileGateway } from '../../../infrastructure/services/dsn/fileGateway/index.js'
-import { ObjectUseCases } from '../index.js'
+import { ObjectUseCases } from '../object.js'
 import PizZip from 'pizzip'
 
 export interface ObjectFetcher {
