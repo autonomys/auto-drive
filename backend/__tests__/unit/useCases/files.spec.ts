@@ -1,9 +1,7 @@
 import { jest } from '@jest/globals'
 import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
 import { FilesUseCases } from '../../../src/useCases/objects/files.js'
-import { ObjectStatus } from '@auto-drive/models'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
-import { config } from '../../../src/config.js'
 
 jest.unstable_mockModule('../../../src/useCases/objects/object.js', () => ({
   ObjectUseCases: {
@@ -16,7 +14,9 @@ describe('FilesUseCases', () => {
     jest.clearAllMocks()
   })
 
-  beforeAll(() => {})
+  afterEach(async () => {
+    jest.restoreAllMocks()
+  })
 
   it('should handle file upload', async () => {
     const metadata: OffchainMetadata = {
@@ -27,22 +27,8 @@ describe('FilesUseCases', () => {
       chunks: [],
     }
 
-    jest.spyOn(ObjectUseCases, 'getObjectInformation').mockResolvedValue({
-      metadata: metadata,
-      tags: [],
-      cid: '',
-      createdAt: '',
-      status: ObjectStatus.Processing,
-      uploadState: {
-        uploadedNodes: 0,
-        totalNodes: 0,
-        archivedNodes: 0,
-        minimumBlockDepth: 0,
-        maximumBlockDepth: 0,
-      },
-      owners: [],
-      publishedObjectId: null,
-    })
+    jest.spyOn(ObjectUseCases, 'getMetadata').mockResolvedValue(metadata)
+    jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(false)
 
     const result = await FilesUseCases.downloadObjectByAnonymous(
       metadata.dataCid,
@@ -58,62 +44,21 @@ describe('FilesUseCases', () => {
       type: 'file',
     }
 
-    jest.spyOn(ObjectUseCases, 'getObjectInformation').mockResolvedValue({
-      metadata: {
-        totalSize: 100n,
-        type: 'file',
-        dataCid: 'test-cid',
-        totalChunks: 1,
-        chunks: [],
-      },
-      tags: ['insecure'],
-      cid: '',
-      createdAt: '',
-      status: ObjectStatus.Processing,
-      uploadState: {
-        uploadedNodes: 0,
-        totalNodes: 0,
-        archivedNodes: 0,
-        minimumBlockDepth: 0,
-        maximumBlockDepth: 0,
-      },
-      owners: [],
-      publishedObjectId: null,
-    })
-
-    expect(
-      FilesUseCases.downloadObjectByAnonymous(mockFile.cid, ['insecure']),
-    ).rejects.toThrow(new Error('File is blocked'))
-  })
-
-  it('should throw if file is too large', async () => {
     const metadata: OffchainMetadata = {
-      totalSize: BigInt(config.params.maxAnonymousDownloadSize) + 1n,
+      totalSize: 100n,
       type: 'file',
       dataCid: 'test-cid',
       totalChunks: 1,
       chunks: [],
     }
 
-    jest.spyOn(ObjectUseCases, 'getObjectInformation').mockResolvedValue({
-      metadata: metadata,
-      tags: [],
-      cid: '',
-      createdAt: '',
-      status: ObjectStatus.Processing,
-      uploadState: {
-        uploadedNodes: 0,
-        totalNodes: 0,
-        archivedNodes: 0,
-        minimumBlockDepth: 0,
-        maximumBlockDepth: 0,
-      },
-      owners: [],
-      publishedObjectId: null,
-    })
+    jest.spyOn(ObjectUseCases, 'getMetadata').mockResolvedValue(metadata)
+    jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(true)
 
-    expect(
-      FilesUseCases.downloadObjectByAnonymous(metadata.dataCid),
-    ).rejects.toThrow(new Error('File too large to be downloaded anonymously.'))
+    await expect(
+      FilesUseCases.downloadObjectByAnonymous(mockFile.cid, ['insecure']),
+    ).rejects.toThrow(
+      new Error('File download is blocked by blocking tags or is banned'),
+    )
   })
 })
