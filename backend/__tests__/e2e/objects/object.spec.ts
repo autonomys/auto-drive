@@ -1,6 +1,6 @@
 import { UserWithOrganization } from '@auto-drive/models'
-import { AuthManager } from '../../../src/services/auth/index.js'
-import { ObjectUseCases } from '../../../src/useCases/index.js'
+import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
+import { ObjectUseCases } from '../../../src/core/index.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { PreconditionError } from '../../utils/error.js'
 import {
@@ -11,7 +11,7 @@ import {
 import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
 import { v4 } from 'uuid'
-import { downloadService } from '../../../src/services/download/index.js'
+import { downloadService } from '../../../src/infrastructure/services/download/index.js'
 import { Readable } from 'stream'
 
 describe('Object', () => {
