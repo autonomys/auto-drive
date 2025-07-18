@@ -6,7 +6,15 @@ import {
   useRef,
   useEffect,
 } from 'react';
-import { ObjectSummary, ObjectTag, OwnerRole, User } from '@auto-drive/models';
+import {
+  isBanned,
+  isInsecure,
+  isReported,
+  ObjectSummary,
+  ObjectTag,
+  OwnerRole,
+  User,
+} from '@auto-drive/models';
 import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';
 import { DisplayerIcon } from 'components/common/Triangle';
 import { shortenString } from 'utils/misc';
@@ -238,20 +246,17 @@ export const FileTableRow = ({
                   : `No name (${file.headCid.slice(0, 12)})`}
               </span>
             </Link>
-            <ConditionalRender
-              condition={file.tags.includes(ObjectTag.Insecure)}
-            >
+            <ConditionalRender condition={isInsecure(file.tags)}>
               <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
                 Insecure
               </span>
             </ConditionalRender>
-            {file.tags.includes(ObjectTag.Reported) &&
-              !file.tags.includes(ObjectTag.Banned) && (
-                <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
-                  Reported
-                </span>
-              )}
-            {file.tags.includes(ObjectTag.Banned) && (
+            {isReported(file.tags) && !isBanned(file.tags) && (
+              <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+                Reported
+              </span>
+            )}
+            {isBanned(file.tags) && (
               <span className='ml-2 rounded-lg bg-red-500 p-1 text-xs font-semibold text-white'>
                 Banned
               </span>
@@ -320,15 +325,15 @@ export const FileTableRow = ({
                       <button
                         className={cn(
                           'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
-                          file.tags.includes(ObjectTag.Banned) &&
+                          isBanned(file.tags) &&
                             'cursor-not-allowed opacity-50',
                         )}
-                        disabled={file.tags.includes(ObjectTag.Banned)}
+                        disabled={isBanned(file.tags)}
                         onClick={handleAsyncDownload}
                         role='menuitem'
                       >
                         Bring to Cache
-                        {file.tags.includes(ObjectTag.Banned) && (
+                        {isBanned(file.tags) && (
                           <div className='mt-1 text-xs text-gray-500'>
                             File is banned
                           </div>
@@ -357,7 +362,7 @@ export const FileTableRow = ({
                           Processing upload...
                         </div>
                       )}
-                      {file.tags.includes(ObjectTag.Banned) && (
+                      {isBanned(file.tags) && (
                         <div className='mt-1 text-xs text-gray-500'>
                           File is banned
                         </div>
@@ -389,7 +394,8 @@ export const FileTableRow = ({
                     </button>
                   )}
                   {actionButtons.includes(FileActionButtons.REPORT) &&
-                    !file.tags.includes(ObjectTag.Reported) && (
+                    !isReported(file.tags) &&
+                    !isBanned(file.tags) && (
                       <button
                         className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
                         onClick={handleReport}

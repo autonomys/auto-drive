@@ -1,14 +1,10 @@
-query ReportingFiles(
-  $includingTag: String!
-  $excludingTag: String!
-  $limit: Int!
-  $offset: Int!
-) {
+query ReportingFiles($limit: Int!, $offset: Int!) {
   metadata_roots(
     where: {
       _and: [
-        { tags: { _contains: [$includingTag] } }
-        { _not: { tags: { _contains: [$excludingTag] } } }
+        { tags: { _contains: ["reported"] } }
+        { _not: { tags: { _contains: ["banned"] } } }
+        { _not: { tags: { _contains: ["report-dismissed"] } } }
       ]
     }
     limit: $limit

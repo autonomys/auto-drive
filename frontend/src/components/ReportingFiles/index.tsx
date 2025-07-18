@@ -31,8 +31,8 @@ export const ReportingFiles = () => {
       query: ReportingFilesDocument,
       fetchPolicy: 'network-only',
       variables: {
-        includingTag: ObjectTag.Reported,
-        excludingTag: ObjectTag.Banned,
+        includingTags: [ObjectTag.Reported],
+        excludingTags: [ObjectTag.Banned, ObjectTag.ReportDismissed],
         limit: 100,
         offset: 0,
       },
