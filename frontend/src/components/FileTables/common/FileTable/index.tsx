@@ -26,12 +26,14 @@ import { FileTableRow } from './FileTableRow';
 import { useFileTableState } from '@/components/FileTables/state';
 import { SortableTableColumn } from './SortableTableColumn';
 import { FileTableRowSkeleton } from './FileTableRowSkeleton';
+import { ObjectReportModal } from '../ObjectReportModal';
 
 export enum FileActionButtons {
   DOWNLOAD = 'download',
   SHARE = 'share',
   DELETE = 'delete',
   RESTORE = 'restore',
+  REPORT = 'report',
   ASYNC_DOWNLOAD = 'asyncDownload',
 }
 
@@ -44,6 +46,7 @@ export const FileTable: FC<{
   const [shareCID, setShareCID] = useState<string | null>(null);
   const [restoreCID, setRestoreCID] = useState<string | null>(null);
   const [deleteCID, setDeleteCID] = useState<string | null>(null);
+  const [reportCID, setReportCID] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
 
   const objects = useFileTableState((v) => v.objects);
@@ -56,6 +59,7 @@ export const FileTable: FC<{
     setDeleteCID(null);
     setDownloadingCID(null);
     setRestoreCID(null);
+    setReportCID(null);
     setTimeout(() => {
       refetch();
     }, 500);
@@ -79,6 +83,7 @@ export const FileTable: FC<{
       <ObjectDeleteModal cid={deleteCID} closeModal={onClose} />
       <ObjectDownloadModal cid={downloadingCID} onClose={onClose} />
       <ObjectRestoreModal cid={restoreCID} closeModal={onClose} />
+      <ObjectReportModal cid={reportCID} closeModal={onClose} />
       <div className='-my-2 sm:-mx-6 lg:-mx-8'>
         <div className='inline-block w-full overflow-x-scroll py-2 sm:px-6 lg:px-8'>
           <div className='mb-4 ml-2 flex items-center justify-start gap-2'>
@@ -141,6 +146,7 @@ export const FileTable: FC<{
                       onShareFile={setShareCID}
                       onDeleteFile={setDeleteCID}
                       onRestoreFile={setRestoreCID}
+                      onReportFile={setReportCID}
                     />
                   ))
                 : Array.from({ length: limit }).map((_, index) => (

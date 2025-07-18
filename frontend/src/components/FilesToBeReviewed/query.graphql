@@ -1,0 +1,15 @@
+query FilesToBeReviewed($limit: Int!, $offset: Int!) {
+  metadata_roots(
+    where: {
+      _and: [
+        { tags: { _contains: ["reported"] } }
+        { _not: { tags: { _contains: ["banned"] } } }
+        { _not: { tags: { _contains: ["report-dismissed"] } } }
+      ]
+    }
+    limit: $limit
+    offset: $offset
+  ) {
+    headCid: head_cid
+  }
+}

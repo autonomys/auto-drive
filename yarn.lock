@@ -146,7 +146,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@auto-files/models@workspace:submodules/files-gateway/common/models"
   dependencies:
-    "@autonomys/rpc": "npm:^1.4.14"
+    "@autonomys/rpc": "npm:^1.4.31"
     typescript: "npm:^5.6.3"
     zod: "npm:^3.24.2"
   languageName: unknown
@@ -157,13 +157,22 @@ __metadata:
   resolution: "@auto-files/rpc-apis@workspace:submodules/files-gateway/common/rpc-apis"
   dependencies:
     "@auto-files/models": "workspace:*"
-    "@autonomys/rpc": "npm:^1.4.14"
+    "@autonomys/rpc": "npm:^1.5.6"
     typescript: "npm:^5.6.3"
     zod: "npm:^3.24.2"
   languageName: unknown
   linkType: soft
 
-"@autonomys/asynchronous@npm:^1.4.1, @autonomys/asynchronous@npm:^1.5.1, @autonomys/asynchronous@npm:^1.5.7":
+"@autonomys/asynchronous@npm:^1.4.36, @autonomys/asynchronous@npm:^1.5.10":
+  version: 1.5.10
+  resolution: "@autonomys/asynchronous@npm:1.5.10"
+  dependencies:
+    stream-fork: "npm:^1.0.5"
+  checksum: 10c0/83b6d36b52af3573dd48f2fcc2567dd78eb8311dad089c13f26f9435597647f848ced11a1c90271ab347dbc39a1dc2931b23f96bf0f24496312b46f2834e42a9
+  languageName: node
+  linkType: hard
+
+"@autonomys/asynchronous@npm:^1.5.1, @autonomys/asynchronous@npm:^1.5.7":
   version: 1.5.7
   resolution: "@autonomys/asynchronous@npm:1.5.7"
   dependencies:
@@ -172,7 +181,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.0.12, @autonomys/auto-dag-data@npm:^1.0.5, @autonomys/auto-dag-data@npm:^1.3.1, @autonomys/auto-dag-data@npm:^1.5.1, @autonomys/auto-dag-data@npm:^1.5.7":
+"@autonomys/auto-dag-data@npm:^1.3.1, @autonomys/auto-dag-data@npm:^1.5.1, @autonomys/auto-dag-data@npm:^1.5.7":
   version: 1.5.7
   resolution: "@autonomys/auto-dag-data@npm:1.5.7"
   dependencies:
@@ -188,6 +197,25 @@ __metadata:
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
   checksum: 10c0/4cc3f0c5f10834b79846a8ebe392c4854c2ebc7c9baf21004012f646c0e648a7f8c93367f454be34d52d7974e916d22525da5d790d4f733c5bcf7ae69d890459
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-dag-data@npm:^1.4.31, @autonomys/auto-dag-data@npm:^1.4.35, @autonomys/auto-dag-data@npm:^1.5.10":
+  version: 1.5.10
+  resolution: "@autonomys/auto-dag-data@npm:1.5.10"
+  dependencies:
+    "@autonomys/asynchronous": "npm:^1.5.10"
+    "@ipld/dag-pb": "npm:^4.1.3"
+    "@peculiar/webcrypto": "npm:^1.5.0"
+    "@webbuf/blake3": "npm:^3.0.26"
+    "@webbuf/fixedbuf": "npm:^3.0.26"
+    "@webbuf/webbuf": "npm:^3.0.26"
+    fflate: "npm:^0.8.2"
+    multiformats: "npm:^13.3.2"
+    protobufjs: "npm:^7.4.0"
+    protons: "npm:^7.6.0"
+    protons-runtime: "npm:^5.5.0"
+  checksum: 10c0/518f0dc13ac13bf39235be2d9a16ed6523d71acf4d49b8b060acd2a1aa7b2646d25cde099b13eaca231882ab81e7f909ad2b37af92ab0659d1e8320dfe4784d6
   languageName: node
   linkType: hard
 
@@ -248,13 +276,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-utils@npm:^1.0.12, @autonomys/auto-utils@npm:^1.3.2, @autonomys/auto-utils@npm:^1.5.7":
+"@autonomys/auto-utils@npm:^1.3.2, @autonomys/auto-utils@npm:^1.5.7":
   version: 1.5.7
   resolution: "@autonomys/auto-utils@npm:1.5.7"
   dependencies:
     "@polkadot/api": "npm:^15.8.1"
     "@polkadot/extension-dapp": "npm:^0.58.6"
   checksum: 10c0/e783993bf981a573ddc9b3604136fe9f7c71c8be1fc02ce08384bc9da997b8c6762e67320393a4e36cc0e3164e46ad24a40542a547d0c5e72abe7e57c8b91fa1
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-utils@npm:^1.4.31, @autonomys/auto-utils@npm:^1.5.10":
+  version: 1.5.10
+  resolution: "@autonomys/auto-utils@npm:1.5.10"
+  dependencies:
+    "@polkadot/api": "npm:^15.8.1"
+    "@polkadot/extension-dapp": "npm:^0.58.6"
+  checksum: 10c0/9b697ff9c30da30b957ec31e41473cf42de72f4919692cb46aa09502d3a7fbc9e8102d48856a8f2c2f59dd129f1e1bd00c5144621032a75ba409c438e2a17701
   languageName: node
   linkType: hard
 
@@ -268,7 +306,27 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/file-caching@npm:^1.4.3, @autonomys/file-caching@npm:^1.5.1":
+"@autonomys/file-caching@npm:^1.4.36":
+  version: 1.5.10
+  resolution: "@autonomys/file-caching@npm:1.5.10"
+  dependencies:
+    "@autonomys/asynchronous": "npm:^1.5.10"
+    "@autonomys/auto-dag-data": "npm:^1.5.10"
+    "@autonomys/auto-utils": "npm:^1.5.10"
+    "@keyvhq/sqlite": "npm:^2.1.7"
+    cache-manager: "npm:^6.4.2"
+    jszip: "npm:^3.10.1"
+    keyv: "npm:^5.3.2"
+    mime-types: "npm:^3.0.1"
+    process: "npm:^0.11.10"
+    stream: "npm:^0.0.3"
+    uuid: "npm:^11.1.0"
+    zod: "npm:^3.24.2"
+  checksum: 10c0/0f871c4787b787422cff1458026e7e7ff3de8500a05a09def36406c268147ec433d96b4723a80e40e8ff1d02d88e81a033ddbf33d41bebdc5cfa719540711132
+  languageName: node
+  linkType: hard
+
+"@autonomys/file-caching@npm:^1.5.1":
   version: 1.5.7
   resolution: "@autonomys/file-caching@npm:1.5.7"
   dependencies:
@@ -288,7 +346,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/rpc@npm:^1.4.14, @autonomys/rpc@npm:^1.5.1":
+"@autonomys/rpc@npm:^1.4.31, @autonomys/rpc@npm:^1.5.6":
+  version: 1.5.10
+  resolution: "@autonomys/rpc@npm:1.5.10"
+  dependencies:
+    websocket: "npm:^1.0.35"
+    zod: "npm:^3.24.2"
+  checksum: 10c0/a74b505be1b715e77f70534e5fda3379235a829d736f057cbf0259e8347b681b9e0ab92932767983a614b51a7b5d021ff5ad77956b05e5c7f9ee8dc7d0132d96
+  languageName: node
+  linkType: hard
+
+"@autonomys/rpc@npm:^1.5.1":
   version: 1.5.7
   resolution: "@autonomys/rpc@npm:1.5.7"
   dependencies:
@@ -4357,83 +4425,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oven/bun-darwin-aarch64@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-darwin-aarch64@npm:1.2.18"
-  conditions: os=darwin & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-darwin-x64-baseline@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-darwin-x64-baseline@npm:1.2.18"
-  conditions: os=darwin & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-darwin-x64@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-darwin-x64@npm:1.2.18"
-  conditions: os=darwin & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-aarch64-musl@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-linux-aarch64-musl@npm:1.2.18"
-  conditions: os=linux & cpu=aarch64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-aarch64@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-linux-aarch64@npm:1.2.18"
-  conditions: os=linux & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-x64-baseline@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-linux-x64-baseline@npm:1.2.18"
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-x64-musl-baseline@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-linux-x64-musl-baseline@npm:1.2.18"
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-x64-musl@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-linux-x64-musl@npm:1.2.18"
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-x64@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-linux-x64@npm:1.2.18"
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-windows-x64-baseline@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-windows-x64-baseline@npm:1.2.18"
-  conditions: os=win32 & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-windows-x64@npm:1.2.18":
-  version: 1.2.18
-  resolution: "@oven/bun-windows-x64@npm:1.2.18"
-  conditions: os=win32 & cpu=x64
-  languageName: node
-  linkType: hard
-
 "@panva/hkdf@npm:^1.0.2":
   version: 1.2.1
   resolution: "@panva/hkdf@npm:1.2.1"
@@ -7463,6 +7454,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/stream-fork@npm:^1.0.5":
+  version: 1.0.5
+  resolution: "@types/stream-fork@npm:1.0.5"
+  dependencies:
+    "@types/node": "npm:*"
+  checksum: 10c0/139d047cccfcbe6ac23be7a7d025b0ffbb885a0075b19248f2b7bed1becc6647180196c50152cafecb6cba52d7d1e4507d2beb2f632500bc426c06d86797fce1
+  languageName: node
+  linkType: hard
+
 "@types/streamsaver@npm:^2":
   version: 2.0.5
   resolution: "@types/streamsaver@npm:2.0.5"
@@ -9022,17 +9022,18 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "auto-files-gateway@workspace:submodules/files-gateway"
   dependencies:
-    "@autonomys/rpc": "npm:^1.4.14"
+    "@autonomys/rpc": "npm:^1.4.31"
     "@types/k6": "npm:^1.0.0"
     "@types/node": "npm:^22.10.2"
+    "@types/stream-fork": "npm:^1.0.5"
     axios: "npm:^1.7.9"
-    bun: "npm:^1.1.39"
     eslint: "npm:^9.0.0"
     eslint-config-prettier: "npm:^10.0.0"
     eslint-plugin-eslint-plugin: "npm:^6.3.1"
     eslint-plugin-import: "npm:^2.31.0"
     eslint-plugin-prettier: "npm:^5.2.1"
     eslint-plugin-require-extensions: "npm:^0.1.3"
+    stream-fork: "npm:^1.0.5"
     ts-node: "npm:^10.9.2"
     winston: "npm:^3.17.0"
     yocto-queue: "npm:^1.2.0"
@@ -9640,52 +9641,6 @@ __metadata:
   version: 0.0.6
   resolution: "buildcheck@npm:0.0.6"
   checksum: 10c0/8cbdb89f41bc484b8325f4828db4135b206a0dffb641eb6cdb2b7022483c45dd0e5aac6d820c9a67bdd2caab3a02c76d7ceec7bd9ec494b5a2270d2806b01a76
-  languageName: node
-  linkType: hard
-
-"bun@npm:^1.1.39":
-  version: 1.2.18
-  resolution: "bun@npm:1.2.18"
-  dependencies:
-    "@oven/bun-darwin-aarch64": "npm:1.2.18"
-    "@oven/bun-darwin-x64": "npm:1.2.18"
-    "@oven/bun-darwin-x64-baseline": "npm:1.2.18"
-    "@oven/bun-linux-aarch64": "npm:1.2.18"
-    "@oven/bun-linux-aarch64-musl": "npm:1.2.18"
-    "@oven/bun-linux-x64": "npm:1.2.18"
-    "@oven/bun-linux-x64-baseline": "npm:1.2.18"
-    "@oven/bun-linux-x64-musl": "npm:1.2.18"
-    "@oven/bun-linux-x64-musl-baseline": "npm:1.2.18"
-    "@oven/bun-windows-x64": "npm:1.2.18"
-    "@oven/bun-windows-x64-baseline": "npm:1.2.18"
-  dependenciesMeta:
-    "@oven/bun-darwin-aarch64":
-      optional: true
-    "@oven/bun-darwin-x64":
-      optional: true
-    "@oven/bun-darwin-x64-baseline":
-      optional: true
-    "@oven/bun-linux-aarch64":
-      optional: true
-    "@oven/bun-linux-aarch64-musl":
-      optional: true
-    "@oven/bun-linux-x64":
-      optional: true
-    "@oven/bun-linux-x64-baseline":
-      optional: true
-    "@oven/bun-linux-x64-musl":
-      optional: true
-    "@oven/bun-linux-x64-musl-baseline":
-      optional: true
-    "@oven/bun-windows-x64":
-      optional: true
-    "@oven/bun-windows-x64-baseline":
-      optional: true
-  bin:
-    bun: bin/bun.exe
-    bunx: bin/bunx.exe
-  checksum: 10c0/582fda7df94b3b0f8b1aa7ec61025e432cb3c205803440197972359ede1a1c560fd5647545fb3d0c59f6e451c2229ce967076cb1f0c58c22709151a11ae4f319
-  conditions: (os=darwin | os=linux | os=win32) & (cpu=arm64 | cpu=x64 | cpu=aarch64)
   languageName: node
   linkType: hard
 
@@ -12630,10 +12585,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "file-retriever@workspace:submodules/files-gateway/services/file-retriever"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.4.1"
-    "@autonomys/auto-dag-data": "npm:^1.0.12"
-    "@autonomys/auto-utils": "npm:^1.0.12"
-    "@autonomys/file-caching": "npm:^1.4.3"
+    "@auto-files/rpc-apis": "workspace:*"
+    "@autonomys/asynchronous": "npm:^1.4.36"
+    "@autonomys/auto-dag-data": "npm:^1.4.31"
+    "@autonomys/auto-utils": "npm:^1.4.31"
+    "@autonomys/file-caching": "npm:^1.4.36"
+    "@autonomys/rpc": "npm:^1.4.31"
     "@ipld/dag-pb": "npm:^4.1.3"
     "@keyvhq/core": "npm:^2.1.1"
     "@keyvhq/sqlite": "npm:^2.1.6"
@@ -16674,8 +16631,8 @@ __metadata:
   dependencies:
     "@auto-files/models": "workspace:*"
     "@auto-files/rpc-apis": "workspace:*"
-    "@autonomys/auto-dag-data": "npm:^1.0.5"
-    "@autonomys/rpc": "npm:^1.4.14"
+    "@autonomys/auto-dag-data": "npm:^1.4.35"
+    "@autonomys/rpc": "npm:^1.4.31"
     "@peculiar/webcrypto": "npm:^1.5.0"
     "@types/cors": "npm:^2.8.17"
     "@types/express": "npm:^5.0.0"
@@ -16699,6 +16656,7 @@ __metadata:
     pg: "npm:^8.13.1"
     pg-format: "npm:^1.0.4"
     prettier: "npm:^3.3.3"
+    ts-jest: "npm:^29.4.0"
     ts-node: "npm:^10.9.2"
     typescript: "npm:^5.6.3"
     uuid: "npm:^11.0.3"
@@ -20345,7 +20303,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ts-jest@npm:^29.2.5, ts-jest@npm:^29.2.6":
+"ts-jest@npm:^29.2.5, ts-jest@npm:^29.2.6, ts-jest@npm:^29.4.0":
   version: 29.4.0
   resolution: "ts-jest@npm:29.4.0"
   dependencies:

@@ -414,4 +414,65 @@ objectController.post(
   }),
 )
 
+objectController.post(
+  '/:cid/ban',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
+    await ObjectUseCases.banObject(executor, cid)
+
+    res.sendStatus(204)
+  }),
+)
+
+objectController.post(
+  '/:cid/report',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
+    await ObjectUseCases.reportObject(cid)
+    res.sendStatus(204)
+  }),
+)
+
+objectController.post(
+  '/:cid/dismiss-report',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
+    await ObjectUseCases.dismissReport(executor, cid)
+    res.sendStatus(204)
+  }),
+)
+
+objectController.get(
+  '/to-be-reviewed/list',
+  asyncSafeHandler(async (req, res) => {
+    const { limit, offset } = req.query
+    const limitNumber = limit ? parseInt(limit as string) : 100
+    const offsetNumber = offset ? parseInt(offset as string) : 0
+
+    const toBeReviewedList = await ObjectUseCases.getToBeReviewedList(
+      limitNumber,
+      offsetNumber,
+    )
+    res.json(toBeReviewedList)
+  }),
+)
+
 export { objectController }

@@ -77,6 +77,7 @@ export const TrashFiles = () => {
             actionButtons={[
               FileActionButtons.DOWNLOAD,
               FileActionButtons.RESTORE,
+              FileActionButtons.REPORT,
             ]}
             noFilesPlaceholder={<NoFilesInTrashPlaceholder />}
           />

@@ -6,7 +6,15 @@ import {
   useRef,
   useEffect,
 } from 'react';
-import { ObjectSummary, OwnerRole, User } from '@auto-drive/models';
+import {
+  isBanned,
+  isInsecure,
+  isToBeReviewed,
+  ObjectSummary,
+  ObjectTag,
+  OwnerRole,
+  User,
+} from '@auto-drive/models';
 import { TableBodyCell, TableBodyRow } from 'components/common/Table/TableBody';
 import { DisplayerIcon } from 'components/common/Triangle';
 import { shortenString } from 'utils/misc';
@@ -40,6 +48,7 @@ export const FileTableRow = ({
   onShareFile,
   onDeleteFile,
   onRestoreFile,
+  onReportFile,
 }: {
   file: ObjectSummary;
   user: User;
@@ -50,6 +59,7 @@ export const FileTableRow = ({
   onShareFile: (cid: string) => void;
   onDeleteFile: (cid: string) => void;
   onRestoreFile: (cid: string) => void;
+  onReportFile: (cid: string) => void;
 }) => {
   const { network } = useNetwork();
 
@@ -131,6 +141,15 @@ export const FileTableRow = ({
         onRestoreFile(file.headCid);
       }),
     [onRestoreFile, file.headCid, stopEventPropagation],
+  );
+
+  const handleReport = useMemo(
+    () =>
+      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
+        setShowActionsMenu(false);
+        onReportFile(file.headCid);
+      }),
+    [onReportFile, file.headCid, stopEventPropagation],
   );
 
   const handleToggleSelectFile = useMemo(
@@ -227,11 +246,21 @@ export const FileTableRow = ({
                   : `No name (${file.headCid.slice(0, 12)})`}
               </span>
             </Link>
-            <ConditionalRender condition={file.tags.includes('insecure')}>
+            <ConditionalRender condition={isInsecure(file.tags)}>
               <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
                 Insecure
               </span>
             </ConditionalRender>
+            {isToBeReviewed(file.tags) && !isBanned(file.tags) && (
+              <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+                Reported
+              </span>
+            )}
+            {isBanned(file.tags) && (
+              <span className='ml-2 rounded-lg bg-red-500 p-1 text-xs font-semibold text-white'>
+                Banned
+              </span>
+            )}
           </div>
         </TableBodyCell>
         <TableBodyCell>
@@ -294,11 +323,21 @@ export const FileTableRow = ({
                   {actionButtons.includes(FileActionButtons.ASYNC_DOWNLOAD) &&
                     !isCached && (
                       <button
-                        className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
+                        className={cn(
+                          'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
+                          isBanned(file.tags) &&
+                            'cursor-not-allowed opacity-50',
+                        )}
+                        disabled={isBanned(file.tags)}
                         onClick={handleAsyncDownload}
                         role='menuitem'
                       >
                         Bring to Cache
+                        {isBanned(file.tags) && (
+                          <div className='mt-1 text-xs text-gray-500'>
+                            File is banned
+                          </div>
+                        )}
                       </button>
                     )}
 
@@ -306,10 +345,14 @@ export const FileTableRow = ({
                     <button
                       className={cn(
                         'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
-                        file.uploadState.totalNodes === null &&
+                        (file.uploadState.totalNodes === null ||
+                          file.tags.includes(ObjectTag.Banned)) &&
                           'cursor-not-allowed opacity-50',
                       )}
-                      disabled={file.uploadState.totalNodes === null}
+                      disabled={
+                        file.uploadState.totalNodes === null ||
+                        file.tags.includes(ObjectTag.Banned)
+                      }
                       onClick={handleDownload}
                       role='menuitem'
                     >
@@ -317,6 +360,11 @@ export const FileTableRow = ({
                       {file.uploadState.totalNodes === null && (
                         <div className='mt-1 text-xs text-gray-500'>
                           Processing upload...
+                        </div>
+                      )}
+                      {isBanned(file.tags) && (
+                        <div className='mt-1 text-xs text-gray-500'>
+                          File is banned
                         </div>
                       )}
                     </button>
@@ -345,6 +393,17 @@ export const FileTableRow = ({
                       Restore
                     </button>
                   )}
+                  {actionButtons.includes(FileActionButtons.REPORT) &&
+                    !isToBeReviewed(file.tags) &&
+                    !isBanned(file.tags) && (
+                      <button
+                        className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
+                        onClick={handleReport}
+                        role='menuitem'
+                      >
+                        Report
+                      </button>
+                    )}
                 </div>
               </div>
             )}
@@ -400,7 +459,12 @@ export const FileTableRow = ({
             <TableBodyCell className='flex justify-end'>
               <Button
                 variant='lightAccent'
-                className='text-xs'
+                className={cn(
+                  'text-xs',
+                  file.tags.includes(ObjectTag.Banned) &&
+                    'cursor-not-allowed opacity-50',
+                )}
+                disabled={file.tags.includes(ObjectTag.Banned)}
                 onClick={() => onDownloadFile(child.cid)}
               >
                 Download
