@@ -521,8 +521,23 @@ const banObject = async (executor: User, cid: string) => {
 
 const reportObject = async (executor: User, cid: string) => {
   logger.debug('Attempting to report object (cid=%s)', cid)
-  await ObjectUseCases.addTag(cid, 'reported')
+  await ObjectUseCases.addTag(cid, ObjectTag.Reported)
 
+  logger.info('Object reported successfully (cid=%s)', cid)
+}
+
+const dismissReport = async (executor: User, cid: string) => {
+  logger.debug('Attempting to dismiss report (cid=%s)', cid)
+  if (!isAdminUser(executor)) {
+    logger.warn(
+      'User (%s) attempted to ban object without admin rights (cid=%s)',
+      executor.oauthUserId,
+      cid,
+    )
+    throw new Error('User is not an admin')
+  }
+
+  await ObjectUseCases.addTag(cid, ObjectTag.ReportDismissed)
   logger.info('Object reported successfully (cid=%s)', cid)
 }
 
@@ -573,6 +588,7 @@ export const ObjectUseCases = {
   addTag,
   banObject,
   reportObject,
+  dismissReport,
   shouldBlockDownload,
   getReportingList,
 }

@@ -445,6 +445,21 @@ objectController.post(
   }),
 )
 
+objectController.post(
+  '/:cid/dismiss-report',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
+    await ObjectUseCases.dismissReport(executor, cid)
+    res.sendStatus(204)
+  }),
+)
+
 objectController.get(
   '/reporting/list',
   asyncSafeHandler(async (req, res) => {

@@ -117,5 +117,26 @@ export interface FileDownload {
 export enum ObjectTag {
   Banned = "banned",
   Reported = "reported",
+  ReportDismissed = "report-dismissed",
   Insecure = "insecure",
 }
+
+export const isBanned = (tags: string[]) => {
+  return tags.includes(ObjectTag.Banned);
+};
+
+export const isReportDismissed = (tags: string[]) => {
+  return tags.includes(ObjectTag.ReportDismissed);
+};
+
+export const isReported = (tags: string[]) => {
+  return (
+    tags.includes(ObjectTag.Reported) &&
+    !isBanned(tags) &&
+    !isReportDismissed(tags)
+  );
+};
+
+export const isInsecure = (tags: string[]) => {
+  return tags.includes(ObjectTag.Insecure);
+};
