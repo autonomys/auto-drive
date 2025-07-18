@@ -514,7 +514,7 @@ const banObject = async (executor: User, cid: string) => {
     throw new Error('User is not an admin')
   }
 
-  await ObjectUseCases.addTag(cid, 'banned')
+  await ObjectUseCases.addTag(cid, ObjectTag.Banned)
 
   logger.info('Object banned successfully (cid=%s)', cid)
 }
