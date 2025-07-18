@@ -14,8 +14,8 @@ import {
   UploadType,
   UserWithOrganization,
 } from '@auto-drive/models'
-import { NodesUseCases, ObjectUseCases } from '../../../src/useCases/index.js'
-import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
+import { NodesUseCases, ObjectUseCases } from '../../../src/core/index.js'
+import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { PreconditionError } from '../../utils/error.js'
 import {
@@ -24,16 +24,16 @@ import {
   unmockMethods,
 } from '../../utils/mocks.js'
 import { MemoryBlockstore } from 'blockstore-core'
-import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
+import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
 import {
   metadataRepository,
   nodesRepository,
-} from '../../../src/repositories/index.js'
+} from '../../../src/infrastructure/repositories/index.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import PizZip from 'pizzip'
-import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
-import { Rabbit } from '../../../src/drivers/rabbit.js'
-import { DownloadUseCase } from '../../../src/useCases/objects/downloads.js'
+import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
+import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
+import { DownloadUseCase } from '../../../src/core/objects/downloads.js'
 
 describe('Folder Upload', () => {
   let user: UserWithOrganization

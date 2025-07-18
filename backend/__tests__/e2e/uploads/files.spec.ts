@@ -4,7 +4,7 @@ import {
   mockRabbitPublish,
   unmockMethods,
 } from '../../utils/mocks.js'
-import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
+import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import {
   UserWithOrganization,
   Upload,
@@ -15,7 +15,7 @@ import {
   TransactionStatus,
   ObjectStatus,
 } from '@auto-drive/models'
-import { blockstoreRepository } from '../../../src/repositories/uploads/index.js'
+import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/index.js'
 import { MemoryBlockstore } from 'blockstore-core'
 import {
   processFileToIPLDFormat,
@@ -25,25 +25,25 @@ import {
   blake3HashFromCid,
   stringToCid,
 } from '@autonomys/auto-dag-data'
-import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
-import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
+import { ObjectUseCases } from '../../../src/core/objects/object.js'
+import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import {
   NodesUseCases,
   SubscriptionsUseCases,
-} from '../../../src/useCases/index.js'
+} from '../../../src/core/index.js'
 import {
   interactionsRepository,
   metadataRepository,
   nodesRepository,
-} from '../../../src/repositories/index.js'
+} from '../../../src/infrastructure/repositories/index.js'
 import { jest } from '@jest/globals'
-import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
-import { Rabbit } from '../../../src/drivers/rabbit.js'
-import { EventRouter } from '../../../src/services/eventRouter/index.js'
-import { MAX_RETRIES } from '../../../src/services/eventRouter/tasks.js'
-import { DownloadUseCase } from '../../../src/useCases/objects/downloads.js'
-import { downloadService } from '../../../src/services/download/index.js'
+import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
+import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
+import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
+import { MAX_RETRIES } from '../../../src/infrastructure/eventRouter/tasks.js'
+import { DownloadUseCase } from '../../../src/core/objects/downloads.js'
+import { downloadService } from '../../../src/infrastructure/services/download/index.js'
 
 const files = [
   {

@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { optionalBoolEnvironmentVariable, env } from './utils/misc.js'
+import { optionalBoolEnvironmentVariable, env } from './shared/utils/misc.js'
 
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 
