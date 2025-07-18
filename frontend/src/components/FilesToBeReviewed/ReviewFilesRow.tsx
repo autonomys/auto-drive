@@ -1,7 +1,7 @@
 import { useCallback, useState, Fragment } from 'react';
 import { BanIcon, CopyIcon, XCircleIcon } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { useReportingFilesStore } from './state';
+import { useFilesToBeReviewedStore } from './state';
 import { useNetwork } from '../../contexts/network';
 import {
   Dialog,
@@ -36,8 +36,8 @@ const TooltipButton = ({
   );
 };
 
-export const ReportingFileRow = ({ headCid }: { headCid: string }) => {
-  const updateReportingFiles = useReportingFilesStore((e) => e.update);
+export const ToBeReviewedFileRow = ({ headCid }: { headCid: string }) => {
+  const updateFiles = useFilesToBeReviewedStore((e) => e.update);
   const { api } = useNetwork();
   const [isBanModalOpen, setIsBanModalOpen] = useState(false);
   const [isDismissModalOpen, setIsDismissModalOpen] = useState(false);
@@ -69,13 +69,13 @@ export const ReportingFileRow = ({ headCid }: { headCid: string }) => {
       .banFile(headCid)
       .then(() => {
         toast.success('Banned', { id: toastId });
-        updateReportingFiles();
+        updateFiles();
         closeBanModal();
       })
       .catch(() => {
         toast.error('Failed to ban', { id: toastId });
       });
-  }, [headCid, updateReportingFiles, api, closeBanModal]);
+  }, [headCid, updateFiles, api, closeBanModal]);
 
   const dismissReport = useCallback(() => {
     const toastId = toast.loading('Dismissing report...');
@@ -83,13 +83,13 @@ export const ReportingFileRow = ({ headCid }: { headCid: string }) => {
       .dismissReport(headCid)
       .then(() => {
         toast.success('Report dismissed', { id: toastId });
-        updateReportingFiles();
+        updateFiles();
         closeDismissModal();
       })
       .catch(() => {
         toast.error('Failed to dismiss report', { id: toastId });
       });
-  }, [headCid, updateReportingFiles, api, closeDismissModal]);
+  }, [headCid, updateFiles, api, closeDismissModal]);
 
   return (
     <>

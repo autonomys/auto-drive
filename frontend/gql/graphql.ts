@@ -2322,13 +2322,13 @@ export type GetMyFilesQueryVariables = Exact<{
 
 export type GetMyFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
-export type ReportingFilesQueryVariables = Exact<{
+export type FilesToBeReviewedQueryVariables = Exact<{
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
 }>;
 
 
-export type ReportingFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', headCid?: string | null }> };
+export type FilesToBeReviewedQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', headCid?: string | null }> };
 
 export type MyUndismissedAsyncDownloadsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -2764,8 +2764,8 @@ export type GetMyFilesQueryHookResult = ReturnType<typeof useGetMyFilesQuery>;
 export type GetMyFilesLazyQueryHookResult = ReturnType<typeof useGetMyFilesLazyQuery>;
 export type GetMyFilesSuspenseQueryHookResult = ReturnType<typeof useGetMyFilesSuspenseQuery>;
 export type GetMyFilesQueryResult = Apollo.QueryResult<GetMyFilesQuery, GetMyFilesQueryVariables>;
-export const ReportingFilesDocument = gql`
-    query ReportingFiles($limit: Int!, $offset: Int!) {
+export const FilesToBeReviewedDocument = gql`
+    query FilesToBeReviewed($limit: Int!, $offset: Int!) {
   metadata_roots(
     where: {_and: [{tags: {_contains: ["reported"]}}, {_not: {tags: {_contains: ["banned"]}}}, {_not: {tags: {_contains: ["report-dismissed"]}}}]}
     limit: $limit
@@ -2777,38 +2777,38 @@ export const ReportingFilesDocument = gql`
     `;
 
 /**
- * __useReportingFilesQuery__
+ * __useFilesToBeReviewedQuery__
  *
- * To run a query within a React component, call `useReportingFilesQuery` and pass it any options that fit your needs.
- * When your component renders, `useReportingFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * To run a query within a React component, call `useFilesToBeReviewedQuery` and pass it any options that fit your needs.
+ * When your component renders, `useFilesToBeReviewedQuery` returns an object from Apollo Client that contains loading, error, and data properties
  * you can use to render your UI.
  *
  * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
  *
  * @example
- * const { data, loading, error } = useReportingFilesQuery({
+ * const { data, loading, error } = useFilesToBeReviewedQuery({
  *   variables: {
  *      limit: // value for 'limit'
  *      offset: // value for 'offset'
  *   },
  * });
  */
-export function useReportingFilesQuery(baseOptions: Apollo.QueryHookOptions<ReportingFilesQuery, ReportingFilesQueryVariables> & ({ variables: ReportingFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+export function useFilesToBeReviewedQuery(baseOptions: Apollo.QueryHookOptions<FilesToBeReviewedQuery, FilesToBeReviewedQueryVariables> & ({ variables: FilesToBeReviewedQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
         const options = {...defaultOptions, ...baseOptions}
-        return Apollo.useQuery<ReportingFilesQuery, ReportingFilesQueryVariables>(ReportingFilesDocument, options);
+        return Apollo.useQuery<FilesToBeReviewedQuery, FilesToBeReviewedQueryVariables>(FilesToBeReviewedDocument, options);
       }
-export function useReportingFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<ReportingFilesQuery, ReportingFilesQueryVariables>) {
+export function useFilesToBeReviewedLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<FilesToBeReviewedQuery, FilesToBeReviewedQueryVariables>) {
           const options = {...defaultOptions, ...baseOptions}
-          return Apollo.useLazyQuery<ReportingFilesQuery, ReportingFilesQueryVariables>(ReportingFilesDocument, options);
+          return Apollo.useLazyQuery<FilesToBeReviewedQuery, FilesToBeReviewedQueryVariables>(FilesToBeReviewedDocument, options);
         }
-export function useReportingFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<ReportingFilesQuery, ReportingFilesQueryVariables>) {
+export function useFilesToBeReviewedSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<FilesToBeReviewedQuery, FilesToBeReviewedQueryVariables>) {
           const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
-          return Apollo.useSuspenseQuery<ReportingFilesQuery, ReportingFilesQueryVariables>(ReportingFilesDocument, options);
+          return Apollo.useSuspenseQuery<FilesToBeReviewedQuery, FilesToBeReviewedQueryVariables>(FilesToBeReviewedDocument, options);
         }
-export type ReportingFilesQueryHookResult = ReturnType<typeof useReportingFilesQuery>;
-export type ReportingFilesLazyQueryHookResult = ReturnType<typeof useReportingFilesLazyQuery>;
-export type ReportingFilesSuspenseQueryHookResult = ReturnType<typeof useReportingFilesSuspenseQuery>;
-export type ReportingFilesQueryResult = Apollo.QueryResult<ReportingFilesQuery, ReportingFilesQueryVariables>;
+export type FilesToBeReviewedQueryHookResult = ReturnType<typeof useFilesToBeReviewedQuery>;
+export type FilesToBeReviewedLazyQueryHookResult = ReturnType<typeof useFilesToBeReviewedLazyQuery>;
+export type FilesToBeReviewedSuspenseQueryHookResult = ReturnType<typeof useFilesToBeReviewedSuspenseQuery>;
+export type FilesToBeReviewedQueryResult = Apollo.QueryResult<FilesToBeReviewedQuery, FilesToBeReviewedQueryVariables>;
 export const MyUndismissedAsyncDownloadsDocument = gql`
     query MyUndismissedAsyncDownloads {
   async_downloads(where: {_not: {status: {_eq: "dismissed"}}}) {

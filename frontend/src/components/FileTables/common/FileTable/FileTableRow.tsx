@@ -9,7 +9,7 @@ import {
 import {
   isBanned,
   isInsecure,
-  isReported,
+  isToBeReviewed,
   ObjectSummary,
   ObjectTag,
   OwnerRole,
@@ -251,7 +251,7 @@ export const FileTableRow = ({
                 Insecure
               </span>
             </ConditionalRender>
-            {isReported(file.tags) && !isBanned(file.tags) && (
+            {isToBeReviewed(file.tags) && !isBanned(file.tags) && (
               <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
                 Reported
               </span>
@@ -394,7 +394,7 @@ export const FileTableRow = ({
                     </button>
                   )}
                   {actionButtons.includes(FileActionButtons.REPORT) &&
-                    !isReported(file.tags) &&
+                    !isToBeReviewed(file.tags) &&
                     !isBanned(file.tags) && (
                       <button
                         className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'

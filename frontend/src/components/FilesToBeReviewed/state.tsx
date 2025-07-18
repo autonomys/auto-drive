@@ -1,13 +1,13 @@
 import { create } from 'zustand';
 
-interface ReportingFilesStore {
+interface FilesToBeReviewedStore {
   asyncDownloads: string[];
   fetcher: (() => Promise<string[]>) | undefined;
   setFetcher: (fetcher: (() => Promise<string[]>) | undefined) => void;
   update: () => void;
 }
 
-export const useReportingFilesStore = create<ReportingFilesStore>(
+export const useFilesToBeReviewedStore = create<FilesToBeReviewedStore>(
   (set, get) => ({
     asyncDownloads: [],
     fetcher: undefined,

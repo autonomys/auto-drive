@@ -19,6 +19,7 @@ import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
 import { UploadButton } from '../../UploadButton';
 import { UserAsyncDownloads } from '../../UserAsyncDownloads';
+import { ToBeReviewedFiles } from '../../FilesToBeReviewed';
 
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -81,6 +82,7 @@ export const UserFiles = () => {
     <div className='flex w-full'>
       <div className='flex w-full flex-col gap-4'>
         <UserAsyncDownloads />
+        <ToBeReviewedFiles />
         <div className='flex w-full flex-row items-center justify-between gap-4'>
           <SearchBar scope='user' />
           <UploadButton />

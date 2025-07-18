@@ -1,10 +1,10 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import {
-  ReportingFilesDocument,
-  ReportingFilesQuery,
+  FilesToBeReviewedDocument,
+  FilesToBeReviewedQuery,
 } from '../../../gql/graphql';
 import { useNetwork } from '../../contexts/network';
-import { useReportingFilesStore } from './state';
+import { useFilesToBeReviewedStore } from './state';
 import {
   Dialog,
   DialogPanel,
@@ -15,23 +15,25 @@ import {
 import { Button } from '../common/Button';
 import { cn } from '@/utils/cn';
 import { AlertTriangle } from 'lucide-react';
-import { ReportingFileRow } from './ReportingFileRow';
+import { ToBeReviewedFileRow } from './ReviewFilesRow';
 import { useUserStore } from '../../globalStates/user';
 import { isAdminUser, ObjectTag } from '@auto-drive/models';
 
-export const ReportingFiles = () => {
-  const setFetcher = useReportingFilesStore((e) => e.setFetcher);
-  const reportingFileCids = useReportingFilesStore((e) => e.asyncDownloads);
+export const ToBeReviewedFiles = () => {
+  const setFetcher = useFilesToBeReviewedStore((e) => e.setFetcher);
+  const toBeReviewedFileCIDs = useFilesToBeReviewedStore(
+    (e) => e.asyncDownloads,
+  );
   const { gql } = useNetwork();
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUserStore();
 
   const fetcher = useCallback(async (): Promise<string[]> => {
-    const { data } = await gql.query<ReportingFilesQuery>({
-      query: ReportingFilesDocument,
+    const { data } = await gql.query<FilesToBeReviewedQuery>({
+      query: FilesToBeReviewedDocument,
       fetchPolicy: 'network-only',
       variables: {
-        includingTags: [ObjectTag.Reported],
+        includingTags: [ObjectTag.ToBeReviewed],
         excludingTags: [ObjectTag.Banned, ObjectTag.ReportDismissed],
         limit: 100,
         offset: 0,
@@ -49,7 +51,7 @@ export const ReportingFiles = () => {
     setIsOpen((prev) => !prev);
   }, []);
 
-  if (reportingFileCids.length === 0 || !user || !isAdminUser(user)) {
+  if (toBeReviewedFileCIDs.length === 0 || !user || !isAdminUser(user)) {
     return null;
   }
 
@@ -59,12 +61,12 @@ export const ReportingFiles = () => {
         variant='danger'
         className={cn(
           'flex items-center gap-1 text-sm',
-          reportingFileCids.length > 0 && 'font-medium',
+          toBeReviewedFileCIDs.length > 0 && 'font-medium',
         )}
         onClick={toggleModal}
       >
         <AlertTriangle className='h-4 w-4' />
-        Files to be reviewed ({reportingFileCids.length})
+        Files to be reviewed ({toBeReviewedFileCIDs.length})
       </Button>
 
       <Transition show={isOpen} as={Fragment}>
@@ -107,11 +109,11 @@ export const ReportingFiles = () => {
                     as='h3'
                     className='text-lg font-medium leading-6 text-gray-900 dark:text-white'
                   >
-                    Reporting Files
+                    Files to be reviewed
                   </DialogTitle>
                   <div className='mt-4 flex flex-col gap-2'>
-                    {reportingFileCids.map((headCid) => (
-                      <ReportingFileRow key={headCid} headCid={headCid} />
+                    {toBeReviewedFileCIDs.map((headCid) => (
+                      <ToBeReviewedFileRow key={headCid} headCid={headCid} />
                     ))}
                   </div>
                 </div>

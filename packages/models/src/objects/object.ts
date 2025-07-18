@@ -129,7 +129,7 @@ export const isReportDismissed = (tags: string[]) => {
   return tags.includes(ObjectTag.ReportDismissed);
 };
 
-export const isReported = (tags: string[]) => {
+export const isToBeReviewed = (tags: string[]) => {
   return (
     tags.includes(ObjectTag.ToBeReviewed) &&
     !isBanned(tags) &&

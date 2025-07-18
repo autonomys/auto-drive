@@ -145,12 +145,12 @@ export const UploadedObjectInformation = ({
               </ConditionalRender>
               <ConditionalRender
                 condition={
-                  object.tags.includes(ObjectTag.Reported) &&
+                  object.tags.includes(ObjectTag.ToBeReviewed) &&
                   !object.tags.includes(ObjectTag.Banned)
                 }
               >
                 <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
-                  Reported
+                  On review
                 </span>
               </ConditionalRender>
               <ConditionalRender
