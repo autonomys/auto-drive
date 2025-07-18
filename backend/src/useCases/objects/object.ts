@@ -10,6 +10,7 @@ import {
   UserWithOrganization,
   objectStatus,
   isAdminUser,
+  ObjectTag,
 } from '@auto-drive/models'
 import {
   metadataRepository,
@@ -531,9 +532,19 @@ const shouldBlockDownload = async (cid: string, blockingTags: string[]) => {
     return false
   }
 
-  const actualBlockingsTags = [...blockingTags, 'banned']
+  const actualBlockingsTags = [...blockingTags, ObjectTag.Banned]
 
   return metadata.tags.some((tag) => actualBlockingsTags.includes(tag))
+}
+
+const getReportingList = async (limit: number, offset: number) => {
+  const metadata = await metadataRepository.getMetadataByTagIncludeExclude(
+    ObjectTag.Reported,
+    ObjectTag.Banned,
+    limit,
+    offset,
+  )
+  return metadata.rows.map((e) => e.head_cid)
 }
 
 export const ObjectUseCases = {
@@ -563,4 +574,5 @@ export const ObjectUseCases = {
   banObject,
   reportObject,
   shouldBlockDownload,
+  getReportingList,
 }

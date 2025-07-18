@@ -290,6 +290,22 @@ const addTag = async (cid: string, tag: string) => {
   })
 }
 
+const getMetadataByTagIncludeExclude = async (
+  tagIncludes: string,
+  tagToExclude: string,
+  limit: number,
+  offset: number,
+) => {
+  const db = await getDatabase()
+  return db.query<MetadataEntryWithTotalCount>({
+    text: `
+      SELECT * FROM metadata WHERE tags @> $1 AND NOT tags @> $2
+      LIMIT $3 OFFSET $4
+    `,
+    values: [[tagIncludes], [tagToExclude], limit, offset],
+  })
+}
+
 export const metadataRepository = {
   getMetadata,
   setMetadata,
@@ -307,4 +323,5 @@ export const metadataRepository = {
   markAsArchived,
   getMetadataByIsArchived,
   addTag,
+  getMetadataByTagIncludeExclude,
 }

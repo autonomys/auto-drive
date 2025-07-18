@@ -113,3 +113,9 @@ export interface FileDownload {
   metadata: OffchainMetadata;
   startDownload: () => Promise<Readable> | Readable;
 }
+
+export enum ObjectTag {
+  Banned = "banned",
+  Reported = "reported",
+  Insecure = "insecure",
+}

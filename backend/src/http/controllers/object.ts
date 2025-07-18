@@ -445,4 +445,19 @@ objectController.post(
   }),
 )
 
+objectController.get(
+  '/reporting/list',
+  asyncSafeHandler(async (req, res) => {
+    const { limit, offset } = req.query
+    const limitNumber = limit ? parseInt(limit as string) : 100
+    const offsetNumber = offset ? parseInt(offset as string) : 0
+
+    const reportingList = await ObjectUseCases.getReportingList(
+      limitNumber,
+      offsetNumber,
+    )
+    res.json(reportingList)
+  }),
+)
+
 export { objectController }
