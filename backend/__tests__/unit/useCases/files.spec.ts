@@ -1,10 +1,11 @@
 import { jest } from '@jest/globals'
 import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
-import { FilesUseCases } from '../../../src/useCases/objects/files.js'
+import { FilesUseCases } from '../../../src/useCases/objects/files/index.js'
 import { ObjectStatus } from '@auto-drive/models'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { config } from '../../../src/config.js'
 import { ByteRange } from '@autonomys/file-caching'
+import { DownloadUseCase } from '../../../src/useCases/objects/downloads.js'
 
 jest.unstable_mockModule('../../../src/useCases/objects/object.js', () => ({
   ObjectUseCases: {
@@ -45,7 +46,7 @@ describe('FilesUseCases', () => {
       publishedObjectId: null,
     })
 
-    const result = await FilesUseCases.downloadObjectByAnonymous(
+    const result = await DownloadUseCase.downloadObjectByAnonymous(
       metadata.dataCid,
     )
 
@@ -82,8 +83,8 @@ describe('FilesUseCases', () => {
       publishedObjectId: null,
     })
 
-    expect(
-      FilesUseCases.downloadObjectByAnonymous(mockFile.cid, {
+    await expect(
+      DownloadUseCase.downloadObjectByAnonymous(mockFile.cid, {
         blockingTags: ['insecure'],
       }),
     ).rejects.toThrow(new Error('File is blocked'))
@@ -115,8 +116,8 @@ describe('FilesUseCases', () => {
       publishedObjectId: null,
     })
 
-    expect(
-      FilesUseCases.downloadObjectByAnonymous(metadata.dataCid),
+    await expect(
+      DownloadUseCase.downloadObjectByAnonymous(metadata.dataCid),
     ).rejects.toThrow(new Error('File too large to be downloaded anonymously.'))
   })
 

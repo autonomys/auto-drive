@@ -22,7 +22,7 @@ const get = (cid: string, options?: DownloadServiceOptions) => {
     return null
   }
 
-  const byteRange = options?.byteRange ?? [0, value.length]
+  const byteRange = options?.byteRange ?? [0, value.length - 1]
 
   return bufferToAsyncIterable(
     Buffer.from(

@@ -30,7 +30,7 @@ const getCalculatedResultingByteRange = (
 const downloadObjectByUser = async (
   reader: UserWithOrganization,
   cid: string,
-  { blockingTags, byteRange }: DownloadOptions = {},
+  options: DownloadOptions = {},
 ): Promise<FileDownload> => {
   logger.debug(
     'downloadObjectByUser requested (cid=%s, userId=%s)',
@@ -53,13 +53,18 @@ const downloadObjectByUser = async (
     throw new Error('Not enough download credits')
   }
 
-  if (blockingTags && tags.some((tag) => blockingTags.includes(tag))) {
+  if (
+    options.blockingTags &&
+    tags.some(
+      (tag) => options.blockingTags && options.blockingTags.includes(tag),
+    )
+  ) {
     throw new Error('File is blocked')
   }
 
   const resultingByteRange = getCalculatedResultingByteRange(
     metadata,
-    byteRange,
+    options.byteRange,
   )
   logger.info(
     'downloadObjectByUser authorized (cid=%s, userId=%s)',
@@ -73,7 +78,7 @@ const downloadObjectByUser = async (
 
   return {
     metadata,
-    byteRange: byteRange ? resultingByteRange : undefined,
+    byteRange: options.byteRange ? resultingByteRange : undefined,
     startDownload: async () => {
       logger.trace(
         'downloadObjectByUser starting stream (cid=%s, userId=%s)',
@@ -86,7 +91,7 @@ const downloadObjectByUser = async (
         totalSize,
       )
 
-      const download = await downloadService.download(cid)
+      const download = await downloadService.download(cid, options)
 
       return download
     },
