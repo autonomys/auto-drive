@@ -414,4 +414,35 @@ objectController.post(
   }),
 )
 
+objectController.post(
+  '/:cid/ban',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
+    await ObjectUseCases.banObject(executor, cid)
+
+    res.sendStatus(204)
+  }),
+)
+
+objectController.post(
+  '/:cid/report',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
+    await ObjectUseCases.reportObject(executor, cid)
+    res.sendStatus(204)
+  }),
+)
+
 export { objectController }

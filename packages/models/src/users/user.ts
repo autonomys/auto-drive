@@ -76,3 +76,7 @@ export const userFromTable = (
     onboarded: true,
   };
 };
+
+export const isAdminUser = (user: User): boolean => {
+  return user.role === UserRole.Admin;
+};

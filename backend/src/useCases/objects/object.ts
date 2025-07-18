@@ -9,6 +9,7 @@ import {
   User,
   UserWithOrganization,
   objectStatus,
+  isAdminUser,
 } from '@auto-drive/models'
 import {
   metadataRepository,
@@ -501,6 +502,40 @@ const addTag = async (cid: string, tag: string) => {
   await metadataRepository.addTag(cid, tag)
 }
 
+const banObject = async (executor: User, cid: string) => {
+  logger.debug('Attempting to ban object (cid=%s)', cid)
+  if (!isAdminUser(executor)) {
+    logger.warn(
+      'User (%s) attempted to ban object without admin rights (cid=%s)',
+      executor.oauthUserId,
+      cid,
+    )
+    throw new Error('User is not an admin')
+  }
+
+  await ObjectUseCases.addTag(cid, 'banned')
+
+  logger.info('Object banned successfully (cid=%s)', cid)
+}
+
+const reportObject = async (executor: User, cid: string) => {
+  logger.debug('Attempting to report object (cid=%s)', cid)
+  await ObjectUseCases.addTag(cid, 'reported')
+
+  logger.info('Object reported successfully (cid=%s)', cid)
+}
+
+const shouldBlockDownload = async (cid: string, blockingTags: string[]) => {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
+    return false
+  }
+
+  const actualBlockingsTags = [...blockingTags, 'banned']
+
+  return metadata.tags.some((tag) => actualBlockingsTags.includes(tag))
+}
+
 export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
@@ -525,4 +560,7 @@ export const ObjectUseCases = {
   checkObjectsArchivalStatus,
   populateCaches,
   addTag,
+  banObject,
+  reportObject,
+  shouldBlockDownload,
 }
