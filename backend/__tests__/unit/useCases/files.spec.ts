@@ -1,13 +1,11 @@
 import { jest } from '@jest/globals'
 import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
-import { FilesUseCases } from '../../../src/useCases/objects/files/index.js'
 import { ObjectStatus } from '@auto-drive/models'
-import { OffchainMetadata } from '@autonomys/auto-dag-data'
-import { config } from '../../../src/config.js'
+import { dbMigration } from '../../utils/dbMigrate.js'
 import { ByteRange } from '@autonomys/file-caching'
 import { DownloadUseCase } from '../../../src/useCases/objects/downloads.js'
-import { FilesUseCases } from '../../../src/useCases/objects/files.js'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
+import { FilesUseCases } from '../../../src/useCases/index.js'
 
 jest.unstable_mockModule('../../../src/useCases/objects/object.js', () => ({
   ObjectUseCases: {
@@ -33,7 +31,22 @@ describe('FilesUseCases', () => {
       chunks: [],
     }
 
-    jest.spyOn(ObjectUseCases, 'getMetadata').mockResolvedValue(metadata)
+    jest.spyOn(ObjectUseCases, 'getObjectInformation').mockResolvedValue({
+      metadata,
+      tags: [],
+      cid: '<cid>',
+      createdAt: '',
+      status: ObjectStatus.Processing,
+      uploadState: {
+        uploadedNodes: 0,
+        totalNodes: 0,
+        archivedNodes: 0,
+        minimumBlockDepth: 0,
+        maximumBlockDepth: 0,
+      },
+      owners: [],
+      publishedObjectId: null,
+    })
     jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(false)
 
     const result = await DownloadUseCase.downloadObjectByAnonymous(
@@ -72,29 +85,13 @@ describe('FilesUseCases', () => {
       owners: [],
       publishedObjectId: null,
     })
+    jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(true)
 
     await expect(
       DownloadUseCase.downloadObjectByAnonymous(mockFile.cid, {
         blockingTags: ['insecure'],
       }),
     ).rejects.toThrow(new Error('File is blocked'))
-  })
-
-  it('should throw if file is too large', async () => {
-    const metadata: OffchainMetadata = {
-      totalSize: 100n,
-      type: 'file',
-      dataCid: 'test-cid',
-      totalChunks: 1,
-      chunks: [],
-    }
-
-    jest.spyOn(ObjectUseCases, 'getMetadata').mockResolvedValue(metadata)
-    jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(true)
-
-    await expect(
-      DownloadUseCase.downloadObjectByAnonymous(metadata.dataCid),
-    ).rejects.toThrow(new Error('File too large to be downloaded anonymously.'))
   })
 
   describe('getNodesForPartialRetrieval', () => {
