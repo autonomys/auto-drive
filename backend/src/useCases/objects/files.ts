@@ -26,7 +26,6 @@ import { BlockstoreUseCases } from '../uploads/blockstore.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import { downloadService } from '../../services/download/index.js'
 import { FileGateway } from '../../services/dsn/fileGateway/index.js'
-import { config } from '../../config.js'
 import { Readable } from 'stream'
 import { createLogger } from '../../drivers/logger.js'
 
@@ -259,8 +258,8 @@ const downloadObjectByUser = async (
     cid,
     reader.oauthUserId,
   )
-  const information = await ObjectUseCases.getObjectInformation(cid)
-  if (!information) {
+  const metadata = await ObjectUseCases.getMetadata(cid)
+  if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`)
   }
 
@@ -269,14 +268,17 @@ const downloadObjectByUser = async (
       reader,
       InteractionType.Download,
     )
-  const { metadata, tags } = information
+
+  const shouldBlockDownload = await ObjectUseCases.shouldBlockDownload(
+    cid,
+    blockingTags ?? [],
+  )
+  if (shouldBlockDownload) {
+    throw new Error('File download is blocked by blocking tags or is banned')
+  }
 
   if (pendingCredits < metadata.totalSize) {
     throw new Error('Not enough download credits')
-  }
-
-  if (blockingTags && tags.some((tag) => blockingTags.includes(tag))) {
-    throw new Error('File is blocked')
   }
 
   logger.info(
@@ -310,16 +312,17 @@ const downloadObjectByAnonymous = async (
   blockingTags?: string[],
 ): Promise<FileDownload> => {
   logger.debug('downloadObjectByAnonymous requested (cid=%s)', cid)
-  const information = await ObjectUseCases.getObjectInformation(cid)
-  if (!information) {
+  const metadata = await ObjectUseCases.getMetadata(cid)
+  if (!metadata) {
     throw new Error(`Metadata with CID ${cid} not found`)
   }
-  const { metadata, tags } = information
-  if (metadata.totalSize > config.params.maxAnonymousDownloadSize) {
-    throw new Error('File too large to be downloaded anonymously.')
-  }
-  if (blockingTags && tags.some((tag) => blockingTags.includes(tag))) {
-    throw new Error('File is blocked')
+
+  const shouldBlockDownload = await ObjectUseCases.shouldBlockDownload(
+    cid,
+    blockingTags ?? [],
+  )
+  if (shouldBlockDownload) {
+    throw new Error('File download is blocked by blocking tags or is banned')
   }
 
   logger.info('downloadObjectByAnonymous authorized (cid=%s)', cid)
