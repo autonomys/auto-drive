@@ -1,7 +1,6 @@
 import { jest } from '@jest/globals'
 import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
 import { ObjectStatus } from '@auto-drive/models'
-import { dbMigration } from '../../utils/dbMigrate.js'
 import { ByteRange } from '@autonomys/file-caching'
 import { DownloadUseCase } from '../../../src/useCases/objects/downloads.js'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
