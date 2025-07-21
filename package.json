@@ -39,9 +39,5 @@
     "ethers": "^6.13.5",
     "keyv": "^5.3.1",
     "siwe": "^3.0.0"
-  },
-  "resolutions": {
-    "@autonomys/auto-files": "portal:/Users/carloslostao/Autonomys/auto-sdk/packages/auto-files",
-    "@autonomys/auto-drive": "^1.5.1"
   }
 }
