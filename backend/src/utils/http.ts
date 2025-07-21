@@ -2,7 +2,7 @@ import { Request } from 'express'
 import { ByteRange } from '@autonomys/file-caching'
 
 export const getByteRange = (req: Request): ByteRange | undefined => {
-  const byteRange = req.headers['content-range']
+  const byteRange = req.headers['range']
   if (byteRange == null) {
     return undefined
   }
