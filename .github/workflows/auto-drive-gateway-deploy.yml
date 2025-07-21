@@ -10,7 +10,7 @@ on:
         options:
           - auto_drive_multinetwork_gateway
       image_tag:
-        description: "Docker image tag visit in the releases page at (https://github.com/autonomys/auto-drive/pkgs/container/auto-drive-backend)"
+        description: "Docker image tag visit in the releases page at (https://github.com/autonomys/auto-drive/pkgs/container/auto-drive-gateway)"
         required: true
         type: string
 
