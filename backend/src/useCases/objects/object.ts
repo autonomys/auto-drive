@@ -9,6 +9,8 @@ import {
   User,
   UserWithOrganization,
   objectStatus,
+  isAdminUser,
+  ObjectTag,
 } from '@auto-drive/models'
 import {
   metadataRepository,
@@ -238,7 +240,7 @@ const getObjectInformation = async (
   return {
     cid,
     metadata: metadata.metadata,
-    tags: metadata.tags,
+    tags: metadata.tags ?? [],
     uploadState: uploadState,
     owners,
     status: objectStatus(uploadState),
@@ -499,6 +501,65 @@ const addTag = async (cid: string, tag: string) => {
   await metadataRepository.addTag(cid, tag)
 }
 
+const banObject = async (executor: User, cid: string) => {
+  logger.debug('Attempting to ban object (cid=%s)', cid)
+  if (!isAdminUser(executor)) {
+    logger.warn(
+      'User (%s) attempted to ban object without admin rights (cid=%s)',
+      executor.oauthUserId,
+      cid,
+    )
+    throw new Error('User is not an admin')
+  }
+
+  await ObjectUseCases.addTag(cid, ObjectTag.Banned)
+
+  logger.info('Object banned successfully (cid=%s)', cid)
+}
+
+const reportObject = async (cid: string) => {
+  logger.debug('Attempting to report object (cid=%s)', cid)
+  await ObjectUseCases.addTag(cid, ObjectTag.ToBeReviewed)
+
+  logger.info('Object reported successfully (cid=%s)', cid)
+}
+
+const dismissReport = async (executor: User, cid: string) => {
+  logger.debug('Attempting to dismiss report (cid=%s)', cid)
+  if (!isAdminUser(executor)) {
+    logger.warn(
+      'User (%s) attempted to ban object without admin rights (cid=%s)',
+      executor.oauthUserId,
+      cid,
+    )
+    throw new Error('User is not an admin')
+  }
+
+  await ObjectUseCases.addTag(cid, ObjectTag.ReportDismissed)
+  logger.info('Object reported successfully (cid=%s)', cid)
+}
+
+const shouldBlockDownload = async (cid: string, blockingTags: string[]) => {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
+    return false
+  }
+
+  const actualBlockingsTags = [...blockingTags, ObjectTag.Banned]
+
+  return (metadata.tags ?? []).some((tag) => actualBlockingsTags.includes(tag))
+}
+
+const getToBeReviewedList = async (limit: number, offset: number) => {
+  const metadata = await metadataRepository.getMetadataByTagIncludeExclude(
+    [ObjectTag.ToBeReviewed],
+    [ObjectTag.Banned, ObjectTag.ReportDismissed],
+    limit,
+    offset,
+  )
+  return metadata.rows.map((e) => e.head_cid)
+}
+
 export const ObjectUseCases = {
   getMetadata,
   getObjectInformation,
@@ -523,4 +584,9 @@ export const ObjectUseCases = {
   checkObjectsArchivalStatus,
   populateCaches,
   addTag,
+  banObject,
+  reportObject,
+  dismissReport,
+  shouldBlockDownload,
+  getToBeReviewedList,
 }

@@ -115,3 +115,30 @@ export interface FileDownload {
   startDownload: () => Promise<Readable> | Readable;
   byteRange?: ByteRange;
 }
+
+export enum ObjectTag {
+  Banned = "banned",
+  ToBeReviewed = "reported",
+  ReportDismissed = "report-dismissed",
+  Insecure = "insecure",
+}
+
+export const isBanned = (tags: string[]) => {
+  return tags.includes(ObjectTag.Banned);
+};
+
+export const isReportDismissed = (tags: string[]) => {
+  return tags.includes(ObjectTag.ReportDismissed);
+};
+
+export const isToBeReviewed = (tags: string[]) => {
+  return (
+    tags.includes(ObjectTag.ToBeReviewed) &&
+    !isBanned(tags) &&
+    !isReportDismissed(tags)
+  );
+};
+
+export const isInsecure = (tags: string[]) => {
+  return tags.includes(ObjectTag.Insecure);
+};
