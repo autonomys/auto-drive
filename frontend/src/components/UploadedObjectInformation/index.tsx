@@ -1,4 +1,4 @@
-import { OwnerRole, ObjectInformation } from '@auto-drive/models';
+import { OwnerRole, ObjectInformation, ObjectTag } from '@auto-drive/models';
 import { getTypeFromMetadata } from 'utils/file';
 import { useUserStore } from 'globalStates/user';
 import { useCallback, useMemo, useState } from 'react';
@@ -16,6 +16,7 @@ import {
   LockOpenIcon,
   InformationCircleIcon,
   CloudArrowUpIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { EXTERNAL_ROUTES } from '@/constants/routes';
 import { NetworkId } from '@/constants/networks';
@@ -25,6 +26,8 @@ import { formatNumberWithCommas } from '@/utils/number';
 import { FileIcons } from './FileIcons';
 import { ConditionalRender } from '../common/ConditionalRender';
 import { Badge } from 'components/common/Badge';
+import { cn } from '@/utils/cn';
+import toast from 'react-hot-toast';
 
 const getBlockExplorerUrl = (
   networkId: NetworkId,
@@ -59,11 +62,12 @@ export const UploadedObjectInformation = ({
 }: {
   object: ObjectInformation | null;
 }) => {
-  const { network } = useNetwork();
+  const { network, api } = useNetwork();
 
   const [downloadModalCid, setDownloadModalCid] = useState<string | null>(null);
   const [shareModalCid, setShareModalCid] = useState<string | null>(null);
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
+  const [isReporting, setIsReporting] = useState(false);
   const user = useUserStore(({ user }) => user);
 
   const owners = useMemo(() => {
@@ -96,6 +100,23 @@ export const UploadedObjectInformation = ({
   const handleDelete = useCallback(() => {
     setDeleteModalCid(object?.metadata.dataCid ?? null);
   }, [object?.metadata.dataCid]);
+
+  const handleReport = useCallback(async () => {
+    if (!object?.metadata.dataCid) {
+      return;
+    }
+
+    setIsReporting(true);
+    try {
+      await api.reportFile(object.metadata.dataCid);
+      toast.success('File has been reported successfully');
+    } catch (error) {
+      console.error('Report error:', error);
+      toast.error('Failed to report file. Please try again.');
+    } finally {
+      setIsReporting(false);
+    }
+  }, [api, object?.metadata.dataCid]);
 
   const isLoading = object === null;
   if (isLoading) {
@@ -140,17 +161,44 @@ export const UploadedObjectInformation = ({
                   Insecure
                 </span>
               </ConditionalRender>
+              <ConditionalRender
+                condition={
+                  object.tags.includes(ObjectTag.ToBeReviewed) &&
+                  !object.tags.includes(ObjectTag.Banned)
+                }
+              >
+                <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+                  On review
+                </span>
+              </ConditionalRender>
+              <ConditionalRender
+                condition={object.tags.includes(ObjectTag.Banned)}
+              >
+                <span className='ml-2 rounded-lg bg-red-500 p-1 text-xs font-semibold text-white'>
+                  Banned
+                </span>
+              </ConditionalRender>
             </p>
           </div>
         </div>
         <div className='flex space-x-2'>
           <Button
             variant='lightAccent'
-            className='inline-flex items-center text-sm'
+            className={cn(
+              'inline-flex items-center text-sm',
+              object.tags.includes(ObjectTag.Banned) &&
+                'cursor-not-allowed opacity-50',
+            )}
+            disabled={object.tags.includes(ObjectTag.Banned)}
             onClick={handleDownload}
           >
             <ArrowDownTrayIcon className='mr-2 h-4 w-4' />
             Download
+            {object.tags.includes(ObjectTag.Banned) && (
+              <span className='ml-2 text-xs text-gray-500'>
+                (File is banned)
+              </span>
+            )}
           </Button>
           <Button
             variant='lightAccent'
@@ -169,6 +217,19 @@ export const UploadedObjectInformation = ({
           >
             <TrashIcon className='mr-2 h-4 w-4' />
             Remove
+          </Button>
+          <Button
+            variant='lightAccent'
+            className='inline-flex items-center bg-orange-100 text-sm text-orange-700 hover:bg-orange-200'
+            onClick={handleReport}
+            disabled={
+              isReporting ||
+              object.tags.includes(ObjectTag.ToBeReviewed) ||
+              object.tags.includes(ObjectTag.Banned)
+            }
+          >
+            <ExclamationTriangleIcon className='mr-2 h-4 w-4' />
+            {isReporting ? 'Reporting...' : 'Report'}
           </Button>
         </div>
       </div>

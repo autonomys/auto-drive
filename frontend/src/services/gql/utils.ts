@@ -1,15 +1,5 @@
-import {
-  GetAllUsersWithSubscriptionsQuery,
-  GetMetadataByHeadCidQuery,
-} from 'gql/graphql';
-import {
-  SubscriptionGranularity,
-  SubscriptionInfoWithUser,
-  UserRole,
-  ObjectInformation,
-  OwnerRole,
-  objectStatus,
-} from '@auto-drive/models';
+import { GetMetadataByHeadCidQuery } from 'gql/graphql';
+import { ObjectInformation, OwnerRole, objectStatus } from '@auto-drive/models';
 
 export const mapObjectInformationFromQueryResult = (
   result: GetMetadataByHeadCidQuery,
@@ -43,31 +33,4 @@ export const mapObjectInformationFromQueryResult = (
     })),
     publishedObjectId: metadata.published_objects?.id ?? null,
   };
-};
-
-export const mapUsersFromQueryResult = (
-  result: GetAllUsersWithSubscriptionsQuery,
-): SubscriptionInfoWithUser[] => {
-  return result.users.map((user) => ({
-    id: user.user_membership!.subscription!.id,
-    organizationId: user.user_membership!.subscription!.organizationId,
-    uploadLimit: user.user_membership!.subscription!.uploadLimit,
-    downloadLimit: user.user_membership!.subscription!.downloadLimit,
-    granularity: user.user_membership!.subscription!
-      .granularity as SubscriptionGranularity,
-    userPublicId: user.publicId,
-    role: user.role,
-    oauthProvider: user.oauthProvider,
-    user: {
-      publicId: user.publicId!,
-      role: user.role as UserRole,
-      oauthProvider: user.oauthProvider,
-      oauthUserId: user.oauthUserId,
-      downloadCredits: 0,
-      uploadCredits: 0,
-      onboarded: true,
-    },
-    pendingUploadCredits: 0,
-    pendingDownloadCredits: 0,
-  }));
 };
