@@ -136,8 +136,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@auto-drive/models@workspace:packages/models"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.5.10"
-    "@autonomys/file-caching": "npm:^1.5.10"
+    "@autonomys/auto-dag-data": "npm:^1.5.11"
+    "@autonomys/file-caching": "npm:^1.5.11"
     typescript: "npm:^5.7.3"
     zod: "npm:^3.24.2"
   languageName: unknown
@@ -173,7 +173,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.4.31, @autonomys/auto-dag-data@npm:^1.4.35, @autonomys/auto-dag-data@npm:^1.5.10, @autonomys/auto-dag-data@npm:^1.5.11, @autonomys/auto-dag-data@npm:^1.5.7":
+"@autonomys/auto-dag-data@npm:^1.4.31, @autonomys/auto-dag-data@npm:^1.4.35, @autonomys/auto-dag-data@npm:^1.5.11, @autonomys/auto-dag-data@npm:^1.5.7":
   version: 1.5.11
   resolution: "@autonomys/auto-dag-data@npm:1.5.11"
   dependencies:
@@ -270,7 +270,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/file-caching@npm:^1.4.36, @autonomys/file-caching@npm:^1.5.10, @autonomys/file-caching@npm:^1.5.11":
+"@autonomys/file-caching@npm:^1.4.36, @autonomys/file-caching@npm:^1.5.11":
   version: 1.5.11
   resolution: "@autonomys/file-caching@npm:1.5.11"
   dependencies:
