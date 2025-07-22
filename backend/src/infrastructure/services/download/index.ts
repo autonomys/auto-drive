@@ -56,10 +56,11 @@ export const downloadService = {
       )
     }
 
-    const metadata = await ObjectUseCases.getMetadata(cid)
-    if (!metadata) {
+    const getMetadataResult = await ObjectUseCases.getMetadata(cid)
+    if (getMetadataResult.isErr()) {
       throw new Error('Not found')
     }
+    const metadata = getMetadataResult.value
 
     const data = await FilesUseCases.retrieveObject(metadata, options)
 

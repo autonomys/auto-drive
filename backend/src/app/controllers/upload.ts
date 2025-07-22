@@ -6,6 +6,8 @@ import { FolderTreeFolderSchema, uploadOptionsSchema } from '@auto-drive/models'
 import { z } from 'zod'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
+import { handleInternalError } from '../../shared/utils/neverthrow.js'
+import { handleError } from '../../errors/index.js'
 
 const logger = createLogger('http:controllers:upload')
 
@@ -38,24 +40,22 @@ uploadController.post(
       return
     }
 
-    try {
-      const upload = await UploadsUseCases.createFileUpload(
+    const uploadResult = await handleInternalError(
+      UploadsUseCases.createFileUpload(
         user,
         filename,
         mimeType ?? null,
         safeUploadOptions.data,
-      )
+      ),
+      'Failed to create file upload',
+    )
 
-      res.status(200).json(upload)
-      return
-    } catch (error) {
-      logger.error(error as Error, 'Failed to create upload')
-
-      res.status(500).json({
-        error: 'Failed to create upload',
-      })
+    if (uploadResult.isErr()) {
+      handleError(uploadResult.error, res)
       return
     }
+
+    res.status(200).json(uploadResult.value)
   }),
 )
 
@@ -85,23 +85,22 @@ uploadController.post(
       return
     }
 
-    try {
-      const upload = await UploadsUseCases.createFolderUpload(
+    const upload = await handleInternalError(
+      UploadsUseCases.createFolderUpload(
         user,
         safeFileTree.data.name,
         safeFileTree.data,
         safeUploadOptions.data,
-      )
+      ),
+      'Failed to create folder upload',
+    )
 
-      res.status(200).json(upload)
-      return
-    } catch (error) {
-      logger.error(error)
-      res.status(500).json({
-        error: 'Failed to create upload',
-      })
+    if (upload.isErr()) {
+      handleError(upload.error, res)
       return
     }
+
+    res.status(200).json(upload.value)
   }),
 )
 
@@ -140,25 +139,24 @@ uploadController.post(
       return
     }
 
-    try {
-      const upload = await UploadsUseCases.createFileInFolder(
+    const uploadResult = await handleInternalError(
+      UploadsUseCases.createFileInFolder(
         user,
         uploadId,
         relativeId,
         name,
         mimeType ?? null,
         safeUploadOptions.data,
-      )
+      ),
+      'Failed to create file in folder',
+    )
 
-      res.status(200).json(upload)
-      return
-    } catch (error) {
-      logger.error(error)
-      res.status(500).json({
-        error: 'Failed to create file in folder',
-      })
+    if (uploadResult.isErr()) {
+      handleError(uploadResult.error, res)
       return
     }
+
+    res.status(200).json(uploadResult.value)
   }),
 )
 
@@ -189,21 +187,18 @@ uploadController.post(
       return
     }
 
-    try {
-      await UploadsUseCases.uploadChunk(user, uploadId, index, chunk)
-
-      res.status(200).json({
-        message: 'Chunk uploaded',
-      })
-      return
-    } catch (error) {
-      logger.error(error)
-
-      res.status(500).json({
-        error: 'Failed to upload chunk',
-      })
+    const uploadChunkResult = await handleInternalError(
+      UploadsUseCases.uploadChunk(user, uploadId, index, chunk),
+      'Failed to upload chunk',
+    )
+    if (uploadChunkResult.isErr()) {
+      handleError(uploadChunkResult.error, res)
       return
     }
+
+    res.status(200).json({
+      message: 'Chunk uploaded',
+    })
   }),
 )
 
@@ -216,20 +211,19 @@ uploadController.post(
     }
     const { uploadId } = req.params
 
-    try {
-      const cid = await UploadsUseCases.completeUpload(user, uploadId)
+    const completeResult = await handleInternalError(
+      UploadsUseCases.completeUpload(user, uploadId),
+      'Failed to complete upload',
+    )
 
-      res.status(200).json({
-        cid,
-      })
-      return
-    } catch (error) {
-      logger.error(error)
-      res.status(500).json({
-        error: 'Failed to complete upload',
-      })
+    if (completeResult.isErr()) {
+      handleError(completeResult.error, res)
       return
     }
+
+    res.status(200).json({
+      cid: completeResult.value,
+    })
   }),
 )
 

@@ -13,6 +13,8 @@ import { interactionsRepository } from '../../infrastructure/repositories/object
 import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
 import { config } from '../../config.js'
+import { err, ok, Result } from 'neverthrow'
+import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
 
 const updateSubscription = async (
   executor: User,
@@ -20,22 +22,21 @@ const updateSubscription = async (
   granularity: SubscriptionGranularity,
   uploadLimit: number,
   downloadLimit: number,
-): Promise<void> => {
+): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
   if (executor.role !== UserRole.Admin) {
-    throw new Error('User does not have admin privileges')
+    return err(new ForbiddenError('User does not have admin privileges'))
   }
 
   const user = await AuthManager.getUserFromPublicId(userPublicId)
   if (!user.organizationId) {
-    throw new Error('User organization ID is required')
+    return err(new ObjectNotFoundError('User has no organization ID'))
   }
 
   const subscription = await subscriptionsRepository.getByOrganizationId(
     user.organizationId,
   )
-
   if (!subscription) {
-    throw new Error('Subscription not found')
+    return err(new ObjectNotFoundError('Subscription not found'))
   }
 
   await subscriptionsRepository.updateSubscription(
@@ -44,6 +45,8 @@ const updateSubscription = async (
     uploadLimit,
     downloadLimit,
   )
+
+  return ok()
 }
 
 const getOrCreateSubscription = async (

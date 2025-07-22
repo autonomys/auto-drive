@@ -13,6 +13,11 @@ import { handleDownloadResponseHeaders } from '../../shared/httpHandlers/downloa
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { downloadService } from '../../infrastructure/services/download/index.js'
 import { getByteRange } from '../../shared/utils/http.js'
+import { handleError } from '../../errors/index.js'
+import {
+  handleInternalError,
+  handleInternalErrorResult,
+} from '../../shared/utils/neverthrow.js'
 
 const logger = createLogger('http:controllers:download')
 
@@ -22,8 +27,16 @@ downloadController.get(
   '/:cid/status',
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
-    const status = await downloadService.status(cid)
-    res.json({ status })
+    const checkStatusResult = await handleInternalError(
+      downloadService.status(cid),
+      'Failed to get download status',
+    )
+
+    if (checkStatusResult.isErr()) {
+      handleError(checkStatusResult.error, res)
+      return
+    }
+    res.json({ status: checkStatusResult.value })
   }),
 )
 
@@ -36,9 +49,16 @@ downloadController.post(
       return
     }
 
-    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const createDownloadResult = await handleInternalErrorResult(
+      AsyncDownloadsUseCases.createDownload(user, cid),
+      'Failed to create download',
+    )
+    if (createDownloadResult.isErr()) {
+      handleError(createDownloadResult.error, res)
+      return
+    }
 
-    res.json(download)
+    res.json(createDownloadResult.value)
   }),
 )
 
@@ -51,12 +71,16 @@ downloadController.post(
       return
     }
 
-    const download = await AsyncDownloadsUseCases.dismissDownload(
-      user,
-      downloadId,
+    const dismissalResult = await handleInternalError(
+      AsyncDownloadsUseCases.dismissDownload(user, downloadId),
+      'Failed to dismiss download',
     )
+    if (dismissalResult.isErr()) {
+      handleError(dismissalResult.error, res)
+      return
+    }
 
-    res.json(download)
+    res.json(dismissalResult.value)
   }),
 )
 
@@ -87,21 +111,24 @@ downloadController.get(
       const user =
         typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
 
-      const {
-        metadata,
-        startDownload,
-        byteRange: resultingByteRange,
-      } = !user
-        ? await DownloadUseCase.downloadObjectByAnonymous(cid, downloadOptions)
-        : await DownloadUseCase.downloadObjectByUser(user, cid, downloadOptions)
+      const downloadResultPromise = !user
+        ? DownloadUseCase.downloadObjectByAnonymous(cid, downloadOptions)
+        : DownloadUseCase.downloadObjectByUser(user, cid, downloadOptions)
 
-      if (!metadata) {
-        res.status(404).json({
-          error: 'Metadata not found',
-        })
+      const downloadResult = await handleInternalErrorResult(
+        downloadResultPromise,
+        'Failed to download object',
+      )
+      if (downloadResult.isErr()) {
+        handleError(downloadResult.error, res)
         return
       }
 
+      const {
+        metadata,
+        byteRange: resultingByteRange,
+        startDownload,
+      } = downloadResult.value
       handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
 
       pipeline(await startDownload(), res, (err: Error | null) => {
@@ -132,9 +159,16 @@ downloadController.get(
       return
     }
 
-    const asyncDownloads = await AsyncDownloadsUseCases.getDownloadsByUser(user)
+    const asyncDownloads = await handleInternalError(
+      AsyncDownloadsUseCases.getDownloadsByUser(user),
+      'Failed to get downloads by user',
+    )
+    if (asyncDownloads.isErr()) {
+      handleError(asyncDownloads.error, res)
+      return
+    }
 
-    res.json(asyncDownloads)
+    res.json(asyncDownloads.value)
   }),
 )
 
@@ -147,12 +181,16 @@ downloadController.get(
       return
     }
 
-    const asyncDownload = await AsyncDownloadsUseCases.getDownloadById(
-      user,
-      downloadId,
+    const getDownloadResult = await handleInternalErrorResult(
+      AsyncDownloadsUseCases.getDownloadById(user, downloadId),
+      'Failed to get download by id',
     )
+    if (getDownloadResult.isErr()) {
+      handleError(getDownloadResult.error, res)
+      return
+    }
 
-    res.json(asyncDownload)
+    res.json(getDownloadResult.value)
   }),
 )
 

@@ -10,6 +10,11 @@ import { createTask } from '../../../src/infrastructure/eventRouter/tasks.js'
 import { ObjectUseCases } from '../../../src/core/index.js'
 import { downloadService } from '../../../src/infrastructure/services/download/index.js'
 import { Readable } from 'stream'
+import {
+  ForbiddenError,
+  ObjectNotFoundError,
+} from '../../../src/errors/index.js'
+import { err } from 'neverthrow'
 
 describe('Async Downloads', () => {
   let user: User
@@ -31,9 +36,12 @@ describe('Async Downloads', () => {
   })
 
   it('should fail if object is not found', async () => {
-    await expect(
-      AsyncDownloadsUseCases.createDownload(user, 'not-found'),
-    ).rejects.toThrow('Object not found')
+    const result = await AsyncDownloadsUseCases.createDownload(
+      user,
+      'not-found',
+    )
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
   })
 
   it('should create an async download', async () => {
@@ -45,7 +53,10 @@ describe('Async Downloads', () => {
     })
     const mockPublish = jest.spyOn(Rabbit, 'publish').mockResolvedValue()
 
-    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
 
     expect(download).toMatchObject({
       id: expect.any(String),
@@ -64,20 +75,23 @@ describe('Async Downloads', () => {
   })
 
   it('should fail if download is not found', async () => {
-    await expect(
-      AsyncDownloadsUseCases.asyncDownload('not-found'),
-    ).rejects.toThrow('Download not found')
+    const result = await AsyncDownloadsUseCases.asyncDownload('not-found')
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
   })
 
   it('should fail if object is not found', async () => {
-    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
     const mockGetMetadata = jest
       .spyOn(ObjectUseCases, 'getMetadata')
-      .mockResolvedValue(undefined)
+      .mockResolvedValue(err(new ObjectNotFoundError('Object not found')))
 
-    await expect(
-      AsyncDownloadsUseCases.asyncDownload(download.id),
-    ).rejects.toThrow('Object not found')
+    const result = await AsyncDownloadsUseCases.asyncDownload(download.id)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
 
     mockGetMetadata.mockRestore()
   })
@@ -104,7 +118,10 @@ describe('Async Downloads', () => {
       }),
     )
 
-    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
     const doneMock = jest.spyOn(AsyncDownloadsUseCases, 'updateStatus')
 
     await AsyncDownloadsUseCases.asyncDownload(download.id)
@@ -138,7 +155,10 @@ describe('Async Downloads', () => {
       }),
     )
 
-    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
     const doneMock = jest.spyOn(AsyncDownloadsUseCases, 'setError')
 
     await expect(
@@ -149,7 +169,10 @@ describe('Async Downloads', () => {
   })
 
   it('should be dismissed if user dismiss it', async () => {
-    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
     await AsyncDownloadsUseCases.dismissDownload(user, download.id)
 
     const dismissed = await asyncDownloadsRepository.getDownloadById(
@@ -164,8 +187,14 @@ describe('Async Downloads', () => {
 
   it('should get all downloads for a user', async () => {
     // Create multiple downloads for the same user
-    const download1 = await AsyncDownloadsUseCases.createDownload(user, cid)
-    const download2 = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download1 = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
+    const download2 = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
 
     // Get all downloads for the user
     const downloads = await AsyncDownloadsUseCases.getDownloadsByUser(user)
@@ -181,8 +210,14 @@ describe('Async Downloads', () => {
 
   it('should get all downloads for a user', async () => {
     // Create multiple downloads for the same user
-    const download1 = await AsyncDownloadsUseCases.createDownload(user, cid)
-    const download2 = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download1 = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
+    const download2 = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
 
     await AsyncDownloadsUseCases.dismissDownload(user, download1.id)
 
@@ -197,16 +232,20 @@ describe('Async Downloads', () => {
 
   it('should get a specific download by id', async () => {
     // Create a download
-    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
 
     // Get the download by id
-    const retrievedDownload = await AsyncDownloadsUseCases.getDownloadById(
+    const retrieveResult = await AsyncDownloadsUseCases.getDownloadById(
       user,
       download.id,
     )
 
     // Verify the retrieved download matches the created one
-    expect(retrievedDownload).toMatchObject({
+    expect(retrieveResult.isOk()).toBe(true)
+    expect(retrieveResult._unsafeUnwrap()).toMatchObject({
       id: download.id,
       cid: download.cid,
       oauthProvider: user.oauthProvider,
@@ -215,22 +254,21 @@ describe('Async Downloads', () => {
     })
   })
 
-  it('should throw error when getting download with invalid id', async () => {
-    // Attempt to get a download with an invalid id
-    await expect(
-      AsyncDownloadsUseCases.getDownloadById(user, 'invalid-id'),
-    ).rejects.toThrow('Download not found')
-  })
-
   it('should throw error when user tries to access another user download', async () => {
     // Create a download
-    const download = await AsyncDownloadsUseCases.createDownload(user, cid)
+    const download = await AsyncDownloadsUseCases.createDownload(
+      user,
+      cid,
+    ).then((e) => e._unsafeUnwrap())
 
     // Create another user
     const anotherUser = createMockUser()
     // Attempt to get the download with another user
-    await expect(
-      AsyncDownloadsUseCases.getDownloadById(anotherUser, download.id),
-    ).rejects.toThrow('User unauthorized')
+    const result = await AsyncDownloadsUseCases.getDownloadById(
+      anotherUser,
+      download.id,
+    )
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
   })
 })

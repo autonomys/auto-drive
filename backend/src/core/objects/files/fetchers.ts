@@ -15,10 +15,11 @@ export interface ObjectFetcher {
 
 export const DBObjectFetcher: ObjectFetcher = {
   async fetchFile(cid: string): Promise<Readable> {
-    const metadata = await ObjectUseCases.getMetadata(cid)
-    if (!metadata) {
+    const getMetadataResult = await ObjectUseCases.getMetadata(cid)
+    if (getMetadataResult.isErr()) {
       throw new Error(`Object not found: cid=${cid}`)
     }
+    const metadata = getMetadataResult.value
 
     if (metadata.type === 'file') {
       return composeNodesDataAsFileReadable({

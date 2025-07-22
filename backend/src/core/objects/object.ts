@@ -11,6 +11,7 @@ import {
   objectStatus,
   isAdminUser,
   ObjectTag,
+  FileDownload,
 } from '@auto-drive/models'
 import {
   metadataRepository,
@@ -29,18 +30,27 @@ import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { createTask } from '../../infrastructure/eventRouter/tasks.js'
 import { consumeStream } from '../../shared/utils/misc.js'
 import { DownloadUseCase } from '../../core/downloads/index.js'
+import { err, ok, Result } from 'neverthrow'
+import {
+  ForbiddenError,
+  NotAcceptableError,
+  ObjectNotFoundError,
+  PaymentRequiredError,
+} from '../../errors/index.js'
 
 const logger = createLogger('useCases:objects:object')
 
-const getMetadata = async (cid: string) => {
+const getMetadata = async (
+  cid: string,
+): Promise<Result<OffchainMetadata, ObjectNotFoundError>> => {
   logger.debug('Fetching metadata for object (cid=%s)', cid)
   const entry = await metadataRepository.getMetadata(cid)
   if (!entry) {
     logger.info('No metadata found for object (cid=%s)', cid)
-    return undefined
+    return err(new ObjectNotFoundError(`Object with cid=${cid} not found`))
   }
 
-  return entry.metadata
+  return ok(entry.metadata)
 }
 
 const saveMetadata = async (
@@ -249,7 +259,11 @@ const getObjectInformation = async (
   }
 }
 
-const shareObject = async (executor: User, cid: string, publicId: string) => {
+const shareObject = async (
+  executor: User,
+  cid: string,
+  publicId: string,
+): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
   logger.debug(
     'Attempting to share object (cid=%s) with user (publicId=%s)',
     cid,
@@ -267,7 +281,7 @@ const shareObject = async (executor: User, cid: string, publicId: string) => {
       executor.oauthUserId,
       cid,
     )
-    throw new Error('User is not an admin of this object')
+    return err(new ForbiddenError('User is not an admin of this object'))
   }
 
   const user = await AuthManager.getUserFromPublicId(publicId)
@@ -276,7 +290,7 @@ const shareObject = async (executor: User, cid: string, publicId: string) => {
       'Failed to share object - target user not found (publicId=%s)',
       publicId,
     )
-    throw new Error('User not found')
+    return err(new ObjectNotFoundError('User not found'))
   }
 
   if (user.publicId === null) {
@@ -284,7 +298,7 @@ const shareObject = async (executor: User, cid: string, publicId: string) => {
       'Failed to share object - target user has no public ID (publicId=%s)',
       publicId,
     )
-    throw new Error('User public ID is required')
+    return err(new ObjectNotFoundError('User public ID is required'))
   }
 
   await OwnershipUseCases.setUserAsOwner(user, cid)
@@ -293,9 +307,14 @@ const shareObject = async (executor: User, cid: string, publicId: string) => {
     cid,
     publicId,
   )
+
+  return ok()
 }
 
-const markAsDeleted = async (executor: User, cid: string) => {
+const markAsDeleted = async (
+  executor: User,
+  cid: string,
+): Promise<Result<void, ForbiddenError>> => {
   logger.debug('Attempting to mark object as deleted (cid=%s)', cid)
   const ownerships = await ownershipRepository.getOwnerships(cid)
   const isUserOwner = ownerships.find(
@@ -310,14 +329,19 @@ const markAsDeleted = async (executor: User, cid: string) => {
       executor.oauthUserId,
       cid,
     )
-    throw new Error('User is not an owner of this object')
+    return err(new ForbiddenError('User is not an owner of this object'))
   }
 
   await OwnershipUseCases.setObjectAsDeleted(executor, cid)
   logger.info('Object marked as deleted (cid=%s)', cid)
+
+  return ok()
 }
 
-const restoreObject = async (executor: User, cid: string) => {
+const restoreObject = async (
+  executor: User,
+  cid: string,
+): Promise<Result<void, ForbiddenError>> => {
   logger.debug('Attempting to restore object (cid=%s)', cid)
   const deletedOwnerships = await ownershipRepository.getDeletedOwnerships(cid)
   const isUserOwner = deletedOwnerships.find(
@@ -332,11 +356,13 @@ const restoreObject = async (executor: User, cid: string) => {
       executor.oauthUserId,
       cid,
     )
-    throw new Error('User is not an owner of this object')
+    return err(new ForbiddenError('User is not an owner of this object'))
   }
 
   await OwnershipUseCases.restoreObject(executor, cid)
   logger.info('Object restored successfully (cid=%s)', cid)
+
+  return ok()
 }
 
 const isArchived = async (cid: string) => {
@@ -414,13 +440,21 @@ const publishObject = async (user: UserWithOrganization, cid: string) => {
   return publishedObject
 }
 
-const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
+const downloadPublishedObject = async (
+  id: string,
+  blockingTags?: string[],
+): Promise<
+  Result<
+    FileDownload,
+    ObjectNotFoundError | PaymentRequiredError | NotAcceptableError
+  >
+> => {
   logger.debug('Attempting to download published object (id=%s)', id)
   const publishedObject =
     await publishedObjectsRepository.getPublishedObjectById(id)
   if (!publishedObject) {
     logger.warn('Published object not found (id=%s)', id)
-    throw new Error('Published object not found')
+    return err(new ObjectNotFoundError('Published object not found'))
   }
 
   const user = await AuthManager.getUserFromPublicId(publishedObject.publicId)
@@ -429,7 +463,7 @@ const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
       'User not found or has no subscription (publicId=%s)',
       publishedObject.publicId,
     )
-    throw new Error('User does not have a subscription')
+    return err(new ObjectNotFoundError('User does not have a subscription'))
   }
 
   logger.trace(
@@ -442,13 +476,16 @@ const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
   })
 }
 
-const unpublishObject = async (user: User, cid: string) => {
+const unpublishObject = async (
+  user: User,
+  cid: string,
+): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
   logger.debug('Attempting to unpublish object (cid=%s)', cid)
   const publishedObject =
     await publishedObjectsRepository.getPublishedObjectByCid(cid)
   if (!publishedObject) {
     logger.debug('Object not published, nothing to unpublish (cid=%s)', cid)
-    return
+    return ok()
   }
 
   if (publishedObject.publicId !== user.publicId) {
@@ -457,11 +494,13 @@ const unpublishObject = async (user: User, cid: string) => {
       user.publicId,
       cid,
     )
-    throw new Error('User does not have access to this object')
+    return err(new ForbiddenError('User does not have access to this object'))
   }
 
   await publishedObjectsRepository.deletePublishedObjectByCid(cid)
   logger.info('Object unpublished successfully (cid=%s)', cid)
+
+  return ok()
 }
 
 const checkObjectsArchivalStatus = async () => {
@@ -501,7 +540,10 @@ const addTag = async (cid: string, tag: string) => {
   await metadataRepository.addTag(cid, tag)
 }
 
-const banObject = async (executor: User, cid: string) => {
+const banObject = async (
+  executor: User,
+  cid: string,
+): Promise<Result<void, ForbiddenError>> => {
   logger.debug('Attempting to ban object (cid=%s)', cid)
   if (!isAdminUser(executor)) {
     logger.warn(
@@ -509,12 +551,14 @@ const banObject = async (executor: User, cid: string) => {
       executor.oauthUserId,
       cid,
     )
-    throw new Error('User is not an admin')
+    return err(new ForbiddenError('User is not an admin'))
   }
 
   await ObjectUseCases.addTag(cid, ObjectTag.Banned)
 
   logger.info('Object banned successfully (cid=%s)', cid)
+
+  return ok()
 }
 
 const reportObject = async (cid: string) => {
@@ -524,7 +568,10 @@ const reportObject = async (cid: string) => {
   logger.info('Object reported successfully (cid=%s)', cid)
 }
 
-const dismissReport = async (executor: User, cid: string) => {
+const dismissReport = async (
+  executor: User,
+  cid: string,
+): Promise<Result<void, ForbiddenError>> => {
   logger.debug('Attempting to dismiss report (cid=%s)', cid)
   if (!isAdminUser(executor)) {
     logger.warn(
@@ -532,11 +579,13 @@ const dismissReport = async (executor: User, cid: string) => {
       executor.oauthUserId,
       cid,
     )
-    throw new Error('User is not an admin')
+    return err(new ForbiddenError('User is not an admin'))
   }
 
   await ObjectUseCases.addTag(cid, ObjectTag.ReportDismissed)
   logger.info('Object reported successfully (cid=%s)', cid)
+
+  return ok()
 }
 
 const shouldBlockDownload = async (cid: string, blockingTags: string[]) => {

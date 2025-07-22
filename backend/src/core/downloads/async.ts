@@ -5,17 +5,20 @@ import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { downloadService } from '../../infrastructure/services/download/index.js'
 import { ObjectUseCases } from '../objects/object.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { err, ok, Result } from 'neverthrow'
+import { ObjectNotFoundError, ForbiddenError } from '../../errors/index.js'
 
 const logger = createLogger('useCases:asyncDownloads')
 
 const createDownload = async (
   user: User,
   cid: string,
-): Promise<AsyncDownload> => {
-  const metadata = await ObjectUseCases.getMetadata(cid)
-  if (!metadata) {
-    throw new Error('Object not found')
+): Promise<Result<AsyncDownload, ObjectNotFoundError>> => {
+  const result = await ObjectUseCases.getMetadata(cid)
+  if (result.isErr()) {
+    return err(result.error)
   }
+  const metadata = result.value
 
   const download = await asyncDownloadsRepository.createDownload(
     v4(),
@@ -35,7 +38,7 @@ const createDownload = async (
     retriesLeft: 3,
   })
 
-  return download
+  return ok(download)
 }
 
 const getDownloadsByUser = async (user: User): Promise<AsyncDownload[]> => {
@@ -48,16 +51,18 @@ const getDownloadsByUser = async (user: User): Promise<AsyncDownload[]> => {
 const updateProgress = async (
   downloadId: string,
   downloadedBytes: bigint,
-): Promise<AsyncDownload | null> => {
+): Promise<Result<AsyncDownload, ObjectNotFoundError>> => {
   const download = await asyncDownloadsRepository.getDownloadById(downloadId)
   if (!download) {
     throw new Error('Download not found')
   }
 
-  const metadata = await ObjectUseCases.getMetadata(download.cid)
-  if (!metadata) {
-    throw new Error('Object not found')
+  const result = await ObjectUseCases.getMetadata(download.cid)
+  if (result.isErr()) {
+    return err(result.error)
   }
+  const metadata = result.value
+
   logger.trace(
     'Updating progress for download id=%s cid=%s, bytes downloaded: %s',
     downloadId,
@@ -65,11 +70,20 @@ const updateProgress = async (
     downloadedBytes.toString(),
   )
 
-  return asyncDownloadsRepository.updateDownloadProgress(
+  const updatedDownload = await asyncDownloadsRepository.updateDownloadProgress(
     downloadId,
     downloadedBytes,
     metadata.totalSize,
   )
+  if (!updatedDownload) {
+    return err(
+      new ObjectNotFoundError(
+        `Download with id=${downloadId} not found when updating progress`,
+      ),
+    )
+  }
+
+  return ok(updatedDownload)
 }
 
 const updateStatus = async (
@@ -101,19 +115,24 @@ const setError = async (
   )
 }
 
-const asyncDownload = async (downloadId: string): Promise<void> => {
+const asyncDownload = async (
+  downloadId: string,
+): Promise<Result<void, ObjectNotFoundError>> => {
   const download = await asyncDownloadsRepository.getDownloadById(downloadId)
   if (!download) {
-    throw new Error('Download not found')
+    return err(
+      new ObjectNotFoundError(`Download with id=${downloadId} not found`),
+    )
   }
 
   const metadata = await ObjectUseCases.getMetadata(download.cid)
-  if (!metadata) {
-    throw new Error('Object not found')
+  if (metadata.isErr()) {
+    return err(metadata.error)
   }
 
   logger.info('Starting async download id=%s cid=%s', downloadId, download.cid)
   AsyncDownloadsUseCases.updateProgress(downloadId, BigInt(0))
+
   const file = await downloadService.download(download.cid)
 
   let downloadedBytes = 0n
@@ -135,7 +154,7 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
         downloadId,
         AsyncDownloadStatus.Completed,
       )
-      resolve()
+      resolve(ok(undefined))
     })
 
     file.on('error', async (error) => {
@@ -149,10 +168,12 @@ const asyncDownload = async (downloadId: string): Promise<void> => {
 const dismissDownload = async (
   user: User,
   downloadId: string,
-): Promise<AsyncDownload | null> => {
+): Promise<Result<AsyncDownload, ObjectNotFoundError>> => {
   const download = await asyncDownloadsRepository.getDownloadById(downloadId)
   if (!download) {
-    throw new Error('Download not found')
+    return err(
+      new ObjectNotFoundError(`Download with id=${downloadId} not found`),
+    )
   }
 
   if (
@@ -162,29 +183,44 @@ const dismissDownload = async (
     throw new Error('User unauthorized')
   }
 
-  return await AsyncDownloadsUseCases.updateStatus(
+  const updatedDownload = await AsyncDownloadsUseCases.updateStatus(
     downloadId,
     AsyncDownloadStatus.Dismissed,
   )
+  if (!updatedDownload) {
+    return err(
+      new ObjectNotFoundError(
+        `Download with id=${downloadId} not found when updating status`,
+      ),
+    )
+  }
+
+  return ok(updatedDownload)
 }
 
 const getDownloadById = async (
   user: User,
   downloadId: string,
-): Promise<AsyncDownload> => {
+): Promise<Result<AsyncDownload, ObjectNotFoundError | ForbiddenError>> => {
   const download = await asyncDownloadsRepository.getDownloadById(downloadId)
   if (!download) {
-    throw new Error('Download not found')
+    return err(
+      new ObjectNotFoundError(`Download with id=${downloadId} not found`),
+    )
   }
 
   if (
     download.oauthProvider !== user.oauthProvider ||
     download.oauthUserId !== user.oauthUserId
   ) {
-    throw new Error('User unauthorized')
+    return err(
+      new ForbiddenError(
+        `User ${user.oauthProvider}:${user.oauthUserId} is not the owner of download ${downloadId}`,
+      ),
+    )
   }
 
-  return download
+  return ok(download)
 }
 
 export const AsyncDownloadsUseCases = {

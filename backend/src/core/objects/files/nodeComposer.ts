@@ -74,10 +74,12 @@ export const retrieveAndReassembleFolderAsZip = async (
   cid: string,
 ): Promise<Readable> => {
   logger.debug('retrieveAndReassembleFolderAsZip called (cid=%s)', cid)
-  const metadata = await ObjectUseCases.getMetadata(cid)
-  if (!metadata) {
+  const getMetadataResult = await ObjectUseCases.getMetadata(cid)
+  if (getMetadataResult.isErr()) {
     throw new Error(`Metadata with CID ${cid} not found`)
   }
+  const metadata = getMetadataResult.value
+
   if (!metadata.name) {
     throw new Error(`Metadata with CID ${cid} has no name`)
   }

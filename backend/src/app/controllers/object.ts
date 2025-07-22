@@ -1,15 +1,15 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
-import {
-  handleAuth,
-  handleOptionalAuth,
-} from '../../infrastructure/services/auth/express.js'
+import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { ObjectUseCases, UploadStatusUseCases } from '../../core/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleDownloadResponseHeaders } from '../../shared/httpHandlers/download.js'
-import { getByteRange } from '../../shared/utils/http.js'
-import { DownloadUseCase } from '../../core/downloads/index.js'
+import {
+  handleInternalError,
+  handleInternalErrorResult,
+} from '../../shared/utils/neverthrow.js'
+import { handleError } from '../../errors/index.js'
 
 const logger = createLogger('http:controllers:object')
 
@@ -27,19 +27,28 @@ objectController.get(
     const limitNumber = limit ? parseInt(limit as string) : undefined
     const offsetNumber = offset ? parseInt(offset as string) : undefined
 
-    const roots = await ObjectUseCases.getRootObjects(
-      user && scope === 'user'
-        ? {
-            user,
-            scope,
-          }
-        : {
-            scope: 'global',
-          },
-      limitNumber,
-      offsetNumber,
+    const getResult = await handleInternalError(
+      ObjectUseCases.getRootObjects(
+        user && scope === 'user'
+          ? {
+              user,
+              scope,
+            }
+          : {
+              scope: 'global',
+            },
+        limitNumber,
+        offsetNumber,
+      ),
+      'Failed to get root objects',
     )
-    res.json(roots)
+
+    if (getResult.isErr()) {
+      handleError(getResult.error, res)
+      return
+    }
+
+    res.json(getResult.value)
   }),
 )
 
@@ -55,13 +64,17 @@ objectController.get(
     const limitNumber = limit ? parseInt(limit as string) : undefined
     const offsetNumber = offset ? parseInt(offset as string) : undefined
 
-    const sharedRoots = await ObjectUseCases.getSharedRoots(
-      user,
-      limitNumber,
-      offsetNumber,
+    const getResult = await handleInternalError(
+      ObjectUseCases.getSharedRoots(user, limitNumber, offsetNumber),
+      'Failed to get shared roots',
     )
 
-    res.json(sharedRoots)
+    if (getResult.isErr()) {
+      handleError(getResult.error, res)
+      return
+    }
+
+    res.json(getResult.value)
   }),
 )
 
@@ -77,38 +90,43 @@ objectController.get(
     const limitNumber = limit ? parseInt(limit as string) : undefined
     const offsetNumber = offset ? parseInt(offset as string) : undefined
 
-    const deletedRoots = await ObjectUseCases.getMarkedAsDeletedRoots(
-      user,
-      limitNumber,
-      offsetNumber,
+    const deleteResult = await handleInternalError(
+      ObjectUseCases.getMarkedAsDeletedRoots(user, limitNumber, offsetNumber),
+      'Failed to get deleted roots',
     )
 
-    res.json(deletedRoots)
+    if (deleteResult.isErr()) {
+      handleError(deleteResult.error, res)
+      return
+    }
+
+    res.json(deleteResult.value)
   }),
 )
 
 objectController.get(
   '/search',
   asyncSafeHandler(async (req, res) => {
-    try {
-      const { scope, cid } = req.query
+    const { scope, cid } = req.query
 
-      const user = await handleAuth(req, res)
-      if (!user) {
-        return
-      }
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
 
-      if (typeof cid !== 'string') {
-        res.status(400).json({
-          error: 'Missing or invalid cid value',
-        })
-        return
-      }
+    if (typeof cid !== 'string') {
+      res.status(400).json({
+        error: 'Missing or invalid cid value',
+      })
+      return
+    }
 
-      const limit = req.query.limit
-        ? parseInt(req.query.limit as string)
-        : undefined
-      const results = await ObjectUseCases.searchByCIDOrName(
+    const limit = req.query.limit
+      ? parseInt(req.query.limit as string)
+      : undefined
+
+    const searchResult = await handleInternalError(
+      ObjectUseCases.searchByCIDOrName(
         cid,
         limit,
         user && scope === 'user'
@@ -119,63 +137,70 @@ objectController.get(
           : {
               scope: 'global',
             },
-      )
-      res.json(results)
-    } catch (error: unknown) {
-      logger.error('Error searching metadata:', error)
-      res.status(500).json({
-        error: 'Failed to search metadata',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      })
+      ),
+      'Failed to search metadata',
+    )
+
+    if (searchResult.isErr()) {
+      handleError(searchResult.error, res)
+      return
     }
+
+    res.json(searchResult.value)
   }),
 )
 
 objectController.get(
   '/:cid/summary',
   asyncSafeHandler(async (req, res) => {
-    try {
-      const { cid } = req.params
-      const summary = await ObjectUseCases.getObjectSummaryByCID(cid)
-      if (!summary) {
-        res.status(404).json({
-          error: 'Metadata not found',
-        })
-        return
-      }
+    const { cid } = req.params
 
-      res.json(summary)
-    } catch (error: unknown) {
-      logger.error('Error retrieving metadata:', error)
-      res.status(500).json({
-        error: 'Failed to retrieve metadata',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      })
+    const summaryResult = await handleInternalError(
+      ObjectUseCases.getObjectSummaryByCID(cid),
+      'Failed to get object summary',
+    )
+
+    if (summaryResult.isErr()) {
+      handleError(summaryResult.error, res)
+      return
     }
+
+    const summary = summaryResult.value
+    if (!summary) {
+      res.status(404).json({
+        error: 'Metadata not found',
+      })
+      return
+    }
+
+    res.json(summary)
   }),
 )
 
 objectController.get(
   '/:cid/metadata',
   asyncSafeHandler(async (req, res) => {
-    try {
-      const { cid } = req.params
-      const metadata = await ObjectUseCases.getMetadata(cid)
-      if (!metadata) {
-        res.status(404).json({
-          error: 'Metadata not found',
-        })
-        return
-      }
+    const { cid } = req.params
 
-      res.json(metadata)
-    } catch (error: unknown) {
-      logger.error('Error retrieving metadata:', error)
-      res.status(500).json({
-        error: 'Failed to retrieve metadata',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      })
+    const metadataResult = await handleInternalError(
+      ObjectUseCases.getMetadata(cid),
+      'Failed to get metadata',
+    )
+
+    if (metadataResult.isErr()) {
+      handleError(metadataResult.error, res)
+      return
     }
+
+    const metadata = metadataResult.value
+    if (!metadata) {
+      res.status(404).json({
+        error: 'Metadata not found',
+      })
+      return
+    }
+
+    res.json(metadata)
   }),
 )
 
@@ -184,8 +209,17 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const objectInformation = await UploadStatusUseCases.getUploadStatus(cid)
-    res.json(objectInformation)
+    const statusResult = await handleInternalError(
+      UploadStatusUseCases.getUploadStatus(cid),
+      'Failed to get upload status',
+    )
+
+    if (statusResult.isErr()) {
+      handleError(statusResult.error, res)
+      return
+    }
+
+    res.json(statusResult.value)
   }),
 )
 
@@ -207,129 +241,65 @@ objectController.post(
       return
     }
 
-    try {
-      await ObjectUseCases.shareObject(user, cid, publicId)
-      res.sendStatus(200)
-    } catch (error: unknown) {
-      logger.error('Error sharing object:', error)
-      res.status(500).json({
-        error: 'Failed to share object',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      })
+    const shareResult = await handleInternalError(
+      ObjectUseCases.shareObject(user, cid, publicId),
+      'Failed to share object',
+    )
+
+    if (shareResult.isErr()) {
+      handleError(shareResult.error, res)
+      return
     }
-  }),
-)
 
-// Deprecated: Use /downloads/:cid instead
-objectController.get(
-  '/:cid/download',
-  asyncSafeHandler(async (req, res) => {
-    try {
-      const { cid } = req.params
-      const { blockObjectsWithTags } = req.query
-
-      const blockingTags = blockObjectsWithTags
-        ?.toString()
-        .split(',')
-        .filter((e) => e.trim())
-      const byteRange = getByteRange(req)
-      const downloadOptions = {
-        blockingTags,
-        byteRange,
-      }
-
-      const optionalAuthResult = await handleOptionalAuth(req, res)
-      if (!optionalAuthResult) {
-        return
-      }
-
-      logger.info('Attempting to retrieve data for metadataCid: %s', cid)
-
-      const user =
-        typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
-
-      const {
-        metadata,
-        startDownload,
-        byteRange: resultingByteRange,
-      } = !user
-        ? await DownloadUseCase.downloadObjectByAnonymous(cid, downloadOptions)
-        : await DownloadUseCase.downloadObjectByUser(user, cid, downloadOptions)
-
-      if (!metadata) {
-        res.status(404).json({
-          error: 'Metadata not found',
-        })
-        return
-      }
-
-      handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
-
-      pipeline(await startDownload(), res, (err) => {
-        if (err) {
-          if (res.headersSent) return
-          logger.error('Error streaming data:', err)
-          res.status(500).json({
-            error: 'Failed to stream data',
-            details: err.message,
-          })
-        }
-      })
-    } catch (error: unknown) {
-      logger.error('Error retrieving data:', error)
-      res.status(500).json({
-        error: 'Failed to retrieve data',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      })
-    }
+    res.sendStatus(200)
   }),
 )
 
 objectController.post(
   '/:cid/delete',
   asyncSafeHandler(async (req, res) => {
-    try {
-      const user = await handleAuth(req, res)
-      if (!user) {
-        return
-      }
-
-      const { cid } = req.params
-
-      await ObjectUseCases.markAsDeleted(user, cid)
-
-      res.sendStatus(200)
-    } catch (error: unknown) {
-      logger.error('Error deleting object:', error)
-      res.status(500).json({
-        error: 'Failed to delete object',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      })
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
     }
+
+    const { cid } = req.params
+
+    const deleteResult = await handleInternalError(
+      ObjectUseCases.markAsDeleted(user, cid),
+      'Failed to delete object',
+    )
+
+    if (deleteResult.isErr()) {
+      handleError(deleteResult.error, res)
+      return
+    }
+
+    res.sendStatus(200)
   }),
 )
 
 objectController.post(
   '/:cid/restore',
   asyncSafeHandler(async (req, res) => {
-    try {
-      const user = await handleAuth(req, res)
-      if (!user) {
-        return
-      }
-
-      const { cid } = req.params
-
-      await ObjectUseCases.restoreObject(user, cid)
-
-      res.sendStatus(200)
-    } catch (error: unknown) {
-      logger.error('Error deleting object:', error)
-      res.status(500).json({
-        error: 'Failed to delete object',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      })
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
     }
+
+    const { cid } = req.params
+
+    const restoreResult = await handleInternalError(
+      ObjectUseCases.restoreObject(user, cid),
+      'Failed to restore object',
+    )
+
+    if (restoreResult.isErr()) {
+      handleError(restoreResult.error, res)
+      return
+    }
+
+    res.sendStatus(200)
   }),
 )
 
@@ -338,8 +308,17 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const objectInformation = await ObjectUseCases.getObjectInformation(cid)
+    const objectResult = await handleInternalError(
+      ObjectUseCases.getObjectInformation(cid),
+      'Failed to get object information',
+    )
 
+    if (objectResult.isErr()) {
+      handleError(objectResult.error, res)
+      return
+    }
+
+    const objectInformation = objectResult.value
     if (!objectInformation) {
       res.status(404).json({
         error: 'Object not found',
@@ -361,53 +340,62 @@ objectController.post(
       return
     }
 
-    const publishedObject = await ObjectUseCases.publishObject(user, cid)
+    const publishResult = await handleInternalError(
+      ObjectUseCases.publishObject(user, cid),
+      'Failed to publish object',
+    )
 
-    res.json({ result: publishedObject.id })
+    if (publishResult.isErr()) {
+      handleError(publishResult.error, res)
+      return
+    }
+
+    res.json({ result: publishResult.value.id })
   }),
 )
 
 objectController.get(
   '/:id/public',
   asyncSafeHandler(async (req, res) => {
-    try {
-      const { id } = req.params
-      const blockingTags = req.query.blockObjectsWithTags
-        ?.toString()
-        .split(',')
-        .filter((e) => e.trim())
+    const { id } = req.params
+    const blockingTags = req.query.blockObjectsWithTags
+      ?.toString()
+      .split(',')
+      .filter((e) => e.trim())
 
-      const {
-        metadata,
-        startDownload,
-        byteRange: resultingByteRange,
-      } = await ObjectUseCases.downloadPublishedObject(id, blockingTags)
-      if (!metadata) {
-        res.status(404).json({
-          error: 'Published object not found',
-        })
-        return
-      }
-
-      handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
-
-      pipeline(await startDownload(), res, (err) => {
-        if (err) {
-          if (res.headersSent) return
-          logger.error('Error streaming data:', err)
-          res.status(500).json({
-            error: 'Failed to stream data',
-            details: err.message,
-          })
-        }
-      })
-    } catch (error: unknown) {
-      logger.error('Error retrieving data:', error)
-      res.status(500).json({
-        error: 'Failed to retrieve data',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      })
+    const downloadResult = await handleInternalErrorResult(
+      ObjectUseCases.downloadPublishedObject(id, blockingTags),
+      'Failed to download published object',
+    )
+    if (downloadResult.isErr()) {
+      handleError(downloadResult.error, res)
+      return
     }
+
+    const {
+      metadata,
+      startDownload,
+      byteRange: resultingByteRange,
+    } = downloadResult.value
+    if (!metadata) {
+      res.status(404).json({
+        error: 'Published object not found',
+      })
+      return
+    }
+
+    handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
+
+    pipeline(await startDownload(), res, (err) => {
+      if (err) {
+        if (res.headersSent) return
+        logger.error('Error streaming data:', err)
+        res.status(500).json({
+          error: 'Failed to stream data',
+          details: err.message,
+        })
+      }
+    })
   }),
 )
 
@@ -421,7 +409,14 @@ objectController.post(
       return
     }
 
-    await ObjectUseCases.unpublishObject(user, cid)
+    const unpublishResult = await handleInternalErrorResult(
+      ObjectUseCases.unpublishObject(user, cid),
+      'Failed to unpublish object',
+    )
+    if (unpublishResult.isErr()) {
+      handleError(unpublishResult.error, res)
+      return
+    }
 
     res.sendStatus(204)
   }),
@@ -437,7 +432,14 @@ objectController.post(
       return
     }
 
-    await ObjectUseCases.banObject(executor, cid)
+    const banResult = await handleInternalErrorResult(
+      ObjectUseCases.banObject(executor, cid),
+      'Failed to ban object',
+    )
+    if (banResult.isErr()) {
+      handleError(banResult.error, res)
+      return
+    }
 
     res.sendStatus(204)
   }),
@@ -453,7 +455,14 @@ objectController.post(
       return
     }
 
-    await ObjectUseCases.reportObject(cid)
+    const reportResult = await handleInternalError(
+      ObjectUseCases.reportObject(cid),
+      'Failed to report object',
+    )
+    if (reportResult.isErr()) {
+      handleError(reportResult.error, res)
+      return
+    }
     res.sendStatus(204)
   }),
 )
@@ -468,7 +477,14 @@ objectController.post(
       return
     }
 
-    await ObjectUseCases.dismissReport(executor, cid)
+    const dismissReportResult = await handleInternalErrorResult(
+      ObjectUseCases.dismissReport(executor, cid),
+      'Failed to dismiss report',
+    )
+    if (dismissReportResult.isErr()) {
+      handleError(dismissReportResult.error, res)
+      return
+    }
     res.sendStatus(204)
   }),
 )
@@ -480,11 +496,15 @@ objectController.get(
     const limitNumber = limit ? parseInt(limit as string) : 100
     const offsetNumber = offset ? parseInt(offset as string) : 0
 
-    const toBeReviewedList = await ObjectUseCases.getToBeReviewedList(
-      limitNumber,
-      offsetNumber,
+    const toBeReviewedList = await handleInternalError(
+      ObjectUseCases.getToBeReviewedList(limitNumber, offsetNumber),
+      'Failed to get to be reviewed list',
     )
-    res.json(toBeReviewedList)
+    if (toBeReviewedList.isErr()) {
+      handleError(toBeReviewedList.error, res)
+      return
+    }
+    res.json(toBeReviewedList.value)
   }),
 )
 

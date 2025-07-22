@@ -25,6 +25,8 @@ import { config } from '../../config.js'
 import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
 import { BlockstoreUseCases } from './blockstore.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { ObjectNotFoundError } from '../../errors/index.js'
+import { err, ok, Result } from 'neverthrow'
 
 const logger = createLogger('useCases:uploads:uploads')
 
@@ -336,8 +338,16 @@ const scheduleUploadTagging = async (cid: string): Promise<void> => {
   EventRouter.publish(tasks)
 }
 
-const tagUpload = async (cid: string): Promise<void> => {
-  const metadata = await ObjectUseCases.getMetadata(cid)
+const tagUpload = async (
+  cid: string,
+): Promise<Result<void, ObjectNotFoundError>> => {
+  const getResult = await ObjectUseCases.getMetadata(cid)
+  if (getResult.isErr()) {
+    logger.error('Failed to get metadata for upload (cid=%s)', cid)
+    return err(getResult.error)
+  }
+
+  const metadata = getResult.value
   if (metadata?.type === 'folder') {
     await Promise.all(metadata.children.map((child) => tagUpload(child.cid)))
   } else {
@@ -351,6 +361,8 @@ const tagUpload = async (cid: string): Promise<void> => {
   }
 
   await scheduleNodesPublish(cid)
+
+  return ok()
 }
 
 const processMigration = async (uploadId: string): Promise<void> => {

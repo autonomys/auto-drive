@@ -181,7 +181,9 @@ files.map((file, index) => {
       })
 
       it('should have generated expected metadata', async () => {
-        const metadata = await ObjectUseCases.getMetadata(cid)
+        const metadata = await ObjectUseCases.getMetadata(cid).then((e) =>
+          e._unsafeUnwrap(),
+        )
 
         expect(metadata).toMatchObject({
           type: 'file',
@@ -252,10 +254,14 @@ files.map((file, index) => {
       it('should be able to retrieve the file', async () => {
         handleCacheMock = jest.spyOn(downloadService, 'handleCache')
 
-        const { startDownload } = await DownloadUseCase.downloadObjectByUser(
+        const downloadResult = await DownloadUseCase.downloadObjectByUser(
           user,
           cid,
         )
+        if (downloadResult.isErr()) {
+          throw downloadResult.error
+        }
+        const { startDownload } = downloadResult.value
         const file = await startDownload()
         const fileArray = await asyncIterableToPromiseOfArray(file)
         const fileBuffer = Buffer.concat(fileArray)
