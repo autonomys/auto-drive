@@ -8,7 +8,7 @@ import {
 } from '@autonomys/file-caching'
 import { config } from '../../config.js'
 import { Readable } from 'stream'
-import { DownloadStatus } from '@auto-drive/models'
+import { DownloadServiceOptions, DownloadStatus } from '@auto-drive/models'
 
 const logger = createLogger('download-service')
 
@@ -21,27 +21,23 @@ const fsCache = createFileCache(
 )
 
 export const downloadService = {
-  download: async (cid: string): Promise<Readable> => {
-    const file = memoryDownloadCache.get(cid)
+  download: async (
+    cid: string,
+    options: DownloadServiceOptions = {},
+  ): Promise<Readable> => {
+    logger.debug(
+      `Download service called for cid=${cid} with options=${JSON.stringify(
+        options,
+      )}`,
+    )
+    const file = memoryDownloadCache.get(cid, options)
     if (file != null) {
       logger.debug('Downloading file from memory %s', cid)
-      
-      const [stream1, stream2] = await forkAsyncIterable(file)
 
-      // Cache the file in the file system cache
-      ObjectUseCases.getMetadata(cid).then(async (metadata) => {
-        const [stream3, stream4] = await forkStream(stream1)
-        fsCache.set(cid, {
-          data: stream3,
-          size: BigInt(metadata?.totalSize ?? 0).valueOf(),
-        })
-        memoryDownloadCache.set(cid, stream4)
-      })
-
-      return stream2
+      return downloadService.handleCache(cid, options, file, undefined)
     }
 
-    const cachedFile = await fsCache.get(cid).catch((e) => {
+    const cachedFile = await fsCache.get(cid, options).catch((e) => {
       logger.error(
         e as Error,
         'Error getting file from file system cache for cid %s. Ignoring error and retrieving file from source.',
@@ -51,9 +47,12 @@ export const downloadService = {
     })
     if (cachedFile != null) {
       logger.debug('Reading file from file system cache %s', cid)
-      const [stream1, stream2] = await forkStream(cachedFile.data)
-      memoryDownloadCache.set(cid, stream1)
-      return stream2
+      return downloadService.handleCache(
+        cid,
+        options,
+        cachedFile.data,
+        cachedFile.size,
+      )
     }
 
     const metadata = await ObjectUseCases.getMetadata(cid)
@@ -61,19 +60,42 @@ export const downloadService = {
       throw new Error('Not found')
     }
 
-    const data = await FilesUseCases.retrieveObject(metadata)
+    const data = await FilesUseCases.retrieveObject(metadata, options)
 
-    const [returningStream, stream2] = await forkStream(data)
+    return downloadService.handleCache(
+      cid,
+      options,
+      data,
+      BigInt(metadata.totalSize),
+    )
+  },
+  handleCache: async (
+    cid: string,
+    options: DownloadServiceOptions,
+    stream: Readable | AsyncIterable<Buffer>,
+    size: bigint | undefined,
+  ): Promise<Readable> => {
+    logger.debug(
+      `Populating caches for cid=${cid} with options=${JSON.stringify(options)}`,
+    )
+    const [stream1, stream2] =
+      stream instanceof Readable
+        ? await forkStream(stream)
+        : await forkAsyncIterable(stream)
 
-    forkStream(stream2).then(([stream3, stream4]) => {
-      memoryDownloadCache.set(cid, stream3)
-      fsCache.set(cid, {
-        data: stream4,
-        size: BigInt(metadata.totalSize).valueOf(),
-      })
-    })
-
-    return returningStream
+    // If byte range is not set, cache the file in the memory and file system caches
+    // Do this asynchronously to avoid blocking the stream return
+    if (!options?.byteRange) {
+      forkStream(stream2)
+        .then(async ([stream3, stream4]) => {
+          await memoryDownloadCache.set(cid, stream3)
+          await fsCache.set(cid, { data: stream4, size })
+        })
+        .catch((error) => {
+          logger.warn(error, 'Error caching file with cid %s', cid)
+        })
+    }
+    return stream1
   },
   status: async (cid: string): Promise<DownloadStatus> => {
     const file = memoryDownloadCache.has(cid)

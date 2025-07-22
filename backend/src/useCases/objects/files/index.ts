@@ -2,32 +2,28 @@ import {
   fileMetadata,
   folderMetadata,
   MetadataType,
-  OffchainFileMetadata,
   OffchainMetadata,
+  ChunkInfo,
 } from '@autonomys/auto-dag-data'
-import PizZip from 'pizzip'
 import {
   UserWithOrganization,
   InteractionType,
-  FileDownload,
   FileArtifacts,
   FolderArtifacts,
   UploadArtifacts,
   UploadType,
+  DownloadServiceOptions,
 } from '@auto-drive/models'
-import {
-  NodesUseCases,
-  ObjectUseCases,
-  OwnershipUseCases,
-  SubscriptionsUseCases,
-} from '../index.js'
-import { uploadsRepository } from '../../repositories/uploads/uploads.js'
-import { BlockstoreUseCases } from '../uploads/blockstore.js'
-import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
-import { downloadService } from '../../services/download/index.js'
-import { FileGateway } from '../../services/dsn/fileGateway/index.js'
+import { ObjectUseCases, OwnershipUseCases } from '../index.js'
+import { uploadsRepository } from '../../../repositories/uploads/uploads.js'
+import { BlockstoreUseCases } from '../../uploads/blockstore.js'
 import { Readable } from 'stream'
-import { createLogger } from '../../drivers/logger.js'
+import { createLogger } from '../../../drivers/logger.js'
+import { ByteRange } from '@autonomys/file-caching'
+import { sliceReadable } from '../../../utils/readable.js'
+import { DBObjectFetcher, FileGatewayObjectFetcher } from './fetchers.js'
+import { composeNodesDataAsFileReadable } from './nodeComposer.js'
+import { SubscriptionsUseCases } from '../../users/subscriptions.js'
 
 const logger = createLogger('useCases:objects:files')
 
@@ -154,187 +150,6 @@ const generateArtifacts = async (
     : generateFolderArtifacts(uploadId)
 }
 
-const retrieveAndReassembleFile = async (
-  metadata: OffchainFileMetadata,
-): Promise<Readable> => {
-  logger.debug('retrieveAndReassembleFile called (cid=%s)', metadata.dataCid)
-  if (metadata.totalChunks === 1) {
-    const chunkData = await NodesUseCases.getChunkData(metadata.chunks[0].cid)
-    if (!chunkData) {
-      throw new Error(`Chunk not found: cid=${metadata.chunks[0].cid}`)
-    }
-
-    return Readable.from(chunkData)
-  }
-
-  const SIMULTANEOUS_CHUNKS = 100
-  let currentIndex = 0
-  return new Readable({
-    async read() {
-      if (currentIndex >= metadata.chunks.length) {
-        this.push(null)
-        return
-      }
-
-      const endIndex = currentIndex + SIMULTANEOUS_CHUNKS
-      const chunks = metadata.chunks.slice(currentIndex, endIndex)
-
-      try {
-        const chunkedData = await Promise.all(
-          chunks.map((chunk) => NodesUseCases.getChunkData(chunk.cid)),
-        )
-
-        if (chunkedData.some((e) => e === undefined)) {
-          this.destroy(new Error(`Chunk not found: cid=${chunks[0].cid}`))
-          return
-        }
-
-        for (const data of chunkedData) {
-          currentIndex++
-          if (!this.push(data)) {
-            return
-          }
-        }
-      } catch (err) {
-        console.log('Error', err)
-        this.destroy(err instanceof Error ? err : new Error(String(err)))
-      }
-    },
-  })
-}
-
-const retrieveAndReassembleFolderAsZip = async (
-  parent: PizZip,
-  cid: string,
-): Promise<Readable> => {
-  logger.debug('retrieveAndReassembleFolderAsZip called (cid=%s)', cid)
-  const metadata = await ObjectUseCases.getMetadata(cid)
-  if (!metadata) {
-    throw new Error(`Metadata with CID ${cid} not found`)
-  }
-  if (!metadata.name) {
-    throw new Error(`Metadata with CID ${cid} has no name`)
-  }
-
-  if (metadata.type !== 'folder') {
-    throw new Error(`Metadata with CID ${cid} is not a folder`)
-  }
-
-  const folder = parent.folder(metadata.name)
-
-  await Promise.all([
-    ...metadata.children
-      .filter((e) => e.type === 'file')
-      .map(async (e) => {
-        const data = Buffer.concat(
-          await asyncIterableToPromiseOfArray(
-            await downloadService.download(e.cid),
-          ),
-        )
-
-        if (!data) {
-          throw new Error(`Data with CID ${e.cid} not found`)
-        }
-
-        return folder.file(e.name!, data)
-      }),
-    ...metadata.children
-      .filter((e) => e.type === 'folder')
-      .map(async (e) => {
-        return retrieveAndReassembleFolderAsZip(folder, e.cid)
-      }),
-  ])
-
-  return Readable.from(folder.generate({ type: 'nodebuffer' }))
-}
-
-const downloadObjectByUser = async (
-  reader: UserWithOrganization,
-  cid: string,
-  blockingTags?: string[],
-): Promise<FileDownload> => {
-  logger.debug(
-    'downloadObjectByUser requested (cid=%s, userId=%s)',
-    cid,
-    reader.oauthUserId,
-  )
-  const metadata = await ObjectUseCases.getMetadata(cid)
-  if (!metadata) {
-    throw new Error(`Metadata with CID ${cid} not found`)
-  }
-
-  const pendingCredits =
-    await SubscriptionsUseCases.getPendingCreditsByUserAndType(
-      reader,
-      InteractionType.Download,
-    )
-
-  const shouldBlockDownload = await ObjectUseCases.shouldBlockDownload(
-    cid,
-    blockingTags ?? [],
-  )
-  if (shouldBlockDownload) {
-    throw new Error('File download is blocked by blocking tags or is banned')
-  }
-
-  if (pendingCredits < metadata.totalSize) {
-    throw new Error('Not enough download credits')
-  }
-
-  logger.info(
-    'downloadObjectByUser authorized (cid=%s, userId=%s)',
-    cid,
-    reader.oauthUserId,
-  )
-  return {
-    metadata,
-    startDownload: async () => {
-      logger.trace(
-        'downloadObjectByUser starting stream (cid=%s, userId=%s)',
-        cid,
-        reader.oauthUserId,
-      )
-      await SubscriptionsUseCases.registerInteraction(
-        reader,
-        InteractionType.Download,
-        metadata.totalSize,
-      )
-
-      const download = await downloadService.download(cid)
-
-      return download
-    },
-  }
-}
-
-const downloadObjectByAnonymous = async (
-  cid: string,
-  blockingTags?: string[],
-): Promise<FileDownload> => {
-  logger.debug('downloadObjectByAnonymous requested (cid=%s)', cid)
-  const metadata = await ObjectUseCases.getMetadata(cid)
-  if (!metadata) {
-    throw new Error(`Metadata with CID ${cid} not found`)
-  }
-
-  const shouldBlockDownload = await ObjectUseCases.shouldBlockDownload(
-    cid,
-    blockingTags ?? [],
-  )
-  if (shouldBlockDownload) {
-    throw new Error('File download is blocked by blocking tags or is banned')
-  }
-
-  logger.info('downloadObjectByAnonymous authorized (cid=%s)', cid)
-  return {
-    metadata,
-    startDownload: async () => {
-      logger.trace('downloadObjectByAnonymous starting stream (cid=%s)', cid)
-      return downloadService.download(cid)
-    },
-  }
-}
-
 const handleFileUploadFinalization = async (
   user: UserWithOrganization,
   uploadId: string,
@@ -413,9 +228,105 @@ const handleFolderUploadFinalization = async (
   return metadata.dataCid
 }
 
-const retrieveObject = async (
+const getNodesForPartialRetrieval = async (
+  chunks: ChunkInfo[],
+  byteRange: ByteRange,
+): Promise<{
+  nodes: string[]
+  firstNodeFileOffset: number
+}> => {
+  let accumulatedLength = 0
+  const nodeRange: [number | null, number | null] = [null, null]
+  let firstNodeFileOffset: number | undefined
+  let i = 0
+
+  logger.info('getNodesForPartialRetrieval called (byteRange=%s)', byteRange)
+
+  // Searchs for the first node that contains the byte range
+  while (nodeRange[0] === null && i < chunks.length) {
+    const chunk = chunks[i]
+    const chunkSize = Number(chunk.size.valueOf())
+    // [accumulatedLength, accumulatedLength + chunkSize) // is the range of the chunk
+    if (
+      byteRange[0] >= accumulatedLength &&
+      byteRange[0] < accumulatedLength + chunkSize
+    ) {
+      nodeRange[0] = i
+      firstNodeFileOffset = accumulatedLength
+    } else {
+      accumulatedLength += chunkSize
+      i++
+    }
+  }
+
+  // Searchs for the last node that contains the byte range
+  // unless the byte range is the last byte of the file
+  if (byteRange[1]) {
+    while (nodeRange[1] === null && i < chunks.length) {
+      const chunk = chunks[i]
+      const chunkSize = Number(chunk.size.valueOf())
+      if (
+        byteRange[1] >= accumulatedLength &&
+        byteRange[1] < accumulatedLength + chunkSize
+      ) {
+        nodeRange[1] = i
+      }
+      accumulatedLength += chunkSize
+      i++
+    }
+  }
+
+  if (nodeRange[0] == null) {
+    throw new Error('Byte range not found')
+  }
+
+  const nodes = chunks
+    .slice(nodeRange[0], nodeRange[1] === null ? undefined : nodeRange[1] + 1)
+    .map((e) => e.cid)
+
+  return {
+    nodes,
+    firstNodeFileOffset: firstNodeFileOffset ?? 0,
+  }
+}
+
+const retrieveFileByteRange = async (
   metadata: OffchainMetadata,
+  byteRange: ByteRange,
 ): Promise<Readable> => {
+  if (metadata.type === 'folder') {
+    throw new Error('Partial retrieval is not supported in folders')
+  }
+
+  const { nodes, firstNodeFileOffset } = await getNodesForPartialRetrieval(
+    metadata.chunks,
+    byteRange,
+  )
+
+  const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
+  const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+
+  const reader = await composeNodesDataAsFileReadable({
+    fetcher,
+    chunks: nodes,
+    concurrentChunks: 100,
+  })
+
+  const offsetWithinFirstNode = byteRange[0] - firstNodeFileOffset
+  const upperBound = byteRange[1] ?? Number(metadata.totalSize)
+  const length = upperBound - byteRange[0] + 1
+
+  logger.info(
+    'retrieveFileByteRange called (cid=%s, byteRange=%s, offsetWithinFirstNode=%s, length=%s)',
+    metadata.dataCid,
+    byteRange,
+    offsetWithinFirstNode,
+    length,
+  )
+  return sliceReadable(reader, offsetWithinFirstNode, length)
+}
+
+const retrieveFullFile = async (metadata: OffchainMetadata) => {
   logger.debug(
     'retrieveObject called (cid=%s, type=%s)',
     metadata.dataCid,
@@ -423,19 +334,28 @@ const retrieveObject = async (
   )
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
 
-  if (isArchived) {
-    return FileGateway.getFile(metadata.dataCid)
+  const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+
+  return fetcher.fetchFile(metadata.dataCid)
+}
+
+const retrieveObject = async (
+  metadata: OffchainMetadata,
+  options?: DownloadServiceOptions,
+): Promise<Readable> => {
+  const byteRange = options?.byteRange
+
+  const isFullRetrieval = !byteRange
+  if (isFullRetrieval) {
+    return retrieveFullFile(metadata)
   }
 
-  return metadata.type === 'folder'
-    ? await retrieveAndReassembleFolderAsZip(new PizZip(), metadata.dataCid)
-    : retrieveAndReassembleFile(metadata)
+  return retrieveFileByteRange(metadata, byteRange)
 }
 
 export const FilesUseCases = {
   handleFileUploadFinalization,
   handleFolderUploadFinalization,
-  downloadObjectByUser,
-  downloadObjectByAnonymous,
+  getNodesForPartialRetrieval,
   retrieveObject,
 }

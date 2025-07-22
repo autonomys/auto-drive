@@ -4,9 +4,10 @@ import { asyncSafeHandler } from '../../utils/express.js'
 import { AsyncDownloadsUseCases } from '../../useCases/asyncDownloads/index.js'
 import { handleAuth, handleOptionalAuth } from '../../services/auth/express.js'
 import { handleDownloadResponseHeaders } from '../../services/download/express.js'
-import { FilesUseCases } from '../../useCases/objects/files.js'
 import { createLogger } from '../../drivers/logger.js'
 import { downloadService } from '../../services/download/index.js'
+import { getByteRange } from '../../utils/http.js'
+import { DownloadUseCase } from '../../useCases/objects/downloads.js'
 
 const logger = createLogger('http:controllers:download')
 
@@ -65,6 +66,11 @@ downloadController.get(
         ?.toString()
         .split(',')
         .filter((e) => e.trim())
+      const byteRange = getByteRange(req)
+      const downloadOptions = {
+        blockingTags,
+        byteRange,
+      }
 
       const optionalAuthResult = await handleOptionalAuth(req, res)
       if (!optionalAuthResult) {
@@ -76,9 +82,13 @@ downloadController.get(
       const user =
         typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
 
-      const { metadata, startDownload } = !user
-        ? await FilesUseCases.downloadObjectByAnonymous(cid, blockingTags)
-        : await FilesUseCases.downloadObjectByUser(user, cid, blockingTags)
+      const {
+        metadata,
+        startDownload,
+        byteRange: resultingByteRange,
+      } = !user
+        ? await DownloadUseCase.downloadObjectByAnonymous(cid, downloadOptions)
+        : await DownloadUseCase.downloadObjectByUser(user, cid, downloadOptions)
 
       if (!metadata) {
         res.status(404).json({
@@ -87,7 +97,7 @@ downloadController.get(
         return
       }
 
-      handleDownloadResponseHeaders(req, res, metadata)
+      handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
 
       pipeline(await startDownload(), res, (err: Error | null) => {
         if (err) {

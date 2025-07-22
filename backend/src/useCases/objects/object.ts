@@ -23,12 +23,12 @@ import { MetadataEntry } from '../../repositories/objects/metadata.js'
 import { AuthManager } from '../../services/auth/index.js'
 import { publishedObjectsRepository } from '../../repositories/objects/publishedObjects.js'
 import { v4 } from 'uuid'
-import { FilesUseCases } from './files.js'
 import { downloadService } from '../../services/download/index.js'
 import { createLogger } from '../../drivers/logger.js'
 import { EventRouter } from '../../services/eventRouter/index.js'
 import { createTask } from '../../services/eventRouter/tasks.js'
 import { consumeStream } from '../../utils/misc.js'
+import { DownloadUseCase } from './downloads.js'
 
 const logger = createLogger('useCases:objects:object')
 
@@ -437,11 +437,9 @@ const downloadPublishedObject = async (id: string, blockingTags?: string[]) => {
     id,
     publishedObject.cid,
   )
-  return FilesUseCases.downloadObjectByUser(
-    user,
-    publishedObject.cid,
+  return DownloadUseCase.downloadObjectByUser(user, publishedObject.cid, {
     blockingTags,
-  )
+  })
 }
 
 const unpublishObject = async (user: User, cid: string) => {
