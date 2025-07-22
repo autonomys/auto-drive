@@ -51,6 +51,9 @@ uploadController.post(
     )
 
     if (uploadResult.isErr()) {
+      logger.error('Failed to create file upload', {
+        error: uploadResult.error,
+      })
       handleError(uploadResult.error, res)
       return
     }
@@ -69,6 +72,9 @@ uploadController.post(
     const { fileTree, uploadOptions } = req.body
     const safeFileTree = FolderTreeFolderSchema.safeParse(fileTree)
     if (!safeFileTree.success) {
+      logger.error('Invalid file tree', {
+        error: safeFileTree.error,
+      })
       res.status(400).json({
         error: 'Invalid file tree',
       })
@@ -79,6 +85,9 @@ uploadController.post(
       .union([uploadOptionsSchema, z.null()])
       .safeParse(uploadOptions)
     if (!safeUploadOptions.success) {
+      logger.error('Invalid upload options', {
+        error: safeUploadOptions.error,
+      })
       res.status(400).json({
         error: 'Invalid upload options',
       })
@@ -96,6 +105,9 @@ uploadController.post(
     )
 
     if (upload.isErr()) {
+      logger.error('Failed to create folder upload', {
+        error: upload.error,
+      })
       handleError(upload.error, res)
       return
     }
@@ -116,6 +128,9 @@ uploadController.post(
     const { name, mimeType, relativeId, uploadOptions } = req.body
 
     if (typeof name !== 'string') {
+      logger.error('Invalid name', {
+        name,
+      })
       res.status(400).json({
         error: 'Missing or invalid field: name',
       })
@@ -123,6 +138,9 @@ uploadController.post(
     }
 
     if (typeof relativeId !== 'string') {
+      logger.error('Invalid relativeId', {
+        relativeId,
+      })
       res.status(400).json({
         error: 'Missing or invalid field: relativeId',
       })
@@ -133,6 +151,9 @@ uploadController.post(
       .union([uploadOptionsSchema, z.null()])
       .safeParse(uploadOptions)
     if (!safeUploadOptions.success) {
+      logger.error('Invalid upload options', {
+        error: safeUploadOptions.error,
+      })
       res.status(400).json({
         error: 'Invalid upload options',
       })
@@ -152,6 +173,9 @@ uploadController.post(
     )
 
     if (uploadResult.isErr()) {
+      logger.error('Failed to create file in folder', {
+        error: uploadResult.error,
+      })
       handleError(uploadResult.error, res)
       return
     }
@@ -173,6 +197,9 @@ uploadController.post(
     let { index } = req.body
 
     if (!chunk) {
+      logger.error('Missing chunk', {
+        uploadId,
+      })
       res.status(400).json({
         error: 'Missing chunk: expected formData entry in field `file`',
       })
@@ -181,6 +208,9 @@ uploadController.post(
 
     index = parseInt(index)
     if (isNaN(index)) {
+      logger.error('Invalid index', {
+        index,
+      })
       res.status(400).json({
         error: 'Invalid index',
       })
@@ -192,6 +222,9 @@ uploadController.post(
       'Failed to upload chunk',
     )
     if (uploadChunkResult.isErr()) {
+      logger.error('Failed to upload chunk', {
+        error: uploadChunkResult.error,
+      })
       handleError(uploadChunkResult.error, res)
       return
     }
