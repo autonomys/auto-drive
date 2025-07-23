@@ -350,7 +350,7 @@ const tagUpload = async (
   const metadata = getResult.value
   if (metadata?.type === 'folder') {
     const results = await Promise.all(
-      metadata.children.map((child) => tagUpload(child.cid)),
+      metadata.children.map((child) => UploadsUseCases.tagUpload(child.cid)),
     )
     const combinedResult = Result.combine(results)
     if (combinedResult.isErr()) {
@@ -361,7 +361,6 @@ const tagUpload = async (
       )
       return err(combinedResult.error)
     }
-    return ok()
   } else {
     const fileExtension = metadata?.name?.split('.').pop()
     const isFileInsecure =

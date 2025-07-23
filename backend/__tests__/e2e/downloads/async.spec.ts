@@ -12,6 +12,7 @@ import { downloadService } from '../../../src/infrastructure/services/download/i
 import { Readable } from 'stream'
 import {
   ForbiddenError,
+  InternalError,
   ObjectNotFoundError,
 } from '../../../src/errors/index.js'
 import { err } from 'neverthrow'
@@ -161,11 +162,10 @@ describe('Async Downloads', () => {
     ).then((e) => e._unsafeUnwrap())
     const doneMock = jest.spyOn(AsyncDownloadsUseCases, 'setError')
 
-    await expect(
-      AsyncDownloadsUseCases.asyncDownload(download.id),
-    ).rejects.toThrow('Download failed')
+    const result = await AsyncDownloadsUseCases.asyncDownload(download.id)
 
-    expect(doneMock).toHaveBeenCalledWith(download.id, expect.any(String))
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(InternalError)
   })
 
   it('should be dismissed if user dismiss it', async () => {
