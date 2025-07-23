@@ -160,7 +160,6 @@ describe('Async Downloads', () => {
       user,
       cid,
     ).then((e) => e._unsafeUnwrap())
-    const doneMock = jest.spyOn(AsyncDownloadsUseCases, 'setError')
 
     const result = await AsyncDownloadsUseCases.asyncDownload(download.id)
 
