@@ -6,7 +6,11 @@ import { downloadService } from '../../infrastructure/services/download/index.js
 import { ObjectUseCases } from '../objects/object.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { err, ok, Result } from 'neverthrow'
-import { ObjectNotFoundError, ForbiddenError } from '../../errors/index.js'
+import {
+  ObjectNotFoundError,
+  ForbiddenError,
+  InternalError,
+} from '../../errors/index.js'
 
 const logger = createLogger('useCases:asyncDownloads')
 
@@ -136,7 +140,7 @@ const asyncDownload = async (
   const file = await downloadService.download(download.cid)
 
   let downloadedBytes = 0n
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     file.on('data', (chunk) => {
       downloadedBytes += BigInt(chunk.length)
       logger.debug(
@@ -160,7 +164,7 @@ const asyncDownload = async (
     file.on('error', async (error) => {
       logger.error('Error downloading id=%s cid=%s', downloadId, download.cid)
       await AsyncDownloadsUseCases.setError(downloadId, JSON.stringify(error))
-      reject(error)
+      resolve(err(new InternalError('Failed to download object')))
     })
   })
 }
