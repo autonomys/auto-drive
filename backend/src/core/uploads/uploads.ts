@@ -349,7 +349,19 @@ const tagUpload = async (
 
   const metadata = getResult.value
   if (metadata?.type === 'folder') {
-    await Promise.all(metadata.children.map((child) => tagUpload(child.cid)))
+    const results = await Promise.all(
+      metadata.children.map((child) => tagUpload(child.cid)),
+    )
+    const combinedResult = Result.combine(results)
+    if (combinedResult.isErr()) {
+      logger.error(
+        'Failed to tag upload (cid=%s) due to error: %s',
+        cid,
+        combinedResult.error.message,
+      )
+      return err(combinedResult.error)
+    }
+    return ok()
   } else {
     const fileExtension = metadata?.name?.split('.').pop()
     const isFileInsecure =
