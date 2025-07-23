@@ -31,8 +31,8 @@ subscriptionController.get(
       return
     }
 
-    logger.debug('Subscription info', subscriptionInfo.value)
-    res.json(subscriptionInfo)
+    logger.trace('Subscription info', subscriptionInfo.value)
+    res.json(subscriptionInfo.value)
   }),
 )
 
