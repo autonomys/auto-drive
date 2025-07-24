@@ -172,7 +172,7 @@ const asyncDownload = async (
 const dismissDownload = async (
   user: User,
   downloadId: string,
-): Promise<Result<AsyncDownload, ObjectNotFoundError>> => {
+): Promise<Result<AsyncDownload, ObjectNotFoundError | ForbiddenError>> => {
   const download = await asyncDownloadsRepository.getDownloadById(downloadId)
   if (!download) {
     return err(
@@ -184,7 +184,11 @@ const dismissDownload = async (
     download.oauthProvider !== user.oauthProvider ||
     download.oauthUserId !== user.oauthUserId
   ) {
-    throw new Error('User unauthorized')
+    return err(
+      new ForbiddenError(
+        `User ${user.oauthProvider}:${user.oauthUserId} is not the owner of download ${downloadId}`,
+      ),
+    )
   }
 
   const updatedDownload = await AsyncDownloadsUseCases.updateStatus(
