@@ -2,8 +2,8 @@ import { Metadata } from 'next';
 import localFont from 'next/font/local';
 import './globals.css';
 import { ToasterSetup } from 'components/ToasterSetup';
-import dynamic from 'next/dynamic';
 import NextTopLoader from 'nextjs-toploader';
+import ClientWalletProvider from '@/components/common/ClientWalletProvider';
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -75,13 +75,6 @@ export const metadata: Metadata = {
   },
 };
 
-const WalletProvider = dynamic(
-  () => import('@/contexts/web3').then((mod) => mod.Web3Provider),
-  {
-    ssr: false,
-  },
-);
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -93,7 +86,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <NextTopLoader color='#1949D2' height={2} showSpinner={false} />
-        <WalletProvider>{children}</WalletProvider>
+        <ClientWalletProvider>{children}</ClientWalletProvider>
         <ToasterSetup />
       </body>
     </html>

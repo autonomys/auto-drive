@@ -1,9 +1,12 @@
 import { redirect } from 'next/navigation';
+import { NetworkId } from '../../constants/networks';
 
-export default function Page({
-  params: { chain },
+export default async function Page({
+  params,
 }: {
-  params: { chain: string };
+  params: Promise<{ chain: NetworkId }>;
 }) {
+  const { chain } = await params;
+
   redirect(`/${chain}/drive`);
 }

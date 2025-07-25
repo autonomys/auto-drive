@@ -69,7 +69,8 @@ export async function middleware(req: NextRequest) {
   }
 
   if (userInfo.onboarded) {
-    const redirect = cookies().get('redirect');
+    const cookieStore = await cookies();
+    const redirect = cookieStore.get('redirect');
     if (redirect?.value) {
       return NextResponse.redirect(new URL(redirect.value, req.url), {
         headers: {

@@ -12,13 +12,15 @@ export const dynamic = 'force-dynamic';
 export default async function Page({
   params,
 }: {
-  params: { cid: string; chain: string };
+  params: Promise<{ cid: string; chain: NetworkId }>;
 }) {
-  const gqlClient = createGQLClientByNetwork(params.chain as NetworkId);
+  const { cid, chain } = await params;
+
+  const gqlClient = createGQLClientByNetwork(chain);
 
   const { data } = await gqlClient.query<GetMetadataByHeadCidQuery>({
     query: GetMetadataByHeadCidDocument,
-    variables: { headCid: params.cid },
+    variables: { headCid: cid },
   });
 
   const objInfo = mapObjectInformationFromQueryResult(data);

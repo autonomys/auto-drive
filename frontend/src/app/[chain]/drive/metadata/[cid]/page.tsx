@@ -10,10 +10,12 @@ import { createGQLClientByNetwork } from 'services/gql';
 export const dynamic = 'force-dynamic';
 
 export default async function Page({
-  params: { cid, chain },
+  params,
 }: {
-  params: { cid: string; chain: NetworkId };
+  params: Promise<{ cid: string; chain: NetworkId }>;
 }) {
+  const { chain, cid } = await params;
+
   const gqlClient = createGQLClientByNetwork(chain);
 
   const { data } = await gqlClient.query<GetMetadataByHeadCidQuery>({

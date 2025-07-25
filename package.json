@@ -39,5 +39,8 @@
     "ethers": "^6.13.5",
     "keyv": "^5.3.1",
     "siwe": "^3.0.0"
+  },
+  "resolutions": {
+    "@autonomys/auto-design-system": "portal:/Users/carloslostao/Autonomys/auto-sdk/packages/auto-design-system"
   }
 }
