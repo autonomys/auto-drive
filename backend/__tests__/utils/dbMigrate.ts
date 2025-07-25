@@ -1,5 +1,5 @@
 import dbMigrate from 'db-migrate'
-import { Rabbit } from '../../src/drivers/rabbit.js'
+import { Rabbit } from '../../src/infrastructure/drivers/rabbit.js'
 import { jest } from '@jest/globals'
 
 let dbMigrateInstance: ReturnType<typeof dbMigrate.getInstance>

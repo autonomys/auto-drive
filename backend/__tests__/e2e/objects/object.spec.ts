@@ -1,8 +1,7 @@
 import { UserWithOrganization } from '@auto-drive/models'
-import { AuthManager } from '../../../src/services/auth/index.js'
-import { ObjectUseCases } from '../../../src/useCases/index.js'
+import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
+import { ObjectUseCases } from '../../../src/core/index.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { PreconditionError } from '../../utils/error.js'
 import {
   createMockUser,
   mockRabbitPublish,
@@ -11,8 +10,9 @@ import {
 import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
 import { v4 } from 'uuid'
-import { downloadService } from '../../../src/services/download/index.js'
+import { downloadService } from '../../../src/infrastructure/services/download/index.js'
 import { Readable } from 'stream'
+import { ForbiddenError } from '../../../src/errors/index.js'
 
 describe('Object', () => {
   let user: UserWithOrganization
@@ -42,23 +42,27 @@ describe('Object', () => {
 
   it('for not admin user should not be able to share object', async () => {
     const mockUser = createMockUser()
-    await expect(
-      ObjectUseCases.shareObject(mockUser, fileCid, user.publicId!),
-    ).rejects.toThrow(new Error('User is not an admin of this object'))
+    const result = await ObjectUseCases.shareObject(
+      mockUser,
+      fileCid,
+      user.publicId!,
+    )
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
   })
 
   it('User that is not owner should not be able to delete object', async () => {
     const mockUser = createMockUser()
-    await expect(
-      ObjectUseCases.markAsDeleted(mockUser, fileCid),
-    ).rejects.toThrow(new Error('User is not an owner of this object'))
+    const result = await ObjectUseCases.markAsDeleted(mockUser, fileCid)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
   })
 
   it('User that is not owner should not be able to restore object', async () => {
     const mockUser = createMockUser()
-    await expect(
-      ObjectUseCases.restoreObject(mockUser, fileCid),
-    ).rejects.toThrow(new Error('User is not an owner of this object'))
+    const result = await ObjectUseCases.restoreObject(mockUser, fileCid)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
   })
 
   it('isArchived should return false for not archived object', async () => {
@@ -164,8 +168,9 @@ describe('Object', () => {
   })
 
   it('should be able to search object by name', async () => {
-    const metadata = await ObjectUseCases.getMetadata(fileCid)
-    if (!metadata) throw new PreconditionError('Metadata not found')
+    const metadata = await ObjectUseCases.getMetadata(fileCid).then((e) =>
+      e._unsafeUnwrap(),
+    )
 
     const search = await ObjectUseCases.searchMetadataByName(
       metadata.name!,
@@ -179,8 +184,10 @@ describe('Object', () => {
   })
 
   it('should be able to see another user with user scope', async () => {
-    const metadata = await ObjectUseCases.getMetadata(fileCid)
-    if (!metadata) throw new PreconditionError('Metadata not found')
+    const metadata = await ObjectUseCases.getMetadata(fileCid).then((e) =>
+      e._unsafeUnwrap(),
+    )
+
     const mockUser = createMockUser()
     const search = await ObjectUseCases.searchMetadataByName(
       metadata.name!,
@@ -194,8 +201,10 @@ describe('Object', () => {
   })
 
   it('should be able to see another user with global scope', async () => {
-    const metadata = await ObjectUseCases.getMetadata(fileCid)
-    if (!metadata) throw new PreconditionError('Metadata not found')
+    const metadata = await ObjectUseCases.getMetadata(fileCid).then((e) =>
+      e._unsafeUnwrap(),
+    )
+
     const search = await ObjectUseCases.searchMetadataByName(
       metadata.name!,
       5,
@@ -207,8 +216,9 @@ describe('Object', () => {
   })
 
   it('should be able to search object by cid', async () => {
-    const metadata = await ObjectUseCases.getMetadata(fileCid)
-    if (!metadata) throw new PreconditionError('Metadata not found')
+    const metadata = await ObjectUseCases.getMetadata(fileCid).then((e) =>
+      e._unsafeUnwrap(),
+    )
 
     const search = await ObjectUseCases.searchMetadataByCID(fileCid, 5, {
       scope: 'user',
@@ -218,8 +228,9 @@ describe('Object', () => {
   })
 
   it('should be able to search object by name (using common method)', async () => {
-    const metadata = await ObjectUseCases.getMetadata(fileCid)
-    if (!metadata) throw new PreconditionError('Metadata not found')
+    const metadata = await ObjectUseCases.getMetadata(fileCid).then((e) =>
+      e._unsafeUnwrap(),
+    )
 
     const search = await ObjectUseCases.searchByCIDOrName(metadata.name!, 5, {
       scope: 'user',
@@ -234,8 +245,9 @@ describe('Object', () => {
   })
 
   it('should be able to search object by cid (using common method)', async () => {
-    const metadata = await ObjectUseCases.getMetadata(fileCid)
-    if (!metadata) throw new PreconditionError('Metadata not found')
+    const metadata = await ObjectUseCases.getMetadata(fileCid).then((e) =>
+      e._unsafeUnwrap(),
+    )
 
     const search = await ObjectUseCases.searchByCIDOrName(fileCid, 5, {
       scope: 'user',

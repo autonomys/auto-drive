@@ -9,7 +9,7 @@ import {
 import {
   nodesRepository,
   Node,
-} from '../../../src/repositories/objects/nodes.js'
+} from '../../../src/infrastructure/repositories/objects/nodes.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { MetadataType } from '@autonomys/auto-dag-data'
 

@@ -1,12 +1,13 @@
 import { jest } from '@jest/globals'
-import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
+import { ObjectUseCases } from '../../../src/core/objects/object.js'
+import { FilesUseCases } from '../../../src/core/objects/files/index.js'
+import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { ObjectStatus } from '@auto-drive/models'
 import { ByteRange } from '@autonomys/file-caching'
-import { DownloadUseCase } from '../../../src/useCases/objects/downloads.js'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
-import { FilesUseCases } from '../../../src/useCases/index.js'
+import { NotAcceptableError } from '../../../src/errors/index.js'
 
-jest.unstable_mockModule('../../../src/useCases/objects/object.js', () => ({
+jest.unstable_mockModule('../../../src/core/objects/object.js', () => ({
   ObjectUseCases: {
     getObjectInformation: jest.fn(),
   },
@@ -51,9 +52,12 @@ describe('FilesUseCases', () => {
     const result = await DownloadUseCase.downloadObjectByAnonymous(
       metadata.dataCid,
     )
+    if (result.isErr()) {
+      throw result.error
+    }
 
     // Expect not to throw
-    expect(result.metadata).toEqual(metadata)
+    expect(result.value.metadata).toEqual(metadata)
   })
 
   it('should block file upload', async () => {
@@ -86,11 +90,15 @@ describe('FilesUseCases', () => {
     })
     jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(true)
 
-    await expect(
-      DownloadUseCase.downloadObjectByAnonymous(mockFile.cid, {
+    const result = await DownloadUseCase.downloadObjectByAnonymous(
+      mockFile.cid,
+      {
         blockingTags: ['insecure'],
-      }),
-    ).rejects.toThrow(new Error('File is blocked'))
+      },
+    )
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(NotAcceptableError)
   })
 
   describe('getNodesForPartialRetrieval', () => {

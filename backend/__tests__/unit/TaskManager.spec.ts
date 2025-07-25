@@ -1,28 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals'
-import { Task } from '../../src/services/eventRouter/tasks.js'
-import { Rabbit as RabbitT } from '../../src/drivers/rabbit.js'
-import { EventRouter as EventRouterT } from '../../src/services/eventRouter/index.js'
-import { UploadsUseCases as UploadsUseCasesT } from '../../src/useCases/uploads/uploads.js'
-import { OnchainPublisher as OnchainPublisherT } from '../../src/services/upload/onchainPublisher/index.js'
-import type { Logger } from '../../src/drivers/logger.js'
-import { closeDatabase } from '../../src/drivers/pg.js'
+import { Task } from '../../src/infrastructure/eventRouter/tasks.js'
+import { Rabbit as RabbitT } from '../../src/infrastructure/drivers/rabbit.js'
+import { EventRouter as EventRouterT } from '../../src/infrastructure/eventRouter/index.js'
+import { UploadsUseCases as UploadsUseCasesT } from '../../src/core/uploads/uploads.js'
+import { OnchainPublisher as OnchainPublisherT } from '../../src/infrastructure/services/upload/onchainPublisher/index.js'
+import type { Logger } from '../../src/infrastructure/drivers/logger.js'
+import { closeDatabase } from '../../src/infrastructure/drivers/pg.js'
 
 // Mock dependencies before imports
-jest.unstable_mockModule('../../src/drivers/rabbit.js', () => ({
+jest.unstable_mockModule('../../src/infrastructure/drivers/rabbit.js', () => ({
   Rabbit: {
     subscribe: jest.fn(),
     publish: jest.fn(),
   },
 }))
 
-jest.unstable_mockModule('../../src/useCases/objects/nodes.js', () => ({
+jest.unstable_mockModule('../../src/core/objects/index.js', () => ({
   NodesUseCases: {
     processNodeArchived: jest.fn(),
   },
 }))
 
-jest.unstable_mockModule('../../src/useCases/uploads/uploads.js', () => ({
+jest.unstable_mockModule('../../src/core/uploads/uploads.js', () => ({
   UploadsUseCases: {
     processMigration: jest.fn(),
     tagUpload: jest.fn(),
@@ -30,7 +30,7 @@ jest.unstable_mockModule('../../src/useCases/uploads/uploads.js', () => ({
 }))
 
 jest.unstable_mockModule(
-  '../../src/services/upload/onchainPublisher/index.js',
+  '../../src/infrastructure/services/upload/onchainPublisher/index.js',
   () => ({
     OnchainPublisher: {
       publishNodes: jest.fn(),
@@ -38,7 +38,7 @@ jest.unstable_mockModule(
   }),
 )
 
-jest.unstable_mockModule('../../src/drivers/logger.js', () => {
+jest.unstable_mockModule('../../src/infrastructure/drivers/logger.js', () => {
   // Return a mock createLogger that yields a mocked logger instance
   const mockedLogger = {
     error: jest.fn(),
@@ -61,15 +61,20 @@ describe('TaskManager', () => {
   let logger: Logger
   beforeAll(async () => {
     // Import modules after mocks
-    EventRouter = (await import('../../src/services/eventRouter/index.js'))
-      .EventRouter
-    Rabbit = (await import('../../src/drivers/rabbit.js')).Rabbit
-    UploadsUseCases = (await import('../../src/useCases/uploads/uploads.js'))
+    EventRouter = (
+      await import('../../src/infrastructure/eventRouter/index.js')
+    ).EventRouter
+    Rabbit = (await import('../../src/infrastructure/drivers/rabbit.js')).Rabbit
+    UploadsUseCases = (await import('../../src/core/uploads/uploads.js'))
       .UploadsUseCases
     OnchainPublisher = (
-      await import('../../src/services/upload/onchainPublisher/index.js')
+      await import(
+        '../../src/infrastructure/services/upload/onchainPublisher/index.js'
+      )
     ).OnchainPublisher
-    logger = (await import('../../src/drivers/logger.js')).createLogger('test')
+    logger = (
+      await import('../../src/infrastructure/drivers/logger.js')
+    ).createLogger('test')
   })
 
   beforeEach(() => {
