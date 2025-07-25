@@ -135,13 +135,19 @@ const asyncDownload = async (
   }
 
   logger.info('Starting async download id=%s cid=%s', downloadId, download.cid)
-  AsyncDownloadsUseCases.updateProgress(downloadId, BigInt(0))
+  const result = await AsyncDownloadsUseCases.updateProgress(
+    downloadId,
+    BigInt(0),
+  )
+  if (result.isErr()) {
+    return err(result.error)
+  }
 
   const file = await downloadService.download(download.cid)
 
   let downloadedBytes = 0n
   return new Promise((resolve) => {
-    file.on('data', (chunk) => {
+    file.on('data', async (chunk) => {
       downloadedBytes += BigInt(chunk.length)
       logger.debug(
         'Async download id=%s cid=%s, bytes downloaded: %s',
@@ -149,12 +155,18 @@ const asyncDownload = async (
         download.cid,
         downloadedBytes.toString(),
       )
-      AsyncDownloadsUseCases.updateProgress(downloadId, downloadedBytes)
+      const result = await AsyncDownloadsUseCases.updateProgress(
+        downloadId,
+        downloadedBytes,
+      )
+      if (result.isErr()) {
+        resolve(err(result.error))
+      }
     })
 
-    file.on('end', () => {
+    file.on('end', async () => {
       logger.info('Download completed id=%s cid=%s', downloadId, download.cid)
-      AsyncDownloadsUseCases.updateStatus(
+      await AsyncDownloadsUseCases.updateStatus(
         downloadId,
         AsyncDownloadStatus.Completed,
       )
