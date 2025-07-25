@@ -192,9 +192,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-design-system@npm:^1.5.7":
-  version: 1.5.11
-  resolution: "@autonomys/auto-design-system@npm:1.5.11"
+"@autonomys/auto-design-system@portal:/Users/carloslostao/Autonomys/auto-sdk/packages/auto-design-system::locator=auto-drive%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@autonomys/auto-design-system@portal:/Users/carloslostao/Autonomys/auto-sdk/packages/auto-design-system::locator=auto-drive%40workspace%3A."
   dependencies:
     "@autonomys/design-tokens": "npm:^1.5.11"
     "@floating-ui/react": "npm:^0.27.8"
@@ -220,9 +220,8 @@ __metadata:
   peerDependencies:
     react: ^18.2.0
     react-dom: ^18.2.0
-  checksum: 10c0/f55d877b90c18db619d4ba539cf82d848a3c3bf557e92ea0044aa880b205c49f7f9ea218737dad51ea94b32c0d85e5c0cfe82a92bb10f88ed6c5336317987636
   languageName: node
-  linkType: hard
+  linkType: soft
 
 "@autonomys/auto-drive@npm:^1.3.2, @autonomys/auto-drive@npm:^1.5.11, @autonomys/auto-drive@npm:^1.5.7":
   version: 1.5.11
@@ -12845,7 +12844,7 @@ __metadata:
     graphql-tag: "npm:^2.12.6"
     jsonwebtoken: "npm:^9.0.2"
     jszip: "npm:^3.10.1"
-    lucide-react: "npm:^0.439.0"
+    lucide-react: "npm:^0.510.0"
     multiformats: "npm:^13.2.3"
     next: "npm:^14.2.17"
     next-auth: "npm:^4.24.8"
@@ -12861,7 +12860,7 @@ __metadata:
     rxjs: "npm:^7.8.1"
     siwe: "npm:^3.0.0"
     streamsaver: "npm:^2.0.6"
-    tailwind-merge: "npm:^3.0.1"
+    tailwind-merge: "npm:^2.6.0"
     tailwindcss: "npm:^3.4.1"
     typescript: "npm:^5"
     typescript-generic-sdk: "npm:^1.17.12"
@@ -15519,15 +15518,6 @@ __metadata:
   dependencies:
     yallist: "npm:^4.0.0"
   checksum: 10c0/cb53e582785c48187d7a188d3379c181b5ca2a9c78d2bce3e7dee36f32761d1c42983da3fe12b55cb74e1779fa94cdc2e5367c028a9b35317184ede0c07a30a9
-  languageName: node
-  linkType: hard
-
-"lucide-react@npm:^0.439.0":
-  version: 0.439.0
-  resolution: "lucide-react@npm:0.439.0"
-  peerDependencies:
-    react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
-  checksum: 10c0/153c6da6a1bdcc03c47080b00a50a341b7e485ccbb479a742c0fb606355acf93c136630626dad2d57cafe1f5c691dd4f2fcd0f2b7c813e7c9e0e1f065cf62be0
   languageName: node
   linkType: hard
 
@@ -19952,17 +19942,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tailwind-merge@npm:^2.2.1":
+"tailwind-merge@npm:^2.2.1, tailwind-merge@npm:^2.6.0":
   version: 2.6.0
   resolution: "tailwind-merge@npm:2.6.0"
   checksum: 10c0/fc8a5535524de9f4dacf1c16ab298581c7bb757d68a95faaf28942b1c555a619bba9d4c6726fe83986e44973b315410c1a5226e5354c30ba82353bd6d2288fa5
-  languageName: node
-  linkType: hard
-
-"tailwind-merge@npm:^3.0.1":
-  version: 3.3.1
-  resolution: "tailwind-merge@npm:3.3.1"
-  checksum: 10c0/b84c6a78d4669fa12bf5ab8f0cdc4400a3ce0a7c006511af4af4be70bb664a27466dbe13ee9e3b31f50ddf6c51d380e8192ce0ec9effce23ca729d71a9f63818
   languageName: node
   linkType: hard
 
