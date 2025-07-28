@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals'
-import { metadataRepository } from '../../../src/repositories/objects/metadata.js'
+import { metadataRepository } from '../../../src/infrastructure/repositories/objects/metadata.js'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { ownershipRepository } from '../../../src/repositories/index.js'
+import { ownershipRepository } from '../../../src/infrastructure/repositories/objects/ownership.js'
 
 describe('Metadata Repository', () => {
   beforeAll(async () => {
@@ -174,13 +174,14 @@ describe('Metadata Repository', () => {
       name: 'search-cid-file',
     }
 
-    await ownershipRepository.setUserAsAdmin(headCid, 'test-provider', 'test-user-id')
+    await ownershipRepository.setUserAsAdmin(
+      headCid,
+      'test-provider',
+      'test-user-id',
+    )
     await metadataRepository.setMetadata(rootCid, headCid, metadata)
 
-    const results = await metadataRepository.searchMetadataByCID(
-      headCid,
-      10000,
-    )
+    const results = await metadataRepository.searchMetadataByCID(headCid, 10000)
     expect(
       results.find((r) => r.metadata.dataCid === metadata.dataCid),
     ).toBeTruthy()
