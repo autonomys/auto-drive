@@ -18,7 +18,7 @@ export const internalRedirect = async (
   });
 
   if (!response.ok) {
-    res.status(response.status).send(response.body);
+    res.status(response.status).send(await response.bytes());
     return;
   }
 
