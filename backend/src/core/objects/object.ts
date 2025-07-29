@@ -611,10 +611,12 @@ const syncingIsObjectBanned = async (cid: string): Promise<boolean> => {
 const shouldBlockDownload = async (
   cid: string,
   blockingTags: string[] = [],
-): Promise<Result<void, NotAcceptableError | IllegalContentError>> => {
+): Promise<
+  Result<void, NotAcceptableError | IllegalContentError | ObjectNotFoundError>
+> => {
   const metadata = await metadataRepository.getMetadata(cid)
   if (!metadata) {
-    return err(new NotAcceptableError('Object not found'))
+    return err(new ObjectNotFoundError('Object not found'))
   }
 
   if (metadata.tags?.includes(ObjectTag.Banned)) {
