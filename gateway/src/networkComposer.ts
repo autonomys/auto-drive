@@ -3,16 +3,24 @@ import { createAutoDriveApi } from "@autonomys/auto-drive";
 import { removeFalsy, toPromise } from "./utils";
 import { ApiPatternByNetwork, config } from "./config";
 
+const autoDriveApiByNetwork = {
+  [NetworkId.MAINNET]: createAutoDriveApi({
+    network: NetworkId.MAINNET,
+    apiKey: config.autoDriveApiKey,
+  }),
+  [NetworkId.TAURUS]: createAutoDriveApi({
+    network: NetworkId.TAURUS,
+    apiKey: config.autoDriveApiKey,
+  }),
+};
+
 export const getFileNetwork = async (cid: string) => {
   const networks = [NetworkId.MAINNET, NetworkId.TAURUS] as const;
 
   const results = removeFalsy(
     await toPromise(
       networks.map(async (network) => {
-        const api = createAutoDriveApi({
-          network: network,
-          apiKey: config.autoDriveApiKey,
-        });
+        const api = autoDriveApiByNetwork[network];
 
         const object = await api.searchByNameOrCID(cid);
         const fileExists = object.length > 0;
