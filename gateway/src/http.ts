@@ -14,6 +14,7 @@ export const internalRedirect = async (
 
   const response = await fetch(_url, {
     headers,
+    signal: AbortSignal.timeout(30_000),
   });
 
   const whitelistedHeaders = ["content-type"];
