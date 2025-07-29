@@ -64,12 +64,12 @@ const downloadObjectByUser = async (
     return err(new PaymentRequiredError('Not enough download credits'))
   }
 
-  const shouldBlockResult = await ObjectUseCases.shouldBlockDownload(
+  const authResult = await ObjectUseCases.authorizeDownload(
     cid,
     options.blockingTags,
   )
-  if (shouldBlockResult.isErr()) {
-    return err(shouldBlockResult.error)
+  if (authResult.isErr()) {
+    return err(authResult.error)
   }
 
   const resultingByteRange = getCalculatedResultingByteRange(
@@ -129,12 +129,12 @@ const downloadObjectByAnonymous = async (
     )
   }
 
-  const shouldBlockResult = await ObjectUseCases.shouldBlockDownload(
+  const authResult = await ObjectUseCases.authorizeDownload(
     cid,
     options.blockingTags,
   )
-  if (shouldBlockResult.isErr()) {
-    return err(shouldBlockResult.error)
+  if (authResult.isErr()) {
+    return err(authResult.error)
   }
 
   const resultingByteRange = getCalculatedResultingByteRange(

@@ -608,7 +608,7 @@ const syncingIsObjectBanned = async (cid: string): Promise<boolean> => {
   return isBanned
 }
 
-const shouldBlockDownload = async (
+const authorizeDownload = async (
   cid: string,
   blockingTags: string[] = [],
 ): Promise<
@@ -676,7 +676,7 @@ export const ObjectUseCases = {
   banObject,
   reportObject,
   dismissReport,
-  shouldBlockDownload,
+  authorizeDownload,
   getToBeReviewedList,
   syncingIsObjectBanned,
 }
