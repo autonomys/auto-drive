@@ -623,7 +623,10 @@ const authorizeDownload = async (
     return err(new IllegalContentError('Object is banned'))
   }
 
-  const isBanned = await ObjectUseCases.syncingIsObjectBanned(cid)
+  // optimistic check to avoid cycle service dependency blocks
+  const isBanned = await ObjectUseCases.syncingIsObjectBanned(cid).catch(
+    () => false,
+  )
   if (isBanned) {
     return err(new IllegalContentError('Object is banned'))
   }
