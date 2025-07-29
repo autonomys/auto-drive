@@ -565,6 +565,7 @@ const banObject = async (
   }
 
   await ObjectUseCases.addTag(cid, ObjectTag.Banned)
+  await FileGateway.banFile(cid)
 
   logger.info('Object banned successfully (cid=%s)', cid)
 
