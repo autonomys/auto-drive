@@ -17,6 +17,11 @@ export const internalRedirect = async (
     signal: AbortSignal.timeout(30_000),
   });
 
+  if (!response.ok) {
+    res.status(response.status).send(response.body);
+    return;
+  }
+
   const whitelistedHeaders = ["content-type"];
   for (const [key, value] of response.headers.entries()) {
     if (whitelistedHeaders.includes(key.toLowerCase())) {
