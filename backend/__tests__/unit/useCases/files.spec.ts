@@ -32,7 +32,7 @@ describe('FilesUseCases', () => {
     }
 
     jest.spyOn(ObjectUseCases, 'getMetadata').mockResolvedValue(ok(metadata))
-    jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(ok())
+    jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
 
     const result = await DownloadUseCase.downloadObjectByAnonymous(
       metadata.dataCid,
@@ -61,7 +61,7 @@ describe('FilesUseCases', () => {
       }),
     )
     jest
-      .spyOn(ObjectUseCases, 'shouldBlockDownload')
+      .spyOn(ObjectUseCases, 'authorizeDownload')
       .mockResolvedValue(err(new NotAcceptableError('File is blocked')))
 
     const result = await DownloadUseCase.downloadObjectByAnonymous(

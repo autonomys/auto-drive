@@ -370,7 +370,7 @@ describe('Folder Upload', () => {
     })
 
     it('should be able to download folder as zip', async () => {
-      jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(ok())
+      jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
       const downloadResult = await DownloadUseCase.downloadObjectByUser(
         user,
         folderCID,

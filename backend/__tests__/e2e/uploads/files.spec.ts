@@ -254,9 +254,7 @@ files.map((file, index) => {
 
       it('should be able to retrieve the file', async () => {
         handleCacheMock = jest.spyOn(downloadService, 'handleCache')
-        jest
-          .spyOn(ObjectUseCases, 'shouldBlockDownload')
-          .mockResolvedValue(ok())
+        jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
 
         const downloadResult = await DownloadUseCase.downloadObjectByUser(
           user,

@@ -46,7 +46,7 @@ describe('Public URL', () => {
 
   it('should be downloadable by public id and credits should be deducted', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(user)
-    jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(ok())
+    jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
 
     const downloadResult = await ObjectUseCases.downloadPublishedObject(
       publishedObject.id,
