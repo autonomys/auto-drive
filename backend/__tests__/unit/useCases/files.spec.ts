@@ -6,6 +6,7 @@ import { ObjectStatus } from '@auto-drive/models'
 import { ByteRange } from '@autonomys/file-caching'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { NotAcceptableError } from '../../../src/errors/index.js'
+import { err, ok } from 'neverthrow'
 
 jest.unstable_mockModule('../../../src/core/objects/object.js', () => ({
   ObjectUseCases: {
@@ -31,23 +32,8 @@ describe('FilesUseCases', () => {
       chunks: [],
     }
 
-    jest.spyOn(ObjectUseCases, 'getObjectInformation').mockResolvedValue({
-      metadata,
-      tags: [],
-      cid: '<cid>',
-      createdAt: '',
-      status: ObjectStatus.Processing,
-      uploadState: {
-        uploadedNodes: 0,
-        totalNodes: 0,
-        archivedNodes: 0,
-        minimumBlockDepth: 0,
-        maximumBlockDepth: 0,
-      },
-      owners: [],
-      publishedObjectId: null,
-    })
-    jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(false)
+    jest.spyOn(ObjectUseCases, 'getMetadata').mockResolvedValue(ok(metadata))
+    jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(ok())
 
     const result = await DownloadUseCase.downloadObjectByAnonymous(
       metadata.dataCid,
@@ -66,29 +52,18 @@ describe('FilesUseCases', () => {
       type: 'file',
     }
 
-    jest.spyOn(ObjectUseCases, 'getObjectInformation').mockResolvedValue({
-      metadata: {
+    jest.spyOn(ObjectUseCases, 'getMetadata').mockResolvedValue(
+      ok({
         totalSize: 100n,
         type: 'file',
         dataCid: 'test-cid',
         totalChunks: 1,
         chunks: [],
-      },
-      tags: ['insecure'],
-      cid: '',
-      createdAt: '',
-      status: ObjectStatus.Processing,
-      uploadState: {
-        uploadedNodes: 0,
-        totalNodes: 0,
-        archivedNodes: 0,
-        minimumBlockDepth: 0,
-        maximumBlockDepth: 0,
-      },
-      owners: [],
-      publishedObjectId: null,
-    })
-    jest.spyOn(ObjectUseCases, 'shouldBlockDownload').mockResolvedValue(true)
+      }),
+    )
+    jest
+      .spyOn(ObjectUseCases, 'shouldBlockDownload')
+      .mockResolvedValue(err(new NotAcceptableError('File is blocked')))
 
     const result = await DownloadUseCase.downloadObjectByAnonymous(
       mockFile.cid,
