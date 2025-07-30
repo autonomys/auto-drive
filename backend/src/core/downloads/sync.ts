@@ -48,33 +48,28 @@ const downloadObjectByUser = async (
     cid,
     reader.oauthUserId,
   )
-  const information = await ObjectUseCases.getObjectInformation(cid)
-  if (!information) {
-    return err(new ObjectNotFoundError(`Metadata with CID ${cid} not found`))
+  const getResult = await ObjectUseCases.getMetadata(cid)
+  if (getResult.isErr()) {
+    return err(getResult.error)
   }
+  const metadata = getResult.value
 
   const pendingCredits =
     await SubscriptionsUseCases.getPendingCreditsByUserAndType(
       reader,
       InteractionType.Download,
     )
-  const { metadata, tags } = information
 
   if (pendingCredits < metadata.totalSize) {
     return err(new PaymentRequiredError('Not enough download credits'))
   }
 
-  if (
-    options.blockingTags &&
-    tags.some(
-      (tag) => options.blockingTags && options.blockingTags.includes(tag),
-    )
-  ) {
-    return err(
-      new NotAcceptableError(
-        'Tags blocked this file from being downloaded, update blocking tags.',
-      ),
-    )
+  const authResult = await ObjectUseCases.authorizeDownload(
+    cid,
+    options.blockingTags,
+  )
+  if (authResult.isErr()) {
+    return err(authResult.error)
   }
 
   const resultingByteRange = getCalculatedResultingByteRange(
@@ -115,7 +110,7 @@ const downloadObjectByUser = async (
 
 const downloadObjectByAnonymous = async (
   cid: string,
-  { blockingTags, byteRange }: DownloadOptions = {},
+  options: DownloadOptions = {},
 ): Promise<
   Result<
     FileDownload,
@@ -123,37 +118,38 @@ const downloadObjectByAnonymous = async (
   >
 > => {
   logger.debug('downloadObjectByAnonymous requested (cid=%s)', cid)
-  const information = await ObjectUseCases.getObjectInformation(cid)
-  if (!information) {
-    return err(new ObjectNotFoundError(`Metadata with CID ${cid} not found`))
+  const getResult = await ObjectUseCases.getMetadata(cid)
+  if (getResult.isErr()) {
+    return err(getResult.error)
   }
-  const { metadata, tags } = information
+  const metadata = getResult.value
   if (metadata.totalSize > config.params.maxAnonymousDownloadSize) {
     return err(
       new PaymentRequiredError('File too large to be downloaded anonymously.'),
     )
   }
-  if (blockingTags && tags.some((tag) => blockingTags.includes(tag))) {
-    return err(
-      new NotAcceptableError(
-        'Tags blocked this file from being downloaded, update blocking tags.',
-      ),
-    )
+
+  const authResult = await ObjectUseCases.authorizeDownload(
+    cid,
+    options.blockingTags,
+  )
+  if (authResult.isErr()) {
+    return err(authResult.error)
   }
 
   const resultingByteRange = getCalculatedResultingByteRange(
     metadata,
-    byteRange,
+    options.byteRange,
   )
 
   logger.info('downloadObjectByAnonymous authorized (cid=%s)', cid)
 
   return ok({
     metadata,
-    byteRange: byteRange ? resultingByteRange : undefined,
+    byteRange: options.byteRange ? resultingByteRange : undefined,
     startDownload: async () => {
       logger.trace('downloadObjectByAnonymous starting stream (cid=%s)', cid)
-      return downloadService.download(cid, { byteRange })
+      return downloadService.download(cid, options)
     },
   })
 }
