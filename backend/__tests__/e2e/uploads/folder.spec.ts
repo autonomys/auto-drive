@@ -35,6 +35,8 @@ import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
 import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { ObjectNotFoundError } from '../../../src/errors/index.js'
+import { ok } from 'neverthrow'
+import { jest } from '@jest/globals'
 
 describe('Folder Upload', () => {
   let user: UserWithOrganization
@@ -368,6 +370,7 @@ describe('Folder Upload', () => {
     })
 
     it('should be able to download folder as zip', async () => {
+      jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
       const downloadResult = await DownloadUseCase.downloadObjectByUser(
         user,
         folderCID,
