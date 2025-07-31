@@ -80,24 +80,25 @@ export const downloadService = {
     logger.debug(
       `Populating caches for cid=${cid} with options=${JSON.stringify(options)}`,
     )
-    const [stream1, stream2] =
+
+    // If byte range is set, don't cache and return the stream directly
+    if (options?.byteRange) {
+      return stream instanceof Readable ? stream : Readable.from(stream)
+    }
+
+    // Fork the stream once for caching and return
+    const [returnStream, cacheStream] =
       stream instanceof Readable
         ? await forkStream(stream)
         : await forkAsyncIterable(stream)
 
-    // If byte range is not set, cache the file in the memory and file system caches
-    // Do this asynchronously to avoid blocking the stream return
-    if (!options?.byteRange) {
-      forkStream(stream2)
-        .then(async ([stream3, stream4]) => {
-          await memoryDownloadCache.set(cid, stream3)
-          await fsCache.set(cid, { data: stream4, size })
-        })
-        .catch((error) => {
-          logger.warn(error, 'Error caching file with cid %s', cid)
-        })
-    }
-    return stream1
+    // Fork the stream again for caching w/o blocking the main thread
+    forkStream(cacheStream).then(async ([fsCacheStream, memoryCacheStream]) => {
+      await memoryDownloadCache.set(cid, memoryCacheStream)
+      await fsCache.set(cid, { data: fsCacheStream, size })
+    })
+
+    return returnStream
   },
   status: async (cid: string): Promise<DownloadStatus> => {
     const file = memoryDownloadCache.has(cid)
