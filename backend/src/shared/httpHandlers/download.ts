@@ -69,6 +69,8 @@ const setFileResponseHeaders = (
     )
     const upperBound = byteRange[1] ?? Number(metadata.totalSize)
     res.set('Content-Length', (upperBound - byteRange[0] + 1).toString())
+  } else {
+    res.set('Content-Length', metadata.totalSize.toString())
   }
 }
 
