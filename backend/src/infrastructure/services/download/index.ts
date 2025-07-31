@@ -94,8 +94,8 @@ export const downloadService = {
 
     // Fork the stream again for caching w/o blocking the main thread
     forkStream(cacheStream).then(async ([fsCacheStream, memoryCacheStream]) => {
-      await memoryDownloadCache.set(cid, memoryCacheStream)
-      await fsCache.set(cid, { data: fsCacheStream, size })
+      memoryDownloadCache.set(cid, memoryCacheStream)
+      fsCache.set(cid, { data: fsCacheStream, size })
     })
 
     return returnStream
