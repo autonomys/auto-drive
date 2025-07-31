@@ -93,10 +93,14 @@ export const downloadService = {
         : await forkAsyncIterable(stream)
 
     // Fork the stream again for caching w/o blocking the main thread
-    forkStream(cacheStream).then(async ([fsCacheStream, memoryCacheStream]) => {
-      memoryDownloadCache.set(cid, memoryCacheStream)
-      fsCache.set(cid, { data: fsCacheStream, size })
-    })
+    forkStream(cacheStream)
+      .then(async ([fsCacheStream, memoryCacheStream]) => {
+        memoryDownloadCache.set(cid, memoryCacheStream)
+        fsCache.set(cid, { data: fsCacheStream, size })
+      })
+      .catch((error) => {
+        logger.warn(error, 'Error caching file with cid %s', cid)
+      })
 
     return returnStream
   },
