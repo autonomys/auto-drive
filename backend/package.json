@@ -41,6 +41,7 @@
     "debug-level": "^4.1.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "js2xmlparser": "^5.0.0",
     "jsonwebtoken": "^9.0.2",
     "keyv": "^5.3.1",
     "lru-cache": "^11.0.2",

@@ -9,6 +9,7 @@ import { uploadController } from '../controllers/upload.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { docsController } from '../controllers/docs.js'
+import { s3Controller } from '../controllers/s3/http.js'
 
 const logger = createLogger('api:frontend')
 
@@ -47,6 +48,7 @@ const createServer = async () => {
   app.use('/subscriptions', subscriptionController)
   app.use('/uploads', uploadController)
   app.use('/docs', docsController)
+  app.use('/s3', s3Controller)
 
   app.get('/health', (_req, res) => {
     logger.trace('Health check request received')
