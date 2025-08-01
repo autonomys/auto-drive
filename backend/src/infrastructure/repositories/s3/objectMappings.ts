@@ -29,7 +29,7 @@ const createMapping = async (
 
   const result = await db.query<S3KeyMappingDB>({
     text: `
-      INSERT INTO s3.object_mappings 
+      INSERT INTO "S3".object_mappings 
       ("key", cid) 
       VALUES ($1, $2)
       RETURNING *
@@ -45,7 +45,7 @@ const findByKey = async (s3Key: string): Promise<S3KeyMapping | null> => {
 
   const result = await db.query<S3KeyMappingDB>({
     text: `
-      SELECT * FROM s3.object_mappings 
+      SELECT * FROM "S3".object_mappings
       WHERE "key" = $1
     `,
     values: [s3Key],
@@ -66,7 +66,7 @@ const updateMapping = async (
 
   const result = await db.query<S3KeyMappingDB>({
     text: `
-      UPDATE s3.object_mappings 
+      UPDATE "S3".object_mappings 
       SET cid = $2, updated_at = NOW()
       WHERE "key" = $1
       RETURNING *
@@ -86,7 +86,7 @@ const findByCid = async (cid: string): Promise<S3KeyMapping[]> => {
 
   const result = await db.query<S3KeyMappingDB>({
     text: `
-      SELECT * FROM s3.object_mappings 
+      SELECT * FROM "S3".object_mappings 
       WHERE cid = $1
       ORDER BY "key"
     `,
