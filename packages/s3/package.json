@@ -1,0 +1,24 @@
+{
+  "name": "@auto-drive/s3",
+  "version": "1.0.0",
+  "description": "S3 interface DTOs for auto-drive",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "packageManager": "yarn@4.2.2",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prebuild": "yarn clean"
+  },
+  "dependencies": {
+    "@auto-drive/models": "workspace:*",
+    "@autonomys/file-caching": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist"
+  ]
+}

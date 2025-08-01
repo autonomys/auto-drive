@@ -143,6 +143,16 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@auto-drive/s3@workspace:packages/s3":
+  version: 0.0.0-use.local
+  resolution: "@auto-drive/s3@workspace:packages/s3"
+  dependencies:
+    "@auto-drive/models": "workspace:*"
+    "@autonomys/file-caching": "npm:^1.0.0"
+    typescript: "npm:^5.0.0"
+  languageName: unknown
+  linkType: soft
+
 "@auto-files/models@workspace:*, @auto-files/models@workspace:submodules/files-gateway/common/models":
   version: 0.0.0-use.local
   resolution: "@auto-files/models@workspace:submodules/files-gateway/common/models"
@@ -325,6 +335,26 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@autonomys/file-caching@npm:^1.0.0, @autonomys/file-caching@npm:^1.5.12":
+  version: 1.5.12
+  resolution: "@autonomys/file-caching@npm:1.5.12"
+  dependencies:
+    "@autonomys/asynchronous": "npm:^1.5.12"
+    "@autonomys/auto-dag-data": "npm:^1.5.12"
+    "@autonomys/auto-utils": "npm:^1.5.12"
+    "@keyvhq/sqlite": "npm:^2.1.7"
+    cache-manager: "npm:^6.4.2"
+    jszip: "npm:^3.10.1"
+    keyv: "npm:^5.3.2"
+    mime-types: "npm:^3.0.1"
+    process: "npm:^0.11.10"
+    stream: "npm:^0.0.3"
+    uuid: "npm:^11.1.0"
+    zod: "npm:^3.24.2"
+  checksum: 10c0/06af243af9898c4a8042e04e95e95258d158f3c1b7f47c3523b10801cac21e35779c58ed8c6064274997f0658c9146b4667e94f412ee985829cd95547e624ba9
+  languageName: node
+  linkType: hard
+
 "@autonomys/file-caching@npm:^1.4.36, @autonomys/file-caching@npm:^1.5.11":
   version: 1.5.11
   resolution: "@autonomys/file-caching@npm:1.5.11"
@@ -342,26 +372,6 @@ __metadata:
     uuid: "npm:^11.1.0"
     zod: "npm:^3.24.2"
   checksum: 10c0/2cc9524972a08cd4ec1bc4b5ed2d5a85ec131acd209cf6b4236078e0ce14a9a4b3ddfba0c4e8a2cbaf8492a9522ced35c15463e330fceb6563b093bb910321c8
-  languageName: node
-  linkType: hard
-
-"@autonomys/file-caching@npm:^1.5.12":
-  version: 1.5.12
-  resolution: "@autonomys/file-caching@npm:1.5.12"
-  dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.12"
-    "@autonomys/auto-dag-data": "npm:^1.5.12"
-    "@autonomys/auto-utils": "npm:^1.5.12"
-    "@keyvhq/sqlite": "npm:^2.1.7"
-    cache-manager: "npm:^6.4.2"
-    jszip: "npm:^3.10.1"
-    keyv: "npm:^5.3.2"
-    mime-types: "npm:^3.0.1"
-    process: "npm:^0.11.10"
-    stream: "npm:^0.0.3"
-    uuid: "npm:^11.1.0"
-    zod: "npm:^3.24.2"
-  checksum: 10c0/06af243af9898c4a8042e04e95e95258d158f3c1b7f47c3523b10801cac21e35779c58ed8c6064274997f0658c9146b4667e94f412ee985829cd95547e624ba9
   languageName: node
   linkType: hard
 
@@ -9368,6 +9378,7 @@ __metadata:
     interface-blockstore: "npm:^5.3.1"
     interface-store: "npm:^6.0.2"
     jest: "npm:^29.7.0"
+    js2xmlparser: "npm:^5.0.0"
     jsonwebtoken: "npm:^9.0.2"
     keyv: "npm:^5.3.1"
     lru-cache: "npm:^11.0.2"
@@ -15026,6 +15037,15 @@ __metadata:
   dependencies:
     xmlcreate: "npm:^2.0.4"
   checksum: 10c0/b00de9351649d67d225e21734a08f456a4ecb3c29cafcd3bbecb36a8ab61ec841fad7f425bed50e21936fe387f472e49cfe75ce71d0beaacb0475b077c88ed39
+  languageName: node
+  linkType: hard
+
+"js2xmlparser@npm:^5.0.0":
+  version: 5.0.0
+  resolution: "js2xmlparser@npm:5.0.0"
+  dependencies:
+    xmlcreate: "npm:^2.0.4"
+  checksum: 10c0/9fe62331f260ef532a40567f14b75ca6758ea5fb15aeff267d9c5beef7b778ec6a9851097d13714e57807de41576217f6221a15357473d4c2792f9b35aaffedb
   languageName: node
   linkType: hard
 
@@ -20824,6 +20844,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"typescript@npm:^5.0.0":
+  version: 5.9.2
+  resolution: "typescript@npm:5.9.2"
+  bin:
+    tsc: bin/tsc
+    tsserver: bin/tsserver
+  checksum: 10c0/cd635d50f02d6cf98ed42de2f76289701c1ec587a363369255f01ed15aaf22be0813226bff3c53e99d971f9b540e0b3cc7583dbe05faded49b1b0bed2f638a18
+  languageName: node
+  linkType: hard
+
 "typescript@patch:typescript@npm%3A^5#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.6.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.2#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.8.2#optional!builtin<compat/typescript>":
   version: 5.8.3
   resolution: "typescript@patch:typescript@npm%3A5.8.3#optional!builtin<compat/typescript>::version=5.8.3&hash=b45daf"
@@ -20831,6 +20861,16 @@ __metadata:
     tsc: bin/tsc
     tsserver: bin/tsserver
   checksum: 10c0/92ea03509e06598948559ddcdd8a4ae5a7ab475766d5589f1b796f5731b3d631a4c7ddfb86a3bd44d58d10102b132cd4b4994dda9b63e6273c66d77d6a271dbd
+  languageName: node
+  linkType: hard
+
+"typescript@patch:typescript@npm%3A^5.0.0#optional!builtin<compat/typescript>":
+  version: 5.9.2
+  resolution: "typescript@patch:typescript@npm%3A5.9.2#optional!builtin<compat/typescript>::version=5.9.2&hash=b45daf"
+  bin:
+    tsc: bin/tsc
+    tsserver: bin/tsserver
+  checksum: 10c0/66fc07779427a7c3fa97da0cf2e62595eaff2cea4594d45497d294bfa7cb514d164f0b6ce7a5121652cf44c0822af74e29ee579c771c405e002d1f23cf06bfde
   languageName: node
   linkType: hard
 
