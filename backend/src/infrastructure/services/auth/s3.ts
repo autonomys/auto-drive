@@ -8,7 +8,7 @@ export const handleS3Auth = async (req: Request, res: Response) => {
     return
   }
 
-  const apiKey = authHeader.match(/Credential=(.*)\//)?.[1]
+  const apiKey = authHeader.match(/Credential=([A-Za-z0-9]*)\//)?.[1]
   if (!apiKey) {
     res.status(401).json({ error: 'Missing api key or invalid format' })
     return
