@@ -84,6 +84,12 @@ const completeMultipartUpload = async (
 > => {
   const cid = await UploadsUseCases.completeUpload(user, params.UploadId)
 
+  const mapping = await s3ObjectMappingsRepository.createMapping(
+    params.Key,
+    cid,
+  )
+  logger.debug('Created mapping: key=(%s) -> cid=(%s)', mapping, cid)
+
   return ok({
     Location: objectDownloadPath(params.Key),
     Bucket: params.Bucket,
