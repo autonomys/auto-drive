@@ -31,8 +31,10 @@ import { createTask } from '../../infrastructure/eventRouter/tasks.js'
 import { consumeStream } from '../../shared/utils/misc.js'
 import { DownloadUseCase } from '../../core/downloads/index.js'
 import { err, ok, Result } from 'neverthrow'
+import { FileGateway } from '../../infrastructure/services/dsn/fileGateway/index.js'
 import {
   ForbiddenError,
+  IllegalContentError,
   NotAcceptableError,
   ObjectNotFoundError,
   PaymentRequiredError,
@@ -537,6 +539,14 @@ const checkObjectsArchivalStatus = async () => {
 }
 
 const addTag = async (cid: string, tag: string) => {
+  const tags = await metadataRepository.getMetadata(cid)
+  if (!tags) {
+    throw new Error('Object not found')
+  }
+
+  // If the tag is already present, do nothing
+  if (tags.tags?.includes(tag)) return
+
   await metadataRepository.addTag(cid, tag)
 }
 
@@ -555,6 +565,7 @@ const banObject = async (
   }
 
   await ObjectUseCases.addTag(cid, ObjectTag.Banned)
+  await FileGateway.banFile(cid)
 
   logger.info('Object banned successfully (cid=%s)', cid)
 
@@ -588,15 +599,47 @@ const dismissReport = async (
   return ok()
 }
 
-const shouldBlockDownload = async (cid: string, blockingTags: string[]) => {
-  const metadata = await metadataRepository.getMetadata(cid)
-  if (!metadata) {
-    return false
+const syncingIsObjectBanned = async (cid: string): Promise<boolean> => {
+  const isBanned = await FileGateway.isFileBanned(cid)
+  if (isBanned) {
+    await ObjectUseCases.addTag(cid, ObjectTag.Banned)
   }
 
-  const actualBlockingsTags = [...blockingTags, ObjectTag.Banned]
+  return isBanned
+}
 
-  return (metadata.tags ?? []).some((tag) => actualBlockingsTags.includes(tag))
+const authorizeDownload = async (
+  cid: string,
+  blockingTags: string[] = [],
+): Promise<
+  Result<void, NotAcceptableError | IllegalContentError | ObjectNotFoundError>
+> => {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
+    return err(new ObjectNotFoundError('Object not found'))
+  }
+
+  if (metadata.tags?.includes(ObjectTag.Banned)) {
+    return err(new IllegalContentError('Object is banned'))
+  }
+
+  // optimistic check to avoid cycle service dependency blocks
+  const isBanned = await ObjectUseCases.syncingIsObjectBanned(cid).catch(
+    () => false,
+  )
+  if (isBanned) {
+    return err(new IllegalContentError('Object is banned'))
+  }
+
+  if ((metadata.tags ?? []).some((tag) => blockingTags.includes(tag))) {
+    return err(
+      new NotAcceptableError(
+        'Object download has been blocked by the blocking tags',
+      ),
+    )
+  }
+
+  return ok()
 }
 
 const getToBeReviewedList = async (limit: number, offset: number) => {
@@ -636,6 +679,7 @@ export const ObjectUseCases = {
   banObject,
   reportObject,
   dismissReport,
-  shouldBlockDownload,
+  authorizeDownload,
   getToBeReviewedList,
+  syncingIsObjectBanned,
 }

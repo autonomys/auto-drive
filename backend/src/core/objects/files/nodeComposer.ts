@@ -44,7 +44,7 @@ export const composeNodesDataAsFileReadable = async ({
         )
 
         if (chunkedData.some((e) => e === undefined)) {
-          const notFoundChunkIndex = chunksToDownload.findIndex(
+          const notFoundChunkIndex = chunkedData.findIndex(
             (e) => e === undefined,
           )
           this.destroy(

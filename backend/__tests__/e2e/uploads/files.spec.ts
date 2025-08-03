@@ -44,6 +44,7 @@ import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../../src/infrastructure/eventRouter/tasks.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { downloadService } from '../../../src/infrastructure/services/download/index.js'
+import { ok } from 'neverthrow'
 
 const files = [
   {
@@ -253,6 +254,7 @@ files.map((file, index) => {
 
       it('should be able to retrieve the file', async () => {
         handleCacheMock = jest.spyOn(downloadService, 'handleCache')
+        jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
 
         const downloadResult = await DownloadUseCase.downloadObjectByUser(
           user,
