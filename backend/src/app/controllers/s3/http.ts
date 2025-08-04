@@ -67,9 +67,6 @@ s3Controller.use(
     limit: '100mb',
   }),
   asyncSafeHandler(async (req: Request, res: Response) => {
-    logger.info('S3 request query: %s', JSON.stringify(req.query))
-    logger.info('S3 request headers: %s', JSON.stringify(req.headers))
-    logger.info('S3 request params: %s', JSON.stringify(req.params))
     const s3Method = getS3Method(req)
 
     const handler = S3HandlerConfig[s3Method as keyof typeof S3HandlerConfig]
