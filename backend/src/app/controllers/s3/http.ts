@@ -6,6 +6,7 @@ import {
   completeMultipartUploadHandler,
   createMultipartUploadHandler,
   getObjectHandler,
+  headObjectHandler,
   putObjectHandler,
   uploadPartHandler,
 } from './s3.js'
@@ -15,33 +16,16 @@ const s3Controller = Router()
 const logger = createLogger('http:controllers:s3')
 
 type S3HandlerConfig = {
-  [key: string]: {
-    handler: (req: Request, res: Response) => Promise<void>
-    methods: string[]
-  }
+  [key: string]: (req: Request, res: Response) => Promise<void>
 }
 
 const S3HandlerConfig: S3HandlerConfig = {
-  GetObject: {
-    handler: getObjectHandler,
-    methods: ['GET'],
-  },
-  PutObject: {
-    handler: putObjectHandler,
-    methods: ['PUT'],
-  },
-  CreateMultipartUpload: {
-    handler: createMultipartUploadHandler,
-    methods: ['POST'],
-  },
-  UploadPart: {
-    handler: uploadPartHandler,
-    methods: ['PUT', 'POST'],
-  },
-  CompleteMultipartUpload: {
-    handler: completeMultipartUploadHandler,
-    methods: ['POST'],
-  },
+  GetObject: getObjectHandler,
+  HeadObject: headObjectHandler,
+  PutObject: putObjectHandler,
+  CreateMultipartUpload: createMultipartUploadHandler,
+  UploadPart: uploadPartHandler,
+  CompleteMultipartUpload: completeMultipartUploadHandler,
 }
 
 const getS3Method = (req: Request) => {
@@ -55,6 +39,9 @@ const getS3Method = (req: Request) => {
     }
     if ('uploadId' in req.query) {
       return 'CompleteMultipartUpload'
+    }
+    if (req.method === 'HEAD') {
+      return 'HeadObject'
     }
   }
   return s3Method
@@ -75,7 +62,7 @@ s3Controller.use(
       return handleError(new Error('Method not found'), res)
     }
 
-    return handler.handler(req, res)
+    return handler(req, res)
   }),
 )
 
