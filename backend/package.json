@@ -59,6 +59,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.859.0",
     "@faker-js/faker": "^9.2.0",
     "@ninoseki/eslint-plugin-neverthrow": "^0.0.1",
     "@swc/core": "^1.9.2",
