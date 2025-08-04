@@ -159,5 +159,19 @@ describe('AWS S3 - SDK', () => {
         ETag: expect.any(String),
       })
     })
+
+    it('should be able to download the object', async () => {
+      const command = new GetObjectCommand({
+        Bucket,
+        Key: SecondKey,
+      })
+
+      const result = await s3Client.send(command)
+
+      expect(result.Body).toBeDefined()
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        SecondBody,
+      )
+    })
   })
 })
