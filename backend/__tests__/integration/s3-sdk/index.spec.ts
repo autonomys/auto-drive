@@ -31,7 +31,7 @@ describe('AWS S3 - SDK', () => {
     const consoleWarn = global.console.warn
     global.console.warn = () => {}
     // Start the frontend server
-    await import('../../../src/app/apis/frontend.js')
+    await import('../../../src/app/apis/download.js')
     global.console.warn = consoleWarn
     // Wait for the server to start
     await new Promise((resolve) => setTimeout(resolve, 500))
