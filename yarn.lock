@@ -143,7 +143,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@auto-drive/s3@workspace:packages/s3":
+"@auto-drive/s3@workspace:*, @auto-drive/s3@workspace:packages/s3":
   version: 0.0.0-use.local
   resolution: "@auto-drive/s3@workspace:packages/s3"
   dependencies:
@@ -9325,6 +9325,7 @@ __metadata:
   resolution: "backend@workspace:backend"
   dependencies:
     "@auto-drive/models": "workspace:*"
+    "@auto-drive/s3": "workspace:*"
     "@auto-files/rpc-apis": "workspace:*"
     "@autonomys/asynchronous": "npm:^1.5.12"
     "@autonomys/auto-dag-data": "npm:^1.5.12"
