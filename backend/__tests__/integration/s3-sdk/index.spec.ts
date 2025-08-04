@@ -3,6 +3,7 @@ import {
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -65,113 +66,142 @@ describe('AWS S3 - SDK', () => {
     expect(response.status).toBe(204)
   })
 
-  describe('upload an object', () => {
-    const Key = 'test.txt'
-    const Body = Buffer.from('Hello, world!')
+  const Key = 'test.txt'
+  const Body = Buffer.from('Hello, world!')
 
-    it('should upload an object', async () => {
+  it('should upload an object', async () => {
+    const command = new PutObjectCommand({
+      Bucket,
+      Key: 'test.txt',
+      Body,
+    })
+    const result = await s3Client.send(command)
+    expect(result).toMatchObject({
+      ETag: expect.any(String),
+    })
+  })
+
+  it('should download the object', async () => {
+    const command = new GetObjectCommand({
+      Bucket,
+      Key,
+    })
+
+    const result = await s3Client.send(command)
+
+    expect(result.Body).toBeDefined()
+    expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(Body)
+  })
+
+  it('should be able download first 10 bytes of the object', async () => {
+    const command = new GetObjectCommand({
+      Bucket,
+      Key,
+      Range: 'bytes 0-9',
+    })
+
+    const result = await s3Client.send(command)
+
+    expect(result.Body).toBeDefined()
+    expect(result.ContentRange).toBe('bytes 0-9/13')
+    const body = await result.Body!.transformToByteArray()
+    expect(body.length).toBe(10)
+    expect(body).toMatchObject(Body.subarray(0, 10).buffer)
+  })
+
+  const SecondKey = 'test2.txt'
+  const SecondBody = Buffer.from('Hello, world!')
+
+  it('should be able to upload an object with multipart upload', async () => {
+    const createCommand = new CreateMultipartUploadCommand({
+      Bucket,
+      Key: SecondKey,
+    })
+
+    const result = await s3Client.send(createCommand)
+    expect(result).toMatchObject({
+      UploadId: expect.any(String),
+    })
+
+    const uploadId = result.UploadId!
+
+    const uploadPartCommand = new UploadPartCommand({
+      Bucket,
+      Key: SecondKey,
+      UploadId: uploadId,
+      PartNumber: 1,
+      Body: SecondBody,
+    })
+
+    const partUploadResult = await s3Client.send(uploadPartCommand)
+    expect(partUploadResult).toMatchObject({
+      ETag: expect.any(String),
+    })
+
+    const completeCommand = new CompleteMultipartUploadCommand({
+      Bucket,
+      Key: SecondKey,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: [
+          {
+            ETag: partUploadResult.ETag!,
+            PartNumber: 1,
+          },
+        ],
+      },
+    })
+
+    const completeResult = await s3Client.send(completeCommand)
+    expect(completeResult).toMatchObject({
+      ETag: expect.any(String),
+    })
+  })
+
+  it('should be able to download the object', async () => {
+    const command = new GetObjectCommand({
+      Bucket,
+      Key: SecondKey,
+    })
+
+    const result = await s3Client.send(command)
+
+    expect(result.Body).toBeDefined()
+    expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+      SecondBody,
+    )
+  })
+
+  describe('Metadata handled correctly', () => {
+    const ThirdKey = 'test3.txt'
+
+    it('should be able to upload an object with compression and encryption', async () => {
       const command = new PutObjectCommand({
         Bucket,
-        Key: 'test.txt',
+        Key: ThirdKey,
         Body,
-      })
-      const result = await s3Client.send(command)
-      expect(result).toMatchObject({
-        ETag: expect.any(String),
-      })
-    })
-
-    it('should download the object', async () => {
-      const command = new GetObjectCommand({
-        Bucket,
-        Key,
-      })
-
-      const result = await s3Client.send(command)
-
-      expect(result.Body).toBeDefined()
-      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
-        Body,
-      )
-    })
-
-    it('should be able download first 10 bytes of the object', async () => {
-      const command = new GetObjectCommand({
-        Bucket,
-        Key,
-        Range: 'bytes 0-9',
-      })
-
-      const result = await s3Client.send(command)
-
-      expect(result.Body).toBeDefined()
-      expect(result.ContentRange).toBe('bytes 0-9/13')
-      const body = await result.Body!.transformToByteArray()
-      expect(body.length).toBe(10)
-      expect(body).toMatchObject(Body.subarray(0, 10).buffer)
-    })
-
-    const SecondKey = 'test2.txt'
-    const SecondBody = Buffer.from('Hello, world!')
-
-    it('should be able to upload an object with multipart upload', async () => {
-      const createCommand = new CreateMultipartUploadCommand({
-        Bucket,
-        Key: SecondKey,
-      })
-
-      const result = await s3Client.send(createCommand)
-      expect(result).toMatchObject({
-        UploadId: expect.any(String),
-      })
-
-      const uploadId = result.UploadId!
-
-      const uploadPartCommand = new UploadPartCommand({
-        Bucket,
-        Key: SecondKey,
-        UploadId: uploadId,
-        PartNumber: 1,
-        Body: SecondBody,
-      })
-
-      const partUploadResult = await s3Client.send(uploadPartCommand)
-      expect(partUploadResult).toMatchObject({
-        ETag: expect.any(String),
-      })
-
-      const completeCommand = new CompleteMultipartUploadCommand({
-        Bucket,
-        Key: SecondKey,
-        UploadId: uploadId,
-        MultipartUpload: {
-          Parts: [
-            {
-              ETag: partUploadResult.ETag!,
-              PartNumber: 1,
-            },
-          ],
+        Metadata: {
+          compression: 'ZLIB',
+          encryption: 'AES_256_GCM',
         },
       })
 
-      const completeResult = await s3Client.send(completeCommand)
-      expect(completeResult).toMatchObject({
+      const result = await s3Client.send(command)
+      expect(result).toMatchObject({
         ETag: expect.any(String),
       })
     })
 
-    it('should be able to download the object', async () => {
-      const command = new GetObjectCommand({
+    it('should be able to download the object with compression and encryption', async () => {
+      const command = new HeadObjectCommand({
         Bucket,
-        Key: SecondKey,
+        Key: ThirdKey,
       })
 
       const result = await s3Client.send(command)
 
-      expect(result.Body).toBeDefined()
-      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
-        SecondBody,
-      )
+      expect(result.Metadata?.compression).toBe('ZLIB')
+      expect(result.Metadata?.encryption).toBe('AES_256_GCM')
     })
   })
 })

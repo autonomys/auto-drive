@@ -1,3 +1,4 @@
+import { UploadOptions } from "@auto-drive/models";
 import { Readable } from "stream";
 
 export interface PutObjectCommandParams {
@@ -5,6 +6,7 @@ export interface PutObjectCommandParams {
   Key: string;
   Body: Buffer;
   ContentType?: string;
+  UploadOptions?: UploadOptions;
 }
 
 export interface PutObjectCommandResult {

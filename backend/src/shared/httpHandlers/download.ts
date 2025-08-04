@@ -87,3 +87,26 @@ const setFolderResponseHeaders = (
     `filename="${safeName}.zip; ${isExpectedDocument ? 'inline' : 'attachment'}`,
   )
 }
+
+export const handleS3DownloadResponseHeaders = (
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  req: Request,
+  res: Response,
+  metadata: OffchainMetadata,
+) => {
+  const isEncrypted = !!metadata.uploadOptions?.encryption?.algorithm
+  if (isEncrypted) {
+    res.set(
+      'x-amz-meta-encryption',
+      metadata.uploadOptions?.encryption?.algorithm,
+    )
+  }
+
+  const isCompressed = !!metadata.uploadOptions?.compression?.algorithm
+  if (isCompressed) {
+    res.set(
+      'x-amz-meta-compression',
+      metadata.uploadOptions?.compression?.algorithm,
+    )
+  }
+}

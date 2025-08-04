@@ -44,7 +44,7 @@ const createMultipartUpload = async (
     user,
     name,
     params.ContentType ?? null,
-    // TODO: add upload options
+    params.UploadOptions ?? null,
     null,
     null,
   )
@@ -108,6 +108,7 @@ const putObject = async (
     user,
     name,
     params.ContentType ?? null,
+    params.UploadOptions ?? null,
     null,
     null,
   )
