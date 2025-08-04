@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@auto-drive/models": "workspace:*",
+    "@auto-drive/s3": "workspace:*",
     "@auto-files/rpc-apis": "workspace:*",
     "@autonomys/asynchronous": "^1.5.12",
     "@autonomys/auto-dag-data": "^1.5.12",
