@@ -1,5 +1,6 @@
 import { Response, Request } from "express";
 import { Readable } from "stream";
+import { config } from "./config";
 
 export const internalRedirect = async (
   req: Request,
@@ -14,7 +15,13 @@ export const internalRedirect = async (
 
   const response = await fetch(_url, {
     headers,
+    signal: AbortSignal.timeout(config.downloadTimeout),
   });
+
+  if (!response.ok) {
+    res.status(response.status).send(await response.bytes());
+    return;
+  }
 
   const whitelistedHeaders = ["content-type"];
   for (const [key, value] of response.headers.entries()) {

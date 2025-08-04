@@ -43,3 +43,4 @@ database.sqlite
 .cursorrules
 hosts.ini
 environment.yaml
+*.debug.ts

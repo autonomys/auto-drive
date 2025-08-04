@@ -10,4 +10,5 @@ export const ApiPatternByNetwork: Partial<Record<NetworkId, string>> = {
 export const config = {
   port: env("GATEWAY_PORT"),
   autoDriveApiKey: env("AUTO_DRIVE_API_KEY"),
+  downloadTimeout: Number(env("DOWNLOAD_TIMEOUT", "30000")),
 };
