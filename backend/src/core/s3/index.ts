@@ -88,7 +88,7 @@ const completeMultipartUpload = async (
     params.Key,
     cid,
   )
-  logger.debug('Created mapping: key=(%s) -> cid=(%s)', mapping, cid)
+  logger.debug('Created mapping: key=(%s) -> cid=(%s)', mapping.key, cid)
 
   return ok({
     Location: objectDownloadPath(params.Key),
@@ -127,7 +127,7 @@ const putObject = async (
     params.Key,
     cid,
   )
-  logger.debug('Created mapping: key=(%s) -> cid=(%s)', mapping, cid)
+  logger.debug('Created mapping: key=(%s) -> cid=(%s)', mapping.key, cid)
 
   return ok({ ETag: cid })
 }
