@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@auto-drive/models": "workspace:*",
+    "@auto-drive/s3": "workspace:*",
     "@auto-files/rpc-apis": "workspace:*",
     "@autonomys/asynchronous": "^1.5.12",
     "@autonomys/auto-dag-data": "^1.5.12",
@@ -41,6 +42,7 @@
     "debug-level": "^4.1.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "js2xmlparser": "^5.0.0",
     "jsonwebtoken": "^9.0.2",
     "keyv": "^5.3.1",
     "lru-cache": "^11.0.2",
@@ -57,6 +59,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.859.0",
     "@faker-js/faker": "^9.2.0",
     "@ninoseki/eslint-plugin-neverthrow": "^0.0.1",
     "@swc/core": "^1.9.2",

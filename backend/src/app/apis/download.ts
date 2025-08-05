@@ -6,6 +6,7 @@ import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { downloadController } from '../controllers/download.js'
+import { s3Controller } from '../controllers/s3/http.js'
 
 const logger = createLogger('api:download')
 
@@ -49,6 +50,8 @@ const createServer = async () => {
   }
 
   app.use('/downloads', downloadController)
+  app.use('/s3', s3Controller)
+
   logger.debug('Download controller mounted at /downloads')
 
   app.get('/health', (_req: Request, res: Response) => {

@@ -27,6 +27,7 @@
     "auth": "yarn workspace auth",
     "gateway": "yarn workspace gateway",
     "models": "yarn workspace @auto-drive/models",
+    "s3": "yarn workspace @auto-drive/s3",
     "auto-files-gateway": "yarn workspace auto-files-gateway"
   },
   "packageManager": "yarn@4.2.2",
