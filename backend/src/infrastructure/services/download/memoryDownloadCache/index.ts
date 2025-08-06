@@ -22,8 +22,13 @@ const get = (cid: string, options?: DownloadServiceOptions) => {
     return null
   }
 
+  const byteRange = options?.byteRange ?? [0, value.length - 1]
+
   return bufferToAsyncIterable(
-    value.subarray(options?.byteRange?.[0], options?.byteRange?.[1]),
+    value.subarray(
+      byteRange[0],
+      byteRange[1] !== undefined ? byteRange[1] + 1 : undefined,
+    ),
   )
 }
 
