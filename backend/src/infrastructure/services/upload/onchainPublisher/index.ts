@@ -6,6 +6,7 @@ import { compactAddLength } from '@polkadot/util'
 import { nodesRepository } from '../../../repositories/objects/nodes.js'
 import { EventRouter } from '../../../eventRouter/index.js'
 import { MAX_RETRIES } from '../../../eventRouter/tasks.js'
+import { config } from '../../../../config.js'
 
 const logger = createLogger('upload:onchainPublisher')
 
@@ -74,7 +75,10 @@ const republishNodes = safeCallback(
         },
       })
     } else {
-      logger.error('Failed to publish nodes after %d retries', retriesLeft)
+      logger.error(
+        'Failed to publish nodes after %d retries',
+        config.services.taskManager.maxRetries,
+      )
       logger.info('Publishing failed task to event router')
       logger.debug('Nodes: %s', nodes.join(', '))
       EventRouter.publishFailedTask({
