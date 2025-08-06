@@ -1,4 +1,5 @@
 import { OffchainMetadata } from "@autonomys/auto-dag-data";
+import { ByteRange } from "@autonomys/file-caching";
 import { Readable } from "stream";
 
 export interface ObjectInformation {
@@ -112,4 +113,32 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
 export interface FileDownload {
   metadata: OffchainMetadata;
   startDownload: () => Promise<Readable> | Readable;
+  byteRange?: ByteRange;
 }
+
+export enum ObjectTag {
+  Banned = "banned",
+  ToBeReviewed = "reported",
+  ReportDismissed = "report-dismissed",
+  Insecure = "insecure",
+}
+
+export const isBanned = (tags: string[]) => {
+  return tags.includes(ObjectTag.Banned);
+};
+
+export const isReportDismissed = (tags: string[]) => {
+  return tags.includes(ObjectTag.ReportDismissed);
+};
+
+export const isToBeReviewed = (tags: string[]) => {
+  return (
+    tags.includes(ObjectTag.ToBeReviewed) &&
+    !isBanned(tags) &&
+    !isReportDismissed(tags)
+  );
+};
+
+export const isInsecure = (tags: string[]) => {
+  return tags.includes(ObjectTag.Insecure);
+};

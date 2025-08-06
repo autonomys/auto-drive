@@ -1,10 +1,10 @@
 import { InteractionType, UserWithOrganization } from '@auto-drive/models'
-import { PublishedObject } from '../../../src/repositories/objects/publishedObjects.js'
-import { AuthManager } from '../../../src/services/auth/index.js'
+import { PublishedObject } from '../../../src/infrastructure/repositories/objects/publishedObjects.js'
+import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import {
   ObjectUseCases,
   SubscriptionsUseCases,
-} from '../../../src/useCases/index.js'
+} from '../../../src/core/index.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
@@ -14,6 +14,7 @@ import {
 } from '../../utils/mocks.js'
 import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
+import { ok } from 'neverthrow'
 
 describe('Public URL', () => {
   let user: UserWithOrganization
@@ -45,9 +46,15 @@ describe('Public URL', () => {
 
   it('should be downloadable by public id and credits should be deducted', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(user)
+    jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
 
-    const { metadata, startDownload } =
-      await ObjectUseCases.downloadPublishedObject(publishedObject.id)
+    const downloadResult = await ObjectUseCases.downloadPublishedObject(
+      publishedObject.id,
+    )
+    if (downloadResult.isErr()) {
+      throw downloadResult.error
+    }
+    const { metadata, startDownload } = downloadResult.value
 
     expect(metadata).toMatchObject({
       type: 'file',

@@ -193,6 +193,64 @@ export const createApiService = ({
 
     return apiDrive.publishObject(cid);
   },
+
+  reportFile: async (headCid: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/objects/${headCid}/report`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to report file: ${response.statusText}`);
+    }
+  },
+  banFile: async (headCid: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/objects/${headCid}/ban`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to ban file: ${response.statusText}`);
+    }
+  },
+  dismissReport: async (headCid: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/objects/${headCid}/dismiss-report`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to dismiss report: ${response.statusText}`);
+    }
+  },
   // Download
   downloadObject: async (
     cid: string,

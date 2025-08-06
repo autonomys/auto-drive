@@ -1,5 +1,5 @@
 import { v4 } from 'uuid'
-import { NodesUseCases, ObjectUseCases } from '../../../src/useCases/index.js'
+import { NodesUseCases, ObjectUseCases } from '../../../src/core/index.js'
 import {
   blake3HashFromCid,
   cidOfNode,
@@ -16,7 +16,7 @@ import {
   metadataRepository,
   Node,
   nodesRepository,
-} from '../../../src/repositories/index.js'
+} from '../../../src/infrastructure/repositories/index.js'
 import {
   ObjectMapping,
   ObjectMappingListEntry,
@@ -24,9 +24,9 @@ import {
 } from '@auto-drive/models'
 import { mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
 import { jest } from '@jest/globals'
-import { EventRouter } from '../../../src/services/eventRouter/index.js'
-import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
-import { MAX_RETRIES } from '../../../src/services/eventRouter/tasks.js'
+import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
+import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
+import { MAX_RETRIES } from '../../../src/infrastructure/eventRouter/tasks.js'
 
 describe('Nodes', () => {
   const id = v4()

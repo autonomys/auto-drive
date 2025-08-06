@@ -1,13 +1,13 @@
 import { InteractionType, UserWithOrganization } from '@auto-drive/models'
 import { PreconditionError } from '../../utils/error.js'
-import { getDatabase } from '../../../src/drivers/pg.js'
+import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import {
   createMockUser,
   mockRabbitPublish,
   unmockMethods,
 } from '../../utils/mocks.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { SubscriptionsUseCases } from '../../../src/useCases/index.js'
+import { SubscriptionsUseCases } from '../../../src/core/users/subscriptions.js'
 
 describe('CreditsUseCases', () => {
   let mockUser: UserWithOrganization

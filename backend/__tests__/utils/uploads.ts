@@ -1,5 +1,5 @@
 import { UserWithOrganization } from '@auto-drive/models'
-import { UploadsUseCases } from '../../src/useCases/uploads/uploads.js'
+import { UploadsUseCases } from '../../src/core/uploads/uploads.js'
 import { PreconditionError } from './error.js'
 
 export const uploadFile = async (

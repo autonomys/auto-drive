@@ -5,6 +5,8 @@ backend: common
 	yarn backend build
 models:
 	yarn models build
+s3:
+	yarn s3 build
 frontend:
 	yarn frontend build
 gateway: install
@@ -21,7 +23,7 @@ submodules:
 	yarn auto-files-gateway install
 	yarn auto-files-gateway build
 
-common: install submodules models
+common: install submodules models s3
 
 test: install
 	yarn backend test
@@ -32,4 +34,4 @@ lint: install
 	yarn auth lint
 	yarn frontend lint
 
-all: submodules models frontend gateway backend
+all: submodules models s3 frontend gateway backend

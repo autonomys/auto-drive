@@ -14,12 +14,8 @@ import {
   UploadType,
   UserWithOrganization,
 } from '@auto-drive/models'
-import {
-  FilesUseCases,
-  NodesUseCases,
-  ObjectUseCases,
-} from '../../../src/useCases/index.js'
-import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
+import { NodesUseCases, ObjectUseCases } from '../../../src/core/index.js'
+import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { PreconditionError } from '../../utils/error.js'
 import {
@@ -28,15 +24,19 @@ import {
   unmockMethods,
 } from '../../utils/mocks.js'
 import { MemoryBlockstore } from 'blockstore-core'
-import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
+import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
 import {
   metadataRepository,
   nodesRepository,
-} from '../../../src/repositories/index.js'
+} from '../../../src/infrastructure/repositories/index.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import PizZip from 'pizzip'
-import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
-import { Rabbit } from '../../../src/drivers/rabbit.js'
+import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
+import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
+import { DownloadUseCase } from '../../../src/core/downloads/index.js'
+import { ObjectNotFoundError } from '../../../src/errors/index.js'
+import { ok } from 'neverthrow'
+import { jest } from '@jest/globals'
 
 describe('Folder Upload', () => {
   let user: UserWithOrganization
@@ -171,7 +171,8 @@ describe('Folder Upload', () => {
     it('should not be generated any metadata', async () => {
       if (!subfileCID) throw new PreconditionError('Subfile CID not defined')
       const metadata = await ObjectUseCases.getMetadata(subfileCID)
-      expect(metadata).toBeUndefined()
+      expect(metadata.isErr()).toBe(true)
+      expect(metadata._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
   })
 
@@ -209,7 +210,9 @@ describe('Folder Upload', () => {
 
     it('should be generated metadata', async () => {
       if (!folderCID) throw new PreconditionError('Folder CID not defined')
-      const metadata = await ObjectUseCases.getMetadata(folderCID)
+      const metadata = await ObjectUseCases.getMetadata(folderCID).then((e) =>
+        e._unsafeUnwrap(),
+      )
       expect(metadata).toMatchObject({
         dataCid: folderCID,
         type: 'folder',
@@ -233,7 +236,9 @@ describe('Folder Upload', () => {
 
     it('should be able to get file metadata', async () => {
       if (!subfileCID) throw new PreconditionError('Subfile CID not defined')
-      const metadata = await ObjectUseCases.getMetadata(subfileCID)
+      const metadata = await ObjectUseCases.getMetadata(subfileCID).then((e) =>
+        e._unsafeUnwrap(),
+      )
       expect(metadata).toMatchObject({
         dataCid: subfileCID,
         type: 'file',
@@ -365,8 +370,15 @@ describe('Folder Upload', () => {
     })
 
     it('should be able to download folder as zip', async () => {
-      const zip = await FilesUseCases.downloadObjectByUser(user, folderCID)
-      const dataStream = await zip.startDownload()
+      jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
+      const downloadResult = await DownloadUseCase.downloadObjectByUser(
+        user,
+        folderCID,
+      )
+      if (downloadResult.isErr()) {
+        throw downloadResult.error
+      }
+      const dataStream = await downloadResult.value.startDownload()
       const zipArray = await asyncIterableToPromiseOfArray(dataStream)
       const zipBuffer = Buffer.concat(zipArray)
       expect(zipBuffer).toBeDefined()

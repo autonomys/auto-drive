@@ -19,7 +19,10 @@ app.get("/file/:cid", async (req, res) => {
 
   res.setHeader("X-Network", result.network);
 
-  internalRedirect(req, res, result.url);
+  internalRedirect(req, res, result.url).catch((error) => {
+    console.error(error);
+    res.status(500).send("Internal server error");
+  });
 });
 
 app.get("/folder/:cid", async (req, res) => {
@@ -36,7 +39,10 @@ app.get("/folder/:cid", async (req, res) => {
 
   res.setHeader("X-Network", result.network);
 
-  internalRedirect(req, res, result.url);
+  internalRedirect(req, res, result.url).catch((error) => {
+    console.error(error);
+    res.status(500).send("Internal server error");
+  });
 });
 
 app.get("/", (req, res) => {

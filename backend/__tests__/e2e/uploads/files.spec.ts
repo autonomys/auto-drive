@@ -4,7 +4,7 @@ import {
   mockRabbitPublish,
   unmockMethods,
 } from '../../utils/mocks.js'
-import { UploadsUseCases } from '../../../src/useCases/uploads/uploads.js'
+import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import {
   UserWithOrganization,
   Upload,
@@ -15,7 +15,7 @@ import {
   TransactionStatus,
   ObjectStatus,
 } from '@auto-drive/models'
-import { blockstoreRepository } from '../../../src/repositories/uploads/index.js'
+import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/index.js'
 import { MemoryBlockstore } from 'blockstore-core'
 import {
   processFileToIPLDFormat,
@@ -25,32 +25,32 @@ import {
   blake3HashFromCid,
   stringToCid,
 } from '@autonomys/auto-dag-data'
-import { ObjectUseCases } from '../../../src/useCases/objects/object.js'
-import { uploadsRepository } from '../../../src/repositories/uploads/uploads.js'
+import { ObjectUseCases } from '../../../src/core/objects/object.js'
+import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import {
-  FilesUseCases,
   NodesUseCases,
   SubscriptionsUseCases,
-} from '../../../src/useCases/index.js'
+} from '../../../src/core/index.js'
 import {
   interactionsRepository,
   metadataRepository,
   nodesRepository,
-} from '../../../src/repositories/index.js'
-import { memoryDownloadCache } from '../../../src/services/download/memoryDownloadCache/index.js'
+} from '../../../src/infrastructure/repositories/index.js'
 import { jest } from '@jest/globals'
-import { downloadService } from '../../../src/services/download/index.js'
-import { BlockstoreUseCases } from '../../../src/useCases/uploads/blockstore.js'
-import { Rabbit } from '../../../src/drivers/rabbit.js'
-import { EventRouter } from '../../../src/services/eventRouter/index.js'
-import { MAX_RETRIES } from '../../../src/services/eventRouter/tasks.js'
+import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
+import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
+import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
+import { MAX_RETRIES } from '../../../src/infrastructure/eventRouter/tasks.js'
+import { DownloadUseCase } from '../../../src/core/downloads/index.js'
+import { downloadService } from '../../../src/infrastructure/services/download/index.js'
+import { ok } from 'neverthrow'
 
 const files = [
   {
     filename: 'test.pdf',
     mimeType: 'application/pdf',
-    rndBuffer: Buffer.alloc(1024 ** 2).fill(0),
+    rndBuffer: Buffer.alloc(64000).fill(0),
   },
   {
     filename: 'test.txt',
@@ -182,7 +182,9 @@ files.map((file, index) => {
       })
 
       it('should have generated expected metadata', async () => {
-        const metadata = await ObjectUseCases.getMetadata(cid)
+        const metadata = await ObjectUseCases.getMetadata(cid).then((e) =>
+          e._unsafeUnwrap(),
+        )
 
         expect(metadata).toMatchObject({
           type: 'file',
@@ -246,15 +248,33 @@ files.map((file, index) => {
     })
 
     describe('Downloading the file', () => {
+      let handleCacheMock: jest.SpiedFunction<
+        typeof downloadService.handleCache
+      >
+
       it('should be able to retrieve the file', async () => {
-        const { startDownload } = await FilesUseCases.downloadObjectByUser(
+        handleCacheMock = jest.spyOn(downloadService, 'handleCache')
+        jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
+
+        const downloadResult = await DownloadUseCase.downloadObjectByUser(
           user,
           cid,
         )
+        if (downloadResult.isErr()) {
+          throw downloadResult.error
+        }
+        const { startDownload } = downloadResult.value
         const file = await startDownload()
         const fileArray = await asyncIterableToPromiseOfArray(file)
         const fileBuffer = Buffer.concat(fileArray)
         expect(fileBuffer).toEqual(rndBuffer)
+
+        expect(handleCacheMock).toHaveBeenCalledWith(
+          cid,
+          expect.any(Object),
+          expect.any(Object),
+          expect.any(BigInt),
+        )
       })
 
       it('should have been added an interaction', async () => {
@@ -268,26 +288,6 @@ files.map((file, index) => {
           )
 
         expect(interactions).toHaveLength(1)
-      })
-
-      it('download cache should be updated', async () => {
-        // Wait for the async context to finish
-        await new Promise((resolve) => setTimeout(resolve, 300))
-        const asyncFromDatabase = await downloadService.fsCache.get(cid)
-        expect(asyncFromDatabase).not.toBeNull()
-        const fileArrayFromDatabase = await asyncIterableToPromiseOfArray(
-          asyncFromDatabase!.data,
-        )
-        const fileBufferFromDatabase = Buffer.concat(fileArrayFromDatabase)
-        expect(fileBufferFromDatabase).toEqual(rndBuffer)
-
-        const asyncFromMemory = memoryDownloadCache.get(cid)
-        expect(asyncFromMemory).not.toBeNull()
-        const fileArrayFromMemory = await asyncIterableToPromiseOfArray(
-          asyncFromMemory!,
-        )
-        const fileBufferFromMemory = Buffer.concat(fileArrayFromMemory)
-        expect(fileBufferFromMemory).toEqual(rndBuffer)
       })
     })
 
@@ -358,7 +358,7 @@ files.map((file, index) => {
         )
       })
 
-      it('metadata should be updated as archived', async () => {
+      it('metadata should be updated as archived and cache should be updated', async () => {
         const processArchivalSpy = jest
           .spyOn(EventRouter, 'publish')
           .mockReturnValue()
@@ -367,9 +367,6 @@ files.map((file, index) => {
 
         const metadata = await metadataRepository.getMetadata(cid)
         expect(metadata).not.toBeNull()
-
-        expect(memoryDownloadCache.has(cid)).toBe(true)
-        expect(downloadService.fsCache.get(cid)).not.toBeNull()
 
         expect(processArchivalSpy).toHaveBeenCalledWith({
           id: 'object-archived',
