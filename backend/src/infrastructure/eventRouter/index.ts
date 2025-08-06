@@ -1,6 +1,12 @@
 import { Rabbit } from '../drivers/rabbit.js'
-import { processDownloadTask } from './processors/download.js'
-import { processFrontendTask } from './processors/frontend.js'
+import {
+  downloadErrorPublishedQueue,
+  processDownloadTask,
+} from './processors/download.js'
+import {
+  frontendErrorPublishedQueue,
+  processFrontendTask,
+} from './processors/frontend.js'
 import { Task } from './tasks.js'
 
 export const EventRouter = {
@@ -19,6 +25,9 @@ export const EventRouter = {
       Rabbit.publish(getTargetQueueByTask(tasks), tasks)
     }
   },
+  publishFailedTask: (task: Task) => {
+    Rabbit.publish(getFailedTaskQueue(task), task)
+  },
 }
 
 const getTargetQueueByTask = (task: Task) => {
@@ -28,5 +37,16 @@ const getTargetQueueByTask = (task: Task) => {
       return 'download-manager'
     default:
       return 'task-manager'
+  }
+}
+
+const getFailedTaskQueue = (task: Task) => {
+  switch (getTargetQueueByTask(task)) {
+    case 'task-manager':
+      return frontendErrorPublishedQueue
+    case 'download-manager':
+      return downloadErrorPublishedQueue
+    default:
+      throw new Error(`Unknown task: ${task.id}`)
   }
 }

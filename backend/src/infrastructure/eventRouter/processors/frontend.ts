@@ -4,6 +4,8 @@ import { UploadsUseCases } from '../../../core/uploads/uploads.js'
 import { Task } from '../tasks.js'
 import { createHandlerWithRetries } from '../utils.js'
 
+export const frontendErrorPublishedQueue = 'frontend-errors'
+
 export const processFrontendTask = createHandlerWithRetries(
   ({ id, params, retriesLeft }: Task) => {
     if (id === 'migrate-upload-nodes') {
@@ -19,6 +21,6 @@ export const processFrontendTask = createHandlerWithRetries(
     }
   },
   {
-    errorPublishQueue: 'frontend-errors',
+    errorPublishQueue: frontendErrorPublishedQueue,
   },
 )
