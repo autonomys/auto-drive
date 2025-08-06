@@ -1,5 +1,8 @@
 import { Rabbit } from '../drivers/rabbit.js'
-import { processDownloadTask } from './processors/download.js'
+import {
+  downloadErrorPublishedQueue,
+  processDownloadTask,
+} from './processors/download.js'
 import {
   frontendErrorPublishedQueue,
   processFrontendTask,
