@@ -1,6 +1,9 @@
 import { Rabbit } from '../drivers/rabbit.js'
 import { processDownloadTask } from './processors/download.js'
-import { processFrontendTask } from './processors/frontend.js'
+import {
+  frontendErrorPublishedQueue,
+  processFrontendTask,
+} from './processors/frontend.js'
 import { Task } from './tasks.js'
 
 export const EventRouter = {
