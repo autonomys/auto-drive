@@ -34,7 +34,6 @@ const set = async (
   const buffer = await asyncIterableToBuffer(value)
 
   if (buffer.length > 0) {
-    console.log('setting buffer', cid, buffer.toString())
     cache.set(cid, buffer, {
       sizeCalculation: (value) => value.length,
     })
