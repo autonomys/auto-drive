@@ -22,15 +22,8 @@ const get = (cid: string, options?: DownloadServiceOptions) => {
     return null
   }
 
-  const byteRange = options?.byteRange ?? [0, value.length - 1]
-
   return bufferToAsyncIterable(
-    Buffer.from(
-      value.buffer.slice(
-        byteRange[0],
-        byteRange[1] !== undefined ? byteRange[1] + 1 : undefined,
-      ),
-    ),
+    value.subarray(options?.byteRange?.[0], options?.byteRange?.[1]),
   )
 }
 
@@ -41,6 +34,7 @@ const set = async (
   const buffer = await asyncIterableToBuffer(value)
 
   if (buffer.length > 0) {
+    console.log('setting buffer', cid, buffer.toString())
     cache.set(cid, buffer, {
       sizeCalculation: (value) => value.length,
     })
