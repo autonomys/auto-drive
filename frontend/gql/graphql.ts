@@ -2367,12 +2367,7 @@ export type SearchUserMetadataByCidOrNameQuery = { __typename?: 'query_root', me
 
 export const GetGlobalFilesDocument = gql`
     query GetGlobalFiles($aggregateLimit: Int!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String) {
-  metadata_roots(
-    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}}
-    limit: $limit
-    offset: $offset
-    order_by: $orderBy
-  ) {
+  metadata_roots(limit: $limit, offset: $offset, order_by: $orderBy) {
     cid: head_cid
     tags
     type: metadata(path: "type")
@@ -2420,7 +2415,7 @@ export const GetGlobalFilesDocument = gql`
   }
   metadata_roots_aggregate(
     limit: $aggregateLimit
-    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}}
+    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
   ) {
     aggregate {
       count
