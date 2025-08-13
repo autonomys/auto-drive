@@ -1,8 +1,9 @@
 import { type Session } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from 'app/api/auth/[...nextauth]/config';
+import { memoizePromise } from '@/utils/async';
 
-export const getAuthSession = async (): Promise<Session | null> => {
+const internalGetAuthSession = async (): Promise<Session | null> => {
   const internalSession = await (typeof window === 'undefined'
     ? import('next-auth').then((m) => m.getServerSession(authOptions))
     : import('next-auth/react').then((m) => m.getSession()));
@@ -17,3 +18,8 @@ export const getAuthSession = async (): Promise<Session | null> => {
 
   return internalSession;
 };
+
+const getAuthSessionThrottled = memoizePromise(internalGetAuthSession, 500);
+
+export const getAuthSession = async (): Promise<Session | null> =>
+  getAuthSessionThrottled();

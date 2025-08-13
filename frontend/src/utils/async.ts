@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export const asyncByChunk = async function* (
   iterable: AsyncIterable<Buffer>,
   chunkSize: number,
@@ -21,3 +22,26 @@ export const bufferToIterable = (buffer: Buffer): AsyncIterable<Buffer> => {
     yield buffer;
   })();
 };
+
+export function memoizePromise<
+  F extends (...args: any[]) => Promise<any> | any,
+>(fn: F, ttl: number) {
+  let sharedPromise: Promise<Awaited<ReturnType<F>>> | null = null;
+  let timestamp: number | null = null;
+
+  return function throttled(
+    this: any,
+    ...args: Parameters<F>
+  ): Promise<Awaited<ReturnType<F>>> {
+    if (!sharedPromise || (timestamp && Date.now() - timestamp > ttl)) {
+      sharedPromise = Promise.resolve(
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - apply variadic args
+        fn.apply(this, args),
+      ) as Promise<Awaited<ReturnType<F>>>;
+      timestamp = Date.now();
+    }
+
+    return sharedPromise as Promise<Awaited<ReturnType<F>>>;
+  };
+}
