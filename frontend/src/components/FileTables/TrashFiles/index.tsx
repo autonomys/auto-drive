@@ -4,11 +4,7 @@
 import { NoFilesInTrashPlaceholder } from './NoFilesInTrashPlaceholder';
 import { FileActionButtons, FileTable } from '../common/FileTable';
 import { useCallback, useEffect } from 'react';
-import {
-  GetTrashedFilesDocument,
-  GetTrashedFilesQuery,
-  useGetTrashedFilesQuery,
-} from 'gql/graphql';
+import { GetTrashedFilesDocument, GetTrashedFilesQuery } from 'gql/graphql';
 import { useUserStore } from 'globalStates/user';
 import { objectSummaryFromTrashedFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
@@ -17,10 +13,6 @@ import { useNetwork } from 'contexts/network';
 export const TrashFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
   const setFetcher = useFileTableState((e) => e.setFetcher);
-  const page = useFileTableState((e) => e.page);
-  const limit = useFileTableState((e) => e.limit);
-  const setTotal = useFileTableState((e) => e.setTotal);
-  const sortBy = useFileTableState((e) => e.sortBy);
   const user = useUserStore((state) => state.user);
   const aggregateLimit = useFileTableState((e) => e.aggregateLimit);
 
@@ -53,24 +45,6 @@ export const TrashFiles = () => {
     setObjects(null);
     setFetcher(fetcher);
   }, [fetcher, gql, setFetcher, setObjects]);
-
-  useGetTrashedFilesQuery({
-    fetchPolicy: 'cache-and-network',
-    skip: !user,
-    variables: {
-      limit,
-      offset: page * limit,
-      orderBy: sortBy,
-      oauthUserId: user?.oauthUserId ?? '',
-      oauthProvider: user?.oauthProvider ?? '',
-      aggregateLimit,
-    },
-    onCompleted: (data) => {
-      setObjects(objectSummaryFromTrashedFilesQuery(data));
-      setTotal(data.metadata_roots_aggregate?.aggregate?.count ?? 0);
-    },
-    pollInterval: 30_000,
-  });
 
   return (
     <div className='flex w-full'>
