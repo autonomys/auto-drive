@@ -22,6 +22,7 @@ export const TrashFiles = () => {
   const setTotal = useFileTableState((e) => e.setTotal);
   const sortBy = useFileTableState((e) => e.sortBy);
   const user = useUserStore((state) => state.user);
+  const aggregateLimit = useFileTableState((e) => e.aggregateLimit);
 
   const { gql } = useNetwork();
 
@@ -35,6 +36,7 @@ export const TrashFiles = () => {
           oauthUserId: user?.oauthUserId ?? '',
           oauthProvider: user?.oauthProvider ?? '',
           orderBy: sortBy,
+          aggregateLimit,
         },
         fetchPolicy: 'no-cache',
       });
@@ -44,7 +46,7 @@ export const TrashFiles = () => {
         total: data.metadata_roots_aggregate?.aggregate?.count ?? 0,
       };
     },
-    [gql, user?.oauthProvider, user?.oauthUserId],
+    [gql, user?.oauthProvider, user?.oauthUserId, aggregateLimit],
   );
 
   useEffect(() => {
@@ -61,6 +63,7 @@ export const TrashFiles = () => {
       orderBy: sortBy,
       oauthUserId: user?.oauthUserId ?? '',
       oauthProvider: user?.oauthProvider ?? '',
+      aggregateLimit,
     },
     onCompleted: (data) => {
       setObjects(objectSummaryFromTrashedFilesQuery(data));

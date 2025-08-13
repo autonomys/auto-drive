@@ -1,8 +1,9 @@
 query GetGlobalFiles(
+  $aggregateLimit: Int!
   $limit: Int!
   $offset: Int!
   $orderBy: [metadata_roots_order_by!]
-  $search: String!
+  $search: String
 ) {
   metadata_roots(
     where: {
@@ -63,6 +64,7 @@ query GetGlobalFiles(
     }
   }
   metadata_roots_aggregate(
+    limit: $aggregateLimit
     where: {
       inner_metadata: { object_ownership: { is_admin: { _eq: true } } }
       _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]

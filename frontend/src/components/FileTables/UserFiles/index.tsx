@@ -30,6 +30,7 @@ export const UserFiles = () => {
   const sortBy = useFileTableState((e) => e.sortBy);
   const user = useUserStore((state) => state.user);
   const searchQuery = useFileTableState((e) => e.searchQuery);
+  const aggregateLimit = useFileTableState((e) => e.aggregateLimit);
   const { gql } = useNetwork();
 
   const fetcher: Fetcher = useCallback(
@@ -43,6 +44,7 @@ export const UserFiles = () => {
           oauthProvider: user?.oauthProvider ?? '',
           orderBy: sortBy,
           search: `%${searchQuery}%`,
+          aggregateLimit,
         },
         fetchPolicy: 'no-cache',
       });
@@ -52,7 +54,7 @@ export const UserFiles = () => {
         total: data.metadata_roots_aggregate?.aggregate?.count ?? 0,
       };
     },
-    [gql, user?.oauthProvider, user?.oauthUserId],
+    [gql, user?.oauthProvider, user?.oauthUserId, aggregateLimit],
   );
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export const UserFiles = () => {
       oauthUserId: user?.oauthUserId ?? '',
       oauthProvider: user?.oauthProvider ?? '',
       search: `%${searchQuery}%`,
+      aggregateLimit,
     },
     onCompleted: (data) => {
       setObjects(objectSummaryFromUserFilesQuery(data));

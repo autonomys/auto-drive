@@ -21,6 +21,7 @@ export const GlobalFiles = () => {
   const setFetcher = useFileTableState((e) => e.setFetcher);
   const sortBy = useFileTableState((e) => e.sortBy);
   const page = useFileTableState((e) => e.page);
+  const aggregateLimit = useFileTableState((e) => e.aggregateLimit);
   const limit = useFileTableState((e) => e.limit);
   const setTotal = useFileTableState((e) => e.setTotal);
   const searchQuery = useFileTableState((e) => e.searchQuery);
@@ -35,6 +36,7 @@ export const GlobalFiles = () => {
           offset: page * limit,
           orderBy: sortBy,
           search: `%${searchQuery}%`,
+          aggregateLimit,
         },
         fetchPolicy: 'no-cache',
       });
@@ -43,7 +45,7 @@ export const GlobalFiles = () => {
         total: data.metadata_roots_aggregate?.aggregate?.count ?? 0,
       };
     },
-    [gql],
+    [gql, aggregateLimit],
   );
 
   useEffect(() => {
@@ -58,6 +60,7 @@ export const GlobalFiles = () => {
       offset: page * limit,
       orderBy: sortBy,
       search: `%${searchQuery}%`,
+      aggregateLimit,
     },
     onCompleted: (data) => {
       setObjects(objectSummaryFromGlobalFilesQuery(data));

@@ -23,6 +23,7 @@ export const TablePaginator = () => {
     total,
     isInitialized,
     initFromUrl,
+    aggregateLimit,
   } = useFileTableState();
 
   const router = useRouter();
@@ -33,7 +34,12 @@ export const TablePaginator = () => {
     getDisplayPageNumber(page),
   );
 
-  const totalPages = getTotalPages(total, limit);
+  const isLimitUnknown = aggregateLimit === total;
+
+  const offset = page * limit;
+  const effectiveTotal = isLimitUnknown ? aggregateLimit + offset : total;
+
+  const totalPages = getTotalPages(effectiveTotal, limit);
 
   // Initialize from URL params on mount
   useEffect(() => {
@@ -88,8 +94,8 @@ export const TablePaginator = () => {
       </div>
       <div>
         <span>
-          {total > 0
-            ? `${page * limit + 1}-${Math.min(page * limit + limit, total)} of ${total} items`
+          {effectiveTotal > 0
+            ? `${page * limit + 1}-${Math.min(page * limit + limit, effectiveTotal)} of ${isLimitUnknown ? `${effectiveTotal}+` : effectiveTotal} items`
             : '0 items'}
         </span>
       </div>
@@ -120,7 +126,7 @@ export const TablePaginator = () => {
             className='w-12 rounded border border-gray-300 p-1.5 text-center focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-darkWhite dark:text-darkBlack'
             aria-label='Page number'
           />
-          <span>of {totalPages}</span>
+          <span>of {isLimitUnknown ? `${totalPages}+` : totalPages}</span>
         </div>
         <button
           disabled={page >= totalPages - 1}

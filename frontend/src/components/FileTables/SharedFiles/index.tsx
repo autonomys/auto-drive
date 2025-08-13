@@ -19,6 +19,7 @@ export const SharedFiles = () => {
   const limit = useFileTableState((e) => e.limit);
   const page = useFileTableState((e) => e.page);
   const sortBy = useFileTableState((e) => e.sortBy);
+  const aggregateLimit = useFileTableState((e) => e.aggregateLimit);
   const user = useUserStore((state) => state.user);
   const { gql } = useNetwork();
   const fetcher: Fetcher = useCallback(
@@ -31,6 +32,7 @@ export const SharedFiles = () => {
           oauthUserId: user?.oauthUserId ?? '',
           oauthProvider: user?.oauthProvider ?? '',
           orderBy: sortBy,
+          aggregateLimit,
         },
         fetchPolicy: 'no-cache',
       });
@@ -40,7 +42,7 @@ export const SharedFiles = () => {
         total: data.metadata_roots_aggregate?.aggregate?.count ?? 0,
       };
     },
-    [gql, user?.oauthProvider, user?.oauthUserId],
+    [gql, user?.oauthProvider, user?.oauthUserId, aggregateLimit],
   );
 
   useEffect(() => {
@@ -56,6 +58,7 @@ export const SharedFiles = () => {
       orderBy: sortBy,
       oauthUserId: user?.oauthUserId ?? '',
       oauthProvider: user?.oauthProvider ?? '',
+      aggregateLimit,
     },
     onCompleted: (data) => {
       setObjects(objectSummaryFromSharedFilesQuery(data));

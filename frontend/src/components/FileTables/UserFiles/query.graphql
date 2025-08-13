@@ -5,6 +5,7 @@ query GetMyFiles(
   $offset: Int!
   $orderBy: [metadata_roots_order_by!]
   $search: String!
+  $aggregateLimit: Int!
 ) {
   metadata_roots(
     where: {
@@ -77,6 +78,7 @@ query GetMyFiles(
     }
   }
   metadata_roots_aggregate(
+    limit: $aggregateLimit
     where: {
       inner_metadata: {
         object_ownership: {
