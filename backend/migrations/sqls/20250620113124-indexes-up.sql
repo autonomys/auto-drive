@@ -21,8 +21,6 @@ WHERE (is_admin IS TRUE);
 CREATE INDEX IF NOT EXISTS idx_object_admin_cid
 ON public.object_ownership USING btree (cid, is_admin);
 
--- Note: Skipped idx_object_cid because idx_object_admin_cid (leading cid) already covers cid-only lookups.
-
 -- =========================
 -- NODES
 -- =========================
