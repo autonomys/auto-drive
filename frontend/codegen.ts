@@ -6,7 +6,7 @@ dotenv.config();
 const config: CodegenConfig = {
   generates: {
     './gql/graphql.ts': {
-      schema: 'https://demo.auto-drive.autonomys.xyz/hasura/v1/graphql',
+      schema: process.env.HASURA_URL ?? 'http://localhost:6565/v1/graphql',
       documents: ['./src/**/query.graphql'],
       plugins: [
         'typescript',
