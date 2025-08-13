@@ -24,7 +24,5 @@ const internalGetAuthSession = async (): Promise<Session | null> => {
   return internalSession;
 };
 
-const getAuthSessionThrottled = memoizePromise(internalGetAuthSession, 500);
-
 export const getAuthSession = async (): Promise<Session | null> =>
-  getAuthSessionThrottled();
+  internalGetAuthSession();
