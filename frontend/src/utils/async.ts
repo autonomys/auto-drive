@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-this-alias */
 export const asyncByChunk = async function* (
   iterable: AsyncIterable<Buffer>,
   chunkSize: number,
