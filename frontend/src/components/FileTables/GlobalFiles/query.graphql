@@ -5,7 +5,14 @@ query GetGlobalFiles(
   $orderBy: [metadata_roots_order_by!]
   $search: String
 ) {
-  metadata_roots(limit: $limit, offset: $offset, order_by: $orderBy) {
+  metadata_roots(
+    where: {
+      _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]
+    }
+    limit: $limit
+    offset: $offset
+    order_by: $orderBy
+  ) {
     cid: head_cid
     tags
     type: metadata(path: "type")
