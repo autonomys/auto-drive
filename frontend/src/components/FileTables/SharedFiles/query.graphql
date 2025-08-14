@@ -4,6 +4,7 @@ query GetSharedFiles(
   $limit: Int!
   $offset: Int!
   $orderBy: [metadata_roots_order_by!]
+  $aggregateLimit: Int!
 ) {
   metadata_roots(
     where: {
@@ -72,6 +73,7 @@ query GetSharedFiles(
     }
   }
   metadata_roots_aggregate(
+    limit: $aggregateLimit
     where: {
       inner_metadata: {
         object_ownership: {

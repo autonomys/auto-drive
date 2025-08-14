@@ -25,6 +25,7 @@ interface FileTableStore {
   total: number;
   page: number;
   limit: number;
+  aggregateLimit: number;
   fetcher: Fetcher | null;
   setObjects: (objects: ObjectSummary[] | null) => void;
   setFetcher: (fetcher: Fetcher) => void;
@@ -47,6 +48,7 @@ export const useFileTableState = create<FileTableStore>()((set, get) => {
     sortBy: defaultParams.sortBy,
     page: defaultParams.page,
     limit: defaultParams.limit,
+    aggregateLimit: 1_000,
     isInitialized: false,
     isLoading: true,
     objects: null,

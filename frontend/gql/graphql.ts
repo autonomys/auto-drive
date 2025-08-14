@@ -2279,10 +2279,11 @@ export type Timestamp_Comparison_Exp = {
 };
 
 export type GetGlobalFilesQueryVariables = Exact<{
+  aggregateLimit: Scalars['Int']['input'];
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
   orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
-  search: Scalars['String']['input'];
+  search?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
@@ -2294,6 +2295,7 @@ export type GetSharedFilesQueryVariables = Exact<{
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
   orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
+  aggregateLimit: Scalars['Int']['input'];
 }>;
 
 
@@ -2305,6 +2307,7 @@ export type GetTrashedFilesQueryVariables = Exact<{
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
   orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
+  aggregateLimit: Scalars['Int']['input'];
 }>;
 
 
@@ -2317,6 +2320,7 @@ export type GetMyFilesQueryVariables = Exact<{
   offset: Scalars['Int']['input'];
   orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
   search: Scalars['String']['input'];
+  aggregateLimit: Scalars['Int']['input'];
 }>;
 
 
@@ -2362,13 +2366,8 @@ export type SearchUserMetadataByCidOrNameQuery = { __typename?: 'query_root', me
 
 
 export const GetGlobalFilesDocument = gql`
-    query GetGlobalFiles($limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String!) {
-  metadata_roots(
-    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
-    limit: $limit
-    offset: $offset
-    order_by: $orderBy
-  ) {
+    query GetGlobalFiles($aggregateLimit: Int!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String) {
+  metadata_roots(limit: $limit, offset: $offset, order_by: $orderBy) {
     cid: head_cid
     tags
     type: metadata(path: "type")
@@ -2415,6 +2414,7 @@ export const GetGlobalFilesDocument = gql`
     }
   }
   metadata_roots_aggregate(
+    limit: $aggregateLimit
     where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
   ) {
     aggregate {
@@ -2436,6 +2436,7 @@ export const GetGlobalFilesDocument = gql`
  * @example
  * const { data, loading, error } = useGetGlobalFilesQuery({
  *   variables: {
+ *      aggregateLimit: // value for 'aggregateLimit'
  *      limit: // value for 'limit'
  *      offset: // value for 'offset'
  *      orderBy: // value for 'orderBy'
@@ -2460,7 +2461,7 @@ export type GetGlobalFilesLazyQueryHookResult = ReturnType<typeof useGetGlobalFi
 export type GetGlobalFilesSuspenseQueryHookResult = ReturnType<typeof useGetGlobalFilesSuspenseQuery>;
 export type GetGlobalFilesQueryResult = Apollo.QueryResult<GetGlobalFilesQuery, GetGlobalFilesQueryVariables>;
 export const GetSharedFilesDocument = gql`
-    query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
+    query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $aggregateLimit: Int!) {
   metadata_roots(
     where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}
     limit: $limit
@@ -2513,6 +2514,7 @@ export const GetSharedFilesDocument = gql`
     }
   }
   metadata_roots_aggregate(
+    limit: $aggregateLimit
     where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}
   ) {
     aggregate {
@@ -2539,6 +2541,7 @@ export const GetSharedFilesDocument = gql`
  *      limit: // value for 'limit'
  *      offset: // value for 'offset'
  *      orderBy: // value for 'orderBy'
+ *      aggregateLimit: // value for 'aggregateLimit'
  *   },
  * });
  */
@@ -2559,7 +2562,7 @@ export type GetSharedFilesLazyQueryHookResult = ReturnType<typeof useGetSharedFi
 export type GetSharedFilesSuspenseQueryHookResult = ReturnType<typeof useGetSharedFilesSuspenseQuery>;
 export type GetSharedFilesQueryResult = Apollo.QueryResult<GetSharedFilesQuery, GetSharedFilesQueryVariables>;
 export const GetTrashedFilesDocument = gql`
-    query GetTrashedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!]) {
+    query GetTrashedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $aggregateLimit: Int!) {
   metadata_roots(
     where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: false}}}}}
     limit: $limit
@@ -2615,7 +2618,7 @@ export const GetTrashedFilesDocument = gql`
     }
   }
   metadata_roots_aggregate(
-    distinct_on: root_cid
+    limit: $aggregateLimit
     where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: false}}}}}
   ) {
     aggregate {
@@ -2642,6 +2645,7 @@ export const GetTrashedFilesDocument = gql`
  *      limit: // value for 'limit'
  *      offset: // value for 'offset'
  *      orderBy: // value for 'orderBy'
+ *      aggregateLimit: // value for 'aggregateLimit'
  *   },
  * });
  */
@@ -2662,7 +2666,7 @@ export type GetTrashedFilesLazyQueryHookResult = ReturnType<typeof useGetTrashed
 export type GetTrashedFilesSuspenseQueryHookResult = ReturnType<typeof useGetTrashedFilesSuspenseQuery>;
 export type GetTrashedFilesQueryResult = Apollo.QueryResult<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>;
 export const GetMyFilesDocument = gql`
-    query GetMyFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String!) {
+    query GetMyFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String!, $aggregateLimit: Int!) {
   metadata_roots(
     where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
     limit: $limit
@@ -2718,6 +2722,7 @@ export const GetMyFilesDocument = gql`
     }
   }
   metadata_roots_aggregate(
+    limit: $aggregateLimit
     where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}}
   ) {
     aggregate {
@@ -2745,6 +2750,7 @@ export const GetMyFilesDocument = gql`
  *      offset: // value for 'offset'
  *      orderBy: // value for 'orderBy'
  *      search: // value for 'search'
+ *      aggregateLimit: // value for 'aggregateLimit'
  *   },
  * });
  */

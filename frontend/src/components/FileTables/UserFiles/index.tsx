@@ -9,11 +9,7 @@ import {
   FileTable,
 } from '@/components/FileTables/common/FileTable';
 import { NoUploadsPlaceholder } from '@/components/FileTables/common/NoUploadsPlaceholder';
-import {
-  GetMyFilesDocument,
-  GetMyFilesQuery,
-  useGetMyFilesQuery,
-} from 'gql/graphql';
+import { GetMyFilesDocument, GetMyFilesQuery } from 'gql/graphql';
 import { objectSummaryFromUserFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../state';
 import { useNetwork } from 'contexts/network';
@@ -23,13 +19,9 @@ import { ToBeReviewedFiles } from '../../FilesToBeReviewed';
 
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
-  const setTotal = useFileTableState((e) => e.setTotal);
   const setFetcher = useFileTableState((e) => e.setFetcher);
-  const limit = useFileTableState((e) => e.limit);
-  const page = useFileTableState((e) => e.page);
-  const sortBy = useFileTableState((e) => e.sortBy);
   const user = useUserStore((state) => state.user);
-  const searchQuery = useFileTableState((e) => e.searchQuery);
+  const aggregateLimit = useFileTableState((e) => e.aggregateLimit);
   const { gql } = useNetwork();
 
   const fetcher: Fetcher = useCallback(
@@ -43,6 +35,7 @@ export const UserFiles = () => {
           oauthProvider: user?.oauthProvider ?? '',
           orderBy: sortBy,
           search: `%${searchQuery}%`,
+          aggregateLimit,
         },
         fetchPolicy: 'no-cache',
       });
@@ -52,31 +45,13 @@ export const UserFiles = () => {
         total: data.metadata_roots_aggregate?.aggregate?.count ?? 0,
       };
     },
-    [gql, user?.oauthProvider, user?.oauthUserId],
+    [gql, user?.oauthProvider, user?.oauthUserId, aggregateLimit],
   );
 
   useEffect(() => {
     setObjects(null);
     setFetcher(fetcher);
   }, [fetcher, gql, setFetcher, setObjects]);
-
-  useGetMyFilesQuery({
-    fetchPolicy: 'cache-and-network',
-    skip: !user,
-    variables: {
-      limit,
-      offset: page * limit,
-      orderBy: sortBy,
-      oauthUserId: user?.oauthUserId ?? '',
-      oauthProvider: user?.oauthProvider ?? '',
-      search: `%${searchQuery}%`,
-    },
-    onCompleted: (data) => {
-      setObjects(objectSummaryFromUserFilesQuery(data));
-      setTotal(data.metadata_roots_aggregate?.aggregate?.count ?? 0);
-    },
-    pollInterval: 30_000,
-  });
 
   return (
     <div className='flex w-full'>

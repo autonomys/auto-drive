@@ -4,6 +4,7 @@ query GetTrashedFiles(
   $limit: Int!
   $offset: Int!
   $orderBy: [metadata_roots_order_by!]
+  $aggregateLimit: Int!
 ) {
   metadata_roots(
     where: {
@@ -74,7 +75,7 @@ query GetTrashedFiles(
     }
   }
   metadata_roots_aggregate(
-    distinct_on: root_cid
+    limit: $aggregateLimit
     where: {
       inner_metadata: {
         object_ownership: {

@@ -1,11 +1,17 @@
 import { type Session } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from 'app/api/auth/[...nextauth]/config';
+import { memoizePromise } from '@/utils/async';
 
-export const getAuthSession = async (): Promise<Session | null> => {
+const internalGetAuthSession = async (): Promise<Session | null> => {
+  const memoizedFrontend = memoizePromise(
+    () => import('next-auth/react').then((m) => m.getSession()),
+    50,
+  );
+
   const internalSession = await (typeof window === 'undefined'
     ? import('next-auth').then((m) => m.getServerSession(authOptions))
-    : import('next-auth/react').then((m) => m.getSession()));
+    : memoizedFrontend());
 
   if (!internalSession) {
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
@@ -17,3 +23,6 @@ export const getAuthSession = async (): Promise<Session | null> => {
 
   return internalSession;
 };
+
+export const getAuthSession = async (): Promise<Session | null> =>
+  internalGetAuthSession();
