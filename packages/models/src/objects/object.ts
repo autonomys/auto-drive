@@ -1,5 +1,5 @@
 import { OffchainMetadata } from "@autonomys/auto-dag-data";
-import { ByteRange, DownloadMetadata } from "@autonomys/file-caching";
+import { ByteRange, DownloadMetadata } from "@autonomys/file-server";
 import { Readable } from "stream";
 
 export interface ObjectInformation {
