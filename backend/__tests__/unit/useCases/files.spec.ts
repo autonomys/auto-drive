@@ -43,9 +43,7 @@ describe('FilesUseCases', () => {
 
     // Expect not to throw
     expect(result.value.metadata).toEqual({
-      name: metadata.name,
       type: metadata.type,
-      mimeType: metadata.mimeType,
     })
   })
 
