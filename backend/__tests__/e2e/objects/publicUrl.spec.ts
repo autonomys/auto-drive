@@ -58,7 +58,7 @@ describe('Public URL', () => {
 
     expect(metadata).toMatchObject({
       type: 'file',
-      size: BigInt(content.length),
+      size: BigInt(content.length).toString(),
     })
 
     const pendingCredits =

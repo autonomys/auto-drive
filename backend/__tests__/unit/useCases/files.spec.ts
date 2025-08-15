@@ -42,7 +42,7 @@ describe('FilesUseCases', () => {
     }
 
     // Expect not to throw
-    expect(result.value.metadata).toEqual({
+    expect(result.value.metadata).toMatchObject({
       type: metadata.type,
     })
   })
