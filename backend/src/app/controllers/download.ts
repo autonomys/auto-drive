@@ -9,10 +9,12 @@ import {
   handleAuth,
   handleOptionalAuth,
 } from '../../infrastructure/services/auth/express.js'
-import { handleDownloadResponseHeaders } from '../../shared/httpHandlers/download.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { downloadService } from '../../infrastructure/services/download/index.js'
-import { getByteRange } from '../../shared/utils/http.js'
+import {
+  getByteRange,
+  handleDownloadResponseHeaders,
+} from '@autonomys/file-server'
 import { handleError } from '../../errors/index.js'
 import {
   handleInternalError,
@@ -129,7 +131,9 @@ downloadController.get(
         byteRange: resultingByteRange,
         startDownload,
       } = downloadResult.value
-      handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
+      handleDownloadResponseHeaders(req, res, metadata, {
+        byteRange: resultingByteRange,
+      })
 
       pipeline(await startDownload(), res, (err: Error | null) => {
         if (err) {

@@ -136,8 +136,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@auto-drive/models@workspace:packages/models"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.5.11"
-    "@autonomys/file-caching": "npm:^1.5.11"
+    "@autonomys/auto-dag-data": "npm:^1.5.14"
+    "@autonomys/file-server": "npm:^1.5.14"
     typescript: "npm:^5.7.3"
     zod: "npm:^3.24.2"
   languageName: unknown
@@ -148,7 +148,7 @@ __metadata:
   resolution: "@auto-drive/s3@workspace:packages/s3"
   dependencies:
     "@auto-drive/models": "workspace:*"
-    "@autonomys/file-caching": "npm:^1.0.0"
+    "@autonomys/file-server": "npm:^1.5.14"
     typescript: "npm:^5.0.0"
   languageName: unknown
   linkType: soft
@@ -157,7 +157,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@auto-files/models@workspace:submodules/files-gateway/common/models"
   dependencies:
-    "@autonomys/rpc": "npm:^1.4.14"
+    "@autonomys/rpc": "npm:^1.4.31"
     typescript: "npm:^5.6.3"
     zod: "npm:^3.24.2"
   languageName: unknown
@@ -168,22 +168,41 @@ __metadata:
   resolution: "@auto-files/rpc-apis@workspace:submodules/files-gateway/common/rpc-apis"
   dependencies:
     "@auto-files/models": "workspace:*"
-    "@autonomys/rpc": "npm:^1.4.14"
+    "@autonomys/rpc": "npm:^1.5.6"
     typescript: "npm:^5.6.3"
     zod: "npm:^3.24.2"
   languageName: unknown
   linkType: soft
 
-"@autonomys/asynchronous@npm:^1.4.1, @autonomys/asynchronous@npm:^1.5.12":
-  version: 1.5.12
-  resolution: "@autonomys/asynchronous@npm:1.5.12"
+"@autonomys/asynchronous@npm:^1.4.36, @autonomys/asynchronous@npm:^1.5.14":
+  version: 1.5.14
+  resolution: "@autonomys/asynchronous@npm:1.5.14"
   dependencies:
     stream-fork: "npm:^1.0.5"
-  checksum: 10c0/248fd3dc137cf3531799892ba61c20f05c348728f41ac2b31ea3e2015b08dd7711ad00852b44c488b3ee87366cb5cfdd822e81be7c276a9adad48ef5ee103ffe
+  checksum: 10c0/c1975c4b1ae58fd4d216764c94fb3dd6f8ff1bbdb1f9f832c1fae670bce6a584958667af6f7ae1ed031605c68b5aad2898aac68602d9c6b863ad8f5556e65f15
   languageName: node
   linkType: hard
 
-"@autonomys/asynchronous@npm:^1.5.11":
+"@autonomys/auto-dag-data@npm:^1.4.31, @autonomys/auto-dag-data@npm:^1.5.14":
+  version: 1.5.14
+  resolution: "@autonomys/auto-dag-data@npm:1.5.14"
+  dependencies:
+    "@autonomys/asynchronous": "npm:^1.5.14"
+    "@ipld/dag-pb": "npm:^4.1.3"
+    "@peculiar/webcrypto": "npm:^1.5.0"
+    "@webbuf/blake3": "npm:^3.0.26"
+    "@webbuf/fixedbuf": "npm:^3.0.26"
+    "@webbuf/webbuf": "npm:^3.0.26"
+    fflate: "npm:^0.8.2"
+    multiformats: "npm:^13.3.2"
+    protobufjs: "npm:^7.4.0"
+    protons: "npm:^7.6.0"
+    protons-runtime: "npm:^5.5.0"
+  checksum: 10c0/a549a34be97b164a1d4fb4e7eb7f5d1821efc021f1aa7326f179449c2d05cb1eaae3d2dd76943ce1e3753ced1fa886be1097f56c6bfadc7dff05915df2c34919
+  languageName: node
+  linkType: hard
+
+"@autonomys/auto-dag-data@npm:^1.4.35":
   version: 1.5.11
   resolution: "@autonomys/asynchronous@npm:1.5.11"
   dependencies:
@@ -192,49 +211,11 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.0.12, @autonomys/auto-dag-data@npm:^1.0.5, @autonomys/auto-dag-data@npm:^1.5.12":
-  version: 1.5.12
-  resolution: "@autonomys/auto-dag-data@npm:1.5.12"
+"@autonomys/auto-design-system@npm:^1.5.14":
+  version: 1.5.14
+  resolution: "@autonomys/auto-design-system@npm:1.5.14"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.12"
-    "@ipld/dag-pb": "npm:^4.1.3"
-    "@peculiar/webcrypto": "npm:^1.5.0"
-    "@webbuf/blake3": "npm:^3.0.26"
-    "@webbuf/fixedbuf": "npm:^3.0.26"
-    "@webbuf/webbuf": "npm:^3.0.26"
-    fflate: "npm:^0.8.2"
-    multiformats: "npm:^13.3.2"
-    protobufjs: "npm:^7.4.0"
-    protons: "npm:^7.6.0"
-    protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/29711d90514e7b1d1a268ce8288340c87b5cafc33f44a24a005114cb5b6d9f6216d194346665a29e491e5ab874ab85f0400783e14232704e6fd95be2ee83819d
-  languageName: node
-  linkType: hard
-
-"@autonomys/auto-dag-data@npm:^1.5.11, @autonomys/auto-dag-data@npm:^1.5.7":
-  version: 1.5.11
-  resolution: "@autonomys/auto-dag-data@npm:1.5.11"
-  dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.11"
-    "@ipld/dag-pb": "npm:^4.1.3"
-    "@peculiar/webcrypto": "npm:^1.5.0"
-    "@webbuf/blake3": "npm:^3.0.26"
-    "@webbuf/fixedbuf": "npm:^3.0.26"
-    "@webbuf/webbuf": "npm:^3.0.26"
-    fflate: "npm:^0.8.2"
-    multiformats: "npm:^13.3.2"
-    protobufjs: "npm:^7.4.0"
-    protons: "npm:^7.6.0"
-    protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/21cece79d6c869c3f20a63d8aa05c4134a49059f3c262417e5d00bd0cba80725ebbd862b0a78e1ddebcdbaa958065cc790f67e07a7652bd377de18a10b31a3f4
-  languageName: node
-  linkType: hard
-
-"@autonomys/auto-design-system@npm:^1.5.7":
-  version: 1.5.11
-  resolution: "@autonomys/auto-design-system@npm:1.5.11"
-  dependencies:
-    "@autonomys/design-tokens": "npm:^1.5.11"
+    "@autonomys/design-tokens": "npm:^1.5.14"
     "@floating-ui/react": "npm:^0.27.8"
     "@headlessui/react": "npm:^2.2.3"
     "@heroicons/react": "npm:^2.2.0"
@@ -258,92 +239,66 @@ __metadata:
   peerDependencies:
     react: ^18.2.0
     react-dom: ^18.2.0
-  checksum: 10c0/f55d877b90c18db619d4ba539cf82d848a3c3bf557e92ea0044aa880b205c49f7f9ea218737dad51ea94b32c0d85e5c0cfe82a92bb10f88ed6c5336317987636
+  checksum: 10c0/087a4f11c35c23e735d10279ecf24f7fc03a1db91ef4f32a5bd4e8ef2a8cd7f35df6e69cb17d168d24e57774cf5e0d528a0d738956bfd2b910504c85b90783ad
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.3.2, @autonomys/auto-drive@npm:^1.5.7":
-  version: 1.5.11
-  resolution: "@autonomys/auto-drive@npm:1.5.11"
+"@autonomys/auto-drive@npm:^1.5.14":
+  version: 1.5.14
+  resolution: "@autonomys/auto-drive@npm:1.5.14"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.11"
-    "@autonomys/auto-dag-data": "npm:^1.5.11"
-    "@autonomys/auto-utils": "npm:^1.5.11"
+    "@autonomys/asynchronous": "npm:^1.5.14"
+    "@autonomys/auto-dag-data": "npm:^1.5.14"
+    "@autonomys/auto-utils": "npm:^1.5.14"
     blockstore-core: "npm:^5.0.2"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^3.0.1"
     process: "npm:^0.11.10"
     stream: "npm:^0.0.3"
     zod: "npm:^3.24.2"
-  checksum: 10c0/53074e52147a3f81eb5836cf08fa91d18986e75d72b3c04d81a8e62e768bdaaed23f16f0e82e9a8e124506f0409079fe23470fb3530578ed37d53088cd87cf42
+  checksum: 10c0/214ddff2ba87c40bb42ddff2a67b5587d2ce2af8b9dc6c9f144daebe6f2bc61a175528d2648c87af926cc2382eeafa8ca6a8d0494bc10376633d65e08a0b1f50
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.5.12":
-  version: 1.5.12
-  resolution: "@autonomys/auto-drive@npm:1.5.12"
+"@autonomys/auto-files@npm:^1.5.14":
+  version: 1.5.14
+  resolution: "@autonomys/auto-files@npm:1.5.14"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.12"
-    "@autonomys/auto-dag-data": "npm:^1.5.12"
-    "@autonomys/auto-utils": "npm:^1.5.12"
-    blockstore-core: "npm:^5.0.2"
-    jszip: "npm:^3.10.1"
-    mime-types: "npm:^3.0.1"
-    process: "npm:^0.11.10"
-    stream: "npm:^0.0.3"
-    zod: "npm:^3.24.2"
-  checksum: 10c0/3442776a0672708881a1a4bf03cbb145f2c7929c18521e4c91adaaeca146e1b289b3df3d311d75d4cae6c1f92753da99b613afcc09d83340ce64afd613df49ff
+    "@autonomys/auto-drive": "npm:^1.5.14"
+  checksum: 10c0/8a9f62555d6920b1aff193ad7817ea241901b87a08f3d65b739a9129d2d82d83f014190f1cf3ef9698adc5dca325b72b2cf979b2c82788f2e368b6e83a5e5aa9
   languageName: node
   linkType: hard
 
-"@autonomys/auto-files@npm:^1.5.12":
-  version: 1.5.12
-  resolution: "@autonomys/auto-files@npm:1.5.12"
-  dependencies:
-    "@autonomys/auto-drive": "npm:^1.5.12"
-  checksum: 10c0/bf6ae6526913339551f32b4d1ec5a12fb9aa8ef8158ce557bce6965aa18c43aa913021fb591c8329720bbc8dccfcc544c2a3b674b4c62c57feb48d225bfbd35f
-  languageName: node
-  linkType: hard
-
-"@autonomys/auto-utils@npm:^1.0.12, @autonomys/auto-utils@npm:^1.5.12":
-  version: 1.5.12
-  resolution: "@autonomys/auto-utils@npm:1.5.12"
+"@autonomys/auto-utils@npm:^1.4.31, @autonomys/auto-utils@npm:^1.5.14":
+  version: 1.5.14
+  resolution: "@autonomys/auto-utils@npm:1.5.14"
   dependencies:
     "@polkadot/api": "npm:^15.8.1"
     "@polkadot/extension-dapp": "npm:^0.58.6"
-  checksum: 10c0/30f7ada57c162496ee96c7aeed5bf5724ad595cf5fe81b7385fa1da8c303c06fad414736d5fc69076e206fcf32614a10706e690db574bee782a9f916ac8883e9
+  checksum: 10c0/d1c4d6a38d6b9029191dcae5e777b48717025f30b60f963772ee1d1220f4426cbfa96a27541962024c0dec0ee0a7c4ab35850edb7abbf53a04d8fb3378806951
   languageName: node
   linkType: hard
 
-"@autonomys/auto-utils@npm:^1.3.2, @autonomys/auto-utils@npm:^1.5.11":
-  version: 1.5.11
-  resolution: "@autonomys/auto-utils@npm:1.5.11"
-  dependencies:
-    "@polkadot/api": "npm:^15.8.1"
-    "@polkadot/extension-dapp": "npm:^0.58.6"
-  checksum: 10c0/60425cfac408afbe109e8e6d581c64428b4168964f331dc4a751487cd93647cb14f2cad83feda52d60ad8a51a0e4725b930fe594ed40566a3770eca8eb54cb21
-  languageName: node
-  linkType: hard
-
-"@autonomys/design-tokens@npm:^1.5.11":
-  version: 1.5.11
-  resolution: "@autonomys/design-tokens@npm:1.5.11"
+"@autonomys/design-tokens@npm:^1.5.14":
+  version: 1.5.14
+  resolution: "@autonomys/design-tokens@npm:1.5.14"
   dependencies:
     "@tailwindcss/forms": "npm:^0.5.7"
     tailwindcss: "npm:^3.3.5"
-  checksum: 10c0/142455b82600f8e2c49c9835e7d2f3d11d344878f4a7c15924bcf36f155d709270816efae56defc5d89707bdb31c88d8541441d8d8e6aa9a9ccde9c64a41d483
+  checksum: 10c0/f003df24add9d80edc919820401f1293bd397885f13556012f49bb592f7b9ec5f9c2280367d888a7f493249c7acc98c681ae2cd1a4486a311cf64be105866f58
   languageName: node
   linkType: hard
 
-"@autonomys/file-caching@npm:^1.0.0, @autonomys/file-caching@npm:^1.4.3, @autonomys/file-caching@npm:^1.5.12":
-  version: 1.5.12
-  resolution: "@autonomys/file-caching@npm:1.5.12"
+"@autonomys/file-server@npm:1.5.14, @autonomys/file-server@npm:^1.5.14":
+  version: 1.5.14
+  resolution: "@autonomys/file-server@npm:1.5.14"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.12"
-    "@autonomys/auto-dag-data": "npm:^1.5.12"
-    "@autonomys/auto-utils": "npm:^1.5.12"
+    "@autonomys/asynchronous": "npm:^1.5.14"
+    "@autonomys/auto-dag-data": "npm:^1.5.14"
+    "@autonomys/auto-utils": "npm:^1.5.14"
     "@keyvhq/sqlite": "npm:^2.1.7"
     cache-manager: "npm:^6.4.2"
+    express: "npm:^4.19.2"
     jszip: "npm:^3.10.1"
     keyv: "npm:^5.3.2"
     mime-types: "npm:^3.0.1"
@@ -351,37 +306,17 @@ __metadata:
     stream: "npm:^0.0.3"
     uuid: "npm:^11.1.0"
     zod: "npm:^3.24.2"
-  checksum: 10c0/06af243af9898c4a8042e04e95e95258d158f3c1b7f47c3523b10801cac21e35779c58ed8c6064274997f0658c9146b4667e94f412ee985829cd95547e624ba9
+  checksum: 10c0/abe0ad3bace38d108103a3fda537b3b725ab38787baf51d367dd54b057de531d0263447e7012b1caeeea9b39cedb7787ad1f3ed124794bae9998ba6daf20e2f5
   languageName: node
   linkType: hard
 
-"@autonomys/file-caching@npm:^1.5.11":
-  version: 1.5.11
-  resolution: "@autonomys/file-caching@npm:1.5.11"
-  dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.11"
-    "@autonomys/auto-dag-data": "npm:^1.5.11"
-    "@autonomys/auto-utils": "npm:^1.5.11"
-    "@keyvhq/sqlite": "npm:^2.1.7"
-    cache-manager: "npm:^6.4.2"
-    jszip: "npm:^3.10.1"
-    keyv: "npm:^5.3.2"
-    mime-types: "npm:^3.0.1"
-    process: "npm:^0.11.10"
-    stream: "npm:^0.0.3"
-    uuid: "npm:^11.1.0"
-    zod: "npm:^3.24.2"
-  checksum: 10c0/2cc9524972a08cd4ec1bc4b5ed2d5a85ec131acd209cf6b4236078e0ce14a9a4b3ddfba0c4e8a2cbaf8492a9522ced35c15463e330fceb6563b093bb910321c8
-  languageName: node
-  linkType: hard
-
-"@autonomys/rpc@npm:^1.4.14, @autonomys/rpc@npm:^1.5.12":
-  version: 1.5.12
-  resolution: "@autonomys/rpc@npm:1.5.12"
+"@autonomys/rpc@npm:^1.4.31, @autonomys/rpc@npm:^1.5.14, @autonomys/rpc@npm:^1.5.6":
+  version: 1.5.14
+  resolution: "@autonomys/rpc@npm:1.5.14"
   dependencies:
     websocket: "npm:^1.0.35"
     zod: "npm:^3.24.2"
-  checksum: 10c0/cd7501b3787620486d90c6d10766fb1159f8e417816c7180e28c2c1a0aefcc02e0fc05da379ba18a3e87da1760507b33e502f96f540f6be56579563c81b96088
+  checksum: 10c0/313a7de82ed43fb524754e7de36154bba7db1aeda61409cae105ca1dba67cc9c3bdd1e7b5e880658405de66575409f3192b3965026b05f15f5e5a7a450efa630
   languageName: node
   linkType: hard
 
@@ -4975,83 +4910,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oven/bun-darwin-aarch64@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-darwin-aarch64@npm:1.2.19"
-  conditions: os=darwin & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-darwin-x64-baseline@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-darwin-x64-baseline@npm:1.2.19"
-  conditions: os=darwin & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-darwin-x64@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-darwin-x64@npm:1.2.19"
-  conditions: os=darwin & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-aarch64-musl@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-linux-aarch64-musl@npm:1.2.19"
-  conditions: os=linux & cpu=aarch64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-aarch64@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-linux-aarch64@npm:1.2.19"
-  conditions: os=linux & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-x64-baseline@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-linux-x64-baseline@npm:1.2.19"
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-x64-musl-baseline@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-linux-x64-musl-baseline@npm:1.2.19"
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-x64-musl@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-linux-x64-musl@npm:1.2.19"
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-linux-x64@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-linux-x64@npm:1.2.19"
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-windows-x64-baseline@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-windows-x64-baseline@npm:1.2.19"
-  conditions: os=win32 & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@oven/bun-windows-x64@npm:1.2.19":
-  version: 1.2.19
-  resolution: "@oven/bun-windows-x64@npm:1.2.19"
-  conditions: os=win32 & cpu=x64
-  languageName: node
-  linkType: hard
-
 "@panva/hkdf@npm:^1.0.2":
   version: 1.2.1
   resolution: "@panva/hkdf@npm:1.2.1"
@@ -8324,6 +8182,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/stream-fork@npm:^1.0.5":
+  version: 1.0.5
+  resolution: "@types/stream-fork@npm:1.0.5"
+  dependencies:
+    "@types/node": "npm:*"
+  checksum: 10c0/139d047cccfcbe6ac23be7a7d025b0ffbb885a0075b19248f2b7bed1becc6647180196c50152cafecb6cba52d7d1e4507d2beb2f632500bc426c06d86797fce1
+  languageName: node
+  linkType: hard
+
 "@types/streamsaver@npm:^2":
   version: 2.0.5
   resolution: "@types/streamsaver@npm:2.0.5"
@@ -9886,17 +9753,18 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "auto-files-gateway@workspace:submodules/files-gateway"
   dependencies:
-    "@autonomys/rpc": "npm:^1.4.14"
+    "@autonomys/rpc": "npm:^1.4.31"
     "@types/k6": "npm:^1.0.0"
     "@types/node": "npm:^22.10.2"
+    "@types/stream-fork": "npm:^1.0.5"
     axios: "npm:^1.7.9"
-    bun: "npm:^1.1.39"
     eslint: "npm:^9.0.0"
     eslint-config-prettier: "npm:^10.0.0"
     eslint-plugin-eslint-plugin: "npm:^6.3.1"
     eslint-plugin-import: "npm:^2.31.0"
     eslint-plugin-prettier: "npm:^5.2.1"
     eslint-plugin-require-extensions: "npm:^0.1.3"
+    stream-fork: "npm:^1.0.5"
     ts-node: "npm:^10.9.2"
     winston: "npm:^3.17.0"
     yocto-queue: "npm:^1.2.0"
@@ -10092,12 +9960,12 @@ __metadata:
     "@auto-drive/models": "workspace:*"
     "@auto-drive/s3": "workspace:*"
     "@auto-files/rpc-apis": "workspace:*"
-    "@autonomys/asynchronous": "npm:^1.5.12"
-    "@autonomys/auto-dag-data": "npm:^1.5.12"
-    "@autonomys/auto-drive": "npm:^1.5.12"
-    "@autonomys/auto-files": "npm:^1.5.12"
-    "@autonomys/file-caching": "npm:^1.5.12"
-    "@autonomys/rpc": "npm:^1.5.12"
+    "@autonomys/asynchronous": "npm:^1.5.14"
+    "@autonomys/auto-dag-data": "npm:^1.5.14"
+    "@autonomys/auto-drive": "npm:^1.5.14"
+    "@autonomys/auto-files": "npm:^1.5.14"
+    "@autonomys/file-server": "npm:1.5.14"
+    "@autonomys/rpc": "npm:^1.5.14"
     "@aws-sdk/client-s3": "npm:^3.859.0"
     "@faker-js/faker": "npm:^9.2.0"
     "@keyvhq/sqlite": "npm:^2.1.6"
@@ -10509,52 +10377,6 @@ __metadata:
   version: 0.0.6
   resolution: "buildcheck@npm:0.0.6"
   checksum: 10c0/8cbdb89f41bc484b8325f4828db4135b206a0dffb641eb6cdb2b7022483c45dd0e5aac6d820c9a67bdd2caab3a02c76d7ceec7bd9ec494b5a2270d2806b01a76
-  languageName: node
-  linkType: hard
-
-"bun@npm:^1.1.39":
-  version: 1.2.19
-  resolution: "bun@npm:1.2.19"
-  dependencies:
-    "@oven/bun-darwin-aarch64": "npm:1.2.19"
-    "@oven/bun-darwin-x64": "npm:1.2.19"
-    "@oven/bun-darwin-x64-baseline": "npm:1.2.19"
-    "@oven/bun-linux-aarch64": "npm:1.2.19"
-    "@oven/bun-linux-aarch64-musl": "npm:1.2.19"
-    "@oven/bun-linux-x64": "npm:1.2.19"
-    "@oven/bun-linux-x64-baseline": "npm:1.2.19"
-    "@oven/bun-linux-x64-musl": "npm:1.2.19"
-    "@oven/bun-linux-x64-musl-baseline": "npm:1.2.19"
-    "@oven/bun-windows-x64": "npm:1.2.19"
-    "@oven/bun-windows-x64-baseline": "npm:1.2.19"
-  dependenciesMeta:
-    "@oven/bun-darwin-aarch64":
-      optional: true
-    "@oven/bun-darwin-x64":
-      optional: true
-    "@oven/bun-darwin-x64-baseline":
-      optional: true
-    "@oven/bun-linux-aarch64":
-      optional: true
-    "@oven/bun-linux-aarch64-musl":
-      optional: true
-    "@oven/bun-linux-x64":
-      optional: true
-    "@oven/bun-linux-x64-baseline":
-      optional: true
-    "@oven/bun-linux-x64-musl":
-      optional: true
-    "@oven/bun-linux-x64-musl-baseline":
-      optional: true
-    "@oven/bun-windows-x64":
-      optional: true
-    "@oven/bun-windows-x64-baseline":
-      optional: true
-  bin:
-    bun: bin/bun.exe
-    bunx: bin/bunx.exe
-  checksum: 10c0/6f87dbc01f195941b3e60b7601e33806a5954cb7f54fb33964ea17b67fff1b48dcdb3ed270fe554cce63415c955c13da445a8c3f4038b6a225f091c92eea0fd9
-  conditions: (os=darwin | os=linux | os=win32) & (cpu=arm64 | cpu=x64 | cpu=aarch64)
   languageName: node
   linkType: hard
 
@@ -13531,10 +13353,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "file-retriever@workspace:submodules/files-gateway/services/file-retriever"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.4.1"
-    "@autonomys/auto-dag-data": "npm:^1.0.12"
-    "@autonomys/auto-utils": "npm:^1.0.12"
-    "@autonomys/file-caching": "npm:^1.4.3"
+    "@auto-files/rpc-apis": "workspace:*"
+    "@autonomys/asynchronous": "npm:^1.4.36"
+    "@autonomys/auto-dag-data": "npm:^1.4.31"
+    "@autonomys/auto-utils": "npm:^1.4.31"
+    "@autonomys/file-server": "npm:^1.5.14"
+    "@autonomys/rpc": "npm:^1.4.31"
     "@ipld/dag-pb": "npm:^4.1.3"
     "@keyvhq/core": "npm:^2.1.1"
     "@keyvhq/sqlite": "npm:^2.1.6"
@@ -13766,9 +13590,9 @@ __metadata:
   dependencies:
     "@apollo/client": "npm:^3.11.10"
     "@auto-drive/models": "workspace:*"
-    "@autonomys/auto-dag-data": "npm:^1.5.7"
-    "@autonomys/auto-design-system": "npm:^1.5.7"
-    "@autonomys/auto-drive": "npm:^1.5.7"
+    "@autonomys/auto-dag-data": "npm:^1.5.14"
+    "@autonomys/auto-design-system": "npm:^1.5.14"
+    "@autonomys/auto-drive": "npm:^1.5.14"
     "@cyntler/react-doc-viewer": "npm:^1.17.0"
     "@graphql-codegen/cli": "npm:^5.0.3"
     "@graphql-codegen/introspection": "npm:^4.0.3"
@@ -13928,8 +13752,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "gateway@workspace:gateway"
   dependencies:
-    "@autonomys/auto-drive": "npm:^1.3.2"
-    "@autonomys/auto-utils": "npm:^1.3.2"
+    "@autonomys/auto-drive": "npm:^1.5.14"
+    "@autonomys/auto-utils": "npm:^1.5.14"
     dotenv: "npm:^16.4.7"
     express: "npm:^4.21.2"
     ts-node: "npm:^10.9.2"
@@ -14282,6 +14106,24 @@ __metadata:
     ufo: "npm:^1.6.1"
     uncrypto: "npm:^0.1.3"
   checksum: 10c0/4b83daceda6f39cd508d56382dc3a83ef14453d0119ada290c7fda3c69d907ccaf2547fd233f3e001a9ffae2cde4e2543e4361d714c29fb6ec664f604d5b84a3
+  languageName: node
+  linkType: hard
+
+"handlebars@npm:^4.7.8":
+  version: 4.7.8
+  resolution: "handlebars@npm:4.7.8"
+  dependencies:
+    minimist: "npm:^1.2.5"
+    neo-async: "npm:^2.6.2"
+    source-map: "npm:^0.6.1"
+    uglify-js: "npm:^3.1.4"
+    wordwrap: "npm:^1.0.0"
+  dependenciesMeta:
+    uglify-js:
+      optional: true
+  bin:
+    handlebars: bin/handlebars
+  checksum: 10c0/7aff423ea38a14bb379316f3857fe0df3c5d66119270944247f155ba1f08e07a92b340c58edaa00cfe985c21508870ee5183e0634dcb53dd405f35c93ef7f10d
   languageName: node
   linkType: hard
 
@@ -16830,7 +16672,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimist@npm:^1.2.0, minimist@npm:^1.2.3, minimist@npm:^1.2.6":
+"minimist@npm:^1.2.0, minimist@npm:^1.2.3, minimist@npm:^1.2.5, minimist@npm:^1.2.6":
   version: 1.2.8
   resolution: "minimist@npm:1.2.8"
   checksum: 10c0/19d3fcdca050087b84c2029841a093691a91259a47def2f18222f41e7645a0b7c44ef4b40e88a1e58a40c84d2ef0ee6047c55594d298146d0eb3f6b737c20ce6
@@ -17128,6 +16970,13 @@ __metadata:
   version: 1.0.0
   resolution: "negotiator@npm:1.0.0"
   checksum: 10c0/4c559dd52669ea48e1914f9d634227c561221dd54734070791f999c52ed0ff36e437b2e07d5c1f6e32909fc625fe46491c16e4a8f0572567d4dd15c3a4fda04b
+  languageName: node
+  linkType: hard
+
+"neo-async@npm:^2.6.2":
+  version: 2.6.2
+  resolution: "neo-async@npm:2.6.2"
+  checksum: 10c0/c2f5a604a54a8ec5438a342e1f356dff4bc33ccccdb6dc668d94fe8e5eccfc9d2c2eea6064b0967a767ba63b33763f51ccf2cd2441b461a7322656c1f06b3f5d
   languageName: node
   linkType: hard
 
@@ -17601,8 +17450,8 @@ __metadata:
   dependencies:
     "@auto-files/models": "workspace:*"
     "@auto-files/rpc-apis": "workspace:*"
-    "@autonomys/auto-dag-data": "npm:^1.0.5"
-    "@autonomys/rpc": "npm:^1.4.14"
+    "@autonomys/auto-dag-data": "npm:^1.4.35"
+    "@autonomys/rpc": "npm:^1.4.31"
     "@peculiar/webcrypto": "npm:^1.5.0"
     "@types/cors": "npm:^2.8.17"
     "@types/express": "npm:^5.0.0"
@@ -17626,6 +17475,7 @@ __metadata:
     pg: "npm:^8.13.1"
     pg-format: "npm:^1.0.4"
     prettier: "npm:^3.3.3"
+    ts-jest: "npm:^29.4.0"
     ts-node: "npm:^10.9.2"
     typescript: "npm:^5.6.3"
     uuid: "npm:^11.0.3"
@@ -21339,6 +21189,46 @@ __metadata:
   languageName: node
   linkType: hard
 
+"ts-jest@npm:^29.4.0":
+  version: 29.4.1
+  resolution: "ts-jest@npm:29.4.1"
+  dependencies:
+    bs-logger: "npm:^0.2.6"
+    fast-json-stable-stringify: "npm:^2.1.0"
+    handlebars: "npm:^4.7.8"
+    json5: "npm:^2.2.3"
+    lodash.memoize: "npm:^4.1.2"
+    make-error: "npm:^1.3.6"
+    semver: "npm:^7.7.2"
+    type-fest: "npm:^4.41.0"
+    yargs-parser: "npm:^21.1.1"
+  peerDependencies:
+    "@babel/core": ">=7.0.0-beta.0 <8"
+    "@jest/transform": ^29.0.0 || ^30.0.0
+    "@jest/types": ^29.0.0 || ^30.0.0
+    babel-jest: ^29.0.0 || ^30.0.0
+    jest: ^29.0.0 || ^30.0.0
+    jest-util: ^29.0.0 || ^30.0.0
+    typescript: ">=4.3 <6"
+  peerDependenciesMeta:
+    "@babel/core":
+      optional: true
+    "@jest/transform":
+      optional: true
+    "@jest/types":
+      optional: true
+    babel-jest:
+      optional: true
+    esbuild:
+      optional: true
+    jest-util:
+      optional: true
+  bin:
+    ts-jest: cli.js
+  checksum: 10c0/e4881717323c9e03ba9ad2f8726872cd0bede7f3f34095754aa850688b319f50294211cfd330edad878005e70601cbbbb0bb489ed0949a9aa545491e1083e923
+  languageName: node
+  linkType: hard
+
 "ts-log@npm:^2.2.3":
   version: 2.2.7
   resolution: "ts-log@npm:2.2.7"
@@ -21707,7 +21597,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"uglify-js@npm:^3.7.7":
+"uglify-js@npm:^3.1.4, uglify-js@npm:^3.7.7":
   version: 3.19.3
   resolution: "uglify-js@npm:3.19.3"
   bin:
@@ -22635,6 +22525,13 @@ __metadata:
   version: 1.2.5
   resolution: "word-wrap@npm:1.2.5"
   checksum: 10c0/e0e4a1ca27599c92a6ca4c32260e8a92e8a44f4ef6ef93f803f8ed823f486e0889fc0b93be4db59c8d51b3064951d25e43d434e95dc8c960cc3a63d65d00ba20
+  languageName: node
+  linkType: hard
+
+"wordwrap@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "wordwrap@npm:1.0.0"
+  checksum: 10c0/7ed2e44f3c33c5c3e3771134d2b0aee4314c9e49c749e37f464bf69f2bcdf0cbf9419ca638098e2717cff4875c47f56a007532f6111c3319f557a2ca91278e92
   languageName: node
   linkType: hard
 

@@ -4,7 +4,7 @@ import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { ObjectUseCases, UploadStatusUseCases } from '../../core/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
-import { handleDownloadResponseHeaders } from '../../shared/httpHandlers/download.js'
+import { handleDownloadResponseHeaders } from '@autonomys/file-server'
 import {
   handleInternalError,
   handleInternalErrorResult,
@@ -384,7 +384,9 @@ objectController.get(
       return
     }
 
-    handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
+    handleDownloadResponseHeaders(req, res, metadata, {
+      byteRange: resultingByteRange,
+    })
 
     pipeline(await startDownload(), res, (err) => {
       if (err) {

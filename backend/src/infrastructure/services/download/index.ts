@@ -6,7 +6,7 @@ import { forkAsyncIterable, forkStream } from '@autonomys/asynchronous'
 import {
   createFileCache,
   defaultMemoryAndSqliteConfig,
-} from '@autonomys/file-caching'
+} from '@autonomys/file-server'
 import { config } from '../../../config.js'
 import { Readable } from 'stream'
 import { DownloadServiceOptions, DownloadStatus } from '@auto-drive/models'
