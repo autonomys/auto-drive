@@ -2,7 +2,7 @@ import { jest } from '@jest/globals'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { FilesUseCases } from '../../../src/core/objects/files/index.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
-import { ByteRange } from '@autonomys/file-caching'
+import { ByteRange } from '@autonomys/file-server'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { NotAcceptableError } from '../../../src/errors/index.js'
 import { err, ok } from 'neverthrow'
@@ -42,7 +42,9 @@ describe('FilesUseCases', () => {
     }
 
     // Expect not to throw
-    expect(result.value.metadata).toEqual(metadata)
+    expect(result.value.metadata).toMatchObject({
+      type: metadata.type,
+    })
   })
 
   it('should block file upload', async () => {

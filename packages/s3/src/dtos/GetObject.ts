@@ -1,4 +1,4 @@
-import { ByteRange } from "@autonomys/file-caching";
+import { ByteRange } from "@autonomys/file-server";
 import { FileDownload } from "@auto-drive/models";
 
 export interface GetObjectCommandParams {

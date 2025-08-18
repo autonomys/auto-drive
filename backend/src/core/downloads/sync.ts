@@ -1,4 +1,4 @@
-import { ByteRange } from '@autonomys/file-caching'
+import { ByteRange, DownloadMetadataFactory } from '@autonomys/file-server'
 import { downloadService } from '../../infrastructure/services/download/index.js'
 import {
   DownloadOptions,
@@ -87,7 +87,7 @@ const downloadObjectByUser = async (
   ).valueOf()
 
   return ok({
-    metadata,
+    metadata: DownloadMetadataFactory.fromOffchainMetadata(metadata),
     byteRange: options.byteRange ? resultingByteRange : undefined,
     startDownload: async () => {
       logger.trace(
@@ -145,7 +145,7 @@ const downloadObjectByAnonymous = async (
   logger.info('downloadObjectByAnonymous authorized (cid=%s)', cid)
 
   return ok({
-    metadata,
+    metadata: DownloadMetadataFactory.fromOffchainMetadata(metadata),
     byteRange: options.byteRange ? resultingByteRange : undefined,
     startDownload: async () => {
       logger.trace('downloadObjectByAnonymous starting stream (cid=%s)', cid)

@@ -1,5 +1,5 @@
 import { OffchainMetadata } from "@autonomys/auto-dag-data";
-import { ByteRange } from "@autonomys/file-caching";
+import { ByteRange, DownloadMetadata } from "@autonomys/file-server";
 import { Readable } from "stream";
 
 export interface ObjectInformation {
@@ -111,7 +111,7 @@ export const getObjectSummary = (object: ObjectInformation): ObjectSummary => {
 };
 
 export interface FileDownload {
-  metadata: OffchainMetadata;
+  metadata: DownloadMetadata;
   startDownload: () => Promise<Readable> | Readable;
   byteRange?: ByteRange;
 }

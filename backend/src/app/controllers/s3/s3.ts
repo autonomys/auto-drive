@@ -1,11 +1,11 @@
 import { S3UseCases } from '../../../core/s3/index.js'
 import { handleError } from '../../../errors/index.js'
 import { handleS3Auth } from '../../../infrastructure/services/auth/s3.js'
-import { getByteRange } from '../../../shared/utils/http.js'
 import {
+  getByteRange,
   handleDownloadResponseHeaders,
   handleS3DownloadResponseHeaders,
-} from '../../../shared/httpHandlers/download.js'
+} from '@autonomys/file-server'
 import { pipeline } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { Request, Response } from 'express'
@@ -60,7 +60,9 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     byteRange: resultingByteRange,
   } = downloadResult.value
 
-  handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
+  handleDownloadResponseHeaders(req, res, metadata, {
+    byteRange: resultingByteRange,
+  })
   handleS3DownloadResponseHeaders(req, res, metadata)
 
   pipeline(await startDownload(), res, (err: Error | null) => {
@@ -93,7 +95,9 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   }
   const { metadata, byteRange: resultingByteRange } = downloadResult.value
 
-  handleDownloadResponseHeaders(req, res, metadata, resultingByteRange)
+  handleDownloadResponseHeaders(req, res, metadata, {
+    byteRange: resultingByteRange,
+  })
   handleS3DownloadResponseHeaders(req, res, metadata)
 
   res.sendStatus(204)

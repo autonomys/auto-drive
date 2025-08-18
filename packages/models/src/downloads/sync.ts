@@ -1,4 +1,4 @@
-import { ByteRange } from "@autonomys/file-caching";
+import { ByteRange } from "@autonomys/file-server";
 
 export interface DownloadOptions extends DownloadServiceOptions {
   blockingTags?: string[];
