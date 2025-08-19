@@ -2,7 +2,7 @@ import {
   GetMetadataByHeadCidDocument,
   GetMetadataByHeadCidQuery,
 } from 'gql/graphql';
-import { ObjectDetails } from '@/components/ObjectDetails';
+import { ObjectDetails } from '@/components/views/ObjectDetails';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { NetworkId } from 'constants/networks';
 import { createGQLClientByNetwork } from 'services/gql';
@@ -23,5 +23,5 @@ export default async function Page({
 
   const metadata = mapObjectInformationFromQueryResult(data);
 
-  return <ObjectDetails metadata={metadata} />;
+  return <ObjectDetails object={metadata} />;
 }

@@ -1,17 +1,17 @@
 'use client';
 
 import '../globals.css';
-import { UserEnsurer } from 'components/UserEnsurer';
+import { UserEnsurer } from '@/components/atoms/UserEnsurer';
 import { useEffect, useMemo } from 'react';
 import { useUserStore } from 'globalStates/user';
 import { SessionProvider } from 'next-auth/react';
 import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
 import { NetworkProvider } from 'contexts/network';
 import { redirect } from 'next/navigation';
-import { TopNavbar } from 'components/Navbar/TopNavbar';
-import { SideNavbar } from 'components/Navbar/SideNavbar';
+import { TopNavbar } from '@/components/organisms/TopNavbar';
+import { SideNavbar } from '@/components/organisms/SideNavbar';
 import { AuthService } from 'services/auth/auth';
-import { TableRouteChangeListener } from '@/components/FileTables/common/FileTable/TableRouteChangeListener';
+import { TableRouteChangeListener } from '@/components/organisms/FileTable/TableRouteChangeListener';
 
 export default function AppLayout({
   children,

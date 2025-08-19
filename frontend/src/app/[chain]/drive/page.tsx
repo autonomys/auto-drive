@@ -1,4 +1,4 @@
-import { UserFiles } from '@/components/FileTables/UserFiles';
+import { UserFiles } from '@/components/views/UserFiles';
 
 export default function Page() {
   return <UserFiles />;
