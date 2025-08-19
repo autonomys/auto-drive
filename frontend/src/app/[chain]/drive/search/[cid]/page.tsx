@@ -1,4 +1,4 @@
-import { SearchResult } from '@/components/SearchResult';
+import { SearchResult } from '@/components/views/SearchResult';
 import { createGQLClientByNetwork } from 'services/gql';
 import {
   SearchGlobalMetadataByCidOrNameDocument,

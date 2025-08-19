@@ -1,6 +1,6 @@
 'use client';
 
-import { SharedFiles } from '@/components/FileTables/SharedFiles';
+import { SharedFiles } from '@/components/views/SharedFiles';
 
 export default function Page() {
   return <SharedFiles />;

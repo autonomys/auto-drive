@@ -1,5 +1,5 @@
 import { AuthService } from 'services/auth/auth';
-import { Developers } from '@/components/Developers';
+import { Developers } from '@/components/views/Developers';
 
 export const dynamic = 'force-dynamic';
 
