@@ -298,7 +298,7 @@ export const FileTableRow = ({
           <div className='relative'>
             <div ref={buttonRef}>
               <Button
-                variant='lightAccent'
+                variant='outline'
                 className='p-1'
                 onClick={toggleActionsMenu}
               >
