@@ -16,7 +16,7 @@ export const LandingLayout = ({ children }: { children: React.ReactNode }) => {
         router.push(`/${defaultNetworkId}/drive`);
       }
     });
-  }, []);
+  }, [router]);
 
   return (
     <div className='flex min-h-screen flex-col'>

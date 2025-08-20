@@ -7,7 +7,7 @@ import { useUserStore } from 'globalStates/user';
 import { SessionProvider } from 'next-auth/react';
 import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
 import { NetworkProvider } from 'contexts/network';
-import { redirect, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { TopNavbar } from '@/components/organisms/TopNavbar';
 import { AuthService } from 'services/auth/auth';
 import { TableRouteChangeListener } from '@/components/organisms/FileTable/TableRouteChangeListener';
@@ -36,13 +36,14 @@ export default function AppLayout({
       .catch(() => {
         router.replace('/');
       });
-  }, [setUser]);
+  }, [router, setUser]);
 
   const network = useMemo(() => {
     return networks[params.chain] || null;
   }, [params.chain]);
   if (!network) {
     router.replace(`/${defaultNetworkId}/drive`);
+    return null;
   }
 
   return (
