@@ -14,11 +14,13 @@ export const NavItem = ({
   isActive,
 }: NavItemProps) => (
   <InternalLink className='contents' href={href}>
-    <button
-      className={`mb-2 flex items-center space-x-2 text-black hover:text-blue-600 dark:hover:text-darkPrimary ${isActive ? 'text-darkPrimary' : 'dark:text-darkBlack'}`}
-    >
-      <Icon className='h-5 w-5' />
-      <span className='hidden md:block'>{label}</span>
-    </button>
+    <div className='flex w-[80%] items-center justify-start rounded-md hover:bg-gray-100'>
+      <button
+        className={`mb-2 flex items-center space-x-2 text-black hover:text-blue-600 dark:hover:text-darkPrimary ${isActive ? 'text-darkPrimary' : 'dark:text-darkBlack'}`}
+      >
+        <Icon className='h-5 w-5' />
+        <span className='hidden md:block'>{label}</span>
+      </button>
+    </div>
   </InternalLink>
 );
