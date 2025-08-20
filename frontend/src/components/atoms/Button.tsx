@@ -18,11 +18,12 @@ const buttonVariants = cva(
           'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
-        danger: 'bg-danger text-danger-foreground hover:bg-danger/90',
+        danger:
+          'bg-danger text-danger-foreground hover:bg-danger/90 font-semibold',
         lightAccent:
-          'bg-lightAccent text-lightAccent-foreground hover:bg-lightAccent/90',
+          'bg-lightAccent text-lightAccent-foreground hover:bg-lightAccent/90 font-semibold',
         lightDanger:
-          'bg-lightDanger text-lightDanger-foreground hover:bg-lightDanger/90',
+          'bg-lightDanger hover:bg-lightDanger/80 text-lightDanger-foreground font-semibold',
       },
       size: {
         default: 'h-10 px-4 py-2',

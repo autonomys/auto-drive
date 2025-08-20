@@ -85,6 +85,14 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --light-accent: 189 64% 80%;
+    --light-accent-foreground: 0 0% 100%;
+    --light-danger: 348 73% 80%;
+    --light-danger-foreground: 0 0% 100%;
+
+    --danger: 350 68% 54%;
+    --danger-foreground: 0 0% 100%;
   }
 
   .dark {
