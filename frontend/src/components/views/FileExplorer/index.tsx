@@ -22,7 +22,6 @@ export const FileExplorer = () => {
 
   const fetcher: Fetcher = useCallback(
     async (page, limit, sortBy, searchQuery) => {
-      console.log('searchQuery', searchQuery);
       const { data } = await gql.query<GetGlobalFilesQuery>({
         query: GetGlobalFilesDocument,
         variables: {
