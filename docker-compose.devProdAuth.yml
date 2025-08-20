@@ -71,7 +71,7 @@ services:
       HASURA_GRAPHQL_DEV_MODE: "true" # Disable development mode features
 
       # Role and CORS Settings
-      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: user # Default role for unauthenticated users
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous # Default role for unauthenticated users
       HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN} # Allowed domains for CORS
       HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: "true"
 
@@ -92,6 +92,9 @@ services:
       # Hasura Migrations and Metadata
       HASURA_GRAPHQL_METADATA_DIR: /app/metadata
       HASURA_GRAPHQL_MIGRATIONS_DIR: /app/migrations
+    command:
+      - graphql-engine
+      - serve
     profiles:
       - infrastructure
     ports:
