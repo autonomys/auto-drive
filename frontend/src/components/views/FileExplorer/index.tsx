@@ -11,6 +11,7 @@ import { useNetwork } from 'contexts/network';
 import { FileExplorerHeader } from './FileExplorerHeader';
 import { NetworkDropdown } from '../../molecules/NetworkDropdown';
 import { NoFilesPlaceholder } from '../../molecules/NoFilesPlaceholder';
+import { ROUTES } from '../../../constants/routes';
 
 export const FileExplorer = () => {
   const { network } = useNetwork();
@@ -62,6 +63,7 @@ export const FileExplorer = () => {
         <FileTable
           actionButtons={[FileActionButtons.DOWNLOAD, FileActionButtons.REPORT]}
           noFilesPlaceholder={<NoFilesPlaceholder />}
+          fileDetailPath={ROUTES.publicFileDetails}
         />
       </div>
     </div>

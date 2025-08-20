@@ -28,7 +28,6 @@ import { Button } from '@/components/atoms/Button';
 import { File, Folder, MoreVertical } from 'lucide-react';
 import { OwnerBadge } from './OwnerBadge';
 import { useNetwork } from 'contexts/network';
-import { ROUTES } from 'constants/routes';
 import { utcToLocalRelativeTime, formatLocalDate } from 'utils/time';
 import { Badge } from '@/components/atoms/Badge';
 import { DocumentIcon } from '@heroicons/react/24/outline';
@@ -238,7 +237,7 @@ export const FileTableRow = ({
               </button>
             )}
             <Link
-              href={ROUTES.objectDetails(network.id, file.headCid)}
+              href={fileDetailPath(network.id, file.headCid)}
               className='relative ml-2 flex flex-row items-center text-sm font-medium text-gray-900 dark:text-darkBlack'
             >
               {file.type === 'folder' ? (

@@ -8,9 +8,6 @@ query GetMetadataByHeadCID($headCid: String!) {
     tags
     metadata
     created_at
-    published_objects {
-      id
-    }
     maximumBlockDepth: nodes(
       order_by: { block_published_on: desc_nulls_last }
       limit: 1

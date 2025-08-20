@@ -17,10 +17,10 @@ export type FileIconProps = {
   className?: string;
 };
 
-export function FileIcons({
+export const IconByFileType = ({
   fileType,
   className = 'h-6 w-6 text-blue-900 dark:text-blue-100',
-}: FileIconProps) {
+}: FileIconProps) => {
   // Helper function to check if the file type starts with a specific prefix
   const isType = (prefix: string) => fileType.toLowerCase().startsWith(prefix);
 
@@ -73,4 +73,4 @@ export function FileIcons({
   }
   // Default fallback icon
   return <DocumentIcon className={className} />;
-}
+};
