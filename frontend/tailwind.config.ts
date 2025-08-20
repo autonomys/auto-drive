@@ -39,6 +39,18 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        lightAccent: {
+          DEFAULT: 'hsl(var(--light-accent))',
+          foreground: 'hsl(var(--light-accent-foreground))',
+        },
+        lightDanger: {
+          DEFAULT: 'hsl(var(--light-danger))',
+          foreground: 'hsl(var(--light-danger-foreground))',
+        },
+        danger: {
+          DEFAULT: 'hsl(var(--danger))',
+          foreground: 'hsl(var(--danger-foreground))',
+        },
         sidebar: {
           DEFAULT: 'hsl(var(--sidebar-background))',
           foreground: 'hsl(var(--sidebar-foreground))',
