@@ -1,7 +1,6 @@
 'use client';
 
-import LandingFooter from '../../molecules/LandingFooter';
-import { LandingHeader } from '../../molecules/LandingHeader';
+import { LandingLayout } from '../../layouts/LandingLayout';
 import { CTASection } from './CTASection';
 import { DeveloperSection } from './DeveloperSection';
 import HeroSection from './HeroSection';
@@ -9,13 +8,11 @@ import { UploadSection } from './UploadSection';
 
 export const LandingHome = () => {
   return (
-    <div className='flex min-h-screen flex-col'>
-      <LandingHeader />
+    <LandingLayout>
       <HeroSection />
       <UploadSection />
       <DeveloperSection />
       <CTASection />
-      <LandingFooter />
-    </div>
+    </LandingLayout>
   );
 };
