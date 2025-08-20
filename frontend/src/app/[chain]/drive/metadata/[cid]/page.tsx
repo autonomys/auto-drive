@@ -2,7 +2,7 @@ import {
   GetMetadataByHeadCidDocument,
   GetMetadataByHeadCidQuery,
 } from 'gql/graphql';
-import { ObjectDetails } from '@/components/views/ObjectDetails';
+import { ObjectDetails } from '@/components/organisms/ObjectDetails';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { NetworkId } from 'constants/networks';
 import { createGQLClientByNetwork } from 'services/gql';

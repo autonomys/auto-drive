@@ -23,6 +23,10 @@ export const EXTERNAL_ROUTES = {
     linkedin: 'https://www.linkedin.com/company/autonomys/',
     subSocial: 'https://app.subsocial.network/@NetworkSubspace',
   },
+  explorer: {
+    block: (networkId: NetworkId, blockDepth: number) =>
+      `https://astral.autonomys.xyz/${networkId}/consensus/blocks/${blockDepth}`,
+  },
   novaExplorer: 'https://nova.subspace.network/',
   subscan: 'https://autonomys.subscan.io/',
   spaceAcres:
