@@ -7,7 +7,7 @@ import { useUserStore } from 'globalStates/user';
 import { SessionProvider } from 'next-auth/react';
 import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
 import { NetworkProvider } from 'contexts/network';
-import { redirect } from 'next/navigation';
+import { redirect, useRouter } from 'next/navigation';
 import { TopNavbar } from '@/components/organisms/TopNavbar';
 import { AuthService } from 'services/auth/auth';
 import { TableRouteChangeListener } from '@/components/organisms/FileTable/TableRouteChangeListener';
@@ -22,22 +22,27 @@ export default function AppLayout({
   params: { chain: NetworkId };
 }>) {
   const setUser = useUserStore(({ setUser }) => setUser);
+  const router = useRouter();
 
   useEffect(() => {
-    AuthService.getMe().then((user) => {
-      if (user.onboarded) {
-        setUser(user);
-      } else {
-        redirect('/onboarding');
-      }
-    });
+    AuthService.getMe()
+      .then((user) => {
+        if (user.onboarded) {
+          setUser(user);
+        } else {
+          router.push('/onboarding');
+        }
+      })
+      .catch(() => {
+        router.replace('/');
+      });
   }, [setUser]);
 
   const network = useMemo(() => {
     return networks[params.chain] || null;
   }, [params.chain]);
   if (!network) {
-    redirect(`/${defaultNetworkId}/drive`);
+    router.replace(`/${defaultNetworkId}/drive`);
   }
 
   return (

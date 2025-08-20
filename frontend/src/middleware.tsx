@@ -55,6 +55,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const userInfo: MaybeUser | null = await getUserFromSession(session);
+  console.log('userInfo', userInfo);
 
   if (!userInfo) {
     return pathname !== '/'

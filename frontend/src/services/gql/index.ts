@@ -6,8 +6,6 @@ import { NetworkId, getNetwork } from 'constants/networks';
 const authLink = setContext(async (_, { headers }) => {
   const token = await getAuthSession();
 
-  console.log('token', token);
-
   return {
     headers: {
       ...headers,
