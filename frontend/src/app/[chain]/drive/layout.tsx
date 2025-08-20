@@ -1,6 +1,6 @@
 'use client';
 
-import '../globals.css';
+import '../../globals.css';
 import { UserEnsurer } from '@/components/atoms/UserEnsurer';
 import { useEffect, useMemo } from 'react';
 import { useUserStore } from 'globalStates/user';

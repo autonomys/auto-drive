@@ -47,4 +47,7 @@ export const ROUTES = {
   profile: (networkId: NetworkId) => `/${networkId}/drive/profile`,
   developers: (networkId: NetworkId) => `/${networkId}/drive/developers`,
   admin: (networkId: NetworkId) => `/${networkId}/drive/admin`,
+  explorer: (networkId: NetworkId) => `/${networkId}/explorer`,
+  publicFileDetails: (networkId: NetworkId, cid: string) =>
+    `/${networkId}/explorer/${cid}`,
 };
