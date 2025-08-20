@@ -55,7 +55,7 @@ export const UploadButton = () => {
         />
         <PopoverButton as='div'>
           <Button
-            variant='primaryOutline'
+            variant='outline'
             className='flex h-full items-center gap-2 rounded-full bg-gray-100 py-[.50rem] text-gray-800 shadow-sm hover:bg-gray-200'
           >
             <PlusIcon className='h-5 w-5' />

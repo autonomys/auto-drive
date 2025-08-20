@@ -1,18 +1,24 @@
-export const DiscordIcon = ({
-  fillColor = '#5865F2',
-}: {
+import { FC } from 'react';
+
+type DiscordIconProps = {
   fillColor?: string;
+  size?: number;
+};
+
+export const DiscordIcon: FC<DiscordIconProps> = ({
+  fillColor = '#5865F2',
+  size = 24,
 }) => {
   return (
     <svg
-      width='800px'
-      height='800px'
+      width={size}
+      height={size}
       viewBox='0 -28.5 256 256'
       version='1.1'
       xmlns='http://www.w3.org/2000/svg'
       xmlnsXlink='http://www.w3.org/1999/xlink'
       preserveAspectRatio='xMidYMid'
-      className='mr-2 h-6 w-6'
+      className='mr-2'
     >
       <g>
         <path

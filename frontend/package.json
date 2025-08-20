@@ -57,6 +57,7 @@
     "siwe": "^3.0.0",
     "streamsaver": "^2.0.6",
     "tailwind-merge": "^3.0.1",
+    "tailwindcss-animate": "^1.0.7",
     "typescript-generic-sdk": "^1.17.12",
     "usehooks-ts": "^3.1.0",
     "util-browser": "^0.0.2",
