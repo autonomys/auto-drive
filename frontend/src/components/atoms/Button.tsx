@@ -1,76 +1,61 @@
-import React, { MouseEventHandler, ReactNode } from 'react';
+import * as React from 'react';
+import { Slot } from '@radix-ui/react-slot';
+import { cva, type VariantProps } from 'class-variance-authority';
 
-type ButtonVariant =
-  | 'primary'
-  | 'accent'
-  | 'outline'
-  | 'grayscale'
-  | 'danger'
-  | 'lightAccent'
-  | 'lightDanger'
-  | 'primaryOutline';
+import { cn } from '@/utils/cn';
 
-export interface ButtonProps {
-  children: ReactNode;
-  onClick?: MouseEventHandler<HTMLButtonElement>;
-  className?: string;
-  variant?: ButtonVariant;
-  disabled?: boolean;
+const buttonVariants = cva(
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  {
+    variants: {
+      variant: {
+        primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        destructive:
+          'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        outline:
+          'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+        secondary:
+          'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        ghost: 'hover:bg-accent hover:text-accent-foreground',
+        link: 'text-primary underline-offset-4 hover:underline',
+        danger: 'bg-danger text-danger-foreground hover:bg-danger/90',
+        lightAccent:
+          'bg-lightAccent text-lightAccent-foreground hover:bg-lightAccent/90',
+        lightDanger:
+          'bg-lightDanger text-lightDanger-foreground hover:bg-lightDanger/90',
+      },
+      size: {
+        default: 'h-10 px-4 py-2',
+        sm: 'h-9 rounded-md px-3',
+        lg: 'h-11 rounded-md px-8',
+        icon: 'h-10 w-10',
+      },
+    },
+    defaultVariants: {
+      variant: 'primary',
+      size: 'default',
+    },
+  },
+);
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
 }
 
-const baseClasses =
-  'px-4 py-2 rounded-lg shadow-sm focus:outline-none transition-colors duration-200';
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : 'button';
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    );
+  },
+);
+Button.displayName = 'Button';
 
-export const buttonVariantClasses: Record<ButtonVariant, string> = {
-  primary: `${baseClasses} bg-primary text-white hover:bg-primaryHover dark:bg-darkPrimary dark:hover:bg-darkPrimaryHover disabled:opacity-50 disabled:hover:opacity-50 disabled:hover:cursor-default dark:bg-backgroundDark`,
-  accent: `${baseClasses} bg-accent dark:bg-darkAccent text-white opacity-100 hover:opacity-80 disabled:opacity-50 disabled:hover disabled:hover:cursor-default dark:bg-backgroundDark`,
-  outline: `${baseClasses} bg-transparent text-accent hover:text-accent-dark border border-accent hover:border-accent-dark disabled:opacity-50 disabled:hover disabled:hover:cursor-default dark:bg-backgroundDark`,
-  lightAccent: `${baseClasses} font-medium bg-blue-100 text-blue-900 hover:bg-blue-200 dark:bg-blue-200 dark:hover:bg-blue-300 disabled:opacity-50 disabled:hover disabled:cursor-default`,
-  lightDanger: `${baseClasses} font-medium bg-light-danger text-red-900 hover:bg-red-300 dark:bg-red-200 dark:hover:bg-red-300 disabled:opacity-50 disabled:hover disabled:hover:cursor-default`,
-  danger: `${baseClasses} font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 bg-red-400 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-400 text-white font-semibold disabled:opacity-50 disabled:hover disabled:hover:cursor-default`,
-  grayscale: `${baseClasses} bg-gray-button text-white opacity-80 hover:opacity-100 font-extralight disabled:opacity-50 disabled:hover disabled:hover:cursor-default`,
-  primaryOutline: `${baseClasses} bg-transparent text-primary border border-primary hover:border-primary-dark disabled:opacity-50 disabled:hover disabled:hover:cursor-default dark:bg-darkWhite hover:bg-primaryHover hover:text-white dark:text-darkBlack dark:hover:bg-darkWhiteHover dark:border-darkBlack dark:text-darkBlack dark:hover:bg-darkWhiteHover dark:border-darkBlack`,
-};
-
-const mapVariantToDarkModeVariant: Record<ButtonVariant, ButtonVariant> = {
-  lightAccent: 'primary',
-  lightDanger: 'danger',
-  primary: 'primary',
-  accent: 'accent',
-  outline: 'outline',
-  grayscale: 'grayscale',
-  danger: 'danger',
-  primaryOutline: 'primaryOutline',
-};
-
-export function Button({
-  children,
-  onClick,
-  className = '',
-  variant = 'primary',
-  disabled = false,
-}: ButtonProps) {
-  const isDarkMode = () => {
-    if (typeof window !== 'undefined') {
-      return (
-        window.matchMedia &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches
-      );
-    }
-    return false;
-  };
-
-  const darkModeVariant = isDarkMode()
-    ? mapVariantToDarkModeVariant[variant]
-    : variant;
-
-  return (
-    <button
-      onClick={onClick}
-      className={`${baseClasses} ${buttonVariantClasses[darkModeVariant]} ${className}`}
-      disabled={disabled}
-    >
-      {children}
-    </button>
-  );
-}
+export { Button, buttonVariants };

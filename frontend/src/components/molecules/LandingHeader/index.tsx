@@ -1,37 +1,53 @@
-'use client';
+import { Button } from '@/components/atoms/Button';
+import { AutonomysSymbol } from '../../icons/AutonomysSymbol';
+import { useState } from 'react';
+import { AuthModal } from '@/components/molecules/AuthModal';
 
-import { HelpCircleIcon, HomeIcon } from 'lucide-react';
-import { usePathname } from 'next/navigation';
-import { useCallback } from 'react';
-import Link from 'next/link';
 export const LandingHeader = () => {
-  const pathname = usePathname();
-
-  const getLinkClass = useCallback(
-    (path: string) => {
-      return `rounded-lg px-8 py-2 font-medium ${
-        pathname === path
-          ? 'bg-white dark:bg-darkWhite dark:text-darkBlack'
-          : 'bg-transparent hover:cursor-pointer dark:text-darkBlack'
-      }`;
-    },
-    [pathname],
-  );
-
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   return (
-    <div className='flex w-full flex-row justify-center gap-2 bg-transparent px-[20%] py-2'>
-      <ul className='flex flex-row gap-4'>
-        <Link className='content' href='/'>
-          <li className={getLinkClass('/')}>
-            <HomeIcon className='h-4 w-4' />
-          </li>
-        </Link>
-        <Link className='content' href='/faqs'>
-          <li className={getLinkClass('/faqs')}>
-            <HelpCircleIcon className='h-4 w-4' />
-          </li>
-        </Link>
-      </ul>
-    </div>
+    <header className='bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 w-full border-b backdrop-blur'>
+      <div className='mx-auto flex h-16 w-full max-w-screen-2xl items-center justify-between px-4 md:px-6'>
+        <a href='/'>
+          <div className='flex items-center space-x-2'>
+            <AutonomysSymbol />
+            <span className='text-xl font-bold'>Auto Drive</span>
+          </div>
+        </a>
+
+        <nav className='hidden items-center space-x-6 md:flex'>
+          <a
+            href='/'
+            className='text-sm font-medium transition-colors hover:text-primary'
+          >
+            Home
+          </a>
+          <a
+            href='/explorer'
+            className='text-sm font-medium transition-colors hover:text-primary'
+          >
+            Explorer
+          </a>
+
+          <a
+            href='https://develop.autonomys.xyz/sdk/auto-drive/overview_setup'
+            target='_blank'
+            rel='noopener noreferrer'
+            className='text-sm font-medium transition-colors hover:text-primary'
+          >
+            Docs
+          </a>
+        </nav>
+
+        <Button className='font-bold' onClick={() => setIsAuthModalOpen(true)}>
+          Get Started
+        </Button>
+
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+        />
+      </div>
+    </header>
   );
 };
