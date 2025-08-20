@@ -27,6 +27,8 @@ import { useFileTableState } from '@/components/organisms/FileTable/state';
 import { SortableTableColumn } from './SortableTableColumn';
 import { FileTableRowSkeleton } from './FileTableRowSkeleton';
 import { ObjectReportModal } from '../../molecules/ObjectReportModal';
+import { ROUTES } from '@/constants/routes';
+import { NetworkId } from '@/constants/networks';
 
 export enum FileActionButtons {
   DOWNLOAD = 'download',
@@ -40,7 +42,12 @@ export enum FileActionButtons {
 export const FileTable: FC<{
   actionButtons: FileActionButtons[];
   noFilesPlaceholder?: React.ReactNode;
-}> = ({ actionButtons, noFilesPlaceholder }) => {
+  fileDetailPath?: (networkId: NetworkId, cid: string) => string;
+}> = ({
+  actionButtons,
+  noFilesPlaceholder,
+  fileDetailPath = ROUTES.objectDetails,
+}) => {
   const user = useUserStore(({ user }) => user);
   const [downloadingCID, setDownloadingCID] = useState<string | null>(null);
   const [shareCID, setShareCID] = useState<string | null>(null);
@@ -147,6 +154,7 @@ export const FileTable: FC<{
                       onDeleteFile={setDeleteCID}
                       onRestoreFile={setRestoreCID}
                       onReportFile={setReportCID}
+                      fileDetailPath={fileDetailPath}
                     />
                   ))
                 : Array.from({ length: limit }).map((_, index) => (

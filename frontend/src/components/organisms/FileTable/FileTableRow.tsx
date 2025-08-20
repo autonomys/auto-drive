@@ -40,6 +40,7 @@ import { CopiableText } from '@/components/atoms/CopiableText';
 import toast from 'react-hot-toast';
 import { useUserAsyncDownloadsStore } from '../UserAsyncDownloads/state';
 import { useFileInCache } from '@/hooks/useFileInCache';
+import { NetworkId } from '@/constants/networks';
 
 export const FileTableRow = ({
   file,
@@ -52,6 +53,7 @@ export const FileTableRow = ({
   onDeleteFile,
   onRestoreFile,
   onReportFile,
+  fileDetailPath,
 }: {
   file: ObjectSummary;
   user: User;
@@ -63,6 +65,7 @@ export const FileTableRow = ({
   onDeleteFile: (cid: string) => void;
   onRestoreFile: (cid: string) => void;
   onReportFile: (cid: string) => void;
+  fileDetailPath: (networkId: NetworkId, cid: string) => string;
 }) => {
   const { network } = useNetwork();
 
@@ -433,7 +436,7 @@ export const FileTableRow = ({
                   <File className='mx-2 h-5 w-5 flex-shrink-0 text-accent' />
                 )}
 
-                <Link href={ROUTES.objectDetails(network.id, child.cid)}>
+                <Link href={fileDetailPath(network.id, child.cid)}>
                   <span
                     className={`relative text-sm font-semibold text-accent ${
                       file.type === 'folder'

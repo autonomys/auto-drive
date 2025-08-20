@@ -2,6 +2,8 @@ import { Button } from '@/components/atoms/Button';
 import { AutonomysSymbol } from '../../icons/AutonomysSymbol';
 import { useState } from 'react';
 import { AuthModal } from '@/components/molecules/AuthModal';
+import { defaultNetworkId } from '../../../constants/networks';
+import { ROUTES } from '../../../constants/routes';
 
 export const LandingHeader = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -23,7 +25,7 @@ export const LandingHeader = () => {
             Home
           </a>
           <a
-            href='/explorer'
+            href={ROUTES.explorer(defaultNetworkId)}
             className='text-sm font-medium transition-colors hover:text-primary'
           >
             Explorer
