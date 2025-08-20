@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AuthModal } from '@/components/molecules/AuthModal';
 import { defaultNetworkId } from '../../../constants/networks';
 import { ROUTES } from '../../../constants/routes';
+import { InternalLink } from '../../atoms/InternalLink';
 
 export const LandingHeader = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -18,32 +19,52 @@ export const LandingHeader = () => {
         </a>
 
         <nav className='hidden items-center space-x-6 md:flex'>
-          <a
-            href='/'
-            className='text-sm font-medium transition-colors hover:text-primary'
-          >
-            Home
-          </a>
-          <a
+          <span>
+            <InternalLink
+              href='/'
+              className='text-sm font-medium transition-colors hover:text-primary'
+            >
+              Home
+            </InternalLink>
+          </span>
+          <span>
+            <InternalLink
+              href={ROUTES.explorer(defaultNetworkId)}
+              className='text-sm font-medium transition-colors hover:text-primary'
+            >
+              Explorer
+            </InternalLink>
+          </span>
+
+          <span>
+            <a
+              href='https://develop.autonomys.xyz/sdk/auto-drive/overview_setup'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='text-sm font-medium transition-colors hover:text-primary'
+            >
+              Docs
+            </a>
+          </span>
+        </nav>
+
+        <Button
+          className='hidden font-bold md:block'
+          onClick={() => setIsAuthModalOpen(true)}
+        >
+          Get Started
+        </Button>
+
+        <div className='flex items-center space-x-2 md:hidden'>
+          <InternalLink
             href={ROUTES.explorer(defaultNetworkId)}
             className='text-sm font-medium transition-colors hover:text-primary'
           >
-            Explorer
-          </a>
-
-          <a
-            href='https://develop.autonomys.xyz/sdk/auto-drive/overview_setup'
-            target='_blank'
-            rel='noopener noreferrer'
-            className='text-sm font-medium transition-colors hover:text-primary'
-          >
-            Docs
-          </a>
-        </nav>
-
-        <Button className='font-bold' onClick={() => setIsAuthModalOpen(true)}>
-          Get Started
-        </Button>
+            <Button size='sm' variant='outline' className='font-bold'>
+              Explorer
+            </Button>
+          </InternalLink>
+        </div>
 
         <AuthModal
           isOpen={isAuthModalOpen}

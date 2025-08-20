@@ -8,7 +8,6 @@ import {
   TrashIcon,
   UserIcon,
   UsersIcon,
-  Files,
 } from 'lucide-react';
 import React, { useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -35,7 +34,7 @@ const FILES_ITEMS = [
   {
     href: (networkId: NetworkId) => ROUTES.drive(networkId),
     icon: HomeIcon,
-    label: 'Files',
+    label: 'My Files',
   },
   {
     href: (networkId: NetworkId) => ROUTES.globalFeed(networkId),
@@ -162,7 +161,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
                     tooltip={collapsed ? ADMIN_ITEM.label : undefined}
                   >
                     <ADMIN_ITEM.icon className='h-4 w-4' />
-                    <span className='flex-1'>{item.label}</span>
+                    <span className='flex-1'>{ADMIN_ITEM.label}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

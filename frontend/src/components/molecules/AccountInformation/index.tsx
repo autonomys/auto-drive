@@ -1,5 +1,4 @@
 import bytes from 'bytes';
-import { Download, Upload } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { utcToLocalRelativeTime } from '../../../utils/time';
 import { EXTERNAL_ROUTES } from '../../../constants/routes';

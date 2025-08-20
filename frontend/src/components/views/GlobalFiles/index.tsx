@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect } from 'react';
 import { FileTable, FileActionButtons } from '../../organisms/FileTable';
-import { NoUploadsPlaceholder } from '../../molecules/NoUploadsPlaceholder';
 import { SearchBar } from '@/components/molecules/SearchBar';
 import { GetGlobalFilesDocument, GetGlobalFilesQuery } from 'gql/graphql';
 import { objectSummaryFromGlobalFilesQuery } from './utils';
