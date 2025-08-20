@@ -11,6 +11,7 @@ import { Fetcher, useFileTableState } from '../../organisms/FileTable/state';
 import { useNetwork } from 'contexts/network';
 import { UserAsyncDownloads } from '../../organisms/UserAsyncDownloads';
 import { ToBeReviewedFiles } from '../../organisms/FilesToBeReviewed';
+import { NoFilesPlaceholder } from '../../molecules/NoFilesPlaceholder';
 
 export const GlobalFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
@@ -61,7 +62,7 @@ export const GlobalFiles = () => {
               FileActionButtons.ASYNC_DOWNLOAD,
               FileActionButtons.REPORT,
             ]}
-            noFilesPlaceholder={<NoUploadsPlaceholder />}
+            noFilesPlaceholder={<NoFilesPlaceholder />}
           />
         </div>
       </div>
