@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
 import { getMessageToSign } from '../app/api/auth/[...nextauth]/web3';
 import { signIn as nextAuthSignIn } from 'next-auth/react';
+import { defaultNetworkId } from '../constants/networks';
 
 type AuthProvider = 'google' | 'discord' | 'web3-wallet' | 'github';
 
@@ -22,7 +23,9 @@ export const useLogIn = (): UseAuth => {
       if (provider === 'web3-wallet') {
         if (openConnectModal) openConnectModal();
       } else {
-        nextAuthSignIn(provider);
+        nextAuthSignIn(provider, {
+          callbackUrl: `/${defaultNetworkId}/drive`,
+        });
       }
     },
     [openConnectModal],
@@ -40,7 +43,7 @@ export const useLogIn = (): UseAuth => {
       message,
       signature,
       redirect: true,
-      callbackUrl: '/drive',
+      callbackUrl: `/${defaultNetworkId}/drive`,
     });
   }, [address, signMessageAsync]);
 
