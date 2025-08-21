@@ -12,7 +12,6 @@ import { Button } from '@/components/atoms/Button';
 import { shortenString } from 'utils/misc';
 import { useEncryptionStore } from 'globalStates/encryption';
 import toast from 'react-hot-toast';
-import { useSession } from 'next-auth/react';
 import { useGetMetadataByHeadCidQuery } from 'gql/graphql';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { useNetwork } from 'contexts/network';
@@ -33,7 +32,6 @@ export const ObjectDownloadModal = ({
   const [wrongPassword, setWrongPassword] = useState<boolean>(false);
   const [insecure, setInsecure] = useState<boolean>(false);
   const defaultPassword = useEncryptionStore((store) => store.password);
-  const session = useSession();
   const network = useNetwork();
 
   useEffect(() => {
@@ -50,7 +48,7 @@ export const ObjectDownloadModal = ({
     variables: {
       headCid: cid ?? '',
     },
-    skip: !cid || !session.data?.accessToken,
+    skip: !cid,
     onCompleted: (data) => {
       const summary = mapObjectInformationFromQueryResult(data);
       setMetadata(summary.metadata);
