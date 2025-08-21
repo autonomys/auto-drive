@@ -18,41 +18,13 @@ export const LandingHeader = () => {
           </div>
         </a>
 
-        <nav className='hidden items-center space-x-6 md:flex'>
-          <span>
-            <InternalLink
-              href='/'
-              className='text-sm font-medium transition-colors hover:text-primary'
-            >
-              Home
-            </InternalLink>
-          </span>
-          <span>
-            <InternalLink
-              href={ROUTES.explorer(defaultNetworkId)}
-              className='text-sm font-medium transition-colors hover:text-primary'
-            >
-              Explorer
-            </InternalLink>
-          </span>
-
-          <span>
-            <a
-              href='https://develop.autonomys.xyz/sdk/auto-drive/overview_setup'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-sm font-medium transition-colors hover:text-primary'
-            >
-              Docs
-            </a>
-          </span>
-        </nav>
-
         <Button
           className='hidden font-bold md:block'
-          onClick={() => setIsAuthModalOpen(true)}
+          onClick={() =>
+            (window.location.href = `/${defaultNetworkId}/drive/global`)
+          }
         >
-          Get Started
+          Explore
         </Button>
 
         <div className='flex items-center space-x-2 md:hidden'>
