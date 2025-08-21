@@ -2,7 +2,6 @@ import { getToken, JWT } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAuth } from 'services/auth/jwt';
 import { MaybeUser } from '@auto-drive/models';
-import { cookies } from 'next/headers';
 import { refreshAccessToken } from './app/api/auth/[...nextauth]/jwt';
 
 const getUserFromSession = async (session: JWT) => {
@@ -55,7 +54,6 @@ export async function middleware(req: NextRequest) {
   }
 
   const userInfo: MaybeUser | null = await getUserFromSession(session);
-  console.log('userInfo', userInfo);
 
   if (!userInfo) {
     return pathname !== '/'
@@ -67,21 +65,6 @@ export async function middleware(req: NextRequest) {
     return pathname.startsWith('/onboarding')
       ? NextResponse.next()
       : NextResponse.redirect(new URL('/onboarding', req.url));
-  }
-
-  if (userInfo.onboarded) {
-    const redirect = cookies().get('redirect');
-    if (redirect?.value) {
-      return NextResponse.redirect(new URL(redirect.value, req.url), {
-        headers: {
-          'Set-Cookie': 'redirect=; Path=/; HttpOnly; SameSite=Strict',
-        },
-      });
-    }
-
-    return pathname.startsWith('/drive')
-      ? NextResponse.next()
-      : NextResponse.redirect(new URL('/drive', req.url));
   }
 
   return NextResponse.next();
