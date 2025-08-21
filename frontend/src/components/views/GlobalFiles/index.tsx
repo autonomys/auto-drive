@@ -1,7 +1,7 @@
 /* eslint-disable camelcase */
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useContext, useEffect } from 'react';
 import { FileTable, FileActionButtons } from '../../organisms/FileTable';
 import { SearchBar } from '@/components/molecules/SearchBar';
 import { GetGlobalFilesDocument, GetGlobalFilesQuery } from 'gql/graphql';
@@ -11,12 +11,16 @@ import { useNetwork } from 'contexts/network';
 import { UserAsyncDownloads } from '../../organisms/UserAsyncDownloads';
 import { ToBeReviewedFiles } from '../../organisms/FilesToBeReviewed';
 import { NoFilesPlaceholder } from '../../molecules/NoFilesPlaceholder';
+import { SessionContext } from 'next-auth/react';
 
 export const GlobalFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
   const setFetcher = useFileTableState((e) => e.setFetcher);
   const aggregateLimit = useFileTableState((e) => e.aggregateLimit);
   const { gql } = useNetwork();
+  const sessionContext = useContext(SessionContext)!;
+
+  const isLoggedIn = sessionContext.data !== null;
 
   const fetcher: Fetcher = useCallback(
     async (page, limit, sortBy, searchQuery) => {
@@ -58,8 +62,8 @@ export const GlobalFiles = () => {
           <FileTable
             actionButtons={[
               FileActionButtons.DOWNLOAD,
-              FileActionButtons.ASYNC_DOWNLOAD,
               FileActionButtons.REPORT,
+              ...(isLoggedIn ? [FileActionButtons.ASYNC_DOWNLOAD] : []),
             ]}
             noFilesPlaceholder={<NoFilesPlaceholder />}
           />
