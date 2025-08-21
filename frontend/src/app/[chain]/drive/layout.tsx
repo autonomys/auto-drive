@@ -32,8 +32,8 @@ export default function AppLayout({
   return (
     <div className='flex min-h-screen bg-white dark:bg-darkWhite'>
       <SessionProvider>
-        <SessionEnsurer>
-          <NetworkProvider network={network}>
+        <NetworkProvider network={network}>
+          <SessionEnsurer>
             <SidebarProvider className='contents'>
               <SideNavbar networkId={params.chain} />
               <div className='flex h-screen flex-1 flex-col rounded-lg bg-white dark:bg-darkWhite dark:text-white'>
@@ -46,8 +46,8 @@ export default function AppLayout({
                 </div>
               </div>
             </SidebarProvider>
-          </NetworkProvider>
-        </SessionEnsurer>
+          </SessionEnsurer>
+        </NetworkProvider>
       </SessionProvider>
     </div>
   );
