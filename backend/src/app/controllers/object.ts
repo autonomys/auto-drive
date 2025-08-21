@@ -452,11 +452,6 @@ objectController.post(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const executor = await handleAuth(req, res)
-    if (!executor) {
-      return
-    }
-
     const reportResult = await handleInternalError(
       ObjectUseCases.reportObject(cid),
       'Failed to report object',
