@@ -195,17 +195,8 @@ export const createApiService = ({
   },
 
   reportFile: async (headCid: string): Promise<void> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
     const response = await fetch(`${apiBaseUrl}/objects/${headCid}/report`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-      },
     });
 
     if (!response.ok) {
