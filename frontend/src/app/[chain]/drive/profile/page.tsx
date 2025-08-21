@@ -1,5 +1,10 @@
 import { Profile } from '@/components/views/Profile';
+import { UserProtectedLayout } from '../../../../components/layouts/UserProtectedLayout';
 
 export default async function Page() {
-  return <Profile />;
+  return (
+    <UserProtectedLayout>
+      <Profile />
+    </UserProtectedLayout>
+  );
 }

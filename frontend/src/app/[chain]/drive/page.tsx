@@ -1,5 +1,10 @@
 import { UserFiles } from '@/components/views/UserFiles';
+import { UserProtectedLayout } from '@/components/layouts/UserProtectedLayout';
 
 export default function Page() {
-  return <UserFiles />;
+  return (
+    <UserProtectedLayout>
+      <UserFiles />
+    </UserProtectedLayout>
+  );
 }

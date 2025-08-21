@@ -1,7 +1,5 @@
 import bytes from 'bytes';
-import { Button } from '@/components/atoms/Button';
 import { utcToLocalRelativeTime } from '../../../utils/time';
-import { EXTERNAL_ROUTES } from '../../../constants/routes';
 
 interface CreditLimitsProps {
   uploadPending: number;
@@ -38,16 +36,6 @@ export const AccountInformation = ({
       <p className='text-muted-foreground space-y-2 text-xs'>
         Renews in {utcToLocalRelativeTime(renewalDate.toISOString())}
       </p>
-      <a
-        target='_blank'
-        rel='noreferrer'
-        href={EXTERNAL_ROUTES.requestMoreCreditsForm}
-        className='contents'
-      >
-        <Button variant='outline' size='sm' className='w-full text-xs'>
-          Ask for more credits
-        </Button>
-      </a>
     </div>
   );
 };
