@@ -10,6 +10,7 @@ export const EXTERNAL_ROUTES = {
   operatorDocs: 'https://docs.autonomys.xyz/staking/operator/register',
   autoDriveDocs:
     'https://github.com/autonomys/auto-sdk/tree/main/packages/auto-drive',
+  requestMoreCreditsForm: 'https://forms.gle/EAPzicXcbP7gH2uT6',
   autoDriveApiDocs: 'https://mainnet.auto-drive.autonomys.xyz/api/docs',
   social: {
     twitter: 'https://x.com/AutonomysNet',
@@ -21,6 +22,10 @@ export const EXTERNAL_ROUTES = {
     youtube: 'https://www.youtube.com/@AutonomysNetwork',
     linkedin: 'https://www.linkedin.com/company/autonomys/',
     subSocial: 'https://app.subsocial.network/@NetworkSubspace',
+  },
+  explorer: {
+    block: (networkId: NetworkId, blockDepth: number) =>
+      `https://astral.autonomys.xyz/${networkId}/consensus/blocks/${blockDepth}`,
   },
   novaExplorer: 'https://nova.subspace.network/',
   subscan: 'https://autonomys.subscan.io/',
@@ -47,4 +52,7 @@ export const ROUTES = {
   profile: (networkId: NetworkId) => `/${networkId}/drive/profile`,
   developers: (networkId: NetworkId) => `/${networkId}/drive/developers`,
   admin: (networkId: NetworkId) => `/${networkId}/drive/admin`,
+  explorer: (networkId: NetworkId) => `/${networkId}/explorer`,
+  publicFileDetails: (networkId: NetworkId, cid: string) =>
+    `/${networkId}/explorer/${cid}`,
 };

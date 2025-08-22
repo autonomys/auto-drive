@@ -15,6 +15,19 @@ select_permissions:
       filter: {}
       allow_aggregations: true
     comment: ""
+  - role: anonymous
+    permission:
+      columns:
+        - root_cid
+        - head_cid
+        - name
+        - metadata
+        - tags
+        - created_at
+        - updated_at
+      filter: {}
+      allow_aggregations: true
+    comment: ""
 object_relationships:
   - name: root_metadata
     using:

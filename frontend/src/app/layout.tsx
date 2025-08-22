@@ -1,9 +1,9 @@
 import { Metadata } from 'next';
 import localFont from 'next/font/local';
 import './globals.css';
-import { ToasterSetup } from 'components/ToasterSetup';
 import dynamic from 'next/dynamic';
 import NextTopLoader from 'nextjs-toploader';
+import { Toaster } from 'react-hot-toast';
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -94,7 +94,7 @@ export default function RootLayout({
       >
         <NextTopLoader color='#1949D2' height={2} showSpinner={false} />
         <WalletProvider>{children}</WalletProvider>
-        <ToasterSetup />
+        <Toaster position='top-center' />
       </body>
     </html>
   );

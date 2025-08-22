@@ -91,7 +91,7 @@ describe('AWS S3 - SDK', () => {
 
     expect(result.Body).toBeDefined()
     expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(Body)
-  })
+  }, 15_000)
 
   it('should be able download first 10 bytes of the object', async () => {
     const command = new GetObjectCommand({

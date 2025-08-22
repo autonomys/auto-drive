@@ -10,6 +10,7 @@ import {
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
+import { sendMetricToVictoria } from '../../infrastructure/drivers/vmetrics.js'
 
 const logger = createLogger('http:controllers:object')
 
@@ -452,10 +453,15 @@ objectController.post(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const executor = await handleAuth(req, res)
-    if (!executor) {
-      return
-    }
+    logger.info('Reporting object', { cid })
+    sendMetricToVictoria({
+      measurement: 'object_report',
+      tag: req.ip?.toString() ?? 'unknown',
+      fields: {
+        cid,
+        ip: req.ip?.toString() ?? 'unknown',
+      },
+    })
 
     const reportResult = await handleInternalError(
       ObjectUseCases.reportObject(cid),

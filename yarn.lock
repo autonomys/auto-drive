@@ -3392,6 +3392,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@icons-pack/react-simple-icons@npm:^13.7.0":
+  version: 13.7.0
+  resolution: "@icons-pack/react-simple-icons@npm:13.7.0"
+  peerDependencies:
+    react: ^16.13 || ^17 || ^18 || ^19
+  checksum: 10c0/8a469a2f048451ad44229c4e923c7f0d9524540b1b199b09ad57892e04e5a5e8422b2d8444d3d04ab0f4dbe2b6642159d9aef84986b1fba22f08a2225d16efe0
+  languageName: node
+  linkType: hard
+
 "@img/sharp-darwin-arm64@npm:0.34.3":
   version: 0.34.3
   resolution: "@img/sharp-darwin-arm64@npm:0.34.3"
@@ -5786,6 +5795,25 @@ __metadata:
     "@types/react-dom":
       optional: true
   checksum: 10c0/34b2492589c3a4b118a03900d622640033630f30ac93c4a69b3701513117607f4ac3a0d9dd3cad39caa8b6495660f71f3aa9d0074d4eb4dac6804dc0b8408deb
+  languageName: node
+  linkType: hard
+
+"@radix-ui/react-separator@npm:^1.1.7":
+  version: 1.1.7
+  resolution: "@radix-ui/react-separator@npm:1.1.7"
+  dependencies:
+    "@radix-ui/react-primitive": "npm:2.1.3"
+  peerDependencies:
+    "@types/react": "*"
+    "@types/react-dom": "*"
+    react: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+    react-dom: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+  peerDependenciesMeta:
+    "@types/react":
+      optional: true
+    "@types/react-dom":
+      optional: true
+  checksum: 10c0/32c0eb4fe018397efbe580542e6e33fdc09b76b96395b2bb4c55da7b6d49224b18f46143bdaf9eb6cb01e166c459fb77508a81d20a591a9034949acee5d171d9
   languageName: node
   linkType: hard
 
@@ -9444,6 +9472,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "auto-drive@workspace:."
   dependencies:
+    "@icons-pack/react-simple-icons": "npm:^13.7.0"
     "@types/spdy": "npm:^3.4.9"
     cache-manager: "npm:^6.4.1"
     eslint-plugin-import: "npm:^2.31.0"
@@ -13281,6 +13310,7 @@ __metadata:
     "@next/eslint-plugin-next": "npm:^15.0.2"
     "@peculiar/webcrypto": "npm:^1.5.0"
     "@polkadot/keyring": "npm:^13.5.2"
+    "@radix-ui/react-separator": "npm:^1.1.7"
     "@rainbow-me/rainbowkit": "npm:^2.2.3"
     "@tanstack/react-query": "npm:^5.66.0"
     "@types/byte-size": "npm:^8.1.2"
@@ -13331,6 +13361,7 @@ __metadata:
     streamsaver: "npm:^2.0.6"
     tailwind-merge: "npm:^3.0.1"
     tailwindcss: "npm:^3.4.1"
+    tailwindcss-animate: "npm:^1.0.7"
     typescript: "npm:^5"
     typescript-generic-sdk: "npm:^1.17.12"
     usehooks-ts: "npm:^3.1.0"
@@ -20446,6 +20477,15 @@ __metadata:
   version: 3.3.1
   resolution: "tailwind-merge@npm:3.3.1"
   checksum: 10c0/b84c6a78d4669fa12bf5ab8f0cdc4400a3ce0a7c006511af4af4be70bb664a27466dbe13ee9e3b31f50ddf6c51d380e8192ce0ec9effce23ca729d71a9f63818
+  languageName: node
+  linkType: hard
+
+"tailwindcss-animate@npm:^1.0.7":
+  version: 1.0.7
+  resolution: "tailwindcss-animate@npm:1.0.7"
+  peerDependencies:
+    tailwindcss: "*"
+  checksum: 10c0/ec7dbd1631076b97d66a1fbaaa06e0725fccfa63119221e8d87a997b02dcede98ad88bb1ef6665b968f5d260fcefb10592e0299ca70208d365b37761edf5e19a
   languageName: node
   linkType: hard
 

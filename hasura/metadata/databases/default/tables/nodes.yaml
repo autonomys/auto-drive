@@ -17,6 +17,21 @@ select_permissions:
       filter: {}
       allow_aggregations: true
     comment: ""
+  - role: anonymous
+    permission:
+      columns:
+        - root_cid
+        - head_cid
+        - cid
+        - encoded_node
+        - type
+        - piece_index
+        - piece_offset
+        - block_published_on
+        - tx_published_on
+      filter: {}
+      allow_aggregations: true
+    comment: ""
 object_relationships:
   - name: root
     using:

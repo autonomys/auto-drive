@@ -1,4 +1,4 @@
-import { TrashFiles } from '@/components/FileTables/TrashFiles';
+import { TrashFiles } from '@/components/views/TrashFiles';
 
 export default function Page() {
   return <TrashFiles />;

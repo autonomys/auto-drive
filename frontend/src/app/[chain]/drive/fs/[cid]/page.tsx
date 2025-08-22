@@ -5,7 +5,8 @@ import {
 } from 'gql/graphql';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { NetworkId } from 'constants/networks';
-import { FS } from '@/components/FileSystem';
+import { FS } from '@/components/views/FileSystem';
+import { UserProtectedLayout } from '../../../../../components/layouts/UserProtectedLayout';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,5 +24,9 @@ export default async function Page({
 
   const objInfo = mapObjectInformationFromQueryResult(data);
 
-  return <FS information={objInfo} />;
+  return (
+    <UserProtectedLayout>
+      <FS information={objInfo} />
+    </UserProtectedLayout>
+  );
 }
