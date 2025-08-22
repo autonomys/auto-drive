@@ -3533,7 +3533,7 @@ export type GetGlobalFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', is_admin?: boolean | null, oauth_provider: string, oauth_user_id: string }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null } } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type GetSharedFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -3737,16 +3737,11 @@ export const GetGlobalFilesDocument = gql`
           count
         }
       }
-      object_ownership {
-        is_admin
-        oauth_provider
-        oauth_user_id
-      }
     }
   }
   metadata_roots_aggregate(
     limit: $aggregateLimit
-    where: {inner_metadata: {object_ownership: {is_admin: {_eq: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
+    where: {_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
   ) {
     aggregate {
       count
