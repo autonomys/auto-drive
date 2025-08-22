@@ -5,7 +5,7 @@ import { SubscriptionInfo, User } from '@auto-drive/models';
 interface UserStore {
   user: User | null;
   subscription: SubscriptionInfo | null;
-  setUser: (user: User) => void;
+  setUser: (user: User | null) => void;
   clearUser: () => void;
   setSubscription: (subscriptionInfo: SubscriptionInfo) => void;
 }
@@ -15,7 +15,7 @@ export const useUserStore = create<UserStore>()(
     (set) => ({
       user: null,
       subscription: null,
-      setUser: (user: User) =>
+      setUser: (user: User | null) =>
         set({
           user: user,
         }),

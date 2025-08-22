@@ -18,7 +18,7 @@ export const useFileInCache = (cid: string): boolean => {
       if (!cid) return;
 
       try {
-        const status = await api.checkDownloadStatus(cid);
+        const status = await api.checkDownloadStatus(cid).catch(() => false);
         if (mounted) {
           setIsCached(status === DownloadStatus.Cached);
         }

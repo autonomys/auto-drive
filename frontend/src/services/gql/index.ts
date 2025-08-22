@@ -9,7 +9,8 @@ const authLink = setContext(async (_, { headers }) => {
   return {
     headers: {
       ...headers,
-      authorization: token ? `Bearer ${token.accessToken}` : '',
+      ...(token ? { authorization: `Bearer ${token.accessToken}` } : {}),
+      'X-Hasura-Role': token ? 'user' : 'anonymous',
     },
   };
 });

@@ -22,7 +22,7 @@ services:
       HASURA_GRAPHQL_DEV_MODE: "false" # Disable development mode features
 
       # Role and CORS Settings
-      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: user # Default role for unauthenticated users
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous # Default role for unauthenticated users
       HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN} # Allowed domains for CORS
       HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: "true"
 

@@ -1,0 +1,70 @@
+query GetGlobalFiles(
+  $aggregateLimit: Int!
+  $limit: Int!
+  $offset: Int!
+  $orderBy: [metadata_roots_order_by!]
+  $search: String
+) {
+  metadata_roots(
+    where: {
+      _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]
+    }
+    limit: $limit
+    offset: $offset
+    order_by: $orderBy
+  ) {
+    cid: head_cid
+    tags
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    children: metadata(path: "children")
+    createdAt: created_at
+    inner_metadata {
+      maximumBlockDepth: nodes(
+        order_by: { block_published_on: desc_nulls_last }
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      minimumBlockDepth: nodes(
+        order_by: { block_published_on: desc_nulls_last }
+        limit: 1
+      ) {
+        block_published_on
+        tx_published_on
+      }
+      publishedNodes: nodes_aggregate(
+        where: { block_published_on: { _is_null: false } }
+      ) {
+        aggregate {
+          count
+        }
+      }
+      archivedNodes: nodes_aggregate(
+        where: { piece_offset: { _is_null: false } }
+      ) {
+        aggregate {
+          count
+        }
+      }
+      totalNodes: nodes_aggregate {
+        aggregate {
+          count
+        }
+      }
+    }
+  }
+  metadata_roots_aggregate(
+    limit: $aggregateLimit
+    where: {
+      _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]
+    }
+  ) {
+    aggregate {
+      count
+    }
+  }
+}

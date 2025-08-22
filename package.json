@@ -37,6 +37,7 @@
     "eslint-plugin-neverthrow": "^1.1.4"
   },
   "dependencies": {
+    "@icons-pack/react-simple-icons": "^13.7.0",
     "cache-manager": "^6.4.1",
     "ethers": "^6.13.5",
     "keyv": "^5.3.1",

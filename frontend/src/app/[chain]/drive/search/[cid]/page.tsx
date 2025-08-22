@@ -1,10 +1,11 @@
-import { SearchResult } from '@/components/SearchResult';
+import { SearchResult } from '@/components/views/SearchResult';
 import { createGQLClientByNetwork } from 'services/gql';
 import {
   SearchGlobalMetadataByCidOrNameDocument,
   SearchGlobalMetadataByCidOrNameQuery,
 } from 'gql/graphql';
 import { NetworkId } from 'constants/networks';
+import { UserProtectedLayout } from '../../../../../components/layouts/UserProtectedLayout';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,5 +31,9 @@ export default async function Page({
     cid: metadata.cid,
   }));
 
-  return <SearchResult objects={objects} />;
+  return (
+    <UserProtectedLayout>
+      <SearchResult objects={objects} />
+    </UserProtectedLayout>
+  );
 }
