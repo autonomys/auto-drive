@@ -19,3 +19,10 @@ body {
     text-wrap: balance;
   }
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #252525; /* matches darkWhite */
+    --foreground: #ffffff; /* matches darkBlack */
+  }
+}

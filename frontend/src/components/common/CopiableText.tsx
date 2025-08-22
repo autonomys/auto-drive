@@ -42,7 +42,7 @@ export const CopiableText = ({
           <Check className='h-4 w-4 text-green-500' />
         ) : (
           <Copy
-            className='h-4 w-4 text-gray-400 hover:text-gray-700 dark:text-darkBlack dark:hover:text-gray-100'
+            className='h-4 w-4 text-gray-400 hover:text-gray-700 text-foreground dark:hover:text-gray-100'
             onClick={(e) => {
               e.stopPropagation();
               onClick();

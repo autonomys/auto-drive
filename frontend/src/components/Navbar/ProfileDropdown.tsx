@@ -43,7 +43,7 @@ export const ProfileDropdown: React.FC = () => {
               className='h-9 w-9 rounded-full border border-gray-100 shadow-lg dark:border-gray-500'
             />
           ) : (
-            <div className='flex h-9 w-9 items-center justify-center rounded-full border border-gray-100 bg-gray-300 text-white shadow-lg dark:border-gray-500 dark:bg-darkWhite'>
+            <div className='flex h-9 w-9 items-center justify-center rounded-full border border-gray-100 bg-gray-300 text-white shadow-lg dark:border-gray-500 bg-background'>
               <UserRoundIcon className='h-6 w-6' />
             </div>
           )}
@@ -51,7 +51,7 @@ export const ProfileDropdown: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className='absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-500 dark:bg-darkWhite'>
+        <div className='absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md border border-gray-200 bg-background shadow-lg dark:border-gray-500 bg-background'>
           <div className='border-b border-gray-100 px-4 py-3 dark:border-gray-700'>
             <p className='break-words text-sm font-medium'>
               {user?.oauthUsername || 'Anonymous'}

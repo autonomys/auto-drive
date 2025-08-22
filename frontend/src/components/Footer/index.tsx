@@ -6,7 +6,7 @@ import { LogoIcon } from 'components/common/LogoIcon';
 const Footer: FC = () => {
   return (
     <footer className='container mb-[50px] px-4 sm:mx-auto xl:px-0'>
-      <div className='body-font rounded-xl bg-backgroundDarker p-10 text-white dark:bg-darkBlack dark:bg-darkWhiteHover dark:text-whiteOpaque'>
+      <div className='body-font rounded-xl bg-backgroundDarker p-10 text-white dark:bg-darkBlack bg-background dark:text-whiteOpaque'>
         <div className='md:grid md:grid-cols-2'>
           <div className='mb-20 flex justify-center md:mb-0 md:justify-start'>
             <div className='flex flex-col md:justify-between'>

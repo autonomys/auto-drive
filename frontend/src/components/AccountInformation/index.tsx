@@ -25,11 +25,11 @@ export const AccountInformation = ({
   const downloadPercentage = (downloadUsed / downloadLimit) * 100;
 
   return (
-    <div className='mx-auto w-full max-w-sm overflow-hidden rounded-lg bg-white dark:bg-darkWhite dark:text-darkBlack'>
+    <div className='mx-auto w-full max-w-sm overflow-hidden rounded-lg bg-background text-foreground'>
       <div className='py-2'>
         <div className='space-y-6'>
           <div>
-            <div className='mb-1 flex justify-between text-sm text-gray-600 dark:text-darkBlack'>
+            <div className='mb-1 flex justify-between text-sm text-gray-600 text-foreground'>
               <span>
                 <span>{bytes(Number(uploadUsed))}</span>/
                 <span>{bytes(Number(uploadLimit))}</span>
@@ -51,10 +51,10 @@ export const AccountInformation = ({
           </div>
 
           <div>
-            <div className='mb-1 flex justify-between text-sm text-gray-600 text-primary dark:text-darkBlack'>
+            <div className='mb-1 flex justify-between text-sm text-gray-600 text-primary text-foreground'>
               <span>
                 <span>{bytes(downloadUsed)}</span>/
-                <span className='text-gray-500 dark:text-darkBlack'>
+                <span className='text-gray-500 text-foreground'>
                   {bytes(downloadLimit)}
                 </span>
               </span>
@@ -75,7 +75,7 @@ export const AccountInformation = ({
           </div>
         </div>
         <div className='mt-2 flex flex-col text-center'>
-          <span className='text-sm text-gray-400 dark:text-darkBlack'>
+          <span className='text-sm text-gray-400 text-foreground'>
             Renews in {utcToLocalRelativeTime(renewalDate.toISOString())}
           </span>
         </div>
@@ -84,7 +84,7 @@ export const AccountInformation = ({
             target='_blank'
             rel='noreferrer'
             href='https://forms.gle/EAPzicXcbP7gH2uT6'
-            className='text-sm text-black hover:underline'
+            className='text-sm text-foreground hover:underline'
           >
             <Button variant='primary'>Ask for more credits</Button>
           </a>

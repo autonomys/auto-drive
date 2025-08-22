@@ -59,10 +59,10 @@ export const UpdateRoleModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-darkWhite'>
+              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-background p-6 text-left align-middle shadow-xl transition-all bg-background'>
                 <DialogTitle
                   as='h3'
-                  className='text-lg font-medium leading-6 text-black dark:text-darkBlack'
+                  className='text-lg font-medium leading-6 text-foreground'
                 >
                   Update user role
                 </DialogTitle>
@@ -70,7 +70,7 @@ export const UpdateRoleModal = ({
                   <div className='space-y-4'>
                     <div>
                       <select
-                        className='rounded border border-gray-300 bg-white px-2 py-1 text-black dark:bg-darkWhite dark:text-darkBlack dark:ring-1 dark:ring-darkWhiteHover'
+                        className='rounded border border-gray-300 bg-background px-2 py-1 text-foreground bg-background text-foreground dark:ring-1 dark:ring-darkWhiteHover'
                         value={role}
                         onChange={(e) => setRole(e.target.value as UserRole)}
                       >
