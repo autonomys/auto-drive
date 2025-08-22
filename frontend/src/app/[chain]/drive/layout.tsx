@@ -30,13 +30,13 @@ export default function AppLayout({
   }
 
   return (
-    <div className='flex min-h-screen bg-white dark:bg-darkWhite'>
+    <div className='flex min-h-screen bg-background'>
       <SessionProvider>
         <NetworkProvider network={network}>
           <SessionEnsurer>
             <SidebarProvider className='contents'>
               <SideNavbar networkId={params.chain} />
-              <div className='flex h-screen flex-1 flex-col rounded-lg bg-white dark:bg-darkWhite dark:text-white'>
+              <div className='flex h-screen flex-1 flex-col rounded-lg bg-background dark:text-white'>
                 <TopNavbar networkId={params.chain} />
                 <div className='flex flex-1 overflow-hidden'>
                   <main className='flex-1 overflow-auto px-6 pb-6'>

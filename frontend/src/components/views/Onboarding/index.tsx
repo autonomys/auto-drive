@@ -22,20 +22,20 @@ export const Onboarding = () => {
   }, []);
 
   return (
-    <div className='flex h-screen flex-col items-center justify-center bg-white dark:bg-darkWhite'>
+    <div className='flex h-screen flex-col items-center justify-center bg-background'>
       <header className='mb-8 flex flex-col items-center justify-between gap-4 md:flex-row md:gap-0'>
-        <div className='flex items-center space-x-2 text-black dark:text-darkBlack'>
+        <div className='flex items-center space-x-2 text-foreground'>
           <AutonomysSymbol />
           <span className='text-xl font-semibold'>Auto Drive</span>
         </div>
       </header>
-      <div className='flex flex-col items-center gap-4 dark:text-darkBlack'>
+      <div className='flex flex-col items-center gap-4 text-foreground'>
         <Disclaimer />
         <div className='flex items-center gap-2'>
           <Checkbox
             checked={accepted}
             onChange={() => setAccepted((e) => !e)}
-            className='group relative block size-4 rounded border bg-white data-[checked]:bg-blue-500 dark:bg-darkWhite'
+            className='group relative block size-4 rounded border bg-background data-[checked]:bg-blue-500'
           >
             <CheckIcon className='absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 stroke-white opacity-0 group-data-[checked]:opacity-100' />
           </Checkbox>

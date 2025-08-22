@@ -64,7 +64,7 @@ export const DeleteApiKeyModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left text-center align-middle shadow-xl transition-all dark:bg-darkWhite'>
+              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-background p-6 text-left text-center align-middle shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
                   className='text-lg font-medium leading-6 text-gray-900 dark:text-white'

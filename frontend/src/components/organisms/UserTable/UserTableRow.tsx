@@ -57,7 +57,7 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
           role='button'
           tabIndex={0}
           onKeyDown={handleEnterOrSpace(copyToClipboard)}
-          className='flex cursor-pointer items-center gap-2 text-sm text-black transition-colors duration-200 hover:text-blue-500 dark:text-darkBlack'
+          className='flex cursor-pointer items-center gap-2 text-sm text-foreground transition-colors duration-200 hover:text-blue-500'
           onClick={copyToClipboard}
         >
           {shortenString(subscriptionWithUser.user.publicId!, 16)}{' '}
@@ -65,43 +65,43 @@ export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-black dark:text-darkBlack'>
+        <div className='text-sm text-foreground'>
           {subscriptionWithUser.user.oauthProvider}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='flex items-center gap-2 text-sm text-black dark:text-darkBlack'>
+        <div className='flex items-center gap-2 text-sm text-foreground'>
           {subscriptionWithUser.user.role}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-black dark:text-darkBlack'>
+        <div className='text-sm text-foreground'>
           {granularity}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-black dark:text-darkBlack'>
+        <div className='text-sm text-foreground'>
           {bytes(Number(subscriptionWithUser.uploadLimit), {
             unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-black dark:text-darkBlack'>
+        <div className='text-sm text-foreground'>
           {bytes(Number(subscriptionWithUser.pendingUploadCredits || 0), {
             unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-black dark:text-darkBlack'>
+        <div className='text-sm text-foreground'>
           {bytes(Number(subscriptionWithUser.downloadLimit), {
             unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='text-sm text-black dark:text-darkBlack'>
+        <div className='text-sm text-foreground'>
           {bytes(Number(subscriptionWithUser.pendingDownloadCredits || 0), {
             unitSeparator: ' ',
           })}

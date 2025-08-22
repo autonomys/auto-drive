@@ -23,12 +23,12 @@ export const SearchBar = ({ scope }: { scope: 'global' | 'user' }) => {
   }, [scope]);
 
   return (
-    <div className='w-full max-w-md dark:text-darkBlack'>
+    <div className='w-full max-w-md text-foreground'>
       <div className='relative mt-1'>
         <div className='relative h-fit min-w-80'>
           <input
             type='text'
-            className='w-full rounded-lg border border-[#BCC1CA] bg-white py-[.65rem] pl-3 pr-10 text-sm leading-5 text-black text-gray-900 placeholder:text-black focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-darkWhite dark:text-darkBlack dark:placeholder:text-darkBlack'
+            className='w-full rounded-lg border border-[#BCC1CA] bg-background py-[.65rem] pl-3 pr-10 text-sm leading-5 text-foreground text-gray-900 placeholder:text-foreground focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
             value={inputValue}
             onChange={(e) => {
               setInputValue(e.target.value);

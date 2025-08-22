@@ -62,7 +62,7 @@ export const UserSubscriptionsTable = ({
                   <TableBodyRow>
                     <TableBodyCell
                       colSpan={9}
-                      className='whitespace-nowrap px-6 py-4 text-center text-sm text-black dark:text-darkBlack'
+                      className='whitespace-nowrap px-6 py-4 text-center text-sm text-foreground'
                     >
                       <span className='flex items-center justify-center'>
                         <Loader className='h-4 w-4 animate-spin' />
@@ -77,7 +77,7 @@ export const UserSubscriptionsTable = ({
       </div>
 
       {/* Pagination Controls */}
-      <div className='mt-4 flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 dark:bg-gray-800'>
+      <div className='mt-4 flex items-center justify-between border-t border-gray-200 bg-background px-4 py-3 sm:px-6 dark:bg-gray-800'>
         <div className='flex items-center'>
           <label
             htmlFor='itemsPerPage'
@@ -116,7 +116,7 @@ export const UserSubscriptionsTable = ({
           <button
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className='relative inline-flex items-center rounded-md border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300'
+            className='relative inline-flex items-center rounded-md border border-gray-300 bg-background px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300'
           >
             <ChevronLeft className='h-4 w-4' />
           </button>
@@ -126,7 +126,7 @@ export const UserSubscriptionsTable = ({
           <button
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages || totalPages === 0}
-            className='relative inline-flex items-center rounded-md border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300'
+            className='relative inline-flex items-center rounded-md border border-gray-300 bg-background px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300'
           >
             <ChevronRight className='h-4 w-4' />
           </button>

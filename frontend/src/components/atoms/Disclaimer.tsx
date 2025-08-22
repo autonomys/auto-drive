@@ -1,6 +1,6 @@
 export const Disclaimer = () => {
   return (
-    <div className='relative rounded-lg border border-red-300 bg-red-50 bg-opacity-60 p-4 dark:bg-red-400 dark:text-darkBlack'>
+    <div className='relative rounded-lg border border-red-300 bg-red-50 bg-opacity-60 p-4 dark:bg-red-400 text-foreground'>
       <h3 className='mb-2 font-semibold'>Please, note:</h3>
       <ul className='list-inside list-disc space-y-1 text-sm font-bold'>
         <li>Uploaded content will be visible and searchable by everyone</li>

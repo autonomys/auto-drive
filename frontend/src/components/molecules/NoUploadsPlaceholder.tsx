@@ -2,7 +2,7 @@ import { Disclaimer } from '@/components/atoms/Disclaimer';
 
 export const NoUploadsPlaceholder = () => {
   return (
-    <div className='mx-auto max-w-2xl rounded-lg bg-white p-6 dark:bg-darkWhite'>
+    <div className='mx-auto max-w-2xl rounded-lg bg-background p-6'>
       <h2 className='mb-4 text-center text-2xl font-bold'>
         Make your first upload
       </h2>

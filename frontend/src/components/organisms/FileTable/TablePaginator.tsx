@@ -77,11 +77,11 @@ export const TablePaginator = () => {
   };
 
   return (
-    <div className='flex w-full items-center justify-between p-4 text-sm text-light-gray dark:text-darkBlack'>
+    <div className='flex w-full items-center justify-between p-4 text-sm text-light-gray text-foreground'>
       <div className='flex items-center'>
         <span className='mr-2'>Items per page:</span>
         <select
-          className='rounded border border-gray-300 bg-gray-100 p-1 pr-1 dark:bg-darkWhite'
+          className='rounded border border-gray-300 bg-gray-100 p-1 pr-1 bg-background'
           value={limit}
           onChange={(e) => setLimit(parseInt(e.target.value))}
         >
@@ -102,7 +102,7 @@ export const TablePaginator = () => {
       <div className='flex items-center gap-2'>
         <button
           disabled={page === 0}
-          className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-50 dark:text-darkBlack'
+          className='cursor-pointer rounded-md border border-light-gray p-2 text-foreground transition-all hover:scale-[102%] disabled:opacity-50'
           onClick={() => setInternalPage(0)}
           title='First page'
         >
@@ -110,7 +110,7 @@ export const TablePaginator = () => {
         </button>
         <button
           disabled={page === 0}
-          className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-50 dark:text-darkBlack'
+          className='cursor-pointer rounded-md border border-light-gray p-2 text-foreground transition-all hover:scale-[102%] disabled:opacity-50'
           onClick={() => setInternalPage(page - 1)}
           title='Previous page'
         >
@@ -123,14 +123,14 @@ export const TablePaginator = () => {
             onChange={handlePageInputChange}
             onBlur={goToPage}
             onKeyDown={handleKeyDown}
-            className='w-12 rounded border border-gray-300 p-1.5 text-center focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-darkWhite dark:text-darkBlack'
+            className='w-12 rounded border border-gray-300 p-1.5 text-center focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-background text-foreground'
             aria-label='Page number'
           />
           <span>of {isLimitUnknown ? `${totalPages}+` : totalPages}</span>
         </div>
         <button
           disabled={page >= totalPages - 1}
-          className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-50 dark:text-darkBlack'
+          className='cursor-pointer rounded-md border border-light-gray p-2 text-foreground transition-all hover:scale-[102%] disabled:opacity-50'
           onClick={() => setInternalPage(page + 1)}
           title='Next page'
         >
@@ -138,7 +138,7 @@ export const TablePaginator = () => {
         </button>
         <button
           disabled={page >= totalPages - 1}
-          className='cursor-pointer rounded-md border border-light-gray p-2 text-black transition-all hover:scale-[102%] disabled:opacity-50 dark:text-darkBlack'
+          className='cursor-pointer rounded-md border border-light-gray p-2 text-foreground transition-all hover:scale-[102%] disabled:opacity-50'
           onClick={() => setInternalPage(totalPages - 1)}
           title='Last page'
         >

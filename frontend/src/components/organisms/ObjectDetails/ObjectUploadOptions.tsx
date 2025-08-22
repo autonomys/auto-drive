@@ -8,7 +8,7 @@ export const ObjectUploadOptions = ({
   object: ObjectInformation;
 }) => {
   return (
-    <div className='rounded-lg border border-gray-200 p-6 dark:border-gray-200 dark:bg-darkWhite'>
+    <div className='rounded-lg border border-gray-200 p-6 dark:border-gray-200 bg-background'>
       <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
         <IconWithTooltip
           icon={

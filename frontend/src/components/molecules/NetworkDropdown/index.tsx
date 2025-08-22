@@ -27,7 +27,7 @@ export const NetworkDropdown: FC<{
   return (
     <Listbox value={selected} onChange={onChange}>
       <div className='relative mt-1 w-36'>
-        <ListboxButton className='relative w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 sm:text-sm dark:bg-darkWhite dark:ring-1 dark:ring-darkBlackHover'>
+        <ListboxButton className='relative w-full cursor-default rounded-lg bg-background py-2 pl-3 pr-10 text-left shadow-md focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 sm:text-sm dark:ring-1 dark:ring-darkBlackHover'>
           <div className='flex items-center space-x-2'>
             <AutonomysSymbol />
             <span className='ml-2 block'>{selected.name}</span>
@@ -45,12 +45,12 @@ export const NetworkDropdown: FC<{
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <ListboxOptions className='absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm dark:bg-darkWhite'>
+          <ListboxOptions className='absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-background py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm'>
             {Object.values(networks).map((network, personIdx) => (
               <ListboxOption
                 key={personIdx}
                 className={cn(
-                  'relative flex cursor-default select-none items-center justify-start gap-2 bg-white py-2 pl-4 pr-4 dark:bg-darkWhite',
+                  'relative flex cursor-default select-none items-center justify-start gap-2 bg-background py-2 pl-4 pr-4',
                   isActive(selected, network) ? 'bg-gray-100' : '',
                 )}
                 value={network}

@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { cn } from '@/utils/cn';
 export const TableHead = ({ children }: { children: ReactNode }) => {
   return (
-    <thead className='rounded-lg bg-white font-semibold text-primary dark:bg-darkWhite'>
+    <thead className='rounded-lg bg-background font-semibold text-primary'>
       {children}
     </thead>
   );
@@ -25,7 +25,7 @@ export const TableHeadCell = ({
     <th
       scope='col'
       className={cn(
-        'rounded-lg px-6 py-3 text-left text-xs uppercase tracking-wider dark:text-darkBlack',
+        'rounded-lg px-6 py-3 text-left text-xs uppercase tracking-wider text-foreground',
         className,
       )}
       onClick={onClick}

@@ -182,7 +182,7 @@ export const UploadingFileModal = ({
     <Transition show={!!files && files.length > 0}>
       <Dialog as='div' onClose={handleClose}>
         <div className='fixed inset-0 flex items-center justify-center bg-black/25 bg-opacity-50 dark:bg-darkBlack/25'>
-          <div className='min-w-[400px] max-w-[600px] transform rounded-lg bg-white p-6 shadow-lg transition-transform dark:bg-darkWhite'>
+          <div className='min-w-[400px] max-w-[600px] transform rounded-lg bg-background p-6 shadow-lg transition-transform'>
             {tooManyFiles ? (
               <div className='p-4'>
                 <div className='mb-4 text-center font-medium text-red-500'>
@@ -271,7 +271,7 @@ export const UploadingFileModal = ({
             ) : (
               <div>
                 <div className='flex flex-col gap-2 p-4'>
-                  <span className='text-md block text-center font-semibold text-gray-700 dark:text-darkBlack'>
+                  <span className='text-md block text-center font-semibold text-gray-700 text-foreground'>
                     Enter Encrypting Password
                   </span>
                   {totalFiles > 1 ? (

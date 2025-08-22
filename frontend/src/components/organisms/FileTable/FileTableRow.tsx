@@ -232,13 +232,13 @@ export const FileTableRow = ({
                 {isRowExpanded ? (
                   <Triangle className='rotate-90 text-accent' />
                 ) : (
-                  <Triangle className='text-black dark:text-darkBlack' />
+                  <Triangle className='text-foreground' />
                 )}
               </button>
             )}
             <Link
               href={fileDetailPath(network.id, file.headCid)}
-              className='relative ml-2 flex flex-row items-center text-sm font-medium text-gray-900 dark:text-darkBlack'
+              className='relative ml-2 flex flex-row items-center text-sm font-medium text-gray-900 text-foreground'
             >
               {file.type === 'folder' ? (
                 <Folder className='mr-2 h-5 w-5 text-gray-400' />
@@ -307,7 +307,7 @@ export const FileTableRow = ({
 
             {showActionsMenu && (
               <div
-                className='absolute right-0 top-full z-10 mt-1 w-36 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-darkWhite'
+                className='absolute right-0 top-full z-10 mt-1 w-36 rounded-md bg-background shadow-lg ring-1 ring-black ring-opacity-5'
                 ref={actionsMenuRef}
               >
                 <div className='py-1' role='menu' aria-orientation='vertical'>

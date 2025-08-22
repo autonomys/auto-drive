@@ -60,7 +60,7 @@ export const ObjectDetails = ({
       </div>
       <ObjectUploadDetails object={object} isOwner={isOwner} />
       <ObjectUploadOptions object={object} />
-      <div className='rounded-lg border border-gray-200 p-6 dark:bg-darkWhite'>
+      <div className='rounded-lg border border-gray-200 p-6 bg-background'>
         <h2 className='mb-4 text-lg font-medium text-gray-900 dark:text-gray-100'>
           Preview
         </h2>
