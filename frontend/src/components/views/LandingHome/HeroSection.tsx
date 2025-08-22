@@ -6,7 +6,6 @@ import { SiGithub, SiGoogle, SiDiscord } from '@icons-pack/react-simple-icons';
 import { useLogIn } from '@/hooks/useAuth';
 import { ROUTES } from '../../../constants/routes';
 import { defaultNetworkId } from '../../../constants/networks';
-import { NavItem } from '../../atoms/NavItem';
 import { InternalLink } from '../../atoms/InternalLink';
 
 const HeroSection = () => {
