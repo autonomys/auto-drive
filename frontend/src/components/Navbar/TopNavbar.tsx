@@ -18,7 +18,7 @@ export const TopNavbar = ({ networkId }: TopNavbarProps) => {
   const { user } = useUserStore((state) => state);
 
   if (!network) {
-    redirect(`/${defaultNetworkId}/drive`);
+    redirect(`/${defaultNetworkId}/explorer/global`);
   }
 
   return (
