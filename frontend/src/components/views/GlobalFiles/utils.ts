@@ -1,5 +1,5 @@
 import { GetGlobalFilesQuery } from 'gql/graphql';
-import { objectStatus, ObjectSummary, OwnerRole } from '@auto-drive/models';
+import { objectStatus, ObjectSummary } from '@auto-drive/models';
 
 export const objectSummaryFromGlobalFilesQuery = (
   e: GetGlobalFilesQuery,
@@ -18,11 +18,7 @@ export const objectSummaryFromGlobalFilesQuery = (
       headCid: m.cid ?? '',
       tags: m.tags ?? [],
       size: m.size ?? 0,
-      owners: m.inner_metadata!.object_ownership.map((o) => ({
-        oauthProvider: o.oauth_provider ?? '',
-        oauthUserId: o.oauth_user_id ?? '',
-        role: o.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
-      })),
+      owners: [],
       type: m.type,
       name: m.name,
       mimeType: m.mimeType,
