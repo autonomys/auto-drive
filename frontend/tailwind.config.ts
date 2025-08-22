@@ -3,6 +3,7 @@ import twAnimate from 'tailwindcss-animate';
 
 const config: Config = {
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
