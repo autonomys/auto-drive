@@ -2,9 +2,8 @@ import { Button } from '@/components/atoms/Button';
 import { AutonomysSymbol } from '../../icons/AutonomysSymbol';
 import { useState } from 'react';
 import { AuthModal } from '@/components/molecules/AuthModal';
+import { Globe } from 'lucide-react';
 import { defaultNetworkId } from '../../../constants/networks';
-import { ROUTES } from '../../../constants/routes';
-import { InternalLink } from '../../atoms/InternalLink';
 
 export const LandingHeader = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -19,24 +18,14 @@ export const LandingHeader = () => {
         </a>
 
         <Button
-          className='hidden font-bold md:block'
+          className='flex items-center justify-start space-x-2 font-bold'
           onClick={() =>
             (window.location.href = `/${defaultNetworkId}/drive/global`)
           }
         >
+          <Globe size={16} />
           Explore
         </Button>
-
-        <div className='flex items-center space-x-2 md:hidden'>
-          <InternalLink
-            href={ROUTES.explorer(defaultNetworkId)}
-            className='text-sm font-medium transition-colors hover:text-primary'
-          >
-            <Button size='sm' variant='outline' className='font-bold'>
-              Explorer
-            </Button>
-          </InternalLink>
-        </div>
 
         <AuthModal
           isOpen={isAuthModalOpen}

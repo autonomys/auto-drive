@@ -1,12 +1,17 @@
 import { Button } from '@/components/atoms/Button';
-import { Wallet } from 'lucide-react';
+import { Globe, Wallet } from 'lucide-react';
 import { Card } from '../../atoms/Card';
 import { AutonomysSymbol } from '../../icons/AutonomysSymbol';
 import { SiGithub, SiGoogle, SiDiscord } from '@icons-pack/react-simple-icons';
 import { useLogIn } from '@/hooks/useAuth';
+import { ROUTES } from '../../../constants/routes';
+import { defaultNetworkId } from '../../../constants/networks';
+import { NavItem } from '../../atoms/NavItem';
+import { InternalLink } from '../../atoms/InternalLink';
 
 const HeroSection = () => {
   const { signIn } = useLogIn();
+
   return (
     <section className='bg-gradient-main relative py-24 lg:py-32'>
       <div className='container mx-auto px-4'>
@@ -27,7 +32,7 @@ const HeroSection = () => {
               <p className='text-muted-foreground text-sm font-medium'>
                 Sign in with:
               </p>
-              <div className='grid grid-cols-2 gap-3 font-semibold'>
+              <div className='grid flex-1 grid-cols-2 gap-3 font-semibold'>
                 <Button
                   variant='outline'
                   className='flex items-center justify-start space-x-2 text-[#000000]'
@@ -60,6 +65,20 @@ const HeroSection = () => {
                   <Wallet size={16} />
                   <span>Wallet</span>
                 </Button>
+                <div className='col-span-2 flex items-center justify-start'>
+                  <p className='text-muted-foreground text-sm font-medium'>
+                    Or access as guest:
+                  </p>
+                </div>
+                <InternalLink href={ROUTES.globalFeed(defaultNetworkId)}>
+                  <Button
+                    variant='primary'
+                    className='col-span-2 flex items-center justify-start space-x-2'
+                  >
+                    <Globe size={16} />
+                    <span>Explore</span>
+                  </Button>
+                </InternalLink>
               </div>
             </div>
           </div>
