@@ -14,7 +14,7 @@
     "start:fe:worker": "node dist/app/servers/frontendWorker.js",
     "start:download": "node dist/app/servers/download.js",
     "start:download:api": "node dist/app/apis/download.js",
-    "start:download:worker": "node dist/servers/downloadWorker.js",
+    "start:download:worker": "node dist/servers/app/downloadWorker.js",
     "lint": "eslint . "
   },
   "dependencies": {
