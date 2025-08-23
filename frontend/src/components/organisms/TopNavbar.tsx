@@ -17,7 +17,7 @@ export const TopNavbar = ({ networkId }: TopNavbarProps) => {
   const { user } = useUserStore((state) => state);
 
   if (!network) {
-    redirect(`/${defaultNetworkId}/drive`);
+    redirect(`/${defaultNetworkId}/explorer/global`);
   }
 
   return (
@@ -28,7 +28,7 @@ export const TopNavbar = ({ networkId }: TopNavbarProps) => {
           <NetworkDropdown
             selected={network}
             onChange={(value) => {
-              window.location.assign(`/${value.id}/drive`);
+              window.location.assign(`/${value.id}/drive/global`);
             }}
           />
           {user && <ProfileDropdown />}
