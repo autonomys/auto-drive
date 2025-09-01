@@ -36,4 +36,4 @@ lint: install
 	yarn auth lint
 	yarn frontend lint
 
-all: submodules models s3 frontend gateway backend
+all: submodules models ui s3 frontend gateway backend
