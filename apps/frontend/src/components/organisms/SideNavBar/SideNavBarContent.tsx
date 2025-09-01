@@ -1,4 +1,4 @@
-import { NetworkId } from '../../../constants/networks';
+import { NetworkId } from '@auto-drive/ui';
 import {
   SidebarMenuBadge,
   SidebarMenuButton,

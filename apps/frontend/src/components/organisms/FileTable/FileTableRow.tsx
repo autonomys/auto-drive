@@ -24,7 +24,7 @@ import { shortenString } from 'utils/misc';
 import { ConditionalRender } from '@/components/atoms/ConditionalRender';
 import { FileActionButtons } from '@/components/organisms/FileTable';
 import bytes from 'bytes';
-import { Button } from '@auto-drive/ui';
+import { Button, NetworkId } from '@auto-drive/ui';
 import { File, Folder, MoreVertical } from 'lucide-react';
 import { OwnerBadge } from './OwnerBadge';
 import { useNetwork } from 'contexts/network';
@@ -39,7 +39,6 @@ import { CopiableText } from '@/components/atoms/CopiableText';
 import toast from 'react-hot-toast';
 import { useUserAsyncDownloadsStore } from '../UserAsyncDownloads/state';
 import { useFileInCache } from '@/hooks/useFileInCache';
-import { NetworkId } from '@/constants/networks';
 
 export const FileTableRow = ({
   file,

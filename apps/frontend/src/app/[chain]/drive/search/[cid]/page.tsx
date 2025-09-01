@@ -4,7 +4,7 @@ import {
   SearchGlobalMetadataByCidOrNameDocument,
   SearchGlobalMetadataByCidOrNameQuery,
 } from 'gql/graphql';
-import { NetworkId } from 'constants/networks';
+import { NetworkId } from '@auto-drive/ui';
 import { UserProtectedLayout } from '../../../../../components/layouts/UserProtectedLayout';
 
 export const dynamic = 'force-dynamic';

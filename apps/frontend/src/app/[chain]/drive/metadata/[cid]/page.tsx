@@ -4,7 +4,7 @@ import {
 } from 'gql/graphql';
 import { ObjectDetails } from '@/components/organisms/ObjectDetails';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
-import { NetworkId } from 'constants/networks';
+import { NetworkId } from '@auto-drive/ui';
 import { createGQLClientByNetwork } from 'services/gql';
 
 export const dynamic = 'force-dynamic';

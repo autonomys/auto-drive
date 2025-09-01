@@ -9,7 +9,7 @@ import {
   SubscriptionInfoWithUser,
 } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
-import { Button } from '../../atoms/Button';
+import { Button } from '@auto-drive/ui';
 
 export const AdminPanel = () => {
   const [subscriptionsWithUsers, setSubscriptionsWithUsers] = useState<

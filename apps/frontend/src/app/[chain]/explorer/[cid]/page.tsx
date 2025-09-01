@@ -1,5 +1,5 @@
 import { createGQLClientByNetwork } from '@/services/gql';
-import { NetworkId } from '@/constants/networks';
+import { NetworkId } from '@auto-drive/ui';
 import {
   GetMetadataByHeadCidDocument,
   GetMetadataByHeadCidQuery,

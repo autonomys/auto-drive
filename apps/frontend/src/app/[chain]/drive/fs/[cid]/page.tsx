@@ -4,7 +4,7 @@ import {
   GetMetadataByHeadCidQuery,
 } from 'gql/graphql';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
-import { NetworkId } from 'constants/networks';
+import { NetworkId } from '@auto-drive/ui';
 import { FS } from '@/components/views/FileSystem';
 import { UserProtectedLayout } from '../../../../../components/layouts/UserProtectedLayout';
 
