@@ -9415,9 +9415,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"auth@workspace:auth":
+"auth@workspace:apps/auth":
   version: 0.0.0-use.local
-  resolution: "auth@workspace:auth"
+  resolution: "auth@workspace:apps/auth"
   dependencies:
     "@auto-drive/models": "workspace:*"
     "@aws-sdk/dsql-signer": "npm:^3.734.0"
@@ -9687,9 +9687,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"backend@workspace:backend":
+"backend@workspace:apps/backend":
   version: 0.0.0-use.local
-  resolution: "backend@workspace:backend"
+  resolution: "backend@workspace:apps/backend"
   dependencies:
     "@auto-drive/models": "workspace:*"
     "@auto-drive/s3": "workspace:*"
@@ -13287,9 +13287,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"frontend@workspace:frontend":
+"frontend@workspace:apps/frontend":
   version: 0.0.0-use.local
-  resolution: "frontend@workspace:frontend"
+  resolution: "frontend@workspace:apps/frontend"
   dependencies:
     "@apollo/client": "npm:^3.11.10"
     "@auto-drive/models": "workspace:*"
@@ -13453,9 +13453,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"gateway@workspace:gateway":
+"gateway@workspace:apps/gateway":
   version: 0.0.0-use.local
-  resolution: "gateway@workspace:gateway"
+  resolution: "gateway@workspace:apps/gateway"
   dependencies:
     "@autonomys/auto-drive": "npm:^1.5.14"
     "@autonomys/auto-utils": "npm:^1.5.14"
@@ -13910,9 +13910,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"hasura@workspace:hasura":
+"hasura@workspace:apps/hasura":
   version: 0.0.0-use.local
-  resolution: "hasura@workspace:hasura"
+  resolution: "hasura@workspace:apps/hasura"
   dependencies:
     hasura: "npm:^2.0.1"
   languageName: unknown

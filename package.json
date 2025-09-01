@@ -6,11 +6,7 @@
   "author": "Autonomys Network",
   "license": "MIT",
   "workspaces": [
-    "backend",
-    "frontend",
-    "auth",
-    "gateway",
-    "hasura",
+    "apps/*",
     "packages/*",
     "submodules/*"
   ],
