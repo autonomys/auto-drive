@@ -8,7 +8,7 @@
     "build": "tsc",
     "start:prod": "node dist/server.prod.js",
     "start:docs": "node --loader ts-node/esm src/http/controllers/docs.ts",
-    "test": "NODE_OPTIONS='--max-old-space-size=6096' node --experimental-vm-modules ../node_modules/jest/bin/jest.js --runInBand --coverage --forceExit",
+    "test": "NODE_OPTIONS='--max-old-space-size=6096' node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --coverage --forceExit",
     "start:fe": "node dist/app/servers/frontend.js",
     "start:fe:api": "node dist/app/apis/frontend.js",
     "start:fe:worker": "node dist/app/servers/frontendWorker.js",
