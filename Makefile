@@ -11,6 +11,8 @@ frontend:
 	yarn frontend build
 gateway: install
 	yarn gateway build
+ui: install
+	yarn workspace @auto-drive/ui build
 
 init-submodules:
 	# Ignore errors if submodules are already initialized
@@ -23,7 +25,7 @@ submodules:
 	yarn auto-files-gateway install
 	yarn auto-files-gateway build
 
-common: install submodules models s3
+common: install submodules models s3 ui
 
 test: install
 	yarn backend test
