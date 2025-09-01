@@ -12,6 +12,7 @@
   "dependencies": {
     "@apollo/client": "^3.11.10",
     "@auto-drive/models": "workspace:*",
+    "@auto-drive/ui": "workspace:*",
     "@autonomys/auto-dag-data": "^1.5.14",
     "@autonomys/auto-design-system": "^1.5.14",
     "@autonomys/auto-drive": "^1.5.14",

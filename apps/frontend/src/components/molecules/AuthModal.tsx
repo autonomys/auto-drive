@@ -6,7 +6,7 @@ import {
   TransitionChild,
 } from '@headlessui/react';
 import { Fragment } from 'react';
-import { Button } from '@/components/atoms/Button';
+import { Button } from '@auto-drive/ui';
 import { useLogIn } from '../../hooks/useAuth';
 
 interface AuthModalProps {
@@ -28,7 +28,7 @@ export const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='fixed inset-0 bg-black bg-opacity-25 dark:bg-darkBlack/25' />
+          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black bg-opacity-25' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -42,12 +42,12 @@ export const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-darkWhite'>
+              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
                 <div className='space-y-2'>
                   <DialogTitle className='text-center text-2xl font-bold'>
                     Welcome to Auto Drive
                   </DialogTitle>
-                  <div className='text-muted-foreground text-center'>
+                  <div className='text-center text-muted-foreground'>
                     Choose your preferred sign-in method to get started
                   </div>
                 </div>
@@ -114,7 +114,7 @@ export const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
                       <div className='w-full border-t border-gray-200' />
                     </div>
                     <div className='relative flex justify-center text-xs uppercase'>
-                      <span className='text-muted-foreground bg-background px-2'>
+                      <span className='bg-background px-2 text-muted-foreground'>
                         Or
                       </span>
                     </div>

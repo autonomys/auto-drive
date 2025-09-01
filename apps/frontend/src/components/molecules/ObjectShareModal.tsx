@@ -9,11 +9,10 @@ import { Fragment, useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ObjectInformation } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
-import { Button } from '@/components/atoms/Button';
 import { Download, Link } from 'lucide-react';
 import { useGetMetadataByHeadCidQuery } from 'gql/graphql';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
-import { EXTERNAL_ROUTES, ROUTES } from 'constants/routes';
+import { EXTERNAL_ROUTES, ROUTES, Button } from '@auto-drive/ui';
 
 export const ObjectShareModal = ({
   cid,
@@ -74,7 +73,7 @@ export const ObjectShareModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='fixed inset-0 bg-black/25 dark:bg-darkBlack/25' />
+          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black/25' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -88,10 +87,10 @@ export const ObjectShareModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-darkWhite'>
+              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
-                  className='text-lg font-medium leading-6 text-gray-900 dark:text-darkBlack'
+                  className='dark:text-darkBlack text-lg font-medium leading-6 text-gray-900'
                 >
                   Share &quot;{metadata?.metadata.name}&quot;
                 </DialogTitle>

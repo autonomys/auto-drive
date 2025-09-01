@@ -18,7 +18,6 @@ import {
   TableBodyRow,
   TableBodyCell,
 } from '@/components/molecules/Table/TableBody';
-import { Button } from '@/components/atoms/Button';
 import { TableFooter } from '@/components/molecules/Table/TableFooter';
 import { TablePaginator } from './TablePaginator';
 import { ObjectRestoreModal } from '../../molecules/ObjectRestoreModal';
@@ -27,8 +26,7 @@ import { useFileTableState } from '@/components/organisms/FileTable/state';
 import { SortableTableColumn } from './SortableTableColumn';
 import { FileTableRowSkeleton } from './FileTableRowSkeleton';
 import { ObjectReportModal } from '../../molecules/ObjectReportModal';
-import { ROUTES } from '@/constants/routes';
-import { NetworkId } from '@/constants/networks';
+import { ROUTES, NetworkId, Button } from '@auto-drive/ui';
 
 export enum FileActionButtons {
   DOWNLOAD = 'download',

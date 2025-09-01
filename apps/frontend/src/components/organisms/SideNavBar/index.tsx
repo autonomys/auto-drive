@@ -1,4 +1,3 @@
-import { NetworkId } from 'constants/networks';
 import React, { useCallback, useContext, useMemo, useState } from 'react';
 import {
   SidebarHeader,
@@ -10,12 +9,11 @@ import {
 } from '../../molecules/Sidebar';
 import { useUserStore } from '../../../globalStates/user';
 import { UserRole } from '@auto-drive/models';
-import { AutonomysSymbol } from '../../icons/AutonomysSymbol';
+import { AutonomysSymbol, Button, NetworkId } from '@auto-drive/ui';
 import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
 import { SessionContext } from 'next-auth/react';
 import { AuthModal } from '../../molecules/AuthModal';
-import { Button } from '../../atoms/Button';
 import { AskForCreditsButton } from '../../atoms/AskForCredits';
 import { SIDEBAR_DEFINITION } from './items';
 import { SideNavBarContent } from './SideNavBarContent';
@@ -55,7 +53,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   });
 
   return (
-    <Sidebar className='bg-card border-r'>
+    <Sidebar className='border-r bg-card'>
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -66,7 +64,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
           {!collapsed && (
             <div>
               <h2 className='text-sm font-semibold'>Auto Drive</h2>
-              <p className='text-muted-foreground text-xs'>Permanent Storage</p>
+              <p className='text-xs text-muted-foreground'>Permanent Storage</p>
             </div>
           )}
         </div>

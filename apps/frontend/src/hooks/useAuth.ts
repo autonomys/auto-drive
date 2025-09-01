@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
 import { getMessageToSign } from '../app/api/auth/[...nextauth]/web3';
 import { signIn as nextAuthSignIn } from 'next-auth/react';
-import { defaultNetworkId } from '../constants/networks';
+import { defaultNetworkId } from '@auto-drive/ui';
 
 type AuthProvider = 'google' | 'discord' | 'web3-wallet' | 'github';
 

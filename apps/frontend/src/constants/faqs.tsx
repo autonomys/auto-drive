@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { EXTERNAL_ROUTES } from 'constants/routes';
+import { EXTERNAL_ROUTES } from '@auto-drive/ui';
 
 export type FAQ = {
   question: string;

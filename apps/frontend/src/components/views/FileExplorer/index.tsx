@@ -11,7 +11,7 @@ import { useNetwork } from 'contexts/network';
 import { FileExplorerHeader } from './FileExplorerHeader';
 import { NetworkDropdown } from '../../molecules/NetworkDropdown';
 import { NoFilesPlaceholder } from '../../molecules/NoFilesPlaceholder';
-import { ROUTES } from '../../../constants/routes';
+import { ROUTES } from '@auto-drive/ui';
 
 export const FileExplorer = () => {
   const { network } = useNetwork();

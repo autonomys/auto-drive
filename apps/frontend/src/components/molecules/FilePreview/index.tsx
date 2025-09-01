@@ -8,9 +8,11 @@ import {
   decryptFileData,
 } from '@autonomys/auto-dag-data';
 import { useNetwork } from '../../../contexts/network';
-import { NetworkId as AutoDriveNetworkId } from '../../../constants/networks';
 import { NetworkId as AutoUtilsNetworkId } from '@autonomys/auto-utils';
-import { EXTERNAL_ROUTES } from '../../../constants/routes';
+import {
+  EXTERNAL_ROUTES,
+  NetworkId as AutoDriveNetworkId,
+} from '@auto-drive/ui';
 import { sanitizeHTML } from '../../../utils/sanitizeHTML';
 
 export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {

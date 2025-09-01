@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo } from 'react';
-import { Network } from 'constants/networks';
+import { Network } from '@auto-drive/ui';
 import { Api, createApiService } from 'services/api';
 import {
   ApolloClient,

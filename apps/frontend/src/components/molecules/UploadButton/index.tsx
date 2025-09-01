@@ -1,4 +1,4 @@
-import { Button } from '@/components/atoms/Button';
+import { Button } from '@auto-drive/ui';
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
 import { FileIcon, FolderIcon, PlusIcon } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
@@ -63,18 +63,18 @@ export const UploadButton = () => {
           </Button>
         </PopoverButton>
         <PopoverPanel className='relative'>
-          <div className='absolute left-0 top-1 flex text-nowrap rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-darkWhiteHover dark:text-darkBlack'>
+          <div className='dark:bg-darkWhiteHover dark:text-darkBlack absolute left-0 top-1 flex text-nowrap rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5'>
             <div className='p-1'>
               <button
                 onClick={openFileDialog}
-                className='flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-darkWhite'
+                className='dark:hover:bg-darkWhite flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100'
               >
                 <FileIcon className='mr-3 h-5 w-5' />
                 Select Files
               </button>
               <button
                 onClick={openFolderDialog}
-                className='flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-darkWhite'
+                className='dark:hover:bg-darkWhite flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100'
               >
                 <FolderIcon className='mr-3 h-5 w-5' />
                 Select Folder

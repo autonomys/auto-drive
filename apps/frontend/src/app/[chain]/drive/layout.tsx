@@ -3,7 +3,7 @@
 import '../../globals.css';
 import { useMemo } from 'react';
 import { SessionProvider } from 'next-auth/react';
-import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
+import { defaultNetworkId, NetworkId, networks } from '@auto-drive/ui';
 import { NetworkProvider } from 'contexts/network';
 import { useRouter } from 'next/navigation';
 import { TopNavbar } from '@/components/organisms/TopNavbar';
@@ -30,13 +30,13 @@ export default function AppLayout({
   }
 
   return (
-    <div className='flex min-h-screen bg-white dark:bg-darkWhite'>
+    <div className='dark:bg-darkWhite flex min-h-screen bg-white'>
       <SessionProvider>
         <NetworkProvider network={network}>
           <SessionEnsurer>
             <SidebarProvider className='contents'>
               <SideNavbar networkId={params.chain} />
-              <div className='flex h-screen flex-1 flex-col rounded-lg bg-white dark:bg-darkWhite dark:text-white'>
+              <div className='dark:bg-darkWhite flex h-screen flex-1 flex-col rounded-lg bg-white dark:text-white'>
                 <TopNavbar networkId={params.chain} />
                 <div className='flex flex-1 overflow-hidden'>
                   <main className='flex-1 overflow-auto px-6 pb-6'>

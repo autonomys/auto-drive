@@ -12,7 +12,7 @@ import {
   Transition,
   TransitionChild,
 } from '@headlessui/react';
-import { Button } from '../../atoms/Button';
+import { Button } from '@auto-drive/ui';
 import { cn } from '@/utils/cn';
 import { AlertTriangle } from 'lucide-react';
 import { ToBeReviewedFileRow } from './ReviewFilesRow';

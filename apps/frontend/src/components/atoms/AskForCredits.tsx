@@ -1,5 +1,4 @@
-import { EXTERNAL_ROUTES } from '../../constants/routes';
-import { Button } from './Button';
+import { EXTERNAL_ROUTES, Button } from '@auto-drive/ui';
 
 export const AskForCreditsButton = () => {
   return (

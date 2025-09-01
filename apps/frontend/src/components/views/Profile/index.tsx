@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useUserStore } from 'globalStates/user';
 import { DefaultPasswordModal } from '../../molecules/DefaultPasswordModal';
-import { Button } from '@/components/atoms/Button';
+import { Button } from '@auto-drive/ui';
 import { signOut } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
 

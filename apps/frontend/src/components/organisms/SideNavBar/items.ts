@@ -7,8 +7,7 @@ import {
   CodeXmlIcon,
   SettingsIcon,
 } from 'lucide-react';
-import { NetworkId } from '../../../constants/networks';
-import { ROUTES } from '../../../constants/routes';
+import { NetworkId, ROUTES } from '@auto-drive/ui';
 import { SidebarSection } from './SideNavBarContent';
 
 export const SIDEBAR_DEFINITION: SidebarSection[] = [

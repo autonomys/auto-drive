@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { NetworkDropdown } from '../molecules/NetworkDropdown';
 import { redirect } from 'next/navigation';
-import { defaultNetworkId, NetworkId, networks } from 'constants/networks';
+import { defaultNetworkId, NetworkId, networks } from '@auto-drive/ui';
 import { ProfileDropdown } from '../molecules/ProfileDropdown';
 import { useUserStore } from '@/globalStates/user';
 import { SidebarTrigger } from '../molecules/Sidebar';

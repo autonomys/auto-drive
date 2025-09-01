@@ -14,7 +14,7 @@ import {
   TableBodyCell,
   TableBodyRow,
 } from '@/components/molecules/Table/TableBody';
-import { Button } from '@/components/atoms/Button';
+import { Button } from '@auto-drive/ui';
 import { useRouter } from 'next/navigation';
 
 export const ApiKeysTable = ({

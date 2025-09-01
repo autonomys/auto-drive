@@ -10,7 +10,7 @@ import {
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ApiKey } from '@auto-drive/models';
 import toast from 'react-hot-toast';
-import { Button } from '@/components/atoms/Button';
+import { Button } from '@auto-drive/ui';
 import { handleEnterOrSpace } from 'utils/eventHandler';
 import { AuthService } from 'services/auth/auth';
 
@@ -65,7 +65,7 @@ export const ApiKeyCreationModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='fixed inset-0 bg-black dark:bg-backgroundDarkest dark:bg-darkBlack/25' />
+          <div className='dark:bg-backgroundDarkest dark:bg-darkBlack/25 fixed inset-0 bg-black' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -79,10 +79,10 @@ export const ApiKeyCreationModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-backgroundDark dark:bg-darkWhite'>
+              <DialogPanel className='dark:bg-backgroundDark dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
-                  className='text-center text-lg font-medium leading-6 text-black dark:text-darkBlack'
+                  className='dark:text-darkBlack text-center text-lg font-medium leading-6 text-black'
                 >
                   Create API Key
                 </DialogTitle>
@@ -93,7 +93,7 @@ export const ApiKeyCreationModal = ({
                         <button
                           tabIndex={0}
                           onKeyDown={handleEnterOrSpace(copyApiKey)}
-                          className='flex cursor-pointer items-center rounded bg-gray-100 px-2 py-1 text-center font-mono text-sm dark:bg-backgroundDark'
+                          className='dark:bg-backgroundDark flex cursor-pointer items-center rounded bg-gray-100 px-2 py-1 text-center font-mono text-sm'
                           onClick={copyApiKey}
                           title='Click to copy'
                         >

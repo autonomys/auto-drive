@@ -6,7 +6,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { getTypeFromMetadata } from '../../../utils/file';
 import { formatNumberWithCommas } from '../../../utils/number';
-import { EXTERNAL_ROUTES } from '../../../constants/routes';
+import { EXTERNAL_ROUTES } from '@auto-drive/ui';
 import { useNetwork } from '../../../contexts/network';
 import bytes from 'bytes';
 
@@ -21,7 +21,7 @@ export const ObjectUploadDetails = ({
 
   return (
     <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
-      <div className='rounded-lg border border-gray-200 p-6 dark:border-gray-200 dark:bg-darkWhite'>
+      <div className='dark:bg-darkWhite rounded-lg border border-gray-200 p-6 dark:border-gray-200'>
         <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
           <IconWithTooltip
             icon={
@@ -110,7 +110,7 @@ export const ObjectUploadDetails = ({
           </div>
         </div>
       </div>
-      <div className='rounded-lg border border-gray-200 p-6 dark:bg-darkWhite'>
+      <div className='dark:bg-darkWhite rounded-lg border border-gray-200 p-6'>
         <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
           <IconWithTooltip
             icon={<CloudArrowUpIcon className='mr-2 h-5 w-5 text-gray-500' />}

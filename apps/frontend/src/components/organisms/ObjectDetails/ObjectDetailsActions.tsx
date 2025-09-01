@@ -1,5 +1,5 @@
 import { ObjectInformation, ObjectTag } from '@auto-drive/models';
-import { Button } from '@/components/atoms/Button';
+import { Button } from '@auto-drive/ui';
 import { cn } from '@/utils/cn';
 import {
   ArrowDownTrayIcon,

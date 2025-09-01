@@ -5,5 +5,5 @@ export default function Page({
 }: {
   params: { chain: string };
 }) {
-  redirect(`/${chain}/drive`);
+  redirect(`/${chain}/explorer`);
 }

@@ -2,7 +2,7 @@ import { AsyncDownload } from '@auto-drive/models';
 import { useNetwork } from '../../../contexts/network';
 import { useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { ROUTES } from '../../../constants/routes';
+import { ROUTES } from '@auto-drive/ui';
 import { AsyncStatusBadge } from './AsyncStatusBadge';
 import { shortenString } from '../../../utils/misc';
 import { XIcon } from 'lucide-react';

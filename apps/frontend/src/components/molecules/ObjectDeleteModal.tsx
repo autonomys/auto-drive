@@ -8,7 +8,7 @@ import {
 import { Fragment, useCallback, useState } from 'react';
 import { ObjectInformation } from '@auto-drive/models';
 import toast from 'react-hot-toast';
-import { Button } from '@/components/atoms/Button';
+import { Button } from '@auto-drive/ui';
 import { useGetMetadataByHeadCidQuery } from 'gql/graphql';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { useNetwork } from 'contexts/network';
@@ -66,7 +66,7 @@ export const ObjectDeleteModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='fixed inset-0 bg-black dark:bg-darkBlack/25' />
+          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -80,7 +80,7 @@ export const ObjectDeleteModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-darkWhite'>
+              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
                   className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-100'

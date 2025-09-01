@@ -1,5 +1,6 @@
-import { LandingHome } from '../components/views/LandingHome';
+import { redirect } from 'next/navigation';
+import { ROUTES, defaultNetworkId } from '@auto-drive/ui';
 
 export default function App() {
-  return <LandingHome />;
+  redirect(ROUTES.globalFeed(defaultNetworkId));
 }

@@ -2,10 +2,8 @@
 'use client';
 
 import { XIcon } from 'lucide-react';
-import { DiscordIcon } from '@/components/icons/DiscordIcon';
-import { EXTERNAL_ROUTES, ROUTES } from 'constants/routes';
+import { EXTERNAL_ROUTES, ROUTES, Button, DiscordIcon } from '@auto-drive/ui';
 import { InternalLink } from '@/components/atoms/InternalLink';
-import { Button } from '@/components/atoms/Button';
 
 export const NotFound = () => {
   return (

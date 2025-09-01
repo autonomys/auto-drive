@@ -1,7 +1,6 @@
 'use client';
 
-import { LandingLayout } from '@/components/layouts/LandingLayout';
-import { defaultNetworkId, networks, NetworkId } from '@/constants/networks';
+import { defaultNetworkId, networks, NetworkId } from '@auto-drive/ui';
 import { NetworkProvider } from '../../../contexts/network';
 
 export default function ExplorerLayout({
@@ -16,9 +15,5 @@ export default function ExplorerLayout({
       ? networks[params.chain as NetworkId]!
       : networks[defaultNetworkId]!;
 
-  return (
-    <LandingLayout>
-      <NetworkProvider network={network}>{children}</NetworkProvider>
-    </LandingLayout>
-  );
+  return <NetworkProvider network={network}>{children}</NetworkProvider>;
 }
