@@ -21,6 +21,8 @@
     "backend": "yarn workspace backend",
     "hasura": "yarn workspace hasura",
     "auth": "yarn workspace auth",
+    "landing": "yarn workspace landing",
+    "ui": "yarn workspace @auto-drive/ui",
     "gateway": "yarn workspace gateway",
     "models": "yarn workspace @auto-drive/models",
     "s3": "yarn workspace @auto-drive/s3",
