@@ -79,12 +79,6 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
         />
       </SidebarContent>
       <SidebarFooter className='p-4'>
-        <InternalLink href='/'>
-          <SidebarMenuButton>
-            <ArrowLeftIcon className='h-4 w-4' />
-            <span>Go back to landing</span>
-          </SidebarMenuButton>
-        </InternalLink>
         {isLoggedIn && (
           <AccountInformation
             renewalDate={renewalDate}

@@ -5,7 +5,7 @@ import { getMessageToSign } from '../app/api/auth/[...nextauth]/web3';
 import { signIn as nextAuthSignIn } from 'next-auth/react';
 import { defaultNetworkId } from '@auto-drive/ui';
 
-type AuthProvider = 'google' | 'discord' | 'web3-wallet' | 'github';
+export type AuthProvider = 'google' | 'discord' | 'web3-wallet' | 'github';
 
 interface UseAuth {
   signIn: (provider: AuthProvider) => void;

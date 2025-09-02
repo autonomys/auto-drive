@@ -11,6 +11,7 @@ import { TableRouteChangeListener } from '@/components/organisms/FileTable/Table
 import { SidebarProvider } from '@/components/molecules/Sidebar';
 import { SideNavbar } from 'frontend/src/components/organisms/SideNavBar';
 import { SessionEnsurer } from '@/components/atoms/SessionEnsurer';
+import { useAutomaticLogin } from '../../../hooks/useAutomaticLogin';
 
 export default function AppLayout({
   children,
@@ -28,6 +29,8 @@ export default function AppLayout({
     router.replace(`/${defaultNetworkId}/drive`);
     return null;
   }
+
+  useAutomaticLogin();
 
   return (
     <div className='dark:bg-darkWhite flex min-h-screen bg-white'>
