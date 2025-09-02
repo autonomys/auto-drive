@@ -5,7 +5,6 @@ import {
   SidebarFooter,
   useSidebar,
   SidebarContent,
-  SidebarMenuButton,
 } from '../../molecules/Sidebar';
 import { useUserStore } from '../../../globalStates/user';
 import { UserRole } from '@auto-drive/models';
@@ -17,8 +16,6 @@ import { AuthModal } from '../../molecules/AuthModal';
 import { AskForCreditsButton } from '../../atoms/AskForCredits';
 import { SIDEBAR_DEFINITION } from './items';
 import { SideNavBarContent } from './SideNavBarContent';
-import { ArrowLeftIcon } from 'lucide-react';
-import { InternalLink } from '../../atoms/InternalLink';
 
 export type SideNavbarProps = {
   networkId: NetworkId;
