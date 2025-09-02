@@ -11,7 +11,7 @@ import { TableRouteChangeListener } from '@/components/organisms/FileTable/Table
 import { SidebarProvider } from '@/components/molecules/Sidebar';
 import { SideNavbar } from 'frontend/src/components/organisms/SideNavBar';
 import { SessionEnsurer } from '@/components/atoms/SessionEnsurer';
-import { useAutomaticLogin } from '../../../hooks/useAutomaticLogin';
+import { AutomaticLoginWrapper } from '../../../components/atoms/AutomaticLoginWrapper';
 
 export default function AppLayout({
   children,
@@ -30,28 +30,28 @@ export default function AppLayout({
     return null;
   }
 
-  useAutomaticLogin();
-
   return (
     <div className='dark:bg-darkWhite flex min-h-screen bg-white'>
-      <SessionProvider>
-        <NetworkProvider network={network}>
-          <SessionEnsurer>
-            <SidebarProvider className='contents'>
-              <SideNavbar networkId={params.chain} />
-              <div className='dark:bg-darkWhite flex h-screen flex-1 flex-col rounded-lg bg-white dark:text-white'>
-                <TopNavbar networkId={params.chain} />
-                <div className='flex flex-1 overflow-hidden'>
-                  <main className='flex-1 overflow-auto px-6 pb-6'>
-                    <TableRouteChangeListener />
-                    {children}
-                  </main>
+      <AutomaticLoginWrapper>
+        <SessionProvider>
+          <NetworkProvider network={network}>
+            <SessionEnsurer>
+              <SidebarProvider className='contents'>
+                <SideNavbar networkId={params.chain} />
+                <div className='dark:bg-darkWhite flex h-screen flex-1 flex-col rounded-lg bg-white dark:text-white'>
+                  <TopNavbar networkId={params.chain} />
+                  <div className='flex flex-1 overflow-hidden'>
+                    <main className='flex-1 overflow-auto px-6 pb-6'>
+                      <TableRouteChangeListener />
+                      {children}
+                    </main>
+                  </div>
                 </div>
-              </div>
-            </SidebarProvider>
-          </SessionEnsurer>
-        </NetworkProvider>
-      </SessionProvider>
+              </SidebarProvider>
+            </SessionEnsurer>
+          </NetworkProvider>
+        </SessionProvider>
+      </AutomaticLoginWrapper>
     </div>
   );
 }
