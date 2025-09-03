@@ -41,6 +41,52 @@ query GetMetadataByHeadCID($headCid: String!) {
         count
       }
     }
+  }
+}
+
+query GetMetadataByHeadCIDWithOwnership($headCid: String!) {
+  metadata(
+    where: {
+      _or: [{ head_cid: { _ilike: $headCid } }, { name: { _ilike: $headCid } }]
+    }
+  ) {
+    head_cid
+    tags
+    metadata
+    created_at
+    maximumBlockDepth: nodes(
+      order_by: { block_published_on: desc_nulls_last }
+      limit: 1
+    ) {
+      block_published_on
+      tx_published_on
+    }
+    minimumBlockDepth: nodes(
+      order_by: { block_published_on: desc_nulls_last }
+      limit: 1
+    ) {
+      block_published_on
+      tx_published_on
+    }
+    publishedNodes: nodes_aggregate(
+      where: { block_published_on: { _is_null: false } }
+    ) {
+      aggregate {
+        count
+      }
+    }
+    archivedNodes: nodes_aggregate(
+      where: { piece_offset: { _is_null: false } }
+    ) {
+      aggregate {
+        count
+      }
+    }
+    totalNodes: nodes_aggregate {
+      aggregate {
+        count
+      }
+    }
     object_ownership {
       oauth_user_id
       oauth_provider

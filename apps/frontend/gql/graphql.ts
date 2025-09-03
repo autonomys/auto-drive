@@ -3577,7 +3577,14 @@ export type GetMetadataByHeadCidQueryVariables = Exact<{
 }>;
 
 
-export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', head_cid: string, tags?: Array<string> | null, metadata?: any | null, created_at?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
+export type GetMetadataByHeadCidQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', head_cid: string, tags?: Array<string> | null, metadata?: any | null, created_at?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null } }> };
+
+export type GetMetadataByHeadCidWithOwnershipQueryVariables = Exact<{
+  headCid: Scalars['String']['input'];
+}>;
+
+
+export type GetMetadataByHeadCidWithOwnershipQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', head_cid: string, tags?: Array<string> | null, metadata?: any | null, created_at?: any | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_user_id: string, oauth_provider: string, is_admin?: boolean | null }> }> };
 
 export type SearchGlobalMetadataByCidOrNameQueryVariables = Exact<{
   search: Scalars['String']['input'];
@@ -4134,11 +4141,6 @@ export const GetMetadataByHeadCidDocument = gql`
         count
       }
     }
-    object_ownership {
-      oauth_user_id
-      oauth_provider
-      is_admin
-    }
   }
 }
     `;
@@ -4175,6 +4177,85 @@ export type GetMetadataByHeadCidQueryHookResult = ReturnType<typeof useGetMetada
 export type GetMetadataByHeadCidLazyQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidLazyQuery>;
 export type GetMetadataByHeadCidSuspenseQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidSuspenseQuery>;
 export type GetMetadataByHeadCidQueryResult = Apollo.QueryResult<GetMetadataByHeadCidQuery, GetMetadataByHeadCidQueryVariables>;
+export const GetMetadataByHeadCidWithOwnershipDocument = gql`
+    query GetMetadataByHeadCIDWithOwnership($headCid: String!) {
+  metadata(
+    where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
+  ) {
+    head_cid
+    tags
+    metadata
+    created_at
+    maximumBlockDepth: nodes(
+      order_by: {block_published_on: desc_nulls_last}
+      limit: 1
+    ) {
+      block_published_on
+      tx_published_on
+    }
+    minimumBlockDepth: nodes(
+      order_by: {block_published_on: desc_nulls_last}
+      limit: 1
+    ) {
+      block_published_on
+      tx_published_on
+    }
+    publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
+      aggregate {
+        count
+      }
+    }
+    archivedNodes: nodes_aggregate(where: {piece_offset: {_is_null: false}}) {
+      aggregate {
+        count
+      }
+    }
+    totalNodes: nodes_aggregate {
+      aggregate {
+        count
+      }
+    }
+    object_ownership {
+      oauth_user_id
+      oauth_provider
+      is_admin
+    }
+  }
+}
+    `;
+
+/**
+ * __useGetMetadataByHeadCidWithOwnershipQuery__
+ *
+ * To run a query within a React component, call `useGetMetadataByHeadCidWithOwnershipQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetMetadataByHeadCidWithOwnershipQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetMetadataByHeadCidWithOwnershipQuery({
+ *   variables: {
+ *      headCid: // value for 'headCid'
+ *   },
+ * });
+ */
+export function useGetMetadataByHeadCidWithOwnershipQuery(baseOptions: Apollo.QueryHookOptions<GetMetadataByHeadCidWithOwnershipQuery, GetMetadataByHeadCidWithOwnershipQueryVariables> & ({ variables: GetMetadataByHeadCidWithOwnershipQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetMetadataByHeadCidWithOwnershipQuery, GetMetadataByHeadCidWithOwnershipQueryVariables>(GetMetadataByHeadCidWithOwnershipDocument, options);
+      }
+export function useGetMetadataByHeadCidWithOwnershipLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetMetadataByHeadCidWithOwnershipQuery, GetMetadataByHeadCidWithOwnershipQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetMetadataByHeadCidWithOwnershipQuery, GetMetadataByHeadCidWithOwnershipQueryVariables>(GetMetadataByHeadCidWithOwnershipDocument, options);
+        }
+export function useGetMetadataByHeadCidWithOwnershipSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetMetadataByHeadCidWithOwnershipQuery, GetMetadataByHeadCidWithOwnershipQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetMetadataByHeadCidWithOwnershipQuery, GetMetadataByHeadCidWithOwnershipQueryVariables>(GetMetadataByHeadCidWithOwnershipDocument, options);
+        }
+export type GetMetadataByHeadCidWithOwnershipQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidWithOwnershipQuery>;
+export type GetMetadataByHeadCidWithOwnershipLazyQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidWithOwnershipLazyQuery>;
+export type GetMetadataByHeadCidWithOwnershipSuspenseQueryHookResult = ReturnType<typeof useGetMetadataByHeadCidWithOwnershipSuspenseQuery>;
+export type GetMetadataByHeadCidWithOwnershipQueryResult = Apollo.QueryResult<GetMetadataByHeadCidWithOwnershipQuery, GetMetadataByHeadCidWithOwnershipQueryVariables>;
 export const SearchGlobalMetadataByCidOrNameDocument = gql`
     query SearchGlobalMetadataByCIDOrName($search: String!, $limit: Int!) {
   metadata(
