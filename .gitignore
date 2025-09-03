@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 **/node_modules/
+.yarn/
 
 # Compiled output
 dist/
@@ -44,3 +45,6 @@ database.sqlite
 hosts.ini
 environment.yaml
 *.debug.ts
+
+# Next
+**/.next/
