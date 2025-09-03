@@ -45,3 +45,6 @@ database.sqlite
 hosts.ini
 environment.yaml
 *.debug.ts
+
+# Next
+**/.next/
