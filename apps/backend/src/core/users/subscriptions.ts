@@ -120,7 +120,11 @@ const getPendingCreditsBySubscriptionAndType = async (
   type: InteractionType,
 ): Promise<number> => {
   const end = new Date()
-  const start = new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
+  const start =
+    subscription.granularity === SubscriptionGranularity.Monthly
+      ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
+      : new Date(0)
+
   const interactions =
     await interactionsRepository.getInteractionsBySubscriptionIdAndTypeInTimeRange(
       subscription.id,
