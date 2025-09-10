@@ -1,13 +1,16 @@
 import bytes from 'bytes';
 import { utcToLocalRelativeTime } from '../../../utils/time';
+import { SubscriptionGranularity } from '@auto-drive/models';
 
 interface CreditLimitsProps {
   uploadPending: number;
   uploadLimit: number;
   renewalDate: Date;
+  granularity: SubscriptionGranularity;
 }
 
 export const AccountInformation = ({
+  granularity,
   uploadPending = 0,
   uploadLimit = 1000,
   renewalDate,
@@ -18,7 +21,7 @@ export const AccountInformation = ({
 
   return (
     <div className='space-y-2'>
-      <div className='text-muted-foreground text-xs'>Upload usage</div>
+      <div className='text-xs text-muted-foreground'>Upload usage</div>
       <div className='space-y-1'>
         <div className='flex justify-between text-xs'>
           <span>{bytes(uploadPending)} left</span>
@@ -26,16 +29,18 @@ export const AccountInformation = ({
             {bytes(uploadUsed)}/{bytes(uploadLimit)}
           </span>
         </div>
-        <div className='bg-muted h-1.5 w-full rounded-full'>
+        <div className='h-1.5 w-full rounded-full bg-muted'>
           <div
             className='h-1.5 rounded-full bg-primary'
             style={{ width: `${uploadPercentage}%` }}
           ></div>
         </div>
       </div>
-      <p className='text-muted-foreground space-y-2 text-xs'>
-        Renews in {utcToLocalRelativeTime(renewalDate.toISOString())}
-      </p>
+      {granularity === SubscriptionGranularity.Monthly && (
+        <p className='space-y-2 text-xs text-muted-foreground'>
+          Renews in {utcToLocalRelativeTime(renewalDate.toISOString())}
+        </p>
+      )}
     </div>
   );
 };
