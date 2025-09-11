@@ -4827,6 +4827,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@openzeppelin/contracts@npm:^5.4.0":
+  version: 5.4.0
+  resolution: "@openzeppelin/contracts@npm:5.4.0"
+  checksum: 10c0/7e05646dee4905fea4493f0fb2ad208abaff84b9f5ef1b9e1a5fc61d0e74d9bc30759bdf0d09a08049cfef6a290623330d83469eadc990a7bba6c2cd09a27e1d
+  languageName: node
+  linkType: hard
+
 "@panva/hkdf@npm:^1.0.2":
   version: 1.2.1
   resolution: "@panva/hkdf@npm:1.2.1"
@@ -9753,6 +9760,7 @@ __metadata:
   resolution: "auto-drive@workspace:."
   dependencies:
     "@icons-pack/react-simple-icons": "npm:^13.7.0"
+    "@openzeppelin/contracts": "npm:^5.4.0"
     "@types/spdy": "npm:^3.4.9"
     cache-manager: "npm:^6.4.1"
     eslint-plugin-import: "npm:^2.31.0"
