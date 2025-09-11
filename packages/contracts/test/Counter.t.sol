@@ -13,22 +13,23 @@ contract CounterTest is Test {
     }
 
     function testIncrement() public {
+        bytes32 intentId = bytes32(0);
         counter = new AutoDriveTreasury();
         uint256 num = address(counter).balance;
-        counter.increment{value: 100 ether}();
+        counter.deposit{value: 100 ether}(intentId);
         assertEq(address(counter).balance, num + 100 ether);
     }
 
     function testWithdraw() public {
         counter = new AutoDriveTreasury();
-        counter.increment{value: 100 ether}();
+        counter.deposit{value: 100 ether}(bytes32(0));
         counter.withdraw(100 ether);
         assertEq(address(counter).balance, 0);
     }
 
     function testWithdrawAll() public {
         counter = new AutoDriveTreasury();
-        counter.increment{value: 100 ether}();
+        counter.deposit{value: 100 ether}(bytes32(0));
         counter.withdrawAll();
         assertEq(address(counter).balance, 0);
     }

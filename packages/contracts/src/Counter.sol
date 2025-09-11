@@ -10,10 +10,10 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 contract AutoDriveTreasury is Ownable2Step, ReentrancyGuard {
     constructor() Ownable(msg.sender) {}
     
-    event CreditsAdded(uint256 depositAmount);
+    event CreditsAdded(bytes32 indexed intentId, uint256 depositAmount);
 
-    function increment() public payable {
-        emit CreditsAdded(msg.value);
+    function deposit(bytes32 intentId) public payable {
+        emit CreditsAdded(intentId, msg.value);
     }
 
     function withdraw(uint256 amount) public onlyOwner nonReentrant {
