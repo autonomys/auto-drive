@@ -36,9 +36,10 @@ const watchTransaction = async (txHash: string) => {
         intentId: log.args.intentId,
         depositAmount: log.args.depositAmount,
       })
+      const normalizedDepositAmount = log.args.depositAmount / 10n ** 18n
       return IntentsUseCases.markIntentAsConfirmed({
-        id: log.args.intentId,
-        depositAmount: log.args.depositAmount,
+        intentId: log.args.intentId,
+        depositAmount: normalizedDepositAmount,
       })
     }),
   )
