@@ -23,11 +23,12 @@ const watchTransaction = async (txHash: string) => {
     confirmations: config.paymentManager.confirmations,
   })
 
+  // Filter logs to only include the deposit event
   const logs = parseEventLogs({
     abi: depositEventAbi,
     eventName: depositEventAbi[0].name,
     logs: receipt.logs,
-  })
+  }).filter((log) => log.address === config.paymentManager.contractAddress)
 
   const results = await Promise.all(
     logs.map((log) => {
