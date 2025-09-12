@@ -3,6 +3,7 @@ import { NodesUseCases } from '../../../core/objects/nodes.js'
 import { UploadsUseCases } from '../../../core/uploads/uploads.js'
 import { Task } from '../tasks.js'
 import { createHandlerWithRetries } from '../utils.js'
+import { paymentManager } from '../../services/paymentManager/index.js'
 
 export const frontendErrorPublishedQueue = 'frontend-errors'
 
@@ -16,6 +17,8 @@ export const processFrontendTask = createHandlerWithRetries(
       return OnchainPublisher.publishNodes(params.nodes, retriesLeft)
     } else if (id === 'tag-upload') {
       return UploadsUseCases.tagUpload(params.cid)
+    } else if (id === 'watch-intent-tx') {
+      return paymentManager.watchTransaction(params.txHash)
     } else {
       throw new Error(`Received task ${id} but no handler found.`)
     }

@@ -1,0 +1,79 @@
+import { getDatabase } from '../../drivers/pg.js'
+import { Intent, IntentStatus } from '@auto-drive/models'
+
+type DBIntent = {
+  id: string
+  user_public_id: string
+  status: IntentStatus
+  tx_hash: string
+  deposit_amount: string
+  expires_at: string
+}
+
+const mapRows = (rows: DBIntent[]): Intent[] => {
+  return rows.map((row) => ({
+    id: row.id,
+    userPublicId: row.user_public_id,
+    status: row.status,
+    txHash: row.tx_hash,
+    depositAmount: BigInt(row.deposit_amount).valueOf(),
+    expiresAt: new Date(row.expires_at),
+  }))
+}
+
+const getById = async (id: string): Promise<Intent | null> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    'SELECT * FROM intents WHERE id = $1',
+    [id],
+  )
+  return mapRows(result.rows)[0] || null
+}
+
+const createIntent = async (intent: Intent): Promise<Intent> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    'INSERT INTO intents (id, price, user_public_id, status, tx_hash, expires_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, price, user_public_id, status, tx_hash, expires_at',
+    [
+      intent.id,
+      intent.userPublicId,
+      intent.status,
+      intent.txHash ?? null,
+      intent.depositAmount?.toString() ?? null,
+      intent.expiresAt,
+    ],
+  )
+  return mapRows(result.rows)[0]
+}
+
+const updateIntent = async (intent: Intent): Promise<Intent> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    'UPDATE intents SET status = $1, user_public_id = $2, tx_hash = $3, deposit_amount = $4, expires_at = $5s WHERE id = $6 RETURNING *',
+    [
+      intent.status,
+      intent.userPublicId,
+      intent.txHash ?? null,
+      intent.depositAmount?.toString() ?? null,
+      intent.expiresAt,
+      intent.id,
+    ],
+  )
+  return mapRows(result.rows)[0]
+}
+
+const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    'SELECT * FROM intents WHERE status = $1',
+    [status],
+  )
+  return mapRows(result.rows)
+}
+
+export const intentsRepository = {
+  getById,
+  createIntent,
+  updateIntent,
+  getByStatus,
+}
