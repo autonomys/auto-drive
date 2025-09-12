@@ -40,6 +40,45 @@ intentsController.post(
   }),
 )
 
+intentsController.get(
+  '/price',
+  asyncSafeHandler(async (req, res) => {
+    const result = await handleInternalError(
+      new Promise<{ price: number }>((resolve) =>
+        resolve(IntentsUseCases.getPrice()),
+      ),
+      'Failed to get price',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json(result.value)
+  }),
+)
+
+intentsController.get(
+  '/:id',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      IntentsUseCases.getIntent(req.params.id),
+      'Failed to get intent',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json(result.value)
+  }),
+)
+
 intentsController.post(
   '/:id/watch',
   asyncSafeHandler(async (req, res) => {
