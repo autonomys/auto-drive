@@ -368,12 +368,8 @@ const restoreObject = async (
 }
 
 const isArchived = async (cid: string) => {
-  const metadata = await metadataRepository.getMetadata(cid)
-  if (!metadata) {
-    return false
-  }
-
-  return metadata.is_archived
+  const count = await nodesRepository.getNodesCountWithoutDataByHeadCid(cid)
+  return count.rows[0].count > 0
 }
 
 const hasAllNodesArchived = async (cid: string) => {
