@@ -394,6 +394,12 @@ const getNonArchivedObjects = async () => {
 
 const populateCaches = async (cid: string) => {
   try {
+    const isArchived = await ObjectUseCases.isArchived(cid)
+    if (isArchived) {
+      logger.warn('Object is archived, skipping cache population (cid=%s)', cid)
+      return
+    }
+
     const stream = await downloadService.download(cid)
 
     logger.debug('Downloaded object from DB after archival check (cid=%s)', cid)
