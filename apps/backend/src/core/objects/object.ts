@@ -368,7 +368,7 @@ const restoreObject = async (
 }
 
 const isArchived = async (cid: string) => {
-  const count = await nodesRepository.getNodesCountWithoutDataByHeadCid(cid)
+  const count = await nodesRepository.getNodesCountWithoutDataByRootCid(cid)
   logger.info('Nodes count without data (cid=%s): %d', cid, count.rows[0].count)
   return count.rows[0].count > 0
 }

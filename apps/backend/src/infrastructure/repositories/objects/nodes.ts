@@ -233,11 +233,11 @@ const getLastArchivedPieceNode = async () => {
     .then((e) => e.rows.at(0))
 }
 
-const getNodesCountWithoutDataByHeadCid = async (headCid: string) => {
+const getNodesCountWithoutDataByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
   return db.query<{ count: number }>({
     text: 'SELECT COUNT(*) as count FROM nodes WHERE root_cid = $1 AND encoded_node IS NULL',
-    values: [headCid],
+    values: [rootCid],
   })
 }
 
@@ -256,5 +256,5 @@ export const nodesRepository = {
   getUploadedNodesByRootCid,
   getLastArchivedPieceNode,
   removeNodeByRootCid,
-  getNodesCountWithoutDataByHeadCid,
+  getNodesCountWithoutDataByRootCid,
 }
