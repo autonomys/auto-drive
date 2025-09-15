@@ -9,6 +9,7 @@ import { uploadController } from '../controllers/upload.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { docsController } from '../controllers/docs.js'
+import { intentsController } from '../controllers/intents.js'
 
 const logger = createLogger('api:frontend')
 
@@ -46,6 +47,7 @@ const createServer = async () => {
   app.use('/objects', objectController)
   app.use('/subscriptions', subscriptionController)
   app.use('/uploads', uploadController)
+  app.use('/intents', intentsController)
   app.use('/docs', docsController)
 
   app.get('/health', (_req, res) => {

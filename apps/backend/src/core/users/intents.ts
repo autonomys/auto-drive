@@ -2,17 +2,25 @@ import { Intent, IntentCreation, IntentStatus, User } from '@auto-drive/models'
 import { intentsRepository } from '../../infrastructure/repositories/users/intents.js'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../infrastructure/eventRouter/tasks.js'
-import { v4 } from 'uuid'
 import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
 import { err, ok } from 'neverthrow'
 import { config } from '../../config.js'
+import { randomBytes } from 'crypto'
+import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { SubscriptionsUseCases } from './subscriptions.js'
+
+const logger = createLogger('IntentsUseCases')
+
+const randomBytes32 = () => {
+  return '0x' + randomBytes(32).toString('hex')
+}
 
 const createIntent = async (
   executor: User,
   intentCreation: IntentCreation,
 ): Promise<Intent> => {
   const intent = await intentsRepository.createIntent({
-    id: v4(),
+    id: randomBytes32(),
     userPublicId: executor.publicId,
     status: IntentStatus.PENDING,
     expiresAt: intentCreation.expiresAt,
@@ -93,7 +101,18 @@ const markIntentAsConfirmed = async ({
   )
 }
 
-// Add
+const getIntentCredits = (intent: Intent) => {
+  if (!intent.depositAmount) {
+    return 0
+  }
+
+  const creditsInBytes =
+    intent.depositAmount /
+    (BigInt(config.paymentManager.pricePerMB * 10 ** 6) * 10n ** 6n)
+
+  return Number(creditsInBytes).valueOf()
+}
+
 const onConfirmedIntent = async (intentId: string) => {
   const result = await getIntent(intentId)
   if (result.isErr()) {
@@ -101,9 +120,31 @@ const onConfirmedIntent = async (intentId: string) => {
   }
   const intent = result.value
 
-  if (intent.status !== IntentStatus.PENDING) {
-    return err(new Error('Intent is already confirmed'))
+  if (intent.status === IntentStatus.COMPLETED) {
+    return err(new Error('Intent is not completed'))
   }
+
+  if (!intent.depositAmount) {
+    logger.warn('Intent has no deposit amount', {
+      intentId,
+    })
+    return err(new Error('Intent has no deposit amount'))
+  }
+
+  const addResult = await SubscriptionsUseCases.addCreditsToSubscription(
+    intent.userPublicId,
+    getIntentCredits(intent),
+  )
+  if (addResult.isErr()) {
+    return err(addResult.error)
+  }
+
+  await intentsRepository.updateIntent({
+    ...intent,
+    status: IntentStatus.COMPLETED,
+  })
+
+  return ok()
 }
 
 const getConfirmedIntents = async () => {

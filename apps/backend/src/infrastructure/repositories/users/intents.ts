@@ -16,7 +16,9 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
     userPublicId: row.user_public_id,
     status: row.status,
     txHash: row.tx_hash,
-    depositAmount: BigInt(row.deposit_amount).valueOf(),
+    depositAmount: row.deposit_amount
+      ? BigInt(row.deposit_amount).valueOf()
+      : undefined,
     expiresAt: new Date(row.expires_at),
   }))
 }
@@ -33,7 +35,7 @@ const getById = async (id: string): Promise<Intent | null> => {
 const createIntent = async (intent: Intent): Promise<Intent> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
-    'INSERT INTO intents (id, price, user_public_id, status, tx_hash, expires_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, price, user_public_id, status, tx_hash, expires_at',
+    'INSERT INTO intents (id, user_public_id, status, tx_hash, deposit_amount, expires_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
     [
       intent.id,
       intent.userPublicId,
@@ -49,7 +51,7 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
 const updateIntent = async (intent: Intent): Promise<Intent> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
-    'UPDATE intents SET status = $1, user_public_id = $2, tx_hash = $3, deposit_amount = $4, expires_at = $5s WHERE id = $6 RETURNING *',
+    'UPDATE intents SET status = $1, user_public_id = $2, tx_hash = $3, deposit_amount = $4, expires_at = $5 WHERE id = $6 RETURNING *',
     [
       intent.status,
       intent.userPublicId,
