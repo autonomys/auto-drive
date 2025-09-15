@@ -1,4 +1,4 @@
-import { AutonomysSymbol, EXTERNAL_ROUTES, Button } from '@auto-drive/ui';
+import { AutonomysSymbol, EXTERNAL_ROUTES, Button, ThemeToggle } from '@auto-drive/ui';
 import { Globe } from 'lucide-react';
 import Link from 'next/link';
 
@@ -13,12 +13,15 @@ export const LandingHeader = () => {
           </div>
         </Link>
 
-        <Link href={EXTERNAL_ROUTES.fileExplorer()}>
-          <Button className='flex items-center justify-start space-x-2 font-bold'>
-            <Globe size={16} />
-            Explore
-          </Button>
-        </Link>
+        <div className='flex items-center gap-2'>
+          <ThemeToggle />
+          <Link href={EXTERNAL_ROUTES.fileExplorer()}>
+            <Button className='flex items-center justify-start space-x-2 font-bold'>
+              <Globe size={16} />
+              Explore
+            </Button>
+          </Link>
+        </div>
       </div>
     </header>
   );
