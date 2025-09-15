@@ -4,8 +4,10 @@ import { useRouter } from 'next/navigation';
 
 export const GoBackButton = ({
   children = 'Back',
+  onClick,
 }: {
   children?: React.ReactNode;
+  onClick?: () => void;
 }) => {
   const router = useRouter();
 
@@ -14,7 +16,7 @@ export const GoBackButton = ({
       variant='outline'
       size='sm'
       className='inline-flex items-center'
-      onClick={() => router.back()}
+      onClick={onClick ? onClick : router.back}
     >
       <ChevronLeftIcon className='h-4 w-4' />
       {children}

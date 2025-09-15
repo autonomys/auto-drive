@@ -13,7 +13,7 @@ import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
 import { SessionContext } from 'next-auth/react';
 import { AuthModal } from '../../molecules/AuthModal';
-import { AskForCreditsButton } from '../../atoms/AskForCredits';
+import { BuyMoreCreditsButton } from '../../atoms/AskForCredits';
 import { SIDEBAR_DEFINITION } from './items';
 import { SideNavBarContent } from './SideNavBarContent';
 
@@ -78,14 +78,16 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
       <SidebarFooter className='p-4'>
         {isLoggedIn && (
           <AccountInformation
-            granularity={subscription?.granularity ?? SubscriptionGranularity.OneOff}
+            granularity={
+              subscription?.granularity ?? SubscriptionGranularity.OneOff
+            }
             renewalDate={renewalDate}
             uploadLimit={subscription?.uploadLimit ?? 0}
             uploadPending={subscription?.pendingUploadCredits ?? 0}
           />
         )}
         {isLoggedIn && subscription ? (
-          <AskForCreditsButton />
+          <BuyMoreCreditsButton />
         ) : (
           <Button
             variant='outline'

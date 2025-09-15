@@ -157,6 +157,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@auto-drive/ui@workspace:packages/ui"
   dependencies:
+    "@autonomys/auto-utils": "npm:^1.5.15"
     autoprefixer: "npm:^10.4.21"
     lucide-react: "npm:^0.439.0"
     postcss: "npm:^8.5.6"
@@ -7641,10 +7642,48 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tanstack/query-async-storage-persister@npm:^5.87.4":
+  version: 5.87.4
+  resolution: "@tanstack/query-async-storage-persister@npm:5.87.4"
+  dependencies:
+    "@tanstack/query-core": "npm:5.87.4"
+    "@tanstack/query-persist-client-core": "npm:5.87.4"
+  checksum: 10c0/e553addc0cfed966ede21f97d174ae68c7799fb1bf1b90d670c032303ef91c0cc2b836bb6cdf20b6a9b9768e13934b00bdff9d0fe08171abac5f51d954b26498
+  languageName: node
+  linkType: hard
+
 "@tanstack/query-core@npm:5.85.3":
   version: 5.85.3
   resolution: "@tanstack/query-core@npm:5.85.3"
   checksum: 10c0/7db9e78c3648a3d5bc295fff14e7afdf061e38ca55b0004e3f6e6f1f44596f564bf8b59c97b2d1f7ce851792c8eac7008608ccd4de0dfcd6349a4e0943b7d247
+  languageName: node
+  linkType: hard
+
+"@tanstack/query-core@npm:5.87.4":
+  version: 5.87.4
+  resolution: "@tanstack/query-core@npm:5.87.4"
+  checksum: 10c0/00898c96d199ba8f0cd2004b76da8e5e3355b97473a6c16dd13de65f5063c4f2abfae64e9f32fc395557c2f446af09e1646a82f62992256fdda6062c9399c2a3
+  languageName: node
+  linkType: hard
+
+"@tanstack/query-persist-client-core@npm:5.87.4":
+  version: 5.87.4
+  resolution: "@tanstack/query-persist-client-core@npm:5.87.4"
+  dependencies:
+    "@tanstack/query-core": "npm:5.87.4"
+  checksum: 10c0/0eee998bfbd6465cc5d30f639492d65e910c52781592bd6540fdd063d96f97026e27b698bfb193f490b32deee206682b9ce4eb5b9705de227af8ad3b1ce63c57
+  languageName: node
+  linkType: hard
+
+"@tanstack/react-query-persist-client@npm:^5.87.4":
+  version: 5.87.4
+  resolution: "@tanstack/react-query-persist-client@npm:5.87.4"
+  dependencies:
+    "@tanstack/query-persist-client-core": "npm:5.87.4"
+  peerDependencies:
+    "@tanstack/react-query": ^5.87.4
+    react: ^18 || ^19
+  checksum: 10c0/3cf624ead9d2b5c7bfa862b897388a00bd84614d6638536cc0507754bcfcb7e9b45beeec45534f4827f26dfdb8f3c1d7978b45481e3445ae5a48d5f9c65211f0
   languageName: node
   linkType: hard
 
@@ -13777,7 +13816,9 @@ __metadata:
     "@polkadot/keyring": "npm:^13.5.2"
     "@radix-ui/react-separator": "npm:^1.1.7"
     "@rainbow-me/rainbowkit": "npm:^2.2.3"
+    "@tanstack/query-async-storage-persister": "npm:^5.87.4"
     "@tanstack/react-query": "npm:^5.66.0"
+    "@tanstack/react-query-persist-client": "npm:^5.87.4"
     "@types/byte-size": "npm:^8.1.2"
     "@types/bytes": "npm:^3"
     "@types/eslint-plugin-jsx-a11y": "npm:^6"
