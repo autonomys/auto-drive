@@ -15,6 +15,9 @@ import { AuthManager } from '../../infrastructure/services/auth/index.js'
 import { config } from '../../config.js'
 import { err, ok, Result } from 'neverthrow'
 import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
+import { createLogger } from '../../infrastructure/drivers/logger.js'
+
+const logger = createLogger('SubscriptionsUseCases')
 
 const updateSubscription = async (
   executor: User,
@@ -198,6 +201,35 @@ const registerInteraction = async (
   await InteractionsUseCases.createInteraction(subscription.id, type, size)
 }
 
+const addCreditsToSubscription = async (
+  userPublicId: string,
+  credits: number,
+): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
+  const user = await AuthManager.getUserFromPublicId(userPublicId)
+  if (!user.organizationId) {
+    return err(new ObjectNotFoundError('User has no organization ID'))
+  }
+
+  const subscription = await SubscriptionsUseCases.getOrCreateSubscription(user)
+  if (!subscription) {
+    return err(new ObjectNotFoundError('Subscription not found'))
+  }
+
+  if (subscription.granularity !== SubscriptionGranularity.OneOff) {
+    return err(new Error('Subscription is not one-off'))
+  }
+
+  logger.info(`Adding ${credits} credits to subscription ${subscription.id}`)
+  await subscriptionsRepository.updateSubscription(
+    subscription.id,
+    subscription.granularity,
+    subscription.uploadLimit + credits,
+    subscription.downloadLimit,
+  )
+
+  return ok()
+}
+
 export const SubscriptionsUseCases = {
   updateSubscription,
   getOrCreateSubscription,
@@ -208,4 +240,5 @@ export const SubscriptionsUseCases = {
   registerInteraction,
   getUserListSubscriptions,
   getSubscriptionById,
+  addCreditsToSubscription,
 }

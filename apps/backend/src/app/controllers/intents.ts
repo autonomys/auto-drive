@@ -75,7 +75,10 @@ intentsController.get(
       return
     }
 
-    res.status(200).json(result.value)
+    res.status(200).json({
+      ...result.value,
+      depositAmount: result.value.depositAmount?.toString(),
+    })
   }),
 )
 

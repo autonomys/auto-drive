@@ -18,6 +18,9 @@ const watchTransaction = async (txHash: string) => {
     throw new Error('Invalid tx hash')
   }
 
+  logger.info('Watching transaction', {
+    txHash,
+  })
   const receipt = await viemClient.waitForTransactionReceipt({
     hash: txHash as `0x${string}`,
     confirmations: config.paymentManager.confirmations,
@@ -28,7 +31,17 @@ const watchTransaction = async (txHash: string) => {
     abi: depositEventAbi,
     eventName: depositEventAbi[0].name,
     logs: receipt.logs,
-  }).filter((log) => log.address === config.paymentManager.contractAddress)
+  })
+    // Filter logs to only include logs from the payment manager contract
+    .filter(
+      (log) =>
+        log.address.toLowerCase() ===
+        config.paymentManager.contractAddress.toLowerCase(),
+    )
+
+  logger.info('Transaction logs', {
+    logs,
+  })
 
   const results = await Promise.all(
     logs.map((log) => {
@@ -54,13 +67,29 @@ const watchTransaction = async (txHash: string) => {
 }
 
 const checkConfirmedIntents = async () => {
+  logger.info('Checking confirmed intents')
   const intents = await IntentsUseCases.getConfirmedIntents()
-  intents.forEach((intent) => {
-    IntentsUseCases.onConfirmedIntent(intent.id)
+  logger.info('Found confirmed intents', {
+    intents: intents.map((intent) => intent.id),
   })
+  for (const intent of intents) {
+    const result = await IntentsUseCases.onConfirmedIntent(intent.id)
+    console.log(result)
+
+    if (result.isErr()) {
+      logger.error('Error on confirmed intent', {
+        error: result.error,
+      })
+    } else {
+      logger.info('Marked intent as confirmed', {
+        intentId: intent.id,
+      })
+    }
+  }
 }
 
 const start = () => {
+  logger.info('Starting payment manager')
   setInterval(
     safeCallback(checkConfirmedIntents),
     config.paymentManager.checkInterval,
@@ -70,6 +99,9 @@ const start = () => {
     address: config.paymentManager.contractAddress,
     eventName: depositEventAbi[0].name,
     onLogs: (logs) => {
+      logger.info('Deposit event', {
+        logs: logs.map((log) => log.transactionHash),
+      })
       logs.forEach((log) => {
         watchTransaction(log.transactionHash)
       })
