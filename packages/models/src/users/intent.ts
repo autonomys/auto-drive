@@ -14,6 +14,7 @@ export const IntentSchema = z.object({
   txHash: z.string().optional(),
   expiresAt: z.date(),
   depositAmount: z.bigint().optional(),
+  pricePerMB: z.number(),
 });
 
 export type Intent = z.infer<typeof IntentSchema>;
