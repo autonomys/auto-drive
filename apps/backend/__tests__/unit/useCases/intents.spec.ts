@@ -29,6 +29,7 @@ describe('IntentsUseCases', () => {
 
   it('createIntent should create PENDING intent for user', async () => {
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+    config.paymentManager.pricePerMB = 7
     jest
       .spyOn(intentsRepository, 'createIntent')
       .mockImplementation(async (intent) => intent)
@@ -38,6 +39,7 @@ describe('IntentsUseCases', () => {
     expect(intent.userPublicId).toBe(user.publicId)
     expect(intent.status).toBe(IntentStatus.PENDING)
     expect(intent.expiresAt.getTime()).toBeCloseTo(expiresAt.getTime(), -2)
+    expect(intent.pricePerMB).toBe(7)
   })
 
   it('getIntent should return ok when found', async () => {
@@ -45,6 +47,7 @@ describe('IntentsUseCases', () => {
       id: '0x1',
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
+      pricePerMB: 1,
       expiresAt: new Date(Date.now() + 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
@@ -65,6 +68,7 @@ describe('IntentsUseCases', () => {
       id: '0x2',
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
+      pricePerMB: 1,
       expiresAt: new Date(Date.now() + 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
@@ -96,6 +100,7 @@ describe('IntentsUseCases', () => {
       userPublicId: 'other',
       status: IntentStatus.PENDING,
       expiresAt: new Date(Date.now() + 1000),
+      pricePerMB: 1,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
 
@@ -115,6 +120,7 @@ describe('IntentsUseCases', () => {
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
       expiresAt: new Date(Date.now() + 1000),
+      pricePerMB: 1,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const updateSpy = jest
@@ -149,6 +155,7 @@ describe('IntentsUseCases', () => {
       status: IntentStatus.CONFIRMED,
       expiresAt: new Date(Date.now() + 1000),
       depositAmount,
+      pricePerMB: 1,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const addCreditsSpy = jest
@@ -170,6 +177,41 @@ describe('IntentsUseCases', () => {
     )
   })
 
+  it('onConfirmedIntent should use intent.pricePerMB, not current config', async () => {
+    // Set current config to a different value than the intent's stored price
+    config.paymentManager.pricePerMB = 99
+    const storedPrice = 2
+    // Choose deposit so that credits = 123 when divided by storedPrice
+    const depositAmount = 123n * BigInt(storedPrice) * 10n ** 12n
+    const intent: Intent = {
+      id: '0x8',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      expiresAt: new Date(Date.now() + 1000),
+      depositAmount,
+      pricePerMB: storedPrice,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const addCreditsSpy = jest
+      .spyOn(SubscriptionsUseCases, 'addCreditsToSubscription')
+      .mockResolvedValue(ok())
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockResolvedValue({ ...intent, status: IntentStatus.COMPLETED })
+
+    const res = await IntentsUseCases.onConfirmedIntent(intent.id)
+
+    expect(res.isOk()).toBe(true)
+    // Must compute with intent.pricePerMB (2), not config (99)
+    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, 123)
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: intent.id,
+        status: IntentStatus.COMPLETED,
+      }),
+    )
+  })
+
   it('onConfirmedIntent should error when already completed', async () => {
     const intent: Intent = {
       id: '0x6',
@@ -177,6 +219,7 @@ describe('IntentsUseCases', () => {
       status: IntentStatus.COMPLETED,
       expiresAt: new Date(Date.now() + 1000),
       depositAmount: 1n,
+      pricePerMB: 1,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
 
@@ -191,6 +234,7 @@ describe('IntentsUseCases', () => {
         userPublicId: user.publicId,
         status: IntentStatus.CONFIRMED,
         expiresAt: new Date(Date.now() + 1000),
+        pricePerMB: 1,
       },
     ]
     jest.spyOn(intentsRepository, 'getByStatus').mockResolvedValue(intents)

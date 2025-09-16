@@ -25,6 +25,7 @@ const createIntent = async (
     status: IntentStatus.PENDING,
     expiresAt: intentCreation.expiresAt,
     depositAmount: undefined,
+    pricePerMB: config.paymentManager.pricePerMB,
   })
 
   return intent
@@ -107,8 +108,7 @@ const getIntentCredits = (intent: Intent) => {
   }
 
   const creditsInBytes =
-    intent.depositAmount /
-    (BigInt(config.paymentManager.pricePerMB * 10 ** 6) * 10n ** 6n)
+    intent.depositAmount / (BigInt(intent.pricePerMB * 10 ** 6) * 10n ** 6n)
 
   return Number(creditsInBytes).valueOf()
 }

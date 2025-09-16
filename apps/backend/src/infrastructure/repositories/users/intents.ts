@@ -7,6 +7,7 @@ type DBIntent = {
   status: IntentStatus
   tx_hash: string
   deposit_amount: string
+  price_per_mb: number
   expires_at: string
 }
 
@@ -19,6 +20,7 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
     depositAmount: row.deposit_amount
       ? BigInt(row.deposit_amount).valueOf()
       : undefined,
+    pricePerMB: row.price_per_mb,
     expiresAt: new Date(row.expires_at),
   }))
 }
