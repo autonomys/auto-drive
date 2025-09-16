@@ -121,7 +121,7 @@ const onConfirmedIntent = async (intentId: string) => {
   const intent = result.value
 
   if (intent.status === IntentStatus.COMPLETED) {
-    return err(new Error('Intent is not completed'))
+    return err(new Error('Intent should be not completed'))
   }
 
   if (!intent.depositAmount) {
