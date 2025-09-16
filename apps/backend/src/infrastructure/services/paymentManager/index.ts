@@ -45,14 +45,9 @@ const watchTransaction = async (txHash: string) => {
 
   const results = await Promise.all(
     logs.map((log) => {
-      logger.info('Deposit event', {
-        intentId: log.args.intentId,
-        depositAmount: log.args.depositAmount,
-      })
-      const normalizedDepositAmount = log.args.depositAmount / 10n ** 18n
       return IntentsUseCases.markIntentAsConfirmed({
         intentId: log.args.intentId,
-        depositAmount: normalizedDepositAmount,
+        depositAmount: log.args.depositAmount,
       })
     }),
   )

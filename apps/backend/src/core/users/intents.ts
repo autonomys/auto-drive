@@ -133,7 +133,7 @@ const onConfirmedIntent = async (intentId: string) => {
 
   const addResult = await SubscriptionsUseCases.addCreditsToSubscription(
     intent.userPublicId,
-    getIntentCredits(intent),
+    IntentsUseCases.getIntentCredits(intent),
   )
   if (addResult.isErr()) {
     return err(addResult.error)
@@ -163,5 +163,6 @@ export const IntentsUseCases = {
   onConfirmedIntent,
   markIntentAsConfirmed,
   getConfirmedIntents,
+  getIntentCredits,
   getPrice,
 }
