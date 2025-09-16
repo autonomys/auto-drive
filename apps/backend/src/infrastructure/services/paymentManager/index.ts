@@ -69,7 +69,6 @@ const checkConfirmedIntents = async () => {
   })
   for (const intent of intents) {
     const result = await IntentsUseCases.onConfirmedIntent(intent.id)
-    console.log(result)
 
     if (result.isErr()) {
       logger.error('Error on confirmed intent', {
