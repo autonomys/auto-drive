@@ -37,7 +37,7 @@ const getById = async (id: string): Promise<Intent | null> => {
 const createIntent = async (intent: Intent): Promise<Intent> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
-    'INSERT INTO intents (id, user_public_id, status, tx_hash, deposit_amount, expires_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    'INSERT INTO intents (id, user_public_id, status, tx_hash, deposit_amount, expires_at, price_per_mb) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
     [
       intent.id,
       intent.userPublicId,
@@ -45,6 +45,7 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
       intent.txHash ?? null,
       intent.depositAmount?.toString() ?? null,
       intent.expiresAt,
+      intent.pricePerMB,
     ],
   )
   return mapRows(result.rows)[0]
