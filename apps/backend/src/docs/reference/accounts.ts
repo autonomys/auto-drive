@@ -51,9 +51,9 @@ export const accounts = {
           organizationId: { type: 'string' },
           uploadLimit: { type: 'number' },
           downloadLimit: { type: 'number' },
-          granularity: {
+          model: {
             type: 'string',
-            enum: ['monthly', 'AccountInfoWithUser'],
+            enum: ['monthly', 'one_off'],
           },
           pendingUploadCredits: { type: 'number' },
           pendingDownloadCredits: { type: 'number' },
@@ -63,7 +63,7 @@ export const accounts = {
           'organizationId',
           'uploadLimit',
           'downloadLimit',
-          'granularity',
+          'model',
           'pendingUploadCredits',
           'pendingDownloadCredits',
         ],
