@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { SubscriptionGranularity } from '@auto-drive/models'
+import { AccountModel } from '@auto-drive/models'
 import { optionalBoolEnvironmentVariable, env } from './shared/utils/misc.js'
 import { getAddress } from 'viem'
 
@@ -75,10 +75,7 @@ export const config = {
     ),
     optionalAuth: env('OPTIONAL_AUTH', 'false') === 'true',
     defaultSubscription: {
-      granularity: env(
-        'DEFAULT_SUBSCRIPTION_GRANULARITY',
-        SubscriptionGranularity.OneOff,
-      ),
+      granularity: env('DEFAULT_SUBSCRIPTION_GRANULARITY', AccountModel.OneOff),
       uploadLimit: Number(
         env('DEFAULT_SUBSCRIPTION_UPLOAD_LIMIT', ONE_HUNDRED_MiB.toString()),
       ),
