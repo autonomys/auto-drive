@@ -368,12 +368,9 @@ const restoreObject = async (
 }
 
 const isArchived = async (cid: string) => {
-  const metadata = await metadataRepository.getMetadata(cid)
-  if (!metadata) {
-    return false
-  }
-
-  return metadata.is_archived
+  const count = await nodesRepository.getNodesCountWithoutDataByRootCid(cid)
+  logger.info('Nodes count without data (cid=%s): %d', cid, count.rows[0].count)
+  return count.rows[0].count > 0
 }
 
 const hasAllNodesArchived = async (cid: string) => {
@@ -394,6 +391,12 @@ const getNonArchivedObjects = async () => {
 
 const populateCaches = async (cid: string) => {
   try {
+    const isArchived = await ObjectUseCases.isArchived(cid)
+    if (isArchived) {
+      logger.warn('Object is archived, skipping cache population (cid=%s)', cid)
+      return
+    }
+
     const stream = await downloadService.download(cid)
 
     logger.debug('Downloaded object from DB after archival check (cid=%s)', cid)

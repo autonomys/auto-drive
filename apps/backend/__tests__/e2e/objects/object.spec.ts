@@ -13,6 +13,7 @@ import { v4 } from 'uuid'
 import { downloadService } from '../../../src/infrastructure/services/download/index.js'
 import { Readable } from 'stream'
 import { ForbiddenError } from '../../../src/errors/index.js'
+import { nodesRepository } from '../../../src/infrastructure/repositories/index.js'
 
 describe('Object', () => {
   let user: UserWithOrganization
@@ -79,6 +80,17 @@ describe('Object', () => {
         },
       }),
     )
+    await nodesRepository.saveNode({
+      cid: fileCid,
+      root_cid: fileCid,
+      head_cid: fileCid,
+      type: 'file',
+      encoded_node: '',
+      piece_index: null,
+      piece_offset: null,
+      block_published_on: null,
+      tx_published_on: null,
+    })
     await ObjectUseCases.onObjectArchived(fileCid)
     const isArchived = await ObjectUseCases.isArchived(fileCid)
     expect(isArchived).toBe(true)
