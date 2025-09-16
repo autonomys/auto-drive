@@ -16,12 +16,12 @@
   )
   const logger = createLogger('servers:frontendWorker')
 
-  // if (config.services.taskManager.active) {
-  //   EventRouter.listenFrontendEvents()
-  // }
-  // if (config.services.objectMappingArchiver.active) {
-  //   objectMappingArchiver.start()
-  // }
+  if (config.services.taskManager.active) {
+    EventRouter.listenFrontendEvents()
+  }
+  if (config.services.objectMappingArchiver.active) {
+    objectMappingArchiver.start()
+  }
   if (
     !config.services.taskManager.active &&
     !config.services.objectMappingArchiver.active
