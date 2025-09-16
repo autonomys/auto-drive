@@ -8,7 +8,10 @@ export type Subscription = {
   granularity: SubscriptionGranularity;
 };
 
-export type SubscriptionGranularity = "monthly";
+export enum SubscriptionGranularity {
+  Monthly = "monthly",
+  OneOff = "one_off",
+}
 
 export type SubscriptionInfoWithUser = SubscriptionInfo & {
   user: User;
