@@ -16,7 +16,7 @@ import {
 import { jest } from '@jest/globals'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { config } from '../../../src/config.js'
-import { SubscriptionsUseCases } from '../../../dist/core/users/subscriptions.js'
+import { AccountsUseCases } from '../../../src/core/index.js'
 
 describe('AWS S3 - SDK', () => {
   let s3Client: S3Client
@@ -38,7 +38,7 @@ describe('AWS S3 - SDK', () => {
 
     mockRabbitPublish()
     // onboard the user
-    await SubscriptionsUseCases.getOrCreateSubscription(user)
+    await AccountsUseCases.getOrCreateSubscription(user)
 
     // mock auth manager returning the mock user
     jest.spyOn(AuthManager, 'getUserFromAccessToken').mockResolvedValue(user)

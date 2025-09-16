@@ -1,7 +1,7 @@
 'use client';
 
 import { UserTableRow } from './UserTableRow';
-import { SubscriptionInfoWithUser } from '@auto-drive/models';
+import { AccountInfoWithUser } from '@auto-drive/models';
 import {
   TableBody,
   TableBodyCell,
@@ -16,7 +16,7 @@ import {
 import { ChevronLeft, ChevronRight, Loader } from 'lucide-react';
 
 interface UserSubscriptionsTableProps {
-  users: SubscriptionInfoWithUser[] | undefined;
+  users: AccountInfoWithUser[] | undefined;
   currentPage: number;
   totalPages: number;
   itemsPerPage: number;
@@ -55,14 +55,14 @@ export const UserSubscriptionsTable = ({
                 {users?.map((user) => (
                   <UserTableRow
                     key={user.user.publicId}
-                    subscriptionWithUser={user}
+                    accountWithUser={user}
                   />
                 ))}
                 {users === undefined && (
                   <TableBodyRow>
                     <TableBodyCell
                       colSpan={9}
-                      className='whitespace-nowrap px-6 py-4 text-center text-sm text-black dark:text-darkBlack'
+                      className='dark:text-darkBlack whitespace-nowrap px-6 py-4 text-center text-sm text-black'
                     >
                       <span className='flex items-center justify-center'>
                         <Loader className='h-4 w-4 animate-spin' />
@@ -77,7 +77,7 @@ export const UserSubscriptionsTable = ({
       </div>
 
       {/* Pagination Controls */}
-      <div className='mt-4 flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 dark:bg-gray-800'>
+      <div className='mt-4 flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 dark:bg-gray-800 sm:px-6'>
         <div className='flex items-center'>
           <label
             htmlFor='itemsPerPage'

@@ -7,7 +7,7 @@ import {
   unmockMethods,
 } from '../../utils/mocks.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { SubscriptionsUseCases } from '../../../src/core/users/subscriptions.js'
+import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 
 describe('CreditsUseCases', () => {
   let mockUser: UserWithOrganization
@@ -17,7 +17,7 @@ describe('CreditsUseCases', () => {
     await getDatabase()
     await dbMigration.up()
     mockUser = createMockUser()
-    const result = await SubscriptionsUseCases.getOrCreateSubscription(mockUser)
+    const result = await AccountsUseCases.getOrCreateSubscription(mockUser)
     if (!result) throw new PreconditionError('Failed to setup test user')
   })
 
@@ -31,19 +31,15 @@ describe('CreditsUseCases', () => {
     const size = BigInt(1024)
 
     const initialCredits =
-      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      await AccountsUseCases.getPendingCreditsByUserAndType(
         mockUser,
         interactionType,
       )
 
-    await SubscriptionsUseCases.registerInteraction(
-      mockUser,
-      interactionType,
-      size,
-    )
+    await AccountsUseCases.registerInteraction(mockUser, interactionType, size)
 
     const pendingCredits =
-      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      await AccountsUseCases.getPendingCreditsByUserAndType(
         mockUser,
         interactionType,
       )
@@ -56,19 +52,15 @@ describe('CreditsUseCases', () => {
     const size = BigInt(2048)
 
     const initialCredits =
-      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      await AccountsUseCases.getPendingCreditsByUserAndType(
         mockUser,
         interactionType,
       )
 
-    await SubscriptionsUseCases.registerInteraction(
-      mockUser,
-      interactionType,
-      size,
-    )
+    await AccountsUseCases.registerInteraction(mockUser, interactionType, size)
 
     const pendingCredits =
-      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      await AccountsUseCases.getPendingCreditsByUserAndType(
         mockUser,
         interactionType,
       )
