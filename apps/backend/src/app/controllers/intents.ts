@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
-import { intentCreationSchema } from '@auto-drive/models'
 import { IntentsUseCases } from '../../core/users/intents.js'
 import {
   handleInternalError,
@@ -19,16 +18,8 @@ intentsController.post(
       return
     }
 
-    const intentCreation = intentCreationSchema.safeParse(req.body)
-    if (!intentCreation.success) {
-      res.status(400).json({
-        error: intentCreation.error.message,
-      })
-      return
-    }
-
     const result = await handleInternalError(
-      IntentsUseCases.createIntent(user, intentCreation.data),
+      IntentsUseCases.createIntent(user),
       'Failed to create intent',
     )
     if (result.isErr()) {
