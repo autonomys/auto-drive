@@ -77,17 +77,20 @@ describe('CreditsUseCases', () => {
 
   it('should add credits to a OneOff subscription', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
-    const subscription =
-      await AccountsUseCases.getOrCreateSubscription(mockUser)
+    const subscription = await accountsRepository.getByOrganizationId(
+      mockUser.organizationId!,
+    )
+    if (!subscription) throw new Error('Subscription not found')
+
     // Ensure subscription is OneOff
     await accountsRepository.updateSubscription(
-      subscription.id,
+      subscription!.id,
       AccountModel.OneOff,
-      subscription.uploadLimit,
-      subscription.downloadLimit,
+      subscription!.uploadLimit,
+      subscription!.downloadLimit,
     )
 
-    const before = await AccountsUseCases.getSubscriptionById(subscription.id)
+    const before = await AccountsUseCases.getSubscriptionById(subscription!.id)
     if (!before) throw new Error('Subscription not found')
 
     const creditsToAdd = 123
@@ -96,9 +99,12 @@ describe('CreditsUseCases', () => {
       creditsToAdd,
     )
 
+    if (result.isErr()) {
+      expect(result._unsafeUnwrapErr()).toBeUndefined()
+    }
     expect(result.isOk()).toBe(true)
 
-    const after = await AccountsUseCases.getSubscriptionById(subscription.id)
+    const after = await AccountsUseCases.getSubscriptionById(subscription!.id)
     if (!after) throw new Error('Subscription not found')
 
     expect(after.uploadLimit - before.uploadLimit).toBe(creditsToAdd)
@@ -107,8 +113,11 @@ describe('CreditsUseCases', () => {
 
   it('should fail to add credits if subscription is not OneOff', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
-    const subscription =
-      await AccountsUseCases.getOrCreateSubscription(mockUser)
+    const subscription = await accountsRepository.getByOrganizationId(
+      mockUser.organizationId!,
+    )
+    if (!subscription) throw new Error('Subscription not found')
+
     await accountsRepository.updateSubscription(
       subscription.id,
       AccountModel.Monthly,

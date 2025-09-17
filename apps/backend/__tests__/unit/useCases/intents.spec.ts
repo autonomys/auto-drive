@@ -28,17 +28,15 @@ describe('IntentsUseCases', () => {
   })
 
   it('createIntent should create PENDING intent for user', async () => {
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
     config.paymentManager.pricePerMB = 7
     jest
       .spyOn(intentsRepository, 'createIntent')
       .mockImplementation(async (intent) => intent)
 
-    const intent = await IntentsUseCases.createIntent(user, { expiresAt })
+    const intent = await IntentsUseCases.createIntent(user)
 
     expect(intent.userPublicId).toBe(user.publicId)
     expect(intent.status).toBe(IntentStatus.PENDING)
-    expect(intent.expiresAt.getTime()).toBeCloseTo(expiresAt.getTime(), -2)
     expect(intent.pricePerMB).toBe(7)
   })
 
@@ -48,7 +46,6 @@ describe('IntentsUseCases', () => {
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
       pricePerMB: 1,
-      expiresAt: new Date(Date.now() + 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
 
@@ -69,7 +66,6 @@ describe('IntentsUseCases', () => {
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
       pricePerMB: 1,
-      expiresAt: new Date(Date.now() + 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const updateSpy = jest
@@ -99,7 +95,6 @@ describe('IntentsUseCases', () => {
       id: '0x3',
       userPublicId: 'other',
       status: IntentStatus.PENDING,
-      expiresAt: new Date(Date.now() + 1000),
       pricePerMB: 1,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
@@ -119,7 +114,6 @@ describe('IntentsUseCases', () => {
       id: '0x4',
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
-      expiresAt: new Date(Date.now() + 1000),
       pricePerMB: 1,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
@@ -153,7 +147,6 @@ describe('IntentsUseCases', () => {
       id: '0x5',
       userPublicId: user.publicId,
       status: IntentStatus.CONFIRMED,
-      expiresAt: new Date(Date.now() + 1000),
       depositAmount,
       pricePerMB: 1,
     }
@@ -187,7 +180,6 @@ describe('IntentsUseCases', () => {
       id: '0x8',
       userPublicId: user.publicId,
       status: IntentStatus.CONFIRMED,
-      expiresAt: new Date(Date.now() + 1000),
       depositAmount,
       pricePerMB: storedPrice,
     }
@@ -217,7 +209,6 @@ describe('IntentsUseCases', () => {
       id: '0x6',
       userPublicId: user.publicId,
       status: IntentStatus.COMPLETED,
-      expiresAt: new Date(Date.now() + 1000),
       depositAmount: 1n,
       pricePerMB: 1,
     }
@@ -233,7 +224,6 @@ describe('IntentsUseCases', () => {
         id: '0x7',
         userPublicId: user.publicId,
         status: IntentStatus.CONFIRMED,
-        expiresAt: new Date(Date.now() + 1000),
         pricePerMB: 1,
       },
     ]
