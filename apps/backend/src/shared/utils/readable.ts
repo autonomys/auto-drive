@@ -100,3 +100,11 @@ export const sliceReadable = async (
     setImmediate(() => resolve(pass))
   })
 }
+
+export const createEmptyReadable = (): Readable => {
+  return new Readable({
+    read() {
+      this.push(null)
+    },
+  })
+}
