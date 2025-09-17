@@ -10,7 +10,7 @@ import {
 import { config } from '../../../config.js'
 import { Readable } from 'stream'
 import { DownloadServiceOptions, DownloadStatus } from '@auto-drive/models'
-import { attachErrorLogging } from '../../../shared/utils/index.js'
+import { handleReadableError } from '../../../shared/utils/index.js'
 
 const logger = createLogger('download-service')
 
@@ -84,10 +84,17 @@ export const downloadService = {
 
     // If byte range is set, don't cache and return the stream directly
     if (options?.byteRange) {
-      return stream instanceof Readable ? stream : Readable.from(stream)
+      const streamToReturn =
+        stream instanceof Readable ? stream : Readable.from(stream)
+      handleReadableError(
+        streamToReturn,
+        'Byte range stream error for cid %s',
+        cid,
+      )
+      return streamToReturn
     }
 
-    attachErrorLogging(stream, 'Source stream error for cid %s', cid)
+    handleReadableError(stream, 'Source stream error for cid %s', cid)
 
     // Fork the stream once for caching and return
     const [returnStream, cacheStream] =
@@ -95,17 +102,21 @@ export const downloadService = {
         ? await forkStream(stream)
         : await forkAsyncIterable(stream)
 
-    attachErrorLogging(cacheStream, 'Cache branch stream error for cid %s', cid)
+    handleReadableError(
+      cacheStream,
+      'Cache branch stream error for cid %s',
+      cid,
+    )
 
     // Fork the stream again for caching w/o blocking the main thread
     forkStream(cacheStream)
       .then(async ([fsCacheStream, memoryCacheStream]) => {
-        attachErrorLogging(
+        handleReadableError(
           fsCacheStream,
           'Filesystem cache stream error for cid %s',
           cid,
         )
-        attachErrorLogging(
+        handleReadableError(
           memoryCacheStream,
           'Memory cache stream error for cid %s',
           cid,

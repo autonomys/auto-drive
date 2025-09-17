@@ -1,5 +1,5 @@
 export { safeCallback } from './safe.js'
 export {
-  handleReadableError as attachErrorLogging,
+  handleReadableError,
   sliceReadable,
 } from './readable.js'
