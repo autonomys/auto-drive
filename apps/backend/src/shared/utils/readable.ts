@@ -3,6 +3,23 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('utils:readable')
 
+/**
+ * Attach a defensive 'error' handler to a Readable stream to prevent
+ * unhandled error events from crashing the process. Returns the same stream.
+ */
+export const handleReadableError = (
+  stream: Readable | AsyncIterable<Buffer>,
+  message: string,
+  ...params: unknown[]
+) => {
+  if (stream instanceof Readable) {
+    stream.on('error', (error) => {
+      logger.warn(error as Error, message, ...params)
+    })
+  }
+  return stream
+}
+
 export const sliceReadable = async (
   readable: Readable,
   start: number,

@@ -10,6 +10,7 @@ import {
 import { config } from '../../../config.js'
 import { Readable } from 'stream'
 import { DownloadServiceOptions, DownloadStatus } from '@auto-drive/models'
+import { attachErrorLogging } from '../../../shared/utils/index.js'
 
 const logger = createLogger('download-service')
 
@@ -86,15 +87,29 @@ export const downloadService = {
       return stream instanceof Readable ? stream : Readable.from(stream)
     }
 
+    attachErrorLogging(stream, 'Source stream error for cid %s', cid)
+
     // Fork the stream once for caching and return
     const [returnStream, cacheStream] =
       stream instanceof Readable
         ? await forkStream(stream)
         : await forkAsyncIterable(stream)
 
+    attachErrorLogging(cacheStream, 'Cache branch stream error for cid %s', cid)
+
     // Fork the stream again for caching w/o blocking the main thread
     forkStream(cacheStream)
       .then(async ([fsCacheStream, memoryCacheStream]) => {
+        attachErrorLogging(
+          fsCacheStream,
+          'Filesystem cache stream error for cid %s',
+          cid,
+        )
+        attachErrorLogging(
+          memoryCacheStream,
+          'Memory cache stream error for cid %s',
+          cid,
+        )
         memoryDownloadCache.set(cid, memoryCacheStream)
         fsCache.set(cid, { data: fsCacheStream, size })
       })
