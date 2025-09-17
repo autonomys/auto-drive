@@ -1,4 +1,3 @@
-import 'dotenv/config'
 import { NodesUseCases } from '../../../../core/objects/nodes.js'
 import { config } from '../../../../config.js'
 import { createLogger } from '../../../drivers/logger.js'
@@ -15,14 +14,13 @@ const ONE_MINUTE = 60_000
 
 const start = async () => {
   const initSubscription = async (client: ObjectMappingIndexerRpcClient) => {
-    // const node = await nodesRepository.getLastArchivedPieceNode()
+    const node = await nodesRepository.getLastArchivedPieceNode()
 
-    const pieceIndex = 167682 // node?.piece_index ?? 0
+    const pieceIndex = node?.piece_index ?? 0
 
     logger.info(
-      'Subscribing to recover object mappings from piece %d (step %d)',
+      'Subscribing to recover object mappings from piece %d',
       pieceIndex,
-      config.objectMappingArchiver.step,
     )
 
     // To be properly solved later
@@ -42,10 +40,10 @@ const start = async () => {
         initSubscription(ws)
       },
       onReconnection: () => {
-        logger.info('Reconnected to object mapping archiver')
+        logger.debug('Reconnected to object mapping archiver')
       },
       onClose: () => {
-        logger.info('Closed connection to object mapping archiver')
+        logger.debug('Closed connection to object mapping archiver')
       },
     },
   })
@@ -65,5 +63,3 @@ const start = async () => {
 export const objectMappingArchiver = {
   start,
 }
-
-objectMappingArchiver.start()
