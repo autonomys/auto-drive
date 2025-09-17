@@ -1,4 +1,4 @@
-import { Intent, IntentCreation, IntentStatus, User } from '@auto-drive/models'
+import { Intent, IntentStatus, User } from '@auto-drive/models'
 import { intentsRepository } from '../../infrastructure/repositories/users/intents.js'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../infrastructure/eventRouter/tasks.js'
@@ -15,15 +15,11 @@ const randomBytes32 = () => {
   return '0x' + randomBytes(32).toString('hex')
 }
 
-const createIntent = async (
-  executor: User,
-  intentCreation: IntentCreation,
-): Promise<Intent> => {
+const createIntent = async (executor: User): Promise<Intent> => {
   const intent = await intentsRepository.createIntent({
     id: randomBytes32(),
     userPublicId: executor.publicId,
     status: IntentStatus.PENDING,
-    expiresAt: intentCreation.expiresAt,
     depositAmount: undefined,
     pricePerMB: config.paymentManager.pricePerMB,
   })

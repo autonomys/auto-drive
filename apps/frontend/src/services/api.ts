@@ -28,9 +28,6 @@ export const createApiService = ({
       throw new Error('No session');
     }
 
-    // expiresAt must be at least 1 hour from now per backend schema
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 2); // 2 hours buffer
-
     const response = await fetch(`${apiBaseUrl}/intents`, {
       method: 'POST',
       headers: {
@@ -38,7 +35,6 @@ export const createApiService = ({
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
       },
-      body: JSON.stringify({ expiresAt }),
     });
 
     if (!response.ok) {

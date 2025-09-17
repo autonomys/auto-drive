@@ -12,23 +12,11 @@ export const IntentSchema = z.object({
   userPublicId: z.string(),
   status: z.nativeEnum(IntentStatus),
   txHash: z.string().optional(),
-  expiresAt: z.date(),
   depositAmount: z.bigint().optional(),
   pricePerMB: z.number(),
 });
 
 export type Intent = z.infer<typeof IntentSchema>;
-
-export const intentCreationSchema = z.object({
-  expiresAt: z
-    .string()
-    .transform((date) => new Date(date))
-    .refine((date) => date > new Date(Date.now() + 1000 * 60 * 60), {
-      message: "Expires at must be at least 1 hour from now",
-    }),
-});
-
-export type IntentCreation = z.infer<typeof intentCreationSchema>;
 
 export const intentWatchSchema = z.object({
   txHash: z.string(),
