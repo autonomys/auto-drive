@@ -97,6 +97,12 @@ type TaskCreateParams =
         cid: string
       }
     }
+  | {
+      id: 'ensure-object-published'
+      params: {
+        cid: string
+      }
+    }
 
 export const createTask = (task: TaskCreateParams): Task => {
   switch (task.id) {
@@ -131,6 +137,12 @@ export const createTask = (task: TaskCreateParams): Task => {
         retriesLeft: MAX_RETRIES,
       }
     case 'object-archived':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'ensure-object-published':
       return {
         id: task.id,
         params: task.params,

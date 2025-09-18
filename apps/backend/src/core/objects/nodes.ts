@@ -27,6 +27,7 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { Node } from '../../infrastructure/repositories/objects/nodes.js'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { createTask, Task } from '../../infrastructure/eventRouter/tasks.js'
+import { OnchainPublisher } from '../../infrastructure/services/upload/onchainPublisher/index.js'
 
 const logger = createLogger('useCases:objects:nodes')
 
