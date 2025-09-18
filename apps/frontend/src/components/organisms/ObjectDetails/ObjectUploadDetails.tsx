@@ -7,7 +7,6 @@ import {
 import { getTypeFromMetadata } from '../../../utils/file';
 import { formatNumberWithCommas } from '../../../utils/number';
 import { EXTERNAL_ROUTES } from '@auto-drive/ui';
-import { useNetwork } from '../../../contexts/network';
 import bytes from 'bytes';
 
 export const ObjectUploadDetails = ({
@@ -17,7 +16,6 @@ export const ObjectUploadDetails = ({
   object: ObjectInformation;
   isOwner: boolean;
 }) => {
-  const { network } = useNetwork();
 
   return (
     <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
@@ -88,7 +86,6 @@ export const ObjectUploadDetails = ({
               {object.uploadState.minimumBlockDepth ? (
                 <a
                   href={EXTERNAL_ROUTES.explorer.block(
-                    network.id,
                     object.uploadState.minimumBlockDepth,
                   )}
                   target='_blank'
@@ -143,7 +140,6 @@ export const ObjectUploadDetails = ({
               {object.uploadState.minimumBlockDepth ? (
                 <a
                   href={EXTERNAL_ROUTES.explorer.block(
-                    network.id,
                     object.uploadState.minimumBlockDepth,
                   )}
                   target='_blank'

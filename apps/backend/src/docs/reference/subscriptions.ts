@@ -51,7 +51,7 @@ export const subscriptions = {
           organizationId: { type: 'string' },
           uploadLimit: { type: 'number' },
           downloadLimit: { type: 'number' },
-          granularity: { type: 'string', enum: ['monthly'] },
+          granularity: { type: 'string', enum: ['monthly', 'one_off'] },
           pendingUploadCredits: { type: 'number' },
           pendingDownloadCredits: { type: 'number' },
         },

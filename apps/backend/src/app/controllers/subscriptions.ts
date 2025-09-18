@@ -8,6 +8,8 @@ import {
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
+import { SubscriptionGranularity } from '@auto-drive/models'
+import { z } from 'zod'
 
 const logger = createLogger('http:controllers:subscriptions')
 
@@ -98,8 +100,10 @@ subscriptionController.post(
       return
     }
 
-    if (granularity !== 'monthly') {
-      // TODO: support other granularities
+    const safeGranularity = z
+      .nativeEnum(SubscriptionGranularity)
+      .safeParse(granularity)
+    if (!safeGranularity.success) {
       res.status(400).json({
         error: 'Invalid granularity',
       })
@@ -110,7 +114,7 @@ subscriptionController.post(
       SubscriptionsUseCases.updateSubscription(
         executor,
         publicId,
-        granularity,
+        safeGranularity.data,
         uploadLimit,
         downloadLimit,
       ),

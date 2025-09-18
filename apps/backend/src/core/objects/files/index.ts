@@ -4,7 +4,10 @@ import { ObjectUseCases } from '../object.js'
 import { Readable } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { ByteRange } from '@autonomys/file-server'
-import { sliceReadable } from '../../../shared/utils/readable.js'
+import {
+  createEmptyReadable,
+  sliceReadable,
+} from '../../../shared/utils/readable.js'
 import { DBObjectFetcher, FileGatewayObjectFetcher } from './fetchers.js'
 import { composeNodesDataAsFileReadable } from './nodeComposer.js'
 
@@ -125,6 +128,9 @@ const retrieveObject = async (
   metadata: OffchainMetadata,
   options?: DownloadServiceOptions,
 ): Promise<Readable> => {
+  if (BigInt(metadata.totalSize) === BigInt(0)) {
+    return createEmptyReadable()
+  }
   const byteRange = options?.byteRange
 
   const isFullRetrieval = !byteRange

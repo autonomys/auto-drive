@@ -49,7 +49,7 @@ jobs:
         if: ${{ !inputs.prerelease }}
         with:
           context: .
-          file: ./${{ matrix.app }}/Dockerfile
+          file: ./apps/${{ matrix.app }}/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:${{ env.TAG_NAME }}
@@ -63,7 +63,7 @@ jobs:
         if: ${{ inputs.prerelease }}
         with:
           context: .
-          file: ./${{ matrix.app }}/Dockerfile
+          file: ./apps/${{ matrix.app }}/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:${{ env.BRANCH_NAME }}
