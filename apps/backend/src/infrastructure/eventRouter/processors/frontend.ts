@@ -16,6 +16,8 @@ export const processFrontendTask = createHandlerWithRetries(
       return OnchainPublisher.publishNodes(params.nodes)
     } else if (id === 'tag-upload') {
       return UploadsUseCases.tagUpload(params.cid)
+    } else if (id === 'ensure-object-published') {
+      return NodesUseCases.ensureObjectPublished(params.cid)
     } else {
       throw new Error(`Received task ${id} but no handler found.`)
     }
