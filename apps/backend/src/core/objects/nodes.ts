@@ -259,6 +259,15 @@ const setPublishedOn = async (
   return
 }
 
+const ensureObjectPublished = async (cid: string): Promise<void> => {
+  const nodes = await nodesRepository.getNodesByRootCid(cid)
+  if (nodes.length === 0) {
+    throw new Error(`Nodes not found for ${cid}`)
+  }
+
+  await OnchainPublisher.publishNodes(nodes.map((node) => node.cid))
+}
+
 export const NodesUseCases = {
   getNode,
   saveNode,
@@ -270,4 +279,5 @@ export const NodesUseCases = {
   getNodesByCids,
   scheduleNodeArchiving,
   setPublishedOn,
+  ensureObjectPublished,
 }

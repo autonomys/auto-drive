@@ -48,6 +48,13 @@ export const TaskSchema = z.discriminatedUnion('id', [
       cid: z.string(),
     }),
   }),
+  z.object({
+    id: z.literal('ensure-object-published'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({
+      cid: z.string(),
+    }),
+  }),
 ])
 
 export type MigrateUploadTask = z.infer<typeof TaskSchema>
