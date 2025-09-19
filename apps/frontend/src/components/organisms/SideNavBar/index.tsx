@@ -50,7 +50,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   });
 
   return (
-    <Sidebar className='border-r bg-card'>
+    <Sidebar className='bg-card'>
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}

@@ -7,9 +7,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "peerDependencies": {
+    "next": ">=13",
     "react": ">=18",
-    "react-dom": ">=18",
-    "next": ">=13"
+    "react-dom": ">=18"
   },
   "dependencies": {
     "lucide-react": "^0.439.0",

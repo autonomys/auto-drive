@@ -212,9 +212,7 @@ export const FileTableRow = ({
     <Fragment key={file.headCid}>
       <TableBodyRow
         className={cn(
-          file.type === 'folder' ? 'hover:cursor-pointer' : '',
-          selectedFiles.includes(file.headCid) &&
-            'bg-gray-100 hover:bg-gray-100',
+          'hover:bg-background-hover hover:text-background-hover-foreground bg-background text-foreground',
         )}
       >
         <TableBodyCell className='whitespace-nowrap text-sm'>
@@ -231,37 +229,37 @@ export const FileTableRow = ({
                 {isRowExpanded ? (
                   <Triangle className='rotate-90 text-accent' />
                 ) : (
-                  <Triangle className='dark:text-darkBlack text-black' />
+                  <Triangle className='' />
                 )}
               </button>
             )}
             <Link
               href={fileDetailPath(network.id, file.headCid)}
-              className='dark:text-darkBlack relative ml-2 flex flex-row items-center text-sm font-medium text-gray-900'
+              className='relative ml-2 flex flex-row items-center text-sm font-medium'
             >
               {file.type === 'folder' ? (
                 <Folder className='mr-2 h-5 w-5 text-gray-400' />
               ) : (
                 <DocumentIcon className='mr-2 h-5 w-5 text-gray-400' />
               )}
-              <span className='font-semibold text-gray-900 hover:cursor-pointer hover:text-accent hover:underline dark:text-accent'>
+              <span className='font-semibold text-foreground hover:cursor-pointer hover:text-accent hover:underline'>
                 {file.name
                   ? shortenString(file.name, 30)
                   : `No name (${file.headCid.slice(0, 12)})`}
               </span>
             </Link>
             <ConditionalRender condition={isInsecure(file.tags)}>
-              <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+              <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold'>
                 Insecure
               </span>
             </ConditionalRender>
             {isToBeReviewed(file.tags) && !isBanned(file.tags) && (
-              <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
+              <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold'>
                 Reported
               </span>
             )}
             {isBanned(file.tags) && (
-              <span className='ml-2 rounded-lg bg-red-500 p-1 text-xs font-semibold text-white'>
+              <span className='ml-2 rounded-lg bg-red-500 p-1 text-xs font-semibold'>
                 Banned
               </span>
             )}
@@ -283,16 +281,16 @@ export const FileTableRow = ({
               {file.createdAt ? formatLocalDate(file.createdAt) : 'Unknown'}
             </span>
             {file.createdAt && (
-              <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 dark:bg-gray-700'>
+              <div className='pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
                 {utcToLocalRelativeTime(file.createdAt)}
-                <div className='mt-0.5 text-xs opacity-75'>
+                <div className='mt-0.5 opacity-75'>
                   {dayjs.utc(file.createdAt).format('YYYY-MM-DD HH:mm:ss')} UTC
                 </div>
               </div>
             )}
           </div>
         </TableBodyCell>
-        <TableBodyCell className='flex justify-end'>
+        <TableBodyCell className='flex justify-end text-foreground'>
           <div className='relative'>
             <div ref={buttonRef}>
               <Button
@@ -306,14 +304,14 @@ export const FileTableRow = ({
 
             {showActionsMenu && (
               <div
-                className='dark:bg-darkWhite absolute right-0 top-full z-10 mt-1 w-36 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5'
+                className='absolute right-0 top-full z-10 mt-1 w-36 rounded-md bg-background shadow-lg ring-1 ring-black ring-opacity-5'
                 ref={actionsMenuRef}
               >
                 <div className='py-1' role='menu' aria-orientation='vertical'>
                   {actionButtons.includes(FileActionButtons.SHARE) && (
                     <button
                       className={cn(
-                        'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
+                        'block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background',
                         !isOwner && 'cursor-not-allowed opacity-50',
                       )}
                       disabled={!isOwner}
@@ -328,7 +326,7 @@ export const FileTableRow = ({
                     !isCached && (
                       <button
                         className={cn(
-                          'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
+                          'block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background',
                           isBanned(file.tags) &&
                             'cursor-not-allowed opacity-50',
                         )}
@@ -348,7 +346,7 @@ export const FileTableRow = ({
                   {actionButtons.includes(FileActionButtons.DOWNLOAD) && (
                     <button
                       className={cn(
-                        'block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200',
+                        'block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background',
                         (file.uploadState.totalNodes === null ||
                           file.tags.includes(ObjectTag.Banned)) &&
                           'cursor-not-allowed opacity-50',
@@ -377,7 +375,7 @@ export const FileTableRow = ({
                   {actionButtons.includes(FileActionButtons.DELETE) && (
                     <button
                       className={cn(
-                        'block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-200',
+                        'block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-background',
                         !hasFileOwnership && 'cursor-not-allowed opacity-50',
                       )}
                       disabled={!hasFileOwnership}
@@ -390,7 +388,7 @@ export const FileTableRow = ({
 
                   {actionButtons.includes(FileActionButtons.RESTORE) && (
                     <button
-                      className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
+                      className='block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background'
                       onClick={handleRestore}
                       role='menuitem'
                     >
@@ -401,7 +399,7 @@ export const FileTableRow = ({
                     !isToBeReviewed(file.tags) &&
                     !isBanned(file.tags) && (
                       <button
-                        className='block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-200'
+                        className='block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background'
                         onClick={handleReport}
                         role='menuitem'
                       >

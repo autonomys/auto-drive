@@ -31,7 +31,7 @@ const HeroSection = () => {
               <div className='grid flex-1 grid-cols-2 gap-3 font-semibold'>
                 <Button
                   variant='outline'
-                  className='flex items-center justify-start space-x-2 text-[#000000]'
+                  className='flex items-center justify-start space-x-2'
                   onClick={() => signIn('google')}
                 >
                   <SiGoogle size={16} />
@@ -39,7 +39,7 @@ const HeroSection = () => {
                 </Button>
                 <Button
                   variant='outline'
-                  className='flex items-center justify-start space-x-2 text-[#000000]'
+                  className='flex items-center justify-start space-x-2'
                   onClick={() => signIn('discord')}
                 >
                   <SiDiscord size={16} />
@@ -47,7 +47,7 @@ const HeroSection = () => {
                 </Button>
                 <Button
                   variant='outline'
-                  className='flex items-center justify-start space-x-2 text-[#000000]'
+                  className='flex items-center justify-start space-x-2'
                   onClick={() => signIn('github')}
                 >
                   <SiGithub size={16} />
@@ -55,7 +55,7 @@ const HeroSection = () => {
                 </Button>
                 <Button
                   variant='outline'
-                  className='flex items-center justify-start space-x-2 text-[#000000]'
+                  className='flex items-center justify-start space-x-2'
                   onClick={() => signIn('web3-wallet')}
                 >
                   <Wallet size={16} />
@@ -80,16 +80,16 @@ const HeroSection = () => {
 
           {/* Right Column - Demo Interface */}
           <div className='lg:ml-8'>
-            <Card className='border-card-border bg-gradient-card p-6 shadow-xl'>
+            <Card className='border-card-border bg-white p-6 text-black shadow-xl'>
               <div className='space-y-6'>
                 <div className='flex items-center space-x-2'>
-                  <AutonomysSymbol />
+                  <AutonomysSymbol fill='currentColor' />
                   <span className='font-semibold'>Auto Drive</span>
                 </div>
 
                 <div className='space-y-4'>
-                  <div className='flex items-center space-x-2 text-sm'>
-                    <div className='h-4 w-4 rounded bg-muted' />
+                  <div className='flex items-center space-x-2 text-sm text-muted-foreground'>
+                    <div className='h-4 w-4 rounded bg-muted opacity-0' />
                     <span>Files</span>
                   </div>
                   <div className='flex items-center space-x-2 text-sm text-muted-foreground'>
