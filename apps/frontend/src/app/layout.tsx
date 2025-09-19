@@ -1,6 +1,7 @@
-import { Metadata } from 'next';
+import { Metadata, type Viewport } from 'next';
 import localFont from 'next/font/local';
 import './globals.css';
+import { getNoFlashScript } from '@auto-drive/ui';
 import dynamic from 'next/dynamic';
 import NextTopLoader from 'nextjs-toploader';
 import { Toaster } from 'react-hot-toast';
@@ -75,6 +76,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b1220' },
+  ],
+};
+
 const WalletProvider = dynamic(
   () => import('@/contexts/web3').then((mod) => mod.Web3Provider),
   {
@@ -88,10 +96,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang='en'>
+    <html lang='en' suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <script dangerouslySetInnerHTML={{ __html: getNoFlashScript() }} />
         <NextTopLoader color='#1949D2' height={2} showSpinner={false} />
         <WalletProvider>{children}</WalletProvider>
         <Toaster position='top-center' />

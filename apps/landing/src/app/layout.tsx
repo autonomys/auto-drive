@@ -1,6 +1,7 @@
-import { Metadata } from 'next';
+import { Metadata, type Viewport } from 'next';
 import localFont from 'next/font/local';
 import './globals.css';
+import { getNoFlashScript } from '@auto-drive/ui';
 import NextTopLoader from 'nextjs-toploader';
 import { Toaster } from 'react-hot-toast';
 
@@ -74,16 +75,24 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b1220' },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang='en'>
+    <html lang='en' suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <script dangerouslySetInnerHTML={{ __html: getNoFlashScript() }} />
         <NextTopLoader color='#1949D2' height={2} showSpinner={false} />
         {children}
         <Toaster position='top-center' />

@@ -181,14 +181,14 @@ export const UploadingFileModal = ({
   return (
     <Transition show={!!files && files.length > 0}>
       <Dialog as='div' onClose={handleClose}>
-        <div className='dark:bg-darkBlack/25 fixed inset-0 flex items-center justify-center bg-black/25 bg-opacity-50'>
-          <div className='dark:bg-darkWhite min-w-[400px] max-w-[600px] transform rounded-lg bg-white p-6 shadow-lg transition-transform'>
+        <div className='bg-background-hover fixed inset-0 flex items-center justify-center bg-opacity-50'>
+          <div className='bg-background-hover min-w-[400px] max-w-[600px] transform rounded-lg bg-background p-6 shadow-lg transition-transform'>
             {tooManyFiles ? (
               <div className='p-4'>
-                <div className='mb-4 text-center font-medium text-red-500'>
+                <div className='text-light-danger mb-4 text-center font-medium'>
                   Too many files selected
                 </div>
-                <div className='mb-6 text-center text-sm text-gray-700 dark:text-gray-300'>
+                <div className='text-foreground-hover mb-6 text-center text-sm'>
                   You can upload a maximum of {MAX_FILES_LIMIT} files at once.
                   Please select fewer files and try again.
                 </div>
@@ -206,16 +206,16 @@ export const UploadingFileModal = ({
               <div>
                 {totalFiles > 1 && (
                   <div className='mb-4'>
-                    <div className='mb-1 text-sm font-medium text-gray-700 dark:text-gray-300'>
+                    <div className='text-foreground-hover mb-1 text-sm font-medium'>
                       Overall progress
                     </div>
-                    <div className='relative h-2 w-full rounded bg-gray-200'>
+                    <div className='bg-background-hover relative h-2 w-full rounded'>
                       <div
-                        className='absolute left-0 top-0 h-2 rounded bg-blue-500 transition-all duration-500'
+                        className='bg-light-accent absolute left-0 top-0 h-2 rounded transition-all duration-500'
                         style={{ width: `${overallProgress}%` }}
                       />
                     </div>
-                    <div className='mt-1 text-right text-xs text-gray-500 dark:text-gray-400'>
+                    <div className='text-foreground-hover mt-1 text-right text-xs'>
                       {overallProgressPercentage}%
                     </div>
                   </div>
@@ -227,7 +227,7 @@ export const UploadingFileModal = ({
                       key={index}
                       className={`mb-3 ${totalFiles === 1 ? 'mt-4' : ''}`}
                     >
-                      <div className='mb-1 flex justify-between text-sm font-medium text-gray-700 dark:text-gray-300'>
+                      <div className='text-foreground-hover mb-1 flex justify-between text-sm font-medium'>
                         <div
                           className={`truncate ${totalFiles === 1 ? 'max-w-[380px] text-base' : 'max-w-[300px]'}`}
                         >
@@ -237,21 +237,21 @@ export const UploadingFileModal = ({
                           ({Math.round(fileProgress.fileSize / 1024)} KB)
                         </div>
                       </div>
-                      <div className='relative h-2 w-full rounded bg-gray-200'>
+                      <div className='bg-background-hover relative h-2 w-full rounded'>
                         <div
                           className={`absolute left-0 top-0 h-2 rounded transition-all duration-500 ${
                             fileProgress.error
-                              ? 'bg-red-500'
+                              ? 'bg-light-danger'
                               : totalFiles === 1
-                                ? 'bg-blue-500'
-                                : 'bg-green-500'
+                                ? 'bg-light-accent'
+                                : 'bg-light-success'
                           }`}
                           style={{ width: `${fileProgress.progress}%` }}
                         />
                       </div>
-                      <div className='mt-1 text-right text-xs text-gray-500 dark:text-gray-400'>
+                      <div className='text-foreground-hover mt-1 text-right text-xs'>
                         {fileProgress.error ? (
-                          <span className='text-red-500'>Failed</span>
+                          <span className='text-light-danger'>Failed</span>
                         ) : (
                           <>
                             {Math.round(fileProgress.progress)}%
@@ -260,7 +260,7 @@ export const UploadingFileModal = ({
                         )}
                       </div>
                       {fileProgress.error && fileProgress.errorMessage && (
-                        <div className='mt-1 text-xs text-red-500'>
+                        <div className='text-foreground-hover mt-1 text-xs'>
                           {fileProgress.errorMessage}
                         </div>
                       )}
@@ -271,15 +271,15 @@ export const UploadingFileModal = ({
             ) : (
               <div>
                 <div className='flex flex-col gap-2 p-4'>
-                  <span className='text-md dark:text-darkBlack block text-center font-semibold text-gray-700'>
+                  <span className='text-foreground-hover text-md block text-center font-semibold'>
                     Enter Encrypting Password
                   </span>
                   {totalFiles > 1 ? (
-                    <div className='mb-2 text-center text-sm text-gray-500 dark:text-gray-400'>
+                    <div className='text-foreground-hover mb-2 text-center text-sm'>
                       Uploading {totalFiles} files
                     </div>
                   ) : (
-                    <div className='mb-2 text-center text-sm text-gray-500 dark:text-gray-400'>
+                    <div className='text-foreground-hover mb-2 text-center text-sm'>
                       Uploading: {files?.[0]?.name}
                     </div>
                   )}

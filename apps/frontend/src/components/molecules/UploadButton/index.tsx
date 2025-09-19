@@ -56,25 +56,25 @@ export const UploadButton = () => {
         <PopoverButton as='div'>
           <Button
             variant='outline'
-            className='flex h-full items-center gap-2 rounded-full bg-gray-100 py-[.50rem] text-gray-800 shadow-sm hover:bg-gray-200'
+            className='bg-background-hover text-foreground-hover flex h-full items-center gap-2 rounded-full py-[.50rem] shadow-sm hover:bg-background hover:text-foreground'
           >
             <PlusIcon className='h-5 w-5' />
             <span className='text-nowrap'>Add new file</span>
           </Button>
         </PopoverButton>
         <PopoverPanel className='relative'>
-          <div className='dark:bg-darkWhiteHover dark:text-darkBlack absolute left-0 top-1 flex text-nowrap rounded-md bg-white text-black shadow-lg ring-1 ring-black ring-opacity-5'>
+          <div className='bg-background-hover text-foreground-hover absolute left-0 top-1 flex text-nowrap rounded-md bg-background shadow-lg ring-1 ring-black ring-opacity-5'>
             <div className='p-1'>
               <button
                 onClick={openFileDialog}
-                className='dark:hover:bg-darkWhite flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100'
+                className='bg-background-hover text-foreground-hover flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-background hover:text-foreground'
               >
                 <FileIcon className='mr-3 h-5 w-5' />
                 Select Files
               </button>
               <button
                 onClick={openFolderDialog}
-                className='dark:hover:bg-darkWhite flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-gray-100'
+                className='bg-background-hover text-foreground-hover flex w-full items-center rounded-md px-4 py-2 text-sm hover:bg-background hover:text-foreground'
               >
                 <FolderIcon className='mr-3 h-5 w-5' />
                 Select Folder
