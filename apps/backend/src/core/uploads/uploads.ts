@@ -20,7 +20,6 @@ import { ObjectUseCases } from '../objects/object.js'
 import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { createTask, Task } from '../../infrastructure/eventRouter/tasks.js'
-import { chunkArray } from '../../shared/utils/misc.js'
 import { config } from '../../config.js'
 import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
 import { BlockstoreUseCases } from './blockstore.js'
@@ -310,19 +309,14 @@ const removeUploadArtifacts = async (uploadId: string): Promise<void> => {
 const scheduleNodesPublish = async (cid: string): Promise<void> => {
   const nodes = await NodesUseCases.getCidsByRootCid(cid)
 
-  const tasks: Task[] = chunkArray(
-    nodes,
-    config.params.maxUploadNodesPerBatch,
-  ).map((nodes) =>
-    createTask({
-      id: 'publish-nodes',
-      params: {
-        nodes,
-      },
-    }),
-  )
-
-  EventRouter.publish(tasks)
+  nodes.forEach((node) => {
+    EventRouter.publish(
+      createTask({
+        id: 'publish-nodes',
+        params: { nodes: [node] },
+      }),
+    )
+  })
 }
 
 const scheduleUploadTagging = async (cid: string): Promise<void> => {

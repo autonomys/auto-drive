@@ -27,6 +27,7 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { Node } from '../../infrastructure/repositories/objects/nodes.js'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { createTask, Task } from '../../infrastructure/eventRouter/tasks.js'
+import { OnchainPublisher } from '../../infrastructure/services/upload/onchainPublisher/index.js'
 
 const logger = createLogger('useCases:objects:nodes')
 
@@ -259,6 +260,15 @@ const setPublishedOn = async (
   return
 }
 
+const ensureObjectPublished = async (cid: string): Promise<void> => {
+  const nodes = await nodesRepository.getNodesByRootCid(cid)
+  if (nodes.length === 0) {
+    throw new Error(`Nodes not found for ${cid}`)
+  }
+
+  await OnchainPublisher.publishNodes(nodes.map((node) => node.cid))
+}
+
 export const NodesUseCases = {
   getNode,
   saveNode,
@@ -270,4 +280,5 @@ export const NodesUseCases = {
   getNodesByCids,
   scheduleNodeArchiving,
   setPublishedOn,
+  ensureObjectPublished,
 }
