@@ -1,6 +1,5 @@
 import { createLogger } from '../../../drivers/logger.js'
 import { NodesUseCases } from '../../../../core/objects/nodes.js'
-import { safeCallback } from '../../../../shared/utils/safe.js'
 import { createTransactionManager } from './transactionManager.js'
 import { compactAddLength } from '@polkadot/util'
 import { nodesRepository } from '../../../repositories/objects/nodes.js'
@@ -9,7 +8,7 @@ const logger = createLogger('upload:onchainPublisher')
 
 export const transactionManager = createTransactionManager()
 
-const publishNodes = safeCallback(async (cids: string[]) => {
+const publishNodes = async (cids: string[]) => {
   logger.info('Uploading %d nodes', cids.length)
 
   const nodes = await nodesRepository.getNodesByCids(cids)
@@ -49,7 +48,7 @@ const publishNodes = safeCallback(async (cids: string[]) => {
       return NodesUseCases.setPublishedOn(node.cid, results[index])
     }),
   )
-})
+}
 
 export const OnchainPublisher = {
   publishNodes,
