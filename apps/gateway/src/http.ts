@@ -31,5 +31,10 @@ export const internalRedirect = async (
   }
 
   // @ts-ignore
-  Readable.fromWeb(response.body).pipe(res);
+  const readable = Readable.fromWeb(response.body);
+  readable.on("error", (error) => {
+    console.error(error);
+  });
+
+  readable.pipe(res);
 };

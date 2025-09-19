@@ -24,14 +24,14 @@ export const EXTERNAL_ROUTES = {
     subSocial: "https://app.subsocial.network/@NetworkSubspace",
   },
   explorer: {
-    block: (networkId: NetworkId, blockDepth: number) =>
-      `https://astral.autonomys.xyz/${networkId}/consensus/blocks/${blockDepth}`,
+    block: (blockDepth: number) =>
+      `https://autonomys.subscan.io/block/${blockDepth}`,
+    mainpage: "https://autonomys.subscan.io/",
   },
   novaExplorer: "https://nova.subspace.network/",
   subscan: "https://autonomys.subscan.io/",
   spaceAcres:
     "https://api.github.com/repos/autonomys/space-acres/releases/latest",
-  astral: "https://astral.autonomys.xyz/",
   farmerDocs: "https://docs.autonomys.xyz/category/farming",
   gatewayObjectDownload: (cid: string) =>
     `https://gateway.autonomys.xyz/file/${cid}`,
