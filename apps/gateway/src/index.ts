@@ -7,6 +7,7 @@ const app = express();
 
 app.get("/file/:cid", async (req, res) => {
   const result = await getFileNetwork(req.params.cid);
+  console.log("fetching file: ", req.params.cid);
   if (!result) {
     res.status(404).sendFile("404.html", { root: "public" });
     return;

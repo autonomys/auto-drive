@@ -1,4 +1,5 @@
 import { Readable } from 'stream'
+import { handleReadableError } from '../../../shared/utils/index.js'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { ObjectFetcher } from './fetchers.js'
 import { ObjectUseCases } from '../object.js'
@@ -28,7 +29,7 @@ export const composeNodesDataAsFileReadable = async ({
   }
 
   let currentIndex = 0
-  return new Readable({
+  const readable = new Readable({
     async read() {
       if (currentIndex >= chunks.length) {
         this.push(null)
@@ -67,6 +68,15 @@ export const composeNodesDataAsFileReadable = async ({
       }
     },
   })
+
+  // Ensure any emitted errors are observed by a listener to avoid unhandled error
+  handleReadableError(
+    readable,
+    'composeNodesDataAsFileReadable error cid=%s',
+    chunks[0],
+  )
+
+  return readable
 }
 
 export const retrieveAndReassembleFolderAsZip = async (

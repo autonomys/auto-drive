@@ -11,6 +11,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Button } from '@auto-drive/ui';
 import { useNetwork } from 'contexts/network';
+import { SubscriptionGranularity } from '@auto-drive/models';
 
 export const CreditsUpdateModal = ({
   userHandle,
@@ -25,6 +26,9 @@ export const CreditsUpdateModal = ({
   );
   const [uploadCredits, setUploadCredits] = useState<string>('');
   const [uploadCreditsUnit, setUploadCreditsUnit] = useState<number>(1024 ** 2);
+  const [granularity, setGranularity] = useState<SubscriptionGranularity>(
+    SubscriptionGranularity.Monthly,
+  );
 
   const network = useNetwork();
 
@@ -33,6 +37,7 @@ export const CreditsUpdateModal = ({
     setUploadCredits('');
     setDownloadCreditsUnit(1024 ** 2);
     setUploadCreditsUnit(1024 ** 2);
+    setGranularity(SubscriptionGranularity.Monthly);
   }, [userHandle]);
 
   const updateCredits = useCallback(async () => {
@@ -41,7 +46,7 @@ export const CreditsUpdateModal = ({
       const uploadBytes = Number(uploadCredits) * uploadCreditsUnit;
       await network.api.updateSubscription(
         userHandle,
-        'monthly',
+        granularity,
         uploadBytes,
         downloadBytes,
       );
@@ -55,6 +60,7 @@ export const CreditsUpdateModal = ({
     downloadCreditsUnit,
     uploadCredits,
     uploadCreditsUnit,
+    granularity,
     onClose,
   ]);
 
@@ -102,6 +108,31 @@ export const CreditsUpdateModal = ({
                 </DialogTitle>
                 <div className='mt-2'>
                   <div className='space-y-4'>
+                    <div className='flex items-center space-x-2'>
+                      <label
+                        htmlFor='granularity'
+                        className='dark:text-darkBlack min-w-[110px] text-left text-black'
+                      >
+                        Granularity
+                      </label>
+                      <select
+                        className='dark:bg-darkWhite dark:text-darkBlack dark:ring-darkWhiteHover w-full rounded border border-gray-300 bg-white px-2 py-1 text-black dark:ring-1'
+                        id='granularity'
+                        value={granularity}
+                        onChange={(e) =>
+                          setGranularity(
+                            e.target.value as SubscriptionGranularity,
+                          )
+                        }
+                      >
+                        <option value={SubscriptionGranularity.Monthly}>
+                          Monthly
+                        </option>
+                        <option value={SubscriptionGranularity.OneOff}>
+                          One-off
+                        </option>
+                      </select>
+                    </div>
                     <div className='flex items-center space-x-2'>
                       <input
                         type='text'

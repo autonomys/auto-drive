@@ -7,7 +7,7 @@ import {
   SidebarContent,
 } from '../../molecules/Sidebar';
 import { useUserStore } from '../../../globalStates/user';
-import { UserRole } from '@auto-drive/models';
+import { SubscriptionGranularity, UserRole } from '@auto-drive/models';
 import { AutonomysSymbol, Button, NetworkId } from '@auto-drive/ui';
 import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
@@ -78,6 +78,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
       <SidebarFooter className='p-4'>
         {isLoggedIn && (
           <AccountInformation
+            granularity={subscription?.granularity ?? SubscriptionGranularity.OneOff}
             renewalDate={renewalDate}
             uploadLimit={subscription?.uploadLimit ?? 0}
             uploadPending={subscription?.pendingUploadCredits ?? 0}
