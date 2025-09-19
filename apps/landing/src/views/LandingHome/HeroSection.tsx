@@ -82,7 +82,7 @@ const HeroSection = () => {
           <div className='lg:ml-8'>
             <Card className='border-card-border bg-white p-6 text-black shadow-xl'>
               <div className='space-y-6'>
-                <div className='flex items-center space-x-2'>
+                <div className='flex items-center space-x-2 text-black'>
                   <AutonomysSymbol fill='currentColor' />
                   <span className='font-semibold'>Auto Drive</span>
                 </div>
