@@ -368,9 +368,12 @@ const restoreObject = async (
 }
 
 const isArchived = async (cid: string) => {
-  const count = await nodesRepository.getNodesCountWithoutDataByRootCid(cid)
-  logger.info('Nodes count without data (cid=%s): %d', cid, count.rows[0].count)
-  return count.rows[0].count > 0
+  const metadataEntry = await metadataRepository.getMetadata(cid)
+  if (!metadataEntry) {
+    throw new ObjectNotFoundError('Object not found')
+  }
+
+  return metadataEntry.is_archived
 }
 
 const hasAllNodesArchived = async (cid: string) => {
