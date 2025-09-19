@@ -1,9 +1,10 @@
 import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
-  SubscriptionInfo,
-  SubscriptionGranularity,
+  AccountInfo,
+  AccountModel,
   ObjectInformation,
   DownloadStatus,
+  Intent,
 } from '@auto-drive/models';
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
@@ -21,13 +22,55 @@ export const createApiService = ({
   apiBaseUrl: string;
   downloadApiUrl: string;
 }) => ({
-  getSubscription: async (): Promise<SubscriptionInfo> => {
+  createIntent: async (): Promise<string> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${apiBaseUrl}/subscriptions/@me`, {
+    const response = await fetch(`${apiBaseUrl}/intents`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    const intent = (await response.json()) as { id: string };
+    return intent.id;
+  },
+  watchIntent: async (intentId: string, txHash: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/intents/${intentId}/watch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify({ txHash }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+  },
+  getIntent: async (intentId: string): Promise<Intent> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/intents/${intentId}`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
@@ -38,17 +81,36 @@ export const createApiService = ({
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return response.json() as Promise<SubscriptionInfo>;
+    return response.json() as Promise<Intent>;
   },
-  getUserList: async (
-    userPublicIds: string[],
-  ): Promise<Record<string, SubscriptionInfo>> => {
+  getSubscription: async (): Promise<AccountInfo> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${apiBaseUrl}/subscriptions/list`, {
+    const response = await fetch(`${apiBaseUrl}/accounts/@me`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<AccountInfo>;
+  },
+  getUserList: async (
+    userPublicIds: string[],
+  ): Promise<Record<string, AccountInfo>> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/accounts/list`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -62,7 +124,7 @@ export const createApiService = ({
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return response.json() as Promise<Record<string, SubscriptionInfo>>;
+    return response.json() as Promise<Record<string, AccountInfo>>;
   },
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const session = await getAuthSession();
@@ -149,9 +211,9 @@ export const createApiService = ({
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  updateSubscription: async (
+  updateAccount: async (
     publicId: string,
-    granularity: SubscriptionGranularity,
+    granularity: AccountModel,
     uploadLimit: number,
     downloadLimit: number,
   ): Promise<void> => {
@@ -160,7 +222,7 @@ export const createApiService = ({
       throw new Error('No session');
     }
 
-    const response = await fetch(`${apiBaseUrl}/subscriptions/update`, {
+    const response = await fetch(`${apiBaseUrl}/accounts/update`, {
       method: 'POST',
       body: JSON.stringify({
         granularity,
@@ -309,5 +371,24 @@ export const createApiService = ({
     return (response.json() as Promise<{ status: DownloadStatus }>).then(
       (data) => data.status,
     );
+  },
+  getCreditPrice: async (): Promise<{ price: number }> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/intents/price`, {
+      headers: {
+        'X-Auth-Provider': session.authProvider,
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
   },
 });

@@ -1,6 +1,7 @@
 import 'dotenv/config'
-import { SubscriptionGranularity } from '@auto-drive/models'
+import { AccountModel } from '@auto-drive/models'
 import { optionalBoolEnvironmentVariable, env } from './shared/utils/misc.js'
+import { getAddress } from 'viem'
 
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 
@@ -59,6 +60,13 @@ export const config = {
     },
     metricEnvironmentTag: env('METRIC_ENVIRONMENT_TAG', 'chain=unknown'),
   },
+  paymentManager: {
+    url: env('EVM_CHAIN_ENDPOINT'),
+    contractAddress: getAddress(env('EVM_CHAIN_CONTRACT_ADDRESS')),
+    confirmations: Number(env('EVM_CHAIN_CONFIRMATIONS', '12')),
+    checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
+    pricePerMB: Number(env('PRICE_PER_MB', '0.05')), // 0.05 AI3 per MB
+  },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
     maxUploadNodesPerBatch: Number(env('MAX_UPLOAD_NODES_PER_BATCH', '20')),
@@ -67,10 +75,7 @@ export const config = {
     ),
     optionalAuth: env('OPTIONAL_AUTH', 'false') === 'true',
     defaultSubscription: {
-      granularity: env(
-        'DEFAULT_SUBSCRIPTION_GRANULARITY',
-        SubscriptionGranularity.OneOff,
-      ),
+      granularity: env('DEFAULT_SUBSCRIPTION_GRANULARITY', AccountModel.OneOff),
       uploadLimit: Number(
         env('DEFAULT_SUBSCRIPTION_UPLOAD_LIMIT', ONE_HUNDRED_MiB.toString()),
       ),

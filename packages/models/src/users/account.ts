@@ -1,23 +1,23 @@
 import { User } from "./user";
 
-export type Subscription = {
+export type Account = {
   id: string;
   organizationId: string;
   uploadLimit: number;
   downloadLimit: number;
-  granularity: SubscriptionGranularity;
+  model: AccountModel;
 };
 
-export enum SubscriptionGranularity {
+export enum AccountModel {
   Monthly = "monthly",
   OneOff = "one_off",
 }
 
-export type SubscriptionInfoWithUser = SubscriptionInfo & {
+export type AccountInfoWithUser = AccountInfo & {
   user: User;
 };
 
-export type SubscriptionInfo = Subscription & {
+export type AccountInfo = Account & {
   pendingUploadCredits: number;
   pendingDownloadCredits: number;
 };

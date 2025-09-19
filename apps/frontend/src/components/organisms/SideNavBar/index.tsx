@@ -7,13 +7,13 @@ import {
   SidebarContent,
 } from '../../molecules/Sidebar';
 import { useUserStore } from '../../../globalStates/user';
-import { SubscriptionGranularity, UserRole } from '@auto-drive/models';
+import { AccountModel, UserRole } from '@auto-drive/models';
 import { AutonomysSymbol, Button, NetworkId } from '@auto-drive/ui';
 import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
 import { SessionContext } from 'next-auth/react';
 import { AuthModal } from '../../molecules/AuthModal';
-import { AskForCreditsButton } from '../../atoms/AskForCredits';
+import { BuyMoreCreditsButton } from '../../atoms/AskForCredits';
 import { SIDEBAR_DEFINITION } from './items';
 import { SideNavBarContent } from './SideNavBarContent';
 
@@ -23,7 +23,7 @@ export type SideNavbarProps = {
 
 export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const { user, subscription } = useUserStore();
+  const { user, account: subscription } = useUserStore();
   const { state } = useSidebar();
 
   const session = useContext(SessionContext);
@@ -78,14 +78,14 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
       <SidebarFooter className='p-4'>
         {isLoggedIn && (
           <AccountInformation
-            granularity={subscription?.granularity ?? SubscriptionGranularity.OneOff}
+            granularity={subscription?.model ?? AccountModel.OneOff}
             renewalDate={renewalDate}
             uploadLimit={subscription?.uploadLimit ?? 0}
             uploadPending={subscription?.pendingUploadCredits ?? 0}
           />
         )}
         {isLoggedIn && subscription ? (
-          <AskForCreditsButton />
+          <BuyMoreCreditsButton />
         ) : (
           <Button
             variant='outline'
