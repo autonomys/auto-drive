@@ -20,12 +20,12 @@ contract AutoDriveTreasury is Ownable2Step, ReentrancyGuard {
         require(amount > 0, "Amount must be > 0");
         require(amount <= address(this).balance, "Insufficient balance");
         // Send to the EOA that initiated the transaction to avoid reverts on non-payable contracts
-        Address.sendValue(payable(tx.origin), amount);
+        Address.sendValue(payable(msg.sender), amount);
     }
 
     function withdrawAll() public onlyOwner nonReentrant {
         uint256 balance = address(this).balance;
         // Avoid nested nonReentrant by performing the transfer here
-        Address.sendValue(payable(tx.origin), balance);
+        Address.sendValue(payable(msg.sender), balance);
     }
 }
