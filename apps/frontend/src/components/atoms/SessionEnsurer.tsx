@@ -11,7 +11,7 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const setUser = useUserStore(({ setUser }) => setUser);
   const user = useUserStore(({ user }) => user);
   const setSubscription = useUserStore(
-    ({ setAccount: setSubscription }) => setSubscription,
+    ({ setSubscription }) => setSubscription,
   );
   const { api } = useNetwork();
 

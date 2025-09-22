@@ -25,12 +25,8 @@ export const Stepper = ({
             <div
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-full border',
-                isCompleted
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-200 text-gray-500',
-                isActive
-                  ? 'border-primary text-primary'
-                  : 'border-gray-200 text-gray-500',
+                isCompleted && 'bg-primary text-white',
+                isActive && 'border-primary text-primary',
               )}
             >
               {index + 1}

@@ -1,1 +1,1 @@
-export * from './accounts.js'
+export * from './subscriptions.js'

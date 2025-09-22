@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
-import { AccountsUseCases } from '../../core/users/accounts.js'
+import { SubscriptionsUseCases } from '../../core/users/subscriptions.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import {
@@ -8,14 +8,14 @@ import {
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
-import { AccountModel } from '@auto-drive/models'
+import { SubscriptionGranularity } from '@auto-drive/models'
 import { z } from 'zod'
 
-const logger = createLogger('http:controllers:accounts')
+const logger = createLogger('http:controllers:subscriptions')
 
-export const accountController = Router()
+const subscriptionController = Router()
 
-accountController.get(
+subscriptionController.get(
   '/@me',
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
@@ -24,7 +24,7 @@ accountController.get(
     }
 
     const subscriptionInfo = await handleInternalError(
-      AccountsUseCases.getSubscriptionInfo(user),
+      SubscriptionsUseCases.getSubscriptionInfo(user),
       'Failed to get subscription info',
     )
     if (subscriptionInfo.isErr()) {
@@ -38,7 +38,7 @@ accountController.get(
   }),
 )
 
-accountController.post(
+subscriptionController.post(
   '/list',
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
@@ -52,24 +52,24 @@ accountController.post(
     }
 
     const subscriptionByPublicId = await handleInternalError(
-      AccountsUseCases.getUserListAccount(req.body.userPublicIds),
-      'Failed to get user list accounts',
+      SubscriptionsUseCases.getUserListSubscriptions(req.body.userPublicIds),
+      'Failed to get user list subscriptions',
     )
     if (subscriptionByPublicId.isErr()) {
       logger.error(
-        'Failed to get user list accounts',
+        'Failed to get user list subscriptions',
         subscriptionByPublicId.error,
       )
       handleError(subscriptionByPublicId.error, res)
       return
     }
 
-    logger.trace('User list accounts', subscriptionByPublicId.value)
+    logger.trace('User list subscriptions', subscriptionByPublicId.value)
     res.json(subscriptionByPublicId.value)
   }),
 )
 
-accountController.post(
+subscriptionController.post(
   '/update',
   asyncSafeHandler(async (req: Request, res: Response) => {
     const executor = await handleAuth(req, res)
@@ -100,7 +100,9 @@ accountController.post(
       return
     }
 
-    const safeGranularity = z.nativeEnum(AccountModel).safeParse(granularity)
+    const safeGranularity = z
+      .nativeEnum(SubscriptionGranularity)
+      .safeParse(granularity)
     if (!safeGranularity.success) {
       res.status(400).json({
         error: 'Invalid granularity',
@@ -109,7 +111,7 @@ accountController.post(
     }
 
     const updateResult = await handleInternalErrorResult(
-      AccountsUseCases.updateAccount(
+      SubscriptionsUseCases.updateSubscription(
         executor,
         publicId,
         safeGranularity.data,
@@ -128,3 +130,5 @@ accountController.post(
     res.json(updateResult.value)
   }),
 )
+
+export { subscriptionController }

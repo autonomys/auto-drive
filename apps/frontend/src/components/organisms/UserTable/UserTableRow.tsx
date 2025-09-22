@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Copy } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { CreditsUpdateModal } from './CreditsUpdateModal';
-import { AccountInfoWithUser } from '@auto-drive/models';
+import { SubscriptionInfoWithUser } from '@auto-drive/models';
 import { UpdateRoleModal } from './UpdateRoleModal';
 import { useUserStore } from 'globalStates/user';
 import {
@@ -16,38 +16,40 @@ import { shortenString } from 'utils/misc';
 import { handleEnterOrSpace } from 'utils/eventHandler';
 
 type UserTableRowProps = {
-  accountWithUser: AccountInfoWithUser;
+  subscriptionWithUser: SubscriptionInfoWithUser;
 };
 
-export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
+export const UserTableRow = ({ subscriptionWithUser }: UserTableRowProps) => {
   const user = useUserStore(({ user }) => user);
   const [isUpdateRoleOpen, setIsUpdateRoleOpen] = useState(false);
   const [isCreditsUpdateModalOpen, setIsCreditsUpdateModalOpen] =
     useState(false);
 
   const granularity =
-    accountWithUser.model.charAt(0).toUpperCase() +
-    accountWithUser.model.slice(1);
+    subscriptionWithUser.granularity.charAt(0).toUpperCase() +
+    subscriptionWithUser.granularity.slice(1);
 
   const myHandle = useMemo(() => user?.publicId, [user?.publicId]);
 
   const copyToClipboard = useCallback(() => {
-    if (!accountWithUser.user.publicId) return;
+    if (!subscriptionWithUser.user.publicId) return;
 
-    navigator.clipboard.writeText(accountWithUser.user.publicId);
+    navigator.clipboard.writeText(subscriptionWithUser.user.publicId);
     toast.success('Copied to clipboard');
-  }, [accountWithUser.user.publicId]);
+  }, [subscriptionWithUser.user.publicId]);
 
   return (
     <TableBodyRow>
       <CreditsUpdateModal
         onClose={() => setIsCreditsUpdateModalOpen(false)}
         userHandle={
-          isCreditsUpdateModalOpen ? accountWithUser.user.publicId : null
+          isCreditsUpdateModalOpen ? subscriptionWithUser.user.publicId : null
         }
       />
       <UpdateRoleModal
-        userHandle={isUpdateRoleOpen ? accountWithUser.user.publicId : null}
+        userHandle={
+          isUpdateRoleOpen ? subscriptionWithUser.user.publicId : null
+        }
         onClose={() => setIsUpdateRoleOpen(false)}
       />
       <TableBodyCell>
@@ -55,51 +57,52 @@ export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
           role='button'
           tabIndex={0}
           onKeyDown={handleEnterOrSpace(copyToClipboard)}
-          className='dark:text-darkBlack flex cursor-pointer items-center gap-2 text-sm text-black transition-colors duration-200 hover:text-blue-500'
+          className='flex cursor-pointer items-center gap-2 text-sm text-black transition-colors duration-200 hover:text-blue-500 dark:text-darkBlack'
           onClick={copyToClipboard}
         >
-          {shortenString(accountWithUser.user.publicId!, 16)} <Copy size={16} />
+          {shortenString(subscriptionWithUser.user.publicId!, 16)}{' '}
+          <Copy size={16} />
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
-          {accountWithUser.user.oauthProvider}
+        <div className='text-sm text-black dark:text-darkBlack'>
+          {subscriptionWithUser.user.oauthProvider}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack flex items-center gap-2 text-sm text-black'>
-          {accountWithUser.user.role}
+        <div className='flex items-center gap-2 text-sm text-black dark:text-darkBlack'>
+          {subscriptionWithUser.user.role}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
+        <div className='text-sm text-black dark:text-darkBlack'>
           {granularity}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
-          {bytes(Number(accountWithUser.uploadLimit), {
+        <div className='text-sm text-black dark:text-darkBlack'>
+          {bytes(Number(subscriptionWithUser.uploadLimit), {
             unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
-          {bytes(Number(accountWithUser.pendingUploadCredits || 0), {
+        <div className='text-sm text-black dark:text-darkBlack'>
+          {bytes(Number(subscriptionWithUser.pendingUploadCredits || 0), {
             unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
-          {bytes(Number(accountWithUser.downloadLimit), {
+        <div className='text-sm text-black dark:text-darkBlack'>
+          {bytes(Number(subscriptionWithUser.downloadLimit), {
             unitSeparator: ' ',
           })}
         </div>
       </TableBodyCell>
       <TableBodyCell>
-        <div className='dark:text-darkBlack text-sm text-black'>
-          {bytes(Number(accountWithUser.pendingDownloadCredits || 0), {
+        <div className='text-sm text-black dark:text-darkBlack'>
+          {bytes(Number(subscriptionWithUser.pendingDownloadCredits || 0), {
             unitSeparator: ' ',
           })}
         </div>
@@ -119,7 +122,7 @@ export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
             onClick={() => {
               setIsUpdateRoleOpen(true);
             }}
-            disabled={myHandle === accountWithUser.user.publicId}
+            disabled={myHandle === subscriptionWithUser.user.publicId}
           >
             Update role
           </button>

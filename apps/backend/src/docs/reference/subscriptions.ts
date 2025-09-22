@@ -1,10 +1,10 @@
 import { autoDriveServers } from './servers.js'
 
-export const accounts = {
+export const subscriptions = {
   paths: {
-    '/accounts/@me': {
+    '/subscriptions/@me': {
       get: {
-        summary: 'Accounts - Get current user account information',
+        summary: 'Subscriptions - Get current user subscription information',
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         responses: {
@@ -51,10 +51,7 @@ export const accounts = {
           organizationId: { type: 'string' },
           uploadLimit: { type: 'number' },
           downloadLimit: { type: 'number' },
-          model: {
-            type: 'string',
-            enum: ['monthly', 'one_off'],
-          },
+          granularity: { type: 'string', enum: ['monthly', 'one_off'] },
           pendingUploadCredits: { type: 'number' },
           pendingDownloadCredits: { type: 'number' },
         },

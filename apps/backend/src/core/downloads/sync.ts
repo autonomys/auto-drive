@@ -9,7 +9,7 @@ import {
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { ObjectUseCases } from '../objects/object.js'
-import { AccountsUseCases } from '../users/accounts.js'
+import { SubscriptionsUseCases } from '../users/subscriptions.js'
 import { config } from '../../config.js'
 import { err, ok, Result } from 'neverthrow'
 import {
@@ -54,10 +54,11 @@ const downloadObjectByUser = async (
   }
   const metadata = getResult.value
 
-  const pendingCredits = await AccountsUseCases.getPendingCreditsByUserAndType(
-    reader,
-    InteractionType.Download,
-  )
+  const pendingCredits =
+    await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      reader,
+      InteractionType.Download,
+    )
 
   if (pendingCredits < metadata.totalSize) {
     return err(new PaymentRequiredError('Not enough download credits'))
@@ -94,7 +95,7 @@ const downloadObjectByUser = async (
         cid,
         reader.oauthUserId,
       )
-      await AccountsUseCases.registerInteraction(
+      await SubscriptionsUseCases.registerInteraction(
         reader,
         InteractionType.Download,
         totalSize,

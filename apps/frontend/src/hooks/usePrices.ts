@@ -21,10 +21,6 @@ export const usePrices = () => {
   const { data: usdPerAi3 } = useQuery({
     queryKey: ['coingeckoPrice'],
     queryFn: () => coingecko.getPrice(),
-    staleTime: REFRESH_INTERVAL_COINGECKO,
-    retry: 2,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
     refetchInterval: REFRESH_INTERVAL_COINGECKO,
     gcTime: REFRESH_INTERVAL_COINGECKO * 2,
   });

@@ -28,7 +28,10 @@ import {
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
-import { NodesUseCases, AccountsUseCases } from '../../../src/core/index.js'
+import {
+  NodesUseCases,
+  SubscriptionsUseCases,
+} from '../../../src/core/index.js'
 import {
   interactionsRepository,
   metadataRepository,
@@ -275,7 +278,7 @@ files.map((file, index) => {
       })
 
       it('should have been added an interaction', async () => {
-        const { id } = await AccountsUseCases.getSubscriptionInfo(user)
+        const { id } = await SubscriptionsUseCases.getSubscriptionInfo(user)
         const interactions =
           await interactionsRepository.getInteractionsBySubscriptionIdAndTypeInTimeRange(
             id,

@@ -32,7 +32,7 @@ import { filePartsRepository } from '../../infrastructure/repositories/uploads/f
 import { UploadArtifactsUseCase } from './artifacts.js'
 import { CID } from 'multiformats'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { AccountsUseCases } from '../users/accounts.js'
+import { SubscriptionsUseCases } from '../users/subscriptions.js'
 
 const logger = createLogger('useCases:uploads:uploadProcessing')
 
@@ -167,10 +167,11 @@ const handleFileUploadFinalization = async (
     uploadId,
     user.oauthUserId,
   )
-  const pendingCredits = await AccountsUseCases.getPendingCreditsByUserAndType(
-    user,
-    InteractionType.Upload,
-  )
+  const pendingCredits =
+    await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      user,
+      InteractionType.Upload,
+    )
   const { metadata } =
     await UploadArtifactsUseCase.generateFileArtifacts(uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
@@ -189,7 +190,7 @@ const handleFileUploadFinalization = async (
     )
   }
 
-  await AccountsUseCases.registerInteraction(
+  await SubscriptionsUseCases.registerInteraction(
     user,
     InteractionType.Upload,
     metadata.totalSize.valueOf(),

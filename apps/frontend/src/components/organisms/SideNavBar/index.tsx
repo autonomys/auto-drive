@@ -7,7 +7,7 @@ import {
   SidebarContent,
 } from '../../molecules/Sidebar';
 import { useUserStore } from '../../../globalStates/user';
-import { AccountModel, UserRole } from '@auto-drive/models';
+import { SubscriptionGranularity, UserRole } from '@auto-drive/models';
 import { AutonomysSymbol, Button, NetworkId } from '@auto-drive/ui';
 import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
@@ -23,7 +23,7 @@ export type SideNavbarProps = {
 
 export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const { user, account: subscription } = useUserStore();
+  const { user, subscription } = useUserStore();
   const { state } = useSidebar();
 
   const session = useContext(SessionContext);
@@ -78,7 +78,9 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
       <SidebarFooter className='p-4'>
         {isLoggedIn && (
           <AccountInformation
-            granularity={subscription?.model ?? AccountModel.OneOff}
+            granularity={
+              subscription?.granularity ?? SubscriptionGranularity.OneOff
+            }
             renewalDate={renewalDate}
             uploadLimit={subscription?.uploadLimit ?? 0}
             uploadPending={subscription?.pendingUploadCredits ?? 0}

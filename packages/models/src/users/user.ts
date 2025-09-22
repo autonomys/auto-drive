@@ -1,5 +1,5 @@
 import { Organization } from "./organization";
-import { AccountInfo } from "./account";
+import { SubscriptionInfo } from "./subscription";
 
 export type OAuthUser = {
   provider: string;
@@ -55,7 +55,7 @@ export type MaybeUserWithOrganization =
 
 export type UserInfo = {
   user: MaybeUser;
-  subscription: AccountInfo;
+  subscription: SubscriptionInfo;
 };
 
 export const userFromOAuth = (

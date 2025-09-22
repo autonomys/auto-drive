@@ -3,12 +3,12 @@ import {
   User,
   UserRole,
   UserWithOrganization,
-  AccountModel,
-  Account,
+  Subscription,
+  SubscriptionGranularity,
+  SubscriptionInfo,
   InteractionType,
-  AccountInfo,
 } from '@auto-drive/models'
-import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
+import { subscriptionsRepository } from '../../infrastructure/repositories/users/subscriptions.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
 import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
@@ -17,12 +17,12 @@ import { err, ok, Result } from 'neverthrow'
 import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 
-const logger = createLogger('AccountsUseCases')
+const logger = createLogger('SubscriptionsUseCases')
 
-const updateAccount = async (
+const updateSubscription = async (
   executor: User,
   userPublicId: string,
-  granularity: AccountModel,
+  granularity: SubscriptionGranularity,
   uploadLimit: number,
   downloadLimit: number,
 ): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
@@ -35,14 +35,14 @@ const updateAccount = async (
     return err(new ObjectNotFoundError('User has no organization ID'))
   }
 
-  const subscription = await accountsRepository.getByOrganizationId(
+  const subscription = await subscriptionsRepository.getByOrganizationId(
     user.organizationId,
   )
   if (!subscription) {
     return err(new ObjectNotFoundError('Subscription not found'))
   }
 
-  await accountsRepository.updateSubscription(
+  await subscriptionsRepository.updateSubscription(
     subscription.id,
     granularity,
     uploadLimit,
@@ -54,12 +54,12 @@ const updateAccount = async (
 
 const getOrCreateSubscription = async (
   user: UserWithOrganization,
-): Promise<Account> => {
+): Promise<Subscription> => {
   if (!user.organizationId) {
     throw new Error('User organization ID is required')
   }
 
-  const subscription = await accountsRepository.getByOrganizationId(
+  const subscription = await subscriptionsRepository.getByOrganizationId(
     user.organizationId,
   )
   if (!subscription) {
@@ -82,17 +82,19 @@ const getOrCreateSubscription = async (
   return subscription
 }
 
-const getSubscriptionById = async (id: string): Promise<Account | null> => {
-  return accountsRepository.getById(id)
+const getSubscriptionById = async (
+  id: string,
+): Promise<Subscription | null> => {
+  return subscriptionsRepository.getById(id)
 }
 
 const initSubscription = async (
   organizationId: string,
   uploadLimit: number,
   downloadLimit: number,
-): Promise<Account> => {
+): Promise<Subscription> => {
   const subscription =
-    await accountsRepository.getByOrganizationId(organizationId)
+    await subscriptionsRepository.getByOrganizationId(organizationId)
   if (subscription) {
     throw new Error('Subscription already exists')
   }
@@ -100,14 +102,15 @@ const initSubscription = async (
   const newSubscription = {
     id: v4(),
     organizationId,
-    model: config.params.defaultSubscription.granularity as AccountModel,
+    granularity: config.params.defaultSubscription
+      .granularity as SubscriptionGranularity,
     uploadLimit,
     downloadLimit,
   }
-  await accountsRepository.createSubscription(
+  await subscriptionsRepository.createSubscription(
     newSubscription.id,
     organizationId,
-    newSubscription.model,
+    newSubscription.granularity,
     newSubscription.uploadLimit,
     newSubscription.downloadLimit,
   )
@@ -116,12 +119,12 @@ const initSubscription = async (
 }
 
 const getPendingCreditsBySubscriptionAndType = async (
-  subscription: Account,
+  subscription: Subscription,
   type: InteractionType,
 ): Promise<number> => {
   const end = new Date()
   const start =
-    subscription.model === AccountModel.Monthly
+    subscription.granularity === SubscriptionGranularity.Monthly
       ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
       : new Date(0)
 
@@ -147,7 +150,7 @@ const getPendingCreditsBySubscriptionAndType = async (
 
 const getSubscriptionInfo = async (
   user: UserWithOrganization,
-): Promise<AccountInfo> => {
+): Promise<SubscriptionInfo> => {
   const subscription = await getOrCreateSubscription(user)
 
   const pendingUploadCredits = await getPendingCreditsBySubscriptionAndType(
@@ -166,9 +169,9 @@ const getSubscriptionInfo = async (
   }
 }
 
-const getUserListAccount = async (
+const getUserListSubscriptions = async (
   userPublicIds: string[],
-): Promise<Record<string, AccountInfo>> => {
+): Promise<Record<string, SubscriptionInfo>> => {
   return Object.fromEntries(
     await Promise.all(
       userPublicIds.map(async (userPublicId) => {
@@ -207,19 +210,19 @@ const addCreditsToSubscription = async (
     return err(new ObjectNotFoundError('User has no organization ID'))
   }
 
-  const subscription = await AccountsUseCases.getOrCreateSubscription(user)
+  const subscription = await SubscriptionsUseCases.getOrCreateSubscription(user)
   if (!subscription) {
     return err(new ObjectNotFoundError('Subscription not found'))
   }
 
-  if (subscription.model !== AccountModel.OneOff) {
+  if (subscription.granularity !== SubscriptionGranularity.OneOff) {
     return err(new Error('Subscription is not one-off'))
   }
 
   logger.info(`Adding ${credits} credits to subscription ${subscription.id}`)
-  await accountsRepository.updateSubscription(
+  await subscriptionsRepository.updateSubscription(
     subscription.id,
-    subscription.model,
+    subscription.granularity,
     subscription.uploadLimit + credits,
     subscription.downloadLimit,
   )
@@ -227,15 +230,15 @@ const addCreditsToSubscription = async (
   return ok()
 }
 
-export const AccountsUseCases = {
-  updateAccount,
+export const SubscriptionsUseCases = {
+  updateSubscription,
   getOrCreateSubscription,
   initSubscription,
   getPendingCreditsBySubscriptionAndType,
   getSubscriptionInfo,
   getPendingCreditsByUserAndType,
   registerInteraction,
-  getUserListAccount,
+  getUserListSubscriptions,
   getSubscriptionById,
   addCreditsToSubscription,
 }

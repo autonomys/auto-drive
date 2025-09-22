@@ -1,6 +1,6 @@
 import {
   InteractionType,
-  AccountModel,
+  SubscriptionGranularity,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { PreconditionError } from '../../utils/error.js'
@@ -11,8 +11,8 @@ import {
   unmockMethods,
 } from '../../utils/mocks.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { AccountsUseCases } from '../../../src/core/users/accounts.js'
-import { accountsRepository } from '../../../src/infrastructure/repositories/users/accounts.js'
+import { SubscriptionsUseCases } from '../../../src/core/users/subscriptions.js'
+import { subscriptionsRepository } from '../../../src/infrastructure/repositories/users/subscriptions.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { jest } from '@jest/globals'
 
@@ -24,7 +24,7 @@ describe('CreditsUseCases', () => {
     await getDatabase()
     await dbMigration.up()
     mockUser = createMockUser()
-    const result = await AccountsUseCases.getOrCreateSubscription(mockUser)
+    const result = await SubscriptionsUseCases.getOrCreateSubscription(mockUser)
     if (!result) throw new PreconditionError('Failed to setup test user')
   })
 
@@ -38,15 +38,19 @@ describe('CreditsUseCases', () => {
     const size = BigInt(1024)
 
     const initialCredits =
-      await AccountsUseCases.getPendingCreditsByUserAndType(
+      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
         mockUser,
         interactionType,
       )
 
-    await AccountsUseCases.registerInteraction(mockUser, interactionType, size)
+    await SubscriptionsUseCases.registerInteraction(
+      mockUser,
+      interactionType,
+      size,
+    )
 
     const pendingCredits =
-      await AccountsUseCases.getPendingCreditsByUserAndType(
+      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
         mockUser,
         interactionType,
       )
@@ -59,15 +63,19 @@ describe('CreditsUseCases', () => {
     const size = BigInt(2048)
 
     const initialCredits =
-      await AccountsUseCases.getPendingCreditsByUserAndType(
+      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
         mockUser,
         interactionType,
       )
 
-    await AccountsUseCases.registerInteraction(mockUser, interactionType, size)
+    await SubscriptionsUseCases.registerInteraction(
+      mockUser,
+      interactionType,
+      size,
+    )
 
     const pendingCredits =
-      await AccountsUseCases.getPendingCreditsByUserAndType(
+      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
         mockUser,
         interactionType,
       )
@@ -77,24 +85,23 @@ describe('CreditsUseCases', () => {
 
   it('should add credits to a OneOff subscription', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
-    const subscription = await accountsRepository.getByOrganizationId(
-      mockUser.organizationId!,
-    )
-    if (!subscription) throw new Error('Subscription not found')
-
+    const subscription =
+      await SubscriptionsUseCases.getOrCreateSubscription(mockUser)
     // Ensure subscription is OneOff
-    await accountsRepository.updateSubscription(
-      subscription!.id,
-      AccountModel.OneOff,
-      subscription!.uploadLimit,
-      subscription!.downloadLimit,
+    await subscriptionsRepository.updateSubscription(
+      subscription.id,
+      SubscriptionGranularity.OneOff,
+      subscription.uploadLimit,
+      subscription.downloadLimit,
     )
 
-    const before = await AccountsUseCases.getSubscriptionById(subscription!.id)
+    const before = await SubscriptionsUseCases.getSubscriptionById(
+      subscription.id,
+    )
     if (!before) throw new Error('Subscription not found')
 
     const creditsToAdd = 123
-    const result = await AccountsUseCases.addCreditsToSubscription(
+    const result = await SubscriptionsUseCases.addCreditsToSubscription(
       mockUser.publicId,
       creditsToAdd,
     )
@@ -104,28 +111,27 @@ describe('CreditsUseCases', () => {
     }
     expect(result.isOk()).toBe(true)
 
-    const after = await AccountsUseCases.getSubscriptionById(subscription!.id)
+    const after = await SubscriptionsUseCases.getSubscriptionById(
+      subscription.id,
+    )
     if (!after) throw new Error('Subscription not found')
 
     expect(after.uploadLimit - before.uploadLimit).toBe(creditsToAdd)
-    expect(after.model).toBe(AccountModel.OneOff)
+    expect(after.granularity).toBe(SubscriptionGranularity.OneOff)
   })
 
   it('should fail to add credits if subscription is not OneOff', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
-    const subscription = await accountsRepository.getByOrganizationId(
-      mockUser.organizationId!,
-    )
-    if (!subscription) throw new Error('Subscription not found')
-
-    await accountsRepository.updateSubscription(
+    const subscription =
+      await SubscriptionsUseCases.getOrCreateSubscription(mockUser)
+    await subscriptionsRepository.updateSubscription(
       subscription.id,
-      AccountModel.Monthly,
+      SubscriptionGranularity.Monthly,
       subscription.uploadLimit,
       subscription.downloadLimit,
     )
 
-    const result = await AccountsUseCases.addCreditsToSubscription(
+    const result = await SubscriptionsUseCases.addCreditsToSubscription(
       mockUser.publicId,
       10,
     )

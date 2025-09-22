@@ -1,39 +1,39 @@
 import { getDatabase } from '../../drivers/pg.js'
-import { AccountModel, Account } from '@auto-drive/models'
+import { Subscription, SubscriptionGranularity } from '@auto-drive/models'
 
 type DBSubscription = {
   id: string
   organization_id: string
-  model: AccountModel
+  granularity: SubscriptionGranularity
   upload_limit: number
   download_limit: number
 }
 
-const mapRows = (rows: DBSubscription[]): Account[] => {
+const mapRows = (rows: DBSubscription[]): Subscription[] => {
   return rows.map((row) => ({
-    id: row.id,
+    ...row,
     uploadLimit: Number(row.upload_limit),
     downloadLimit: Number(row.download_limit),
     organizationId: row.organization_id,
-    model: row.model as AccountModel,
+    granularity: row.granularity as SubscriptionGranularity,
   }))
 }
 
 const getByOrganizationId = async (
   organizationId: string,
-): Promise<Account | null> => {
+): Promise<Subscription | null> => {
   const db = await getDatabase()
   const result = await db.query<DBSubscription>(
-    'SELECT * FROM accounts WHERE organization_id = $1',
+    'SELECT * FROM subscriptions WHERE organization_id = $1',
     [organizationId],
   )
   return mapRows(result.rows)[0] || null
 }
 
-const getById = async (id: string): Promise<Account | null> => {
+const getById = async (id: string): Promise<Subscription | null> => {
   const db = await getDatabase()
   const result = await db.query<DBSubscription>(
-    'SELECT * FROM accounts WHERE id = $1',
+    'SELECT * FROM subscriptions WHERE id = $1',
     [id],
   )
   return mapRows(result.rows)[0] || null
@@ -42,40 +42,40 @@ const getById = async (id: string): Promise<Account | null> => {
 const createSubscription = async (
   id: string,
   organizationId: string,
-  model: string,
+  granularity: string,
   uploadLimit: number,
   downloadLimit: number,
-): Promise<Account> => {
+): Promise<Subscription> => {
   const db = await getDatabase()
   const result = await db.query<DBSubscription>(
-    'INSERT INTO accounts (id, organization_id, "model", "upload_limit", "download_limit") VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [id, organizationId, model, uploadLimit, downloadLimit],
+    'INSERT INTO subscriptions (id, organization_id, granularity, "upload_limit", "download_limit") VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [id, organizationId, granularity, uploadLimit, downloadLimit],
   )
   return mapRows(result.rows)[0]
 }
 
 const updateSubscription = async (
   id: string,
-  model: string,
+  granularity: string,
   uploadLimit: number,
   downloadLimit: number,
-): Promise<Account> => {
+): Promise<Subscription> => {
   const db = await getDatabase()
   const result = await db.query<DBSubscription>(
-    'UPDATE accounts SET "model" = $1, "upload_limit" = $2, "download_limit" = $3 WHERE id = $4',
-    [model, uploadLimit, downloadLimit, id],
+    'UPDATE subscriptions SET granularity = $1, "upload_limit" = $2, "download_limit" = $3 WHERE id = $4',
+    [granularity, uploadLimit, downloadLimit, id],
   )
   return mapRows(result.rows)[0]
 }
 
-const getAll = async (): Promise<Account[]> => {
+const getAll = async (): Promise<Subscription[]> => {
   const db = await getDatabase()
 
-  const result = await db.query<DBSubscription>('SELECT * FROM accounts')
+  const result = await db.query<DBSubscription>('SELECT * FROM subscriptions')
   return mapRows(result.rows)
 }
 
-export const accountsRepository = {
+export const subscriptionsRepository = {
   getByOrganizationId,
   createSubscription,
   updateSubscription,

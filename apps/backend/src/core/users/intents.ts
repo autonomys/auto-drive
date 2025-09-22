@@ -7,7 +7,7 @@ import { err, ok } from 'neverthrow'
 import { config } from '../../config.js'
 import { randomBytes } from 'crypto'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { AccountsUseCases } from './accounts.js'
+import { SubscriptionsUseCases } from './subscriptions.js'
 
 const logger = createLogger('IntentsUseCases')
 
@@ -127,7 +127,7 @@ const onConfirmedIntent = async (intentId: string) => {
     return err(new Error('Intent has no deposit amount'))
   }
 
-  const addResult = await AccountsUseCases.addCreditsToSubscription(
+  const addResult = await SubscriptionsUseCases.addCreditsToSubscription(
     intent.userPublicId,
     IntentsUseCases.getIntentCredits(intent),
   )
