@@ -97,7 +97,11 @@ const start = () => {
         logs: logs.map((log) => log.transactionHash),
       })
       logs.forEach((log) => {
-        watchTransaction(log.transactionHash)
+        watchTransaction(log.transactionHash).catch((error) => {
+          logger.error('Error watching transaction', {
+            error,
+          })
+        })
       })
     },
   })
