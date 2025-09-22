@@ -183,7 +183,7 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const metadataResult = await handleInternalError(
+    const metadataResult = await handleInternalErrorResult(
       ObjectUseCases.getMetadata(cid),
       'Failed to get metadata',
     )
@@ -194,12 +194,6 @@ objectController.get(
     }
 
     const metadata = metadataResult.value
-    if (!metadata) {
-      res.status(404).json({
-        error: 'Metadata not found',
-      })
-      return
-    }
 
     res.json(metadata)
   }),
