@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import { AutoDriveCreditsReceiver } from "../src/AutoDriveCreditsReceiver.sol";
 
 contract AutoDriveTreasuryTest is Test {
@@ -127,6 +128,54 @@ contract AutoDriveTreasuryTest is Test {
 
         vm.expectRevert(bytes("Insufficient balance"));
         autoDriveCreditsReceiver.sweepAmountToTreasury(2 ether);
+    }
+
+    function testPauseUnpauseOnlyOwner() public {
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver();
+        address stranger = address(0xCAFE);
+
+        // onlyOwner: pause
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        autoDriveCreditsReceiver.pause();
+
+        // onlyOwner: unpause
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        autoDriveCreditsReceiver.unpause();
+
+        // owner can pause
+        autoDriveCreditsReceiver.pause();
+        assertTrue(autoDriveCreditsReceiver.paused());
+
+        // owner can unpause
+        autoDriveCreditsReceiver.unpause();
+        assertFalse(autoDriveCreditsReceiver.paused());
+    }
+
+    function testDepositAndSweepRevertWhenPaused() public {
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver();
+
+        // pause
+        autoDriveCreditsReceiver.pause();
+
+        // deposit reverts when paused
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        autoDriveCreditsReceiver.deposit{value: 1 ether}(bytes32(0));
+
+        // unpause, set treasury and fund
+        autoDriveCreditsReceiver.unpause();
+        address payable treasury = payable(address(0xB0B));
+        autoDriveCreditsReceiver.setTreasury(treasury);
+        autoDriveCreditsReceiver.deposit{value: 2 ether}(bytes32(0));
+
+        // pause again, sweeping should revert when paused
+        autoDriveCreditsReceiver.pause();
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        autoDriveCreditsReceiver.sweepAmountToTreasury(1 ether);
+
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        autoDriveCreditsReceiver.sweepAllToTreasury();
     }
 
     receive() external payable {
