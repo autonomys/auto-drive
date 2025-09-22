@@ -17,7 +17,7 @@ export const TableBodyRow = ({
   return (
     <tr
       className={cn(
-        'w-full border-t border-gray-200 bg-white hover:bg-gray-50 dark:bg-darkWhite dark:hover:bg-darkWhiteHover',
+        'hover:bg-background-hover w-full border-t border-gray-200 bg-background',
         className,
       )}
       onClick={onClick}
@@ -37,13 +37,7 @@ export const TableBodyCell = ({
   colSpan?: number;
 }) => {
   return (
-    <td
-      className={cn(
-        'px-6 py-4 text-sm text-gray-700 dark:text-darkBlack',
-        className,
-      )}
-      colSpan={colSpan}
-    >
+    <td className={cn('px-6 py-4 text-sm', className)} colSpan={colSpan}>
       {children}
     </td>
   );

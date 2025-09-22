@@ -65,7 +65,7 @@ export const ApiKeyCreationModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='dark:bg-backgroundDarkest dark:bg-darkBlack/25 fixed inset-0 bg-black' />
+          <div className='bg-background-hover fixed inset-0 bg-opacity-25' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -79,10 +79,10 @@ export const ApiKeyCreationModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='dark:bg-backgroundDark dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogPanel className='bg-background-hover w-full max-w-md transform overflow-hidden rounded-2xl bg-background p-6 text-left align-middle shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
-                  className='dark:text-darkBlack text-center text-lg font-medium leading-6 text-black'
+                  className='text-center text-lg font-medium leading-6 text-foreground'
                 >
                   Create API Key
                 </DialogTitle>
@@ -93,7 +93,7 @@ export const ApiKeyCreationModal = ({
                         <button
                           tabIndex={0}
                           onKeyDown={handleEnterOrSpace(copyApiKey)}
-                          className='dark:bg-backgroundDark flex cursor-pointer items-center rounded bg-gray-100 px-2 py-1 text-center font-mono text-sm'
+                          className='bg-background-hover flex cursor-pointer items-center rounded px-2 py-1 text-center font-mono text-sm'
                           onClick={copyApiKey}
                           title='Click to copy'
                         >
@@ -108,7 +108,7 @@ export const ApiKeyCreationModal = ({
                     </div>
                   ) : (
                     <Fragment>
-                      <p className='text-center text-sm text-gray-500 dark:text-white'>
+                      <p className='text-foreground-hover text-center text-sm'>
                         You are about to create a new API key. This key will
                         allow you to access the API programmatically. Please
                         keep this key secure and do not share it with anyone.

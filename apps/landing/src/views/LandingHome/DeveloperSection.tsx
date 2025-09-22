@@ -1,5 +1,5 @@
 import { Card, Button } from '@auto-drive/ui';
-import { Code, Key, GitBranch } from 'lucide-react';
+import { Key, GitBranch } from 'lucide-react';
 
 export const DeveloperSection = () => {
   return (
@@ -16,13 +16,13 @@ export const DeveloperSection = () => {
 
         <div className='grid gap-12 lg:grid-cols-2'>
           {/* API Support */}
-          <Card className='bg-gradient-card p-8 shadow-xl'>
+          <Card className='bg-white p-8 text-black shadow-xl'>
             <div className='space-y-6'>
               <div className='flex items-center space-x-3'>
-                <div className='flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10'>
+                <div className='flex h-10 w-10 items-center justify-center rounded-lg'>
                   <Key className='h-5 w-5 text-primary' />
                 </div>
-                <h3 className='text-2xl font-bold'>API Support</h3>
+                <h3 className='text-2xl font-bold text-black'>API Support</h3>
               </div>
 
               <p className='text-muted-foreground'>
@@ -37,7 +37,11 @@ export const DeveloperSection = () => {
                     <span className='font-mono text-sm'>
                       API Key Management
                     </span>
-                    <Button size='sm' variant='outline'>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      className='dark:text-white'
+                    >
                       Generate
                     </Button>
                   </div>
@@ -47,11 +51,11 @@ export const DeveloperSection = () => {
           </Card>
 
           {/* TypeScript SDK */}
-          <Card className='bg-gradient-card p-8 shadow-xl'>
+          <Card className='bg-white p-8 text-black shadow-xl'>
             <div className='space-y-6'>
               <div className='flex items-center space-x-3'>
-                <div className='flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10'>
-                  <Code className='h-5 w-5 text-accent' />
+                <div className='flex h-10 w-10 items-center justify-center rounded-lg'>
+                  <Key className='h-5 w-5 text-primary' />
                 </div>
                 <h3 className='text-2xl font-bold'>
                   TypeScript & JavaScript Support
@@ -66,7 +70,7 @@ export const DeveloperSection = () => {
 
               <div className='space-y-4'>
                 <h4 className='font-semibold'>@autonomys/auto-drive</h4>
-                <div className='rounded-lg bg-foreground/5 p-4 font-mono text-sm'>
+                <div className='rounded-lg bg-foreground/5 bg-muted/50 p-4 font-mono text-sm'>
                   <div className='space-y-1'>
                     <div>npm install auto-drive</div>
                     <div>yarn add auto-drive</div>

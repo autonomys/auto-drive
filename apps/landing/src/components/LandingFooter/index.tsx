@@ -12,7 +12,7 @@ const currentYear = new Date().getFullYear();
 
 const LandingFooter = () => {
   return (
-    <footer className='bg-foreground py-16 text-background'>
+    <footer className='bg-background-hover py-16 text-foreground'>
       <div className='container mx-auto px-4'>
         <div className='grid gap-8 md:grid-cols-4'>
           {/* Brand */}
@@ -21,7 +21,7 @@ const LandingFooter = () => {
               <AutonomysSymbol />
               <span className='text-xl font-bold'>Auto Drive</span>
             </div>
-            <p className='text-sm text-background/70'>
+            <p className='text-foreground-hover text-sm'>
               © {currentYear} Autonomys Labs, Inc. All Rights Reserved
             </p>
           </div>

@@ -36,7 +36,7 @@ export const UserSubscriptionsTable = ({
     <div>
       <div className='-my-2 sm:-mx-6 lg:-mx-8'>
         <div className='inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8'>
-          <div className='border-b border-gray-200 shadow sm:rounded-lg'>
+          <div className='border-background-hover border-b shadow sm:rounded-lg'>
             <Table className='min-w-full'>
               <TableHead>
                 <TableHeadRow>
@@ -62,7 +62,7 @@ export const UserSubscriptionsTable = ({
                   <TableBodyRow>
                     <TableBodyCell
                       colSpan={9}
-                      className='whitespace-nowrap px-6 py-4 text-center text-sm text-black dark:text-darkBlack'
+                      className='text-foreground-hover whitespace-nowrap px-6 py-4 text-center text-sm'
                     >
                       <span className='flex items-center justify-center'>
                         <Loader className='h-4 w-4 animate-spin' />
@@ -77,17 +77,17 @@ export const UserSubscriptionsTable = ({
       </div>
 
       {/* Pagination Controls */}
-      <div className='mt-4 flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 dark:bg-gray-800'>
+      <div className='border-background-hover mt-4 flex items-center justify-between border-t bg-background px-4 py-3 sm:px-6'>
         <div className='flex items-center'>
           <label
             htmlFor='itemsPerPage'
-            className='mr-2 text-sm text-gray-700 dark:text-gray-300'
+            className='text-foreground-hover mr-2 text-sm'
           >
             Show:
           </label>
           <select
             id='itemsPerPage'
-            className='rounded border-gray-300 py-1 text-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700'
+            className='bg-background-hover text-foreground-hover rounded py-1 text-sm focus:border-indigo-500 focus:ring-indigo-500'
             value={itemsPerPage}
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
           >
@@ -99,7 +99,7 @@ export const UserSubscriptionsTable = ({
         </div>
 
         <div className='flex items-center'>
-          <p className='text-sm text-gray-700 dark:text-gray-300'>
+          <p className='text-foreground-hover text-sm'>
             Showing{' '}
             <span className='font-medium'>
               {users?.length ? (currentPage - 1) * itemsPerPage + 1 : 0}
@@ -116,17 +116,17 @@ export const UserSubscriptionsTable = ({
           <button
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className='relative inline-flex items-center rounded-md border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300'
+            className='border-background-hover text-foreground-hover hover:bg-background-hover relative inline-flex items-center rounded-md border bg-background px-2 py-1 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50'
           >
             <ChevronLeft className='h-4 w-4' />
           </button>
-          <span className='mx-2 text-sm text-gray-700 dark:text-gray-300'>
+          <span className='text-foreground-hover mx-2 text-sm'>
             {currentPage} / {totalPages}
           </span>
           <button
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages || totalPages === 0}
-            className='relative inline-flex items-center rounded-md border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300'
+            className='border-background-hover text-foreground-hover hover:bg-background-hover relative inline-flex items-center rounded-md border bg-background px-2 py-1 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50'
           >
             <ChevronRight className='h-4 w-4' />
           </button>
