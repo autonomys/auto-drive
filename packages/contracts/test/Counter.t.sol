@@ -65,4 +65,9 @@ contract CounterTest is Test {
         counter.transferOwnership(stranger);
         assertEq(counter.pendingOwner(), stranger);
     }
+
+
+    receive() external payable {
+        // Do nothing
+    }
 }
