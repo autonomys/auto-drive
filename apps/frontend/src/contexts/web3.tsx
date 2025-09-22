@@ -6,34 +6,25 @@ import {
   RainbowKitProvider,
 } from '@rainbow-me/rainbowkit';
 import '@rainbow-me/rainbowkit/styles.css';
-import { QueryClient } from '@tanstack/react-query';
-import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
-import { FC, ReactNode, useMemo, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { FC, ReactNode, useState } from 'react';
 import { WagmiProvider } from 'wagmi';
-import { evmChains } from '@auto-drive/ui';
+import { mainnet } from 'wagmi/chains';
 
 export const Web3Provider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [queryClient] = useState(() => new QueryClient({}));
-  const config = useMemo(
-    () =>
-      getDefaultConfig({
-        appName: 'Auto Drive',
-        projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
-        chains: [evmChains.local, evmChains.mainnet, evmChains.taurus],
-        ssr: false,
-      }),
-    [],
+  const [queryClient] = useState(() => new QueryClient());
+  const [config] = useState(() =>
+    getDefaultConfig({
+      appName: 'Auto Drive',
+      projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
+      chains: [mainnet],
+      ssr: false,
+    }),
   );
 
   return (
     <WagmiProvider config={config}>
-      <PersistQueryClientProvider
-        client={queryClient}
-        persistOptions={{
-          persister: createAsyncStoragePersister({ storage: localStorage }),
-        }}
-      >
+      <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           theme={darkTheme({
             accentColor: '#0A8DD0',
@@ -45,7 +36,7 @@ export const Web3Provider: FC<{ children: ReactNode }> = ({ children }) => {
         >
           {children}
         </RainbowKitProvider>
-      </PersistQueryClientProvider>
+      </QueryClientProvider>
     </WagmiProvider>
   );
 };
