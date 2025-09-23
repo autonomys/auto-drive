@@ -17,7 +17,7 @@ contract AutoDriveTreasuryTest is Test {
         bytes32 intentId = bytes32(0);
         autoDriveCreditsReceiver = new AutoDriveCreditsReceiver();
         uint256 num = address(autoDriveCreditsReceiver).balance;
-        autoDriveCreditsReceiver.deposit{value: 100 ether}(intentId);
+        autoDriveCreditsReceiver.payIntent{value: 100 ether}(intentId);
         assertEq(address(autoDriveCreditsReceiver).balance, num + 100 ether);
     }
 
@@ -75,7 +75,7 @@ contract AutoDriveTreasuryTest is Test {
 
     function testSweepRevertsWhenTreasuryNotSet() public {
         autoDriveCreditsReceiver = new AutoDriveCreditsReceiver();
-        autoDriveCreditsReceiver.deposit{value: 1 ether}(bytes32(0));
+        autoDriveCreditsReceiver.payIntent{value: 1 ether}(bytes32(0));
 
         vm.expectRevert(bytes("Treasury not set"));
         autoDriveCreditsReceiver.sweepAllToTreasury();
@@ -86,7 +86,7 @@ contract AutoDriveTreasuryTest is Test {
 
     function testSweepAmountPermissionlessSuccess() public {
         autoDriveCreditsReceiver = new AutoDriveCreditsReceiver();
-        autoDriveCreditsReceiver.deposit{value: 5 ether}(bytes32(0));
+        autoDriveCreditsReceiver.payIntent{value: 5 ether}(bytes32(0));
         address payable treasury = payable(address(0xB0B));
         autoDriveCreditsReceiver.setTreasury(treasury);
 
@@ -103,7 +103,7 @@ contract AutoDriveTreasuryTest is Test {
 
     function testSweepAllPermissionlessSuccess() public {
         autoDriveCreditsReceiver = new AutoDriveCreditsReceiver();
-        autoDriveCreditsReceiver.deposit{value: 3 ether}(bytes32(0));
+        autoDriveCreditsReceiver.payIntent{value: 3 ether}(bytes32(0));
         address payable treasury = payable(address(0xB0B));
         autoDriveCreditsReceiver.setTreasury(treasury);
 
@@ -119,7 +119,7 @@ contract AutoDriveTreasuryTest is Test {
 
     function testSweepRevertsInvalidAmountOrInsufficientBalance() public {
         autoDriveCreditsReceiver = new AutoDriveCreditsReceiver();
-        autoDriveCreditsReceiver.deposit{value: 1 ether}(bytes32(0));
+        autoDriveCreditsReceiver.payIntent{value: 1 ether}(bytes32(0));
         address payable treasury = payable(address(0xB0B));
         autoDriveCreditsReceiver.setTreasury(treasury);
 
@@ -161,13 +161,13 @@ contract AutoDriveTreasuryTest is Test {
 
         // deposit reverts when paused
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        autoDriveCreditsReceiver.deposit{value: 1 ether}(bytes32(0));
+        autoDriveCreditsReceiver.payIntent{value: 1 ether}(bytes32(0));
 
         // unpause, set treasury and fund
         autoDriveCreditsReceiver.unpause();
         address payable treasury = payable(address(0xB0B));
         autoDriveCreditsReceiver.setTreasury(treasury);
-        autoDriveCreditsReceiver.deposit{value: 2 ether}(bytes32(0));
+        autoDriveCreditsReceiver.payIntent{value: 2 ether}(bytes32(0));
 
         // pause again, sweeping should revert when paused
         autoDriveCreditsReceiver.pause();

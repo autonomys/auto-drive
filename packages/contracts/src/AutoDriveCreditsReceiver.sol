@@ -17,7 +17,8 @@ contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
 
     address payable public treasury;
 
-    function deposit(bytes32 intentId) public payable whenNotPaused {
+    function payIntent(bytes32 intentId) public payable whenNotPaused {
+        require(msg.value > 0, "Amount must be > 0");
         emit IntentPaymentReceived(intentId, msg.value);
     }
 
