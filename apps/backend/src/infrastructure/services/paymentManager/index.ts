@@ -47,7 +47,7 @@ const watchTransaction = async (txHash: string) => {
     logs.map((log) => {
       return IntentsUseCases.markIntentAsConfirmed({
         intentId: log.args.intentId,
-        depositAmount: log.args.depositAmount,
+        depositAmount: log.args.paymentAmount,
       })
     }),
   )
