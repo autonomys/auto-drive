@@ -10,9 +10,11 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
     address payable public treasury;
+    uint256 public minimumBalance;
 
-    constructor(address initialOwner, address payable initialTreasury) Ownable(initialOwner) {
+    constructor(address initialOwner, address payable initialTreasury, uint256 initialMinimumBalance) Ownable(initialOwner) {
         treasury = initialTreasury;
+        minimumBalance = initialMinimumBalance;
     }
     
     event IntentPaymentReceived(bytes32 indexed intentId, uint256 paymentAmount);
@@ -34,14 +36,15 @@ contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
     function sweepAmountToTreasury(uint256 amount) public nonReentrant whenNotPaused {
         require(treasury != address(0), "Treasury not set");
         require(amount > 0, "Amount must be > 0");
-        require(amount <= address(this).balance, "Insufficient balance");
+        require(amount + minimumBalance <= address(this).balance, "Insufficient balance");
         Address.sendValue(treasury, amount);
         emit SweptToTreasury(msg.sender, treasury, amount);
     }
 
     function sweepAllToTreasury() public nonReentrant whenNotPaused {
         require(treasury != address(0), "Treasury not set");
-        uint256 balance = address(this).balance;
+        require(address(this).balance >= minimumBalance, "Insufficient balance");
+        uint256 balance = address(this).balance - minimumBalance;
         Address.sendValue(treasury, balance);
         emit SweptToTreasury(msg.sender, treasury, balance);
     }
