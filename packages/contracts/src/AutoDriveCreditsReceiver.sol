@@ -13,7 +13,7 @@ contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
     
     event IntentPaymentReceived(bytes32 indexed intentId, uint256 paymentAmount);
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
-    event SweptToTreasury(address indexed caller, uint256 amount);
+    event SweptToTreasury(address indexed caller, address indexed treasury, uint256 amount);
 
     address payable public treasury;
 
@@ -33,14 +33,14 @@ contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
         require(amount > 0, "Amount must be > 0");
         require(amount <= address(this).balance, "Insufficient balance");
         Address.sendValue(treasury, amount);
-        emit SweptToTreasury(msg.sender, amount);
+        emit SweptToTreasury(msg.sender, treasury, amount);
     }
 
     function sweepAllToTreasury() public nonReentrant whenNotPaused {
         require(treasury != address(0), "Treasury not set");
         uint256 balance = address(this).balance;
         Address.sendValue(treasury, balance);
-        emit SweptToTreasury(msg.sender, balance);
+        emit SweptToTreasury(msg.sender, treasury, balance);
     }
 
     function pause() public onlyOwner {
