@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import { AutoDriveCreditsReceiver } from "../src/AutoDriveCreditsReceiver.sol";
+import { RevertingTreasury, AcceptingTreasury } from "./utils.sol";
 
 contract AutoDriveTreasuryTest is Test {
     AutoDriveCreditsReceiver public autoDriveCreditsReceiver;
@@ -73,6 +74,20 @@ contract AutoDriveTreasuryTest is Test {
         // success
         autoDriveCreditsReceiver.setTreasury(newTreasury);
         assertEq(autoDriveCreditsReceiver.treasury(), newTreasury);
+    }
+
+    function testSetTreasuryRevertsWhenContractRejectsZeroValueCall() public {
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        RevertingTreasury bad = new RevertingTreasury();
+        vm.expectRevert(abi.encodeWithSelector(AutoDriveCreditsReceiver.InvalidTreasury.selector, address(bad)));
+        autoDriveCreditsReceiver.setTreasury(payable(address(bad)));
+    }
+
+    function testSetTreasuryAcceptsContractHandlingZeroValueCall() public {
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        AcceptingTreasury good = new AcceptingTreasury();
+        autoDriveCreditsReceiver.setTreasury(payable(address(good)));
+        assertEq(autoDriveCreditsReceiver.treasury(), payable(address(good)));
     }
 
     function testSweepAmountPermissionlessSuccess() public {
@@ -195,3 +210,4 @@ contract AutoDriveTreasuryTest is Test {
         // Do nothing
     }
 }
+

@@ -36,6 +36,11 @@ contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
         if (newTreasury == address(0)) {
             revert InvalidTreasury(newTreasury);
         }
+        (bool ok, ) = newTreasury.call{value: 0}("");
+        if (!ok) {
+            revert InvalidTreasury(newTreasury);
+        }
+
         address payable old = treasury;
         treasury = newTreasury;
         emit TreasuryUpdated(old, newTreasury);
