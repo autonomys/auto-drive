@@ -153,13 +153,13 @@ contract AutoDriveTreasuryTest is Test {
         assertFalse(autoDriveCreditsReceiver.paused());
     }
 
-    function testDepositAndSweepRevertWhenPaused() public {
+    function testPayIntentAndSweepRevertWhenPaused() public {
         autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
 
         // pause
         autoDriveCreditsReceiver.pause();
 
-        // deposit reverts when paused
+        // payIntent reverts when paused
         vm.expectRevert(Pausable.EnforcedPause.selector);
         autoDriveCreditsReceiver.payIntent{value: 1 ether}(bytes32(0));
 
