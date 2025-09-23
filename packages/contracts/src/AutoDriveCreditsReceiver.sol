@@ -11,14 +11,14 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
     constructor() Ownable(msg.sender) {}
     
-    event Deposit(bytes32 indexed intentId, uint256 depositAmount);
+    event IntentPaymentReceived(bytes32 indexed intentId, uint256 paymentAmount);
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
     event SweptToTreasury(address indexed caller, uint256 amount);
 
     address payable public treasury;
 
     function deposit(bytes32 intentId) public payable whenNotPaused {
-        emit Deposit(intentId, msg.value);
+        emit IntentPaymentReceived(intentId, msg.value);
     }
 
     function setTreasury(address payable newTreasury) public onlyOwner {
