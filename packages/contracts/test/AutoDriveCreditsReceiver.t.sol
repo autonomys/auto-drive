@@ -15,7 +15,7 @@ contract AutoDriveTreasuryTest is Test {
         autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
     }
 
-    function testDeposit() public {
+    function testPayIntent() public {
         bytes32 intentId = bytes32(0);
         autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
         uint256 num = address(autoDriveCreditsReceiver).balance;
