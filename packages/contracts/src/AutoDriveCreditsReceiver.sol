@@ -13,7 +13,7 @@ contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
     uint256 public minimumBalance;
 
     constructor(address initialOwner, address payable initialTreasury, uint256 initialMinimumBalance) Ownable(initialOwner) {
-        treasury = initialTreasury;
+        setTreasury(initialTreasury);
         minimumBalance = initialMinimumBalance;
     }
     
