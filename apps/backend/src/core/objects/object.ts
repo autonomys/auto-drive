@@ -373,6 +373,32 @@ const isArchived = async (cid: string) => {
   return count.rows[0].count > 0
 }
 
+// to remove: this will not be used after we process data with no duplicates handling
+const isReconstructable = async (cid: string): Promise<boolean> => {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
+    logger.warn('Metadata not found for object (cid=%s)', cid)
+    return false
+  }
+
+  const metadataType = metadata.metadata.type
+  if (metadataType === 'file') {
+    const areNodesEncoded = await Promise.all(
+      metadata.metadata.chunks.map((child) =>
+        nodesRepository.hasEncodedNode(child.cid),
+      ),
+    )
+    return areNodesEncoded.every((e) => e)
+  } else {
+    const areNodesEncoded = await Promise.all(
+      metadata.metadata.children.map((child) =>
+        ObjectUseCases.isReconstructable(child.cid),
+      ),
+    )
+    return areNodesEncoded.every((e) => e)
+  }
+}
+
 const hasAllNodesArchived = async (cid: string) => {
   const nodes = await nodesRepository.getNodesByRootCid(cid)
 
@@ -391,8 +417,8 @@ const getNonArchivedObjects = async () => {
 
 const populateCaches = async (cid: string) => {
   try {
-    const isArchived = await ObjectUseCases.isArchived(cid)
-    if (isArchived) {
+    const isReconstructable = await ObjectUseCases.isReconstructable(cid)
+    if (isReconstructable) {
       logger.warn('Object is archived, skipping cache population (cid=%s)', cid)
       return
     }
@@ -685,4 +711,5 @@ export const ObjectUseCases = {
   authorizeDownload,
   getToBeReviewedList,
   syncingIsObjectBanned,
+  isReconstructable,
 }

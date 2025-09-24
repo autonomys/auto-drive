@@ -278,6 +278,14 @@ const updateNodeBlockchainData = async (
   })
 }
 
+const hasEncodedNode = async (cid: string) => {
+  const db = await getDatabase()
+  return db.query<{ exists: boolean }>({
+    text: 'SELECT EXISTS(SELECT 1 FROM nodes WHERE cid = $1 AND encoded_node IS NOT NULL)',
+    values: [cid],
+  })
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -296,4 +304,5 @@ export const nodesRepository = {
   getNodesCountWithoutDataByRootCid,
   getNodeBlockchainData,
   updateNodeBlockchainData,
+  hasEncodedNode,
 }
