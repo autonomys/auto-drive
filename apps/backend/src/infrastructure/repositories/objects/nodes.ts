@@ -171,7 +171,7 @@ const setNodeArchivingData = async ({
   const db = await getDatabase()
 
   return db.query({
-    text: 'UPDATE nodes SET piece_index = $1, piece_offset = $2 WHERE cid = $3',
+    text: 'UPDATE nodes SET piece_index = $1, piece_offset = $2 WHERE cid = $3 AND piece_index IS NULL AND piece_offset IS NULL',
     values: [pieceIndex, pieceOffset, cid],
   })
 }
