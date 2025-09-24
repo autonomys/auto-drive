@@ -25,7 +25,7 @@ const publishNodes = async (cids: string[]) => {
   }
 
   const repeatedNodes = nodes.filter((_, index) => !filter(_, index))
-  NodesUseCases.handleRepeatedNodes(repeatedNodes)
+  await NodesUseCases.handleRepeatedNodes(repeatedNodes)
 
   const publishingNodes = nodes.filter(filter)
 
