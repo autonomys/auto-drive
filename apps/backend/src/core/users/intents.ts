@@ -157,7 +157,11 @@ const getPrice = async (): Promise<{ price: number }> => {
     new ApiPromise({ provider: new WsProvider(config.chain.endpoint) }),
   )
 
-  return { price: currentPricePerByte }
+  return {
+    price:
+      currentPricePerByte +
+      currentPricePerByte * config.paymentManager.premiumPct,
+  }
 }
 
 export const IntentsUseCases = {
