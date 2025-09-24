@@ -12,7 +12,7 @@ export const IntentSchema = z.object({
   userPublicId: z.string(),
   status: z.nativeEnum(IntentStatus),
   txHash: z.string().optional(),
-  depositAmount: z.bigint().optional(),
+  paymentAmount: z.bigint().optional(),
   pricePerMB: z.number(),
 });
 

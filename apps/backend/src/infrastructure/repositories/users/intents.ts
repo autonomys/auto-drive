@@ -6,7 +6,7 @@ type DBIntent = {
   user_public_id: string
   status: IntentStatus
   tx_hash: string
-  deposit_amount: string
+  payment_amount: string
   price_per_mb: number
 }
 
@@ -16,8 +16,8 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
     userPublicId: row.user_public_id,
     status: row.status,
     txHash: row.tx_hash,
-    depositAmount: row.deposit_amount
-      ? BigInt(row.deposit_amount).valueOf()
+    paymentAmount: row.payment_amount
+      ? BigInt(row.payment_amount).valueOf()
       : undefined,
     pricePerMB: row.price_per_mb,
   }))
@@ -35,13 +35,13 @@ const getById = async (id: string): Promise<Intent | null> => {
 const createIntent = async (intent: Intent): Promise<Intent> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
-    'INSERT INTO intents (id, user_public_id, status, tx_hash, deposit_amount, price_per_mb) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    'INSERT INTO intents (id, user_public_id, status, tx_hash, payment_amount, price_per_mb) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
     [
       intent.id,
       intent.userPublicId,
       intent.status,
       intent.txHash ?? null,
-      intent.depositAmount?.toString() ?? null,
+      intent.paymentAmount?.toString() ?? null,
       intent.pricePerMB,
     ],
   )
@@ -56,7 +56,7 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
       intent.status,
       intent.userPublicId,
       intent.txHash ?? null,
-      intent.depositAmount?.toString() ?? null,
+      intent.paymentAmount?.toString() ?? null,
       intent.id,
     ],
   )

@@ -20,7 +20,7 @@ const createIntent = async (executor: User): Promise<Intent> => {
     id: randomBytes32(),
     userPublicId: executor.publicId,
     status: IntentStatus.PENDING,
-    depositAmount: undefined,
+    paymentAmount: undefined,
     pricePerMB: config.paymentManager.pricePerMB,
   })
 
@@ -78,10 +78,10 @@ const triggerWatchIntent = async ({
 
 const markIntentAsConfirmed = async ({
   intentId,
-  depositAmount,
+  paymentAmount,
 }: {
   intentId: string
-  depositAmount: bigint
+  paymentAmount: bigint
 }) => {
   const result = await getIntent(intentId)
   if (result.isErr()) {
@@ -93,18 +93,18 @@ const markIntentAsConfirmed = async ({
     intentsRepository.updateIntent({
       ...intent,
       status: IntentStatus.CONFIRMED,
-      depositAmount,
+      paymentAmount,
     }),
   )
 }
 
 const getIntentCredits = (intent: Intent) => {
-  if (!intent.depositAmount) {
+  if (!intent.paymentAmount) {
     return 0
   }
 
   const creditsInBytes =
-    intent.depositAmount / (BigInt(intent.pricePerMB * 10 ** 6) * 10n ** 6n)
+    intent.paymentAmount / (BigInt(intent.pricePerMB * 10 ** 6) * 10n ** 6n)
 
   return Number(creditsInBytes).valueOf()
 }
@@ -120,7 +120,7 @@ const onConfirmedIntent = async (intentId: string) => {
     return err(new Error('Intent should be not completed'))
   }
 
-  if (!intent.depositAmount) {
+  if (!intent.paymentAmount) {
     logger.warn('Intent has no deposit amount', {
       intentId,
     })
