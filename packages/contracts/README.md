@@ -14,14 +14,14 @@
 
 ### Events
 
-- `Deposit(bytes32 indexed intentId, uint256 depositAmount)` — emitted on each deposit with the provided intent identifier.
+- `IntentPaymentReceived(bytes32 indexed intentId, uint256 depositAmount)` — emitted on each deposit with the provided intent identifier.
 - `TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury)` — emitted when the owner updates the treasury.
 - `SweptToTreasury(address indexed caller, uint256 amount)` — emitted when funds are swept to the treasury.
 
 ### Functions
 
-- `deposit(bytes32 intentId) public payable whenNotPaused`
-  - Accepts ETH and emits `Deposit` with the `intentId` and `msg.value`.
+- `payIntent(bytes32 intentId) public payable whenNotPaused`
+  - Accepts ETH and emits `IntentPaymentReceived` with the `intentId` and `msg.value`.
   - No minimum deposit enforced; caller supplies the payable value.
 
 - `setTreasury(address payable newTreasury) public onlyOwner`
@@ -31,12 +31,12 @@
 - `sweepAmountToTreasury(uint256 amount) public nonReentrant whenNotPaused`
   - Transfers exactly `amount` of the contract's ETH balance to `treasury`.
   - Reverts if treasury unset, amount is zero, or insufficient balance.
-  - Emits `SweptToTreasury(msg.sender, amount)`.
+  - Emits `SweptToTreasury(msg.sender, treasury, amount)`.
 
 - `sweepAllToTreasury() public nonReentrant whenNotPaused`
   - Transfers the entire ETH balance to `treasury`.
   - Reverts if treasury unset.
-  - Emits `SweptToTreasury(msg.sender, balance)`.
+  - Emits `SweptToTreasury(msg.sender, treasury, balance)`.
 
 - `pause() public onlyOwner` / `unpause() public onlyOwner`
   - Halts/resumes `deposit` and sweep operations.
