@@ -418,7 +418,7 @@ const getNonArchivedObjects = async () => {
 const populateCaches = async (cid: string) => {
   try {
     const isReconstructable = await ObjectUseCases.isReconstructable(cid)
-    if (isReconstructable) {
+    if (!isReconstructable) {
       logger.warn('Object is archived, skipping cache population (cid=%s)', cid)
       return
     }
