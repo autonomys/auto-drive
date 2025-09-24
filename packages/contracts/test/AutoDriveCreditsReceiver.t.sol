@@ -12,19 +12,19 @@ contract AutoDriveTreasuryTest is Test {
     address payable public treasury = payable(address(0xB0B));
 
     function setUp() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
     }
 
     function testPayIntent() public {
         bytes32 intentId = bytes32(0);
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
         uint256 num = address(autoDriveCreditsReceiver).balance;
         autoDriveCreditsReceiver.payIntent{value: 100 ether}(intentId);
         assertEq(address(autoDriveCreditsReceiver).balance, num + 100 ether);
     }
 
     function testTwoStepOwnershipTransfer() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
         address initialOwner = address(this);
         address newOwner = address(0xBEEF);
         address stranger = address(0xCAFE);
@@ -57,7 +57,7 @@ contract AutoDriveTreasuryTest is Test {
 
 
     function testSetTreasuryOnlyOwnerAndZeroAddressReverts() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
 
         address payable newTreasury = payable(address(0x1234));
 
@@ -77,21 +77,21 @@ contract AutoDriveTreasuryTest is Test {
     }
 
     function testSetTreasuryRevertsWhenContractRejectsZeroValueCall() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
         RevertingTreasury bad = new RevertingTreasury();
         vm.expectRevert(abi.encodeWithSelector(AutoDriveCreditsReceiver.InvalidTreasury.selector, address(bad)));
         autoDriveCreditsReceiver.setTreasury(payable(address(bad)));
     }
 
     function testSetTreasuryAcceptsContractHandlingZeroValueCall() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
         AcceptingTreasury good = new AcceptingTreasury();
         autoDriveCreditsReceiver.setTreasury(payable(address(good)));
         assertEq(autoDriveCreditsReceiver.treasury(), payable(address(good)));
     }
 
     function testSweepAmountPermissionlessSuccess() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
         autoDriveCreditsReceiver.payIntent{value: 5 ether}(bytes32(0));
 
         address caller = address(0xCAFE);
@@ -106,7 +106,8 @@ contract AutoDriveTreasuryTest is Test {
     }
 
     function testSweepAllPermissionlessSuccess() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
+        uint256 minimumBalance = autoDriveCreditsReceiver.minimumBalance();
         autoDriveCreditsReceiver.payIntent{value: 3 ether}(bytes32(0));
 
         address caller = address(0xD00D);
@@ -115,23 +116,23 @@ contract AutoDriveTreasuryTest is Test {
         vm.prank(caller);
         autoDriveCreditsReceiver.sweepAllToTreasury();
 
-        assertEq(address(autoDriveCreditsReceiver).balance, 0);
-        assertEq(treasury.balance, treasuryBefore + 3 ether);
+        assertEq(address(autoDriveCreditsReceiver).balance, minimumBalance);
+        assertEq(treasury.balance, treasuryBefore + 3 ether - minimumBalance);
     }
 
     function testSweepRevertsInvalidAmountOrInsufficientBalance() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
         autoDriveCreditsReceiver.payIntent{value: 1 ether}(bytes32(0));
 
         vm.expectRevert(abi.encodeWithSelector(AutoDriveCreditsReceiver.InvalidAmount.selector, 0));
         autoDriveCreditsReceiver.sweepAmountToTreasury(0);
 
-        vm.expectRevert(abi.encodeWithSelector(AutoDriveCreditsReceiver.InsufficientBalance.selector, address(autoDriveCreditsReceiver).balance, 0, 2 ether));
+        vm.expectRevert(abi.encodeWithSelector(AutoDriveCreditsReceiver.InsufficientBalance.selector, address(autoDriveCreditsReceiver).balance, 2 ether));
         autoDriveCreditsReceiver.sweepAmountToTreasury(2 ether);
     }
 
     function testPauseUnpauseOnlyOwner() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
         address stranger = address(0xCAFE);
 
         // onlyOwner: pause
@@ -154,7 +155,7 @@ contract AutoDriveTreasuryTest is Test {
     }
 
     function testPayIntentAndSweepRevertWhenPaused() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 0);
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
 
         // pause
         autoDriveCreditsReceiver.pause();
@@ -177,31 +178,34 @@ contract AutoDriveTreasuryTest is Test {
     }
 
     function testSweepAllWithMinimumBalanceAndEnoughBalance() public {
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, 1 ether);
-        autoDriveCreditsReceiver.payIntent{value: 2 ether}(bytes32(0));
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
+        uint256 amount = 2 ether;
+        uint256 minimumBalance = autoDriveCreditsReceiver.minimumBalance();
+        autoDriveCreditsReceiver.payIntent{value: amount}(bytes32(0));
 
         uint256 treasuryBefore = treasury.balance;
         autoDriveCreditsReceiver.sweepAllToTreasury();
-        assertEq(address(autoDriveCreditsReceiver).balance, 1 ether);
-        assertEq(treasury.balance, treasuryBefore + 1 ether);
+        assertEq(address(autoDriveCreditsReceiver).balance, minimumBalance);
+        assertEq(treasury.balance, treasuryBefore + amount - minimumBalance);
     }
 
     function testSweepAllWithMinimumBalanceAndNotEnoughBalance() public {
-        uint256 minimumBalance = 2 ether;
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, minimumBalance);
-        autoDriveCreditsReceiver.payIntent{value: 1 ether}(bytes32(0));
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
+        uint256 minimumBalance = autoDriveCreditsReceiver.minimumBalance();
+        uint256 amount = 1 wei;
+        autoDriveCreditsReceiver.payIntent{value: amount}(bytes32(0));
 
-        vm.expectRevert(abi.encodeWithSelector(AutoDriveCreditsReceiver.InsufficientBalance.selector, address(autoDriveCreditsReceiver).balance, minimumBalance, 0));
+        vm.expectRevert(abi.encodeWithSelector(AutoDriveCreditsReceiver.InsufficientBalance.selector, address(autoDriveCreditsReceiver).balance, 0));
         autoDriveCreditsReceiver.sweepAllToTreasury();
     }
 
     function testSweepAmountWithMinimumBalanceAndNotEnoughBalance() public {
-        uint256 minimumBalance = 1 ether;
-        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury, minimumBalance);
-        autoDriveCreditsReceiver.payIntent{value: 2 ether}(bytes32(0));
+        autoDriveCreditsReceiver = new AutoDriveCreditsReceiver(address(this), treasury);
+        uint256 amount = 1 ether;
+        autoDriveCreditsReceiver.payIntent{value: amount}(bytes32(0));
 
-        uint256 withdrawAmount = 2 ether;
-        vm.expectRevert(abi.encodeWithSelector(AutoDriveCreditsReceiver.InsufficientBalance.selector, address(autoDriveCreditsReceiver).balance, minimumBalance, withdrawAmount));
+        uint256 withdrawAmount = amount;
+        vm.expectRevert(abi.encodeWithSelector(AutoDriveCreditsReceiver.InsufficientBalance.selector, address(autoDriveCreditsReceiver).balance, withdrawAmount));
         autoDriveCreditsReceiver.sweepAmountToTreasury(withdrawAmount);
     }
 

@@ -10,11 +10,12 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
     address payable public treasury;
-    uint256 public minimumBalance;
 
-    constructor(address initialOwner, address payable initialTreasury, uint256 initialMinimumBalance) Ownable(initialOwner) {
+    // ExistentialDeposit deposit amount for Mainnet Auto-EVM
+    uint256 public minimumBalance = 1e12 wei;
+
+    constructor(address initialOwner, address payable initialTreasury) Ownable(initialOwner) {
         setTreasury(initialTreasury);
-        minimumBalance = initialMinimumBalance;
     }
     
     event IntentPaymentReceived(bytes32 indexed intentId, uint256 paymentAmount);
@@ -23,7 +24,7 @@ contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
 
     error InvalidAmount(uint256 amount);
     error InvalidTreasury(address treasury);
-    error InsufficientBalance(uint256 balance, uint256 minimumBalance, uint256 amount);
+    error InsufficientBalance(uint256 balance, uint256 amount);
 
     function payIntent(bytes32 intentId) public payable whenNotPaused {
         if (msg.value == 0) {
@@ -54,7 +55,7 @@ contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
             revert InvalidAmount(amount);
         }
         if (amount + minimumBalance > address(this).balance) {
-            revert InsufficientBalance(address(this).balance, minimumBalance, amount);
+            revert InsufficientBalance(address(this).balance, amount);
         }
         Address.sendValue(treasury, amount);
         emit SweptToTreasury(msg.sender, treasury, amount);
@@ -66,7 +67,7 @@ contract AutoDriveCreditsReceiver is Ownable2Step, ReentrancyGuard, Pausable {
         }
         if (address(this).balance < minimumBalance) {
             // amount is 0 because we are sweeping all
-            revert InsufficientBalance(address(this).balance, minimumBalance, 0);
+            revert InsufficientBalance(address(this).balance, 0);
         }
         uint256 balance = address(this).balance - minimumBalance;
         Address.sendValue(treasury, balance);
