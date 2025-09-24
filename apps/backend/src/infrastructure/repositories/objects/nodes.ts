@@ -5,6 +5,11 @@ import z from 'zod'
 
 export type Node = z.infer<typeof NodeSchema>
 
+export type NodeBlockchainData = Omit<
+  Node,
+  'encoded_node' | 'root_cid' | 'head_cid' | 'type'
+>
+
 export const NodeSchema = z.object({
   cid: z.string(),
   root_cid: z.string(),
@@ -241,6 +246,38 @@ const getNodesCountWithoutDataByRootCid = async (rootCid: string) => {
   })
 }
 
+const getNodeBlockchainData = async (
+  cid: string,
+): Promise<NodeBlockchainData | undefined> => {
+  const db = await getDatabase()
+
+  return db
+    .query<NodeBlockchainData>({
+      text: 'SELECT cid, block_published_on, tx_published_on, piece_index, piece_offset FROM nodes WHERE cid = $1',
+      values: [cid],
+    })
+    .then((e) => e.rows.at(0))
+}
+
+const updateNodeBlockchainData = async (
+  rootCid: string,
+  cid: string,
+  blockchainData: NodeBlockchainData,
+) => {
+  const db = await getDatabase()
+  return db.query({
+    text: 'UPDATE nodes SET block_published_on = $1, tx_published_on = $2, piece_index = $3, piece_offset = $4 WHERE root_cid = $5 AND cid = $6',
+    values: [
+      blockchainData.block_published_on,
+      blockchainData.tx_published_on,
+      blockchainData.piece_index,
+      blockchainData.piece_offset,
+      rootCid,
+      cid,
+    ],
+  })
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -257,4 +294,6 @@ export const nodesRepository = {
   getLastArchivedPieceNode,
   removeNodeByRootCid,
   getNodesCountWithoutDataByRootCid,
+  getNodeBlockchainData,
+  updateNodeBlockchainData,
 }
