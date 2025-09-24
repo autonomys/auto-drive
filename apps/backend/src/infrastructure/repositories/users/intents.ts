@@ -51,12 +51,13 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
 const updateIntent = async (intent: Intent): Promise<Intent> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
-    'UPDATE intents SET status = $1, user_public_id = $2, tx_hash = $3, deposit_amount = $4 WHERE id = $5 RETURNING *',
+    'UPDATE intents SET status = $1, user_public_id = $2, tx_hash = $3, payment_amount = $4, price_per_mb = $5 WHERE id = $6 RETURNING *',
     [
       intent.status,
       intent.userPublicId,
       intent.txHash ?? null,
       intent.paymentAmount?.toString() ?? null,
+      intent.pricePerMB,
       intent.id,
     ],
   )
