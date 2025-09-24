@@ -13,7 +13,7 @@ export const IntentSchema = z.object({
   status: z.nativeEnum(IntentStatus),
   txHash: z.string().optional(),
   paymentAmount: z.bigint().optional(),
-  pricePerMB: z.number(),
+  shannonsPerByte: z.bigint(),
 });
 
 export type Intent = z.infer<typeof IntentSchema>;

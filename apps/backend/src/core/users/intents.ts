@@ -8,6 +8,8 @@ import { config } from '../../config.js'
 import { randomBytes } from 'crypto'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { SubscriptionsUseCases } from './subscriptions.js'
+import { transactionByteFee } from '@autonomys/auto-consensus'
+import { ApiPromise, WsProvider } from '@polkadot/api'
 
 const logger = createLogger('IntentsUseCases')
 
@@ -16,12 +18,14 @@ const randomBytes32 = () => {
 }
 
 const createIntent = async (executor: User): Promise<Intent> => {
+  const { price } = await IntentsUseCases.getPrice()
+
   const intent = await intentsRepository.createIntent({
     id: randomBytes32(),
     userPublicId: executor.publicId,
     status: IntentStatus.PENDING,
     paymentAmount: undefined,
-    pricePerMB: config.paymentManager.pricePerMB,
+    shannonsPerByte: BigInt(price),
   })
 
   return intent
@@ -106,7 +110,7 @@ const getIntentCredits = (intent: Intent) => {
   }
 
   const creditsInBytes =
-    intent.paymentAmount / (BigInt(intent.pricePerMB * 10 ** 6) * 10n ** 6n)
+    BigInt(intent.paymentAmount) / BigInt(intent.shannonsPerByte)
 
   return Number(creditsInBytes).valueOf()
 }
@@ -149,7 +153,11 @@ const getConfirmedIntents = async () => {
 }
 
 const getPrice = async (): Promise<{ price: number }> => {
-  return { price: config.paymentManager.pricePerMB }
+  const { current: currentPricePerByte } = await transactionByteFee(
+    new ApiPromise({ provider: new WsProvider(config.chain.endpoint) }),
+  )
+
+  return { price: currentPricePerByte }
 }
 
 export const IntentsUseCases = {

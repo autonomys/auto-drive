@@ -7,7 +7,7 @@ type DBIntent = {
   status: IntentStatus
   tx_hash: string
   payment_amount: string
-  price_per_mb: number
+  shannons_per_byte: string
 }
 
 const mapRows = (rows: DBIntent[]): Intent[] => {
@@ -19,7 +19,7 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
     paymentAmount: row.payment_amount
       ? BigInt(row.payment_amount).valueOf()
       : undefined,
-    pricePerMB: row.price_per_mb,
+    shannonsPerByte: BigInt(row.shannons_per_byte).valueOf(),
   }))
 }
 
@@ -35,14 +35,14 @@ const getById = async (id: string): Promise<Intent | null> => {
 const createIntent = async (intent: Intent): Promise<Intent> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
-    'INSERT INTO intents (id, user_public_id, status, tx_hash, payment_amount, price_per_mb) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    'INSERT INTO intents (id, user_public_id, status, tx_hash, payment_amount, shannons_per_byte) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
     [
       intent.id,
       intent.userPublicId,
       intent.status,
       intent.txHash ?? null,
       intent.paymentAmount?.toString() ?? null,
-      intent.pricePerMB,
+      intent.shannonsPerByte,
     ],
   )
   return mapRows(result.rows)[0]
@@ -51,13 +51,13 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
 const updateIntent = async (intent: Intent): Promise<Intent> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
-    'UPDATE intents SET status = $1, user_public_id = $2, tx_hash = $3, payment_amount = $4, price_per_mb = $5 WHERE id = $6 RETURNING *',
+    'UPDATE intents SET status = $1, user_public_id = $2, tx_hash = $3, payment_amount = $4, shannons_per_byte = $5 WHERE id = $6 RETURNING *',
     [
       intent.status,
       intent.userPublicId,
       intent.txHash ?? null,
       intent.paymentAmount?.toString() ?? null,
-      intent.pricePerMB,
+      intent.shannonsPerByte,
       intent.id,
     ],
   )
