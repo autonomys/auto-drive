@@ -58,7 +58,7 @@ intentsController.get(
     }
 
     const result = await handleInternalErrorResult(
-      IntentsUseCases.getIntent(req.params.id),
+      IntentsUseCases.getIntent(user, req.params.id),
       'Failed to get intent',
     )
     if (result.isErr()) {

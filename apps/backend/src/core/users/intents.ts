@@ -27,10 +27,14 @@ const createIntent = async (executor: User): Promise<Intent> => {
   return intent
 }
 
-const getIntent = async (id: string) => {
+const getIntent = async (user: User, id: string) => {
   const intent = await intentsRepository.getById(id)
   if (!intent) {
     return err(new ObjectNotFoundError('Intent not found'))
+  }
+
+  if (user.publicId !== intent.userPublicId) {
+    return err(new ForbiddenError('Intent not found'))
   }
 
   return ok(intent)
@@ -49,7 +53,7 @@ const triggerWatchIntent = async ({
   txHash: string
   intentId: string
 }) => {
-  const result = await getIntent(intentId)
+  const result = await getIntent(executor, intentId)
   if (result.isErr()) {
     return err(result.error)
   }
@@ -82,11 +86,10 @@ const markIntentAsConfirmed = async ({
   intentId: string
   paymentAmount: bigint
 }) => {
-  const result = await getIntent(intentId)
-  if (result.isErr()) {
-    return err(result.error)
+  const intent = await intentsRepository.getById(intentId)
+  if (!intent) {
+    return err(new ObjectNotFoundError('Intent not found'))
   }
-  const intent = result.value
 
   return ok(
     intentsRepository.updateIntent({
@@ -109,11 +112,10 @@ const getIntentCredits = (intent: Intent) => {
 }
 
 const onConfirmedIntent = async (intentId: string) => {
-  const result = await getIntent(intentId)
-  if (result.isErr()) {
-    return err(result.error)
+  const intent = await intentsRepository.getById(intentId)
+  if (!intent) {
+    return err(new ObjectNotFoundError('Intent not found'))
   }
-  const intent = result.value
 
   if (intent.status === IntentStatus.COMPLETED) {
     return err(new Error('Intent should be not completed'))
