@@ -21,7 +21,7 @@ const saveNode = async (node: Node) => {
   const db = await getDatabase()
 
   return db.query({
-    text: 'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (cid) DO NOTHING',
+    text: 'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $2, $3, $4, $5);',
     values: [
       node.cid,
       node.root_cid,
