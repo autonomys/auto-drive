@@ -60,7 +60,6 @@ export const TaskSchema = z.discriminatedUnion('id', [
     retriesLeft: z.number().default(MAX_RETRIES),
     params: z.object({
       txHash: z.string(),
-      intentId: z.string(),
     }),
   }),
 ])
@@ -115,7 +114,6 @@ type TaskCreateParams =
       id: 'watch-intent-tx'
       params: {
         txHash: string
-        intentId: string
       }
     }
 

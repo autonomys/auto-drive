@@ -64,7 +64,6 @@ const triggerWatchIntent = async ({
     retriesLeft: MAX_RETRIES,
     params: {
       txHash,
-      intentId,
     },
   })
 
