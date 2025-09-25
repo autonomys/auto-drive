@@ -1,11 +1,11 @@
 export const depositEventAbi = [
   {
     type: 'event',
-    name: 'Deposit',
+    name: 'IntentPaymentReceived',
     anonymous: false,
     inputs: [
       { name: 'intentId', type: 'bytes32', indexed: true },
-      { name: 'depositAmount', type: 'uint256', indexed: false },
+      { name: 'paymentAmount', type: 'uint256', indexed: false },
     ],
   },
 ] as const

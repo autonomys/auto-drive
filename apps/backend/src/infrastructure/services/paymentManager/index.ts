@@ -47,7 +47,7 @@ const watchTransaction = async (txHash: string) => {
     logs.map((log) => {
       return IntentsUseCases.markIntentAsConfirmed({
         intentId: log.args.intentId,
-        depositAmount: log.args.depositAmount,
+        paymentAmount: log.args.paymentAmount,
       })
     }),
   )
@@ -97,7 +97,11 @@ const start = () => {
         logs: logs.map((log) => log.transactionHash),
       })
       logs.forEach((log) => {
-        watchTransaction(log.transactionHash)
+        watchTransaction(log.transactionHash).catch((error) => {
+          logger.error('Error watching transaction', {
+            error,
+          })
+        })
       })
     },
   })

@@ -49,11 +49,17 @@ export const TaskSchema = z.discriminatedUnion('id', [
     }),
   }),
   z.object({
+    id: z.literal('ensure-object-published'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({
+      cid: z.string(),
+    }),
+  }),
+  z.object({
     id: z.literal('watch-intent-tx'),
     retriesLeft: z.number().default(MAX_RETRIES),
     params: z.object({
       txHash: z.string(),
-      intentId: z.string(),
     }),
   }),
 ])
@@ -99,10 +105,15 @@ type TaskCreateParams =
       }
     }
   | {
+      id: 'ensure-object-published'
+      params: {
+        cid: string
+      }
+    }
+  | {
       id: 'watch-intent-tx'
       params: {
         txHash: string
-        intentId: string
       }
     }
 
@@ -139,6 +150,12 @@ export const createTask = (task: TaskCreateParams): Task => {
         retriesLeft: MAX_RETRIES,
       }
     case 'object-archived':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'ensure-object-published':
       return {
         id: task.id,
         params: task.params,

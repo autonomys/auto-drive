@@ -65,11 +65,10 @@ export const config = {
     contractAddress: getAddress(env('EVM_CHAIN_CONTRACT_ADDRESS')),
     confirmations: Number(env('EVM_CHAIN_CONFIRMATIONS', '12')),
     checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
-    pricePerMB: Number(env('PRICE_PER_MB', '0.05')), // 0.05 AI3 per MB
+    priceMultiplier: Number(env('EVM_CHAIN_PREMIUM_PCT', '5.00')),
   },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
-    maxUploadNodesPerBatch: Number(env('MAX_UPLOAD_NODES_PER_BATCH', '20')),
     maxAnonymousDownloadSize: Number(
       env('MAX_ANONYMOUS_DOWNLOAD_SIZE', ONE_HUNDRED_MiB.toString()),
     ),

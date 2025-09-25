@@ -8,6 +8,8 @@ import { config } from '../../config.js'
 import { randomBytes } from 'crypto'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { SubscriptionsUseCases } from './subscriptions.js'
+import { transactionByteFee } from '@autonomys/auto-consensus'
+import { ApiPromise, WsProvider } from '@polkadot/api'
 
 const logger = createLogger('IntentsUseCases')
 
@@ -16,21 +18,27 @@ const randomBytes32 = () => {
 }
 
 const createIntent = async (executor: User): Promise<Intent> => {
+  const { price } = await IntentsUseCases.getPrice()
+
   const intent = await intentsRepository.createIntent({
     id: randomBytes32(),
     userPublicId: executor.publicId,
     status: IntentStatus.PENDING,
-    depositAmount: undefined,
-    pricePerMB: config.paymentManager.pricePerMB,
+    paymentAmount: undefined,
+    shannonsPerByte: BigInt(price),
   })
 
   return intent
 }
 
-const getIntent = async (id: string) => {
+const getIntent = async (user: User, id: string) => {
   const intent = await intentsRepository.getById(id)
   if (!intent) {
     return err(new ObjectNotFoundError('Intent not found'))
+  }
+
+  if (user.publicId !== intent.userPublicId) {
+    return err(new ForbiddenError('Intent not found'))
   }
 
   return ok(intent)
@@ -49,7 +57,7 @@ const triggerWatchIntent = async ({
   txHash: string
   intentId: string
 }) => {
-  const result = await getIntent(intentId)
+  const result = await getIntent(executor, intentId)
   if (result.isErr()) {
     return err(result.error)
   }
@@ -64,7 +72,6 @@ const triggerWatchIntent = async ({
     retriesLeft: MAX_RETRIES,
     params: {
       txHash,
-      intentId,
     },
   })
 
@@ -78,49 +85,47 @@ const triggerWatchIntent = async ({
 
 const markIntentAsConfirmed = async ({
   intentId,
-  depositAmount,
+  paymentAmount,
 }: {
   intentId: string
-  depositAmount: bigint
+  paymentAmount: bigint
 }) => {
-  const result = await getIntent(intentId)
-  if (result.isErr()) {
-    return err(result.error)
+  const intent = await intentsRepository.getById(intentId)
+  if (!intent) {
+    return err(new ObjectNotFoundError('Intent not found'))
   }
-  const intent = result.value
 
   return ok(
     intentsRepository.updateIntent({
       ...intent,
       status: IntentStatus.CONFIRMED,
-      depositAmount,
+      paymentAmount,
     }),
   )
 }
 
 const getIntentCredits = (intent: Intent) => {
-  if (!intent.depositAmount) {
+  if (!intent.paymentAmount) {
     return 0
   }
 
   const creditsInBytes =
-    intent.depositAmount / (BigInt(intent.pricePerMB * 10 ** 6) * 10n ** 6n)
+    BigInt(intent.paymentAmount) / BigInt(intent.shannonsPerByte)
 
   return Number(creditsInBytes).valueOf()
 }
 
 const onConfirmedIntent = async (intentId: string) => {
-  const result = await getIntent(intentId)
-  if (result.isErr()) {
-    return err(result.error)
+  const intent = await intentsRepository.getById(intentId)
+  if (!intent) {
+    return err(new ObjectNotFoundError('Intent not found'))
   }
-  const intent = result.value
 
   if (intent.status === IntentStatus.COMPLETED) {
     return err(new Error('Intent should be not completed'))
   }
 
-  if (!intent.depositAmount) {
+  if (!intent.paymentAmount) {
     logger.warn('Intent has no deposit amount', {
       intentId,
     })
@@ -148,7 +153,13 @@ const getConfirmedIntents = async () => {
 }
 
 const getPrice = async (): Promise<{ price: number }> => {
-  return { price: config.paymentManager.pricePerMB }
+  const { current: currentPricePerByte } = await transactionByteFee(
+    new ApiPromise({ provider: new WsProvider(config.chain.endpoint) }),
+  )
+
+  return {
+    price: currentPricePerByte * config.paymentManager.priceMultiplier,
+  }
 }
 
 export const IntentsUseCases = {
