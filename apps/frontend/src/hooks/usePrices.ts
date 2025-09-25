@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNetwork } from '../contexts/network';
-import { coingecko } from '../services/coingecko';
+import { tokenPriceService } from '../services/coingecko';
 import { useCallback } from 'react';
 
 // This is longer because it's not a critical price & we're rate limited
@@ -22,7 +22,7 @@ export const usePrices = () => {
 
   const { data: usdPerAi3 } = useQuery({
     queryKey: ['coingeckoPrice'],
-    queryFn: () => coingecko.getPrice(),
+    queryFn: () => tokenPriceService.getPrice(),
     refetchInterval: REFRESH_INTERVAL_COINGECKO,
     gcTime: REFRESH_INTERVAL_COINGECKO * 2,
     initialData: 0.052,
