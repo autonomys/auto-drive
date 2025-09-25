@@ -20,7 +20,8 @@ export type Intent = z.infer<typeof IntentSchema>;
 
 export const intentCreationSchema = z.object({
   expiresAt: z
-    .date()
+    .string()
+    .transform((date) => new Date(date))
     .refine((date) => date > new Date(Date.now() + 1000 * 60 * 60), {
       message: "Expires at must be at least 1 hour from now",
     }),

@@ -1,16 +1,15 @@
-import { EXTERNAL_ROUTES, Button } from '@auto-drive/ui';
+import { Button, ROUTES } from '@auto-drive/ui';
+import { InternalLink } from './InternalLink';
+import { useNetwork } from '../../contexts/network';
 
-export const AskForCreditsButton = () => {
+export const BuyMoreCreditsButton = () => {
+  const { network } = useNetwork();
+  
   return (
-    <a
-      target='_blank'
-      rel='noreferrer'
-      href={EXTERNAL_ROUTES.requestMoreCreditsForm}
-      className='contents'
-    >
+    <InternalLink href={ROUTES.purchase(network.id)} className='contents'>
       <Button variant='outline' size='sm' className='w-full text-xs'>
-        Ask for more credits
+        Buy more credits
       </Button>
-    </a>
+    </InternalLink>
   );
 };
