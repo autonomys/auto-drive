@@ -1,7 +1,9 @@
 import { usePrices } from '../../../hooks/usePrices';
 
+const MB = 10 ** 6;
+
 export const CreditCurrentPrice = () => {
-  const { ai3PerCreditsMb: mbPricePerAi3 } = usePrices();
+  const { shannonsPerByte, formatCreditsAsAi3 } = usePrices();
 
   return (
     <div className='rounded-xl bg-primary p-6 text-primary-foreground'>
@@ -9,8 +11,8 @@ export const CreditCurrentPrice = () => {
         <div>
           <div className='text-sm opacity-90'>Current Price</div>
           <div className='text-3xl font-bold'>
-            {typeof mbPricePerAi3 === 'number'
-              ? `${mbPricePerAi3} AI3 per MB`
+            {typeof shannonsPerByte === 'number'
+              ? `${formatCreditsAsAi3(MB).toFixed(2)} AI3 per MB`
               : '—'}
           </div>
         </div>

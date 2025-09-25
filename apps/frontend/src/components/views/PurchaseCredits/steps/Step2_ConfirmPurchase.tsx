@@ -20,8 +20,11 @@ export const PurchaseStep2ConnectWallet = ({
   context: Record<string, unknown>;
   onContextChange: (data: Record<string, unknown>) => void;
 }) => {
-  const { formatCreditsAsAi3, formatCreditsAsUsd, formatAi3AsCredits } =
-    usePrices();
+  const {
+    formatCreditsInMbAsUsd,
+    formatAi3AsCreditsInMb,
+    formatCreditsInMbAsAi3,
+  } = usePrices();
 
   const isCustom = String(context.packageId ?? 'custom') === 'custom';
 
@@ -61,10 +64,10 @@ export const PurchaseStep2ConnectWallet = ({
 
   const onChangeAi3 = useCallback(
     (value: string) => {
-      const mb = formatAi3AsCredits(Number(value));
+      const mb = formatAi3AsCreditsInMb(Number(value));
       onContextChange({ sizeMB: mb });
     },
-    [formatAi3AsCredits, onContextChange],
+    [formatAi3AsCreditsInMb, onContextChange],
   );
 
   return (
@@ -124,17 +127,23 @@ export const PurchaseStep2ConnectWallet = ({
                       min={0}
                       step={1}
                       className='w-28 rounded-md border px-2 py-1 text-right'
-                      value={formatCreditsAsAi3(Number(sizeMB))}
+                      value={formatCreditsInMbAsAi3(Number(sizeMB))}
                       onChange={(e) => onChangeAi3(e.target.value)}
                     />
                   ) : (
-                    <span>{formatCreditsAsAi3(Number(sizeMB))} AI3</span>
+                    <span>
+                      {formatCreditsInMbAsAi3(Number(sizeMB)).toFixed(2)} AI3
+                    </span>
                   )
                 }
               />
               <InfoRow
                 label='USD Equivalent'
-                value={<span>${formatCreditsAsUsd(Number(sizeMB))}</span>}
+                value={
+                  <span>
+                    ${formatCreditsInMbAsUsd(Number(sizeMB)).toFixed(2)}
+                  </span>
+                }
               />
               <div className='flex flex-col rounded-md border-b-2 border-gray-200' />
               <div className='mt-2'>
@@ -142,7 +151,7 @@ export const PurchaseStep2ConnectWallet = ({
                   label='Total'
                   value={
                     <span className='font-semibold'>
-                      {formatCreditsAsAi3(Number(sizeMB))} AI3
+                      {formatCreditsInMbAsAi3(Number(sizeMB)).toFixed(2)} AI3
                     </span>
                   }
                   accent

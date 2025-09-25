@@ -53,7 +53,7 @@ export const PurchaseStep1SelectPackage = ({
   onNext: (data: Record<string, unknown>) => void;
   context: Record<string, unknown>;
 }) => {
-  const { formatCreditsAsAi3, formatCreditsAsUsd } = usePrices();
+  const { formatCreditsInMbAsAi3, formatCreditsInMbAsUsd } = usePrices();
 
   const CheckIcon = () => (
     <svg
@@ -105,10 +105,10 @@ export const PurchaseStep1SelectPackage = ({
                 {p.creditsInMB && (
                   <>
                     <div className='text-sm'>
-                      {formatCreditsAsAi3(p.creditsInMB)} AI3
+                      {formatCreditsInMbAsAi3(p.creditsInMB).toFixed(2)} AI3
                     </div>
                     <div className='text-xs text-muted-foreground'>
-                      ≈ ${formatCreditsAsUsd(p.creditsInMB)}
+                      ≈ ${formatCreditsInMbAsUsd(p.creditsInMB).toFixed(2)}
                     </div>
                   </>
                 )}

@@ -25,10 +25,10 @@ export const PurchaseStep3TransferTokens = ({
   onBack: () => void;
   context: Record<string, unknown>;
 }) => {
-  void onBack; // intentionally unused (Back is hidden in this step)
+  void onBack;
   const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const { formatCreditsAsValue, formatCreditsAsAi3 } = usePrices();
+  const { formatCreditsInMbAsAi3 } = usePrices();
   const [intentId, setIntentId] = useState<string | undefined>(undefined);
 
   const { deposit, targetContract } = useDeposit();
@@ -195,7 +195,10 @@ export const PurchaseStep3TransferTokens = ({
             <InfoRow
               label='Amount'
               value={
-                <span>{formatCreditsAsAi3(Number(context.sizeMB))} AI3</span>
+                <span>
+                  {formatCreditsInMbAsAi3(Number(context.sizeMB)).toFixed(2)}{' '}
+                  AI3
+                </span>
               }
             />
             <div className='flex gap-3'>

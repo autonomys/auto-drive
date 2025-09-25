@@ -8,10 +8,12 @@ const REFRESH_INTERVAL_COINGECKO = 1000 * 60 * 60;
 
 const REFRESH_INTERVAL = 60 * 1000;
 
+const BYTES_PER_MB = 10 ** 6;
+
 export const usePrices = () => {
   const { api } = useNetwork();
 
-  const { data: ai3PerCreditsMb } = useQuery({
+  const { data: shannonsPerByte } = useQuery({
     queryKey: ['price'],
     queryFn: () => api.getCreditPrice().then((res) => res.price),
     refetchInterval: REFRESH_INTERVAL,
@@ -23,64 +25,98 @@ export const usePrices = () => {
     queryFn: () => coingecko.getPrice(),
     refetchInterval: REFRESH_INTERVAL_COINGECKO,
     gcTime: REFRESH_INTERVAL_COINGECKO * 2,
+    initialData: 0.052,
   });
 
   const formatCreditsAsAi3 = useCallback(
-    (creditsInMb: number) => {
-      if (typeof ai3PerCreditsMb === 'undefined') {
+    (credits: number) => {
+      if (typeof shannonsPerByte === 'undefined') {
         return 0;
       }
 
-      return creditsInMb * ai3PerCreditsMb * 100;
+      return (credits * shannonsPerByte) / 10 ** 18;
     },
-    [ai3PerCreditsMb],
+    [shannonsPerByte],
   );
 
   const formatCreditsAsUsd = useCallback(
     (creditsInMb: number) => {
-      if (typeof ai3PerCreditsMb === 'undefined') {
+      if (typeof shannonsPerByte === 'undefined') {
         return 0;
       }
 
       if (typeof usdPerAi3 === 'number') {
-        return creditsInMb * ai3PerCreditsMb * usdPerAi3;
+        return formatCreditsAsAi3(creditsInMb) * usdPerAi3;
       }
       return 0;
     },
-    [ai3PerCreditsMb, usdPerAi3],
+    [formatCreditsAsAi3, shannonsPerByte, usdPerAi3],
+  );
+
+  const formatCreditsInMbAsAi3 = useCallback(
+    (creditsInMb: number) => {
+      if (typeof shannonsPerByte === 'undefined') {
+        return 0;
+      }
+      return formatCreditsAsAi3(creditsInMb * BYTES_PER_MB);
+    },
+    [formatCreditsAsAi3, shannonsPerByte],
+  );
+
+  const formatCreditsInMbAsUsd = useCallback(
+    (creditsInMb: number) => {
+      if (typeof shannonsPerByte === 'undefined') {
+        return 0;
+      }
+      return formatCreditsInMbAsAi3(creditsInMb) * usdPerAi3;
+    },
+    [formatCreditsInMbAsAi3, shannonsPerByte, usdPerAi3],
   );
 
   const formatAi3AsCredits = useCallback(
     (ai3: number) => {
-      if (typeof ai3PerCreditsMb === 'undefined') {
+      if (typeof shannonsPerByte === 'undefined') {
         return 0;
       }
-      return ai3 / ai3PerCreditsMb;
+      return ai3 / shannonsPerByte;
     },
-    [ai3PerCreditsMb],
+    [shannonsPerByte],
+  );
+
+  const formatAi3AsCreditsInMb = useCallback(
+    (ai3: number) => {
+      if (typeof shannonsPerByte === 'undefined') {
+        return 0;
+      }
+      return ai3 / (shannonsPerByte * BYTES_PER_MB);
+    },
+    [shannonsPerByte],
   );
 
   const formatCreditsAsValue = useCallback(
     (creditsInMb: number): bigint => {
-      if (typeof ai3PerCreditsMb === 'undefined') {
+      if (typeof shannonsPerByte === 'undefined') {
         return BigInt(0);
       }
 
       const precision = 10 ** 6;
       return (
-        (BigInt(creditsInMb * ai3PerCreditsMb * precision) * BigInt(10 ** 18)) /
+        (BigInt(creditsInMb * shannonsPerByte * precision) * BigInt(10 ** 18)) /
         BigInt(precision)
       );
     },
-    [ai3PerCreditsMb],
+    [shannonsPerByte],
   );
 
   return {
-    ai3PerCreditsMb,
+    shannonsPerByte,
     usdPerAi3,
     formatCreditsAsAi3,
     formatCreditsAsUsd,
     formatCreditsAsValue,
     formatAi3AsCredits,
+    formatCreditsInMbAsAi3,
+    formatCreditsInMbAsUsd,
+    formatAi3AsCreditsInMb,
   };
 };
