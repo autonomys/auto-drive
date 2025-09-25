@@ -65,7 +65,7 @@ export const config = {
     contractAddress: getAddress(env('EVM_CHAIN_CONTRACT_ADDRESS')),
     confirmations: Number(env('EVM_CHAIN_CONFIRMATIONS', '12')),
     checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
-    priceMultiplier: Number(env('EVM_CHAIN_PREMIUM_PCT', '5.00')),
+    priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
