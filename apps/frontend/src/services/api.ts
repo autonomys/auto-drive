@@ -247,16 +247,10 @@ export const createApiService = ({
     cid: string,
     password?: string,
   ): Promise<AsyncIterable<Buffer>> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
     const api = createAutoDriveApi({
       downloadServiceUrl: downloadApiUrl,
       apiUrl: apiBaseUrl,
-      provider: session.authProvider as AuthProvider,
-      apiKey: session.accessToken,
+      apiKey: null,
     });
 
     return api.downloadFile(cid, password);
