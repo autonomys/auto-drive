@@ -23,11 +23,12 @@ export const createDownloadService = (api: Api) => {
 
   const hasFileInCache = async (cid: string) => {
     try {
-      const db = await openDatabase();
+      const objectStoreName = getObjectStoreName();
+      const db = await openDatabase(objectStoreName);
 
-      const transaction = db.transaction('files', 'readonly');
+      const transaction = db.transaction(objectStoreName, 'readonly');
 
-      const store = transaction.objectStore('files');
+      const store = transaction.objectStore(objectStoreName);
 
       const request = store.count(cid);
 
@@ -57,9 +58,10 @@ export const createDownloadService = (api: Api) => {
 
   const saveFileToCache = async (cid: string, buffer: Buffer) => {
     try {
-      const db = await openDatabase();
-      const transaction = db.transaction('files', 'readwrite');
-      const store = transaction.objectStore('files');
+      const objectStoreName = getObjectStoreName();
+      const db = await openDatabase(objectStoreName);
+      const transaction = db.transaction(objectStoreName, 'readwrite');
+      const store = transaction.objectStore(objectStoreName);
       store.put({ cid, buffer });
 
       return new Promise<void>((resolve, reject) => {
@@ -79,6 +81,12 @@ export const createDownloadService = (api: Api) => {
 
   const MB = 1024 * 1024;
   const MAX_CACHEABLE_FILE_SIZE = 150 * MB;
+
+  const getObjectStoreName = () => {
+    const objectStoreVersion =
+      process.env.NEXT_PUBLIC_OBJECT_STORE_VERSION ?? 'v1';
+    return `files-${objectStoreVersion}`;
+  };
 
   const fetchFromApi = async (cid: string, password?: string) => {
     const { metadata } = await api.fetchUploadedObjectMetadata(cid);
@@ -106,9 +114,10 @@ export const createDownloadService = (api: Api) => {
 
   const fetchFromCache = async (cid: string) => {
     try {
-      const db = await openDatabase();
-      const transaction = db.transaction('files', 'readonly');
-      const store = transaction.objectStore('files');
+      const objectStoreName = getObjectStoreName();
+      const db = await openDatabase(objectStoreName);
+      const transaction = db.transaction(objectStoreName, 'readonly');
+      const store = transaction.objectStore(objectStoreName);
       const request = store.get(cid);
 
       const buffer = await new Promise<Buffer>((resolve, reject) => {
