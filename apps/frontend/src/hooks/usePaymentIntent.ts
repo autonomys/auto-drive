@@ -1,15 +1,15 @@
 import { useCallback, useMemo } from 'react';
 import { useNetwork } from '../contexts/network';
 import {
-  depositAbi,
-  depositContractsByNetworkId,
+  paymentReceiverContractsByNetworkId,
+  paymentIntentAbi,
   evmChains,
 } from '@auto-drive/ui';
 import { Address, Chain, Hash } from 'viem';
 
-export interface DepositTransaction {
-  abi: typeof depositAbi;
-  functionName: 'deposit';
+export interface PaymentIntentTransaction {
+  abi: typeof paymentIntentAbi;
+  functionName: 'paymentIntent';
   args: [Hash];
   value: bigint;
   address: Address;
@@ -17,31 +17,31 @@ export interface DepositTransaction {
   chain: Chain;
 }
 
-export const useDeposit = () => {
+export const usePaymentIntent = () => {
   const { network, api } = useNetwork();
 
   const targetContract = useMemo(
-    () => depositContractsByNetworkId[network.id],
+    () => paymentReceiverContractsByNetworkId[network.id],
     [network.id],
   );
 
-  const deposit = useCallback(
+  const paymentIntent = useCallback(
     async (amount: bigint) => {
       console.log('Creating intent');
       const intentId: string = await api.createIntent();
 
       return {
-        abi: depositAbi,
-        functionName: 'deposit',
+        abi: paymentIntentAbi,
+        functionName: 'paymentIntent',
         args: [intentId as Hash],
         value: amount,
         address: targetContract,
         intentId,
         chain: evmChains[network.id],
-      } as DepositTransaction;
+      } as PaymentIntentTransaction;
     },
     [api, network.id, targetContract],
   );
 
-  return { deposit, targetContract };
+  return { paymentIntent, targetContract };
 };

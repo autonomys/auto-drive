@@ -12,7 +12,7 @@ import {
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { type Hash } from 'viem';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useDeposit } from '../../../../hooks/useDeposit';
+import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 import { useNetwork } from '../../../../contexts/network';
 import { usePrices } from '../../../../hooks/usePrices';
 
@@ -31,7 +31,7 @@ export const PurchaseStep3TransferTokens = ({
   const { formatCreditsInMbAsAi3 } = usePrices();
   const [intentId, setIntentId] = useState<string | undefined>(undefined);
 
-  const { deposit, targetContract } = useDeposit();
+  const { paymentIntent, targetContract } = usePaymentIntent();
   const { api } = useNetwork();
 
   const [txHash, setTxHash] = useState<Hash | undefined>(undefined);
@@ -64,10 +64,10 @@ export const PurchaseStep3TransferTokens = ({
     if (openConnectModal) openConnectModal();
   };
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     try {
-      const depositTransaction = await deposit(
-        formatCreditsAsValue(Number(context.sizeMB)),
+      const depositTransaction = await paymentIntent(
+        BigInt(formatCreditsInMbAsAi3(Number(context.sizeMB))),
       );
       const hash = await writeContractAsync(depositTransaction);
       setIntentId(depositTransaction.intentId);
@@ -75,7 +75,12 @@ export const PurchaseStep3TransferTokens = ({
     } catch {
       // no-op; UI will surface writeError via wagmi
     }
-  };
+  }, [
+    paymentIntent,
+    formatCreditsInMbAsAi3,
+    context.sizeMB,
+    writeContractAsync,
+  ]);
 
   const notifyAndNext = useCallback(async () => {
     if (!txHash || !intentId) return;
