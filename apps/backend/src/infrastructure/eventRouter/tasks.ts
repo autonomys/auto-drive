@@ -55,6 +55,13 @@ export const TaskSchema = z.discriminatedUnion('id', [
       cid: z.string(),
     }),
   }),
+  z.object({
+    id: z.literal('watch-intent-tx'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({
+      txHash: z.string(),
+    }),
+  }),
 ])
 
 export type MigrateUploadTask = z.infer<typeof TaskSchema>
@@ -103,6 +110,12 @@ type TaskCreateParams =
         cid: string
       }
     }
+  | {
+      id: 'watch-intent-tx'
+      params: {
+        txHash: string
+      }
+    }
 
 export const createTask = (task: TaskCreateParams): Task => {
   switch (task.id) {
@@ -143,6 +156,12 @@ export const createTask = (task: TaskCreateParams): Task => {
         retriesLeft: MAX_RETRIES,
       }
     case 'ensure-object-published':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'watch-intent-tx':
       return {
         id: task.id,
         params: task.params,
