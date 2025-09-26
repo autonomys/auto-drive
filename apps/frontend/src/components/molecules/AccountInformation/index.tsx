@@ -1,12 +1,12 @@
 import bytes from 'bytes';
 import { utcToLocalRelativeTime } from '../../../utils/time';
-import { SubscriptionGranularity } from '@auto-drive/models';
+import { AccountModel } from '@auto-drive/models';
 
 interface CreditLimitsProps {
   uploadPending: number;
   uploadLimit: number;
   renewalDate: Date;
-  granularity: SubscriptionGranularity;
+  granularity: AccountModel;
 }
 
 export const AccountInformation = ({
@@ -36,7 +36,7 @@ export const AccountInformation = ({
           ></div>
         </div>
       </div>
-      {granularity === SubscriptionGranularity.Monthly && (
+      {granularity === AccountModel.Monthly && (
         <p className='space-y-2 text-xs text-muted-foreground'>
           Renews in {utcToLocalRelativeTime(renewalDate.toISOString())}
         </p>

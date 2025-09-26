@@ -10,7 +10,7 @@ import {
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNetwork } from 'contexts/network';
-import { SubscriptionGranularity } from '@auto-drive/models';
+import { AccountModel } from '@auto-drive/models';
 
 export const CreditsUpdateModal = ({
   userHandle,
@@ -25,8 +25,8 @@ export const CreditsUpdateModal = ({
   );
   const [uploadCredits, setUploadCredits] = useState<string>('');
   const [uploadCreditsUnit, setUploadCreditsUnit] = useState<number>(1024 ** 2);
-  const [granularity, setGranularity] = useState<SubscriptionGranularity>(
-    SubscriptionGranularity.Monthly,
+  const [granularity, setGranularity] = useState<AccountModel>(
+    AccountModel.Monthly,
   );
 
   const network = useNetwork();
@@ -36,14 +36,14 @@ export const CreditsUpdateModal = ({
     setUploadCredits('');
     setDownloadCreditsUnit(1024 ** 2);
     setUploadCreditsUnit(1024 ** 2);
-    setGranularity(SubscriptionGranularity.Monthly);
+    setGranularity(AccountModel.Monthly);
   }, [userHandle]);
 
   const updateCredits = useCallback(async () => {
     if (userHandle && downloadCredits && uploadCredits) {
       const downloadBytes = Number(downloadCredits) * downloadCreditsUnit;
       const uploadBytes = Number(uploadCredits) * uploadCreditsUnit;
-      await network.api.updateSubscription(
+      await network.api.updateAccount(
         userHandle,
         granularity,
         uploadBytes,
@@ -119,17 +119,11 @@ export const CreditsUpdateModal = ({
                         id='granularity'
                         value={granularity}
                         onChange={(e) =>
-                          setGranularity(
-                            e.target.value as SubscriptionGranularity,
-                          )
+                          setGranularity(e.target.value as AccountModel)
                         }
                       >
-                        <option value={SubscriptionGranularity.Monthly}>
-                          Monthly
-                        </option>
-                        <option value={SubscriptionGranularity.OneOff}>
-                          One-off
-                        </option>
+                        <option value={AccountModel.Monthly}>Monthly</option>
+                        <option value={AccountModel.OneOff}>One-off</option>
                       </select>
                     </div>
                     <div className='flex items-center space-x-2'>

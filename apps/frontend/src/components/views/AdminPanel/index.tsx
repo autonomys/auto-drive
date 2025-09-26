@@ -6,14 +6,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   OnboardedUser,
   PaginatedResult,
-  SubscriptionInfoWithUser,
+  AccountInfoWithUser,
 } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
 import { Button } from '@auto-drive/ui';
 
 export const AdminPanel = () => {
   const [subscriptionsWithUsers, setSubscriptionsWithUsers] = useState<
-    SubscriptionInfoWithUser[]
+    AccountInfoWithUser[]
   >([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -39,7 +39,7 @@ export const AdminPanel = () => {
           await network?.api.getUserList(publicIds);
         if (subscriptionsByPublicId) {
           const subscriptions = Object.entries(subscriptionsByPublicId);
-          const subscriptionsWithUsers: SubscriptionInfoWithUser[] =
+          const subscriptionsWithUsers: AccountInfoWithUser[] =
             subscriptions.map(([publicId, subscription]) => ({
               ...subscription,
               pendingUploadCredits: subscription.pendingUploadCredits || 0,
@@ -82,7 +82,7 @@ export const AdminPanel = () => {
 
         if (subscriptionsByPublicId) {
           const subscriptions = Object.values(subscriptionsByPublicId);
-          const subscriptionsWithUsers: SubscriptionInfoWithUser[] =
+          const subscriptionsWithUsers: AccountInfoWithUser[] =
             subscriptions.map((subscription) => ({
               ...subscription,
               pendingUploadCredits: subscription.pendingUploadCredits || 0,

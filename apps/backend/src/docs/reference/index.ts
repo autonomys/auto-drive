@@ -1,7 +1,7 @@
 import { common } from './common.js'
 import { downloads } from './downloads.js'
 import { objects } from './objects.js'
-import { subscriptions } from './subscriptions.js'
+import { accounts } from './accounts.js'
 import { uploads } from './uploads.js'
 
 export const swagger = {
@@ -50,7 +50,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
 - Async downloads`,
   },
   paths: {
-    ...subscriptions.paths,
+    ...accounts.paths,
     ...uploads.paths,
     ...objects.paths,
     ...downloads.paths,
@@ -66,7 +66,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
       ...uploads.components.schemas,
       ...objects.components.schemas,
       ...common.components.schemas,
-      ...subscriptions.components.schemas,
+      ...accounts.components.schemas,
       ...downloads.components.schemas,
     },
     securitySchemes: {
