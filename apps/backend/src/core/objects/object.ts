@@ -374,7 +374,6 @@ const isArchived = async (cid: string) => {
     return false
   }
 
-  logger.info('Is archived (cid=%s): %d', cid, metadata.is_archived)
   return metadata.is_archived
 }
 
