@@ -4,7 +4,7 @@ import { AccountModel, Account } from '@auto-drive/models'
 type DBSubscription = {
   id: string
   organization_id: string
-  granularity: AccountModel
+  model: AccountModel
   upload_limit: number
   download_limit: number
 }
@@ -15,7 +15,7 @@ const mapRows = (rows: DBSubscription[]): Account[] => {
     uploadLimit: Number(row.upload_limit),
     downloadLimit: Number(row.download_limit),
     organizationId: row.organization_id,
-    model: row.granularity as AccountModel,
+    model: row.model as AccountModel,
   }))
 }
 
