@@ -53,7 +53,7 @@ export const accounts = {
           downloadLimit: { type: 'number' },
           granularity: {
             type: 'string',
-            enum: ['monthly', 'AccountInfoWithUser'],
+            enum: ['monthly', 'one_off'],
           },
           pendingUploadCredits: { type: 'number' },
           pendingDownloadCredits: { type: 'number' },
