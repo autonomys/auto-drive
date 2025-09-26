@@ -1,0 +1,1 @@
+ALTER TABLE nodes ADD CONSTRAINT nodes_pkey PRIMARY KEY (cid);

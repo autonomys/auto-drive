@@ -1,0 +1,1 @@
+ALTER TABLE nodes DROP CONSTRAINT IF EXISTS nodes_pkey;
