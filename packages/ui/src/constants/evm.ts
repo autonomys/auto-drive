@@ -43,16 +43,16 @@ export const evmChains: Record<NetworkId, Chain> = {
   },
   [NetworkId.LOCAL]: {
     // Anvil default chain id
-    id: 31337,
-    name: "Local",
+    id: 8700,
+    name: "Chronos Testnet",
     nativeCurrency: {
-      name: "Ethereum",
-      symbol: "ETH",
+      name: "Chronos AI3",
+      symbol: "tAI3",
       decimals: 18,
     },
     rpcUrls: {
       default: {
-        http: ["http://localhost:8545"],
+        http: ["https://auto-evm.chronos.autonomys.xyz/ws"],
       },
     },
   },
