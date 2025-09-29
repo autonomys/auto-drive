@@ -2,14 +2,14 @@ import { useCallback, useMemo } from 'react';
 import { useNetwork } from '../contexts/network';
 import {
   paymentReceiverContractsByNetworkId,
-  paymentIntentAbi,
+  paymentReceiverAbi,
   evmChains,
 } from '@auto-drive/ui';
 import { Address, Chain, Hash } from 'viem';
 
 export interface PaymentIntentTransaction {
-  abi: typeof paymentIntentAbi;
-  functionName: 'paymentIntent';
+  abi: typeof paymentReceiverAbi;
+  functionName: 'payIntent';
   args: [Hash];
   value: bigint;
   address: Address;
@@ -27,12 +27,11 @@ export const usePaymentIntent = () => {
 
   const paymentIntent = useCallback(
     async (amount: bigint) => {
-      console.log('Creating intent');
       const intentId: string = await api.createIntent();
 
       return {
-        abi: paymentIntentAbi,
-        functionName: 'paymentIntent',
+        abi: paymentReceiverAbi,
+        functionName: 'payIntent',
         args: [intentId as Hash],
         value: amount,
         address: targetContract,
