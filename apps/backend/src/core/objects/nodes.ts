@@ -269,6 +269,34 @@ const ensureObjectPublished = async (cid: string): Promise<void> => {
   await OnchainPublisher.publishNodes(nodes.map((node) => node.cid))
 }
 
+const handleRepeatedNodes = async (nodes: Node[]): Promise<void> => {
+  logger.info(
+    'Handling repeated nodes (cids=%s)',
+    nodes.map((node) => node.cid).join(', '),
+  )
+
+  const nodesWithBlockchainData = await Promise.all(
+    nodes.map((node) => nodesRepository.getNodeBlockchainData(node.cid)),
+  ).then((e) => e.filter((e) => e !== undefined).map((e) => e!))
+
+  const nodeBlockchainDataMap = new Map(
+    nodesWithBlockchainData.map((e) => [e.cid, e]),
+  )
+
+  const updatedNodes = nodes.map((node) => {
+    const nodeBlockchainData = nodeBlockchainDataMap.get(node.cid)
+    if (!nodeBlockchainData) return node
+
+    return { ...node, ...nodeBlockchainData }
+  })
+
+  await Promise.all(
+    updatedNodes.map((node) =>
+      nodesRepository.updateNodeBlockchainData(node.root_cid, node.cid, node),
+    ),
+  )
+}
+
 export const NodesUseCases = {
   getNode,
   saveNode,
@@ -281,4 +309,5 @@ export const NodesUseCases = {
   scheduleNodeArchiving,
   setPublishedOn,
   ensureObjectPublished,
+  handleRepeatedNodes,
 }
