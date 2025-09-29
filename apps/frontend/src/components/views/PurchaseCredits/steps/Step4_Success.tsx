@@ -3,7 +3,6 @@
 import { Button, Card, ROUTES } from '@auto-drive/ui';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
-import { useNetwork } from '@/contexts/network';
 import { usePrices } from '../../../../hooks/usePrices';
 import { shortenString } from '../../../../utils/misc';
 
@@ -12,9 +11,10 @@ export const PurchaseStep4Success = ({
 }: {
   context: Record<string, unknown>;
 }) => {
-  const { network } = useNetwork();
-
   const { formatCreditsAsAi3 } = usePrices();
+
+  const sizeMB = context.sizeMB as number;
+
   return (
     <div className='flex flex-col gap-4'>
       <Section title='Payment Successful!'>
@@ -25,7 +25,7 @@ export const PurchaseStep4Success = ({
                 <InfoRow
                   className='items-center font-bold'
                   label='Storage Added'
-                  value={<span>1GB</span>}
+                  value={<span>{sizeMB}MB</span>}
                 />
                 <InfoRow
                   label='AI3 Paid'
