@@ -78,7 +78,7 @@ export const usePrices = () => {
       if (typeof shannonsPerByte === 'undefined') {
         return 0;
       }
-      return ai3 / shannonsPerByte;
+      return (10 ** 18 * ai3) / shannonsPerByte;
     },
     [shannonsPerByte],
   );
@@ -88,7 +88,7 @@ export const usePrices = () => {
       if (typeof shannonsPerByte === 'undefined') {
         return 0;
       }
-      return ai3 / (shannonsPerByte * BYTES_PER_MB);
+      return (10 ** 18 * ai3) / (shannonsPerByte * BYTES_PER_MB);
     },
     [shannonsPerByte],
   );
