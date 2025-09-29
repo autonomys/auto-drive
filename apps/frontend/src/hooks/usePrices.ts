@@ -108,6 +108,17 @@ export const usePrices = () => {
     [shannonsPerByte],
   );
 
+  const formatCreditsInMbAsValue = useCallback(
+    (creditsInMb: number): bigint => {
+      if (typeof shannonsPerByte === 'undefined') {
+        return BigInt(0);
+      }
+
+      return BigInt(creditsInMb * BYTES_PER_MB) * BigInt(shannonsPerByte);
+    },
+    [shannonsPerByte],
+  );
+
   return {
     shannonsPerByte,
     usdPerAi3,
@@ -117,6 +128,7 @@ export const usePrices = () => {
     formatAi3AsCredits,
     formatCreditsInMbAsAi3,
     formatCreditsInMbAsUsd,
+    formatCreditsInMbAsValue,
     formatAi3AsCreditsInMb,
   };
 };

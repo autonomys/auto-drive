@@ -28,7 +28,7 @@ export const PurchaseStep3TransferTokens = ({
   void onBack;
   const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const { formatCreditsInMbAsAi3 } = usePrices();
+  const { formatCreditsInMbAsValue, formatCreditsInMbAsAi3 } = usePrices();
   const [intentId, setIntentId] = useState<string | undefined>(undefined);
 
   const { paymentIntent, targetContract } = usePaymentIntent();
@@ -67,17 +67,18 @@ export const PurchaseStep3TransferTokens = ({
   const handleSend = useCallback(async () => {
     try {
       const depositTransaction = await paymentIntent(
-        BigInt(formatCreditsInMbAsAi3(Number(context.sizeMB))),
+        formatCreditsInMbAsValue(Number(context.sizeMB)),
       );
       const hash = await writeContractAsync(depositTransaction);
       setIntentId(depositTransaction.intentId);
       setTxHash(hash);
-    } catch {
+    } catch (error) {
+      console.error('Error sending payment intent', error);
       // no-op; UI will surface writeError via wagmi
     }
   }, [
     paymentIntent,
-    formatCreditsInMbAsAi3,
+    formatCreditsInMbAsValue,
     context.sizeMB,
     writeContractAsync,
   ]);
