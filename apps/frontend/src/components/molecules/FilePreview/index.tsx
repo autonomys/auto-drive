@@ -34,8 +34,6 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       case AutoDriveNetworkId.LOCAL:
       case AutoDriveNetworkId.MAINNET:
         return AutoUtilsNetworkId.MAINNET;
-      case AutoDriveNetworkId.TAURUS:
-        return AutoUtilsNetworkId.TAURUS;
       default:
         return AutoUtilsNetworkId.MAINNET;
     }
