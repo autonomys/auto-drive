@@ -34,6 +34,7 @@ const getTargetQueueByTask = (task: Task) => {
   switch (task.id) {
     case 'async-download-created':
     case 'object-archived':
+    case 'populate-cache':
       return 'download-manager'
     default:
       return 'task-manager'
