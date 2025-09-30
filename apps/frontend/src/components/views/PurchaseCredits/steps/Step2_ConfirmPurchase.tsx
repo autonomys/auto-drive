@@ -8,6 +8,7 @@ import { Zap } from 'lucide-react';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
 import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
+import { truncateNumberWithDecimals } from '../../../../utils/number';
 
 export const PurchaseStep2ConnectWallet = ({
   onNext,
@@ -64,7 +65,10 @@ export const PurchaseStep2ConnectWallet = ({
 
   const onChangeAi3 = useCallback(
     (value: string) => {
-      const mb = formatAi3AsCreditsInMb(Number(value));
+      const mb = truncateNumberWithDecimals(
+        formatAi3AsCreditsInMb(Number(value)),
+        2,
+      );
       onContextChange({ sizeMB: mb });
     },
     [formatAi3AsCreditsInMb, onContextChange],

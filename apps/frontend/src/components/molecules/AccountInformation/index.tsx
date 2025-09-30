@@ -24,9 +24,10 @@ export const AccountInformation = ({
       <div className='text-xs text-muted-foreground'>Upload usage</div>
       <div className='space-y-1'>
         <div className='flex justify-between text-xs'>
-          <span>{bytes(uploadPending)} left</span>
+          <span>{bytes(uploadPending, { decimalPlaces: 3 })} left</span>
           <span className='text-muted-foreground'>
-            {bytes(uploadUsed)}/{bytes(uploadLimit)}
+            {bytes(uploadUsed, { decimalPlaces: 3 })}/
+            {bytes(uploadLimit, { decimalPlaces: 3 })}
           </span>
         </div>
         <div className='h-1.5 w-full rounded-full bg-muted'>
