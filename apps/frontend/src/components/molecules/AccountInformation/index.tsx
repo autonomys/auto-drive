@@ -1,4 +1,4 @@
-import bytes from 'bytes';
+import { truncateBytes } from '../../../utils/number';
 import { utcToLocalRelativeTime } from '../../../utils/time';
 import { SubscriptionGranularity } from '@auto-drive/models';
 
@@ -19,16 +19,14 @@ export const AccountInformation = ({
 
   const uploadPercentage = (uploadUsed / uploadLimit) * 100;
 
-
   return (
     <div className='space-y-2'>
       <div className='text-xs text-muted-foreground'>Upload usage</div>
       <div className='space-y-1'>
         <div className='flex justify-between text-xs'>
-          <span>{bytes(uploadPending, { decimalPlaces: 3 })} left</span>
+          <span>{truncateBytes(uploadPending)} left</span>
           <span className='text-muted-foreground'>
-            {bytes(uploadUsed, { decimalPlaces: 3 })}/
-            {bytes(uploadLimit, { decimalPlaces: 3 })}
+            {truncateBytes(uploadUsed)}/{truncateBytes(uploadLimit)}
           </span>
         </div>
         <div className='h-1.5 w-full rounded-full bg-muted'>
