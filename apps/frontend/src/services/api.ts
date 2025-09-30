@@ -87,7 +87,7 @@ export const createApiService = ({
 
     return response.json() as Promise<Intent>;
   },
-  getSubscription: async (): Promise<AccountInfo> => {
+  getAccount: async (): Promise<AccountInfo> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');

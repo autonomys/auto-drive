@@ -23,7 +23,7 @@ export type SideNavbarProps = {
 
 export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const { user, account: subscription } = useUserStore();
+  const { user, account } = useUserStore();
   const { state } = useSidebar();
 
   const session = useContext(SessionContext);
@@ -78,13 +78,13 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
       <SidebarFooter className='p-4'>
         {isLoggedIn && (
           <AccountInformation
-            granularity={subscription?.model ?? AccountModel.OneOff}
+            granularity={account?.model ?? AccountModel.OneOff}
             renewalDate={renewalDate}
-            uploadLimit={subscription?.uploadLimit ?? 0}
-            uploadPending={subscription?.pendingUploadCredits ?? 0}
+            uploadLimit={account?.uploadLimit ?? 0}
+            uploadPending={account?.pendingUploadCredits ?? 0}
           />
         )}
-        {isLoggedIn && subscription ? (
+        {isLoggedIn && account ? (
           <AskForCreditsButton />
         ) : (
           <Button

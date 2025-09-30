@@ -465,10 +465,10 @@ const downloadPublishedObject = async (
   const user = await AuthManager.getUserFromPublicId(publishedObject.publicId)
   if (!user) {
     logger.warn(
-      'User not found or has no subscription (publicId=%s)',
+      'User not found or has no account (publicId=%s)',
       publishedObject.publicId,
     )
-    return err(new ObjectNotFoundError('User does not have a subscription'))
+    return err(new ObjectNotFoundError('User does not have a account'))
   }
 
   logger.trace(

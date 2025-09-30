@@ -23,18 +23,18 @@ accountController.get(
       return
     }
 
-    const subscriptionInfo = await handleInternalError(
-      AccountsUseCases.getSubscriptionInfo(user),
-      'Failed to get subscription info',
+    const accountInfo = await handleInternalError(
+      AccountsUseCases.getAccountInfo(user),
+      'Failed to get account info',
     )
-    if (subscriptionInfo.isErr()) {
-      logger.error('Failed to get subscription info', subscriptionInfo.error)
-      handleError(subscriptionInfo.error, res)
+    if (accountInfo.isErr()) {
+      logger.error('Failed to get account info', accountInfo.error)
+      handleError(accountInfo.error, res)
       return
     }
 
-    logger.trace('Subscription info', subscriptionInfo.value)
-    res.json(subscriptionInfo.value)
+    logger.trace('account info', accountInfo.value)
+    res.json(accountInfo.value)
   }),
 )
 
@@ -51,21 +51,18 @@ accountController.post(
       return
     }
 
-    const subscriptionByPublicId = await handleInternalError(
+    const accountByPublicId = await handleInternalError(
       AccountsUseCases.getUserListAccount(req.body.userPublicIds),
       'Failed to get user list accounts',
     )
-    if (subscriptionByPublicId.isErr()) {
-      logger.error(
-        'Failed to get user list accounts',
-        subscriptionByPublicId.error,
-      )
-      handleError(subscriptionByPublicId.error, res)
+    if (accountByPublicId.isErr()) {
+      logger.error('Failed to get user list accounts', accountByPublicId.error)
+      handleError(accountByPublicId.error, res)
       return
     }
 
-    logger.trace('User list accounts', subscriptionByPublicId.value)
-    res.json(subscriptionByPublicId.value)
+    logger.trace('User list accounts', accountByPublicId.value)
+    res.json(accountByPublicId.value)
   }),
 )
 
@@ -116,15 +113,15 @@ accountController.post(
         uploadLimit,
         downloadLimit,
       ),
-      'Failed to update subscription',
+      'Failed to update account',
     )
     if (updateResult.isErr()) {
-      logger.error('Failed to update subscription', updateResult.error)
+      logger.error('Failed to update account', updateResult.error)
       handleError(updateResult.error, res)
       return
     }
 
-    logger.debug('Subscription updated', updateResult.value)
+    logger.debug('Account updated', updateResult.value)
     res.json(updateResult.value)
   }),
 )

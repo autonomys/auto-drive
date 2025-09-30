@@ -55,7 +55,7 @@ export type MaybeUserWithOrganization =
 
 export type UserInfo = {
   user: MaybeUser;
-  subscription: AccountInfo;
+  accountInfo: AccountInfo;
 };
 
 export const userFromOAuth = (

@@ -9,14 +9,14 @@ export const accounts = {
         servers: autoDriveServers,
         responses: {
           '200': {
-            description: 'Successfully retrieved subscription information',
+            description: 'Successfully retrieved account information',
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
                   properties: {
-                    subscription: {
-                      $ref: '#/components/schemas/SubscriptionInfo',
+                    account: {
+                      $ref: '#/components/schemas/AccountInfo',
                     },
                   },
                   required: [
@@ -44,14 +44,14 @@ export const accounts = {
   },
   components: {
     schemas: {
-      SubscriptionInfo: {
+      AccountInfo: {
         type: 'object',
         properties: {
           id: { type: 'string' },
           organizationId: { type: 'string' },
           uploadLimit: { type: 'number' },
           downloadLimit: { type: 'number' },
-          granularity: {
+          module: {
             type: 'string',
             enum: ['monthly', 'one_off'],
           },

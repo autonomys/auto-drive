@@ -1,7 +1,7 @@
 'use client';
 
 import { AuthService } from 'services/auth/auth';
-import { UserSubscriptionsTable } from '../../organisms/UserTable';
+import { UserAccountsTable } from '../../organisms/UserTable';
 import { useCallback, useEffect, useState } from 'react';
 import {
   OnboardedUser,
@@ -12,7 +12,7 @@ import { useNetwork } from 'contexts/network';
 import { Button } from '@auto-drive/ui';
 
 export const AdminPanel = () => {
-  const [subscriptionsWithUsers, setSubscriptionsWithUsers] = useState<
+  const [accountsWithUsers, setAccountsWithUsers] = useState<
     AccountInfoWithUser[]
   >([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -32,25 +32,25 @@ export const AdminPanel = () => {
       if (result.rows.length > 0) {
         setTotalCount(result.totalCount);
 
-        // Get all public IDs from users to fetch their subscriptions
+        // Get all public IDs from users to fetch their accounts
         const publicIds = result.rows.map((user) => user.publicId);
 
-        const subscriptionsByPublicId =
-          await network?.api.getUserList(publicIds);
-        if (subscriptionsByPublicId) {
-          const subscriptions = Object.entries(subscriptionsByPublicId);
-          const subscriptionsWithUsers: AccountInfoWithUser[] =
-            subscriptions.map(([publicId, subscription]) => ({
-              ...subscription,
-              pendingUploadCredits: subscription.pendingUploadCredits || 0,
-              pendingDownloadCredits: subscription.pendingDownloadCredits || 0,
+        const accountsByPublicId = await network?.api.getUserList(publicIds);
+        if (accountsByPublicId) {
+          const accounts = Object.entries(accountsByPublicId);
+          const accountsWithUsers: AccountInfoWithUser[] = accounts.map(
+            ([publicId, account]) => ({
+              ...account,
+              pendingUploadCredits: account.pendingUploadCredits || 0,
+              pendingDownloadCredits: account.pendingDownloadCredits || 0,
               user: result.rows.find((user) => user.publicId === publicId)!,
-            }));
+            }),
+          );
 
-          setSubscriptionsWithUsers(subscriptionsWithUsers);
+          setAccountsWithUsers(accountsWithUsers);
         }
       } else {
-        setSubscriptionsWithUsers([]);
+        setAccountsWithUsers([]);
       }
     } catch (error) {
       console.error('Error fetching user list:', error);
@@ -77,31 +77,31 @@ export const AdminPanel = () => {
 
       if (user) {
         const publicIds = [user.publicId];
-        const subscriptionsByPublicId =
-          await network?.api.getUserList(publicIds);
+        const accountsByPublicId = await network?.api.getUserList(publicIds);
 
-        if (subscriptionsByPublicId) {
-          const subscriptions = Object.values(subscriptionsByPublicId);
-          const subscriptionsWithUsers: AccountInfoWithUser[] =
-            subscriptions.map((subscription) => ({
-              ...subscription,
-              pendingUploadCredits: subscription.pendingUploadCredits || 0,
-              pendingDownloadCredits: subscription.pendingDownloadCredits || 0,
+        if (accountsByPublicId) {
+          const accounts = Object.values(accountsByPublicId);
+          const accountsWithUsers: AccountInfoWithUser[] = accounts.map(
+            (account) => ({
+              ...account,
+              pendingUploadCredits: account.pendingUploadCredits || 0,
+              pendingDownloadCredits: account.pendingDownloadCredits || 0,
               user: user,
-            }));
+            }),
+          );
 
-          setSubscriptionsWithUsers(subscriptionsWithUsers);
+          setAccountsWithUsers(accountsWithUsers);
           setTotalCount(1);
         } else {
-          // If no subscription data, still show the user
-          setSubscriptionsWithUsers([]);
+          // If no account data, still show the user
+          setAccountsWithUsers([]);
           setTotalCount(0);
         }
       }
     } catch (error) {
       console.error('Error searching for user:', error);
       setSearchError('User not found');
-      setSubscriptionsWithUsers([]);
+      setAccountsWithUsers([]);
     } finally {
       setIsSearching(false);
     }
@@ -166,8 +166,8 @@ export const AdminPanel = () => {
       </div>
 
       <div className='flex flex-col gap-2'>
-        <UserSubscriptionsTable
-          users={subscriptionsWithUsers}
+        <UserAccountsTable
+          users={accountsWithUsers}
           currentPage={currentPage}
           totalPages={totalPages}
           itemsPerPage={itemsPerPage}

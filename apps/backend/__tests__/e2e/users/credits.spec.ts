@@ -17,7 +17,7 @@ describe('CreditsUseCases', () => {
     await getDatabase()
     await dbMigration.up()
     mockUser = createMockUser()
-    const result = await AccountsUseCases.getOrCreateSubscription(mockUser)
+    const result = await AccountsUseCases.getOrCreateAccount(mockUser)
     if (!result) throw new PreconditionError('Failed to setup test user')
   })
 

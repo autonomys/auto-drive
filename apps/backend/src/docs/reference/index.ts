@@ -41,7 +41,7 @@ The Storage Service handles all file operations including uploads, downloads, an
 - File uploads (single and multipart)
 - Object metadata management
 - Access control and permissions
-- Subscription management
+- Account management
 
 ### 2. Auto-Drive Download Gateway
 

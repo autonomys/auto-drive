@@ -31,13 +31,13 @@ const createMetric = (type: InteractionType, size: bigint): Metric => {
 }
 
 const createInteraction = async (
-  subscriptionId: string,
+  accountId: string,
   type: InteractionType,
   size: bigint,
 ): Promise<void> => {
   logger.debug(
-    'Creating new interaction (subscriptionId=%s, type=%s, size=%d)',
-    subscriptionId,
+    'Creating new interaction (accountId=%s, type=%s, size=%d)',
+    accountId,
     type,
     size,
   )
@@ -54,20 +54,20 @@ const createInteraction = async (
     const interactionId = v4()
     await interactionsRepository.createInteraction(
       interactionId,
-      subscriptionId,
+      accountId,
       type,
       size,
     )
     logger.info(
-      'Interaction created successfully (id=%s, subscriptionId=%s, type=%s)',
+      'Interaction created successfully (id=%s, accountId=%s, type=%s)',
       interactionId,
-      subscriptionId,
+      accountId,
       type,
     )
   } catch (error) {
     logger.error(
-      'Failed to create interaction (subscriptionId=%s, type=%s): %s',
-      subscriptionId,
+      'Failed to create interaction (accountId=%s, type=%s): %s',
+      accountId,
       type,
       error,
     )

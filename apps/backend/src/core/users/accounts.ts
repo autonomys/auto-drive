@@ -35,15 +35,15 @@ const updateAccount = async (
     return err(new ObjectNotFoundError('User has no organization ID'))
   }
 
-  const subscription = await accountsRepository.getByOrganizationId(
+  const account = await accountsRepository.getByOrganizationId(
     user.organizationId,
   )
-  if (!subscription) {
-    return err(new ObjectNotFoundError('Subscription not found'))
+  if (!account) {
+    return err(new ObjectNotFoundError('Account not found'))
   }
 
-  await accountsRepository.updateSubscription(
-    subscription.id,
+  await accountsRepository.updateAccount(
+    account.id,
     granularity,
     uploadLimit,
     downloadLimit,
@@ -52,82 +52,81 @@ const updateAccount = async (
   return ok()
 }
 
-const getOrCreateSubscription = async (
+const getOrCreateAccount = async (
   user: UserWithOrganization,
 ): Promise<Account> => {
   if (!user.organizationId) {
     throw new Error('User organization ID is required')
   }
 
-  const subscription = await accountsRepository.getByOrganizationId(
+  const account = await accountsRepository.getByOrganizationId(
     user.organizationId,
   )
-  if (!subscription) {
+  if (!account) {
     const isWeb3User = user.oauthProvider === 'web3-wallet'
     if (isWeb3User) {
-      return initSubscription(
+      return initAccount(
         user.organizationId,
-        config.params.web3DefaultSubscription.uploadLimit,
-        config.params.web3DefaultSubscription.downloadLimit,
+        config.params.web3DefaultAccount.uploadLimit,
+        config.params.web3DefaultAccount.downloadLimit,
       )
     } else {
-      return initSubscription(
+      return initAccount(
         user.organizationId,
-        config.params.defaultSubscription.uploadLimit,
-        config.params.defaultSubscription.downloadLimit,
+        config.params.defaultAccount.uploadLimit,
+        config.params.defaultAccount.downloadLimit,
       )
     }
   }
 
-  return subscription
+  return account
 }
 
-const getSubscriptionById = async (id: string): Promise<Account | null> => {
+const getAccountById = async (id: string): Promise<Account | null> => {
   return accountsRepository.getById(id)
 }
 
-const initSubscription = async (
+const initAccount = async (
   organizationId: string,
   uploadLimit: number,
   downloadLimit: number,
 ): Promise<Account> => {
-  const subscription =
-    await accountsRepository.getByOrganizationId(organizationId)
-  if (subscription) {
-    throw new Error('Subscription already exists')
+  const account = await accountsRepository.getByOrganizationId(organizationId)
+  if (account) {
+    throw new Error('Account already exists')
   }
 
-  const newSubscription = {
+  const newAccount = {
     id: v4(),
     organizationId,
-    model: config.params.defaultSubscription.granularity as AccountModel,
+    model: config.params.defaultAccount.granularity as AccountModel,
     uploadLimit,
     downloadLimit,
   }
-  await accountsRepository.createSubscription(
-    newSubscription.id,
+  await accountsRepository.createAccount(
+    newAccount.id,
     organizationId,
-    newSubscription.model,
-    newSubscription.uploadLimit,
-    newSubscription.downloadLimit,
+    newAccount.model,
+    newAccount.uploadLimit,
+    newAccount.downloadLimit,
   )
 
-  return newSubscription
+  return newAccount
 }
 
-const getPendingCreditsBySubscriptionAndType = async (
-  subscription: Account,
+const getPendingCreditsByAccountAndType = async (
+  account: Account,
   type: InteractionType,
 ): Promise<number> => {
   const end = new Date()
   const start =
-    subscription.model === AccountModel.Monthly
+    account.model === AccountModel.Monthly
       ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
       : new Date(0)
 
   const interactions =
-    await interactionsRepository.getInteractionsBySubscriptionIdAndTypeInTimeRange(
-      subscription.id,
+    await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
+      account.id,
       type,
       start,
       end,
@@ -139,28 +138,28 @@ const getPendingCreditsBySubscriptionAndType = async (
 
   const limit =
     type === InteractionType.Upload
-      ? subscription.uploadLimit
-      : subscription.downloadLimit
+      ? account.uploadLimit
+      : account.downloadLimit
 
   return limit - spentCredits
 }
 
-const getSubscriptionInfo = async (
+const getAccountInfo = async (
   user: UserWithOrganization,
 ): Promise<AccountInfo> => {
-  const subscription = await getOrCreateSubscription(user)
+  const account = await getOrCreateAccount(user)
 
-  const pendingUploadCredits = await getPendingCreditsBySubscriptionAndType(
-    subscription,
+  const pendingUploadCredits = await getPendingCreditsByAccountAndType(
+    account,
     InteractionType.Upload,
   )
-  const pendingDownloadCredits = await getPendingCreditsBySubscriptionAndType(
-    subscription,
+  const pendingDownloadCredits = await getPendingCreditsByAccountAndType(
+    account,
     InteractionType.Download,
   )
 
   return {
-    ...subscription,
+    ...account,
     pendingUploadCredits,
     pendingDownloadCredits,
   }
@@ -173,7 +172,7 @@ const getUserListAccount = async (
     await Promise.all(
       userPublicIds.map(async (userPublicId) => {
         const user = await AuthManager.getUserFromPublicId(userPublicId)
-        return [userPublicId, await getSubscriptionInfo(user)]
+        return [userPublicId, await getAccountInfo(user)]
       }),
     ),
   )
@@ -183,9 +182,9 @@ const getPendingCreditsByUserAndType = async (
   user: UserWithOrganization,
   type: InteractionType,
 ): Promise<number> => {
-  const subscription = await getOrCreateSubscription(user)
+  const account = await getOrCreateAccount(user)
 
-  return getPendingCreditsBySubscriptionAndType(subscription, type)
+  return getPendingCreditsByAccountAndType(account, type)
 }
 
 const registerInteraction = async (
@@ -193,19 +192,19 @@ const registerInteraction = async (
   type: InteractionType,
   size: bigint,
 ) => {
-  const subscription = await getOrCreateSubscription(user)
+  const account = await getOrCreateAccount(user)
 
-  await InteractionsUseCases.createInteraction(subscription.id, type, size)
+  await InteractionsUseCases.createInteraction(account.id, type, size)
 }
 
 export const AccountsUseCases = {
   updateAccount,
-  getOrCreateSubscription,
-  initSubscription,
-  getPendingCreditsBySubscriptionAndType,
-  getSubscriptionInfo,
+  getOrCreateAccount,
+  initAccount,
+  getPendingCreditsByAccountAndType,
+  getAccountInfo,
   getPendingCreditsByUserAndType,
   registerInteraction,
   getUserListAccount,
-  getSubscriptionById,
+  getAccountById,
 }

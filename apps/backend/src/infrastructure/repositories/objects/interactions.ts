@@ -38,7 +38,7 @@ const createInteraction = async (
   return mapRows(interaction.rows)[0]
 }
 
-const getInteractionsBySubscriptionIdAndTypeInTimeRange = async (
+const getInteractionsByAccountIdAndTypeInTimeRange = async (
   subscriptionId: string,
   type: InteractionType,
   start: Date,
@@ -56,5 +56,5 @@ const getInteractionsBySubscriptionIdAndTypeInTimeRange = async (
 
 export const interactionsRepository = {
   createInteraction,
-  getInteractionsBySubscriptionIdAndTypeInTimeRange,
+  getInteractionsByAccountIdAndTypeInTimeRange,
 }

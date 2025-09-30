@@ -65,24 +65,21 @@ export const config = {
       env('MAX_ANONYMOUS_DOWNLOAD_SIZE', ONE_HUNDRED_MiB.toString()),
     ),
     optionalAuth: env('OPTIONAL_AUTH', 'false') === 'true',
-    defaultSubscription: {
-      granularity: env('DEFAULT_SUBSCRIPTION_GRANULARITY', AccountModel.OneOff),
+    defaultAccount: {
+      granularity: env('DEFAULT_ACCOUNT_MODE', AccountModel.OneOff),
       uploadLimit: Number(
-        env('DEFAULT_SUBSCRIPTION_UPLOAD_LIMIT', ONE_HUNDRED_MiB.toString()),
+        env('DEFAULT_ACCOUNT_UPLOAD_LIMIT', ONE_HUNDRED_MiB.toString()),
       ),
       downloadLimit: Number(
-        env('DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT', FIVE_GiB.toString()),
+        env('DEFAULT_ACCOUNT_DOWNLOAD_LIMIT', FIVE_GiB.toString()),
       ),
     },
-    web3DefaultSubscription: {
+    web3DefaultAccount: {
       uploadLimit: Number(
-        env('WEB3_DEFAULT_SUBSCRIPTION_UPLOAD_LIMIT', ONE_MiB.toString()),
+        env('WEB3_DEFAULT_ACCOUNT_UPLOAD_LIMIT', ONE_MiB.toString()),
       ),
       downloadLimit: Number(
-        env(
-          'WEB3_DEFAULT_SUBSCRIPTION_DOWNLOAD_LIMIT',
-          ONE_HUNDRED_MiB.toString(),
-        ),
+        env('WEB3_DEFAULT_ACCOUNT_DOWNLOAD_LIMIT', ONE_HUNDRED_MiB.toString()),
       ),
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),

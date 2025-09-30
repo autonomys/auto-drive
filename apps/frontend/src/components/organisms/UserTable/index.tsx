@@ -15,7 +15,7 @@ import {
 } from '@/components/molecules/Table/TableHead';
 import { ChevronLeft, ChevronRight, Loader } from 'lucide-react';
 
-interface UserSubscriptionsTableProps {
+interface UserAccountsTableProps {
   users: AccountInfoWithUser[] | undefined;
   currentPage: number;
   totalPages: number;
@@ -24,14 +24,14 @@ interface UserSubscriptionsTableProps {
   onItemsPerPageChange: (items: number) => void;
 }
 
-export const UserSubscriptionsTable = ({
+export const UserAccountsTable = ({
   users,
   currentPage,
   totalPages,
   itemsPerPage,
   onPageChange,
   onItemsPerPageChange,
-}: UserSubscriptionsTableProps) => {
+}: UserAccountsTableProps) => {
   return (
     <div>
       <div className='-my-2 sm:-mx-6 lg:-mx-8'>

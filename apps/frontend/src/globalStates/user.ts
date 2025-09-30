@@ -7,7 +7,7 @@ interface UserStore {
   account: AccountInfo | null;
   setUser: (user: User | null) => void;
   clearUser: () => void;
-  setAccount: (subscriptionInfo: AccountInfo) => void;
+  setAccount: (accountInfo: AccountInfo) => void;
 }
 
 export const useUserStore = create<UserStore>()(
