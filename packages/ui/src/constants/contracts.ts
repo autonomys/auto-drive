@@ -2,7 +2,9 @@ import { Address } from "viem";
 import { NetworkId } from "./networks";
 
 export const paymentReceiverContractsByNetworkId: Record<NetworkId, Address> = {
+  // TODO: remove taurus
   [NetworkId.TAURUS]: "0x0000000000000000000000000000000000000000",
+  // TODO: deploy contract
   [NetworkId.MAINNET]: "0x0000000000000000000000000000000000000000",
   [NetworkId.LOCAL]: "0x27974e12c9821C7cc453a67d82fb4a76019b1d8D",
 };
