@@ -4,7 +4,7 @@ import { firstNonNull } from "./utils";
 import { ApiPatternByNetwork, config } from "./config";
 
 export const getFileNetwork = async (cid: string) => {
-  const networks = [NetworkId.MAINNET, NetworkId.TAURUS] as const;
+  const networks = [NetworkId.MAINNET] as const;
 
   // Create reusable API instances to avoid memory leaks
   const apiInstances = {
