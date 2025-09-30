@@ -11,8 +11,8 @@ export const evmChains: Record<NetworkId, Chain> = {
     id: 870,
     name: "Mainnet",
     nativeCurrency: {
-      name: "Ethereum",
-      symbol: "ETH",
+      name: "AI3",
+      symbol: "AI3",
       decimals: 18,
     },
     rpcUrls: {
