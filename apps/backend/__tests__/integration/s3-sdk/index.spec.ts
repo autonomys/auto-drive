@@ -38,7 +38,7 @@ describe('AWS S3 - SDK', () => {
 
     mockRabbitPublish()
     // onboard the user
-    await AccountsUseCases.getOrCreateSubscription(user)
+    await AccountsUseCases.getOrCreateAccount(user)
 
     // mock auth manager returning the mock user
     jest.spyOn(AuthManager, 'getUserFromAccessToken').mockResolvedValue(user)

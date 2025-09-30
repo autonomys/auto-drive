@@ -275,9 +275,9 @@ files.map((file, index) => {
       })
 
       it('should have been added an interaction', async () => {
-        const { id } = await AccountsUseCases.getSubscriptionInfo(user)
+        const { id } = await AccountsUseCases.getAccountInfo(user)
         const interactions =
-          await interactionsRepository.getInteractionsBySubscriptionIdAndTypeInTimeRange(
+          await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
             id,
             InteractionType.Download,
             new Date(0),
