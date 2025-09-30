@@ -13,7 +13,7 @@ import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
 import { SessionContext } from 'next-auth/react';
 import { AuthModal } from '../../molecules/AuthModal';
-import { BuyMoreCreditsButton } from '../../atoms/AskForCredits';
+import { BuyMoreCreditsButton } from '../../atoms/BuyMoreCreditsButton';
 import { SIDEBAR_DEFINITION } from './items';
 import { SideNavBarContent } from './SideNavBarContent';
 

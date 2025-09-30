@@ -3,6 +3,7 @@
 import { Button, Card, cn } from '@auto-drive/ui';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
 import { usePrices } from '../../../../hooks/usePrices';
+import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 
 type PackageOption = {
   id: string;
@@ -54,6 +55,8 @@ export const PurchaseStep1SelectPackage = ({
   context: Record<string, unknown>;
 }) => {
   const { formatCreditsInMbAsAi3, formatCreditsInMbAsUsd } = usePrices();
+
+  const { MINIMUM_CONFIRMATIONS } = usePaymentIntent();
 
   const CheckIcon = () => (
     <svg
@@ -177,8 +180,8 @@ export const PurchaseStep1SelectPackage = ({
               <div>
                 <div className='font-medium'>Instant Credits</div>
                 <div className='text-sm text-muted-foreground'>
-                  Once transaction is confirmed (12 confirmations) you will
-                  receive your credits
+                  Once transaction is confirmed ({MINIMUM_CONFIRMATIONS}{' '}
+                  confirmations) you will receive your credits
                 </div>
               </div>
             </div>

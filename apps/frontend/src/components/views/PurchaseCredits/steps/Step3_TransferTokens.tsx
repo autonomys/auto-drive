@@ -27,12 +27,12 @@ export const PurchaseStep3TransferTokens = ({
   const { formatCreditsInMbAsValue, formatCreditsInMbAsAi3 } = usePrices();
   const [intentId, setIntentId] = useState<string | undefined>(undefined);
 
-  const { paymentIntent, targetContract } = usePaymentIntent();
+  const { paymentIntent, targetContract, MINIMUM_CONFIRMATIONS } =
+    usePaymentIntent();
   const { api } = useNetwork();
 
   const [txHash, setTxHash] = useState<Hash | undefined>(undefined);
 
-  const requiredConfirmations = 12;
   const {
     isWaitingReceipt,
     isConfirmed,
@@ -43,7 +43,7 @@ export const PurchaseStep3TransferTokens = ({
     waitError,
   } = useTransactionConfirmation({
     txHash,
-    requiredConfirmations,
+    requiredConfirmations: MINIMUM_CONFIRMATIONS,
     api,
     intentId,
   });
@@ -158,7 +158,7 @@ export const PurchaseStep3TransferTokens = ({
               </div>
               {isConfirmed && (
                 <div className='text-xs text-muted-foreground'>
-                  {currentConfs}/{requiredConfirmations} confirmations
+                  {currentConfs}/{MINIMUM_CONFIRMATIONS} confirmations
                 </div>
               )}
               {isConfirmed && (
@@ -170,7 +170,7 @@ export const PurchaseStep3TransferTokens = ({
                         width: `${Math.min(
                           100,
                           Math.floor(
-                            (currentConfs / requiredConfirmations) * 100,
+                            (currentConfs / MINIMUM_CONFIRMATIONS) * 100,
                           ),
                         )}%`,
                       }}

@@ -25,6 +25,8 @@ export const usePaymentIntent = () => {
     [network.id],
   );
 
+  const MINIMUM_CONFIRMATIONS = 12;
+
   const paymentIntent = useCallback(
     async (amount: bigint) => {
       const intentId: string = await api.createIntent();
@@ -42,5 +44,5 @@ export const usePaymentIntent = () => {
     [api, network.id, targetContract],
   );
 
-  return { paymentIntent, targetContract };
+  return { paymentIntent, targetContract, MINIMUM_CONFIRMATIONS };
 };

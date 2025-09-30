@@ -19,6 +19,7 @@ export const AccountInformation = ({
 
   const uploadPercentage = (uploadUsed / uploadLimit) * 100;
 
+
   return (
     <div className='space-y-2'>
       <div className='text-xs text-muted-foreground'>Upload usage</div>
