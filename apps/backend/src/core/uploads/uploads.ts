@@ -370,6 +370,16 @@ const tagUpload = async (
   return ok()
 }
 
+const scheduleCachePopulation = async (cid: string): Promise<void> => {
+  const tasks: Task[] = [
+    createTask({
+      id: 'populate-cache',
+      params: { cid },
+    }),
+  ]
+  EventRouter.publish(tasks)
+}
+
 const processMigration = async (uploadId: string): Promise<void> => {
   logger.debug('processMigration invoked (uploadId=%s)', uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
@@ -383,6 +393,7 @@ const processMigration = async (uploadId: string): Promise<void> => {
 
   await removeUploadArtifacts(uploadId)
   await scheduleUploadTagging(cidToString(cid))
+  await scheduleCachePopulation(cidToString(cid))
 }
 
 export const UploadsUseCases = {
