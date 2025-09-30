@@ -27,6 +27,7 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { Node } from '../../infrastructure/repositories/objects/nodes.js'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { createTask, Task } from '../../infrastructure/eventRouter/tasks.js'
+import { OnchainPublisher } from '../../infrastructure/services/upload/onchainPublisher/index.js'
 
 const logger = createLogger('useCases:objects:nodes')
 
@@ -259,6 +260,43 @@ const setPublishedOn = async (
   return
 }
 
+const ensureObjectPublished = async (cid: string): Promise<void> => {
+  const nodes = await nodesRepository.getNodesByRootCid(cid)
+  if (nodes.length === 0) {
+    throw new Error(`Nodes not found for ${cid}`)
+  }
+
+  await OnchainPublisher.publishNodes(nodes.map((node) => node.cid))
+}
+
+const handleRepeatedNodes = async (nodes: Node[]): Promise<void> => {
+  logger.info(
+    'Handling repeated nodes (cids=%s)',
+    nodes.map((node) => node.cid).join(', '),
+  )
+
+  const nodesWithBlockchainData = await Promise.all(
+    nodes.map((node) => nodesRepository.getNodeBlockchainData(node.cid)),
+  ).then((e) => e.filter((e) => e !== undefined).map((e) => e!))
+
+  const nodeBlockchainDataMap = new Map(
+    nodesWithBlockchainData.map((e) => [e.cid, e]),
+  )
+
+  const updatedNodes = nodes.map((node) => {
+    const nodeBlockchainData = nodeBlockchainDataMap.get(node.cid)
+    if (!nodeBlockchainData) return node
+
+    return { ...node, ...nodeBlockchainData }
+  })
+
+  await Promise.all(
+    updatedNodes.map((node) =>
+      nodesRepository.updateNodeBlockchainData(node.root_cid, node.cid, node),
+    ),
+  )
+}
+
 export const NodesUseCases = {
   getNode,
   saveNode,
@@ -270,4 +308,6 @@ export const NodesUseCases = {
   getNodesByCids,
   scheduleNodeArchiving,
   setPublishedOn,
+  ensureObjectPublished,
+  handleRepeatedNodes,
 }

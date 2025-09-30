@@ -1,4 +1,4 @@
-export const openDatabase = () => {
+export const openDatabase = (storeName: string) => {
   return new Promise<IDBDatabase>((resolve, reject) => {
     // Check if running in a browser environment
     if (typeof window === 'undefined' || typeof indexedDB === 'undefined') {
@@ -11,7 +11,7 @@ export const openDatabase = () => {
     dbRequest.onerror = () => reject('Error opening database');
     dbRequest.onupgradeneeded = () => {
       const db = dbRequest.result;
-      db.createObjectStore('files', {
+      db.createObjectStore(storeName, {
         keyPath: 'cid',
       });
     };

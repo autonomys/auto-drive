@@ -48,6 +48,20 @@ export const TaskSchema = z.discriminatedUnion('id', [
       cid: z.string(),
     }),
   }),
+  z.object({
+    id: z.literal('ensure-object-published'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({
+      cid: z.string(),
+    }),
+  }),
+  z.object({
+    id: z.literal('populate-cache'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({
+      cid: z.string(),
+    }),
+  }),
 ])
 
 export type MigrateUploadTask = z.infer<typeof TaskSchema>
@@ -90,6 +104,18 @@ type TaskCreateParams =
         cid: string
       }
     }
+  | {
+      id: 'ensure-object-published'
+      params: {
+        cid: string
+      }
+    }
+  | {
+      id: 'populate-cache'
+      params: {
+        cid: string
+      }
+    }
 
 export const createTask = (task: TaskCreateParams): Task => {
   switch (task.id) {
@@ -124,6 +150,18 @@ export const createTask = (task: TaskCreateParams): Task => {
         retriesLeft: MAX_RETRIES,
       }
     case 'object-archived':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'ensure-object-published':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'populate-cache':
       return {
         id: task.id,
         params: task.params,
