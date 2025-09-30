@@ -3,18 +3,14 @@
 import { Button } from '@auto-drive/ui';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
-import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  usePublicClient,
-} from 'wagmi';
+import { useAccount, useWriteContract } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { type Hash } from 'viem';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 import { useNetwork } from '../../../../contexts/network';
 import { usePrices } from '../../../../hooks/usePrices';
+import { useTransactionConfirmation } from '../../../../hooks/useTransactionConfirmation';
 
 export const PurchaseStep3TransferTokens = ({
   onNext,
@@ -35,22 +31,22 @@ export const PurchaseStep3TransferTokens = ({
   const { api } = useNetwork();
 
   const [txHash, setTxHash] = useState<Hash | undefined>(undefined);
-  const {
-    isLoading: isWaitingReceipt,
-    isSuccess: isConfirmed,
-    error: waitError,
-  } = useWaitForTransactionReceipt({ hash: txHash, confirmations: 1 });
 
-  // Track confirmations post-inclusion
-  const client = usePublicClient();
   const requiredConfirmations = 12;
-  const [currentConfs, setCurrentConfs] = useState(0);
-  const [isFullyConfirmed, setIsFullyConfirmed] = useState(false);
-  const stopRef = useRef(false);
-
-  // Backend polling state
-  const [isPollingBackend, setIsPollingBackend] = useState(false);
-  const [isBackendCompleted, setIsBackendCompleted] = useState(false);
+  const {
+    isWaitingReceipt,
+    isConfirmed,
+    currentConfs,
+    isFullyConfirmed,
+    isPollingBackend,
+    isBackendCompleted,
+    waitError,
+  } = useTransactionConfirmation({
+    txHash,
+    requiredConfirmations,
+    api,
+    intentId,
+  });
 
   const {
     writeContractAsync,
@@ -98,75 +94,6 @@ export const PurchaseStep3TransferTokens = ({
       void notifyAndNext();
     }
   }, [api, isConfirmed, notifyAndNext, onNext, txHash]);
-
-  // Start watching block numbers to compute confirmations once included
-  useEffect(() => {
-    if (!client || !txHash || !isConfirmed) return;
-    let unwatch: (() => void) | undefined;
-    let baseBlockNumber: bigint | undefined;
-
-    const start = async () => {
-      try {
-        const receipt = await client.getTransactionReceipt({ hash: txHash });
-        baseBlockNumber = receipt.blockNumber;
-        setCurrentConfs(1);
-        setIsFullyConfirmed(1 >= requiredConfirmations);
-
-        unwatch = client.watchBlockNumber({
-          onBlockNumber: (bn) => {
-            if (stopRef.current || !baseBlockNumber) return;
-            const confs = Number(bn - baseBlockNumber + BigInt(1));
-            const bounded = Math.max(1, Math.min(requiredConfirmations, confs));
-            setCurrentConfs(bounded);
-            if (bounded >= requiredConfirmations) {
-              setIsFullyConfirmed(true);
-              stopRef.current = true;
-              if (unwatch) unwatch();
-            }
-          },
-          emitMissed: true,
-        });
-      } catch {
-        // no-op
-      }
-    };
-
-    void start();
-    return () => {
-      stopRef.current = true;
-      if (unwatch) unwatch();
-    };
-  }, [client, isConfirmed, requiredConfirmations, txHash]);
-
-  // After confirmations threshold, poll backend until IntentStatus.COMPLETED
-  useEffect(() => {
-    if (!api || !intentId || !isFullyConfirmed || isBackendCompleted) return;
-    setIsPollingBackend(true);
-    let timer: NodeJS.Timeout | undefined;
-    let cancelled = false;
-
-    const poll = async () => {
-      try {
-        const intent = await api.getIntent(intentId);
-        if (intent.status === 'completed') {
-          setIsBackendCompleted(true);
-          setIsPollingBackend(false);
-          return;
-        }
-      } catch {
-        // ignore and retry
-      }
-      if (!cancelled) {
-        timer = setTimeout(poll, 2000);
-      }
-    };
-
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [api, intentId, isFullyConfirmed, isBackendCompleted]);
 
   return (
     <div className='flex flex-col gap-4'>
