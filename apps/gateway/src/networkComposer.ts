@@ -12,10 +12,6 @@ export const getFileNetwork = async (cid: string) => {
       network: NetworkId.MAINNET,
       apiKey: config.autoDriveApiKey,
     }),
-    [NetworkId.TAURUS]: createAutoDriveApi({
-      network: NetworkId.TAURUS,
-      apiKey: config.autoDriveApiKey,
-    }),
   };
 
   const promises = networks.map(async (network) => {
