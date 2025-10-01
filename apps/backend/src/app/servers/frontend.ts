@@ -4,8 +4,15 @@
   }
 
   await import('../../app/apis/frontend.js')
-  const { EventRouter } = await import('../../infrastructure/eventRouter/index.js')
-  const { paymentManager } = await import('../../infrastructure/services/paymentManager/index.js')
+  const { EventRouter } = await import(
+    '../../infrastructure/eventRouter/index.js'
+  )
+  const { config } = await import('../../config.js')
+  const { paymentManager } = await import(
+    '../../infrastructure/services/paymentManager/index.js'
+  )
   EventRouter.listenFrontendEvents()
-  paymentManager.start()
+  if (config.featureFlags.flags.buyCredits.active) {
+    paymentManager.start()
+  }
 })()
