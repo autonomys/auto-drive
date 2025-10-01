@@ -13,6 +13,8 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const setSubscription = useUserStore(
     ({ setSubscription }) => setSubscription,
   );
+  const setFeatures = useUserStore(({ setFeatures }) => setFeatures);
+
   const { api } = useNetwork();
 
   useEffect(() => {
@@ -31,6 +33,12 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
       });
     }
   }, [api, router, session, session?.data, setSubscription, setUser]);
+
+  useEffect(() => {
+    api.getFeatures().then((features) => {
+      setFeatures(features);
+    });
+  }, [api, setFeatures]);
 
   useEffect(() => {
     if (user) {
