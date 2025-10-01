@@ -308,6 +308,25 @@ export const createApiService = ({
       throw new Error(`Failed to dismiss report: ${response.statusText}`);
     }
   },
+  getFeatures: async (): Promise<Record<string, boolean>> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/features`, {
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get features: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
   // Download
   downloadObject: async (
     cid: string,
