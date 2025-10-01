@@ -7,6 +7,7 @@ import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { downloadController } from '../controllers/download.js'
 import { s3Controller } from '../controllers/s3/http.js'
+import { featuresController } from '../controllers/features.js'
 
 const logger = createLogger('api:download')
 
@@ -51,17 +52,13 @@ const createServer = async () => {
 
   app.use('/downloads', downloadController)
   app.use('/s3', s3Controller)
+  app.use('/features', featuresController)
 
   logger.debug('Download controller mounted at /downloads')
 
   app.get('/health', (_req: Request, res: Response) => {
     logger.trace('Health check request received')
     res.sendStatus(204)
-  })
-
-  app.get('/features', (_req, res) => {
-    logger.debug('Services configuration requested')
-    res.json(config.featureFlags)
   })
 
   app.get('/auth/session', async (req: Request, res: Response) => {
