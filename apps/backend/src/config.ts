@@ -97,20 +97,29 @@ export const config = {
       ),
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
+    taskManagerMaxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
   },
   featureFlags: {
-    taskManager: {
-      active:
-        (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
-          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
-        !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
-      maxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
+    flags: {
+      taskManager: {
+        active:
+          (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
+            optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+          !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
+      },
+      objectMappingArchiver: {
+        active:
+          (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
+            optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+          !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
+      },
+      buyCredits: {
+        active: optionalBoolEnvironmentVariable('BUY_CREDITS_ACTIVE'),
+        employeeOnly: optionalBoolEnvironmentVariable(
+          'BUY_CREDITS_EMPLOYEE_ONLY',
+        ),
+      },
     },
-    objectMappingArchiver: {
-      active:
-        (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
-          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
-        !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
-    },
+    employeeDomains: env('BUY_CREDITS_EMPLOYEE_DOMAINS', '').split(','),
   },
 }
