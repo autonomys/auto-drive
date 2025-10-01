@@ -27,7 +27,11 @@ intentsController.post(
       return
     }
 
-    res.status(200).json(result.value)
+    res.status(200).json({
+      ...result.value,
+      shannonsPerByte: result.value.shannonsPerByte.toString(),
+      paymentAmount: result.value.paymentAmount?.toString(),
+    })
   }),
 )
 
@@ -69,6 +73,7 @@ intentsController.get(
     res.status(200).json({
       ...result.value,
       paymentAmount: result.value.paymentAmount?.toString(),
+      shannonsPerByte: result.value.shannonsPerByte.toString(),
     })
   }),
 )
