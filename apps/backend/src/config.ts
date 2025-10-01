@@ -98,7 +98,7 @@ export const config = {
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
   },
-  services: {
+  featureFlags: {
     taskManager: {
       active:
         (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||

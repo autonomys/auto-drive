@@ -59,9 +59,9 @@ const createServer = async () => {
     res.sendStatus(204)
   })
 
-  app.get('/services', (_req, res) => {
+  app.get('/features', (_req, res) => {
     logger.debug('Services configuration requested')
-    res.json(config.services)
+    res.json(config.featureFlags)
   })
 
   app.get('/auth/session', async (req: Request, res: Response) => {
