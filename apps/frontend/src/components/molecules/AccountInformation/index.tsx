@@ -6,11 +6,11 @@ interface CreditLimitsProps {
   uploadPending: number;
   uploadLimit: number;
   renewalDate: Date;
-  granularity: AccountModel;
+  model: AccountModel;
 }
 
 export const AccountInformation = ({
-  granularity,
+  model,
   uploadPending = 0,
   uploadLimit = 1000,
   renewalDate,
@@ -36,7 +36,7 @@ export const AccountInformation = ({
           ></div>
         </div>
       </div>
-      {granularity === AccountModel.Monthly && (
+      {model === AccountModel.Monthly && (
         <p className='space-y-2 text-xs text-muted-foreground'>
           Renews in {utcToLocalRelativeTime(renewalDate.toISOString())}
         </p>

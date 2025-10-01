@@ -25,7 +25,7 @@ export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
   const [isCreditsUpdateModalOpen, setIsCreditsUpdateModalOpen] =
     useState(false);
 
-  const granularity =
+  const model =
     accountWithUser.model.charAt(0).toUpperCase() +
     accountWithUser.model.slice(1);
 
@@ -73,7 +73,7 @@ export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
       </TableBodyCell>
       <TableBodyCell>
         <div className='dark:text-darkBlack text-sm text-black'>
-          {granularity}
+          {model}
         </div>
       </TableBodyCell>
       <TableBodyCell>

@@ -78,7 +78,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
       <SidebarFooter className='p-4'>
         {isLoggedIn && (
           <AccountInformation
-            granularity={account?.model ?? AccountModel.OneOff}
+            model={account?.model ?? AccountModel.OneOff}
             renewalDate={renewalDate}
             uploadLimit={account?.uploadLimit ?? 0}
             uploadPending={account?.pendingUploadCredits ?? 0}

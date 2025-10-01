@@ -22,11 +22,17 @@ const logger = createLogger('AccountsUseCases')
 const updateAccount = async (
   executor: User,
   userPublicId: string,
-  granularity: AccountModel,
+  model: AccountModel,
   uploadLimit: number,
   downloadLimit: number,
 ): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
   if (executor.role !== UserRole.Admin) {
+    logger.warn('User does not have admin privileges', {
+      userPublicId,
+      model,
+      uploadLimit,
+      downloadLimit,
+    })
     return err(new ForbiddenError('User does not have admin privileges'))
   }
 
@@ -39,12 +45,25 @@ const updateAccount = async (
     user.organizationId,
   )
   if (!account) {
+    logger.warn('Account not found', {
+      userPublicId,
+      model,
+      uploadLimit,
+      downloadLimit,
+    })
     return err(new ObjectNotFoundError('Account not found'))
   }
 
+  logger.debug('Updating account', {
+    userPublicId,
+    model,
+    uploadLimit,
+    downloadLimit,
+  })
+
   await accountsRepository.updateAccount(
     account.id,
-    granularity,
+    model,
     uploadLimit,
     downloadLimit,
   )
@@ -99,7 +118,7 @@ const initAccount = async (
   const newAccount = {
     id: v4(),
     organizationId,
-    model: config.params.defaultAccount.granularity as AccountModel,
+    model: config.params.defaultAccount.model as AccountModel,
     uploadLimit,
     downloadLimit,
   }

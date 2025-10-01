@@ -74,7 +74,7 @@ accountController.post(
       return
     }
 
-    const { publicId, uploadLimit, downloadLimit, granularity } = req.body
+    const { publicId, uploadLimit, downloadLimit, model } = req.body
 
     if (typeof publicId !== 'string') {
       res.status(400).json({
@@ -97,10 +97,10 @@ accountController.post(
       return
     }
 
-    const safeGranularity = z.nativeEnum(AccountModel).safeParse(granularity)
-    if (!safeGranularity.success) {
+    const safeModel = z.nativeEnum(AccountModel).safeParse(model)
+    if (!safeModel.success) {
       res.status(400).json({
-        error: 'Invalid granularity',
+        error: 'Invalid model',
       })
       return
     }
@@ -109,7 +109,7 @@ accountController.post(
       AccountsUseCases.updateAccount(
         executor,
         publicId,
-        safeGranularity.data,
+        safeModel.data,
         uploadLimit,
         downloadLimit,
       ),

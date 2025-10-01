@@ -66,7 +66,7 @@ export const config = {
     ),
     optionalAuth: env('OPTIONAL_AUTH', 'false') === 'true',
     defaultAccount: {
-      granularity: env('DEFAULT_ACCOUNT_MODE', AccountModel.OneOff),
+      model: env('DEFAULT_ACCOUNT_MODE', AccountModel.OneOff),
       uploadLimit: Number(
         env('DEFAULT_ACCOUNT_UPLOAD_LIMIT', ONE_HUNDRED_MiB.toString()),
       ),

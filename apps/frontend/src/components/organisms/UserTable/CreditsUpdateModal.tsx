@@ -25,9 +25,7 @@ export const CreditsUpdateModal = ({
   );
   const [uploadCredits, setUploadCredits] = useState<string>('');
   const [uploadCreditsUnit, setUploadCreditsUnit] = useState<number>(1024 ** 2);
-  const [granularity, setGranularity] = useState<AccountModel>(
-    AccountModel.Monthly,
-  );
+  const [model, setModel] = useState<AccountModel>(AccountModel.Monthly);
 
   const network = useNetwork();
 
@@ -36,7 +34,7 @@ export const CreditsUpdateModal = ({
     setUploadCredits('');
     setDownloadCreditsUnit(1024 ** 2);
     setUploadCreditsUnit(1024 ** 2);
-    setGranularity(AccountModel.Monthly);
+    setModel(AccountModel.Monthly);
   }, [userHandle]);
 
   const updateCredits = useCallback(async () => {
@@ -45,7 +43,7 @@ export const CreditsUpdateModal = ({
       const uploadBytes = Number(uploadCredits) * uploadCreditsUnit;
       await network.api.updateAccount(
         userHandle,
-        granularity,
+        model,
         uploadBytes,
         downloadBytes,
       );
@@ -59,7 +57,7 @@ export const CreditsUpdateModal = ({
     downloadCreditsUnit,
     uploadCredits,
     uploadCreditsUnit,
-    granularity,
+    model,
     onClose,
   ]);
 
@@ -109,17 +107,17 @@ export const CreditsUpdateModal = ({
                   <div className='space-y-4'>
                     <div className='flex items-center space-x-2'>
                       <label
-                        htmlFor='granularity'
+                        htmlFor='model'
                         className='dark:text-darkBlack min-w-[110px] text-left text-black'
                       >
-                        Granularity
+                        Model
                       </label>
                       <select
                         className='dark:bg-darkWhite dark:text-darkBlack dark:ring-darkWhiteHover w-full rounded border border-gray-300 bg-white px-2 py-1 text-black dark:ring-1'
-                        id='granularity'
-                        value={granularity}
+                        id='model'
+                        value={model}
                         onChange={(e) =>
-                          setGranularity(e.target.value as AccountModel)
+                          setModel(e.target.value as AccountModel)
                         }
                       >
                         <option value={AccountModel.Monthly}>Monthly</option>

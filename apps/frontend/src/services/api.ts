@@ -217,7 +217,7 @@ export const createApiService = ({
   },
   updateAccount: async (
     publicId: string,
-    granularity: AccountModel,
+    model: AccountModel,
     uploadLimit: number,
     downloadLimit: number,
   ): Promise<void> => {
@@ -229,7 +229,7 @@ export const createApiService = ({
     const response = await fetch(`${apiBaseUrl}/accounts/update`, {
       method: 'POST',
       body: JSON.stringify({
-        granularity,
+        model,
         uploadLimit,
         downloadLimit,
         publicId,

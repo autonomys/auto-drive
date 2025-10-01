@@ -43,7 +43,7 @@ export const UserAccountsTable = ({
                   <TableHeadCell>Public ID</TableHeadCell>
                   <TableHeadCell>Provider</TableHeadCell>
                   <TableHeadCell>Role</TableHeadCell>
-                  <TableHeadCell>Granularity</TableHeadCell>
+                  <TableHeadCell>Model</TableHeadCell>
                   <TableHeadCell>Upload Credits</TableHeadCell>
                   <TableHeadCell>Pending Upload</TableHeadCell>
                   <TableHeadCell>Download Credits</TableHeadCell>
