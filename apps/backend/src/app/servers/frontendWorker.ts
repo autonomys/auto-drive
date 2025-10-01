@@ -16,15 +16,15 @@
   )
   const logger = createLogger('servers:frontendWorker')
 
-  if (config.featureFlags.taskManager.active) {
+  if (config.featureFlags.flags.taskManager.active) {
     EventRouter.listenFrontendEvents()
   }
-  if (config.featureFlags.objectMappingArchiver.active) {
+  if (config.featureFlags.flags.objectMappingArchiver.active) {
     objectMappingArchiver.start()
   }
   if (
-    !config.featureFlags.taskManager.active &&
-    !config.featureFlags.objectMappingArchiver.active
+    !config.featureFlags.flags.taskManager.active &&
+    !config.featureFlags.flags.objectMappingArchiver.active
   ) {
     logger.info('No services active, exiting')
     process.exit(1)
