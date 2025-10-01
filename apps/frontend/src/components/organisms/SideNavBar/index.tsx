@@ -16,6 +16,7 @@ import { AuthModal } from '../../molecules/AuthModal';
 import { BuyMoreCreditsButton } from '../../atoms/BuyMoreCreditsButton';
 import { SIDEBAR_DEFINITION } from './items';
 import { SideNavBarContent } from './SideNavBarContent';
+import { AskForCreditsButton } from '../../atoms/AskForCredits';
 
 export type SideNavbarProps = {
   networkId: NetworkId;
@@ -23,7 +24,7 @@ export type SideNavbarProps = {
 
 export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const { user, subscription } = useUserStore();
+  const { user, subscription, features } = useUserStore();
   const { state } = useSidebar();
 
   const session = useContext(SessionContext);
@@ -87,7 +88,11 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
           />
         )}
         {isLoggedIn && subscription ? (
-          <BuyMoreCreditsButton />
+          features.buyCredits ? (
+            <BuyMoreCreditsButton />
+          ) : (
+            <AskForCreditsButton />
+          )
         ) : (
           <Button
             variant='outline'
