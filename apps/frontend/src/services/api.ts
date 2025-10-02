@@ -309,15 +309,16 @@ export const createApiService = ({
     }
   },
   getFeatures: async (): Promise<Record<string, boolean>> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
+    const session = await getAuthSession().catch(() => null);
 
     const response = await fetch(`${apiBaseUrl}/features`, {
       headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
+        ...(session?.accessToken
+          ? {
+              Authorization: `Bearer ${session?.accessToken}`,
+              'X-Auth-Provider': session.authProvider,
+            }
+          : {}),
       },
     });
 
