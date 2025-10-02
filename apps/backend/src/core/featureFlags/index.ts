@@ -42,7 +42,7 @@ const isStaffUsername = (user: User | null) => {
     user &&
       user.oauthProvider !== 'web3-wallet' &&
       config.featureFlags.allowlistedUsernames.some(
-        (username) => username === user.oauthUsername,
+        (username) => username === user.oauthUsername?.toLowerCase(),
       ),
   )
 }
