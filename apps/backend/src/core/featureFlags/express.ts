@@ -22,7 +22,7 @@ export const featureFlagMiddleware =
 
 export const getFeatureFlags = async (req: Request, res: Response) => {
   // If is authenticated, get the user from the request
-  if (req.headers) {
+  if (req.headers.authorization) {
     const user = await handleAuth(req, res)
     if (!user) {
       return
