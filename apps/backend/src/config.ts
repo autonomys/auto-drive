@@ -121,10 +121,12 @@ export const config = {
     },
     allowlistedUsernames: env('STAFF_USERNAME_ALLOWLIST', '')
       .split(',')
-      .filter((username) => username),
+      .filter((username) => username)
+      .map((username) => username.toLowerCase()),
     staffDomains: env('STAFF_DOMAINS', '')
       .split(',')
       // Remove empty strings
-      .filter((domain) => domain),
+      .filter((domain) => domain)
+      .map((domain) => domain.toLowerCase()),
   },
 }
