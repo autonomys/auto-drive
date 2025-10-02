@@ -10,6 +10,8 @@ import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { docsController } from '../controllers/docs.js'
 import { intentsController } from '../controllers/intents.js'
+import { featuresController } from '../controllers/features.js'
+import { featureFlagMiddleware } from '../../core/featureFlags/express.js'
 
 const logger = createLogger('api:frontend')
 
@@ -47,17 +49,13 @@ const createServer = async () => {
   app.use('/objects', objectController)
   app.use('/subscriptions', subscriptionController)
   app.use('/uploads', uploadController)
-  app.use('/intents', intentsController)
+  app.use('/intents', featureFlagMiddleware('buyCredits'), intentsController)
+  app.use('/features', featuresController)
   app.use('/docs', docsController)
 
   app.get('/health', (_req, res) => {
     logger.trace('Health check request received')
     res.sendStatus(204)
-  })
-
-  app.get('/services', (_req, res) => {
-    logger.trace('Services configuration requested')
-    res.json(config.services)
   })
 
   app.get('/auth/session', async (req: Request, res: Response) => {

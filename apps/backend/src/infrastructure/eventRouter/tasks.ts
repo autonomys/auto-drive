@@ -3,7 +3,7 @@ import { ObjectMappingSchema } from '@auto-drive/models'
 import { config } from '../../config.js'
 import { exhaustiveCheck } from '../../shared/utils/misc.js'
 
-export const MAX_RETRIES = config.services.taskManager.maxRetries
+export const MAX_RETRIES = config.params.taskManagerMaxRetries
 
 export const TaskSchema = z.discriminatedUnion('id', [
   z.object({
