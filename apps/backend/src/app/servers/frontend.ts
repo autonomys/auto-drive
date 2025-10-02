@@ -12,7 +12,10 @@
     '../../infrastructure/services/paymentManager/index.js'
   )
   EventRouter.listenFrontendEvents()
-  if (config.featureFlags.flags.buyCredits.active) {
+  if (
+    config.featureFlags.flags.buyCredits.active ||
+    config.featureFlags.flags.buyCredits.staffOnly
+  ) {
     paymentManager.start()
   }
 })()
