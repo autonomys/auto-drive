@@ -25,19 +25,31 @@ const isActive = (value: FeatureFlag, user: User | null) => {
   return value.employeeOnly && isStaff(user)
 }
 
-const isStaff = (user: User | null) => {
-  logger.debug('Checking if user is employee:', user)
+const isStaffDomain = (user: User | null) => {
   return Boolean(
     user &&
       user.oauthProvider !== 'web3-wallet' &&
-      config.featureFlags.staffDomains
-        .filter((domain) => domain)
-        .some(
-          (domain) =>
-            user.oauthUsername &&
-            user.oauthUsername.toLowerCase().endsWith(domain),
-        ),
+      config.featureFlags.staffDomains.some(
+        (domain) =>
+          user.oauthUsername &&
+          user.oauthUsername.toLowerCase().endsWith(`@${domain}`),
+      ),
   )
+}
+
+const isStaffUsername = (user: User | null) => {
+  return Boolean(
+    user &&
+      user.oauthProvider !== 'web3-wallet' &&
+      config.featureFlags.allowlistedUsernames.some(
+        (username) => username === user.oauthUsername,
+      ),
+  )
+}
+
+const isStaff = (user: User | null) => {
+  logger.debug('Checking if user is employee:', user)
+  return Boolean(user && (isStaffDomain(user) || isStaffUsername(user)))
 }
 
 export const FeatureFlagsUseCases = {

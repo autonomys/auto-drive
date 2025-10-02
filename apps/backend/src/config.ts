@@ -118,6 +118,12 @@ export const config = {
         staffOnly: optionalBoolEnvironmentVariable('BUY_CREDITS_STAFF_ONLY'),
       },
     },
-    staffDomains: env('BUY_CREDITS_STAFF_DOMAINS', '').split(','),
+    allowlistedUsernames: env('STAFF_USERNAME_ALLOWLIST', '')
+      .split(',')
+      .filter((username) => username),
+    staffDomains: env('STAFF_DOMAINS', '')
+      .split(',')
+      // Remove empty strings
+      .filter((domain) => domain),
   },
 }
