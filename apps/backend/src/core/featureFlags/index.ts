@@ -22,15 +22,15 @@ const isActive = (value: FeatureFlag, user: User | null) => {
     return true
   }
 
-  return value.employeeOnly && isEmployee(user)
+  return value.employeeOnly && isStaff(user)
 }
 
-const isEmployee = (user: User | null) => {
+const isStaff = (user: User | null) => {
   logger.debug('Checking if user is employee:', user)
   return Boolean(
     user &&
       user.oauthProvider !== 'web3-wallet' &&
-      config.featureFlags.employeeDomains
+      config.featureFlags.staffDomains
         .filter((domain) => domain)
         .some(
           (domain) =>
@@ -42,5 +42,5 @@ const isEmployee = (user: User | null) => {
 
 export const FeatureFlagsUseCases = {
   get,
-  isEmployee,
+  isStaff,
 }

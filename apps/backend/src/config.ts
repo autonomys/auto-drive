@@ -115,11 +115,9 @@ export const config = {
       },
       buyCredits: {
         active: optionalBoolEnvironmentVariable('BUY_CREDITS_ACTIVE'),
-        employeeOnly: optionalBoolEnvironmentVariable(
-          'BUY_CREDITS_EMPLOYEE_ONLY',
-        ),
+        staffOnly: optionalBoolEnvironmentVariable('BUY_CREDITS_STAFF_ONLY'),
       },
     },
-    employeeDomains: env('BUY_CREDITS_EMPLOYEE_DOMAINS', '').split(','),
+    staffDomains: env('BUY_CREDITS_STAFF_DOMAINS', '').split(','),
   },
 }
