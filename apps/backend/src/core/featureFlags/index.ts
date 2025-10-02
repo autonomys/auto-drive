@@ -4,9 +4,9 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('core:featureFlags')
 
-interface FeatureFlag {
+export interface FeatureFlag {
   active: boolean
-  employeeOnly?: boolean
+  staffOnly?: boolean
 }
 
 const get = (user: User | null) => {
@@ -22,7 +22,7 @@ const isActive = (value: FeatureFlag, user: User | null) => {
     return true
   }
 
-  return value.employeeOnly && isStaff(user)
+  return value.staffOnly && isStaff(user)
 }
 
 const isStaffDomain = (user: User | null) => {

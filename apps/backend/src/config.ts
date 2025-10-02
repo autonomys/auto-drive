@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import { SubscriptionGranularity } from '@auto-drive/models'
+import { FeatureFlag } from './core/featureFlags/index.js'
 import { optionalBoolEnvironmentVariable, env } from './shared/utils/misc.js'
 import { getAddress } from 'viem'
 
@@ -106,17 +107,17 @@ export const config = {
           (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
             optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
           !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
-      },
+      } as FeatureFlag,
       objectMappingArchiver: {
         active:
           (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
             optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
           !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
-      },
+      } as FeatureFlag,
       buyCredits: {
         active: optionalBoolEnvironmentVariable('BUY_CREDITS_ACTIVE'),
         staffOnly: optionalBoolEnvironmentVariable('BUY_CREDITS_STAFF_ONLY'),
-      },
+      } as FeatureFlag,
     },
     allowlistedUsernames: env('STAFF_USERNAME_ALLOWLIST', '')
       .split(',')
