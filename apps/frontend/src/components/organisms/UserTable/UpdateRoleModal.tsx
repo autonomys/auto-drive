@@ -10,6 +10,7 @@ import {
 import { Fragment, useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
 import { UserRole } from '@auto-drive/models';
+import { Button } from '@auto-drive/ui';
 import { AuthService } from 'services/auth/auth';
 
 export const UpdateRoleModal = ({
@@ -59,18 +60,18 @@ export const UpdateRoleModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogPanel className='flex w-full max-w-md transform flex-col justify-center overflow-hidden rounded-2xl bg-background p-6 text-left align-middle text-foreground shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
-                  className='dark:text-darkBlack text-lg font-medium leading-6 text-black'
+                  className='gap-4 text-center text-lg font-medium leading-6'
                 >
                   Update user role
                 </DialogTitle>
                 <div className='mt-2'>
-                  <div className='space-y-4'>
-                    <div>
+                  <div className='flex flex-col items-center space-y-4'>
+                    <div className='flex flex-col items-center space-x-2'>
                       <select
-                        className='dark:bg-darkWhite dark:text-darkBlack dark:ring-darkWhiteHover rounded border border-gray-300 bg-white px-2 py-1 text-black dark:ring-1'
+                        className='border-background-hover bg-background-hover text-foreground-hover rounded border px-2 py-1'
                         value={role}
                         onChange={(e) => setRole(e.target.value as UserRole)}
                       >
@@ -82,13 +83,14 @@ export const UpdateRoleModal = ({
                         </option>
                       </select>
                     </div>
-                    <div className='flex justify-end'>
-                      <button
-                        className='inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2'
+                    <div className='flex justify-center'>
+                      <Button
+                        variant='lightAccent'
+                        className='bg-background-hover text-foreground-hover inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium hover:bg-background hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2'
                         onClick={updateRole}
                       >
                         Update
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>

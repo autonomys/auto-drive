@@ -12,6 +12,10 @@ All colors MUST be HSL.
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
 
+    /* Core theme colors */
+    --background-hover: 0 0% 95%;
+    --foreground-hover: 222.2 84% 20%;
+
     /* Auto Drive brand colors */
     --auto-drive-primary: 234 50% 48%;
     --auto-drive-primary-foreground: 0 0% 100%;
@@ -99,14 +103,17 @@ All colors MUST be HSL.
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
 
+    --background-hover: 240 3.7% 15.9%;
+    --background-hover-foreground: 240 4.8% 95.9%;
+
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
 
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 234 50% 48%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -131,6 +138,11 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --light-accent: 234 50% 48%;
+    --light-accent-foreground: 210 40% 98%;
+    --light-danger: 350 68% 54%;
+    --light-danger-foreground: 210 40% 98%;
   }
 }
 

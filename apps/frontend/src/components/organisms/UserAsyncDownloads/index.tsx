@@ -72,7 +72,7 @@ export const UserAsyncDownloads = () => {
   return (
     <div className='relative'>
       <Button
-        variant='lightAccent'
+        variant='primary'
         className={cn(
           'flex items-center gap-1 text-sm',
           asyncDownloads.length > 0 && 'font-medium',
@@ -117,11 +117,11 @@ export const UserAsyncDownloads = () => {
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='bg-backgroundLight dark:bg-darkWhiteHover inline-block flex h-[60vh] w-full max-w-md transform flex-col justify-between overflow-y-scroll rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogPanel className='bg-background-hover inline-block flex h-[60vh] w-full max-w-md transform flex-col justify-between overflow-y-scroll rounded-2xl bg-background p-6 text-left align-middle shadow-xl transition-all'>
                 <div>
                   <DialogTitle
                     as='h3'
-                    className='text-lg font-medium leading-6 text-gray-900 dark:text-white'
+                    className='text-lg font-medium leading-6 text-foreground'
                   >
                     Cached Downloads
                   </DialogTitle>
@@ -137,7 +137,7 @@ export const UserAsyncDownloads = () => {
                 <div className='mt-4'>
                   <Button
                     variant='primary'
-                    className='w-full justify-center text-sm font-medium'
+                    className='w-full justify-center text-sm font-medium hover:bg-background hover:text-foreground'
                     onClick={toggleModal}
                   >
                     Close
