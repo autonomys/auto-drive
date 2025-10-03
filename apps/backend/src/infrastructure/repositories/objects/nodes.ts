@@ -42,7 +42,7 @@ const saveNodes = async (nodes: Node[]) => {
 
   return db.query({
     text: pgFormat(
-      'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node, piece_index, piece_offset, block_published_on, tx_published_on) VALUES %L ON CONFLICT (cid) DO NOTHING',
+      'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node, piece_index, piece_offset, block_published_on, tx_published_on) VALUES %L',
       nodes.map((node) => [
         node.cid,
         node.root_cid,
