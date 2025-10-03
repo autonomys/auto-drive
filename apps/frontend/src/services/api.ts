@@ -67,25 +67,6 @@ export const createApiService = ({
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  getIntent: async (intentId: string): Promise<Intent> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(`${apiBaseUrl}/intents/${intentId}`, {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return response.json() as Promise<Intent>;
-  },
   getAccount: async (): Promise<AccountInfo> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
