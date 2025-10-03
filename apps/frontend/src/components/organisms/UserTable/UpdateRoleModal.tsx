@@ -79,7 +79,7 @@ export const UpdateRoleModal = ({
                           User (Manage own files)
                         </option>
                         <option value={UserRole.Admin}>
-                          Admin (Manage user&apos;s subscriptions)
+                          Admin (Manage user&apos;s account)
                         </option>
                       </select>
                     </div>

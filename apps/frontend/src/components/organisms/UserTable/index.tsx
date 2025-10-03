@@ -1,7 +1,7 @@
 'use client';
 
 import { UserTableRow } from './UserTableRow';
-import { SubscriptionInfoWithUser } from '@auto-drive/models';
+import { AccountInfoWithUser } from '@auto-drive/models';
 import {
   TableBody,
   TableBodyCell,
@@ -15,8 +15,8 @@ import {
 } from '@/components/molecules/Table/TableHead';
 import { ChevronLeft, ChevronRight, Loader } from 'lucide-react';
 
-interface UserSubscriptionsTableProps {
-  users: SubscriptionInfoWithUser[] | undefined;
+interface UserAccountsTableProps {
+  users: AccountInfoWithUser[] | undefined;
   currentPage: number;
   totalPages: number;
   itemsPerPage: number;
@@ -24,14 +24,14 @@ interface UserSubscriptionsTableProps {
   onItemsPerPageChange: (items: number) => void;
 }
 
-export const UserSubscriptionsTable = ({
+export const UserAccountsTable = ({
   users,
   currentPage,
   totalPages,
   itemsPerPage,
   onPageChange,
   onItemsPerPageChange,
-}: UserSubscriptionsTableProps) => {
+}: UserAccountsTableProps) => {
   return (
     <div>
       <div className='-my-2 sm:-mx-6 lg:-mx-8'>
@@ -43,7 +43,7 @@ export const UserSubscriptionsTable = ({
                   <TableHeadCell>Public ID</TableHeadCell>
                   <TableHeadCell>Provider</TableHeadCell>
                   <TableHeadCell>Role</TableHeadCell>
-                  <TableHeadCell>Granularity</TableHeadCell>
+                  <TableHeadCell>Model</TableHeadCell>
                   <TableHeadCell>Upload Credits</TableHeadCell>
                   <TableHeadCell>Pending Upload</TableHeadCell>
                   <TableHeadCell>Download Credits</TableHeadCell>
@@ -55,7 +55,7 @@ export const UserSubscriptionsTable = ({
                 {users?.map((user) => (
                   <UserTableRow
                     key={user.user.publicId}
-                    subscriptionWithUser={user}
+                    accountWithUser={user}
                   />
                 ))}
                 {users === undefined && (

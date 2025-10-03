@@ -1,22 +1,22 @@
 import { autoDriveServers } from './servers.js'
 
-export const subscriptions = {
+export const accounts = {
   paths: {
-    '/subscriptions/@me': {
+    '/accounts/@me': {
       get: {
-        summary: 'Subscriptions - Get current user subscription information',
+        summary: 'Accounts - Get current user account information',
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         responses: {
           '200': {
-            description: 'Successfully retrieved subscription information',
+            description: 'Successfully retrieved account information',
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
                   properties: {
-                    subscription: {
-                      $ref: '#/components/schemas/SubscriptionInfo',
+                    account: {
+                      $ref: '#/components/schemas/AccountInfo',
                     },
                   },
                   required: [
@@ -24,7 +24,7 @@ export const subscriptions = {
                     'organizationId',
                     'uploadLimit',
                     'downloadLimit',
-                    'granularity',
+                    'model',
                     'pendingUploadCredits',
                     'pendingDownloadCredits',
                   ],
@@ -44,14 +44,17 @@ export const subscriptions = {
   },
   components: {
     schemas: {
-      SubscriptionInfo: {
+      AccountInfo: {
         type: 'object',
         properties: {
           id: { type: 'string' },
           organizationId: { type: 'string' },
           uploadLimit: { type: 'number' },
           downloadLimit: { type: 'number' },
-          granularity: { type: 'string', enum: ['monthly', 'one_off'] },
+          module: {
+            type: 'string',
+            enum: ['monthly', 'one_off'],
+          },
           pendingUploadCredits: { type: 'number' },
           pendingDownloadCredits: { type: 'number' },
         },
@@ -60,7 +63,7 @@ export const subscriptions = {
           'organizationId',
           'uploadLimit',
           'downloadLimit',
-          'granularity',
+          'model',
           'pendingUploadCredits',
           'pendingDownloadCredits',
         ],
