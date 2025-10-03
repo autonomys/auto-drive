@@ -10,7 +10,7 @@ import {
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNetwork } from 'contexts/network';
-import { SubscriptionGranularity } from '@auto-drive/models';
+import { AccountModel } from '@auto-drive/models';
 
 export const CreditsUpdateModal = ({
   userHandle,
@@ -25,9 +25,7 @@ export const CreditsUpdateModal = ({
   );
   const [uploadCredits, setUploadCredits] = useState<string>('');
   const [uploadCreditsUnit, setUploadCreditsUnit] = useState<number>(1024 ** 2);
-  const [granularity, setGranularity] = useState<SubscriptionGranularity>(
-    SubscriptionGranularity.Monthly,
-  );
+  const [model, setModel] = useState<AccountModel>(AccountModel.Monthly);
 
   const network = useNetwork();
 
@@ -36,16 +34,16 @@ export const CreditsUpdateModal = ({
     setUploadCredits('');
     setDownloadCreditsUnit(1024 ** 2);
     setUploadCreditsUnit(1024 ** 2);
-    setGranularity(SubscriptionGranularity.Monthly);
+    setModel(AccountModel.Monthly);
   }, [userHandle]);
 
   const updateCredits = useCallback(async () => {
     if (userHandle && downloadCredits && uploadCredits) {
       const downloadBytes = Number(downloadCredits) * downloadCreditsUnit;
       const uploadBytes = Number(uploadCredits) * uploadCreditsUnit;
-      await network.api.updateSubscription(
+      await network.api.updateAccount(
         userHandle,
-        granularity,
+        model,
         uploadBytes,
         downloadBytes,
       );
@@ -59,7 +57,7 @@ export const CreditsUpdateModal = ({
     downloadCreditsUnit,
     uploadCredits,
     uploadCreditsUnit,
-    granularity,
+    model,
     onClose,
   ]);
 
@@ -109,27 +107,21 @@ export const CreditsUpdateModal = ({
                   <div className='space-y-4'>
                     <div className='flex items-center space-x-2'>
                       <label
-                        htmlFor='granularity'
+                        htmlFor='model'
                         className='dark:text-darkBlack min-w-[110px] text-left text-black'
                       >
-                        Granularity
+                        Model
                       </label>
                       <select
                         className='dark:bg-darkWhite dark:text-darkBlack dark:ring-darkWhiteHover w-full rounded border border-gray-300 bg-white px-2 py-1 text-black dark:ring-1'
-                        id='granularity'
-                        value={granularity}
+                        id='model'
+                        value={model}
                         onChange={(e) =>
-                          setGranularity(
-                            e.target.value as SubscriptionGranularity,
-                          )
+                          setModel(e.target.value as AccountModel)
                         }
                       >
-                        <option value={SubscriptionGranularity.Monthly}>
-                          Monthly
-                        </option>
-                        <option value={SubscriptionGranularity.OneOff}>
-                          One-off
-                        </option>
+                        <option value={AccountModel.Monthly}>Monthly</option>
+                        <option value={AccountModel.OneOff}>One-off</option>
                       </select>
                     </div>
                     <div className='flex items-center space-x-2'>
