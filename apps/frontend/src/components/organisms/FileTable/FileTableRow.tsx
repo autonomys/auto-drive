@@ -208,11 +208,16 @@ export const FileTableRow = ({
     [stopEventPropagation],
   );
 
+  const isSelected = selectedFiles.some((cid) => cid === file.headCid);
+  const isFolder = file.type === 'folder';
+
   return (
     <Fragment key={file.headCid}>
       <TableBodyRow
         className={cn(
           'hover:bg-background-hover hover:text-background-hover-foreground bg-background text-foreground',
+          isSelected && 'bg-blue-50 dark:bg-blue-900/20',
+          isFolder && 'cursor-pointer',
         )}
       >
         <TableBodyCell className='whitespace-nowrap text-sm'>
@@ -415,65 +420,79 @@ export const FileTableRow = ({
       {isRowExpanded &&
         file.type === 'folder' &&
         file.children &&
-        file.children.map((child) => (
-          <TableBodyRow key={child.cid}>
-            <TableBodyCell>
-              <div className='flex items-center'>
-                <input
-                  onChange={() => toggleSelectFile(child.cid)}
-                  readOnly={true}
-                  checked={selectedFiles.some((f) => f === child.cid)}
-                  type='checkbox'
-                  className='mr-3 rounded text-blue-600 focus:ring-blue-500'
-                />
-                {child.type === 'folder' ? (
-                  <Folder className='mx-2 h-5 w-5 flex-shrink-0 text-blue-500' />
-                ) : (
-                  <File className='mx-2 h-5 w-5 flex-shrink-0 text-accent' />
-                )}
+        file.children.map((child) => {
+          const isChildSelected = selectedFiles.some(
+            (cid) => cid === child.cid,
+          );
+          const isChildFolder = child.type === 'folder';
 
-                <Link href={fileDetailPath(network.id, child.cid)}>
-                  <span
-                    className={`relative text-sm font-semibold text-accent ${
-                      file.type === 'folder'
-                        ? 'hover:cursor-pointer hover:underline'
-                        : ''
-                    }`}
-                  >
-                    {child.name ?? `No name (${formatCid(child.cid)})`}
-                  </span>
-                </Link>
-              </div>
-            </TableBodyCell>
-            <TableBodyCell>
-              <CopiableText
-                text={child.cid}
-                displayText={formatCid(child.cid)}
-              />
-            </TableBodyCell>
-            <TableBodyCell>
-              <OwnerBadge />
-            </TableBodyCell>
-            <TableBodyCell>{bytes(Number(child.totalSize))}</TableBodyCell>
-            <TableBodyCell>
-              {child.type === 'file' ? 'File' : 'Folder'}
-            </TableBodyCell>
-            <TableBodyCell className='flex justify-end'>
-              <Button
-                variant='lightAccent'
-                className={cn(
-                  'text-xs',
-                  file.tags.includes(ObjectTag.Banned) &&
-                    'cursor-not-allowed opacity-50',
-                )}
-                disabled={file.tags.includes(ObjectTag.Banned)}
-                onClick={() => onDownloadFile(child.cid)}
-              >
-                Download
-              </Button>
-            </TableBodyCell>
-          </TableBodyRow>
-        ))}
+          return (
+            <TableBodyRow
+              key={child.cid}
+              className={cn(
+                'hover:bg-background-hover hover:text-background-hover-foreground bg-background text-foreground',
+                isChildSelected && 'bg-blue-50 dark:bg-blue-900/20',
+                isChildFolder && 'cursor-pointer',
+              )}
+            >
+              <TableBodyCell>
+                <div className='flex items-center'>
+                  <input
+                    onChange={() => toggleSelectFile(child.cid)}
+                    readOnly={true}
+                    checked={selectedFiles.some((f) => f === child.cid)}
+                    type='checkbox'
+                    className='mr-3 rounded text-blue-600 focus:ring-blue-500'
+                  />
+                  {child.type === 'folder' ? (
+                    <Folder className='mx-2 h-5 w-5 flex-shrink-0 text-blue-500' />
+                  ) : (
+                    <File className='mx-2 h-5 w-5 flex-shrink-0 text-accent' />
+                  )}
+
+                  <Link href={fileDetailPath(network.id, child.cid)}>
+                    <span
+                      className={`relative text-sm font-semibold text-accent ${
+                        file.type === 'folder'
+                          ? 'hover:cursor-pointer hover:underline'
+                          : ''
+                      }`}
+                    >
+                      {child.name ?? `No name (${formatCid(child.cid)})`}
+                    </span>
+                  </Link>
+                </div>
+              </TableBodyCell>
+              <TableBodyCell>
+                <CopiableText
+                  text={child.cid}
+                  displayText={formatCid(child.cid)}
+                />
+              </TableBodyCell>
+              <TableBodyCell>
+                <OwnerBadge />
+              </TableBodyCell>
+              <TableBodyCell>{bytes(Number(child.totalSize))}</TableBodyCell>
+              <TableBodyCell>
+                {child.type === 'file' ? 'File' : 'Folder'}
+              </TableBodyCell>
+              <TableBodyCell className='flex justify-end'>
+                <Button
+                  variant='lightAccent'
+                  className={cn(
+                    'text-xs',
+                    file.tags.includes(ObjectTag.Banned) &&
+                      'cursor-not-allowed opacity-50',
+                  )}
+                  disabled={file.tags.includes(ObjectTag.Banned)}
+                  onClick={() => onDownloadFile(child.cid)}
+                >
+                  Download
+                </Button>
+              </TableBodyCell>
+            </TableBodyRow>
+          );
+        })}
     </Fragment>
   );
 };
