@@ -10,8 +10,6 @@ import {
 import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
 import { v4 } from 'uuid'
-import { downloadService } from '../../../src/infrastructure/services/download/index.js'
-import { Readable } from 'stream'
 import { ForbiddenError } from '../../../src/errors/index.js'
 import { nodesRepository } from '../../../src/infrastructure/repositories/index.js'
 
@@ -72,14 +70,6 @@ describe('Object', () => {
   })
 
   it('isArchived should return true for archived object', async () => {
-    const downloadSpy = jest.spyOn(downloadService, 'download')
-    downloadSpy.mockResolvedValueOnce(
-      new Readable({
-        read: async function () {
-          this.push(null)
-        },
-      }),
-    )
     await nodesRepository.saveNode({
       cid: fileCid,
       root_cid: fileCid,
@@ -94,7 +84,6 @@ describe('Object', () => {
     await ObjectUseCases.onObjectArchived(fileCid)
     const isArchived = await ObjectUseCases.isArchived(fileCid)
     expect(isArchived).toBe(true)
-    expect(downloadSpy).toHaveBeenCalledTimes(1)
   })
 
   it('should get listed in user objects', async () => {

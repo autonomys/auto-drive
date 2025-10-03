@@ -200,14 +200,10 @@ describe('Nodes', () => {
     })
     expect(processArchivalSpy).toHaveBeenCalledTimes(1)
 
-    const populateCachesSpy = jest
-      .spyOn(ObjectUseCases, 'populateCaches')
-      .mockResolvedValue()
     // Mock the callback execution of the event above
     await ObjectUseCases.onObjectArchived(cidToString(cid))
 
     const metadata = await metadataRepository.getMetadata(cidToString(cid))
-    expect(populateCachesSpy).toHaveBeenCalledWith(cidToString(cid))
     expect(metadata).toBeDefined()
     expect(metadata?.is_archived).toBe(true)
   })
