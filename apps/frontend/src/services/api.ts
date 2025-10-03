@@ -4,7 +4,6 @@ import {
   AccountModel,
   ObjectInformation,
   DownloadStatus,
-  Intent,
 } from '@auto-drive/models';
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';

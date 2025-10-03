@@ -10,8 +10,6 @@ import {
 import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
 import { v4 } from 'uuid'
-import { downloadService } from '../../../src/infrastructure/services/download/index.js'
-import { Readable } from 'stream'
 import { ForbiddenError } from '../../../src/errors/index.js'
 import { nodesRepository } from '../../../src/infrastructure/repositories/index.js'
 
