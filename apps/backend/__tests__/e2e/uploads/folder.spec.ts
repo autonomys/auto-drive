@@ -289,12 +289,16 @@ describe('Folder Upload', () => {
         tags: ['insecure'],
       })
 
-      expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
-        id: 'publish-nodes',
-        params: {
-          nodes: expect.arrayContaining([folderCID, subfileCID, subfolderCid]),
-        },
-        retriesLeft: expect.any(Number),
+      const cids = [folderCID, subfileCID, subfolderCid]
+
+      cids.forEach((cid) => {
+        expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
+          id: 'publish-nodes',
+          params: {
+            nodes: [cid],
+          },
+          retriesLeft: expect.any(Number),
+        })
       })
     })
 

@@ -45,7 +45,7 @@ export const UpdateRoleModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='fixed inset-0 bg-black dark:bg-darkBlack/25' />
+          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -59,10 +59,10 @@ export const UpdateRoleModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-darkWhite'>
+              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
-                  className='text-lg font-medium leading-6 text-black dark:text-darkBlack'
+                  className='dark:text-darkBlack text-lg font-medium leading-6 text-black'
                 >
                   Update user role
                 </DialogTitle>
@@ -70,7 +70,7 @@ export const UpdateRoleModal = ({
                   <div className='space-y-4'>
                     <div>
                       <select
-                        className='rounded border border-gray-300 bg-white px-2 py-1 text-black dark:bg-darkWhite dark:text-darkBlack dark:ring-1 dark:ring-darkWhiteHover'
+                        className='dark:bg-darkWhite dark:text-darkBlack dark:ring-darkWhiteHover rounded border border-gray-300 bg-white px-2 py-1 text-black dark:ring-1'
                         value={role}
                         onChange={(e) => setRole(e.target.value as UserRole)}
                       >
@@ -78,7 +78,7 @@ export const UpdateRoleModal = ({
                           User (Manage own files)
                         </option>
                         <option value={UserRole.Admin}>
-                          Admin (Manage user&apos;s subscriptions)
+                          Admin (Manage user&apos;s account)
                         </option>
                       </select>
                     </div>

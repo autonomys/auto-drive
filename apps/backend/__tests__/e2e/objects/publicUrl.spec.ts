@@ -1,10 +1,7 @@
 import { InteractionType, UserWithOrganization } from '@auto-drive/models'
 import { PublishedObject } from '../../../src/infrastructure/repositories/objects/publishedObjects.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
-import {
-  ObjectUseCases,
-  SubscriptionsUseCases,
-} from '../../../src/core/index.js'
+import { ObjectUseCases, AccountsUseCases } from '../../../src/core/index.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
@@ -62,7 +59,7 @@ describe('Public URL', () => {
     })
 
     const pendingCredits =
-      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      await AccountsUseCases.getPendingCreditsByUserAndType(
         user,
         InteractionType.Download,
       )
@@ -73,7 +70,7 @@ describe('Public URL', () => {
     expect(downloadedContent).toEqual(Buffer.from(content))
 
     const updatedPendingCredits =
-      await SubscriptionsUseCases.getPendingCreditsByUserAndType(
+      await AccountsUseCases.getPendingCreditsByUserAndType(
         user,
         InteractionType.Download,
       )

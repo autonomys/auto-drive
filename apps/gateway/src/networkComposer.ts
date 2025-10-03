@@ -4,16 +4,12 @@ import { firstNonNull } from "./utils";
 import { ApiPatternByNetwork, config } from "./config";
 
 export const getFileNetwork = async (cid: string) => {
-  const networks = [NetworkId.MAINNET, NetworkId.TAURUS] as const;
+  const networks = [NetworkId.MAINNET] as const;
 
   // Create reusable API instances to avoid memory leaks
   const apiInstances = {
     [NetworkId.MAINNET]: createAutoDriveApi({
       network: NetworkId.MAINNET,
-      apiKey: config.autoDriveApiKey,
-    }),
-    [NetworkId.TAURUS]: createAutoDriveApi({
-      network: NetworkId.TAURUS,
       apiKey: config.autoDriveApiKey,
     }),
   };
