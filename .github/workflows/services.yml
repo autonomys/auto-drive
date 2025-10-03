@@ -5,13 +5,13 @@ on:
     branches:
       - main
     paths:
-      - "backend/**" # Only trigger on changes within auth or backend
-      - "auth/**"
+      - "apps/backend/**" # Only trigger on changes within auth or backend
+      - "apps/auth/**"
       - ".github/**"
   pull_request:
     paths:
-      - "backend/**" # Only trigger on changes within auth or backend
-      - "auth/**"
+      - "apps/backend/**" # Only trigger on changes within auth or backend
+      - "apps/auth/**"
       - ".github/**"
   workflow_dispatch:
 
