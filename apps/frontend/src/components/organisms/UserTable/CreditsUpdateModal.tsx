@@ -111,7 +111,7 @@ export const CreditsUpdateModal = ({
                     <div className='flex items-center space-x-2'>
                       <label
                         htmlFor='granularity'
-                        className='dark:text-darkBlack min-w-[110px] text-left text-black'
+                        className='min-w-[110px] text-left text-foreground'
                       >
                         Granularity
                       </label>
