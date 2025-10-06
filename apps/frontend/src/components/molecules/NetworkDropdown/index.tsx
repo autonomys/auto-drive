@@ -26,7 +26,7 @@ export const NetworkDropdown: FC<{
   return (
     <Listbox value={selected} onChange={onChange}>
       <div className='relative mt-1 w-36'>
-        <ListboxButton className='dark:bg-darkWhite dark:ring-darkBlackHover relative w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 dark:ring-1 sm:text-sm'>
+        <ListboxButton className='bg-background-hover text-background-hover-foreground hover:text-background-hover-foreground relative w-full cursor-default rounded-lg py-2 pl-3 pr-10 text-left shadow-md focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 dark:ring-2 dark:ring-white dark:ring-opacity-5 sm:text-sm'>
           <div className='flex items-center space-x-2'>
             <AutonomysSymbol />
             <span className='ml-2 block'>{selected.name}</span>
@@ -44,13 +44,12 @@ export const NetworkDropdown: FC<{
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <ListboxOptions className='dark:bg-darkWhite absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm'>
+          <ListboxOptions className='absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-background py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none dark:ring-white dark:ring-opacity-5 sm:text-sm'>
             {Object.values(networks).map((network, personIdx) => (
               <ListboxOption
                 key={personIdx}
                 className={cn(
-                  'dark:bg-darkWhite relative flex cursor-default select-none items-center justify-start gap-2 bg-white py-2 pl-4 pr-4',
-                  isActive(selected, network) ? 'bg-gray-100' : '',
+                  'bg-background-hover text-background-hover-foreground hover:text-background-hover-foreground relative flex cursor-default select-none items-center justify-start gap-2 bg-sidebar-accent py-2 pl-4 pr-4 hover:bg-background',
                 )}
                 value={network}
               >
@@ -67,11 +66,8 @@ export const NetworkDropdown: FC<{
                     {network.name}
                   </span>
                   {isActive(selected, network) ? (
-                    <span className='text-greenBright absolute inset-y-0 right-2 my-auto flex items-center'>
-                      <CheckIcon
-                        className='size-4 text-gray-400'
-                        aria-hidden='true'
-                      />
+                    <span className='absolute inset-y-0 right-2 my-auto flex items-center'>
+                      <CheckIcon className='size-4' aria-hidden='true' />
                     </span>
                   ) : null}
                 </div>

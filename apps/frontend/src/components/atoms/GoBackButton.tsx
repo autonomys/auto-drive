@@ -2,10 +2,9 @@ import { ChevronLeftIcon } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
 import { useRouter } from 'next/navigation';
 
-export const GoBackButton = ({
+/* eslint-disable react/prop-types */
+export const GoBackButton: React.FC<{ children?: string }> = ({
   children = 'Back',
-}: {
-  children?: React.ReactNode;
 }) => {
   const router = useRouter();
 

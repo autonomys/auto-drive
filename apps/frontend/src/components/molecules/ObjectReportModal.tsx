@@ -62,19 +62,19 @@ export const ObjectReportModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogPanel className='bg-background-hover w-full max-w-md transform overflow-hidden rounded-2xl bg-background p-6 text-left align-middle shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
-                  className='text-center text-lg font-medium leading-6 text-gray-900 dark:text-gray-100'
+                  className='text-center text-lg font-medium leading-6 text-foreground'
                 >
                   Report File
                 </DialogTitle>
                 <div className='mt-2'>
-                  <p className='text-center text-sm text-gray-500 dark:text-gray-400'>
+                  <p className='text-foreground-hover text-center text-sm'>
                     Are you sure you want to report this file? This will flag it
                     for review by administrators.
                   </p>
-                  <p className='mt-2 break-all text-center font-mono text-xs text-gray-600 dark:text-gray-300'>
+                  <p className='text-foreground-hover mt-2 break-all text-center font-mono text-xs'>
                     {cid}
                   </p>
                 </div>

@@ -142,27 +142,27 @@ export const AdminPanel = () => {
               value={searchPublicId}
               onChange={(e) => setSearchPublicId(e.target.value)}
               placeholder='Enter exact public ID'
-              className='rounded border px-3 py-2'
+              className='bg-background-hover text-foreground-hover rounded border px-3 py-2'
             />
           </div>
           <Button
-            variant='primary'
+            variant='accent'
             disabled={isSearching}
-            className='rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50'
+            className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground disabled:opacity-50'
           >
             {isSearching ? 'Searching...' : 'Search'}
           </Button>
           {searchPublicId && (
             <Button
-              variant='lightDanger'
+              variant='danger'
               onClick={handleResetSearch}
-              className='rounded bg-gray-300 px-4 py-2 text-gray-800 hover:bg-gray-400'
+              className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground'
             >
               Reset
             </Button>
           )}
         </form>
-        {searchError && <p className='mt-2 text-red-500'>{searchError}</p>}
+        {searchError && <p className='text-light-danger mt-2'>{searchError}</p>}
       </div>
 
       <div className='flex flex-col gap-2'>
