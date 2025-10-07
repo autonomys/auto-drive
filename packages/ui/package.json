@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@autonomys/auto-utils": "^1.5.15",
-    "lucide-react": "^0.439.0",
+    "lucide-react": "^0.545.0",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.6.3"
   },
