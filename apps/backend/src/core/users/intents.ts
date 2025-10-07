@@ -7,7 +7,7 @@ import { err, ok } from 'neverthrow'
 import { config } from '../../config.js'
 import { randomBytes } from 'crypto'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { SubscriptionsUseCases } from './subscriptions.js'
+import { AccountsUseCases } from './accounts.js'
 import { transactionByteFee } from '@autonomys/auto-consensus'
 import { ApiPromise, WsProvider } from '@polkadot/api'
 
@@ -132,7 +132,7 @@ const onConfirmedIntent = async (intentId: string) => {
     return err(new Error('Intent has no deposit amount'))
   }
 
-  const addResult = await SubscriptionsUseCases.addCreditsToSubscription(
+  const addResult = await AccountsUseCases.addCreditsToAccount(
     intent.userPublicId,
     IntentsUseCases.getIntentCredits(intent),
   )

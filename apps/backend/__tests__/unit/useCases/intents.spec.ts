@@ -2,7 +2,7 @@ import { jest } from '@jest/globals'
 import { IntentsUseCases } from '../../../src/core/users/intents.js'
 import { intentsRepository } from '../../../src/infrastructure/repositories/users/intents.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
-import { SubscriptionsUseCases } from '../../../src/core/users/subscriptions.js'
+import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { ForbiddenError } from '../../../src/errors/index.js'
 import { IntentStatus, type Intent, type User } from '@auto-drive/models'
 import { ok } from 'neverthrow'
@@ -150,7 +150,7 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const addCreditsSpy = jest
-      .spyOn(SubscriptionsUseCases, 'addCreditsToSubscription')
+      .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(ok())
     const updateSpy = jest
       .spyOn(intentsRepository, 'updateIntent')
@@ -183,7 +183,7 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const addCreditsSpy = jest
-      .spyOn(SubscriptionsUseCases, 'addCreditsToSubscription')
+      .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(ok())
     const updateSpy = jest
       .spyOn(intentsRepository, 'updateIntent')

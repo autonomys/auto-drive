@@ -14,7 +14,7 @@ import { dbMigration } from '../../utils/dbMigrate.js'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { accountsRepository } from '../../../src/infrastructure/repositories/index.js'
-import { SubscriptionsUseCases } from '../../../src/core/users/subscriptions.js'
+import { jest } from '@jest/globals'
 
 describe('CreditsUseCases', () => {
   let mockUser: UserWithOrganization
@@ -90,34 +90,31 @@ describe('CreditsUseCases', () => {
     if (!before) throw new Error('Subscription not found')
 
     const creditsToAdd = 123
-    const result = await SubscriptionsUseCases.addCreditsToSubscription(
+    const result = await AccountsUseCases.addCreditsToAccount(
       mockUser.publicId,
       creditsToAdd,
     )
 
     expect(result.isOk()).toBe(true)
 
-    const after = await SubscriptionsUseCases.getSubscriptionById(
-      subscription.id,
-    )
+    const after = await AccountsUseCases.getAccountById(subscription.id)
     if (!after) throw new Error('Subscription not found')
 
     expect(after.uploadLimit - before.uploadLimit).toBe(creditsToAdd)
-    expect(after.granularity).toBe(AccountModel.OneOff)
+    expect(after.model).toBe(AccountModel.OneOff)
   })
 
   it('should fail to add credits if subscription is not OneOff', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
-    const subscription =
-      await SubscriptionsUseCases.getOrCreateSubscription(mockUser)
+    const subscription = await AccountsUseCases.getOrCreateAccount(mockUser)
     await accountsRepository.updateAccount(
       subscription.id,
-      AccountModel.OneOff,
+      AccountModel.Monthly,
       subscription.uploadLimit,
       subscription.downloadLimit,
     )
 
-    const result = await SubscriptionsUseCases.addCreditsToSubscription(
+    const result = await AccountsUseCases.addCreditsToAccount(
       mockUser.publicId,
       10,
     )

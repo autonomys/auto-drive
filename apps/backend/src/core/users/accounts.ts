@@ -216,6 +216,31 @@ const registerInteraction = async (
   await InteractionsUseCases.createInteraction(account.id, type, size)
 }
 
+const addCreditsToAccount = async (publicId: string, credits: number) => {
+  const user = await AuthManager.getUserFromPublicId(publicId)
+  if (!user) {
+    return err(new ObjectNotFoundError('User not found'))
+  }
+
+  const account = await AccountsUseCases.getOrCreateAccount(user)
+  if (!account) {
+    return err(new ObjectNotFoundError('Account not found'))
+  }
+
+  if (account.model !== AccountModel.OneOff) {
+    return err(new ForbiddenError('Account is not OneOff'))
+  }
+
+  await accountsRepository.updateAccount(
+    account.id,
+    account.model,
+    account.uploadLimit + credits,
+    account.downloadLimit + credits,
+  )
+
+  return ok()
+}
+
 export const AccountsUseCases = {
   updateAccount,
   getOrCreateAccount,
@@ -224,6 +249,7 @@ export const AccountsUseCases = {
   getAccountInfo,
   getPendingCreditsByUserAndType,
   registerInteraction,
+  addCreditsToAccount,
   getUserListAccount,
   getAccountById,
 }
