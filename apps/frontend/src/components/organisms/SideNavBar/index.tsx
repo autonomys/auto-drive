@@ -13,9 +13,9 @@ import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
 import { SessionContext } from 'next-auth/react';
 import { AuthModal } from '../../molecules/AuthModal';
-import { AskForCreditsButton } from '../../atoms/AskForCredits';
 import { SIDEBAR_DEFINITION } from './items';
 import { SideNavBarContent } from './SideNavBarContent';
+import { AskForCreditsButton } from '../../atoms/AskForCredits';
 
 export type SideNavbarProps = {
   networkId: NetworkId;

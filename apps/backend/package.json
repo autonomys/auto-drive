@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "dev": "yarn build && yarn $1",
     "start:prod": "node dist/server.prod.js",
     "start:docs": "node --loader ts-node/esm src/http/controllers/docs.ts",
     "test": "NODE_OPTIONS='--max-old-space-size=6096' node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --coverage --forceExit",
@@ -22,6 +23,7 @@
     "@auto-drive/s3": "workspace:*",
     "@auto-files/rpc-apis": "workspace:*",
     "@autonomys/asynchronous": "^1.5.18",
+    "@autonomys/auto-consensus": "^1.5.18",
     "@autonomys/auto-dag-data": "^1.5.18",
     "@autonomys/auto-drive": "^1.5.18",
     "@autonomys/auto-files": "^1.5.18",
@@ -55,6 +57,7 @@
     "pizzip": "^3.1.7",
     "tar": "^7.4.3",
     "uuid": "^11.1.0",
+    "viem": "^2.37.5",
     "websocket": "^1.0.35",
     "zod": "^3.23.8"
   },

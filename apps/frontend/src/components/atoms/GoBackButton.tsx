@@ -3,8 +3,15 @@ import { Button } from '@auto-drive/ui';
 import { useRouter } from 'next/navigation';
 
 /* eslint-disable react/prop-types */
-export const GoBackButton: React.FC<{ children?: string }> = ({
+export const GoBackButton: React.FC<{
+  children?: string;
+  onClick?: () => void;
+}> = ({
   children = 'Back',
+  onClick,
+}: {
+  children?: React.ReactNode;
+  onClick?: () => void;
 }) => {
   const router = useRouter();
 
@@ -13,7 +20,7 @@ export const GoBackButton: React.FC<{ children?: string }> = ({
       variant='outline'
       size='sm'
       className='inline-flex items-center'
-      onClick={() => router.back()}
+      onClick={onClick ?? router.back}
     >
       <ChevronLeftIcon className='h-4 w-4' />
       {children}

@@ -1,4 +1,8 @@
-import { InteractionType, UserWithOrganization } from '@auto-drive/models'
+import {
+  InteractionType,
+  AccountModel,
+  UserWithOrganization,
+} from '@auto-drive/models'
 import { PreconditionError } from '../../utils/error.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import {
@@ -8,6 +12,9 @@ import {
 } from '../../utils/mocks.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
+import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
+import { accountsRepository } from '../../../src/infrastructure/repositories/index.js'
+import { jest } from '@jest/globals'
 
 describe('CreditsUseCases', () => {
   let mockUser: UserWithOrganization
@@ -66,5 +73,52 @@ describe('CreditsUseCases', () => {
       )
 
     expect(initialCredits - pendingCredits).toBe(Number(size).valueOf())
+  })
+
+  it('should add credits to a OneOff subscription', async () => {
+    jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
+    const subscription = await AccountsUseCases.getOrCreateAccount(mockUser)
+    // Ensure subscription is OneOff
+    await accountsRepository.updateAccount(
+      subscription.id,
+      AccountModel.OneOff,
+      subscription.uploadLimit,
+      subscription.downloadLimit,
+    )
+
+    const before = await AccountsUseCases.getAccountById(subscription.id)
+    if (!before) throw new Error('Subscription not found')
+
+    const creditsToAdd = 123
+    const result = await AccountsUseCases.addCreditsToAccount(
+      mockUser.publicId,
+      creditsToAdd,
+    )
+
+    expect(result.isOk()).toBe(true)
+
+    const after = await AccountsUseCases.getAccountById(subscription.id)
+    if (!after) throw new Error('Subscription not found')
+
+    expect(after.uploadLimit - before.uploadLimit).toBe(creditsToAdd)
+    expect(after.model).toBe(AccountModel.OneOff)
+  })
+
+  it('should fail to add credits if subscription is not OneOff', async () => {
+    jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
+    const subscription = await AccountsUseCases.getOrCreateAccount(mockUser)
+    await accountsRepository.updateAccount(
+      subscription.id,
+      AccountModel.Monthly,
+      subscription.uploadLimit,
+      subscription.downloadLimit,
+    )
+
+    const result = await AccountsUseCases.addCreditsToAccount(
+      mockUser.publicId,
+      10,
+    )
+
+    expect(result.isErr()).toBe(true)
   })
 })

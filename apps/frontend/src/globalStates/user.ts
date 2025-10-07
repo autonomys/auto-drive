@@ -5,9 +5,11 @@ import { AccountInfo, User } from '@auto-drive/models';
 interface UserStore {
   user: User | null;
   account: AccountInfo | null;
+  features: Record<string, boolean>;
+  setFeatures: (features: Record<string, boolean>) => void;
+  setAccount: (account: AccountInfo) => void;
   setUser: (user: User | null) => void;
   clearUser: () => void;
-  setAccount: (accountInfo: AccountInfo) => void;
 }
 
 export const useUserStore = create<UserStore>()(
@@ -24,6 +26,8 @@ export const useUserStore = create<UserStore>()(
         set({
           account,
         }),
+      features: {},
+      setFeatures: (features: Record<string, boolean>) => set({ features }),
     }),
     {
       name: 'user-dto-storage',

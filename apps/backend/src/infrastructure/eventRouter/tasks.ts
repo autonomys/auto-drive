@@ -3,7 +3,7 @@ import { ObjectMappingSchema } from '@auto-drive/models'
 import { config } from '../../config.js'
 import { exhaustiveCheck } from '../../shared/utils/misc.js'
 
-export const MAX_RETRIES = config.services.taskManager.maxRetries
+export const MAX_RETRIES = config.params.taskManagerMaxRetries
 
 export const TaskSchema = z.discriminatedUnion('id', [
   z.object({
@@ -53,6 +53,13 @@ export const TaskSchema = z.discriminatedUnion('id', [
     retriesLeft: z.number().default(MAX_RETRIES),
     params: z.object({
       cid: z.string(),
+    }),
+  }),
+  z.object({
+    id: z.literal('watch-intent-tx'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({
+      txHash: z.string(),
     }),
   }),
   z.object({
@@ -111,6 +118,12 @@ type TaskCreateParams =
       }
     }
   | {
+      id: 'watch-intent-tx'
+      params: {
+        txHash: string
+      }
+    }
+  | {
       id: 'populate-cache'
       params: {
         cid: string
@@ -156,6 +169,12 @@ export const createTask = (task: TaskCreateParams): Task => {
         retriesLeft: MAX_RETRIES,
       }
     case 'ensure-object-published':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'watch-intent-tx':
       return {
         id: task.id,
         params: task.params,

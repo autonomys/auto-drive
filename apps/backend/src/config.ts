@@ -1,6 +1,8 @@
 import 'dotenv/config'
+import { FeatureFlag } from './core/featureFlags/index.js'
 import { AccountModel } from '@auto-drive/models'
 import { optionalBoolEnvironmentVariable, env } from './shared/utils/misc.js'
+import { getAddress } from 'viem'
 
 const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
 
@@ -59,6 +61,13 @@ export const config = {
     },
     metricEnvironmentTag: env('METRIC_ENVIRONMENT_TAG', 'chain=unknown'),
   },
+  paymentManager: {
+    url: env('EVM_CHAIN_ENDPOINT'),
+    contractAddress: getAddress(env('EVM_CHAIN_CONTRACT_ADDRESS')),
+    confirmations: Number(env('EVM_CHAIN_CONFIRMATIONS', '12')),
+    checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
+    priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
+  },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
     maxAnonymousDownloadSize: Number(
@@ -83,20 +92,35 @@ export const config = {
       ),
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
+    taskManagerMaxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
   },
-  services: {
-    taskManager: {
-      active:
-        (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
-          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
-        !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
-      maxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
+  featureFlags: {
+    flags: {
+      taskManager: {
+        active:
+          (optionalBoolEnvironmentVariable('TASK_MANAGER_ACTIVE') ||
+            optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+          !optionalBoolEnvironmentVariable('TASK_MANAGER_DISABLED'),
+      } as FeatureFlag,
+      objectMappingArchiver: {
+        active:
+          (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
+            optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
+          !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
+      } as FeatureFlag,
+      buyCredits: {
+        active: optionalBoolEnvironmentVariable('BUY_CREDITS_ACTIVE'),
+        staffOnly: optionalBoolEnvironmentVariable('BUY_CREDITS_STAFF_ONLY'),
+      } as FeatureFlag,
     },
-    objectMappingArchiver: {
-      active:
-        (optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_ACTIVE') ||
-          optionalBoolEnvironmentVariable('ALL_SERVICES_ACTIVE')) &&
-        !optionalBoolEnvironmentVariable('OBJECT_MAPPING_ARCHIVER_DISABLED'),
-    },
+    allowlistedUsernames: env('STAFF_USERNAME_ALLOWLIST', '')
+      .split(',')
+      .filter((username) => username)
+      .map((username) => username.toLowerCase()),
+    staffDomains: env('STAFF_DOMAINS', '')
+      .split(',')
+      // Remove empty strings
+      .filter((domain) => domain)
+      .map((domain) => domain.toLowerCase()),
   },
 }

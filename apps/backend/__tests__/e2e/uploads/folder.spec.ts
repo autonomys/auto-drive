@@ -300,6 +300,22 @@ describe('Folder Upload', () => {
           retriesLeft: expect.any(Number),
         })
       })
+
+      expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
+        id: 'publish-nodes',
+        params: {
+          nodes: [subfileCID],
+        },
+        retriesLeft: expect.any(Number),
+      })
+
+      expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
+        id: 'publish-nodes',
+        params: {
+          nodes: [subfolderCid],
+        },
+        retriesLeft: expect.any(Number),
+      })
     })
 
     it('upload status should be updated on node publishing', async () => {

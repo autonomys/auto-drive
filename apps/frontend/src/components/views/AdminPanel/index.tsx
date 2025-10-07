@@ -146,7 +146,7 @@ export const AdminPanel = () => {
             />
           </div>
           <Button
-            variant='accent'
+            variant='primary'
             disabled={isSearching}
             className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground disabled:opacity-50'
           >

@@ -10,7 +10,7 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const session = useContext(SessionContext);
   const setUser = useUserStore(({ setUser }) => setUser);
   const user = useUserStore(({ user }) => user);
-  const setAccount = useUserStore(({ setAccount: setAccount }) => setAccount);
+  const setAccount = useUserStore((m) => m.setAccount);
   const { api } = useNetwork();
 
   useEffect(() => {
@@ -29,6 +29,12 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
       });
     }
   }, [api, router, session, session?.data, setAccount, setUser]);
+
+  useEffect(() => {
+    api.getAccount().then((account) => {
+      setAccount(account);
+    });
+  }, [api, setAccount]);
 
   useEffect(() => {
     if (user) {
