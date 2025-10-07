@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { NetworkDropdown } from '../molecules/NetworkDropdown';
 import { redirect } from 'next/navigation';
-import { defaultNetworkId, NetworkId, networks } from '@auto-drive/ui';
+import { defaultNetworkId, NetworkId, networks, ThemeToggle } from '@auto-drive/ui';
 import { ProfileDropdown } from '../molecules/ProfileDropdown';
 import { useUserStore } from '@/globalStates/user';
 import { SidebarTrigger } from '../molecules/Sidebar';
@@ -31,6 +31,7 @@ export const TopNavbar = ({ networkId }: TopNavbarProps) => {
               window.location.assign(`/${value.id}/drive/global`);
             }}
           />
+          <ThemeToggle />
           {user && <ProfileDropdown />}
         </div>
       </div>

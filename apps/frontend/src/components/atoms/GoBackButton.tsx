@@ -2,7 +2,11 @@ import { ChevronLeftIcon } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
 import { useRouter } from 'next/navigation';
 
-export const GoBackButton = ({
+/* eslint-disable react/prop-types */
+export const GoBackButton: React.FC<{
+  children?: string;
+  onClick?: () => void;
+}> = ({
   children = 'Back',
   onClick,
 }: {
@@ -16,7 +20,7 @@ export const GoBackButton = ({
       variant='outline'
       size='sm'
       className='inline-flex items-center'
-      onClick={onClick ? onClick : router.back}
+      onClick={onClick ?? router.back}
     >
       <ChevronLeftIcon className='h-4 w-4' />
       {children}

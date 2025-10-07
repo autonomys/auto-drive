@@ -1,7 +1,7 @@
 import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
-  SubscriptionInfo,
-  SubscriptionGranularity,
+  AccountInfo,
+  AccountModel,
   ObjectInformation,
   DownloadStatus,
   Intent,
@@ -87,13 +87,13 @@ export const createApiService = ({
 
     return response.json() as Promise<Intent>;
   },
-  getSubscription: async (): Promise<SubscriptionInfo> => {
+  getAccount: async (): Promise<AccountInfo> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${apiBaseUrl}/subscriptions/@me`, {
+    const response = await fetch(`${apiBaseUrl}/accounts/@me`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
@@ -104,17 +104,17 @@ export const createApiService = ({
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return response.json() as Promise<SubscriptionInfo>;
+    return response.json() as Promise<AccountInfo>;
   },
   getUserList: async (
     userPublicIds: string[],
-  ): Promise<Record<string, SubscriptionInfo>> => {
+  ): Promise<Record<string, AccountInfo>> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${apiBaseUrl}/subscriptions/list`, {
+    const response = await fetch(`${apiBaseUrl}/accounts/list`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -128,7 +128,7 @@ export const createApiService = ({
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return response.json() as Promise<Record<string, SubscriptionInfo>>;
+    return response.json() as Promise<Record<string, AccountInfo>>;
   },
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const session = await getAuthSession();
@@ -215,9 +215,9 @@ export const createApiService = ({
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  updateSubscription: async (
+  updateAccount: async (
     publicId: string,
-    granularity: SubscriptionGranularity,
+    model: AccountModel,
     uploadLimit: number,
     downloadLimit: number,
   ): Promise<void> => {
@@ -226,10 +226,10 @@ export const createApiService = ({
       throw new Error('No session');
     }
 
-    const response = await fetch(`${apiBaseUrl}/subscriptions/update`, {
+    const response = await fetch(`${apiBaseUrl}/accounts/update`, {
       method: 'POST',
       body: JSON.stringify({
-        granularity,
+        model,
         uploadLimit,
         downloadLimit,
         publicId,
@@ -308,41 +308,15 @@ export const createApiService = ({
       throw new Error(`Failed to dismiss report: ${response.statusText}`);
     }
   },
-  getFeatures: async (): Promise<Record<string, boolean>> => {
-    const session = await getAuthSession().catch(() => null);
-
-    const response = await fetch(`${apiBaseUrl}/features`, {
-      headers: {
-        ...(session?.accessToken
-          ? {
-              Authorization: `Bearer ${session?.accessToken}`,
-              'X-Auth-Provider': session.authProvider,
-            }
-          : {}),
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to get features: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
   // Download
   downloadObject: async (
     cid: string,
     password?: string,
   ): Promise<AsyncIterable<Buffer>> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
     const api = createAutoDriveApi({
       downloadServiceUrl: downloadApiUrl,
       apiUrl: apiBaseUrl,
-      provider: session.authProvider as AuthProvider,
-      apiKey: session.accessToken,
+      apiKey: null,
     });
 
     return api.downloadFile(cid, password);

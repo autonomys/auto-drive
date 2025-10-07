@@ -16,6 +16,7 @@ export const truncateNumberWithDecimals = (
 
 export const truncateBytes = (num: number): string => {
   const f = bytes(num, { decimalPlaces: 2 });
+  if (!f) return 'N/A';
 
   // Extract the numeric part and unit using regex
   const match = f.match(/^(\d+(?:\.\d+)?)([KMGT]?B)$/);

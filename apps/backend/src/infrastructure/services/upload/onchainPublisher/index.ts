@@ -2,7 +2,7 @@ import { createLogger } from '../../../drivers/logger.js'
 import { NodesUseCases } from '../../../../core/objects/nodes.js'
 import { createTransactionManager } from './transactionManager.js'
 import { compactAddLength } from '@polkadot/util'
-import { nodesRepository } from '../../../repositories/objects/nodes.js'
+import { nodesRepository, Node } from '../../../repositories/objects/nodes.js'
 
 const logger = createLogger('upload:onchainPublisher')
 
@@ -20,12 +20,16 @@ const publishNodes = async (cids: string[]) => {
     ),
   )
 
-  const filteredNodes = nodes.filter(
-    (_, index) =>
-      nodeCounts[index] && (nodeCounts[index].publishedCount ?? 0) === 0,
-  )
+  const filter = (node: Node, index: number) => {
+    return nodeCounts[index] && (nodeCounts[index].publishedCount ?? 0) === 0
+  }
 
-  const transactions = filteredNodes.map((node) => {
+  const repeatedNodes = nodes.filter((_, index) => !filter(_, index))
+  await NodesUseCases.handleRepeatedNodes(repeatedNodes)
+
+  const publishingNodes = nodes.filter(filter)
+
+  const transactions = publishingNodes.map((node) => {
     const buffer = Buffer.from(node.encoded_node, 'base64')
 
     return {
@@ -42,7 +46,7 @@ const publishNodes = async (cids: string[]) => {
   }
 
   await Promise.all(
-    filteredNodes.map((node, index) => {
+    publishingNodes.map((node, index) => {
       const isSuccess = results[index].success
       if (!isSuccess) return null
       return NodesUseCases.setPublishedOn(node.cid, results[index])

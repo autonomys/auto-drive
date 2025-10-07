@@ -53,16 +53,16 @@ export const UploadingFolderModal = ({
   return (
     <Transition show={!!data}>
       <Dialog as='div' onClose={onClose}>
-        <div className='dark:bg-darkBlack/25 fixed inset-0 flex items-center justify-center bg-black/25'>
-          <div className='dark:bg-darkWhite min-w-[25%] transform rounded-lg bg-white p-6 shadow-lg transition-transform'>
-            <h3 className='dark:text-darkBlack mb-4 text-center text-lg font-medium'>
+        <div className='bg-background-hover fixed inset-0 flex items-center justify-center bg-opacity-50'>
+          <div className='bg-background-hover min-w-[25%] transform rounded-lg bg-background p-6 shadow-lg transition-transform'>
+            <h3 className='text-foreground-hover mb-4 text-center text-lg font-medium'>
               Uploading Folder
             </h3>
             {passwordConfirmed ? (
               <div>
-                <div className='relative h-2 w-full rounded bg-gray-200'>
+                <div className='bg-background-hover relative h-2 w-full rounded'>
                   <div
-                    className='absolute left-0 top-0 h-2 rounded bg-green-500 transition-all duration-500'
+                    className='bg-light-success absolute left-0 top-0 h-2 rounded transition-all duration-500'
                     style={{ width: `${progress}%` }}
                   />
                 </div>
@@ -70,15 +70,15 @@ export const UploadingFolderModal = ({
                   <div>Uploading... {progressPercentage}%</div>
                 </div>
                 <div className='mt-2 flex justify-between'>
-                  <div className='h-1 w-1 animate-pulse rounded-full bg-gray-500' />
-                  <div className='h-1 w-1 animate-pulse rounded-full bg-gray-500' />
-                  <div className='h-1 w-1 animate-pulse rounded-full bg-gray-500' />
+                  <div className='bg-background-hover h-1 w-1 animate-pulse rounded-full' />
+                  <div className='bg-background-hover h-1 w-1 animate-pulse rounded-full' />
+                  <div className='bg-background-hover h-1 w-1 animate-pulse rounded-full' />
                 </div>
               </div>
             ) : (
               <div>
                 <div className='flex flex-col gap-2 p-4'>
-                  <span className='text-md dark:text-darkBlack block text-center font-semibold text-gray-700'>
+                  <span className='text-foreground-hover text-md block text-center font-semibold'>
                     Enter Encrypting Password
                   </span>
                   <input
@@ -86,7 +86,7 @@ export const UploadingFolderModal = ({
                     id='password'
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className='mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm'
+                    className='border-background-hover mt-1 block w-full rounded-md border p-2 shadow-sm'
                     placeholder='Password'
                   />
                   <div className='flex justify-center gap-2'>
@@ -115,9 +115,9 @@ export const UploadingFolderModal = ({
                       Cancel
                     </Button>
                   </div>
-                  <div className='mt-4 flex items-center gap-2 overflow-hidden rounded bg-yellow-50 p-2'>
-                    <FileWarning className='h-4 w-4 text-yellow-500' />
-                    <span className='text-sm font-semibold text-gray-500'>
+                  <div className='text-foreground-hover mt-4 flex items-center gap-2 overflow-hidden rounded bg-yellow-50 p-2'>
+                    <FileWarning className='text-light-warning h-4 w-4' />
+                    <span className='text-foreground-hover text-sm font-semibold'>
                       Encrypted folders will be uploaded as encrypted zip files.
                     </span>
                   </div>

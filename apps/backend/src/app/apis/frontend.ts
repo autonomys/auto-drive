@@ -3,7 +3,7 @@ import express, { Request, Response } from 'express'
 
 import 'dotenv/config.js'
 import { objectController } from '../controllers/object.js'
-import { subscriptionController } from '../controllers/subscriptions.js'
+import { accountController } from '../controllers/accounts.js'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { uploadController } from '../controllers/upload.js'
 import { config } from '../../config.js'
@@ -47,7 +47,9 @@ const createServer = async () => {
   }
 
   app.use('/objects', objectController)
-  app.use('/subscriptions', subscriptionController)
+  // TODO: Remove this after migration
+  app.use('/subscriptions', accountController)
+  app.use('/accounts', accountController)
   app.use('/uploads', uploadController)
   app.use('/intents', featureFlagMiddleware('buyCredits'), intentsController)
   app.use('/features', featuresController)

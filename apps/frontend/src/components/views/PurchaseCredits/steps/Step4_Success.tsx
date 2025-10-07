@@ -66,7 +66,7 @@ export const PurchaseStep4Success = ({
               />
             </div>
             <div className='flex gap-3'>
-              <a href={ROUTES.drive(network.id)} className='contents'>
+              <a href={ROUTES.drive()} className='contents'>
                 <Button>Continue to Dashboard</Button>
               </a>
             </div>

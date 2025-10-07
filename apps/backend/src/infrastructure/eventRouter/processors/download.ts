@@ -14,6 +14,8 @@ export const processDownloadTask = createHandlerWithRetries(
       return AsyncDownloadsUseCases.asyncDownload(params.downloadId)
     } else if (id === 'object-archived') {
       return ObjectUseCases.onObjectArchived(params.cid)
+    } else if (id === 'populate-cache') {
+      return ObjectUseCases.populateCaches(params.cid)
     } else {
       logger.error(
         'Received task %s but no handler found (processors/download.ts)',

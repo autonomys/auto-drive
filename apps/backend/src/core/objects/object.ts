@@ -368,9 +368,39 @@ const restoreObject = async (
 }
 
 const isArchived = async (cid: string) => {
-  const count = await nodesRepository.getNodesCountWithoutDataByRootCid(cid)
-  logger.info('Nodes count without data (cid=%s): %d', cid, count.rows[0].count)
-  return count.rows[0].count > 0
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
+    logger.warn('Metadata not found for object (cid=%s)', cid)
+    return false
+  }
+
+  return metadata.is_archived
+}
+
+// to remove: this will not be used after we process data with no duplicates handling
+const isReconstructable = async (cid: string): Promise<boolean> => {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
+    logger.warn('Metadata not found for object (cid=%s)', cid)
+    return false
+  }
+
+  const metadataType = metadata.metadata.type
+  if (metadataType === 'file') {
+    const areNodesEncoded = await Promise.all(
+      metadata.metadata.chunks.map((child) =>
+        nodesRepository.hasEncodedNode(child.cid),
+      ),
+    )
+    return areNodesEncoded.every((e) => e)
+  } else {
+    const areNodesEncoded = await Promise.all(
+      metadata.metadata.children.map((child) =>
+        ObjectUseCases.isReconstructable(child.cid),
+      ),
+    )
+    return areNodesEncoded.every((e) => e)
+  }
 }
 
 const hasAllNodesArchived = async (cid: string) => {
@@ -391,9 +421,12 @@ const getNonArchivedObjects = async () => {
 
 const populateCaches = async (cid: string) => {
   try {
-    const isArchived = await ObjectUseCases.isArchived(cid)
-    if (isArchived) {
-      logger.warn('Object is archived, skipping cache population (cid=%s)', cid)
+    const isReconstructable = await ObjectUseCases.isReconstructable(cid)
+    if (!isReconstructable) {
+      logger.warn(
+        'Object is not reconstructable, skipping cache population (cid=%s)',
+        cid,
+      )
       return
     }
 
@@ -414,7 +447,6 @@ const populateCaches = async (cid: string) => {
 }
 
 const onObjectArchived = async (cid: string) => {
-  await ObjectUseCases.populateCaches(cid)
   await metadataRepository.markAsArchived(cid)
   await nodesRepository.removeNodeDataByRootCid(cid)
 }
@@ -465,10 +497,10 @@ const downloadPublishedObject = async (
   const user = await AuthManager.getUserFromPublicId(publishedObject.publicId)
   if (!user) {
     logger.warn(
-      'User not found or has no subscription (publicId=%s)',
+      'User not found or has no account (publicId=%s)',
       publishedObject.publicId,
     )
-    return err(new ObjectNotFoundError('User does not have a subscription'))
+    return err(new ObjectNotFoundError('User does not have a account'))
   }
 
   logger.trace(
@@ -685,4 +717,5 @@ export const ObjectUseCases = {
   authorizeDownload,
   getToBeReviewedList,
   syncingIsObjectBanned,
+  isReconstructable,
 }

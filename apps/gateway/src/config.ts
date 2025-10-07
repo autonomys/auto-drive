@@ -4,7 +4,6 @@ import { env } from "./utils";
 
 export const ApiPatternByNetwork: Partial<Record<NetworkId, string>> = {
   [NetworkId.MAINNET]: process.env.MAINNET_API_PATTERN,
-  [NetworkId.TAURUS]: process.env.TAURUS_API_PATTERN,
 };
 
 export const config = {

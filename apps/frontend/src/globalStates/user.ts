@@ -1,30 +1,30 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { SubscriptionInfo, User } from '@auto-drive/models';
+import { AccountInfo, User } from '@auto-drive/models';
 
 interface UserStore {
   user: User | null;
-  subscription: SubscriptionInfo | null;
+  account: AccountInfo | null;
   features: Record<string, boolean>;
+  setFeatures: (features: Record<string, boolean>) => void;
+  setAccount: (account: AccountInfo) => void;
   setUser: (user: User | null) => void;
   clearUser: () => void;
-  setFeatures: (features: Record<string, boolean>) => void;
-  setSubscription: (subscriptionInfo: SubscriptionInfo) => void;
 }
 
 export const useUserStore = create<UserStore>()(
   persist(
     (set) => ({
       user: null,
-      subscription: null,
+      account: null,
       setUser: (user: User | null) =>
         set({
           user: user,
         }),
-      clearUser: () => set({ user: null, subscription: null }),
-      setSubscription: (subscriptionInfo: SubscriptionInfo) =>
+      clearUser: () => set({ user: null, account: null }),
+      setAccount: (account: AccountInfo) =>
         set({
-          subscription: subscriptionInfo,
+          account,
         }),
       features: {},
       setFeatures: (features: Record<string, boolean>) => set({ features }),

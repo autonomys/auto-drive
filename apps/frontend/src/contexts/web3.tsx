@@ -20,7 +20,7 @@ export const Web3Provider: FC<{ children: ReactNode }> = ({ children }) => {
       getDefaultConfig({
         appName: 'Auto Drive',
         projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
-        chains: [evmChains.local, evmChains.mainnet, evmChains.taurus],
+        chains: [evmChains.local, evmChains.mainnet],
         ssr: false,
       }),
     [],

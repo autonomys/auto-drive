@@ -289,7 +289,9 @@ describe('Folder Upload', () => {
         tags: ['insecure'],
       })
 
-      ;[folderCID, subfileCID, subfolderCid].forEach((cid) => {
+      const cids = [folderCID, subfileCID, subfolderCid]
+
+      cids.forEach((cid) => {
         expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
           id: 'publish-nodes',
           params: {

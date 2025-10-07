@@ -1,19 +1,19 @@
 'use client';
 
 import { AuthService } from 'services/auth/auth';
-import { UserSubscriptionsTable } from '../../organisms/UserTable';
+import { UserAccountsTable } from '../../organisms/UserTable';
 import { useCallback, useEffect, useState } from 'react';
 import {
   OnboardedUser,
   PaginatedResult,
-  SubscriptionInfoWithUser,
+  AccountInfoWithUser,
 } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
 import { Button } from '@auto-drive/ui';
 
 export const AdminPanel = () => {
-  const [subscriptionsWithUsers, setSubscriptionsWithUsers] = useState<
-    SubscriptionInfoWithUser[]
+  const [accountsWithUsers, setAccountsWithUsers] = useState<
+    AccountInfoWithUser[]
   >([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -32,25 +32,25 @@ export const AdminPanel = () => {
       if (result.rows.length > 0) {
         setTotalCount(result.totalCount);
 
-        // Get all public IDs from users to fetch their subscriptions
+        // Get all public IDs from users to fetch their accounts
         const publicIds = result.rows.map((user) => user.publicId);
 
-        const subscriptionsByPublicId =
-          await network?.api.getUserList(publicIds);
-        if (subscriptionsByPublicId) {
-          const subscriptions = Object.entries(subscriptionsByPublicId);
-          const subscriptionsWithUsers: SubscriptionInfoWithUser[] =
-            subscriptions.map(([publicId, subscription]) => ({
-              ...subscription,
-              pendingUploadCredits: subscription.pendingUploadCredits || 0,
-              pendingDownloadCredits: subscription.pendingDownloadCredits || 0,
+        const accountsByPublicId = await network?.api.getUserList(publicIds);
+        if (accountsByPublicId) {
+          const accounts = Object.entries(accountsByPublicId);
+          const accountsWithUsers: AccountInfoWithUser[] = accounts.map(
+            ([publicId, account]) => ({
+              ...account,
+              pendingUploadCredits: account.pendingUploadCredits || 0,
+              pendingDownloadCredits: account.pendingDownloadCredits || 0,
               user: result.rows.find((user) => user.publicId === publicId)!,
-            }));
+            }),
+          );
 
-          setSubscriptionsWithUsers(subscriptionsWithUsers);
+          setAccountsWithUsers(accountsWithUsers);
         }
       } else {
-        setSubscriptionsWithUsers([]);
+        setAccountsWithUsers([]);
       }
     } catch (error) {
       console.error('Error fetching user list:', error);
@@ -77,31 +77,31 @@ export const AdminPanel = () => {
 
       if (user) {
         const publicIds = [user.publicId];
-        const subscriptionsByPublicId =
-          await network?.api.getUserList(publicIds);
+        const accountsByPublicId = await network?.api.getUserList(publicIds);
 
-        if (subscriptionsByPublicId) {
-          const subscriptions = Object.values(subscriptionsByPublicId);
-          const subscriptionsWithUsers: SubscriptionInfoWithUser[] =
-            subscriptions.map((subscription) => ({
-              ...subscription,
-              pendingUploadCredits: subscription.pendingUploadCredits || 0,
-              pendingDownloadCredits: subscription.pendingDownloadCredits || 0,
+        if (accountsByPublicId) {
+          const accounts = Object.values(accountsByPublicId);
+          const accountsWithUsers: AccountInfoWithUser[] = accounts.map(
+            (account) => ({
+              ...account,
+              pendingUploadCredits: account.pendingUploadCredits || 0,
+              pendingDownloadCredits: account.pendingDownloadCredits || 0,
               user: user,
-            }));
+            }),
+          );
 
-          setSubscriptionsWithUsers(subscriptionsWithUsers);
+          setAccountsWithUsers(accountsWithUsers);
           setTotalCount(1);
         } else {
-          // If no subscription data, still show the user
-          setSubscriptionsWithUsers([]);
+          // If no account data, still show the user
+          setAccountsWithUsers([]);
           setTotalCount(0);
         }
       }
     } catch (error) {
       console.error('Error searching for user:', error);
       setSearchError('User not found');
-      setSubscriptionsWithUsers([]);
+      setAccountsWithUsers([]);
     } finally {
       setIsSearching(false);
     }
@@ -142,32 +142,32 @@ export const AdminPanel = () => {
               value={searchPublicId}
               onChange={(e) => setSearchPublicId(e.target.value)}
               placeholder='Enter exact public ID'
-              className='rounded border px-3 py-2'
+              className='bg-background-hover text-foreground-hover rounded border px-3 py-2'
             />
           </div>
           <Button
             variant='primary'
             disabled={isSearching}
-            className='rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50'
+            className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground disabled:opacity-50'
           >
             {isSearching ? 'Searching...' : 'Search'}
           </Button>
           {searchPublicId && (
             <Button
-              variant='lightDanger'
+              variant='danger'
               onClick={handleResetSearch}
-              className='rounded bg-gray-300 px-4 py-2 text-gray-800 hover:bg-gray-400'
+              className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground'
             >
               Reset
             </Button>
           )}
         </form>
-        {searchError && <p className='mt-2 text-red-500'>{searchError}</p>}
+        {searchError && <p className='text-light-danger mt-2'>{searchError}</p>}
       </div>
 
       <div className='flex flex-col gap-2'>
-        <UserSubscriptionsTable
-          users={subscriptionsWithUsers}
+        <UserAccountsTable
+          users={accountsWithUsers}
           currentPage={currentPage}
           totalPages={totalPages}
           itemsPerPage={itemsPerPage}

@@ -31,14 +31,14 @@ export default function AppLayout({
   }
 
   return (
-    <div className='dark:bg-darkWhite flex min-h-screen bg-white'>
+    <div className='flex min-h-screen bg-background'>
       <AutomaticLoginWrapper>
         <SessionProvider>
           <NetworkProvider network={network}>
             <SessionEnsurer>
               <SidebarProvider className='contents'>
                 <SideNavbar networkId={params.chain} />
-                <div className='dark:bg-darkWhite flex h-screen flex-1 flex-col rounded-lg bg-white dark:text-white'>
+                <div className='flex h-screen flex-1 flex-col rounded-lg bg-background text-foreground'>
                   <TopNavbar networkId={params.chain} />
                   <div className='flex flex-1 overflow-hidden'>
                     <main className='flex-1 overflow-auto px-6 pb-6'>
