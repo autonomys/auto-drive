@@ -113,11 +113,11 @@ export const config = {
         staffOnly: optionalBoolEnvironmentVariable('BUY_CREDITS_STAFF_ONLY'),
       } as FeatureFlag,
     },
-    allowlistedUsernames: env('STAFF_USERNAME_ALLOWLIST', '')
+    allowlistedUsernames: env('STAFF_USERNAME_ALLOWLIST', '<none>')
       .split(',')
       .filter((username) => username)
       .map((username) => username.toLowerCase()),
-    staffDomains: env('STAFF_DOMAINS', '')
+    staffDomains: env('STAFF_DOMAINS', '<none>')
       .split(',')
       // Remove empty strings
       .filter((domain) => domain)
