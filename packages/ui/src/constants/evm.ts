@@ -1,10 +1,5 @@
 import { NetworkId } from './networks'
 import { Chain } from 'wagmi/chains'
-import {
-  getNetworkDomainRpcUrls,
-  NetworkId as AutoUtilsNetworkId,
-  DomainRuntime,
-} from '@autonomys/auto-utils'
 
 export const evmChains: Record<NetworkId, Chain> = {
   [NetworkId.MAINNET]: {
@@ -17,10 +12,7 @@ export const evmChains: Record<NetworkId, Chain> = {
     },
     rpcUrls: {
       default: {
-        http: getNetworkDomainRpcUrls({
-          networkId: AutoUtilsNetworkId.MAINNET,
-          domainId: '0',
-        }),
+        http: ['https://auto-evm.mainnet.autonomys.xyz/ws'],
       },
     },
   },

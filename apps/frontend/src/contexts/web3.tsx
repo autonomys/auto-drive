@@ -12,15 +12,17 @@ import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persi
 import { FC, ReactNode, useMemo, useState } from 'react';
 import { WagmiProvider } from 'wagmi';
 import { evmChains } from '@auto-drive/ui';
+import { useNetwork } from './network';
 
 export const Web3Provider: FC<{ children: ReactNode }> = ({ children }) => {
   const [queryClient] = useState(() => new QueryClient({}));
+  const { network } = useNetwork();
   const config = useMemo(
     () =>
       getDefaultConfig({
         appName: 'Auto Drive',
         projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
-        chains: [evmChains.local, evmChains.mainnet],
+        chains: [evmChains[network.id]],
         ssr: false,
       }),
     [],
