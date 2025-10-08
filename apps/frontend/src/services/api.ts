@@ -106,6 +106,26 @@ export const createApiService = ({
 
     return response.json() as Promise<AccountInfo>;
   },
+  getFeatures: async (): Promise<Record<string, boolean>> => {
+    const session = await getAuthSession().catch(() => null);
+
+    const response = await fetch(`${apiBaseUrl}/features`, {
+      headers: {
+        ...(session?.accessToken
+          ? {
+              Authorization: `Bearer ${session?.accessToken}`,
+              'X-Auth-Provider': session.authProvider,
+            }
+          : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get features: ${response.statusText}`);
+    }
+
+    return response.json();
+  },  
   getUserList: async (
     userPublicIds: string[],
   ): Promise<Record<string, AccountInfo>> => {
