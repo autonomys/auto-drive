@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@auto-drive/ui';
+import { Button, evmChains } from '@auto-drive/ui';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
 import { useAccount, useWriteContract } from 'wagmi';
@@ -29,7 +29,7 @@ export const PurchaseStep3TransferTokens = ({
 
   const { paymentIntent, targetContract, MINIMUM_CONFIRMATIONS } =
     usePaymentIntent();
-  const { api } = useNetwork();
+  const { api, network } = useNetwork();
 
   const [txHash, setTxHash] = useState<Hash | undefined>(undefined);
 
@@ -65,7 +65,10 @@ export const PurchaseStep3TransferTokens = ({
       const depositTransaction = await paymentIntent(
         formatCreditsInMbAsValue(Number(context.sizeMB)),
       );
-      const hash = await writeContractAsync(depositTransaction);
+      const hash = await writeContractAsync({
+        ...depositTransaction,
+        chain: evmChains[network.id],
+      });
       setIntentId(depositTransaction.intentId);
       setTxHash(hash);
     } catch (error) {
@@ -77,6 +80,7 @@ export const PurchaseStep3TransferTokens = ({
     formatCreditsInMbAsValue,
     context.sizeMB,
     writeContractAsync,
+    network.id,
   ]);
 
   const notifyAndNext = useCallback(async () => {
