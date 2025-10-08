@@ -1,11 +1,8 @@
 'use client';
 
 import '../../globals.css';
-import { useMemo } from 'react';
 import { SessionProvider } from 'next-auth/react';
-import { defaultNetworkId, NetworkId, networks } from '@auto-drive/ui';
-import { NetworkProvider, useNetwork } from 'contexts/network';
-import { useRouter } from 'next/navigation';
+import { useNetwork } from 'contexts/network';
 import { TopNavbar } from '@/components/organisms/TopNavbar';
 import { TableRouteChangeListener } from '@/components/organisms/FileTable/TableRouteChangeListener';
 import { SidebarProvider } from '@/components/molecules/Sidebar';
