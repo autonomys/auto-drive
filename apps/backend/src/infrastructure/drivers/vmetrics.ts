@@ -5,17 +5,21 @@ const logger = createLogger('drivers:metrics')
 
 export interface Metric {
   measurement: string
-  tag: string
+  tags: Record<string, string>
   fields: Record<string, string | number | bigint>
   timestamp?: number
 }
 
 export const sendMetricToVictoria = async (metric: Metric): Promise<void> => {
   try {
+    const tag = Object.entries(metric.tags)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(',')
+
     const values = Object.entries(metric.fields).map(
       ([key, value]) => `${key}=${value}`,
     )
-    const data = `${metric.measurement},${metric.tag} ${values.join(',')}`
+    const data = `${metric.measurement},${tag} ${values.join(',')}`
 
     const basicAuthToken = Buffer.from(
       `${config.monitoring.auth.username}:${config.monitoring.auth.password}`,
@@ -37,7 +41,7 @@ export const sendMetricToVictoria = async (metric: Metric): Promise<void> => {
     })
     if (!response.ok) {
       throw new Error(
-        `Failed to send metric to Victoria: ${response.statusText}`,
+        `Failed to send metric to Victoria: ${response.statusText}: ${await response.text()}`,
       )
     } else {
       logger.debug('Metric %s sent to Victoria', metric.measurement)

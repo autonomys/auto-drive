@@ -23,13 +23,9 @@ export const requestTrace: RequestHandler = (req, res) => {
     provider,
   }
 
-  const tag = Object.entries(tags)
-    .map(([key, value]) => `${key}=${value}`)
-    .join(',')
-
   const metric: Metric = {
     measurement: 'auto_drive_api_request',
-    tag,
+    tags,
     fields: {
       status: res.statusCode,
       method,
