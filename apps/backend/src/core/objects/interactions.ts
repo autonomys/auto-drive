@@ -17,13 +17,9 @@ const createMetric = (type: InteractionType, size: bigint): Metric => {
     type,
   }
 
-  const tag = Object.entries(tags)
-    .map(([key, value]) => `${key}=${value}`)
-    .join(',')
-
   return {
     measurement: 'auto_drive_interactions',
-    tag,
+    tags,
     fields: {
       size,
     },
@@ -47,7 +43,7 @@ const createInteraction = async (
     logger.trace(
       'Sending metric to Victoria (measurement=%s, tag=%s)',
       metric.measurement,
-      metric.tag,
+      JSON.stringify(metric.tags),
     )
     sendMetricToVictoria(metric)
 

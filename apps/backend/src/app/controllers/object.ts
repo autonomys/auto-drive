@@ -11,6 +11,7 @@ import {
 } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 import { sendMetricToVictoria } from '../../infrastructure/drivers/vmetrics.js'
+import { config } from '../../config.js'
 
 const logger = createLogger('http:controllers:object')
 
@@ -448,9 +449,13 @@ objectController.post(
     const { cid } = req.params
 
     logger.info('Reporting object', { cid })
+    const tags = {
+      chain: config.monitoring.metricEnvironmentTag,
+      ip: req.ip?.toString() ?? 'unknown',
+    }
     sendMetricToVictoria({
       measurement: 'object_report',
-      tag: req.ip?.toString() ?? 'unknown',
+      tags,
       fields: {
         cid,
         ip: req.ip?.toString() ?? 'unknown',
