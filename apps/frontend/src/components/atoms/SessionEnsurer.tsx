@@ -9,7 +9,7 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
   const session = useContext(SessionContext);
   const setUser = useUserStore(({ setUser }) => setUser);
-  const user = useUserStore(({ user }) => user);
+  const setFeatures = useUserStore(({ setFeatures }) => setFeatures);
   const setAccount = useUserStore((m) => m.setAccount);
   const { api } = useNetwork();
 
@@ -37,12 +37,10 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   }, [api, setAccount]);
 
   useEffect(() => {
-    if (user) {
-      api.getAccount().then((account) => {
-        setAccount(account);
-      });
-    }
-  }, [api, user, setAccount]);
+    api.getFeatures().then((features) => {
+      setFeatures(features);
+    });
+  }, [api, setFeatures]);
 
   if (session === undefined) {
     // TODO: Add a loading state

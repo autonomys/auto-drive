@@ -65,7 +65,9 @@ export const PurchaseStep3TransferTokens = ({
       const depositTransaction = await paymentIntent(
         formatCreditsInMbAsValue(Number(context.sizeMB)),
       );
-      const hash = await writeContractAsync(depositTransaction);
+      const hash = await writeContractAsync({
+        ...depositTransaction,
+      });
       setIntentId(depositTransaction.intentId);
       setTxHash(hash);
     } catch (error) {

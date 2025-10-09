@@ -2,7 +2,6 @@ import { Metadata, type Viewport } from 'next';
 import localFont from 'next/font/local';
 import './globals.css';
 import { getNoFlashScript } from '@auto-drive/ui';
-import dynamic from 'next/dynamic';
 import NextTopLoader from 'nextjs-toploader';
 import { Toaster } from 'react-hot-toast';
 
@@ -83,13 +82,6 @@ export const viewport: Viewport = {
   ],
 };
 
-const WalletProvider = dynamic(
-  () => import('@/contexts/web3').then((mod) => mod.Web3Provider),
-  {
-    ssr: false,
-  },
-);
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -102,7 +94,7 @@ export default function RootLayout({
       >
         <script dangerouslySetInnerHTML={{ __html: getNoFlashScript() }} />
         <NextTopLoader color='#1949D2' height={2} showSpinner={false} />
-        <WalletProvider>{children}</WalletProvider>
+        {children}
         <Toaster position='top-center' />
       </body>
     </html>

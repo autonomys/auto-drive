@@ -16,16 +16,27 @@
   )
   const logger = createLogger('servers:frontendWorker')
 
+  const { paymentManager } = await import(
+    '../../infrastructure/services/paymentManager/index.js'
+  )
+  
+  let somethingActive = false
   if (config.featureFlags.flags.taskManager.active) {
     EventRouter.listenFrontendEvents()
+    somethingActive = true
   }
   if (config.featureFlags.flags.objectMappingArchiver.active) {
     objectMappingArchiver.start()
+    somethingActive = true
   }
   if (
-    !config.featureFlags.flags.taskManager.active &&
-    !config.featureFlags.flags.objectMappingArchiver.active
+    config.featureFlags.flags.buyCredits.active ||
+    config.featureFlags.flags.buyCredits.staffOnly
   ) {
+    paymentManager.start()
+    somethingActive = true
+  }
+  if (!somethingActive) {
     logger.info('No services active, exiting')
     process.exit(1)
   }
