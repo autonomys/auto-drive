@@ -1,4 +1,4 @@
-import { truncateBytes } from '../../../utils/number';
+import bytes from 'bytes';
 import { utcToLocalRelativeTime } from '../../../utils/time';
 import { AccountModel } from '@auto-drive/models';
 
@@ -27,9 +27,10 @@ export const AccountInformation = ({
       <div className='text-xs text-muted-foreground'>Upload usage</div>
       <div className='space-y-1'>
         <div className='flex justify-between text-xs'>
-          <span>{truncateBytes(uploadPending)} left</span>
+          <span>{bytes(uploadPending, { decimalPlaces: 2 })} left</span>
           <span className='text-muted-foreground'>
-            {truncateBytes(uploadUsed)}/{truncateBytes(uploadLimit)}
+            {bytes(uploadLimit, { decimalPlaces: 2 })}/
+            {bytes(uploadLimit, { decimalPlaces: 2 })}
           </span>
         </div>
         <div className='h-1.5 w-full rounded-full bg-muted'>
