@@ -29,7 +29,7 @@ export const AccountInformation = ({
         <div className='flex justify-between text-xs'>
           <span>{bytes(uploadPending, { decimalPlaces: 2 })} left</span>
           <span className='text-muted-foreground'>
-            {bytes(uploadLimit, { decimalPlaces: 2 })}/
+            {bytes(uploadUsed, { decimalPlaces: 2 })}/
             {bytes(uploadLimit, { decimalPlaces: 2 })}
           </span>
         </div>
