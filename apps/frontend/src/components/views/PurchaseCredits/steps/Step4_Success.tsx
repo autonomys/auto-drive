@@ -21,7 +21,7 @@ export const PurchaseStep4Success = ({
       <Section title='Payment Successful!'>
         <Card>
           <div className='flex flex-col gap-3 p-4'>
-            <div className='rounded-md bg-green-50 p-4'>
+            <div className='rounded-md bg-green-100 p-4 text-primary dark:bg-green-300'>
               <div className='grid grid-cols-2 gap-2'>
                 <InfoRow
                   className='items-center font-bold'
@@ -43,9 +43,7 @@ export const PurchaseStep4Success = ({
                 <InfoRow
                   label='Status'
                   className='items-center font-bold'
-                  value={
-                    <span className='font-bold text-primary'>Completed</span>
-                  }
+                  value={<span className='font-bold'>Completed</span>}
                 />
                 <InfoRow
                   label='Transaction Hash'
@@ -57,22 +55,21 @@ export const PurchaseStep4Success = ({
                         (context.txHash as string) || '0x...',
                         10,
                       )}
+                      copyButtonClassName='text-primary hover:text-primary/80'
                     />
+                  }
+                />
+                <InfoRow
+                  label='Credits Added'
+                  value={
+                    <span className='font-bold text-primary'>
+                      {Number(context.sizeMB)} MB
+                    </span>
                   }
                 />
               </div>
             </div>
 
-            <div className='grid grid-cols-2 gap-2'>
-              <InfoRow
-                label='Credits Added'
-                value={
-                  <span className='font-bold text-primary'>
-                    {Number(context.sizeMB)} MB
-                  </span>
-                }
-              />
-            </div>
             <div className='flex gap-3'>
               <a href={ROUTES.drive()} className='contents'>
                 <Button>Continue to Dashboard</Button>
