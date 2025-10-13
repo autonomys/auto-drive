@@ -8,7 +8,7 @@ const REFRESH_INTERVAL_COINGECKO = 1000 * 60 * 60;
 
 const REFRESH_INTERVAL = 60 * 1000;
 
-const BYTES_PER_MB = 10 ** 6;
+const BYTES_PER_MB = 1024 ** 2;
 
 export const usePrices = () => {
   const { api } = useNetwork();
