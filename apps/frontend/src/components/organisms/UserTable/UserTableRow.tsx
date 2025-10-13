@@ -1,6 +1,5 @@
 'use client';
 
-import bytes from 'bytes';
 import toast from 'react-hot-toast';
 import { Copy } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
@@ -15,6 +14,7 @@ import {
 import { Button } from '@auto-drive/ui';
 import { shortenString } from 'utils/misc';
 import { handleEnterOrSpace } from 'utils/eventHandler';
+import { formatBytes } from '../../../utils/number';
 
 type UserTableRowProps = {
   accountWithUser: AccountInfoWithUser;
@@ -77,30 +77,22 @@ export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-foreground-hover text-sm'>
-          {bytes(Number(accountWithUser.uploadLimit), {
-            unitSeparator: ' ',
-          })}
+          {formatBytes(Number(accountWithUser.uploadLimit))}
         </div>
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-foreground-hover text-sm'>
-          {bytes(Number(accountWithUser.pendingUploadCredits || 0), {
-            unitSeparator: ' ',
-          })}
+          {formatBytes(Number(accountWithUser.pendingUploadCredits || 0))}
         </div>
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-foreground-hover text-sm'>
-          {bytes(Number(accountWithUser.downloadLimit), {
-            unitSeparator: ' ',
-          })}
+          {formatBytes(Number(accountWithUser.downloadLimit))}
         </div>
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-foreground-hover text-sm'>
-          {bytes(Number(accountWithUser.pendingDownloadCredits || 0), {
-            unitSeparator: ' ',
-          })}
+          {formatBytes(Number(accountWithUser.pendingDownloadCredits || 0))}
         </div>
       </TableBodyCell>
       <TableBodyCell>

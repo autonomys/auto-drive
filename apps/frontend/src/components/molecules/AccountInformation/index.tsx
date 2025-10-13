@@ -1,6 +1,6 @@
-import bytes from 'bytes';
 import { utcToLocalRelativeTime } from '../../../utils/time';
 import { AccountModel } from '@auto-drive/models';
+import { formatBytes } from '../../../utils/number';
 
 interface CreditLimitsProps {
   uploadPending: number;
@@ -27,10 +27,9 @@ export const AccountInformation = ({
       <div className='text-xs text-muted-foreground'>Upload usage</div>
       <div className='space-y-1'>
         <div className='flex justify-between text-xs'>
-          <span>{bytes(uploadPending, { decimalPlaces: 2 })} left</span>
+          <span>{formatBytes(uploadPending, 2)} left</span>
           <span className='text-muted-foreground'>
-            {bytes(uploadUsed, { decimalPlaces: 2 })}/
-            {bytes(uploadLimit, { decimalPlaces: 2 })}
+            {formatBytes(uploadUsed, 2)}/{formatBytes(uploadLimit, 2)}
           </span>
         </div>
         <div className='h-1.5 w-full rounded-full bg-muted'>

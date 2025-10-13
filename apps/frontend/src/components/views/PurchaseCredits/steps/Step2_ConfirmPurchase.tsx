@@ -8,9 +8,11 @@ import { Zap } from 'lucide-react';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
 import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
-import { truncateNumberWithDecimals } from '../../../../utils/number';
+import {
+  formatBytes,
+  truncateNumberWithDecimals,
+} from '../../../../utils/number';
 import { useUserStore } from '../../../../globalStates/user';
-import bytes from 'bytes';
 
 export const PurchaseStep2ConnectWallet = ({
   onNext,
@@ -175,9 +177,7 @@ export const PurchaseStep2ConnectWallet = ({
               <InfoRow
                 label='Current Credits Balance'
                 className='rounded-md bg-gray-100 p-4 dark:bg-gray-800'
-                value={
-                  <span>{bytes(uploadPending ?? 0, { decimalPlaces: 2 })}</span>
-                }
+                value={<span>{formatBytes(uploadPending ?? 0, 2)}</span>}
               />
               <InfoRow
                 label='After Purchase'

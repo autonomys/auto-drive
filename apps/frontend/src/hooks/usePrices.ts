@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 import { useQuery } from '@tanstack/react-query';
 import { useNetwork } from '../contexts/network';
 import { tokenPriceService } from '../services/coingecko';
@@ -8,7 +9,7 @@ const REFRESH_INTERVAL_COINGECKO = 1000 * 60 * 60;
 
 const REFRESH_INTERVAL = 60 * 1000;
 
-const BYTES_PER_MB = 1024 ** 2;
+const BYTES_PER_MiB = 1024 ** 2;
 
 export const usePrices = () => {
   const { api } = useNetwork();
@@ -58,7 +59,7 @@ export const usePrices = () => {
       if (typeof shannonsPerByte === 'undefined') {
         return 0;
       }
-      return formatCreditsAsAi3(creditsInMb * BYTES_PER_MB);
+      return formatCreditsAsAi3(creditsInMb * BYTES_PER_MiB);
     },
     [formatCreditsAsAi3, shannonsPerByte],
   );
@@ -88,7 +89,7 @@ export const usePrices = () => {
       if (typeof shannonsPerByte === 'undefined') {
         return 0;
       }
-      return (10 ** 18 * ai3) / (shannonsPerByte * BYTES_PER_MB);
+      return (10 ** 18 * ai3) / (shannonsPerByte * BYTES_PER_MiB);
     },
     [shannonsPerByte],
   );
@@ -114,7 +115,7 @@ export const usePrices = () => {
         return BigInt(0);
       }
 
-      return BigInt(creditsInMb * BYTES_PER_MB) * BigInt(shannonsPerByte);
+      return BigInt(creditsInMb * BYTES_PER_MiB) * BigInt(shannonsPerByte);
     },
     [shannonsPerByte],
   );
