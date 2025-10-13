@@ -158,7 +158,9 @@ const getPrice = async (): Promise<{ price: number }> => {
   )
 
   return {
-    price: currentPricePerByte * config.paymentManager.priceMultiplier,
+    price: Math.floor(
+      currentPricePerByte * config.paymentManager.priceMultiplier,
+    ),
   }
 }
 
