@@ -91,7 +91,7 @@ export const PurchaseStep2ConnectWallet = ({
                 </div>
               }
             >
-              <div className='flex items-center justify-between rounded-md bg-muted p-4'>
+              <div className='flex items-center justify-between rounded-md bg-muted p-4 dark:bg-gray-800'>
                 <div className='flex flex-col'>
                   <div className='text-sm font-medium'>{title}</div>
                   <div className='text-xs text-muted-foreground'>
@@ -112,7 +112,7 @@ export const PurchaseStep2ConnectWallet = ({
                       type='number'
                       min={0}
                       step={1}
-                      className='w-28 rounded-md border px-2 py-1 text-right'
+                      className='w-28 rounded-md border px-2 py-1 text-right dark:bg-gray-800'
                       value={Number(sizeMB) || 0}
                       onChange={(e) => onChangeMb(e.target.value)}
                     />
@@ -130,12 +130,12 @@ export const PurchaseStep2ConnectWallet = ({
                       type='number'
                       min={0}
                       step={1}
-                      className='w-28 rounded-md border px-2 py-1 text-right'
+                      className='w-28 rounded-md border px-2 py-1 text-right dark:bg-gray-800'
                       value={formatCreditsInMbAsAi3(Number(sizeMB))}
                       onChange={(e) => onChangeAi3(e.target.value)}
                     />
                   ) : (
-                    <span>
+                    <span className='bg-background'>
                       {formatCreditsInMbAsAi3(Number(sizeMB)).toFixed(2)} AI3
                     </span>
                   )
@@ -170,7 +170,7 @@ export const PurchaseStep2ConnectWallet = ({
             <div className='flex flex-col gap-3 p-4'>
               <InfoRow
                 label='Current Balance'
-                className='rounded-md bg-gray-100 p-4'
+                className='rounded-md bg-gray-100 p-4 dark:bg-gray-800'
                 value={<span>0 AI3</span>}
               />
               <InfoRow
