@@ -9,6 +9,8 @@ import { CreditCurrentPrice } from '../CreditCurrentPrice';
 import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
 import { truncateNumberWithDecimals } from '../../../../utils/number';
+import { useUserStore } from '../../../../globalStates/user';
+import bytes from 'bytes';
 
 export const PurchaseStep2ConnectWallet = ({
   onNext,
@@ -28,6 +30,8 @@ export const PurchaseStep2ConnectWallet = ({
   } = usePrices();
 
   const isCustom = String(context.packageId ?? 'custom') === 'custom';
+
+  const uploadPending = useUserStore((u) => u.account?.pendingUploadCredits);
 
   const { title, sizeMB } = useMemo(() => {
     const id = String(context.packageId ?? 'custom');
@@ -169,9 +173,11 @@ export const PurchaseStep2ConnectWallet = ({
           <Section title='Complete Payment'>
             <div className='flex flex-col gap-3 p-4'>
               <InfoRow
-                label='Current Balance'
+                label='Current Credits Balance'
                 className='rounded-md bg-gray-100 p-4 dark:bg-gray-800'
-                value={<span>0 AI3</span>}
+                value={
+                  <span>{bytes(uploadPending ?? 0, { decimalPlaces: 2 })}</span>
+                }
               />
               <InfoRow
                 label='After Purchase'
