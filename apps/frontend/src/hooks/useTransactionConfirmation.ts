@@ -114,7 +114,7 @@ export const useTransactionConfirmation = ({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [api, intentId, isFullyConfirmed, isBackendCompleted]);
+  }, [api, intentId, isFullyConfirmed, isBackendCompleted, queryClient]);
 
   return {
     isWaitingReceipt,
