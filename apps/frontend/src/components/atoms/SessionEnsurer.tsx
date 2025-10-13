@@ -4,6 +4,7 @@ import { useUserStore } from '../../globalStates/user';
 import { useNetwork } from '../../contexts/network';
 import { AuthService } from '../../services/auth/auth';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 
 export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
@@ -30,17 +31,19 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
     }
   }, [api, router, session, session?.data, setAccount, setUser]);
 
-  useEffect(() => {
-    api.getAccount().then((account) => {
-      setAccount(account);
-    });
-  }, [api, setAccount]);
+  useQuery({
+    queryKey: ['account'],
+    queryFn: () => api.getAccount(),
+    enabled: !!session?.data,
+    select: setAccount,
+  });
 
-  useEffect(() => {
-    api.getFeatures().then((features) => {
-      setFeatures(features);
-    });
-  }, [api, setFeatures]);
+  useQuery({
+    queryKey: ['features'],
+    queryFn: () => api.getFeatures(),
+    enabled: !!session?.data,
+    select: setFeatures,
+  });
 
   if (session === undefined) {
     // TODO: Add a loading state
