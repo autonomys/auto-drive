@@ -17,7 +17,10 @@ export const AccountInformation = ({
 }: CreditLimitsProps) => {
   const uploadUsed = uploadLimit - uploadPending;
 
-  const uploadPercentage = (uploadUsed / uploadLimit) * 100;
+  const uploadPercentage = Math.max(
+    0,
+    Math.min(100, (uploadUsed / uploadLimit) * 100),
+  );
 
   return (
     <div className='space-y-2'>
