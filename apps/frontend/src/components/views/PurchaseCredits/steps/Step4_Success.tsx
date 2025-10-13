@@ -5,6 +5,7 @@ import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
 import { usePrices } from '../../../../hooks/usePrices';
 import { shortenString } from '../../../../utils/misc';
+import { CopiableText } from '../../../atoms/CopiableText';
 
 export const PurchaseStep4Success = ({
   context,
@@ -47,9 +48,13 @@ export const PurchaseStep4Success = ({
                   label='Transaction Hash'
                   className='items-center font-bold'
                   value={
-                    <span className='font-bold'>
-                      {shortenString((context.txHash as string) || '0x...', 10)}
-                    </span>
+                    <CopiableText
+                      text={(context.txHash as string) || '0x...'}
+                      displayText={shortenString(
+                        (context.txHash as string) || '0x...',
+                        10,
+                      )}
+                    />
                   }
                 />
               </div>
