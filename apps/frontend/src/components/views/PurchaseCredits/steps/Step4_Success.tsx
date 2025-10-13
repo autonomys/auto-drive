@@ -12,7 +12,7 @@ export const PurchaseStep4Success = ({
 }: {
   context: Record<string, unknown>;
 }) => {
-  const { formatCreditsAsAi3 } = usePrices();
+  const { formatCreditsInMbAsAi3 } = usePrices();
 
   const sizeMB = context.sizeMB as number;
 
@@ -33,7 +33,10 @@ export const PurchaseStep4Success = ({
                   className='items-center font-bold'
                   value={
                     <span className='font-bold'>
-                      {formatCreditsAsAi3(Number(context.sizeMB))} AI3
+                      {formatCreditsInMbAsAi3(Number(context.sizeMB)).toFixed(
+                        2,
+                      )}{' '}
+                      AI3
                     </span>
                   }
                 />
