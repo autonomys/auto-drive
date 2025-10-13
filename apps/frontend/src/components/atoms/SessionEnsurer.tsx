@@ -31,19 +31,25 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
     }
   }, [api, router, session, session?.data, setAccount, setUser]);
 
-  useQuery({
+  const { data: account } = useQuery({
     queryKey: ['account'],
     queryFn: () => api.getAccount(),
     enabled: !!session?.data,
-    select: setAccount,
   });
 
-  useQuery({
+  const { data: features } = useQuery({
     queryKey: ['features'],
     queryFn: () => api.getFeatures(),
     enabled: !!session?.data,
-    select: setFeatures,
   });
+
+  useEffect(() => {
+    if (account) setAccount(account);
+  }, [account, setAccount]);
+
+  useEffect(() => {
+    if (features) setFeatures(features);
+  }, [features, setFeatures]);
 
   if (session === undefined) {
     // TODO: Add a loading state
