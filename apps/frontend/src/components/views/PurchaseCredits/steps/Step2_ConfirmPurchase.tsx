@@ -105,7 +105,7 @@ export const PurchaseStep2ConnectWallet = ({
                   </div>
                 </div>
                 <div className='text-right'>
-                  <div className='text-xl font-bold'>{sizeMB}MB</div>
+                  <div className='text-xl font-bold'>{sizeMB}MiB</div>
                   <div className='text-xs text-muted-foreground'>Storage</div>
                 </div>
               </div>
@@ -123,7 +123,7 @@ export const PurchaseStep2ConnectWallet = ({
                       onChange={(e) => onChangeMb(e.target.value)}
                     />
                   ) : (
-                    <span>{sizeMB}MB</span>
+                    <span>{sizeMB}MiB</span>
                   )
                 }
               />
@@ -181,7 +181,7 @@ export const PurchaseStep2ConnectWallet = ({
               />
               <InfoRow
                 label='After Purchase'
-                value={<span className='font-semibold'>{sizeMB}MB</span>}
+                value={<span className='font-semibold'>{sizeMB}MiB</span>}
                 className='rounded-md bg-primary/20 p-4'
                 accent
               />
