@@ -14,21 +14,25 @@ export const truncateNumberWithDecimals = (
   return Math.floor(num * precision) / precision;
 };
 
-export const truncateBytes = (num: number): string => {
-  const f = bytes(num, { decimalPlaces: 2 });
-  if (!f) return 'N/A';
+const mappers = {
+  ['EB']: 'EiB',
+  ['PB']: 'PiB',
+  ['TB']: 'TiB',
+  ['GB']: 'GiB',
+  ['MB']: 'MiB',
+  ['KB']: 'KiB',
+};
 
-  // Extract the numeric part and unit using regex
-  const match = f.match(/^(\d+(?:\.\d+)?)([KMGT]?B)$/);
-  if (!match) return f;
+// Map XB to XiB since 'bytes' library uses XB when it should be XiB
+export const formatBytes = (
+  amount: number,
+  decimalPlaces: number = 2,
+): string => {
+  const formatted = bytes(amount, { decimalPlaces });
+  if (!formatted) return 'N/A';
 
-  const [, numericPart, unit] = match;
-
-  // If it contains a decimal point, truncate to integer
-  if (numericPart.includes('.')) {
-    const integerPart = numericPart.split('.')[0];
-    return `${integerPart}${unit}`;
-  }
-
-  return f;
+  return formatted.replaceAll(
+    /(EB|PB|TB|GB|MB|KB)/g,
+    (match) => mappers[match as keyof typeof mappers],
+  );
 };

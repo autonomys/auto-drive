@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePublicClient, useWaitForTransactionReceipt } from 'wagmi';
 import { type Hash } from 'viem';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface UseTransactionConfirmationProps {
   txHash: Hash | undefined;
@@ -29,6 +30,7 @@ export const useTransactionConfirmation = ({
 }: UseTransactionConfirmationProps): UseTransactionConfirmationReturn => {
   const client = usePublicClient();
   const stopRef = useRef(false);
+  const queryClient = useQueryClient();
 
   const {
     isLoading: isWaitingReceipt,
@@ -94,6 +96,7 @@ export const useTransactionConfirmation = ({
       try {
         const intent = await api.getIntent(intentId);
         if (intent.status === 'completed') {
+          queryClient.invalidateQueries({ queryKey: ['account'] });
           setIsBackendCompleted(true);
           setIsPollingBackend(false);
           return;
@@ -111,7 +114,7 @@ export const useTransactionConfirmation = ({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [api, intentId, isFullyConfirmed, isBackendCompleted]);
+  }, [api, intentId, isFullyConfirmed, isBackendCompleted, queryClient]);
 
   return {
     isWaitingReceipt,

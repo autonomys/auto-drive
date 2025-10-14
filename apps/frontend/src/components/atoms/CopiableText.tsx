@@ -8,10 +8,12 @@ export const CopiableText = ({
   text,
   displayText,
   className,
+  copyButtonClassName,
 }: {
   text: string;
   displayText?: string;
   className?: string;
+  copyButtonClassName?: string;
 }) => {
   const [isCopied, setIsCopied] = useState(false);
 
@@ -27,7 +29,7 @@ export const CopiableText = ({
 
   return (
     <button
-      type="button"
+      type='button'
       className={cn(
         'group relative flex cursor-pointer items-center gap-2',
         className,
@@ -42,7 +44,10 @@ export const CopiableText = ({
           <Check className='h-4 w-4 text-green-500' />
         ) : (
           <Copy
-            className='h-4 w-4 text-gray-400 hover:text-gray-700 dark:text-darkBlack dark:hover:text-gray-100'
+            className={cn(
+              'dark:text-darkBlack h-4 w-4 text-gray-400 hover:text-gray-700 dark:hover:text-gray-100',
+              copyButtonClassName,
+            )}
             onClick={(e) => {
               e.stopPropagation();
               onClick();

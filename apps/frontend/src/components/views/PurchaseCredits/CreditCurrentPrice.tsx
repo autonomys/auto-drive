@@ -12,7 +12,7 @@ export const CreditCurrentPrice = () => {
           <div className='text-sm opacity-90'>Current Price</div>
           <div className='text-3xl font-bold'>
             {typeof shannonsPerByte === 'number'
-              ? `${formatCreditsAsAi3(MB).toFixed(2)} AI3 per MB`
+              ? `${formatCreditsAsAi3(MB).toFixed(2)} AI3 per MiB`
               : '—'}
           </div>
         </div>

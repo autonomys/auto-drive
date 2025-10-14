@@ -25,7 +25,7 @@ export const usePaymentIntent = () => {
     [network.id],
   );
 
-  const MINIMUM_CONFIRMATIONS = 12;
+  const MINIMUM_CONFIRMATIONS = 6;
 
   const paymentIntent = useCallback(
     async (amount: bigint) => {
