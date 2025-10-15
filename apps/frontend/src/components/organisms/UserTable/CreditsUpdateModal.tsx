@@ -83,7 +83,7 @@ export const CreditsUpdateModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='bg-background-hover fixed inset-0' />
+          <div className='fixed inset-0 bg-background-hover' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -128,41 +128,41 @@ export const CreditsUpdateModal = ({
                     <div className='flex items-center space-x-2'>
                       <input
                         type='text'
-                        className='border-background-hover bg-background-hover text-foreground-hover w-full rounded border px-2 py-1'
+                        className='text-foreground-hover w-full rounded border border-background-hover bg-background-hover px-2 py-1'
                         placeholder='Download credits'
                         value={downloadCredits}
                         onChange={(e) => setDownloadCredits(e.target.value)}
                       />
                       <select
-                        className='border-background-hover bg-background-hover text-foreground-hover rounded border px-2 py-1'
+                        className='text-foreground-hover rounded border border-background-hover bg-background-hover px-2 py-1'
                         value={downloadCreditsUnit}
                         onChange={(e) =>
                           setDownloadCreditsUnit(Number(e.target.value))
                         }
                       >
-                        <option value={1024 ** 2}>MB</option>
-                        <option value={1024 ** 3}>GB</option>
-                        <option value={1024 ** 4}>TB</option>
+                        <option value={1024 ** 2}>MiB</option>
+                        <option value={1024 ** 3}>GiB</option>
+                        <option value={1024 ** 4}>TiB</option>
                       </select>
                     </div>
                     <div className='flex items-center space-x-2'>
                       <input
                         type='text'
-                        className='border-background-hover bg-background-hover text-foreground-hover w-full rounded border px-2 py-1'
+                        className='text-foreground-hover w-full rounded border border-background-hover bg-background-hover px-2 py-1'
                         placeholder='Upload credits'
                         value={uploadCredits}
                         onChange={(e) => setUploadCredits(e.target.value)}
                       />
                       <select
-                        className='border-background-hover bg-background-hover text-foreground-hover rounded border px-2 py-1'
+                        className='text-foreground-hover rounded border border-background-hover bg-background-hover px-2 py-1'
                         value={uploadCreditsUnit}
                         onChange={(e) =>
                           setUploadCreditsUnit(Number(e.target.value))
                         }
                       >
-                        <option value={1024 ** 2}>MB</option>
-                        <option value={1024 ** 3}>GB</option>
-                        <option value={1024 ** 4}>TB</option>
+                        <option value={1024 ** 2}>MiB</option>
+                        <option value={1024 ** 3}>GiB</option>
+                        <option value={1024 ** 4}>TiB</option>
                       </select>
                     </div>
                     <div className='flex justify-end'>

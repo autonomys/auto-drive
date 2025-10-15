@@ -23,7 +23,6 @@ import { Triangle } from '@/components/atoms/Triangle';
 import { shortenString } from 'utils/misc';
 import { ConditionalRender } from '@/components/atoms/ConditionalRender';
 import { FileActionButtons } from '@/components/organisms/FileTable';
-import bytes from 'bytes';
 import { Button, NetworkId } from '@auto-drive/ui';
 import { File, Folder, MoreVertical } from 'lucide-react';
 import { OwnerBadge } from './OwnerBadge';
@@ -39,6 +38,7 @@ import { CopiableText } from '@/components/atoms/CopiableText';
 import toast from 'react-hot-toast';
 import { useUserAsyncDownloadsStore } from '../UserAsyncDownloads/state';
 import { useFileInCache } from '@/hooks/useFileInCache';
+import { formatBytes } from '../../../utils/number';
 
 export const FileTableRow = ({
   file,
@@ -215,7 +215,7 @@ export const FileTableRow = ({
     <Fragment key={file.headCid}>
       <TableBodyRow
         className={cn(
-          'hover:bg-background-hover hover:text-background-hover-foreground bg-background text-foreground',
+          'bg-background text-foreground hover:bg-background-hover hover:text-background-hover-foreground',
           isSelected && 'bg-blue-50 dark:bg-blue-900/20',
           isFolder && 'cursor-pointer',
         )}
@@ -279,7 +279,7 @@ export const FileTableRow = ({
         <TableBodyCell>
           <Badge label={file.status} status={file.status} />
         </TableBodyCell>
-        <TableBodyCell>{bytes(Number(file.size))}</TableBodyCell>
+        <TableBodyCell>{formatBytes(Number(file.size))}</TableBodyCell>
         <TableBodyCell>
           <div className='group relative'>
             <span className='flex cursor-default items-center'>
@@ -430,7 +430,7 @@ export const FileTableRow = ({
             <TableBodyRow
               key={child.cid}
               className={cn(
-                'hover:bg-background-hover hover:text-background-hover-foreground bg-background text-foreground',
+                'bg-background text-foreground hover:bg-background-hover hover:text-background-hover-foreground',
                 isChildSelected && 'bg-blue-50 dark:bg-blue-900/20',
                 isChildFolder && 'cursor-pointer',
               )}
@@ -472,7 +472,9 @@ export const FileTableRow = ({
               <TableBodyCell>
                 <OwnerBadge />
               </TableBodyCell>
-              <TableBodyCell>{bytes(Number(child.totalSize))}</TableBodyCell>
+              <TableBodyCell>
+                {formatBytes(Number(child.totalSize))}
+              </TableBodyCell>
               <TableBodyCell>
                 {child.type === 'file' ? 'File' : 'Folder'}
               </TableBodyCell>

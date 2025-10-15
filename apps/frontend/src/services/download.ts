@@ -79,8 +79,8 @@ export const createDownloadService = (api: Api) => {
     }
   };
 
-  const MB = 1024 * 1024;
-  const MAX_CACHEABLE_FILE_SIZE = 150 * MB;
+  const MiB = 1024 * 1024;
+  const MAX_CACHEABLE_FILE_SIZE = 150 * MiB;
 
   const getObjectStoreName = () => {
     const objectStoreVersion =

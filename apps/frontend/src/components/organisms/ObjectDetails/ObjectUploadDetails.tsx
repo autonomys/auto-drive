@@ -5,9 +5,8 @@ import {
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import { getTypeFromMetadata } from '../../../utils/file';
-import { formatNumberWithCommas } from '../../../utils/number';
+import { formatBytes, formatNumberWithCommas } from '../../../utils/number';
 import { EXTERNAL_ROUTES } from '@auto-drive/ui';
-import bytes from 'bytes';
 
 export const ObjectUploadDetails = ({
   object,
@@ -16,7 +15,6 @@ export const ObjectUploadDetails = ({
   object: ObjectInformation;
   isOwner: boolean;
 }) => {
-
   return (
     <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
       <div className='dark:bg-darkWhite rounded-lg border border-gray-200 p-6 dark:border-gray-200'>
@@ -51,7 +49,7 @@ export const ObjectUploadDetails = ({
               Size:
             </span>
             <span className='text-sm font-medium'>
-              {bytes(Number(object.metadata.totalSize))}
+              {formatBytes(Number(object.metadata.totalSize))}
             </span>
           </div>
           <div className='flex justify-between'>

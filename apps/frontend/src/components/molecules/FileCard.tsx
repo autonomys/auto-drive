@@ -1,6 +1,5 @@
 'use client';
 
-import bytes from 'bytes';
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
 import {
   Download,
@@ -18,6 +17,7 @@ import { shortenString } from 'utils/misc';
 import { useNetwork } from 'contexts/network';
 import { ROUTES } from '@auto-drive/ui';
 import { OffchainMetadata } from '@autonomys/auto-drive';
+import { formatBytes } from '../../utils/number';
 
 interface FileCardProps {
   icon?: React.ReactNode;
@@ -100,7 +100,7 @@ export const FileCard = ({
         <h2 className='dark:text-darkBlack mb-2 text-lg font-semibold text-gray-800'>
           {name ? shortenString(name, 20) : shortenString(cid, 20)}
         </h2>
-        <p className='mb-4 text-gray-500'>Size: {bytes(Number(size))}</p>
+        <p className='mb-4 text-gray-500'>Size: {formatBytes(Number(size))}</p>
         <button
           onClick={handleDownloadClick}
           className='flex w-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600'
