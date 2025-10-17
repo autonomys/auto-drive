@@ -66,6 +66,28 @@ accountController.post(
   }),
 )
 
+accountController.get(
+  '/ranking',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const accounts = await handleInternalError(
+      AccountsUseCases.getTopAccounts(user),
+      'Failed to get top accounts',
+    )
+    if (accounts.isErr()) {
+      logger.error('Failed to get top accounts', accounts.error)
+      handleError(accounts.error, res)
+      return
+    }
+
+    res.json(accounts.value)
+  }),
+)
+
 accountController.post(
   '/update',
   asyncSafeHandler(async (req: Request, res: Response) => {

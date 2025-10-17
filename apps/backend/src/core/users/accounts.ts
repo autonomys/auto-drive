@@ -241,6 +241,21 @@ const addCreditsToAccount = async (publicId: string, credits: number) => {
   return ok()
 }
 
+const getTopAccounts = async (
+  user: User,
+  limit: number = 10,
+): Promise<Result<Account[], ForbiddenError>> => {
+  if (user.role !== UserRole.Admin) {
+    logger.warn('User does not have admin privileges', {
+      userPublicId: user.publicId,
+    })
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+  return ok(
+    await accountsRepository.getTopAccounts(limit, InteractionType.Upload),
+  )
+}
+
 export const AccountsUseCases = {
   updateAccount,
   getOrCreateAccount,
@@ -252,4 +267,5 @@ export const AccountsUseCases = {
   addCreditsToAccount,
   getUserListAccount,
   getAccountById,
+  getTopAccounts,
 }

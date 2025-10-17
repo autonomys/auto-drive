@@ -1,5 +1,5 @@
 import { getDatabase } from '../../drivers/pg.js'
-import { AccountModel, Account } from '@auto-drive/models'
+import { AccountModel, Account, InteractionType } from '@auto-drive/models'
 
 type DBAccount = {
   id: string
@@ -75,10 +75,24 @@ const getAll = async (): Promise<Account[]> => {
   return mapRows(result.rows)
 }
 
+export const getTopAccounts = async (
+  limit: number = 10,
+  type: InteractionType = InteractionType.Upload,
+): Promise<Account[]> => {
+  const db = await getDatabase()
+
+  const result = await db.query<DBAccount>(
+    'SELECT a.*, SUM(i.size) as total_size FROM accounts a INNER JOIN interactions i ON a.id = i.account_id WHERE i.type = $1 GROUP BY a.id ORDER BY total_size DESC LIMIT $2',
+    [type, limit],
+  )
+  return mapRows(result.rows)
+}
+
 export const accountsRepository = {
   getByOrganizationId,
   createAccount,
   updateAccount,
   getAll,
   getById,
+  getTopAccounts,
 }
