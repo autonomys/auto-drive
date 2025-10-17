@@ -4,6 +4,7 @@ import { userController } from './controllers/user.js'
 import { config } from './config.js'
 import { createLogger } from './drivers/logger.js'
 import express, { Request, Response, NextFunction } from 'express'
+import { organizationController } from './controllers/organization.js'
 
 const logger = createLogger('auth:server')
 
@@ -30,6 +31,7 @@ if (config.corsAllowedOrigins) {
 }
 
 app.use('/users', userController)
+app.use('/organizations', organizationController)
 
 app.listen(config.port, () => {
   logger.info('Server is running on port %d', config.port)
