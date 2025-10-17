@@ -74,8 +74,10 @@ accountController.get(
       return
     }
 
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 10
+
     const accounts = await handleInternalError(
-      AccountsUseCases.getTopAccounts(user),
+      AccountsUseCases.getTopAccounts(user, limit),
       'Failed to get top accounts',
     )
     if (accounts.isErr()) {
