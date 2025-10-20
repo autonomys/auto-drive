@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_interactions_account_created_at ON public.interactions (account_id, created_at);
