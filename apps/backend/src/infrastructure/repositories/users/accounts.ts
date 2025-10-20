@@ -1,5 +1,10 @@
 import { getDatabase } from '../../drivers/pg.js'
-import { AccountModel, Account, InteractionType } from '@auto-drive/models'
+import {
+  AccountModel,
+  Account,
+  InteractionType,
+  AccountWithTotalSize,
+} from '@auto-drive/models'
 
 type DBAccount = {
   id: string
@@ -9,6 +14,10 @@ type DBAccount = {
   download_limit: number
 }
 
+type DBAccountWithTotalSize = DBAccount & {
+  total_size: number
+}
+
 const mapRows = (rows: DBAccount[]): Account[] => {
   return rows.map((row) => ({
     id: row.id,
@@ -16,6 +25,19 @@ const mapRows = (rows: DBAccount[]): Account[] => {
     downloadLimit: Number(row.download_limit),
     organizationId: row.organization_id,
     model: row.model as AccountModel,
+  }))
+}
+
+const mapRowsWithSize = (
+  rows: DBAccountWithTotalSize[],
+): AccountWithTotalSize[] => {
+  return rows.map((row) => ({
+    id: row.id,
+    uploadLimit: Number(row.upload_limit),
+    downloadLimit: Number(row.download_limit),
+    organizationId: row.organization_id,
+    model: row.model as AccountModel,
+    totalSize: row.total_size,
   }))
 }
 
@@ -75,17 +97,19 @@ const getAll = async (): Promise<Account[]> => {
   return mapRows(result.rows)
 }
 
-export const getTopAccounts = async (
+export const getTopAccountsWithinPeriod = async (
   limit: number = 10,
   type: InteractionType = InteractionType.Upload,
-): Promise<Account[]> => {
+  fromDate: Date,
+  toDate: Date,
+): Promise<AccountWithTotalSize[]> => {
   const db = await getDatabase()
 
-  const result = await db.query<DBAccount>(
-    'SELECT a.*, SUM(i.size) as total_size FROM accounts a INNER JOIN interactions i ON a.id = i.account_id WHERE i.type = $1 GROUP BY a.id ORDER BY total_size DESC LIMIT $2',
-    [type, limit],
+  const result = await db.query<DBAccountWithTotalSize>(
+    'SELECT a.*, SUM(i.size) as total_size FROM accounts a INNER JOIN interactions i ON a.id = i.account_id WHERE i.type = $1, i.created_at > $2 and i.created_at < $3 GROUP BY a.id ORDER BY total_size DESC LIMIT $4',
+    [type, limit, fromDate, toDate],
   )
-  return mapRows(result.rows)
+  return mapRowsWithSize(result.rows)
 }
 
 export const accountsRepository = {
@@ -94,5 +118,5 @@ export const accountsRepository = {
   updateAccount,
   getAll,
   getById,
-  getTopAccounts,
+  getTopAccountsWithinPeriod,
 }

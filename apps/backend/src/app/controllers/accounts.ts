@@ -76,8 +76,19 @@ accountController.get(
 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 10
 
+    const fromDate = req.query.from
+      ? new Date(parseInt(req.query.from as string))
+      : null
+    const toDate = req.query.to
+      ? new Date(parseInt(req.query.to as string))
+      : null
+
     const accounts = await handleInternalError(
-      AccountsUseCases.getTopAccounts(user, limit),
+      AccountsUseCases.getTopAccounts(user, {
+        limit,
+        fromDate,
+        toDate,
+      }),
       'Failed to get top accounts',
     )
     if (accounts.isErr()) {

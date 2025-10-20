@@ -7,6 +7,7 @@ import {
   Account,
   InteractionType,
   AccountInfo,
+  AccountWithTotalSize,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
@@ -243,8 +244,16 @@ const addCreditsToAccount = async (publicId: string, credits: number) => {
 
 const getTopAccounts = async (
   user: User,
-  limit: number = 10,
-): Promise<Result<Account[], ForbiddenError>> => {
+  {
+    limit = 10,
+    fromDate,
+    toDate,
+  }: {
+    limit: number | undefined
+    fromDate: Date | null
+    toDate: Date | null
+  },
+): Promise<Result<AccountWithTotalSize[], ForbiddenError>> => {
   if (user.role !== UserRole.Admin) {
     logger.warn('User does not have admin privileges', {
       userPublicId: user.publicId,
@@ -252,7 +261,12 @@ const getTopAccounts = async (
     return err(new ForbiddenError('User does not have admin privileges'))
   }
   return ok(
-    await accountsRepository.getTopAccounts(limit, InteractionType.Upload),
+    await accountsRepository.getTopAccountsWithinPeriod(
+      limit,
+      InteractionType.Upload,
+      fromDate ?? new Date(0),
+      toDate ?? new Date(),
+    ),
   )
 }
 
