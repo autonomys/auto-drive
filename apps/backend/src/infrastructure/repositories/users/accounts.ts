@@ -98,10 +98,10 @@ const getAll = async (): Promise<Account[]> => {
 }
 
 export const getTopAccountsWithinPeriod = async (
-  limit: number = 10,
   type: InteractionType = InteractionType.Upload,
   fromDate: Date,
   toDate: Date,
+  limit: number = 10,
 ): Promise<AccountWithTotalSize[]> => {
   const db = await getDatabase()
 

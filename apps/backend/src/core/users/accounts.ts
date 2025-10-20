@@ -245,9 +245,9 @@ const addCreditsToAccount = async (publicId: string, credits: number) => {
 const getTopAccounts = async (
   user: User,
   {
-    limit = 10,
     fromDate,
     toDate,
+    limit = 10,
   }: {
     limit: number | undefined
     fromDate: Date | null
@@ -262,10 +262,10 @@ const getTopAccounts = async (
   }
   return ok(
     await accountsRepository.getTopAccountsWithinPeriod(
-      limit,
       InteractionType.Upload,
       fromDate ?? new Date(0),
       toDate ?? new Date(),
+      limit,
     ),
   )
 }
