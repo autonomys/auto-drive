@@ -106,7 +106,7 @@ export const getTopAccountsWithinPeriod = async (
   const db = await getDatabase()
 
   const result = await db.query<DBAccountWithTotalSize>(
-    'SELECT a.*, SUM(i.size) as total_size FROM accounts a INNER JOIN interactions i ON a.id = i.account_id WHERE i.type = $1 AND i.created_at > $2 AND i.created_at < $3 GROUP BY a.id ORDER BY total_size DESC LIMIT $4',
+    'SELECT a.*, COALESCE(SUM(i.size), 0) as total_size FROM accounts a LEFT JOIN interactions i ON a.id = i.account_id WHERE ($1 IS NULL OR i.type = $1) AND ($2 IS NULL OR i.created_at > $2) AND ($3 IS NULL OR i.created_at < $3) GROUP BY a.id ORDER BY total_size DESC LIMIT $4',
     [type, fromDate, toDate, limit],
   )
   return mapRowsWithSize(result.rows)
