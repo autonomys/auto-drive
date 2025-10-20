@@ -83,6 +83,10 @@ accountController.get(
       ? new Date(parseInt(req.query.to as string))
       : null
 
+    if (fromDate && toDate && fromDate >= toDate) {
+      return res.status(400).json({ error: 'Invalid date range' })
+    }
+
     const accounts = await handleInternalError(
       AccountsUseCases.getTopAccounts(user, {
         limit,
