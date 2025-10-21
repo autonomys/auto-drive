@@ -66,6 +66,45 @@ accountController.post(
   }),
 )
 
+accountController.get(
+  '/ranking',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 10
+
+    const fromDate = req.query.from
+      ? new Date(parseInt(req.query.from as string))
+      : null
+    const toDate = req.query.to
+      ? new Date(parseInt(req.query.to as string))
+      : null
+
+    if (fromDate && toDate && fromDate >= toDate) {
+      return res.status(400).json({ error: 'Invalid date range' })
+    }
+
+    const accounts = await handleInternalError(
+      AccountsUseCases.getTopAccounts(user, {
+        limit,
+        fromDate,
+        toDate,
+      }),
+      'Failed to get top accounts',
+    )
+    if (accounts.isErr()) {
+      logger.error('Failed to get top accounts', accounts.error)
+      handleError(accounts.error, res)
+      return
+    }
+
+    res.json(accounts.value)
+  }),
+)
+
 accountController.post(
   '/update',
   asyncSafeHandler(async (req: Request, res: Response) => {

@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_interactions_account_created_at;
