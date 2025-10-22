@@ -1,5 +1,5 @@
 table:
-  name: subscriptions
+  name: accounts
   schema: public
 select_permissions:
   - role: user
@@ -20,7 +20,7 @@ select_permissions:
       columns:
         - id
         - organization_id
-        - granularity
+        - model
         - upload_limit
         - download_limit
         - created_at
