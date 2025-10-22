@@ -2,7 +2,7 @@
 - "!include nodes.yaml"
 - "!include object_ownership.yaml"
 - "!include interactions.yaml"
-- "!include subscriptions.yaml"
+- "!include accounts.yaml"
 - "!include published_objects.yaml"
 - "!include root_metadata.yaml"
 - "!include async_downloads.yaml"
