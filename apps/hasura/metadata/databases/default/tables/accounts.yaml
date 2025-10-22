@@ -7,7 +7,7 @@ select_permissions:
       columns:
         - id
         - organization_id
-        - granularity
+        - model
         - upload_limit
         - download_limit
         - created_at
