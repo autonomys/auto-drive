@@ -231,6 +231,15 @@ Services are organized into profiles:
 - **download**: Download-related services (API, Worker)
 - **rabbit**: RabbitMQ message queue
 
+### Multinetwork Gateway (deprecated)
+
+The gateway service provides:
+
+- **Unified API**: Single interface for multiple networks
+- **File Access**: GET `/file/:cid` for file retrieval
+- **Folder Access**: GET `/folder/:cid` for folder retrieval
+- **Health Checks**: Monitoring endpoints
+
 ## Configuration Management
 
 ### Infisical Integration
