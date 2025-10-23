@@ -1,7 +1,7 @@
 install:
 	yarn install
 
-backend: common
+backend: common submodules
 	yarn backend build
 models:
 	yarn models build
