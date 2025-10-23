@@ -54,10 +54,13 @@ const resolveUser = async (
   return user
 }
 
-const generateUserPublicId = (user: MaybeUser): string => {
+export const deriveUserPublicId = (
+  oauthProvider: string,
+  oauthUserId: string,
+): string => {
   const USER_PUBLIC_ID_NAMESPACE = 'public-id-user-1'
 
-  const input = `${user.oauthProvider}-${user.oauthUserId}`
+  const input = `${oauthProvider}-${oauthUserId}`
   return v5(input, Buffer.from(USER_PUBLIC_ID_NAMESPACE))
 }
 
@@ -85,7 +88,7 @@ const onboardUser = async (user: MaybeUser): Promise<User | undefined> => {
     return user
   }
 
-  const publicId = generateUserPublicId(user)
+  const publicId = deriveUserPublicId(user.oauthProvider, user.oauthUserId)
 
   const updatedUser = await UsersUseCases.initUser(
     user.oauthProvider,
