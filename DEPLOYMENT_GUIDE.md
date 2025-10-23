@@ -21,28 +21,27 @@ This guide provides comprehensive instructions for managing deployments of the A
 The Auto Drive system consists of two main components:
 
 1. **Auto Drive Services**: Main storage and data access layer services
-2. **Multinetwork Gateway**: Connects and manages multiple networks
 
 ## Target Machine Tags
 
 ### Auto Drive Services
 
 #### Production Environments
+
 - **`auto_drive_mainnet_private`**: Private mainnet deployment for internal services
 - **`auto_drive_mainnet_public`**: Public mainnet deployment for external access
 - **`auto_drive_taurus_private`**: Private taurus testnet deployment
 - **`auto_drive_taurus_public`**: Public taurus testnet deployment
 
 #### Staging Environments
+
 - **`auto_drive_mainnet_staging`**: Staging environment for mainnet testing
 - **`auto_drive_taurus_staging`**: Staging environment for taurus testing
-
-#### Gateway Services
-- **`auto_drive_multinetwork_gateway`**: Unified gateway connecting multiple networks
 
 ## Prerequisites
 
 ### System Requirements
+
 - **Ansible**: Version 2.9 or later
 - **Docker**: Installed on target machines
 - **Docker Compose**: Version 2.0 or later
@@ -50,6 +49,7 @@ The Auto Drive system consists of two main components:
 - **SSH Access**: To all target machines
 
 ### Dependencies Installation
+
 ```bash
 # Install Ansible
 pip install ansible
@@ -60,13 +60,14 @@ ansible-galaxy collection install community.general
 ```
 
 ### Target Machine Setup
+
 All target machines must have:
+
 - Docker and Docker Compose installed
 - SSH access configured
 - Infisical CLI installed (automatically handled by setup playbook)
 - Deployment directories created:
   - `~/deploy/auto-drive/`
-  - `~/deploy/auto-drive/gateway/`
   - `~/env-archives/`
 
 ## Environment Setup
@@ -80,7 +81,6 @@ Create an `environment.yaml` file in the `ansible/` directory:
 infisical_client_id: "your-client-id"
 infisical_token: "your-client-secret"
 infisical_project_id: "your-project-id"
-
 # Additional environment-specific variables
 ```
 
@@ -93,6 +93,7 @@ The `hosts.ini` file is already created in the `ansible/` directory with all tar
 3. **Adjust hostnames** to match your infrastructure
 
 Example configuration:
+
 ```ini
 [auto_drive_mainnet_private]
 user@mainnet-private-1
@@ -106,6 +107,7 @@ user@mainnet-public-2
 The format is `user@hostname` or `user@ip-address` for each host entry.
 
 The inventory includes:
+
 - **Individual target machine groups** for each service
 - **Logical groupings** (production, staging, mainnet, taurus)
 - **Environment-specific variables** for each group
@@ -164,17 +166,7 @@ ansible-playbook auto-drive-deployment.yml \
   -e "image_tag=staging-latest"
 ```
 
-### 3. Multinetwork Gateway Deployment
-
-Deploy the multinetwork gateway:
-
-```bash
-# Deploy multinetwork gateway
-ansible-playbook auto-drive-multinetwork-gateway.yml \
-  -e "image_tag=gateway-v1.0.0"
-```
-
-### 4. Batch Deployments
+### 3. Batch Deployments
 
 Deploy to multiple environments simultaneously:
 
@@ -190,7 +182,7 @@ ansible-playbook auto-drive-deployment.yml \
   -e "image_tag=v1.2.3"
 ```
 
-### 5. Group-Based Deployments
+### 4. Group-Based Deployments
 
 Use the logical groupings defined in the inventory:
 
@@ -239,15 +231,6 @@ Services are organized into profiles:
 - **download**: Download-related services (API, Worker)
 - **rabbit**: RabbitMQ message queue
 
-### Multinetwork Gateway
-
-The gateway service provides:
-
-- **Unified API**: Single interface for multiple networks
-- **File Access**: GET `/file/:cid` for file retrieval
-- **Folder Access**: GET `/folder/:cid` for folder retrieval
-- **Health Checks**: Monitoring endpoints
-
 ## Configuration Management
 
 ### Infisical Integration
@@ -258,14 +241,12 @@ The deployment uses Infisical for secrets management:
 2. **Secret Storage**: Environment-specific paths in Infisical
 3. **Configuration Paths**:
    - Auto Drive: `/[target_machines]` (e.g., `/auto_drive_mainnet_private`)
-   - Gateway: `/auto_drive_multinetwork_gateway`
 
 ### Environment Variables
 
 Key environment variables managed through Infisical:
 
 - `BACKEND_IMAGE`: Docker image for backend services
-- `GATEWAY_IMAGE`: Docker image for gateway service
 - `DATABASE_URL`: Database connection string
 - `HASURA_GRAPHQL_ADMIN_SECRET`: Hasura admin access
 - `HASURA_GRAPHQL_JWT_SECRET`: JWT authentication
@@ -284,40 +265,44 @@ The deployment automatically:
 ### Common Issues
 
 1. **Infisical Authentication Failure**
+
    ```bash
    # Check Infisical credentials
    infisical login --method=universal-auth --client-id=YOUR_ID --client-secret=YOUR_SECRET
-   
+
    # Verify project access
    infisical secrets --projectId YOUR_PROJECT_ID --path /auto_drive_mainnet_private --env prod
    ```
 
 2. **Docker Compose Failures**
+
    ```bash
    # Check service logs
    docker compose logs -f [service-name]
-   
+
    # Verify image availability
    docker images | grep [image-name]
-   
+
    # Check resource usage
    docker stats
    ```
 
 3. **SSH Connection Issues**
+
    ```bash
    # Test SSH connectivity
    ansible all -m ping
-   
+
    # Check specific host
    ansible [hostname] -m ping
    ```
 
 4. **Environment Variable Issues**
+
    ```bash
    # Check .env file content
    cat ~/deploy/auto-drive/.env
-   
+
    # Verify backup exists
    ls -la ~/env-archives/
    ```
@@ -392,9 +377,6 @@ ansible all -m ping
 # Deploy to staging
 ansible-playbook auto-drive-deployment.yml -e "target_machines=auto_drive_mainnet_staging" -e "image_tag=staging-latest"
 
-# Deploy gateway
-ansible-playbook auto-drive-multinetwork-gateway.yml -e "image_tag=gateway-latest"
-
 # Setup new machines
 ansible-playbook setup-infisical.yml -e "target_machines=new_machine_group"
 
@@ -404,15 +386,14 @@ ansible all -m shell -a "docker compose ps"
 
 ### Environment Tag Reference
 
-| Tag | Purpose | Network | Environment |
-|-----|---------|---------|-------------|
-| `auto_drive_mainnet_private` | Private mainnet services | Mainnet | Production |
-| `auto_drive_mainnet_public` | Public mainnet services | Mainnet | Production |
-| `auto_drive_taurus_private` | Private taurus services | Taurus | Production |
-| `auto_drive_taurus_public` | Public taurus services | Taurus | Production |
-| `auto_drive_mainnet_staging` | Mainnet staging | Mainnet | Staging |
-| `auto_drive_taurus_staging` | Taurus staging | Taurus | Staging |
-| `auto_drive_multinetwork_gateway` | Multi-network gateway | Multi | Production |
+| Tag                               | Purpose                  | Network | Environment |
+| --------------------------------- | ------------------------ | ------- | ----------- |
+| `auto_drive_mainnet_private`      | Private mainnet services | Mainnet | Production  |
+| `auto_drive_mainnet_public`       | Public mainnet services  | Mainnet | Production  |
+| `auto_drive_taurus_private`       | Private taurus services  | Taurus  | Production  |
+| `auto_drive_taurus_public`        | Public taurus services   | Taurus  | Production  |
+| `auto_drive_mainnet_staging`      | Mainnet staging          | Mainnet | Staging     |
+| `auto_drive_taurus_staging`       | Taurus staging           | Taurus  | Staging     |
 
 ---
 
