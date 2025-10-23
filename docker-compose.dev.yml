@@ -88,8 +88,6 @@ services:
       # Security and Authorization
       HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false" # Disable query allowlisting
 
-      # Hasura Migrations and Metadata
-      HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
     ports:
       - "${HASURA_GRAPHQL_PORT}:8080"
     command:

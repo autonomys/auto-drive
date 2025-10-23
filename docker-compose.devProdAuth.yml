@@ -89,9 +89,6 @@ services:
       # Security and Authorization
       HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false" # Disable query allowlisting
 
-      # Hasura Migrations and Metadata
-      HASURA_GRAPHQL_METADATA_DIR: /app/metadata
-      HASURA_GRAPHQL_MIGRATIONS_DIR: /app/migrations
     command:
       - graphql-engine
       - serve
