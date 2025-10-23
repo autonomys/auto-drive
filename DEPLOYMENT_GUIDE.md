@@ -231,7 +231,7 @@ Services are organized into profiles:
 - **download**: Download-related services (API, Worker)
 - **rabbit**: RabbitMQ message queue
 
-### Multinetwork Gateway (deprecated)
+### Multinetwork Gateway (retired)
 
 The gateway service provides:
 
@@ -395,14 +395,14 @@ ansible all -m shell -a "docker compose ps"
 
 ### Environment Tag Reference
 
-| Tag                               | Purpose                  | Network | Environment |
-| --------------------------------- | ------------------------ | ------- | ----------- |
-| `auto_drive_mainnet_private`      | Private mainnet services | Mainnet | Production  |
-| `auto_drive_mainnet_public`       | Public mainnet services  | Mainnet | Production  |
-| `auto_drive_taurus_private`       | Private taurus services  | Taurus  | Production  |
-| `auto_drive_taurus_public`        | Public taurus services   | Taurus  | Production  |
-| `auto_drive_mainnet_staging`      | Mainnet staging          | Mainnet | Staging     |
-| `auto_drive_taurus_staging`       | Taurus staging           | Taurus  | Staging     |
+| Tag                          | Purpose                  | Network | Environment |
+| ---------------------------- | ------------------------ | ------- | ----------- |
+| `auto_drive_mainnet_private` | Private mainnet services | Mainnet | Production  |
+| `auto_drive_mainnet_public`  | Public mainnet services  | Mainnet | Production  |
+| `auto_drive_taurus_private`  | Private taurus services  | Taurus  | Production  |
+| `auto_drive_taurus_public`   | Public taurus services   | Taurus  | Production  |
+| `auto_drive_mainnet_staging` | Mainnet staging          | Mainnet | Staging     |
+| `auto_drive_taurus_staging`  | Taurus staging           | Taurus  | Staging     |
 
 ---
 
