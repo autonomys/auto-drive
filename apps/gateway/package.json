@@ -12,8 +12,8 @@
     "name": "Autonomys"
   },
   "dependencies": {
-    "@autonomys/auto-drive": "^1.5.18",
-    "@autonomys/auto-utils": "^1.5.18",
+    "@autonomys/auto-drive": "^1.5.19",
+    "@autonomys/auto-utils": "^1.5.19",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "typescript": "^5.8.2"
