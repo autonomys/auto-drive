@@ -15,42 +15,64 @@ Auto Drive offers a user-friendly interface for uploading and downloading files,
 
 ### Installation
 
-1. Clone the repository:
+For running auto-drive locally you need to launch infra, auth, backend and frontend
 
-   ```
-   git clone https://github.com/autonomys/auto-drive
-   cd auto-drive
-   ```
+### Infrastructure
 
-2. Install dependencies:
+Spin up docker instances with:
 
-   ```
-   yarn install
-   ```
+```bash
+docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
+```
 
-3. Build services:
+Initialise the DB using:
 
-   ```
-   yarn build
-   ```
+```bash
+make init-submodules
+yarn
+yarn backend db-migrate up
+yarn auth db-migrate up
+cd apps/hasura
+hasura migrate apply --admin-secret myadminsecretkey
+hasura metadata apply --admin-secret myadminsecretkey
+cd -
+```
 
-4. Launch backend (requires docker):
+### Auth
 
-   ```
-   docker compose up --env-file .env.dev -f docker-compose.dev.yml up -d
-   ```
+Once infra is spin up, auth can be launched simply with:
 
-5. Apply hasura metadata
+```bash
+cd apps/auth
+cp .env.sample .env
+yarn build
+yarn start
+cd -
+```
 
-   ```
-   yarn hasura metadata apply --admin-secret myadminsecretkey
-   ```
+### Backend
 
-6. Launch frontend
+Next step would be to launch backend using:
 
-   ```
-   yarn frontend dev
-   ```
+```bash
+cd apps/backend
+cp .env.sample .env
+cd -
+```
+
+Then, you have to enter your have to update to your needs the `.env` file
+
+### Frontend
+
+Similarly for launching frontend:
+
+```bash
+cd apps/frontend
+cp .env.sample .env
+cd -
+```
+
+Then, you have to enter your have to update to your needs the `.env` file (e.g adding Google OAuth app)
 
 ### Running the Service
 
