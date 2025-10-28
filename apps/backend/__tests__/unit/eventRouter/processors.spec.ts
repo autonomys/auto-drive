@@ -15,6 +15,7 @@ import { AsyncDownloadsUseCases } from '../../../src/core/downloads/index.js'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { paymentManager } from '../../../src/infrastructure/services/paymentManager/index.js'
 import { Task } from '../../../src/infrastructure/eventRouter/tasks.js'
+import { ok } from 'neverthrow'
 
 describe('EventRouter Processors', () => {
   beforeEach(() => {
@@ -69,7 +70,7 @@ describe('EventRouter Processors', () => {
     it('should handle publish-nodes task', async () => {
       const publishNodesSpy = jest
         .spyOn(OnchainPublisher, 'publishNodes')
-        .mockResolvedValue(undefined as any)
+        .mockResolvedValue(undefined)
 
       const task = {
         id: 'publish-nodes',
@@ -85,7 +86,7 @@ describe('EventRouter Processors', () => {
     it('should handle tag-upload task', async () => {
       const tagUploadSpy = jest
         .spyOn(UploadsUseCases, 'tagUpload')
-        .mockResolvedValue(undefined as any)
+        .mockResolvedValue(undefined)
 
       const task = {
         id: 'tag-upload',
@@ -101,7 +102,7 @@ describe('EventRouter Processors', () => {
     it('should handle ensure-object-published task', async () => {
       const ensureObjectPublishedSpy = jest
         .spyOn(NodesUseCases, 'ensureObjectPublished')
-        .mockResolvedValue(undefined as any)
+        .mockResolvedValue(undefined)
 
       const task = {
         id: 'ensure-object-published',
@@ -117,7 +118,7 @@ describe('EventRouter Processors', () => {
     it('should handle watch-intent-tx task', async () => {
       const watchTransactionSpy = jest
         .spyOn(paymentManager, 'watchTransaction')
-        .mockResolvedValue(undefined as any)
+        .mockResolvedValue(undefined)
 
       const task = {
         id: 'watch-intent-tx',
@@ -145,7 +146,7 @@ describe('EventRouter Processors', () => {
     it('should handle async-download-created task', async () => {
       const asyncDownloadSpy = jest
         .spyOn(AsyncDownloadsUseCases, 'asyncDownload')
-        .mockResolvedValue(undefined as any)
+        .mockResolvedValue(ok(undefined))
 
       const task = {
         id: 'async-download-created',
@@ -161,7 +162,7 @@ describe('EventRouter Processors', () => {
     it('should handle object-archived task', async () => {
       const onObjectArchivedSpy = jest
         .spyOn(ObjectUseCases, 'onObjectArchived')
-        .mockResolvedValue(undefined as any)
+        .mockResolvedValue(undefined)
 
       const task = {
         id: 'object-archived',
@@ -177,7 +178,7 @@ describe('EventRouter Processors', () => {
     it('should handle populate-cache task', async () => {
       const populateCachesSpy = jest
         .spyOn(ObjectUseCases, 'populateCaches')
-        .mockResolvedValue(undefined as any)
+        .mockResolvedValue(undefined)
 
       const task = {
         id: 'populate-cache',
