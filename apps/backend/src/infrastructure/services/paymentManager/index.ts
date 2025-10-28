@@ -97,10 +97,10 @@ const onLogs = safeCallback((logs: Log[]) => {
     logs: logs.map((log) => log.transactionHash),
   })
   logs.forEach(
-    safeCallback((log: Log) => {
+    safeCallback(async (log: Log) => {
       const transactionHash = log.transactionHash as `0x${string}` | null
       if (transactionHash) {
-        paymentManager.watchTransaction(transactionHash)
+        await paymentManager.watchTransaction(transactionHash)
       }
     }),
   )

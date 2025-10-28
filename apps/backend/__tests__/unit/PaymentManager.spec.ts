@@ -144,6 +144,106 @@ describe('PaymentManager', () => {
         paymentManager.watchTransaction(txHash),
       ).resolves.not.toThrow()
     })
+
+    it('should handle multiple events with mixed success and error', async () => {
+      const txHash = '0xmixed'
+      const intentId1 = '0xintent1'
+      const intentId2 = '0xintent2'
+
+      config.paymentManager.contractAddress = '0xContractAddress'
+
+      jest
+        .spyOn(paymentManager.viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue({
+          logs: [
+            {
+              address: '0xContractAddress',
+              data: '0x',
+              topics: [],
+              blockHash: '0x',
+              blockNumber: 123n,
+              logIndex: 0,
+              transactionHash: txHash,
+              transactionIndex: 0,
+              removed: false,
+            },
+            {
+              address: '0xContractAddress',
+              data: '0x',
+              topics: [],
+              blockHash: '0x',
+              blockNumber: 123n,
+              logIndex: 1,
+              transactionHash: txHash,
+              transactionIndex: 1,
+              removed: false,
+            },
+          ],
+        } as any)
+
+      jest.spyOn(paymentManager, 'parseEventLogs').mockReturnValue([
+        {
+          address: '0xContractAddress',
+          args: { intentId: intentId1, paymentAmount: 100n },
+          eventName: 'IntentPaymentReceived',
+        },
+        {
+          address: '0xContractAddress',
+          args: { intentId: intentId2, paymentAmount: 200n },
+          eventName: 'IntentPaymentReceived',
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValueOnce(ok({} as any))
+        .mockResolvedValueOnce(err(new Error('Second intent error')))
+
+      await paymentManager.watchTransaction(txHash)
+
+      expect(markIntentSpy).toHaveBeenCalledTimes(2)
+    })
+
+    it('should handle case insensitive contract address comparison', async () => {
+      const txHash = '0xcasetest'
+
+      config.paymentManager.contractAddress = '0xCONTRACTADDRESS'
+
+      jest
+        .spyOn(paymentManager.viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue({
+          logs: [
+            {
+              address: '0xcontractaddress',
+              data: '0x',
+              topics: [],
+              blockHash: '0x',
+              blockNumber: 123n,
+              logIndex: 0,
+              transactionHash: txHash,
+              transactionIndex: 0,
+              removed: false,
+            },
+          ],
+        } as any)
+
+      jest.spyOn(paymentManager, 'parseEventLogs').mockReturnValue([
+        {
+          address: '0xcontractaddress',
+          args: { intentId: '0xtest', paymentAmount: 100n },
+          eventName: 'IntentPaymentReceived',
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await paymentManager.watchTransaction(txHash)
+
+      // Should match because comparison is case-insensitive
+      expect(markIntentSpy).toHaveBeenCalled()
+    })
   })
 
   describe('onLogs', () => {
@@ -199,6 +299,56 @@ describe('PaymentManager', () => {
       paymentManager.onLogs(logs)
 
       expect(watchTransactionSpy).not.toHaveBeenCalled()
+    })
+
+    it('should handle mixed valid and null transaction hashes', () => {
+      const logs = [
+        {
+          transactionHash: '0xtx1',
+          address: '0xaddr1',
+        },
+        {
+          transactionHash: null,
+          address: '0xaddr2',
+        },
+        {
+          transactionHash: '0xtx2',
+          address: '0xaddr3',
+        },
+      ] as any[]
+
+      const watchTransactionSpy = jest
+        .spyOn(paymentManager, 'watchTransaction')
+        .mockResolvedValue(undefined)
+
+      paymentManager.onLogs(logs)
+
+      // Should only call watchTransaction for non-null hashes
+      expect(watchTransactionSpy).toHaveBeenCalledTimes(2)
+      expect(watchTransactionSpy).toHaveBeenCalledWith('0xtx1')
+      expect(watchTransactionSpy).toHaveBeenCalledWith('0xtx2')
+    })
+
+    it('should handle errors when calling watchTransaction', async () => {
+      const logs = [
+        {
+          transactionHash: '0xtxerror',
+          address: '0xaddr1',
+        },
+      ] as any[]
+
+      const watchTransactionSpy = jest
+        .spyOn(paymentManager, 'watchTransaction')
+        .mockRejectedValue(new Error('Transaction watch failed'))
+
+      // safeCallback catches errors, so this should not throw
+      paymentManager.onLogs(logs)
+
+      // Wait for async operations to complete
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      // Verify watchTransaction was called despite the error
+      expect(watchTransactionSpy).toHaveBeenCalledWith('0xtxerror')
     })
   })
 
@@ -266,6 +416,62 @@ describe('PaymentManager', () => {
 
       expect(onConfirmedSpy).toHaveBeenCalled()
     })
+
+    it('should log success when intents are confirmed', async () => {
+      const intents = [
+        {
+          id: '0xintentsuccess',
+          userPublicId: 'user1',
+          status: 'CONFIRMED',
+        },
+      ] as any[]
+
+      jest
+        .spyOn(IntentsUseCases, 'getConfirmedIntents')
+        .mockResolvedValue(intents)
+
+      const onConfirmedSpy = jest
+        .spyOn(IntentsUseCases, 'onConfirmedIntent')
+        .mockResolvedValue(ok(undefined))
+
+      await paymentManager.checkConfirmedIntents()
+
+      expect(onConfirmedSpy).toHaveBeenCalledWith('0xintentsuccess')
+    })
+
+    it('should handle mixed success and error scenarios', async () => {
+      const intents = [
+        {
+          id: '0xintentersuccess',
+          userPublicId: 'user1',
+          status: 'CONFIRMED',
+        },
+        {
+          id: '0xintenterror',
+          userPublicId: 'user2',
+          status: 'CONFIRMED',
+        },
+        {
+          id: '0xintentersuccess2',
+          userPublicId: 'user3',
+          status: 'CONFIRMED',
+        },
+      ] as any[]
+
+      jest
+        .spyOn(IntentsUseCases, 'getConfirmedIntents')
+        .mockResolvedValue(intents)
+
+      const onConfirmedSpy = jest
+        .spyOn(IntentsUseCases, 'onConfirmedIntent')
+        .mockResolvedValueOnce(ok(undefined))
+        .mockResolvedValueOnce(err(new Error('Processing error')))
+        .mockResolvedValueOnce(ok(undefined))
+
+      await paymentManager.checkConfirmedIntents()
+
+      expect(onConfirmedSpy).toHaveBeenCalledTimes(3)
+    })
   })
 
   describe('start', () => {
@@ -308,6 +514,45 @@ describe('PaymentManager', () => {
 
       watchContractEventSpy.mockRestore()
       onLogsSpy.mockRestore()
+    })
+
+    it('should configure watchContractEvent with correct parameters', () => {
+      const watchContractEventSpy = jest
+        .spyOn(paymentManager.viemClient, 'watchContractEvent')
+        .mockImplementation(() => Promise.resolve() as any)
+
+      jest.spyOn(global, 'setInterval').mockImplementation(() => 1 as any)
+
+      paymentManager.start()
+
+      expect(watchContractEventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: config.paymentManager.contractAddress,
+          eventName: 'IntentPaymentReceived',
+          onLogs: expect.any(Function),
+        }),
+      )
+
+      watchContractEventSpy.mockRestore()
+    })
+
+    it('should use checkInterval from config for setInterval', () => {
+      const setIntervalSpy = jest.spyOn(global, 'setInterval')
+
+      jest
+        .spyOn(paymentManager.viemClient, 'watchContractEvent')
+        .mockImplementation(() => Promise.resolve() as any)
+
+      const originalCheckInterval = config.paymentManager.checkInterval
+      config.paymentManager.checkInterval = 15000
+
+      paymentManager.start()
+
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 15000)
+
+      // Restore original value
+      config.paymentManager.checkInterval = originalCheckInterval
+      setIntervalSpy.mockRestore()
     })
   })
 })
