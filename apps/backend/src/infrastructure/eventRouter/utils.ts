@@ -16,25 +16,25 @@ export const createHandlerWithRetries =
     }: { errorPublishQueue?: string | null; errorRetries?: number } = {},
   ) =>
   async (obj: unknown) => {
-    const task = TaskSchema.safeParse(obj)
-    if (!task.success) {
-      logger.error(task.error as Error, 'Invalid task')
+    const parsingResult = TaskSchema.safeParse(obj)
+    if (!parsingResult.success) {
+      logger.error(parsingResult.error as Error, 'Invalid task')
       return
     }
 
     try {
-      await handler(task.data)
+      await handler(parsingResult.data)
     } catch (error) {
-      if (task.data.retriesLeft > 0) {
+      if (parsingResult.data.retriesLeft > 0) {
         const newTask = {
-          ...task.data,
-          retriesLeft: task.data.retriesLeft - 1,
+          ...parsingResult.data,
+          retriesLeft: parsingResult.data.retriesLeft - 1,
         }
         EventRouter.publish(newTask)
       } else {
         if (errorPublishQueue) {
           Rabbit.publish(errorPublishQueue, {
-            ...task.data,
+            ...parsingResult.data,
             retriesLeft: errorRetries,
           })
         }
