@@ -15,9 +15,12 @@ import { config } from '../../src/config.js'
 describe('PaymentManager', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    jest.useFakeTimers()
   })
 
   afterEach(() => {
+    jest.runOnlyPendingTimers()
+    jest.useRealTimers()
     jest.restoreAllMocks()
   })
 
