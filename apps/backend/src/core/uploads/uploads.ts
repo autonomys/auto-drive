@@ -334,6 +334,7 @@ const scheduleUploadTagging = async (cid: string): Promise<void> => {
 
 const tagUpload = async (
   cid: string,
+  isRoot: boolean = true,
 ): Promise<Result<void, ObjectNotFoundError>> => {
   const getResult = await ObjectUseCases.getMetadata(cid)
   if (getResult.isErr()) {
@@ -344,7 +345,9 @@ const tagUpload = async (
   const metadata = getResult.value
   if (metadata?.type === 'folder') {
     const results = await Promise.all(
-      metadata.children.map((child) => UploadsUseCases.tagUpload(child.cid)),
+      metadata.children.map((child) =>
+        UploadsUseCases.tagUpload(child.cid, false),
+      ),
     )
     const combinedResult = Result.combine(results)
     if (combinedResult.isErr()) {
@@ -365,7 +368,9 @@ const tagUpload = async (
     }
   }
 
-  await scheduleNodesPublish(cid)
+  if (isRoot) {
+    await scheduleNodesPublish(cid)
+  }
 
   return ok()
 }
