@@ -347,8 +347,8 @@ describe('PaymentManager', () => {
       // safeCallback catches errors, so this should not throw
       paymentManager.onLogs(logs)
 
-      // Wait for async operations to complete
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      // Flush microtasks instead of waiting on timers (fake timers active)
+      await Promise.resolve()
 
       // Verify watchTransaction was called despite the error
       expect(watchTransactionSpy).toHaveBeenCalledWith('0xtxerror')

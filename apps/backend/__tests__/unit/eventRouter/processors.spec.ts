@@ -86,7 +86,7 @@ describe('EventRouter Processors', () => {
     it('should handle tag-upload task', async () => {
       const tagUploadSpy = jest
         .spyOn(UploadsUseCases, 'tagUpload')
-        .mockResolvedValue(undefined)
+        .mockResolvedValue(ok(undefined))
 
       const task = {
         id: 'tag-upload',
