@@ -179,6 +179,8 @@ const migrateFromBlockstoreToNodesTable = async (
             piece_offset: null,
           })),
         )
+
+        logger.info(`Saved nodes from headCID=${headCID}`)
       },
       BATCH_SIZE,
     )
