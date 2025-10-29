@@ -152,7 +152,7 @@ const migrateFromBlockstoreToNodesTable = async (
   }
 
   for (const upload of uploads) {
-    const rootCID = await getUploadCID(uploadId)
+    const headCID = await getUploadCID(upload.id)
     const blockstore = await getUploadBlockstore(upload.id)
 
     const BATCH_SIZE = 100
@@ -170,7 +170,7 @@ const migrateFromBlockstoreToNodesTable = async (
           uniqueNodes.map((e) => ({
             cid: cidToString(e.cid),
             root_cid: cidToString(rootCID),
-            head_cid: cidToString(rootCID),
+            head_cid: cidToString(headCID),
             type: decodeIPLDNodeData(Buffer.from(e.block)).type,
             encoded_node: Buffer.from(e.block).toString('base64'),
             block_published_on: null,
@@ -179,6 +179,8 @@ const migrateFromBlockstoreToNodesTable = async (
             piece_offset: null,
           })),
         )
+
+        logger.info(`Saved nodes from headCID=${headCID}`)
       },
       BATCH_SIZE,
     )
