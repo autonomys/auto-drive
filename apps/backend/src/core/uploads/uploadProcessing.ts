@@ -13,12 +13,15 @@ import {
   MetadataType,
   processBufferToIPLDFormatFromChunks,
   processChunksToIPLDFormat,
+  OffchainMetadata,
 } from '@autonomys/auto-dag-data'
 import {
   FolderUpload,
   InteractionType,
   UploadType,
   UserWithOrganization,
+  UploadArtifacts,
+  FolderArtifacts,
 } from '@auto-drive/models'
 import { BlockstoreUseCases } from './blockstore.js'
 import { mapTableToModel } from './uploads.js'
@@ -203,6 +206,17 @@ const handleFileUploadFinalization = async (
   return metadata.dataCid
 }
 
+const flattenArtifacts = (artifact: UploadArtifacts): OffchainMetadata[] => {
+  const collected: OffchainMetadata[] = [artifact.metadata]
+  if ((artifact as FolderArtifacts).childrenArtifacts) {
+    const folder = artifact as FolderArtifacts
+    for (const child of folder.childrenArtifacts) {
+      collected.push(...flattenArtifacts(child))
+    }
+  }
+  return collected
+}
+
 const handleFolderUploadFinalization = async (
   user: UserWithOrganization,
   uploadId: string,
@@ -215,9 +229,13 @@ const handleFolderUploadFinalization = async (
   const { metadata, childrenArtifacts } =
     await UploadArtifactsUseCase.generateFolderArtifacts(uploadId)
 
-  const fullMetadata = [metadata, ...childrenArtifacts.map((e) => e.metadata)]
+  const allMetadata: OffchainMetadata[] = [
+    metadata,
+    ...childrenArtifacts.flatMap((child) => flattenArtifacts(child)),
+  ]
+
   await Promise.all(
-    fullMetadata.map((childMetadata) =>
+    allMetadata.map((childMetadata) =>
       ObjectUseCases.saveMetadata(
         metadata.dataCid,
         childMetadata.dataCid,
