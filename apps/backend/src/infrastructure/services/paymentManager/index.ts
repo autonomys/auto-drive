@@ -37,7 +37,7 @@ const watchTransaction = async (txHash: string) => {
 
   // Filter logs to only include the deposit event
   const logs = paymentManager
-    .parseEventLogs({
+    ._parseEventLogs({
       abi: depositEventAbi,
       eventName: depositEventAbi[0].name,
       logs: receipt.logs,
@@ -71,7 +71,7 @@ const watchTransaction = async (txHash: string) => {
   })
 }
 
-const checkConfirmedIntents = async () => {
+const _checkConfirmedIntents = async () => {
   logger.info('Checking confirmed intents')
   const intents = await IntentsUseCases.getConfirmedIntents()
   logger.info('Found confirmed intents', {
@@ -122,22 +122,22 @@ const parseEventLogs = <
 const start = () => {
   logger.info('Starting payment manager')
   setInterval(
-    safeCallback(paymentManager.checkConfirmedIntents),
+    safeCallback(paymentManager._checkConfirmedIntents),
     config.paymentManager.checkInterval,
   )
   viemClient.watchContractEvent({
     abi: depositEventAbi,
     address: config.paymentManager.contractAddress,
     eventName: depositEventAbi[0].name,
-    onLogs: paymentManager.onLogs,
+    onLogs: paymentManager._onLogs,
   })
 }
 
 export const paymentManager = {
   watchTransaction,
   start,
-  onLogs,
-  checkConfirmedIntents,
-  viemClient,
-  parseEventLogs,
+  _onLogs: onLogs,
+  _checkConfirmedIntents: _checkConfirmedIntents,
+  _viemClient: viemClient,
+  _parseEventLogs: parseEventLogs,
 }

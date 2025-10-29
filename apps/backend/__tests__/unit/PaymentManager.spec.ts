@@ -34,7 +34,7 @@ describe('PaymentManager', () => {
     it('should call viemClient.waitForTransactionReceipt with correct params', async () => {
       const txHash = '0xabc123'
       const waitForReceiptSpy = jest
-        .spyOn(paymentManager.viemClient, 'waitForTransactionReceipt')
+        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [],
         } as any)
@@ -59,7 +59,7 @@ describe('PaymentManager', () => {
       config.paymentManager.contractAddress = '0xContractAddress'
 
       jest
-        .spyOn(paymentManager.viemClient, 'waitForTransactionReceipt')
+        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -76,7 +76,7 @@ describe('PaymentManager', () => {
           ],
         } as any)
 
-      jest.spyOn(paymentManager, 'parseEventLogs').mockReturnValue([
+      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
         {
           address: '0xContractAddress',
           args: { intentId, paymentAmount },
@@ -102,7 +102,7 @@ describe('PaymentManager', () => {
       const txHash = '0xabc789'
 
       jest
-        .spyOn(paymentManager.viemClient, 'waitForTransactionReceipt')
+        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -133,7 +133,7 @@ describe('PaymentManager', () => {
       const txHash = '0xerror'
 
       jest
-        .spyOn(paymentManager.viemClient, 'waitForTransactionReceipt')
+        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [],
         } as any)
@@ -156,7 +156,7 @@ describe('PaymentManager', () => {
       config.paymentManager.contractAddress = '0xContractAddress'
 
       jest
-        .spyOn(paymentManager.viemClient, 'waitForTransactionReceipt')
+        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -184,7 +184,7 @@ describe('PaymentManager', () => {
           ],
         } as any)
 
-      jest.spyOn(paymentManager, 'parseEventLogs').mockReturnValue([
+      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
         {
           address: '0xContractAddress',
           args: { intentId: intentId1, paymentAmount: 100n },
@@ -213,7 +213,7 @@ describe('PaymentManager', () => {
       config.paymentManager.contractAddress = '0xCONTRACTADDRESS'
 
       jest
-        .spyOn(paymentManager.viemClient, 'waitForTransactionReceipt')
+        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -230,7 +230,7 @@ describe('PaymentManager', () => {
           ],
         } as any)
 
-      jest.spyOn(paymentManager, 'parseEventLogs').mockReturnValue([
+      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
         {
           address: '0xcontractaddress',
           args: { intentId: '0xtest', paymentAmount: 100n },
@@ -266,7 +266,7 @@ describe('PaymentManager', () => {
         .spyOn(paymentManager, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager.onLogs(logs)
+      paymentManager._onLogs(logs)
 
       // Should call watchTransaction for each log's transaction hash
       expect(watchTransactionSpy).toHaveBeenCalledTimes(2)
@@ -286,7 +286,7 @@ describe('PaymentManager', () => {
         .spyOn(paymentManager, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager.onLogs(logs)
+      paymentManager._onLogs(logs)
 
       // Should not call watchTransaction for null transactionHash
       expect(watchTransactionSpy).not.toHaveBeenCalled()
@@ -299,7 +299,7 @@ describe('PaymentManager', () => {
         .spyOn(paymentManager, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager.onLogs(logs)
+      paymentManager._onLogs(logs)
 
       expect(watchTransactionSpy).not.toHaveBeenCalled()
     })
@@ -324,7 +324,7 @@ describe('PaymentManager', () => {
         .spyOn(paymentManager, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager.onLogs(logs)
+      paymentManager._onLogs(logs)
 
       // Should only call watchTransaction for non-null hashes
       expect(watchTransactionSpy).toHaveBeenCalledTimes(2)
@@ -345,7 +345,7 @@ describe('PaymentManager', () => {
         .mockRejectedValue(new Error('Transaction watch failed'))
 
       // safeCallback catches errors, so this should not throw
-      paymentManager.onLogs(logs)
+      paymentManager._onLogs(logs)
 
       // Flush microtasks instead of waiting on timers (fake timers active)
       await Promise.resolve()
@@ -361,7 +361,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'getConfirmedIntents')
         .mockResolvedValue([])
 
-      await paymentManager.checkConfirmedIntents()
+      await paymentManager._checkConfirmedIntents()
 
       expect(getConfirmedSpy).toHaveBeenCalled()
     })
@@ -388,7 +388,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'onConfirmedIntent')
         .mockResolvedValue(ok(undefined))
 
-      await paymentManager.checkConfirmedIntents()
+      await paymentManager._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledTimes(2)
       expect(onConfirmedSpy).toHaveBeenCalledWith('0xintent1')
@@ -414,7 +414,7 @@ describe('PaymentManager', () => {
 
       // Should not throw, error should be logged
       await expect(
-        paymentManager.checkConfirmedIntents(),
+        paymentManager._checkConfirmedIntents(),
       ).resolves.not.toThrow()
 
       expect(onConfirmedSpy).toHaveBeenCalled()
@@ -437,7 +437,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'onConfirmedIntent')
         .mockResolvedValue(ok(undefined))
 
-      await paymentManager.checkConfirmedIntents()
+      await paymentManager._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledWith('0xintentsuccess')
     })
@@ -471,7 +471,7 @@ describe('PaymentManager', () => {
         .mockResolvedValueOnce(err(new Error('Processing error')))
         .mockResolvedValueOnce(ok(undefined))
 
-      await paymentManager.checkConfirmedIntents()
+      await paymentManager._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledTimes(3)
     })
@@ -482,7 +482,7 @@ describe('PaymentManager', () => {
       const setIntervalSpy = jest.spyOn(global, 'setInterval')
 
       jest
-        .spyOn(paymentManager.viemClient, 'watchContractEvent')
+        .spyOn(paymentManager._viemClient, 'watchContractEvent')
         .mockImplementation(() => Promise.resolve() as any)
 
       paymentManager.start()
@@ -497,11 +497,11 @@ describe('PaymentManager', () => {
 
     it('should pass onLogs callback to watchContractEvent', () => {
       const onLogsSpy = jest
-        .spyOn(paymentManager, 'onLogs')
+        .spyOn(paymentManager, '_onLogs')
         .mockImplementation(() => Promise.resolve() as any)
 
       const watchContractEventSpy = jest
-        .spyOn(paymentManager.viemClient, 'watchContractEvent')
+        .spyOn(paymentManager._viemClient, 'watchContractEvent')
         .mockImplementation((params: any) => {
           // Trigger the onLogs callback
           params.onLogs([])
@@ -521,7 +521,7 @@ describe('PaymentManager', () => {
 
     it('should configure watchContractEvent with correct parameters', () => {
       const watchContractEventSpy = jest
-        .spyOn(paymentManager.viemClient, 'watchContractEvent')
+        .spyOn(paymentManager._viemClient, 'watchContractEvent')
         .mockImplementation(() => Promise.resolve() as any)
 
       jest.spyOn(global, 'setInterval').mockImplementation(() => 1 as any)
@@ -543,7 +543,7 @@ describe('PaymentManager', () => {
       const setIntervalSpy = jest.spyOn(global, 'setInterval')
 
       jest
-        .spyOn(paymentManager.viemClient, 'watchContractEvent')
+        .spyOn(paymentManager._viemClient, 'watchContractEvent')
         .mockImplementation(() => Promise.resolve() as any)
 
       const originalCheckInterval = config.paymentManager.checkInterval
