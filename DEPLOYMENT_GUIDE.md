@@ -97,11 +97,9 @@ Example configuration:
 ```ini
 [auto_drive_mainnet_private]
 user@mainnet-private-1
-user@mainnet-private-2
 
 [auto_drive_mainnet_public]
 user@mainnet-public-1
-user@mainnet-public-2
 ```
 
 The format is `user@hostname` or `user@ip-address` for each host entry.
