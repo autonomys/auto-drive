@@ -50,6 +50,9 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     return true;
   });
 
+  const hasBuyCreditsFeature =
+    features.buyCredits && isLoggedIn && account?.model === AccountModel.OneOff;
+
   return (
     <Sidebar className='bg-card'>
       <AuthModal
@@ -86,7 +89,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
           />
         )}
         {isLoggedIn && account ? (
-          features.buyCredits ? (
+          hasBuyCreditsFeature ? (
             <BuyMoreCreditsButton />
           ) : (
             <AskForCreditsButton />
