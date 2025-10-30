@@ -229,4 +229,127 @@ describe('IntentsUseCases', () => {
     const res = await IntentsUseCases.getConfirmedIntents()
     expect(res).toEqual(intents)
   })
+
+  it('getIntent should error with forbidden when user does not match', async () => {
+    const intent: Intent = {
+      id: '0x9',
+      userPublicId: 'different-user',
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+
+    const result = await IntentsUseCases.getIntent(user, intent.id)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+  })
+
+  it('markIntentAsConfirmed should error when intent not found', async () => {
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: '0xnotfound',
+      paymentAmount: 100n,
+    })
+
+    expect(res.isErr()).toBe(true)
+  })
+
+  it('onConfirmedIntent should error when intent not found', async () => {
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(null)
+
+    const res = await IntentsUseCases.onConfirmedIntent('0xnotfound')
+    expect(res.isErr()).toBe(true)
+  })
+
+  it('onConfirmedIntent should error when payment amount is missing', async () => {
+    const intent: Intent = {
+      id: '0x10',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      paymentAmount: undefined,
+      shannonsPerByte: 1n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+
+    const res = await IntentsUseCases.onConfirmedIntent(intent.id)
+
+    expect(res.isErr()).toBe(true)
+  })
+
+  it('onConfirmedIntent should error when addCreditsToAccount fails', async () => {
+    const intent: Intent = {
+      id: '0x11',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      paymentAmount: 100n,
+      shannonsPerByte: 1n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const { err: neverthrowErr } = await import('neverthrow')
+    jest
+      .spyOn(AccountsUseCases, 'addCreditsToAccount')
+      .mockResolvedValue(
+        neverthrowErr(new ForbiddenError('Add credits failed')),
+      )
+
+    const res = await IntentsUseCases.onConfirmedIntent(intent.id)
+
+    expect(res.isErr()).toBe(true)
+  })
+
+  it('triggerWatchIntent should error when intent not found', async () => {
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(null)
+
+    const res = await IntentsUseCases.triggerWatchIntent({
+      executor: user,
+      txHash: '0xhash',
+      intentId: '0xnotfound',
+    })
+
+    expect(res.isErr()).toBe(true)
+  })
+
+  it('getIntentCredits should calculate credits correctly', () => {
+    const intent: Intent = {
+      id: '0x12',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      paymentAmount: 1000n,
+      shannonsPerByte: 10n,
+    }
+
+    const credits = IntentsUseCases.getIntentCredits(intent)
+    expect(credits).toBe(100)
+  })
+
+  it('getIntentCredits should return 0 when paymentAmount is undefined', () => {
+    const intent: Intent = {
+      id: '0x13',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      paymentAmount: undefined,
+      shannonsPerByte: 10n,
+    }
+
+    const credits = IntentsUseCases.getIntentCredits(intent)
+    expect(credits).toBe(0)
+  })
+
+  it('updateIntent should proxy repository', async () => {
+    const intent: Intent = {
+      id: '0x14',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+    }
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockResolvedValue(intent)
+
+    const result = await IntentsUseCases.updateIntent(intent)
+
+    expect(updateSpy).toHaveBeenCalledWith(intent)
+    expect(result).toEqual(intent)
+  })
 })

@@ -1,3 +1,5 @@
+import { createLogger } from '../../infrastructure/drivers/logger.js'
+
 export const safeCallback =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   <T extends (...args: any[]) => any>(
@@ -7,9 +9,6 @@ export const safeCallback =
       try {
         return await callback(...args)
       } catch (error) {
-        const { createLogger } = await import(
-          '../../infrastructure/drivers/logger.js'
-        )
         const logger = createLogger('utils:safe')
         logger.error('Unhandled error in safeCallback', error)
       }

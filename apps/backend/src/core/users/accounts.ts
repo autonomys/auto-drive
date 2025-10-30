@@ -85,13 +85,13 @@ const getOrCreateAccount = async (
   if (!account) {
     const isWeb3User = user.oauthProvider === 'web3-wallet'
     if (isWeb3User) {
-      return initAccount(
+      return AccountsUseCases.initAccount(
         user.organizationId,
         config.params.web3DefaultAccount.uploadLimit,
         config.params.web3DefaultAccount.downloadLimit,
       )
     } else {
-      return initAccount(
+      return AccountsUseCases.initAccount(
         user.organizationId,
         config.params.defaultAccount.uploadLimit,
         config.params.defaultAccount.downloadLimit,
@@ -219,14 +219,8 @@ const registerInteraction = async (
 
 const addCreditsToAccount = async (publicId: string, credits: number) => {
   const user = await AuthManager.getUserFromPublicId(publicId)
-  if (!user) {
-    return err(new ObjectNotFoundError('User not found'))
-  }
 
   const account = await AccountsUseCases.getOrCreateAccount(user)
-  if (!account) {
-    return err(new ObjectNotFoundError('Account not found'))
-  }
 
   if (account.model !== AccountModel.OneOff) {
     return err(new ForbiddenError('Account is not OneOff'))

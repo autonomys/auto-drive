@@ -1,4 +1,13 @@
-import { createPublicClient, http, parseEventLogs } from 'viem'
+import {
+  Abi,
+  ContractEventName,
+  createPublicClient,
+  http,
+  Log,
+  ParseEventLogsParameters,
+  ParseEventLogsReturnType,
+  parseEventLogs as viemParseEventLogs,
+} from 'viem'
 import { config } from '../../../config.js'
 import { createLogger } from '../../drivers/logger.js'
 import { depositEventAbi } from './event-abi.js'
@@ -27,11 +36,12 @@ const watchTransaction = async (txHash: string) => {
   })
 
   // Filter logs to only include the deposit event
-  const logs = parseEventLogs({
-    abi: depositEventAbi,
-    eventName: depositEventAbi[0].name,
-    logs: receipt.logs,
-  })
+  const logs = paymentManager
+    ._parseEventLogs({
+      abi: depositEventAbi,
+      eventName: depositEventAbi[0].name,
+      logs: receipt.logs,
+    })
     // Filter logs to only include logs from the payment manager contract
     .filter(
       (log) =>
@@ -61,7 +71,7 @@ const watchTransaction = async (txHash: string) => {
   })
 }
 
-const checkConfirmedIntents = async () => {
+const _checkConfirmedIntents = async () => {
   logger.info('Checking confirmed intents')
   const intents = await IntentsUseCases.getConfirmedIntents()
   logger.info('Found confirmed intents', {
@@ -82,29 +92,52 @@ const checkConfirmedIntents = async () => {
   }
 }
 
+const onLogs = safeCallback((logs: Log[]) => {
+  logger.info('Deposit event', {
+    logs: logs.map((log) => log.transactionHash),
+  })
+  logs.forEach(
+    safeCallback(async (log: Log) => {
+      const transactionHash = log.transactionHash as `0x${string}` | null
+      if (transactionHash) {
+        await paymentManager.watchTransaction(transactionHash)
+      }
+    }),
+  )
+})
+
+const parseEventLogs = <
+  abi extends Abi | readonly unknown[],
+  strict extends boolean | undefined = true,
+  eventName extends
+    | ContractEventName<abi>
+    | ContractEventName<abi>[]
+    | undefined = undefined,
+>(
+  parameters: ParseEventLogsParameters<abi, eventName, strict>,
+): ParseEventLogsReturnType<abi, eventName, strict> => {
+  return viemParseEventLogs<abi, strict, eventName>(parameters)
+}
+
 const start = () => {
   logger.info('Starting payment manager')
   setInterval(
-    safeCallback(checkConfirmedIntents),
+    safeCallback(paymentManager._checkConfirmedIntents),
     config.paymentManager.checkInterval,
   )
   viemClient.watchContractEvent({
     abi: depositEventAbi,
     address: config.paymentManager.contractAddress,
     eventName: depositEventAbi[0].name,
-    onLogs: (logs) => {
-      logger.info('Deposit event', {
-        logs: logs.map((log) => log.transactionHash),
-      })
-      logs.forEach((log) => {
-        watchTransaction(log.transactionHash).catch((error) => {
-          logger.error('Error watching transaction', {
-            error,
-          })
-        })
-      })
-    },
+    onLogs: paymentManager._onLogs,
   })
 }
 
-export const paymentManager = { watchTransaction, start }
+export const paymentManager = {
+  watchTransaction,
+  start,
+  _onLogs: onLogs,
+  _checkConfirmedIntents: _checkConfirmedIntents,
+  _viemClient: viemClient,
+  _parseEventLogs: parseEventLogs,
+}

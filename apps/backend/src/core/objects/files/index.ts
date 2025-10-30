@@ -135,13 +135,15 @@ const retrieveObject = async (
 
   const isFullRetrieval = !byteRange
   if (isFullRetrieval) {
-    return retrieveFullFile(metadata)
+    return FilesUseCases.retrieveFullFile(metadata)
   }
 
-  return retrieveFileByteRange(metadata, byteRange)
+  return FilesUseCases.retrieveFileByteRange(metadata, byteRange)
 }
 
 export const FilesUseCases = {
   getNodesForPartialRetrieval,
   retrieveObject,
+  retrieveFullFile,
+  retrieveFileByteRange,
 }
