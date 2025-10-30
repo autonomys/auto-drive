@@ -50,6 +50,9 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     return true;
   });
 
+  const hasBuyCreditsFeature =
+    features.buyCredits && isLoggedIn && account?.model === AccountModel.OneOff;
+
   return (
     <Sidebar className='bg-card'>
       <AuthModal
@@ -85,21 +88,10 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             uploadPending={account?.pendingUploadCredits ?? 0}
           />
         )}
-        {isLoggedIn && account ? (
-          features.buyCredits ? (
-            <BuyMoreCreditsButton />
-          ) : (
-            <AskForCreditsButton />
-          )
+        {hasBuyCreditsFeature ? (
+          <BuyMoreCreditsButton />
         ) : (
-          <Button
-            variant='outline'
-            size='sm'
-            className='w-full text-xs'
-            onClick={handleOpenAuthModal}
-          >
-            Log In
-          </Button>
+          <AskForCreditsButton />
         )}
       </SidebarFooter>
     </Sidebar>
