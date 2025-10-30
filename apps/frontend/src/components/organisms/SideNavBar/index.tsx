@@ -88,10 +88,21 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             uploadPending={account?.pendingUploadCredits ?? 0}
           />
         )}
-        {hasBuyCreditsFeature ? (
-          <BuyMoreCreditsButton />
+        {isLoggedIn && account ? (
+          hasBuyCreditsFeature ? (
+            <BuyMoreCreditsButton />
+          ) : (
+            <AskForCreditsButton />
+          )
         ) : (
-          <AskForCreditsButton />
+          <Button
+            variant='outline'
+            size='sm'
+            className='w-full text-xs'
+            onClick={handleOpenAuthModal}
+          >
+            Log In
+          </Button>
         )}
       </SidebarFooter>
     </Sidebar>
