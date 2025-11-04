@@ -51,7 +51,9 @@ const publish = async (queue: string, message: object) => {
     async () => {
       const channel = await getChannel()
       channel.assertQueue(queue)
-      channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)))
+      channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), {
+        persistent: true,
+      })
     },
     { maxRetries: 3, startingDelay: 1000 },
   )
