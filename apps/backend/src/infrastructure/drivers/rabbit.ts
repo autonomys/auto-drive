@@ -34,7 +34,10 @@ const getChannel = async () => {
         }
       }
     })
-
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval)
+      keepAliveInterval = null
+    }
     keepAliveInterval = setInterval(keepAlive, KEEP_ALIVE_INTERVAL)
   }
 
