@@ -7,11 +7,13 @@ type SubscriptionCallback = (
   message: Record<string, unknown>,
 ) => Promise<unknown>
 
+type Queue = (typeof queues)[number]
+
 const logger = createLogger('drivers:rabbit')
 
 const KEEP_ALIVE_INTERVAL = 60_000
-const queues = ['task-manager', 'download-manager']
-const subscriptions: Record<string, SubscriptionCallback[]> = {}
+const queues = ['task-manager', 'download-manager'] as const
+const subscriptions: Partial<Record<Queue, SubscriptionCallback[]>> = {}
 
 let channelPromise: Promise<Channel> | null = null
 let keepAliveInterval: NodeJS.Timeout | null = null
@@ -26,8 +28,8 @@ const getChannel = async () => {
       }),
     )
     channelPromise.then(() => {
-      for (const queue in subscriptions) {
-        const queueSubscriptions = subscriptions[queue]
+      for (const queue of queues) {
+        const queueSubscriptions = subscriptions[queue] ?? []
         subscriptions[queue] = []
         for (const callback of queueSubscriptions) {
           subscribe(queue, callback)
@@ -82,7 +84,7 @@ const keepAlive = async () => {
 }
 
 const subscribe = async (
-  queue: string,
+  queue: Queue,
   callback: (message: Record<string, unknown>) => Promise<unknown>,
 ) => {
   if (!subscriptions[queue]) {
@@ -114,14 +116,15 @@ const subscribe = async (
 
   return () => {
     channel.cancel(consume.consumerTag)
-    subscriptions[queue] = subscriptions[queue].filter((c) => c !== callback)
+    subscriptions[queue] =
+      subscriptions[queue]?.filter((c) => c !== callback) ?? []
   }
 }
 
 const close = async () => {
   const channel = await channelPromise
   channelPromise = null
-  for (const queue in subscriptions) {
+  for (const queue of queues) {
     subscriptions[queue] = []
   }
 
