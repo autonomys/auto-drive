@@ -13,8 +13,8 @@ export const withBackingOffRetries = async <T>(
       return await fn()
     } catch (error) {
       lastError = error as Error
-      retries++
       const delay = startingDelay * Math.pow(2, retries)
+      retries++
       await new Promise((resolve) => setTimeout(resolve, delay))
     }
   }
