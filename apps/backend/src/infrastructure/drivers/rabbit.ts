@@ -9,11 +9,12 @@ type SubscriptionCallback = (
 
 const logger = createLogger('drivers:rabbit')
 
+const KEEP_ALIVE_INTERVAL = 60_000
 const queues = ['task-manager', 'download-manager']
-
 const subscriptions: Record<string, SubscriptionCallback[]> = {}
 
 let channelPromise: Promise<Channel> | null = null
+let keepAliveInterval: NodeJS.Timeout | null = null
 
 const getChannel = async () => {
   if (!channelPromise) {
@@ -33,6 +34,8 @@ const getChannel = async () => {
         }
       }
     })
+
+    keepAliveInterval = setInterval(keepAlive, KEEP_ALIVE_INTERVAL)
   }
 
   return channelPromise
@@ -106,18 +109,22 @@ const subscribe = async (
     },
   )
 
-  const KEEP_ALIVE_INTERVAL = 60_000
-
-  setInterval(keepAlive, KEEP_ALIVE_INTERVAL)
-
   return () => {
     channel.cancel(consume.consumerTag)
+    subscriptions[queue] = subscriptions[queue].filter((c) => c !== callback)
   }
 }
 
 const close = async () => {
   const channel = await channelPromise
   channelPromise = null
+  for (const queue in subscriptions) {
+    subscriptions[queue] = []
+  }
+
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval)
+  }
   await channel?.close()
 }
 
