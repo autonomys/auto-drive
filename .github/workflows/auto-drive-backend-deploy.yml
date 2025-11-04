@@ -7,13 +7,10 @@ on:
         description: "Target machines to deploy to"
         required: true
         type: choice
-        default: auto_drive_taurus_staging
+        default: auto_drive_mainnet_staging
         options:
           - auto_drive_mainnet_private
           - auto_drive_mainnet_public
-          - auto_drive_taurus_private
-          - auto_drive_taurus_public
-          - auto_drive_taurus_staging
           - auto_drive_mainnet_staging
       image_tag:
         description: "Docker image tag visit in the releases page at (https://github.com/autonomys/auto-drive/pkgs/container/auto-drive-backend)"
@@ -43,7 +40,7 @@ jobs:
             echo "Using manual inputs"
           else
             # Push trigger - use defaults
-            TARGET_MACHINES="auto_drive_taurus_staging"
+            TARGET_MACHINES="auto_drive_mainnet_staging"
             IMAGE_TAG=""  # or set a default like "latest"
             echo "Using push defaults"
           fi
