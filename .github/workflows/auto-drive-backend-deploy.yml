@@ -40,7 +40,7 @@ jobs:
             echo "Using manual inputs"
           else
             # Push trigger - use defaults
-            TARGET_MACHINES="auto_drive_taurus_staging"
+            TARGET_MACHINES="auto_drive_mainnet_staging"
             IMAGE_TAG=""  # or set a default like "latest"
             echo "Using push defaults"
           fi
