@@ -7,6 +7,12 @@ export const withBackingOffRetries = async <T>(
 ) => {
   let retries = 0
   let lastError: Error
+  if (!startingDelay || startingDelay <= 0) {
+    throw new Error('Starting delay must be greater than 0')
+  }
+  if (maxRetries <= 0) {
+    throw new Error('Max retries must be greater than 0')
+  }
 
   while (retries < maxRetries) {
     try {
