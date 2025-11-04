@@ -1,6 +1,7 @@
 import { Channel, ConsumeMessage, connect } from 'amqplib'
 import { config } from '../../config.js'
 import { createLogger } from './logger.js'
+import { withBackingOffRetries } from '../../shared/utils/retries.js'
 
 const logger = createLogger('drivers:rabbit')
 
@@ -23,9 +24,40 @@ const getChannel = async () => {
 }
 
 const publish = async (queue: string, message: object) => {
+  return withBackingOffRetries(
+    async () => {
+      const channel = await getChannel()
+      channel.assertQueue(queue)
+      channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)))
+    },
+    { maxRetries: 3, startingDelay: 1000 },
+  )
+}
+
+const keepAlive = async () => {
   const channel = await getChannel()
-  channel.assertQueue(queue)
-  channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)))
+  try {
+    // Passive check against an existing queue to keep the connection active
+    await channel.checkQueue(queues[0])
+    logger.debug('RabbitMQ keepalive successful')
+  } catch {
+    logger.warn('RabbitMQ keepalive failed, resetting channel')
+    try {
+      await channel.close()
+    } catch {
+      // ignore errors while closing a stale channel
+    }
+    channelPromise = null
+    // attempt immediate reconnect so next operations don't stall
+    try {
+      await getChannel()
+    } catch (reconnectError) {
+      logger.error(
+        'RabbitMQ reconnect after keepalive failure failed',
+        reconnectError,
+      )
+    }
+  }
 }
 
 const subscribe = async (
@@ -53,6 +85,10 @@ const subscribe = async (
       }
     },
   )
+
+  const KEEP_ALIVE_INTERVAL = 60_000
+
+  setInterval(keepAlive, KEEP_ALIVE_INTERVAL)
 
   return () => {
     channel.cancel(consume.consumerTag)
