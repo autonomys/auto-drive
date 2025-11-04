@@ -1,12 +1,21 @@
 import { Channel, ConsumeMessage, connect } from 'amqplib'
 import { config } from '../../config.js'
 import { createLogger } from './logger.js'
+import { withBackingOffRetries } from '../../shared/utils/retries.js'
+
+type SubscriptionCallback = (
+  message: Record<string, unknown>,
+) => Promise<unknown>
+
+type Queue = (typeof queues)[number]
 
 const logger = createLogger('drivers:rabbit')
 
-const queues = ['task-manager', 'download-manager']
+const queues = ['task-manager', 'download-manager'] as const
+const subscriptions: Partial<Record<Queue, SubscriptionCallback[]>> = {}
 
 let channelPromise: Promise<Channel> | null = null
+let keepAliveInterval: NodeJS.Timeout | null = null
 
 const getChannel = async () => {
   if (!channelPromise) {
@@ -17,21 +26,76 @@ const getChannel = async () => {
         return channel
       }),
     )
+    channelPromise.then(() => {
+      for (const queue of queues) {
+        const queueSubscriptions = subscriptions[queue] ?? []
+        subscriptions[queue] = []
+        for (const callback of queueSubscriptions) {
+          subscribe(queue, callback)
+        }
+      }
+    })
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval)
+      keepAliveInterval = null
+    }
+    keepAliveInterval = setInterval(
+      keepAlive,
+      config.rabbitmq.keepAliveInterval,
+    )
   }
 
   return channelPromise
 }
 
 const publish = async (queue: string, message: object) => {
+  return withBackingOffRetries(
+    async () => {
+      const channel = await getChannel()
+      channel.assertQueue(queue)
+      channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), {
+        persistent: true,
+      })
+    },
+    { maxRetries: 3, startingDelay: 1000 },
+  )
+}
+
+const keepAlive = async () => {
   const channel = await getChannel()
-  channel.assertQueue(queue)
-  channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)))
+  try {
+    // Passive check against an existing queue to keep the connection active
+    await channel.checkQueue(queues[0])
+    logger.debug('RabbitMQ keepalive successful')
+  } catch {
+    logger.warn('RabbitMQ keepalive failed, resetting channel')
+    try {
+      await channel.close()
+    } catch {
+      // ignore errors while closing a stale channel
+    }
+    channelPromise = null
+    // attempt immediate reconnect so next operations don't stall
+    try {
+      await getChannel()
+    } catch (reconnectError) {
+      logger.error(
+        'RabbitMQ reconnect after keepalive failure failed',
+        reconnectError,
+      )
+    }
+  }
 }
 
 const subscribe = async (
-  queue: string,
+  queue: Queue,
   callback: (message: Record<string, unknown>) => Promise<unknown>,
 ) => {
+  if (!subscriptions[queue]) {
+    subscriptions[queue] = [] as SubscriptionCallback[]
+  }
+  subscriptions[queue].push(callback)
+
   const channel = await getChannel()
 
   const consume = await channel.consume(
@@ -56,12 +120,21 @@ const subscribe = async (
 
   return () => {
     channel.cancel(consume.consumerTag)
+    subscriptions[queue] =
+      subscriptions[queue]?.filter((c) => c !== callback) ?? []
   }
 }
 
 const close = async () => {
   const channel = await channelPromise
   channelPromise = null
+  for (const queue of queues) {
+    subscriptions[queue] = []
+  }
+
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval)
+  }
   await channel?.close()
 }
 
