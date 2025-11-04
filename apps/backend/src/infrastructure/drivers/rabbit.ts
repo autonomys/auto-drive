@@ -11,7 +11,6 @@ type Queue = (typeof queues)[number]
 
 const logger = createLogger('drivers:rabbit')
 
-const KEEP_ALIVE_INTERVAL = 60_000
 const queues = ['task-manager', 'download-manager'] as const
 const subscriptions: Partial<Record<Queue, SubscriptionCallback[]>> = {}
 
@@ -40,7 +39,10 @@ const getChannel = async () => {
       clearInterval(keepAliveInterval)
       keepAliveInterval = null
     }
-    keepAliveInterval = setInterval(keepAlive, KEEP_ALIVE_INTERVAL)
+    keepAliveInterval = setInterval(
+      keepAlive,
+      config.rabbitmq.keepAliveInterval,
+    )
   }
 
   return channelPromise
