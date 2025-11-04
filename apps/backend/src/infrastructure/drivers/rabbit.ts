@@ -3,9 +3,15 @@ import { config } from '../../config.js'
 import { createLogger } from './logger.js'
 import { withBackingOffRetries } from '../../shared/utils/retries.js'
 
+type SubscriptionCallback = (
+  message: Record<string, unknown>,
+) => Promise<unknown>
+
 const logger = createLogger('drivers:rabbit')
 
 const queues = ['task-manager', 'download-manager']
+
+const subscriptions: Record<string, SubscriptionCallback[]> = {}
 
 let channelPromise: Promise<Channel> | null = null
 
@@ -18,6 +24,15 @@ const getChannel = async () => {
         return channel
       }),
     )
+    channelPromise.then(() => {
+      for (const queue in subscriptions) {
+        const queueSubscriptions = subscriptions[queue]
+        subscriptions[queue] = []
+        for (const callback of queueSubscriptions) {
+          subscribe(queue, callback)
+        }
+      }
+    })
   }
 
   return channelPromise
@@ -64,6 +79,11 @@ const subscribe = async (
   queue: string,
   callback: (message: Record<string, unknown>) => Promise<unknown>,
 ) => {
+  if (!subscriptions[queue]) {
+    subscriptions[queue] = [] as SubscriptionCallback[]
+  }
+  subscriptions[queue].push(callback)
+
   const channel = await getChannel()
 
   const consume = await channel.consume(
