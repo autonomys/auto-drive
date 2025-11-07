@@ -37,9 +37,6 @@ contract AutoDriveTreasury is Ownable2Step, ReentrancyGuard {
         }
 
         uint256 withdrawAmount = balance - minimumBalance;
-        if (withdrawAmount == 0) {
-            revert InsufficientBalance(balance, minimumBalance);
-        }
 
         Address.sendValue(recipient, withdrawAmount);
         emit FundsWithdrawn(recipient, withdrawAmount);
