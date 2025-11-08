@@ -32,7 +32,7 @@ contract AutoDriveTreasury is Ownable2Step, ReentrancyGuard {
         }
 
         uint256 balance = address(this).balance;
-        if (balance < minimumBalance) {
+        if (balance <= minimumBalance) {
             revert InsufficientBalance(balance, minimumBalance);
         }
 
