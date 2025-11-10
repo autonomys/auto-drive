@@ -45,7 +45,7 @@ jobs:
         run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
 
       - name: Build and push Docker image (release)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         if: ${{ !inputs.prerelease }}
         with:
           context: .
@@ -59,7 +59,7 @@ jobs:
           platforms: linux/amd64
 
       - name: Build and push Docker image (prerelease)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         if: ${{ inputs.prerelease }}
         with:
           context: .
