@@ -253,10 +253,25 @@ const getNodeBlockchainData = async (
 
   return db
     .query<NodeBlockchainData>({
-      text: 'SELECT cid, block_published_on, tx_published_on, piece_index, piece_offset FROM nodes WHERE cid = $1',
+      text: 'SELECT cid, block_published_on, tx_published_on, piece_index, piece_offset FROM nodes WHERE cid = $1 AND block_published_on IS NOT NULL',
       values: [cid],
     })
     .then((e) => e.rows.at(0))
+}
+
+const getNodesBlockchainDataBatch = async (
+  cids: string[],
+): Promise<NodeBlockchainData[]> => {
+  if (cids.length === 0) return []
+
+  const db = await getDatabase()
+
+  return db
+    .query<NodeBlockchainData>({
+      text: 'SELECT DISTINCT ON (cid) cid, block_published_on, tx_published_on, piece_index, piece_offset FROM nodes WHERE cid = ANY($1) AND block_published_on IS NOT NULL ORDER BY cid, block_published_on DESC',
+      values: [cids],
+    })
+    .then((e) => e.rows)
 }
 
 const updateNodeBlockchainData = async (
@@ -275,6 +290,54 @@ const updateNodeBlockchainData = async (
       rootCid,
       cid,
     ],
+  })
+}
+
+const updateNodesBlockchainDataBatch = async (
+  updates: Array<{
+    rootCid: string
+    cid: string
+    blockchainData: NodeBlockchainData
+  }>,
+) => {
+  if (updates.length === 0) return
+
+  const db = await getDatabase()
+
+  // Use a single query with VALUES to batch update
+  // Group by (rootCid, cid) to avoid duplicates
+  const uniqueUpdates = Array.from(
+    new Map(updates.map((u) => [`${u.rootCid}:${u.cid}`, u])).values(),
+  )
+
+  const payload = uniqueUpdates.map((u) => ({
+    block_published_on: u.blockchainData.block_published_on,
+    tx_published_on: u.blockchainData.tx_published_on,
+    piece_index: u.blockchainData.piece_index,
+    piece_offset: u.blockchainData.piece_offset,
+    root_cid: u.rootCid,
+    cid: u.cid,
+  }))
+
+  return db.query({
+    text: `
+      UPDATE nodes AS n
+      SET
+        block_published_on = data.block_published_on,
+        tx_published_on = data.tx_published_on,
+        piece_index = data.piece_index,
+        piece_offset = data.piece_offset
+      FROM jsonb_to_recordset($1::jsonb) AS data(
+        block_published_on INTEGER,
+        tx_published_on TEXT,
+        piece_index INTEGER,
+        piece_offset INTEGER,
+        root_cid TEXT,
+        cid TEXT
+      )
+      WHERE n.root_cid = data.root_cid AND n.cid = data.cid
+    `,
+    values: [JSON.stringify(payload)],
   })
 }
 
@@ -305,6 +368,8 @@ export const nodesRepository = {
   removeNodeByRootCid,
   getNodesCountWithoutDataByRootCid,
   getNodeBlockchainData,
+  getNodesBlockchainDataBatch,
   updateNodeBlockchainData,
+  updateNodesBlockchainDataBatch,
   hasEncodedNode,
 }

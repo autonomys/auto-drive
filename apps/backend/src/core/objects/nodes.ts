@@ -272,31 +272,40 @@ const ensureObjectPublished = async (cid: string): Promise<void> => {
 }
 
 const handleRepeatedNodes = async (nodes: Node[]): Promise<void> => {
+  if (nodes.length === 0) return
+
   logger.info(
     'Handling repeated nodes (cids=%s)',
     nodes.map((node) => node.cid).join(', '),
   )
 
-  const nodesWithBlockchainData = await Promise.all(
-    nodes.map((node) => nodesRepository.getNodeBlockchainData(node.cid)),
-  ).then((e) => e.filter((e) => e !== undefined).map((e) => e!))
+  // Optimize: Batch fetch blockchain data for all unique CIDs
+  const uniqueCids = Array.from(new Set(nodes.map((node) => node.cid)))
+  const nodesWithBlockchainData =
+    await nodesRepository.getNodesBlockchainDataBatch(uniqueCids)
 
   const nodeBlockchainDataMap = new Map(
     nodesWithBlockchainData.map((e) => [e.cid, e]),
   )
 
-  const updatedNodes = nodes.map((node) => {
-    const nodeBlockchainData = nodeBlockchainDataMap.get(node.cid)
-    if (!nodeBlockchainData) return node
+  // Prepare batch updates - only update nodes that have blockchain data
+  const updates = nodes
+    .map((node) => {
+      const nodeBlockchainData = nodeBlockchainDataMap.get(node.cid)
+      if (!nodeBlockchainData) return null
 
-    return { ...node, ...nodeBlockchainData }
-  })
+      return {
+        rootCid: node.root_cid,
+        cid: node.cid,
+        blockchainData: nodeBlockchainData,
+      }
+    })
+    .filter((u): u is NonNullable<typeof u> => u !== null)
 
-  await Promise.all(
-    updatedNodes.map((node) =>
-      nodesRepository.updateNodeBlockchainData(node.root_cid, node.cid, node),
-    ),
-  )
+  // Optimize with batch update
+  if (updates.length > 0) {
+    await nodesRepository.updateNodesBlockchainDataBatch(updates)
+  }
 }
 
 export const NodesUseCases = {
