@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { Button } from '@auto-drive/ui';
 import { FileWarning } from 'lucide-react';
@@ -16,32 +16,72 @@ export const UploadingFolderModal = ({
   const [password, setPassword] = useState<string>();
   const [passwordConfirmed, setPasswordConfirmed] = useState<boolean>();
   const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>();
+  const uploadStartedRef = useRef(false);
   const network = useNetwork();
 
   const progressPercentage = Math.round(progress);
 
   const refetch = useFileTableState((v) => v.fetch);
 
-  const handleUpload = useCallback(async () => {
-    if (!data) return;
-
-    const passwordToUse = password ? password : undefined;
-
-    await network.uploadService.uploadFolder(data, {
-      password: passwordToUse,
-      onProgress: (progress) => setProgress(progress),
-    });
-
+  const resetUploadState = useCallback(() => {
+    setPassword(undefined);
     setPasswordConfirmed(false);
+    setProgress(0);
+    setError(false);
+    setErrorMessage(undefined);
+    uploadStartedRef.current = false;
+  }, []);
+
+  const handleClose = useCallback(() => {
+    resetUploadState();
     onClose();
-    refetch();
-  }, [data, password, onClose, network.uploadService, refetch]);
+  }, [onClose, resetUploadState]);
+
+  const handleUpload = useCallback(async () => {
+    if (!data) return false;
+
+    try {
+      setError(false);
+      setErrorMessage(undefined);
+      await network.uploadService.uploadFolder(data, {
+        password: password || undefined,
+        onProgress: (progress) => setProgress(progress),
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Failed to upload folder:', error);
+      setError(true);
+      setErrorMessage(error instanceof Error ? error.message : 'Upload failed');
+      uploadStartedRef.current = false;
+      return false;
+    }
+  }, [data, password, network.uploadService]);
 
   useEffect(() => {
-    if (!passwordConfirmed) return;
+    if (!passwordConfirmed || uploadStartedRef.current) return;
 
-    handleUpload();
-  }, [passwordConfirmed, handleUpload, onClose]);
+    const performUpload = async () => {
+      uploadStartedRef.current = true;
+      const success = await handleUpload();
+      if (success) {
+        refetch();
+        handleClose();
+      }
+    };
+
+    performUpload();
+  }, [passwordConfirmed, handleUpload, refetch, handleClose]);
+
+  useEffect(() => {
+    // Only reset if data is null/undefined, not when changing from one FileList to another
+    if (!data) {
+      resetUploadState();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   const defaultPassword = useEncryptionStore((store) => store.password);
 
@@ -52,28 +92,52 @@ export const UploadingFolderModal = ({
 
   return (
     <Transition show={!!data}>
-      <Dialog as='div' onClose={onClose}>
-        <div className='bg-background-hover fixed inset-0 flex items-center justify-center bg-opacity-50'>
-          <div className='bg-background-hover min-w-[25%] transform rounded-lg bg-background p-6 shadow-lg transition-transform'>
+      <Dialog as='div' onClose={handleClose}>
+        <div className='fixed inset-0 flex items-center justify-center bg-background-hover bg-opacity-50'>
+          <div className='min-w-[25%] transform rounded-lg bg-background p-6 shadow-lg transition-transform'>
             <h3 className='text-foreground-hover mb-4 text-center text-lg font-medium'>
               Uploading Folder
             </h3>
             {passwordConfirmed ? (
               <div>
-                <div className='bg-background-hover relative h-2 w-full rounded'>
-                  <div
-                    className='bg-light-success absolute left-0 top-0 h-2 rounded transition-all duration-500'
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-                <div className='mt-4 flex justify-center text-sm font-semibold'>
-                  <div>Uploading... {progressPercentage}%</div>
-                </div>
-                <div className='mt-2 flex justify-between'>
-                  <div className='bg-background-hover h-1 w-1 animate-pulse rounded-full' />
-                  <div className='bg-background-hover h-1 w-1 animate-pulse rounded-full' />
-                  <div className='bg-background-hover h-1 w-1 animate-pulse rounded-full' />
-                </div>
+                {error ? (
+                  <div className='p-4'>
+                    <div className='text-light-danger mb-4 text-center font-medium'>
+                      Upload Failed
+                    </div>
+                    {errorMessage && (
+                      <div className='text-foreground-hover mb-6 text-center text-sm'>
+                        {errorMessage}
+                      </div>
+                    )}
+                    <div className='flex justify-center'>
+                      <Button
+                        className='text-sm'
+                        variant='lightDanger'
+                        onClick={handleClose}
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className='relative h-2 w-full rounded bg-background-hover'>
+                      <div
+                        className='bg-light-success absolute left-0 top-0 h-2 rounded transition-all duration-500'
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <div className='mt-4 flex justify-center text-sm font-semibold'>
+                      <div>Uploading... {progressPercentage}%</div>
+                    </div>
+                    <div className='mt-2 flex justify-between'>
+                      <div className='h-1 w-1 animate-pulse rounded-full bg-background-hover' />
+                      <div className='h-1 w-1 animate-pulse rounded-full bg-background-hover' />
+                      <div className='h-1 w-1 animate-pulse rounded-full bg-background-hover' />
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div>
@@ -86,7 +150,7 @@ export const UploadingFolderModal = ({
                     id='password'
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className='border-background-hover mt-1 block w-full rounded-md border p-2 shadow-sm'
+                    className='mt-1 block w-full rounded-md border border-background-hover p-2 shadow-sm'
                     placeholder='Password'
                   />
                   <div className='flex justify-center gap-2'>
@@ -110,7 +174,7 @@ export const UploadingFolderModal = ({
                     <Button
                       className='text-xs'
                       variant='lightDanger'
-                      onClick={onClose}
+                      onClick={handleClose}
                     >
                       Cancel
                     </Button>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { Button } from '@auto-drive/ui';
 import { useEncryptionStore } from 'globalStates/encryption';
@@ -33,19 +33,29 @@ export const UploadingFileModal = ({
   const [password, setPassword] = useState<string>();
   const [passwordConfirmed, setPasswordConfirmed] = useState<boolean>();
   const [tooManyFiles, setTooManyFiles] = useState(false);
+  const [uploadError, setUploadError] = useState<boolean>(false);
+  const [uploadErrorMessage, setUploadErrorMessage] = useState<string>();
+  const uploadStartedRef = useRef(false);
   const network = useNetwork();
   const refetch = useFileTableState((v) => v.fetch);
 
   const totalFiles = files?.length || 0;
 
-  const handleClose = useCallback(() => {
+  const resetUploadState = useCallback(() => {
     setFileProgresses([]);
     setOverallProgress(0);
     setPassword(undefined);
     setPasswordConfirmed(false);
+    setUploadError(false);
+    setUploadErrorMessage(undefined);
+    uploadStartedRef.current = false;
+  }, []);
+
+  const handleClose = useCallback(() => {
+    resetUploadState();
     setTooManyFiles(false);
     onClose();
-  }, [onClose]);
+  }, [onClose, resetUploadState]);
 
   // Check if too many files are selected
   useEffect(() => {
@@ -58,7 +68,13 @@ export const UploadingFileModal = ({
 
   // Initialize file progress tracking when files change
   useEffect(() => {
-    if (files && files.length > 0 && files.length <= MAX_FILES_LIMIT) {
+    // Only reset if files is null/undefined/empty, not when changing from one set to another
+    if (!files || files.length === 0) {
+      resetUploadState();
+      return;
+    }
+
+    if (files.length <= MAX_FILES_LIMIT) {
       const initialProgresses = files.map((file) => ({
         progress: 0,
         fileName: file.name,
@@ -67,18 +83,7 @@ export const UploadingFileModal = ({
       }));
       setFileProgresses(initialProgresses);
     }
-
-    // Cleanup function to reset state when files change or component unmounts
-    return () => {
-      if (!files) {
-        setFileProgresses([]);
-        setOverallProgress(0);
-        setPassword(undefined);
-        setPasswordConfirmed(false);
-        setTooManyFiles(false);
-      }
-    };
-  }, [files]);
+  }, [files, resetUploadState]);
 
   const manageUpload = useCallback(
     async (password: string | undefined) => {
@@ -87,87 +92,105 @@ export const UploadingFileModal = ({
       if (files.length > MAX_FILES_LIMIT) {
         return;
       }
-      // Setup progress update handler for a specific file
-      const createProgressHandler = (index: number) => (progress: number) => {
-        setFileProgresses((prev) => {
-          const newProgresses = [...prev];
-          newProgresses[index] = {
-            ...newProgresses[index],
-            progress,
-            completed: progress === 100,
-          };
-          const totalProgress =
-            newProgresses.reduce((sum, file) => sum + file.progress, 0) /
-            newProgresses.length;
 
-          setOverallProgress(totalProgress);
-          return newProgresses;
-        });
-      };
+      // Clear any previous upload errors
+      setUploadError(false);
+      setUploadErrorMessage(undefined);
 
-      const results: { success: boolean; file: File }[] = [];
+      try {
+        // Setup progress update handler for a specific file
+        const createProgressHandler = (index: number) => (progress: number) => {
+          setFileProgresses((prev) => {
+            const newProgresses = [...prev];
+            newProgresses[index] = {
+              ...newProgresses[index],
+              progress,
+              completed: progress === 100,
+            };
+            const totalProgress =
+              newProgresses.reduce((sum, file) => sum + file.progress, 0) /
+              newProgresses.length;
 
-      // Upload files in parallel, but handle errors individually
-      const uploadPromises = files.map((file, index) =>
-        network.uploadService
-          .uploadFile(file, {
-            password,
-            onProgress: createProgressHandler(index),
-          })
-          .then(() => {
-            results.push({ success: true, file });
-            // Mark as completed in our UI
-            setFileProgresses((prev) => {
-              const newProgresses = [...prev];
-              newProgresses[index] = {
-                ...newProgresses[index],
-                progress: 100,
-                completed: true,
-              };
-              return newProgresses;
-            });
-          })
-          .catch((error) => {
-            console.error(`Failed to upload file ${file.name}:`, error);
-            results.push({ success: false, file });
-            // Mark as failed in our UI
-            setFileProgresses((prev) => {
-              const newProgresses = [...prev];
-              newProgresses[index] = {
-                ...newProgresses[index],
-                progress: 0,
-                completed: false,
-                error: true, // Add error flag
-                errorMessage: error.message || 'Upload failed',
-              };
-              return newProgresses;
-            });
-          }),
-      );
-      // Wait for all uploads to complete (whether success or failure)
-      await Promise.allSettled(uploadPromises);
+            setOverallProgress(totalProgress);
+            return newProgresses;
+          });
+        };
 
-      refetch();
-      setTimeout(() => {
-        handleClose();
-      }, 1000);
+        const results: { success: boolean; file: File }[] = [];
+
+        // Upload files in parallel, but handle errors individually
+        const uploadPromises = files.map((file, index) =>
+          network.uploadService
+            .uploadFile(file, {
+              password,
+              onProgress: createProgressHandler(index),
+            })
+            .then(() => {
+              results.push({ success: true, file });
+              // Mark as completed in our UI
+              setFileProgresses((prev) => {
+                const newProgresses = [...prev];
+                newProgresses[index] = {
+                  ...newProgresses[index],
+                  progress: 100,
+                  completed: true,
+                };
+                return newProgresses;
+              });
+            })
+            .catch((error) => {
+              console.error(`Failed to upload file ${file.name}:`, error);
+              results.push({ success: false, file });
+              // Mark as failed in our UI
+              setFileProgresses((prev) => {
+                const newProgresses = [...prev];
+                newProgresses[index] = {
+                  ...newProgresses[index],
+                  progress: 0,
+                  completed: false,
+                  error: true, // Add error flag
+                  errorMessage: error.message || 'Upload failed',
+                };
+                return newProgresses;
+              });
+            }),
+        );
+        // Wait for all uploads to complete (whether success or failure)
+        await Promise.allSettled(uploadPromises);
+
+        return true;
+      } catch (error) {
+        // Catch any errors that occur before or during the upload setup
+        console.error('Upload failed:', error);
+        setUploadError(true);
+        setUploadErrorMessage(
+          error instanceof Error ? error.message : 'Upload failed',
+        );
+        uploadStartedRef.current = false;
+        return false;
+      }
     },
-    [files, handleClose, network.uploadService, refetch],
+    [files, network.uploadService],
   );
 
-  const onConfirmPassword = useCallback(() => {
+  const onConfirmPassword = useCallback(async () => {
     if (passwordConfirmed) {
-      const passwordToUse = password ?? undefined;
-      manageUpload(passwordToUse).then(() => {
+      const success = await manageUpload(password || undefined);
+      if (success) {
         refetch();
-      });
+        setTimeout(() => {
+          handleClose();
+        }, 1000);
+      }
     }
-  }, [passwordConfirmed, manageUpload, password, refetch]);
+  }, [passwordConfirmed, manageUpload, password, refetch, handleClose]);
 
   useEffect(() => {
-    if (passwordConfirmed) {
-      onConfirmPassword();
+    if (!passwordConfirmed || uploadStartedRef.current) {
+      return;
     }
+    uploadStartedRef.current = true;
+    onConfirmPassword();
   }, [passwordConfirmed, onConfirmPassword]);
 
   const overallProgressPercentage = Math.round(overallProgress);
@@ -181,8 +204,8 @@ export const UploadingFileModal = ({
   return (
     <Transition show={!!files && files.length > 0}>
       <Dialog as='div' onClose={handleClose}>
-        <div className='bg-background-hover fixed inset-0 flex items-center justify-center bg-opacity-50'>
-          <div className='bg-background-hover min-w-[400px] max-w-[600px] transform rounded-lg bg-background p-6 shadow-lg transition-transform'>
+        <div className='fixed inset-0 flex items-center justify-center bg-background-hover bg-opacity-50'>
+          <div className='min-w-[400px] max-w-[600px] transform rounded-lg bg-background p-6 shadow-lg transition-transform'>
             {tooManyFiles ? (
               <div className='p-4'>
                 <div className='text-light-danger mb-4 text-center font-medium'>
@@ -204,69 +227,93 @@ export const UploadingFileModal = ({
               </div>
             ) : passwordConfirmed ? (
               <div>
-                {totalFiles > 1 && (
-                  <div className='mb-4'>
-                    <div className='text-foreground-hover mb-1 text-sm font-medium'>
-                      Overall progress
+                {uploadError ? (
+                  <div className='p-4'>
+                    <div className='text-light-danger mb-4 text-center font-medium'>
+                      Upload Failed
                     </div>
-                    <div className='bg-background-hover relative h-2 w-full rounded'>
-                      <div
-                        className='bg-light-accent absolute left-0 top-0 h-2 rounded transition-all duration-500'
-                        style={{ width: `${overallProgress}%` }}
-                      />
-                    </div>
-                    <div className='text-foreground-hover mt-1 text-right text-xs'>
-                      {overallProgressPercentage}%
+                    {uploadErrorMessage && (
+                      <div className='text-foreground-hover mb-6 text-center text-sm'>
+                        {uploadErrorMessage}
+                      </div>
+                    )}
+                    <div className='flex justify-center'>
+                      <Button
+                        className='text-sm'
+                        variant='lightDanger'
+                        onClick={handleClose}
+                      >
+                        Close
+                      </Button>
                     </div>
                   </div>
-                )}
+                ) : (
+                  <>
+                    {totalFiles > 1 && (
+                      <div className='mb-4'>
+                        <div className='text-foreground-hover mb-1 text-sm font-medium'>
+                          Overall progress
+                        </div>
+                        <div className='relative h-2 w-full rounded bg-background-hover'>
+                          <div
+                            className='bg-light-accent absolute left-0 top-0 h-2 rounded transition-all duration-500'
+                            style={{ width: `${overallProgress}%` }}
+                          />
+                        </div>
+                        <div className='text-foreground-hover mt-1 text-right text-xs'>
+                          {overallProgressPercentage}%
+                        </div>
+                      </div>
+                    )}
 
-                <div className='max-h-[300px] overflow-y-auto'>
-                  {fileProgresses.map((fileProgress, index) => (
-                    <div
-                      key={index}
-                      className={`mb-3 ${totalFiles === 1 ? 'mt-4' : ''}`}
-                    >
-                      <div className='text-foreground-hover mb-1 flex justify-between text-sm font-medium'>
+                    <div className='max-h-[300px] overflow-y-auto'>
+                      {fileProgresses.map((fileProgress, index) => (
                         <div
-                          className={`truncate ${totalFiles === 1 ? 'max-w-[380px] text-base' : 'max-w-[300px]'}`}
+                          key={index}
+                          className={`mb-3 ${totalFiles === 1 ? 'mt-4' : ''}`}
                         >
-                          {fileProgress.fileName}
+                          <div className='text-foreground-hover mb-1 flex justify-between text-sm font-medium'>
+                            <div
+                              className={`truncate ${totalFiles === 1 ? 'max-w-[380px] text-base' : 'max-w-[300px]'}`}
+                            >
+                              {fileProgress.fileName}
+                            </div>
+                            <div>
+                              ({Math.round(fileProgress.fileSize / 1024)} KB)
+                            </div>
+                          </div>
+                          <div className='relative h-2 w-full rounded bg-background-hover'>
+                            <div
+                              className={`absolute left-0 top-0 h-2 rounded transition-all duration-500 ${
+                                fileProgress.error
+                                  ? 'bg-light-danger'
+                                  : totalFiles === 1
+                                    ? 'bg-light-accent'
+                                    : 'bg-light-success'
+                              }`}
+                              style={{ width: `${fileProgress.progress}%` }}
+                            />
+                          </div>
+                          <div className='text-foreground-hover mt-1 text-right text-xs'>
+                            {fileProgress.error ? (
+                              <span className='text-light-danger'>Failed</span>
+                            ) : (
+                              <>
+                                {Math.round(fileProgress.progress)}%
+                                {fileProgress.completed && ' ✓'}
+                              </>
+                            )}
+                          </div>
+                          {fileProgress.error && fileProgress.errorMessage && (
+                            <div className='text-foreground-hover mt-1 text-xs'>
+                              {fileProgress.errorMessage}
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          ({Math.round(fileProgress.fileSize / 1024)} KB)
-                        </div>
-                      </div>
-                      <div className='bg-background-hover relative h-2 w-full rounded'>
-                        <div
-                          className={`absolute left-0 top-0 h-2 rounded transition-all duration-500 ${
-                            fileProgress.error
-                              ? 'bg-light-danger'
-                              : totalFiles === 1
-                                ? 'bg-light-accent'
-                                : 'bg-light-success'
-                          }`}
-                          style={{ width: `${fileProgress.progress}%` }}
-                        />
-                      </div>
-                      <div className='text-foreground-hover mt-1 text-right text-xs'>
-                        {fileProgress.error ? (
-                          <span className='text-light-danger'>Failed</span>
-                        ) : (
-                          <>
-                            {Math.round(fileProgress.progress)}%
-                            {fileProgress.completed && ' ✓'}
-                          </>
-                        )}
-                      </div>
-                      {fileProgress.error && fileProgress.errorMessage && (
-                        <div className='text-foreground-hover mt-1 text-xs'>
-                          {fileProgress.errorMessage}
-                        </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
               </div>
             ) : (
               <div>
