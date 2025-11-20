@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@auto-drive/models": "workspace:*",
-    "@autonomys/file-server": "^1.5.18"
+    "@autonomys/file-server": "1.6.1"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
