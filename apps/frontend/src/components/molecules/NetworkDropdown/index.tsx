@@ -23,10 +23,14 @@ export const NetworkDropdown: FC<{
     return false;
   };
 
+  if (Object.values(networks).length === 1) {
+    return <></>;
+  }
+
   return (
     <Listbox value={selected} onChange={onChange}>
       <div className='relative mt-1 w-36'>
-        <ListboxButton className='bg-background-hover text-background-hover-foreground hover:text-background-hover-foreground relative w-full cursor-default rounded-lg py-2 pl-3 pr-10 text-left shadow-md focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 dark:ring-2 dark:ring-white dark:ring-opacity-5 sm:text-sm'>
+        <ListboxButton className='relative w-full cursor-default rounded-lg bg-background-hover py-2 pl-3 pr-10 text-left text-background-hover-foreground shadow-md hover:text-background-hover-foreground focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 dark:ring-2 dark:ring-white dark:ring-opacity-5 sm:text-sm'>
           <div className='flex items-center space-x-2'>
             <AutonomysSymbol />
             <span className='ml-2 block'>{selected.name}</span>
@@ -49,7 +53,7 @@ export const NetworkDropdown: FC<{
               <ListboxOption
                 key={personIdx}
                 className={cn(
-                  'bg-background-hover text-background-hover-foreground hover:text-background-hover-foreground relative flex cursor-default select-none items-center justify-start gap-2 bg-sidebar-accent py-2 pl-4 pr-4 hover:bg-background',
+                  'relative flex cursor-default select-none items-center justify-start gap-2 bg-background-hover bg-sidebar-accent py-2 pl-4 pr-4 text-background-hover-foreground hover:bg-background hover:text-background-hover-foreground',
                 )}
                 value={network}
               >

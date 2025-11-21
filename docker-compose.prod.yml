@@ -8,7 +8,8 @@ services:
   hasura:
     image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
     volumes:
-      - ./hasura/metadata:/hasura-metadata
+      - ./apps/hasura/metadata:/hasura-metadata
+      - ./apps/hasura/migrations:/hasura-migrations
     restart: unless-stopped
     environment:
       # Essential Environment Variables
@@ -19,12 +20,12 @@ services:
 
       # Console and Development Mode
       HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE} # Disable console in production
-      HASURA_GRAPHQL_DEV_MODE: "false" # Disable development mode features
+      HASURA_GRAPHQL_DEV_MODE: 'false' # Disable development mode features
 
       # Role and CORS Settings
       HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous # Default role for unauthenticated users
       HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN} # Allowed domains for CORS
-      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: "true"
+      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: 'true'
 
       # Performance and Connection Settings
       HASURA_GRAPHQL_MAX_CONNECTIONS: 100 # Maximum number of database connections
@@ -34,16 +35,14 @@ services:
       HASURA_GRAPHQL_TIMEOUT: 60 # Request timeout in seconds
 
       # Logging Settings
-      HASURA_GRAPHQL_LOG_LEVEL: "warn" # Log verbosity level
-      HASURA_GRAPHQL_ENABLED_LOG_TYPES: "startup,http-log,webhook-log,websocket-log,query-log" # Enabled log types
+      HASURA_GRAPHQL_LOG_LEVEL: 'warn' # Log verbosity level
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: 'startup,http-log,webhook-log,websocket-log,query-log' # Enabled log types
 
       # Security and Authorization
-      HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false" # Disable query allowlisting
+      HASURA_GRAPHQL_ENABLE_ALLOWLIST: 'false' # Disable query allowlisting
 
-      # Hasura Migrations and Metadata
-      HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
     ports:
-      - "${HASURA_GRAPHQL_PORT}:8080"
+      - '${HASURA_GRAPHQL_PORT}:8080'
     command:
       - graphql-engine
       - serve
@@ -52,12 +51,12 @@ services:
     logging:
       driver: loki
       options:
-        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "${RABBITMQ_PORT}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+      - '${RABBITMQ_PORT}:5672'
+      - '${RABBITMQ_MANAGEMENT_PORT}:15672'
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
@@ -66,11 +65,11 @@ services:
     logging:
       driver: loki
       options:
-        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
   backend-worker:
     image: ${BACKEND_IMAGE}
     ports:
-      - "${BACKEND_WORKER_PORT}:3000"
+      - '${BACKEND_WORKER_PORT}:3000'
     volumes:
       - files_cache:/usr/src/app/apps/backend/.cache
     restart: unless-stopped
@@ -84,7 +83,7 @@ services:
     logging:
       driver: loki
       options:
-        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
     command:
       - yarn
       - workspace
@@ -95,14 +94,14 @@ services:
     volumes:
       - files_cache:/usr/src/app/apps/backend/.cache
     ports:
-      - "${BACKEND_API_PORT}:3000"
+      - '${BACKEND_API_PORT}:3000'
     restart: unless-stopped
     env_file:
       - .env
     environment:
       - PORT=3000
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
       interval: 15s
       timeout: 10s
       retries: 3
@@ -112,7 +111,7 @@ services:
     logging:
       driver: loki
       options:
-        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
     command:
       - yarn
       - workspace
@@ -124,7 +123,7 @@ services:
       - files_cache:/usr/src/app/apps/backend/.cache
     restart: unless-stopped
     ports:
-      - "${BACKEND_DOWNLOAD_WORKER_PORT}:3000"
+      - '${BACKEND_DOWNLOAD_WORKER_PORT}:3000'
     env_file:
       - .env
     environment:
@@ -135,7 +134,7 @@ services:
     logging:
       driver: loki
       options:
-        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
     command:
       - yarn
       - workspace
@@ -146,7 +145,7 @@ services:
     volumes:
       - files_cache:/usr/src/app/apps/backend/.cache
     ports:
-      - "${BACKEND_DOWNLOAD_API_PORT}:3000"
+      - '${BACKEND_DOWNLOAD_API_PORT}:3000'
     restart: unless-stopped
     env_file:
       - .env
@@ -158,7 +157,7 @@ services:
     logging:
       driver: loki
       options:
-        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
     command:
       - yarn
       - workspace
@@ -173,15 +172,15 @@ services:
     pid: host
     privileged: true
     volumes:
-      - "/:/host:ro"
-      - "/var/run/docker.sock:/var/run/docker.sock"
+      - '/:/host:ro'
+      - '/var/run/docker.sock:/var/run/docker.sock'
     environment:
-      NRIA_LICENSE_KEY: "${NR_API_KEY}"
-      NRIA_DISPLAY_NAME: "${NR_AGENT_IDENTIFIER}"
+      NRIA_LICENSE_KEY: '${NR_API_KEY}'
+      NRIA_DISPLAY_NAME: '${NR_AGENT_IDENTIFIER}'
     restart: unless-stopped
     profiles:
       - base
     logging:
       driver: loki
       options:
-        loki-url: "https://logging.subspace.network/loki/api/v1/push"
+        loki-url: 'https://logging.subspace.network/loki/api/v1/push'

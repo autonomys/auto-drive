@@ -23,10 +23,10 @@
     "auth": "yarn workspace auth",
     "landing": "yarn workspace landing",
     "ui": "yarn workspace @auto-drive/ui",
-    "gateway": "yarn workspace gateway",
     "models": "yarn workspace @auto-drive/models",
     "s3": "yarn workspace @auto-drive/s3",
-    "auto-files-gateway": "yarn workspace auto-files-gateway"
+    "auto-files-gateway": "yarn workspace auto-files-gateway",
+    "update:autonomys": "node scripts/update-autonomys.js"
   },
   "packageManager": "yarn@4.2.2",
   "devDependencies": {
@@ -40,5 +40,11 @@
     "ethers": "^6.13.5",
     "keyv": "^5.3.1",
     "siwe": "^3.0.0"
+  },
+  "resolutions": {
+    "@autonomys/asynchronous": "1.6.1",
+    "@autonomys/auto-dag-data": "1.6.1",
+    "@autonomys/auto-utils": "1.6.1",
+    "@autonomys/rpc": "1.6.1"
   }
 }

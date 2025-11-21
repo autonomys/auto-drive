@@ -8,6 +8,10 @@ export type Account = {
   model: AccountModel;
 };
 
+export type AccountWithTotalSize = Account & {
+  totalSize: number;
+};
+
 export enum AccountModel {
   Monthly = "monthly",
   OneOff = "one_off",

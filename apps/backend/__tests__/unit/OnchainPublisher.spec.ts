@@ -42,11 +42,9 @@ describe('OnchainPublisher', () => {
       .spyOn(transactionManager, 'submit')
       .mockResolvedValue(nodes.map(() => MOCK_PUBLISH_RESULT))
 
-    jest.spyOn(nodesRepository, 'getNodeCount').mockResolvedValue({
-      totalCount: 0,
-      publishedCount: 0,
-      archivedCount: 0,
-    })
+    jest
+      .spyOn(nodesRepository, 'getNodesBlockchainDataBatch')
+      .mockResolvedValue([])
 
     await OnchainPublisher.publishNodes(nodes.map((e) => e.cid))
 
@@ -76,21 +74,17 @@ describe('OnchainPublisher', () => {
       .spyOn(transactionManager, 'submit')
       .mockResolvedValue(nodes.map(() => MOCK_PUBLISH_RESULT))
 
-    jest.spyOn(nodesRepository, 'getNodeCount').mockImplementation((cid) => {
-      if (publishedNodes.includes(cid.cid!)) {
-        return Promise.resolve({
-          totalCount: 1,
-          publishedCount: 1,
-          archivedCount: 0,
-        })
-      }
-
-      return Promise.resolve({
-        totalCount: 1,
-        publishedCount: 0,
-        archivedCount: 0,
-      })
-    })
+    jest
+      .spyOn(nodesRepository, 'getNodesBlockchainDataBatch')
+      .mockResolvedValue(
+        publishedNodes.map((cid) => ({
+          cid,
+          block_published_on: 1,
+          tx_published_on: '0x123',
+          piece_index: 0,
+          piece_offset: 0,
+        })),
+      )
     await OnchainPublisher.publishNodes(nodes.map((e) => e.cid))
 
     const transactions = nodes

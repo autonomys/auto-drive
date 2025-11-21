@@ -1,7 +1,7 @@
 install:
 	yarn install
 
-backend: common
+backend: common submodules
 	yarn backend build
 models:
 	yarn models build
@@ -9,8 +9,6 @@ s3:
 	yarn s3 build
 frontend:
 	yarn frontend build
-gateway: install
-	yarn gateway build
 ui: install
 	yarn workspace @auto-drive/ui build
 
@@ -36,4 +34,4 @@ lint: install
 	yarn auth lint
 	yarn frontend lint
 
-all: submodules models ui s3 frontend gateway backend
+all: submodules models ui s3 frontend backend

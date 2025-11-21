@@ -41,8 +41,18 @@ export const DBObjectFetcher: ObjectFetcher = {
 }
 
 export const FileGatewayObjectFetcher: ObjectFetcher = {
-  fetchFile(cid: string): Promise<Readable> {
-    return FileGateway.getFile(cid)
+  async fetchFile(cid: string): Promise<Readable> {
+    const getMetadataResult = await ObjectUseCases.getMetadata(cid)
+    if (getMetadataResult.isErr()) {
+      throw new Error(`Object not found: cid=${cid}`)
+    }
+    const metadata = getMetadataResult.value
+
+    if (metadata.type === 'file') {
+      return FileGateway.getFile(cid)
+    }
+
+    return retrieveAndReassembleFolderAsZip(new PizZip(), cid)
   },
   async fetchNode(cid: string): Promise<Buffer> {
     const node = await FileGateway.getNode(cid)

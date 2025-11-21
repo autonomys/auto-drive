@@ -51,6 +51,7 @@ export const config = {
   rabbitmq: {
     url: env('RABBITMQ_URL'),
     prefetch: Number(env('RABBITMQ_PREFETCH', '10')),
+    keepAliveInterval: Number(env('RABBITMQ_KEEP_ALIVE_INTERVAL', '60000')),
   },
   monitoring: {
     active: env('VICTORIA_ACTIVE', 'false') === 'true',

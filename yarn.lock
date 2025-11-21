@@ -126,8 +126,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@auto-drive/models@workspace:packages/models"
   dependencies:
-    "@autonomys/auto-dag-data": "npm:^1.5.18"
-    "@autonomys/file-server": "npm:^1.5.18"
+    "@autonomys/auto-dag-data": "npm:1.6.1"
+    "@autonomys/file-server": "npm:1.6.1"
     typescript: "npm:^5.7.3"
     zod: "npm:^3.24.2"
   languageName: unknown
@@ -138,7 +138,7 @@ __metadata:
   resolution: "@auto-drive/s3@workspace:packages/s3"
   dependencies:
     "@auto-drive/models": "workspace:*"
-    "@autonomys/file-server": "npm:^1.5.18"
+    "@autonomys/file-server": "npm:1.6.1"
     typescript: "npm:^5.0.0"
   languageName: unknown
   linkType: soft
@@ -147,7 +147,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@auto-drive/ui@workspace:packages/ui"
   dependencies:
-    "@autonomys/auto-utils": "npm:^1.5.15"
+    "@autonomys/auto-utils": "npm:1.6.1"
     "@types/react": "npm:^18.3.11"
     "@types/react-dom": "npm:^18.3.1"
     autoprefixer: "npm:^10.4.21"
@@ -184,29 +184,30 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autonomys/asynchronous@npm:^1.4.36, @autonomys/asynchronous@npm:^1.5.14, @autonomys/asynchronous@npm:^1.5.18":
-  version: 1.5.18
-  resolution: "@autonomys/asynchronous@npm:1.5.18"
+"@autonomys/asynchronous@npm:1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/asynchronous@npm:1.6.1"
   dependencies:
     stream-fork: "npm:^1.0.5"
-  checksum: 10c0/8f7a69f50c8c34d65b1757607b1c6710302ce8f20b01f6bc650e23cd5f90cdda3336e363cff5da74d9ae8bfc756904601260aa74141b9ef098e92baad4de8689
+  checksum: 10c0/65af4bbd64625bfb7ee91b89ea8e074ed1f8ed6cf8237c7c435ed43cca388123dfaaea7d78304bd1acc2a2229dff4700a5c8d07448159d9347af499c612f50c6
   languageName: node
   linkType: hard
 
-"@autonomys/auto-consensus@npm:^1.5.18":
-  version: 1.5.18
-  resolution: "@autonomys/auto-consensus@npm:1.5.18"
+"@autonomys/auto-consensus@npm:1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/auto-consensus@npm:1.6.1"
   dependencies:
-    "@autonomys/auto-utils": "npm:^1.5.18"
-  checksum: 10c0/909a34ecb2c4b2a6c53b3b5fb2e91e0ddba0cae94a5d8719299828b59e8ad8753a2a485c02f797c7d08ccdd1a0e6198c8e8af8958ef13ab406e240697d6b044d
+    "@autonomys/auto-utils": "npm:^1.6.1"
+    zod: "npm:^3.24.2"
+  checksum: 10c0/12e81236d10b4f8934f6a393d6aeb11094ef8c9bc18f02e15e8009feef3b91dff2a527d1aaa4c4027fa711e39a9eda9951f6ac29aa13cbf469176ac830ca892f
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:^1.4.31, @autonomys/auto-dag-data@npm:^1.4.35, @autonomys/auto-dag-data@npm:^1.5.14, @autonomys/auto-dag-data@npm:^1.5.18":
-  version: 1.5.18
-  resolution: "@autonomys/auto-dag-data@npm:1.5.18"
+"@autonomys/auto-dag-data@npm:1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/auto-dag-data@npm:1.6.1"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.18"
+    "@autonomys/asynchronous": "npm:^1.6.1"
     "@ipld/dag-pb": "npm:^4.1.3"
     "@peculiar/webcrypto": "npm:^1.5.0"
     "@webbuf/blake3": "npm:^3.0.26"
@@ -217,15 +218,15 @@ __metadata:
     protobufjs: "npm:^7.4.0"
     protons: "npm:^7.6.0"
     protons-runtime: "npm:^5.5.0"
-  checksum: 10c0/8d2efe240377dcd56a4b7b8cf8f5f300577b47d14e67e6a1bb8e8622358678de7209100a293d2f1ff1851486cf65b60e7030be9d864584a3cffd7edcc96ec194
+  checksum: 10c0/ba99c522442bb760f0af8ec37dfa5ea3aa8d48e61b76f121863e49f5464e5808af7f3ce55e54a53a38923db325894a0a5623516cd10adcb6ae9ca7ea0bc48849
   languageName: node
   linkType: hard
 
-"@autonomys/auto-design-system@npm:^1.5.18":
-  version: 1.5.18
-  resolution: "@autonomys/auto-design-system@npm:1.5.18"
+"@autonomys/auto-design-system@npm:1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/auto-design-system@npm:1.6.1"
   dependencies:
-    "@autonomys/design-tokens": "npm:^1.5.18"
+    "@autonomys/design-tokens": "npm:^1.6.1"
     "@floating-ui/react": "npm:^0.27.8"
     "@headlessui/react": "npm:^2.2.3"
     "@heroicons/react": "npm:^2.2.0"
@@ -249,53 +250,53 @@ __metadata:
   peerDependencies:
     react: ^18.2.0
     react-dom: ^18.2.0
-  checksum: 10c0/5dfbfb7ae6cc302d7ff035258766301e794a87fd13148aba105bb686b4e800a70921435fff55fe904b9316bd31d43bc467f2a8558e568d4fb2fa9da4febc6b00
+  checksum: 10c0/8ca535cab57c43b8d42392b0fcb3c664f0f41945aa198c67e72bf77bfe9e239bc27afc33924590733ce978e8fba041103649ab91090af20f2f80db151dd6ee05
   languageName: node
   linkType: hard
 
-"@autonomys/auto-drive@npm:^1.5.18":
-  version: 1.5.18
-  resolution: "@autonomys/auto-drive@npm:1.5.18"
+"@autonomys/auto-drive@npm:1.6.1, @autonomys/auto-drive@npm:^1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/auto-drive@npm:1.6.1"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.18"
-    "@autonomys/auto-dag-data": "npm:^1.5.18"
-    "@autonomys/auto-utils": "npm:^1.5.18"
+    "@autonomys/asynchronous": "npm:^1.6.1"
+    "@autonomys/auto-dag-data": "npm:^1.6.1"
+    "@autonomys/auto-utils": "npm:^1.6.1"
     blockstore-core: "npm:^5.0.2"
     jszip: "npm:^3.10.1"
     mime-types: "npm:^3.0.1"
     process: "npm:^0.11.10"
     stream: "npm:^0.0.3"
     zod: "npm:^3.24.2"
-  checksum: 10c0/6eec328ff84d231c83ff93567bb999780a809eddd7c061afcd61094355389fc5acdfcaece3048b1172e6c6c1217a5a83d80a4372b0e608d79d012e4c080f4250
+  checksum: 10c0/a374026c164f79b3e83d36af31c12f30b9e90b113eb01acfdcf1084e68c623ecd4ff3846758637e101b3c753d8f6cf03a82971f99e626fcdaab64f1c9426ca9e
   languageName: node
   linkType: hard
 
-"@autonomys/auto-files@npm:^1.5.18":
-  version: 1.5.18
-  resolution: "@autonomys/auto-files@npm:1.5.18"
+"@autonomys/auto-files@npm:1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/auto-files@npm:1.6.1"
   dependencies:
-    "@autonomys/auto-drive": "npm:^1.5.18"
-  checksum: 10c0/9244812fd371309d36bdcd63f4f95f84bc16df4a949253c26171cdea66dfa6b7a94f67cc8a9ea619f52c4bb9f2a2b92c731cc61d7cfbb66419058362a82cbc96
+    "@autonomys/auto-drive": "npm:^1.6.1"
+  checksum: 10c0/2419e01ac0342a2a9a6acd9d0c44eae1cf79f1d6650725cbeef8b5257d47ab3b5803b073a49a9bd9ac700043cdc25e0f95487cb92f31c695b93836cf65081b09
   languageName: node
   linkType: hard
 
-"@autonomys/auto-utils@npm:^1.4.31, @autonomys/auto-utils@npm:^1.5.14, @autonomys/auto-utils@npm:^1.5.15, @autonomys/auto-utils@npm:^1.5.18":
-  version: 1.5.18
-  resolution: "@autonomys/auto-utils@npm:1.5.18"
+"@autonomys/auto-utils@npm:1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/auto-utils@npm:1.6.1"
   dependencies:
     "@polkadot/api": "npm:^15.8.1"
     "@polkadot/extension-dapp": "npm:^0.58.6"
-  checksum: 10c0/1fef6c7a663fa290347c2778f0cdb2652d8621e7ca91f5a89b54c38003a60769afbe7ff95b8472c57c532d6fd895591bf7c42ebe0cf29ae76d61d3463df2f6fd
+  checksum: 10c0/a43e20f6810946d69f5d349af46aa945dbff22d6a035895fbd485e9398f2c1e3be9c5c0d3588cf436a5e3fcf492789e099a0c04ff03616c036d52448b83185de
   languageName: node
   linkType: hard
 
-"@autonomys/design-tokens@npm:^1.5.18":
-  version: 1.5.18
-  resolution: "@autonomys/design-tokens@npm:1.5.18"
+"@autonomys/design-tokens@npm:^1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/design-tokens@npm:1.6.1"
   dependencies:
     "@tailwindcss/forms": "npm:^0.5.7"
     tailwindcss: "npm:^3.3.5"
-  checksum: 10c0/1d4563bc36f943705786b6c21d1e0dbe32c31c3058b814649ecc27e8ec61c3bc2da6b5044cc04f8aac08704a4497bfb6468996496c6e0cdda451ca41ae4a1b75
+  checksum: 10c0/eb868653df57ae247b47eef47130c91ef9bc24863d0844178bfabbdab7823ab3b035e4bfbad9b36ec90307dc998e86c138bdafe854d164ecaf0a2b865e57a682
   languageName: node
   linkType: hard
 
@@ -319,13 +320,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/file-server@npm:1.5.18, @autonomys/file-server@npm:^1.5.18":
-  version: 1.5.18
-  resolution: "@autonomys/file-server@npm:1.5.18"
+"@autonomys/file-server@npm:1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/file-server@npm:1.6.1"
   dependencies:
-    "@autonomys/asynchronous": "npm:^1.5.18"
-    "@autonomys/auto-dag-data": "npm:^1.5.18"
-    "@autonomys/auto-utils": "npm:^1.5.18"
+    "@autonomys/asynchronous": "npm:^1.6.1"
+    "@autonomys/auto-dag-data": "npm:^1.6.1"
+    "@autonomys/auto-utils": "npm:^1.6.1"
     "@keyvhq/sqlite": "npm:^2.1.7"
     cache-manager: "npm:^6.4.2"
     express: "npm:^4.19.2"
@@ -336,17 +337,17 @@ __metadata:
     stream: "npm:^0.0.3"
     uuid: "npm:^11.1.0"
     zod: "npm:^3.24.2"
-  checksum: 10c0/b39fc121f66fc4a1c2ea506a8629536de15d0713ef7a148f3e32001c14284f994ac4e500a139724cb24756396611cf0665395dc08804dedee090114eb27cbc4e
+  checksum: 10c0/397036d5436106d3561ab7c6f67843d6edaf0aacf1fd764838755c7bd020971cb730881c3cca0011e8c454504c8c06398bd59563af6a0a1b91207ed99349a182
   languageName: node
   linkType: hard
 
-"@autonomys/rpc@npm:^1.4.31, @autonomys/rpc@npm:^1.5.18, @autonomys/rpc@npm:^1.5.6":
-  version: 1.5.18
-  resolution: "@autonomys/rpc@npm:1.5.18"
+"@autonomys/rpc@npm:1.6.1":
+  version: 1.6.1
+  resolution: "@autonomys/rpc@npm:1.6.1"
   dependencies:
     websocket: "npm:^1.0.35"
     zod: "npm:^3.24.2"
-  checksum: 10c0/8d5f4c7f8c676bb0bff970be988347bb12ad555c7a7bf205329b4b56b2e6c913f0804edcb1bae11402f2675d91146669870d5d3a42f9190e4a7102ce81d1e613
+  checksum: 10c0/c2db59c0621593b651d1b46f689199a933eab26a13e12bac936128306aaa2ca47ac487328783441b50841ad8efb1895b6d1e1fffb7dc67071129a776b5278c2f
   languageName: node
   linkType: hard
 
@@ -10113,13 +10114,13 @@ __metadata:
     "@auto-drive/models": "workspace:*"
     "@auto-drive/s3": "workspace:*"
     "@auto-files/rpc-apis": "workspace:*"
-    "@autonomys/asynchronous": "npm:^1.5.18"
-    "@autonomys/auto-consensus": "npm:^1.5.18"
-    "@autonomys/auto-dag-data": "npm:^1.5.18"
-    "@autonomys/auto-drive": "npm:^1.5.18"
-    "@autonomys/auto-files": "npm:^1.5.18"
-    "@autonomys/file-server": "npm:1.5.18"
-    "@autonomys/rpc": "npm:^1.5.18"
+    "@autonomys/asynchronous": "npm:1.6.1"
+    "@autonomys/auto-consensus": "npm:1.6.1"
+    "@autonomys/auto-dag-data": "npm:1.6.1"
+    "@autonomys/auto-drive": "npm:1.6.1"
+    "@autonomys/auto-files": "npm:1.6.1"
+    "@autonomys/file-server": "npm:1.6.1"
+    "@autonomys/rpc": "npm:1.6.1"
     "@aws-sdk/client-s3": "npm:^3.859.0"
     "@faker-js/faker": "npm:^9.2.0"
     "@keyvhq/sqlite": "npm:^2.1.6"
@@ -13772,9 +13773,9 @@ __metadata:
     "@apollo/client": "npm:^3.11.10"
     "@auto-drive/models": "workspace:*"
     "@auto-drive/ui": "workspace:*"
-    "@autonomys/auto-dag-data": "npm:^1.5.18"
-    "@autonomys/auto-design-system": "npm:^1.5.18"
-    "@autonomys/auto-drive": "npm:^1.5.18"
+    "@autonomys/auto-dag-data": "npm:1.6.1"
+    "@autonomys/auto-design-system": "npm:1.6.1"
+    "@autonomys/auto-drive": "npm:1.6.1"
     "@cyntler/react-doc-viewer": "npm:^1.17.0"
     "@graphql-codegen/cli": "npm:^5.0.3"
     "@graphql-codegen/introspection": "npm:^4.0.3"
@@ -13933,19 +13934,6 @@ __metadata:
   checksum: 10c0/33e77fd29bddc2d9bb78ab3eb854c165909201f88c75faa8272e35899e2d35a8a642a15e7420ef945e1f64a9670d6aa3ec744106b2aa42be68ca5114025954ca
   languageName: node
   linkType: hard
-
-"gateway@workspace:apps/gateway":
-  version: 0.0.0-use.local
-  resolution: "gateway@workspace:apps/gateway"
-  dependencies:
-    "@autonomys/auto-drive": "npm:^1.5.18"
-    "@autonomys/auto-utils": "npm:^1.5.18"
-    dotenv: "npm:^16.4.7"
-    express: "npm:^4.21.2"
-    ts-node: "npm:^10.9.2"
-    typescript: "npm:^5.8.2"
-  languageName: unknown
-  linkType: soft
 
 "generator-function@npm:^2.0.0":
   version: 2.0.1
@@ -21989,7 +21977,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:^5, typescript@npm:^5.0.0, typescript@npm:^5.6.3, typescript@npm:^5.7.2, typescript@npm:^5.7.3, typescript@npm:^5.8.2":
+"typescript@npm:^5, typescript@npm:^5.0.0, typescript@npm:^5.6.3, typescript@npm:^5.7.2, typescript@npm:^5.7.3":
   version: 5.9.3
   resolution: "typescript@npm:5.9.3"
   bin:
@@ -21999,7 +21987,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A^5#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.0.0#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.6.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.2#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.8.2#optional!builtin<compat/typescript>":
+"typescript@patch:typescript@npm%3A^5#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.0.0#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.6.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.2#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.3#optional!builtin<compat/typescript>":
   version: 5.9.3
   resolution: "typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>::version=5.9.3&hash=b45daf"
   bin:

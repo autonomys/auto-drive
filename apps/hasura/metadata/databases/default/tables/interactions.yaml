@@ -6,7 +6,7 @@ select_permissions:
     permission:
       columns:
         - id
-        - subscription_id
+        - account_id
         - type
         - size
         - created_at

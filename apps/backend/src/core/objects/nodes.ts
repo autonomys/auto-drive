@@ -152,7 +152,7 @@ const migrateFromBlockstoreToNodesTable = async (
   }
 
   for (const upload of uploads) {
-    const rootCID = await getUploadCID(uploadId)
+    const headCID = await getUploadCID(upload.id)
     const blockstore = await getUploadBlockstore(upload.id)
 
     const BATCH_SIZE = 100
@@ -170,7 +170,7 @@ const migrateFromBlockstoreToNodesTable = async (
           uniqueNodes.map((e) => ({
             cid: cidToString(e.cid),
             root_cid: cidToString(rootCID),
-            head_cid: cidToString(rootCID),
+            head_cid: cidToString(headCID),
             type: decodeIPLDNodeData(Buffer.from(e.block)).type,
             encoded_node: Buffer.from(e.block).toString('base64'),
             block_published_on: null,
@@ -179,6 +179,8 @@ const migrateFromBlockstoreToNodesTable = async (
             piece_offset: null,
           })),
         )
+
+        logger.info(`Saved nodes from headCID=${headCID}`)
       },
       BATCH_SIZE,
     )
@@ -270,31 +272,40 @@ const ensureObjectPublished = async (cid: string): Promise<void> => {
 }
 
 const handleRepeatedNodes = async (nodes: Node[]): Promise<void> => {
+  if (nodes.length === 0) return
+
   logger.info(
     'Handling repeated nodes (cids=%s)',
     nodes.map((node) => node.cid).join(', '),
   )
 
-  const nodesWithBlockchainData = await Promise.all(
-    nodes.map((node) => nodesRepository.getNodeBlockchainData(node.cid)),
-  ).then((e) => e.filter((e) => e !== undefined).map((e) => e!))
+  // Optimize: Batch fetch blockchain data for all unique CIDs
+  const uniqueCids = Array.from(new Set(nodes.map((node) => node.cid)))
+  const nodesWithBlockchainData =
+    await nodesRepository.getNodesBlockchainDataBatch(uniqueCids)
 
   const nodeBlockchainDataMap = new Map(
     nodesWithBlockchainData.map((e) => [e.cid, e]),
   )
 
-  const updatedNodes = nodes.map((node) => {
-    const nodeBlockchainData = nodeBlockchainDataMap.get(node.cid)
-    if (!nodeBlockchainData) return node
+  // Prepare batch updates - only update nodes that have blockchain data
+  const updates = nodes
+    .map((node) => {
+      const nodeBlockchainData = nodeBlockchainDataMap.get(node.cid)
+      if (!nodeBlockchainData) return null
 
-    return { ...node, ...nodeBlockchainData }
-  })
+      return {
+        rootCid: node.root_cid,
+        cid: node.cid,
+        blockchainData: nodeBlockchainData,
+      }
+    })
+    .filter((u): u is NonNullable<typeof u> => u !== null)
 
-  await Promise.all(
-    updatedNodes.map((node) =>
-      nodesRepository.updateNodeBlockchainData(node.root_cid, node.cid, node),
-    ),
-  )
+  // Optimize with batch update
+  if (updates.length > 0) {
+    await nodesRepository.updateNodesBlockchainDataBatch(updates)
+  }
 }
 
 export const NodesUseCases = {

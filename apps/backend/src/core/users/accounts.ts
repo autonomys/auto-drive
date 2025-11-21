@@ -7,6 +7,7 @@ import {
   Account,
   InteractionType,
   AccountInfo,
+  AccountWithTotalSize,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
@@ -84,13 +85,13 @@ const getOrCreateAccount = async (
   if (!account) {
     const isWeb3User = user.oauthProvider === 'web3-wallet'
     if (isWeb3User) {
-      return initAccount(
+      return AccountsUseCases.initAccount(
         user.organizationId,
         config.params.web3DefaultAccount.uploadLimit,
         config.params.web3DefaultAccount.downloadLimit,
       )
     } else {
-      return initAccount(
+      return AccountsUseCases.initAccount(
         user.organizationId,
         config.params.defaultAccount.uploadLimit,
         config.params.defaultAccount.downloadLimit,
@@ -218,14 +219,8 @@ const registerInteraction = async (
 
 const addCreditsToAccount = async (publicId: string, credits: number) => {
   const user = await AuthManager.getUserFromPublicId(publicId)
-  if (!user) {
-    return err(new ObjectNotFoundError('User not found'))
-  }
 
   const account = await AccountsUseCases.getOrCreateAccount(user)
-  if (!account) {
-    return err(new ObjectNotFoundError('Account not found'))
-  }
 
   if (account.model !== AccountModel.OneOff) {
     return err(new ForbiddenError('Account is not OneOff'))
@@ -241,6 +236,34 @@ const addCreditsToAccount = async (publicId: string, credits: number) => {
   return ok()
 }
 
+const getTopAccounts = async (
+  user: User,
+  {
+    fromDate,
+    toDate,
+    limit = 10,
+  }: {
+    limit: number | undefined
+    fromDate: Date | null
+    toDate: Date | null
+  },
+): Promise<Result<AccountWithTotalSize[], ForbiddenError>> => {
+  if (user.role !== UserRole.Admin) {
+    logger.warn('User does not have admin privileges', {
+      userPublicId: user.publicId,
+    })
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+  return ok(
+    await accountsRepository.getTopAccountsWithinPeriod(
+      InteractionType.Upload,
+      fromDate ?? new Date(0),
+      toDate ?? new Date(),
+      limit,
+    ),
+  )
+}
+
 export const AccountsUseCases = {
   updateAccount,
   getOrCreateAccount,
@@ -252,4 +275,5 @@ export const AccountsUseCases = {
   addCreditsToAccount,
   getUserListAccount,
   getAccountById,
+  getTopAccounts,
 }

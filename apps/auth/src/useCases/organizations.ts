@@ -1,9 +1,10 @@
 import { v4 } from 'uuid'
-import { User, Organization } from '@auto-drive/models'
+import { User, Organization, OrganizationWithMembers } from '@auto-drive/models'
 import {
   organizationMembersRepository,
   organizationsRepository,
 } from '../repositories/index.js'
+import { deriveUserPublicId } from './users.js'
 
 const getOrganizationByUser = async (user: User): Promise<Organization> => {
   const organizationMemberships =
@@ -46,7 +47,31 @@ const initOrganization = async (user: User) => {
   )
 }
 
+const getOrganization = async (
+  organizationId: string,
+): Promise<OrganizationWithMembers> => {
+  const organization =
+    await organizationsRepository.getOrganizationById(organizationId)
+
+  if (!organization) {
+    throw new Error('Organization not found')
+  }
+
+  const members =
+    await organizationMembersRepository.getOrganizationMemberships(
+      organizationId,
+    )
+
+  return {
+    id: organization.id,
+    name: organization.name,
+    members: members.map((member) =>
+      deriveUserPublicId(member.oauth_provider, member.oauth_user_id),
+    ),
+  }
+}
 export const OrganizationsUseCases = {
   getOrganizationByUser,
   initOrganization,
+  getOrganization,
 }
