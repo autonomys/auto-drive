@@ -15,6 +15,19 @@ import {
 } from '@auto-drive/ui';
 import { sanitizeHTML } from '../../../utils/sanitizeHTML';
 
+const VIDEO_MIME_PREFIXES = ['video/'];
+const AUDIO_MIME_PREFIXES = ['audio/'];
+
+// Media files need blob URLs to avoid ORB (Opaque Response Blocking) in browsers
+const needsBlobUrl = (metadata: OffchainMetadata): boolean => {
+  if (metadata.type !== 'file') return false;
+  const mime = metadata.mimeType?.toLowerCase() ?? '';
+  return (
+    VIDEO_MIME_PREFIXES.some((p) => mime.startsWith(p)) ||
+    AUDIO_MIME_PREFIXES.some((p) => mime.startsWith(p))
+  );
+};
+
 export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   const { network } = useNetwork();
   const [isFilePreview, setIsFilePreview] = useState(false);
@@ -41,6 +54,9 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
 
   const gatewayUrl = EXTERNAL_ROUTES.gatewayObjectDownload(metadata.dataCid);
 
+  // For video/audio, we must fetch as blob to avoid ORB blocking
+  const forceBlob = useMemo(() => needsBlobUrl(metadata), [metadata]);
+
   const fetchFile = useCallback(
     async (password?: string) => {
       // If file is encrypted and no password provided, don't fetch
@@ -50,15 +66,19 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         return;
       }
 
-      // For non-encrypted files that can be displayed directly,
-      if (!metadata.uploadOptions?.encryption && canDisplayDirectly(metadata)) {
+      // For non-encrypted files that can be displayed directly (and don't need blob URLs)
+      if (
+        !metadata.uploadOptions?.encryption &&
+        canDisplayDirectly(metadata) &&
+        !forceBlob
+      ) {
         setIsFilePreview(true);
         setFile(null);
         setLoading(false);
         return;
       }
 
-      // Encrypted files always need to be fetched and decrypted
+      // Files that require fetching (encrypted or media that needs blob URL)
       setIsFilePreview(true);
       setLoading(true);
 
@@ -108,7 +128,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         setLoading(false);
       }
     },
-    [metadata, isDecrypted, gatewayUrl, safeSetTextContent],
+    [metadata, isDecrypted, gatewayUrl, safeSetTextContent, forceBlob],
   );
 
   useEffect(() => {
@@ -125,7 +145,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       decryptionError={decryptionError}
       isFilePreview={isFilePreview}
       textContent={textContent}
-      gatewayUrl={gatewayUrl}
+      gatewayUrl={forceBlob ? null : gatewayUrl}
       handleDecrypt={fetchFile}
     />
   );
