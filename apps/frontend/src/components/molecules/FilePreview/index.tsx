@@ -14,6 +14,7 @@ import {
   NetworkId as AutoDriveNetworkId,
 } from '@auto-drive/ui';
 import { sanitizeHTML } from '../../../utils/sanitizeHTML';
+import { ExternalLink } from 'lucide-react';
 
 const VIDEO_MIME_PREFIXES = ['video/'];
 const AUDIO_MIME_PREFIXES = ['audio/'];
@@ -136,17 +137,32 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   }, [fetchFile]);
 
   return (
-    <AutoFilePreview
-      metadata={metadata}
-      network={networkId}
-      loading={loading}
-      file={file}
-      error={error}
-      decryptionError={decryptionError}
-      isFilePreview={isFilePreview}
-      textContent={textContent}
-      gatewayUrl={forceBlob ? null : gatewayUrl}
-      handleDecrypt={fetchFile}
-    />
+    <>
+      <AutoFilePreview
+        metadata={metadata}
+        network={networkId}
+        loading={loading}
+        file={file}
+        error={error}
+        decryptionError={decryptionError}
+        isFilePreview={isFilePreview}
+        textContent={textContent}
+        gatewayUrl={forceBlob ? null : gatewayUrl}
+        handleDecrypt={fetchFile}
+      />
+      {forceBlob && !metadata.uploadOptions?.encryption && (
+        <div className='mt-2 flex justify-end text-sm'>
+          <a
+            href={gatewayUrl}
+            target='_blank'
+            rel='noreferrer'
+            className='dark:text-darkAccent flex items-center text-auto-drive-accent hover:underline'
+          >
+            <ExternalLink className='mr-1 h-4 w-4' />
+            View on gateway
+          </a>
+        </div>
+      )}
+    </>
   );
 };
