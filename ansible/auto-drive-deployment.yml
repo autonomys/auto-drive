@@ -60,7 +60,7 @@
 
     - name: Launch docker compose
       ansible.builtin.shell: |
-        /usr/bin/docker compose --env-file {{ env_file_path }} -f ~/deploy/auto-drive/docker-compose.prod.yml up -d --remove-orphans
+        /usr/bin/docker compose --env-file {{ env_file_path }} -f ~/deploy/auto-drive/docker-compose.prod.yml up -d --pull always --remove-orphans
 
     - name: Show env output
       ansible.builtin.debug:
