@@ -17,7 +17,6 @@ const authLink = setContext(async (_, { headers }) => {
 
 export const createGQLClient = (apiBaseUrl: string) =>
   new ApolloClient({
-    uri: apiBaseUrl,
     cache: new InMemoryCache(),
     link: authLink.concat(new HttpLink({ uri: apiBaseUrl })),
   });
