@@ -11,21 +11,21 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
     ports:
-      - "127.0.0.1:5432:5432"
+      - '127.0.0.1:5432:5432'
     profiles:
       - infrastructure
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
+      test: ['CMD', 'pg_isready', '-U', 'postgres', '-d', 'postgres']
       interval: 10s
       timeout: 5s
       retries: 5
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "${RABBITMQ_PORT}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+      - '${RABBITMQ_PORT}:5672'
+      - '${RABBITMQ_MANAGEMENT_PORT}:15672'
     profiles:
       - infrastructure
     environment:
@@ -34,7 +34,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: ./backend/Dockerfile
+      dockerfile: ./apps/backend/Dockerfile
     depends_on:
       - rabbitmq
       - postgres
@@ -45,15 +45,15 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
       interval: 15s
       timeout: 10s
       retries: 3
     ports:
-      - "${PORT}:3000"
+      - '${PORT}:3000'
     profiles:
       - backend
-    command: ["yarn", "start:server"]
+    command: ['yarn', 'start:server']
   hasura:
     image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
     volumes:
@@ -68,12 +68,12 @@ services:
 
       # Console and Development Mode
       HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE} # Disable console in production
-      HASURA_GRAPHQL_DEV_MODE: "true" # Disable development mode features
+      HASURA_GRAPHQL_DEV_MODE: 'true' # Disable development mode features
 
       # Role and CORS Settings
       HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous # Default role for unauthenticated users
       HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN} # Allowed domains for CORS
-      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: "true"
+      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: 'true'
 
       # Performance and Connection Settings
       HASURA_GRAPHQL_MAX_CONNECTIONS: 100 # Maximum number of database connections
@@ -83,11 +83,11 @@ services:
       HASURA_GRAPHQL_TIMEOUT: 60 # Request timeout in seconds
 
       # Logging Settings
-      HASURA_GRAPHQL_LOG_LEVEL: "warn" # Log verbosity level
-      HASURA_GRAPHQL_ENABLED_LOG_TYPES: "startup,http-log,webhook-log,websocket-log,query-log" # Enabled log types
+      HASURA_GRAPHQL_LOG_LEVEL: 'warn' # Log verbosity level
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: 'startup,http-log,webhook-log,websocket-log,query-log' # Enabled log types
 
       # Security and Authorization
-      HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false" # Disable query allowlisting
+      HASURA_GRAPHQL_ENABLE_ALLOWLIST: 'false' # Disable query allowlisting
 
     command:
       - graphql-engine
@@ -95,4 +95,4 @@ services:
     profiles:
       - infrastructure
     ports:
-      - "${HASURA_GRAPHQL_PORT}:8080"
+      - '${HASURA_GRAPHQL_PORT}:8080'
