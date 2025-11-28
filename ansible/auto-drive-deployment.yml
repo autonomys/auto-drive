@@ -1,6 +1,6 @@
 ---
 - name: Pull new image, update ssecret, and reboot
-  hosts: "{{ target_machines }}"
+  hosts: '{{ target_machines }}'
   vars:
     env_file_path: ~/deploy/auto-drive/.env
   tasks:
@@ -23,7 +23,7 @@
 
     - name: Validate required variables
       ansible.builtin.fail:
-        msg: "Missing required variable: {{ item }}"
+        msg: 'Missing required variable: {{ item }}'
       when: vars[item] is undefined or vars[item] == ''
       loop:
         - infisical_client_id
@@ -60,7 +60,7 @@
 
     - name: Launch docker compose
       ansible.builtin.shell: |
-        /usr/bin/docker compose --env-file {{ env_file_path }} -f ~/deploy/auto-drive/docker-compose.prod.yml up -d --remove-orphans
+        /usr/bin/docker compose --env-file {{ env_file_path }} -f ~/deploy/auto-drive/docker-compose.prod.yml up -d --pull always --remove-orphans
 
     - name: Show env output
       ansible.builtin.debug:

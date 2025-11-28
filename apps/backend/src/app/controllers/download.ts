@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
+import { createInflate } from 'zlib'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import {
   AsyncDownloadsUseCases,
@@ -97,11 +98,7 @@ downloadController.get(
         ?.toString()
         .split(',')
         .filter((e) => e.trim())
-      const byteRange = getByteRange(req)
-      const downloadOptions = {
-        blockingTags,
-        byteRange,
-      }
+      const requestedByteRange = getByteRange(req)
 
       const optionalAuthResult = await handleOptionalAuth(req, res)
       if (!optionalAuthResult) {
@@ -112,6 +109,37 @@ downloadController.get(
 
       const user =
         typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
+
+      // First, get metadata to check if we need decompression
+      // We need this to decide whether to pass byte range to download service
+      const metadataResultPromise = !user
+        ? DownloadUseCase.downloadObjectByAnonymous(cid, { blockingTags })
+        : DownloadUseCase.downloadObjectByUser(user, cid, { blockingTags })
+
+      const metadataResult = await handleInternalErrorResult(
+        metadataResultPromise,
+        'Failed to download object',
+      )
+      if (metadataResult.isErr()) {
+        handleError(metadataResult.error, res)
+        return
+      }
+
+      const { metadata } = metadataResult.value
+
+      // Check if this is a media file that needs decompression
+      const mimeType = (metadata.mimeType || '').toLowerCase()
+      const isMediaType =
+        mimeType.startsWith('video/') || mimeType.startsWith('audio/')
+      const needsDecompression =
+        metadata.isCompressed && !metadata.isEncrypted && isMediaType
+
+      // If we need decompression, we can't use byte ranges on compressed data
+      // We must decompress the full file first
+      const downloadOptions = {
+        blockingTags,
+        byteRange: needsDecompression ? undefined : requestedByteRange,
+      }
 
       const downloadResultPromise = !user
         ? DownloadUseCase.downloadObjectByAnonymous(cid, downloadOptions)
@@ -126,25 +154,49 @@ downloadController.get(
         return
       }
 
-      const {
-        metadata,
-        byteRange: resultingByteRange,
-        startDownload,
-      } = downloadResult.value
-      handleDownloadResponseHeaders(req, res, metadata, {
-        byteRange: resultingByteRange,
-      })
+      const { byteRange: resultingByteRange, startDownload } =
+        downloadResult.value
 
-      pipeline(await startDownload(), res, (err: Error | null) => {
-        if (err) {
-          if (res.headersSent) return
-          logger.error('Error streaming data', err)
-          res.status(500).json({
-            error: 'Failed to stream data',
-            details: err.message,
-          })
-        }
-      })
+      // For media files needing decompression, we handle byte ranges ourselves after decompression
+      const effectiveByteRange = needsDecompression
+        ? requestedByteRange
+        : resultingByteRange
+      const { shouldDecompressBody } = handleDownloadResponseHeaders(
+        req,
+        res,
+        metadata,
+        {
+          byteRange: effectiveByteRange,
+        },
+      )
+
+      const sourceStream = await startDownload()
+
+      if (shouldDecompressBody) {
+        // Decompress zlib/deflate compressed content for media files
+        // Note: We decompress the full file and let the client handle seeking
+        pipeline(sourceStream, createInflate(), res, (err: Error | null) => {
+          if (err) {
+            if (res.headersSent) return
+            logger.error('Error streaming/decompressing data', err)
+            res.status(500).json({
+              error: 'Failed to stream data',
+              details: err.message,
+            })
+          }
+        })
+      } else {
+        pipeline(sourceStream, res, (err: Error | null) => {
+          if (err) {
+            if (res.headersSent) return
+            logger.error('Error streaming data', err)
+            res.status(500).json({
+              error: 'Failed to stream data',
+              details: err.message,
+            })
+          }
+        })
+      }
     } catch (error: unknown) {
       logger.error('Error retrieving data', error)
       res.status(500).json({
