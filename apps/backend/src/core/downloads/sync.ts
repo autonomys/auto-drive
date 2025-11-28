@@ -6,7 +6,7 @@ import {
   InteractionType,
   UserWithOrganization,
 } from '@auto-drive/models'
-import { OffchainMetadata } from '@autonomys/auto-dag-data'
+import { CompressionAlgorithm, OffchainMetadata } from '@autonomys/auto-dag-data'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { ObjectUseCases } from '../objects/object.js'
 import { AccountsUseCases } from '../users/accounts.js'
@@ -53,6 +53,9 @@ const downloadObjectByUser = async (
     return err(getResult.error)
   }
   const metadata = getResult.value
+  const isCompressed =
+    metadata.uploadOptions?.compression?.algorithm === CompressionAlgorithm.ZLIB
+  const normalizedByteRange = isCompressed ? undefined : options.byteRange
 
   const pendingCredits = await AccountsUseCases.getPendingCreditsByUserAndType(
     reader,
@@ -71,23 +74,27 @@ const downloadObjectByUser = async (
     return err(authResult.error)
   }
 
-  const resultingByteRange = getCalculatedResultingByteRange(
-    metadata,
-    options.byteRange,
-  )
+  const resultingByteRange = normalizedByteRange
+    ? getCalculatedResultingByteRange(metadata, normalizedByteRange)
+    : undefined
   logger.info(
     'downloadObjectByUser authorized (cid=%s, userId=%s)',
     cid,
     reader.oauthUserId,
   )
 
-  const totalSize = BigInt(
-    resultingByteRange[1] - resultingByteRange[0],
-  ).valueOf()
+  const totalSize = resultingByteRange
+    ? BigInt(resultingByteRange[1] - resultingByteRange[0]).valueOf()
+    : metadata.totalSize
+
+  const downloadOptions = {
+    ...options,
+    byteRange: normalizedByteRange,
+  }
 
   return ok({
     metadata: DownloadMetadataFactory.fromOffchainMetadata(metadata),
-    byteRange: options.byteRange ? resultingByteRange : undefined,
+    byteRange: normalizedByteRange ? resultingByteRange : undefined,
     startDownload: async () => {
       logger.trace(
         'downloadObjectByUser starting stream (cid=%s, userId=%s)',
@@ -100,7 +107,7 @@ const downloadObjectByUser = async (
         totalSize,
       )
 
-      const download = await downloadService.download(cid, options)
+      const download = await downloadService.download(cid, downloadOptions)
 
       return download
     },
@@ -122,6 +129,9 @@ const downloadObjectByAnonymous = async (
     return err(getResult.error)
   }
   const metadata = getResult.value
+  const isCompressed =
+    metadata.uploadOptions?.compression?.algorithm === CompressionAlgorithm.ZLIB
+  const normalizedByteRange = isCompressed ? undefined : options.byteRange
   if (metadata.totalSize > config.params.maxAnonymousDownloadSize) {
     return err(
       new PaymentRequiredError('File too large to be downloaded anonymously.'),
@@ -136,19 +146,23 @@ const downloadObjectByAnonymous = async (
     return err(authResult.error)
   }
 
-  const resultingByteRange = getCalculatedResultingByteRange(
-    metadata,
-    options.byteRange,
-  )
+  const resultingByteRange = normalizedByteRange
+    ? getCalculatedResultingByteRange(metadata, normalizedByteRange)
+    : undefined
 
   logger.info('downloadObjectByAnonymous authorized (cid=%s)', cid)
 
+  const downloadOptions = {
+    ...options,
+    byteRange: normalizedByteRange,
+  }
+
   return ok({
     metadata: DownloadMetadataFactory.fromOffchainMetadata(metadata),
-    byteRange: options.byteRange ? resultingByteRange : undefined,
+    byteRange: normalizedByteRange ? resultingByteRange : undefined,
     startDownload: async () => {
       logger.trace('downloadObjectByAnonymous starting stream (cid=%s)', cid)
-      return downloadService.download(cid, options)
+      return downloadService.download(cid, downloadOptions)
     },
   })
 }

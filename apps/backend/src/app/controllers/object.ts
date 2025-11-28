@@ -1,10 +1,11 @@
 import { Router } from 'express'
-import { pipeline } from 'stream'
+import { pipeline, Readable } from 'stream'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { ObjectUseCases, UploadStatusUseCases } from '../../core/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleDownloadResponseHeaders } from '@autonomys/file-server'
+import { CompressionAlgorithm, decompressFile } from '@autonomys/auto-dag-data'
 import {
   handleInternalError,
   handleInternalErrorResult,
@@ -380,11 +381,25 @@ objectController.get(
       return
     }
 
-    handleDownloadResponseHeaders(req, res, metadata, {
-      byteRange: resultingByteRange,
-    })
+    const { shouldDecompressBody } = handleDownloadResponseHeaders(
+      req,
+      res,
+      metadata,
+      {
+        byteRange: resultingByteRange,
+      },
+    )
 
-    pipeline(await startDownload(), res, (err) => {
+    let stream = await startDownload()
+    if (shouldDecompressBody) {
+      stream = Readable.from(
+        decompressFile(stream, {
+          algorithm: CompressionAlgorithm.ZLIB,
+        }),
+      )
+    }
+
+    pipeline(stream, res, (err) => {
       if (err) {
         if (res.headersSent) return
         logger.error('Error streaming data:', err)

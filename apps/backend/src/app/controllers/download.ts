@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { pipeline } from 'stream'
+import { pipeline, Readable } from 'stream'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import {
   AsyncDownloadsUseCases,
@@ -20,6 +20,7 @@ import {
   handleInternalError,
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
+import { CompressionAlgorithm, decompressFile } from '@autonomys/auto-dag-data'
 
 const logger = createLogger('http:controllers:download')
 
@@ -131,11 +132,25 @@ downloadController.get(
         byteRange: resultingByteRange,
         startDownload,
       } = downloadResult.value
-      handleDownloadResponseHeaders(req, res, metadata, {
-        byteRange: resultingByteRange,
-      })
+      const { shouldDecompressBody } = handleDownloadResponseHeaders(
+        req,
+        res,
+        metadata,
+        {
+          byteRange: resultingByteRange,
+        },
+      )
 
-      pipeline(await startDownload(), res, (err: Error | null) => {
+      let stream = await startDownload()
+      if (shouldDecompressBody) {
+        stream = Readable.from(
+          decompressFile(stream, {
+            algorithm: CompressionAlgorithm.ZLIB,
+          }),
+        )
+      }
+
+      pipeline(stream, res, (err: Error | null) => {
         if (err) {
           if (res.headersSent) return
           logger.error('Error streaming data', err)

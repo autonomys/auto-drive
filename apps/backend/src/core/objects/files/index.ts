@@ -1,4 +1,8 @@
-import { OffchainMetadata, ChunkInfo } from '@autonomys/auto-dag-data'
+import {
+  OffchainMetadata,
+  ChunkInfo,
+  CompressionAlgorithm,
+} from '@autonomys/auto-dag-data'
 import { DownloadServiceOptions } from '@auto-drive/models'
 import { ObjectUseCases } from '../object.js'
 import { Readable } from 'stream'
@@ -131,14 +135,16 @@ const retrieveObject = async (
   if (BigInt(metadata.totalSize) === BigInt(0)) {
     return createEmptyReadable()
   }
-  const byteRange = options?.byteRange
+  const isCompressed =
+    metadata.uploadOptions?.compression?.algorithm === CompressionAlgorithm.ZLIB
+  const normalizedByteRange = isCompressed ? undefined : options?.byteRange
 
-  const isFullRetrieval = !byteRange
+  const isFullRetrieval = !normalizedByteRange
   if (isFullRetrieval) {
     return FilesUseCases.retrieveFullFile(metadata)
   }
 
-  return FilesUseCases.retrieveFileByteRange(metadata, byteRange)
+  return FilesUseCases.retrieveFileByteRange(metadata, normalizedByteRange)
 }
 
 export const FilesUseCases = {

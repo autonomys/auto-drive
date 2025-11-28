@@ -6,7 +6,7 @@ import {
   handleDownloadResponseHeaders,
   handleS3DownloadResponseHeaders,
 } from '@autonomys/file-server'
-import { pipeline } from 'stream'
+import { pipeline, Readable } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { Request, Response } from 'express'
 import { sendXML } from './utils.js'
@@ -14,6 +14,7 @@ import { UploadOptions } from '@auto-drive/models'
 import {
   CompressionAlgorithm,
   EncryptionAlgorithm,
+  decompressFile,
 } from '@autonomys/auto-dag-data'
 
 const Bucket = 'default'
@@ -60,12 +61,21 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     byteRange: resultingByteRange,
   } = downloadResult.value
 
-  handleDownloadResponseHeaders(req, res, metadata, {
+  const { shouldDecompressBody } = handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
 
-  pipeline(await startDownload(), res, (err: Error | null) => {
+  let stream = await startDownload()
+  if (shouldDecompressBody) {
+    stream = Readable.from(
+      decompressFile(stream, {
+        algorithm: CompressionAlgorithm.ZLIB,
+      }),
+    )
+  }
+
+  pipeline(stream, res, (err: Error | null) => {
     if (err) {
       if (res.headersSent) return
       logger.error('Error streaming data', err)
