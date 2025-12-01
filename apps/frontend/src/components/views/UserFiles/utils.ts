@@ -9,10 +9,8 @@ export const objectSummaryFromUserFilesQuery = (
       uploadedNodes: m.inner_metadata!.publishedNodes.aggregate?.count ?? 0,
       archivedNodes: m.inner_metadata!.archivedNodes.aggregate?.count ?? 0,
       totalNodes: m.inner_metadata!.totalNodes.aggregate?.count ?? 0,
-      minimumBlockDepth:
-        m.inner_metadata!.minimumBlockDepth?.[0]?.block_published_on ?? null,
-      maximumBlockDepth:
-        m.inner_metadata!.maximumBlockDepth?.[0]?.block_published_on ?? null,
+      minimumBlockDepth: null,
+      maximumBlockDepth: null,
     };
     return {
       headCid: m.cid ?? '',

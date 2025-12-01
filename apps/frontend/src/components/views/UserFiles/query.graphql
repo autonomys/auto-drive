@@ -37,20 +37,6 @@ query GetMyFiles(
       published_objects {
         id
       }
-      maximumBlockDepth: nodes(
-        order_by: { block_published_on: desc_nulls_last }
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
-      }
-      minimumBlockDepth: nodes(
-        order_by: { block_published_on: desc_nulls_last }
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
-      }
       publishedNodes: nodes_aggregate(
         where: { block_published_on: { _is_null: false } }
       ) {
