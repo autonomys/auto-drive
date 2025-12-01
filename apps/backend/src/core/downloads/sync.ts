@@ -24,12 +24,11 @@ const getCalculatedResultingByteRange = (
   metadata: OffchainMetadata,
   byteRange?: ByteRange,
 ): [number, number] => {
+  // Byte ranges are 0-indexed and inclusive, so max valid index is totalSize - 1
+  const maxEndByte = Number(metadata.totalSize) - 1
   return [
     byteRange?.[0] ?? 0,
-    Math.min(
-      byteRange?.[1] ?? Number(metadata.totalSize),
-      Number(metadata.totalSize),
-    ),
+    Math.min(byteRange?.[1] ?? maxEndByte, maxEndByte),
   ]
 }
 
@@ -81,8 +80,9 @@ const downloadObjectByUser = async (
     reader.oauthUserId,
   )
 
+  // Byte ranges are inclusive, so length = end - start + 1
   const totalSize = BigInt(
-    resultingByteRange[1] - resultingByteRange[0],
+    resultingByteRange[1] - resultingByteRange[0] + 1,
   ).valueOf()
 
   return ok({
