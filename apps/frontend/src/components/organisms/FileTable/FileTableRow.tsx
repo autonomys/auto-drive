@@ -215,6 +215,7 @@ export const FileTableRow = ({
             )}
             <Link
               href={fileDetailPath(network.id, file.headCid)}
+              prefetch={false}
               className='relative ml-2 flex flex-row items-center text-sm font-medium'
             >
               {file.type === 'folder' ? (
@@ -404,7 +405,10 @@ export const FileTableRow = ({
                     <File className='mx-2 h-5 w-5 flex-shrink-0 text-accent' />
                   )}
 
-                  <Link href={fileDetailPath(network.id, child.cid)}>
+                  <Link
+                    href={fileDetailPath(network.id, child.cid)}
+                    prefetch={false}
+                  >
                     <span
                       className={`relative text-sm font-semibold text-accent ${
                         file.type === 'folder'
