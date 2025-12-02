@@ -64,7 +64,6 @@ export const UserFiles = () => {
             actionButtons={[
               FileActionButtons.DOWNLOAD,
               FileActionButtons.SHARE,
-              FileActionButtons.ASYNC_DOWNLOAD,
               FileActionButtons.DELETE,
               FileActionButtons.REPORT,
             ]}
