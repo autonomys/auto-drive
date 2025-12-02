@@ -51,7 +51,6 @@ export const SharedFiles = () => {
             actionButtons={[
               FileActionButtons.DOWNLOAD,
               FileActionButtons.DELETE,
-              FileActionButtons.ASYNC_DOWNLOAD,
               FileActionButtons.REPORT,
             ]}
             noFilesPlaceholder={<NoSharedFilesPlaceholder />}

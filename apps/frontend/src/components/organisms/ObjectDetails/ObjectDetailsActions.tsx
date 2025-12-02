@@ -1,4 +1,4 @@
-import { ObjectInformation, ObjectTag } from '@auto-drive/models';
+import { DownloadStatus, ObjectInformation, ObjectTag } from '@auto-drive/models';
 import { Button } from '@auto-drive/ui';
 import { cn } from '@/utils/cn';
 import {
@@ -6,8 +6,9 @@ import {
   ShareIcon,
   TrashIcon,
   ExclamationTriangleIcon,
+  CloudArrowDownIcon,
 } from '@heroicons/react/24/outline';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useUserStore } from 'globalStates/user';
 import toast from 'react-hot-toast';
 import { useNetwork } from '../../../contexts/network';
@@ -28,6 +29,16 @@ export const ObjectDetailsActions = ({
   const [shareModalCid, setShareModalCid] = useState<string | null>(null);
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
   const [isReporting, setIsReporting] = useState(false);
+  const [isCached, setIsCached] = useState<boolean | null>(null);
+  const [isBringingToCache, setIsBringingToCache] = useState(false);
+
+  useEffect(() => {
+    if (!object?.metadata.dataCid) return;
+    
+    api.checkDownloadStatus(object.metadata.dataCid)
+      .then((status) => setIsCached(status === DownloadStatus.Cached))
+      .catch(() => setIsCached(false));
+  }, [api, object?.metadata.dataCid]);
 
   const hasFileOwnership = object?.owners.some(
     (o) =>
@@ -67,6 +78,23 @@ export const ObjectDetailsActions = ({
     }
   }, [api, object?.metadata.dataCid]);
 
+  const handleBringToCache = useCallback(async () => {
+    if (!object?.metadata.dataCid) {
+      return;
+    }
+
+    setIsBringingToCache(true);
+    try {
+      await api.createAsyncDownload(object.metadata.dataCid);
+      toast.success('File is being brought to cache');
+    } catch (error) {
+      console.error('Bring to cache error:', error);
+      toast.error('Failed to bring file to cache. Please try again.');
+    } finally {
+      setIsBringingToCache(false);
+    }
+  }, [api, object?.metadata.dataCid]);
+
   return (
     <div className='flex space-x-2'>
       <Button
@@ -85,6 +113,21 @@ export const ObjectDetailsActions = ({
           <span className='ml-2 text-xs text-gray-500'>(File is banned)</span>
         )}
       </Button>
+      {isCached === false && (
+        <Button
+          variant='lightAccent'
+          className={cn(
+            'inline-flex items-center text-sm',
+            (object.tags.includes(ObjectTag.Banned) || isBringingToCache) &&
+              'cursor-not-allowed opacity-50',
+          )}
+          disabled={object.tags.includes(ObjectTag.Banned) || isBringingToCache}
+          onClick={handleBringToCache}
+        >
+          <CloudArrowDownIcon className='mr-2 h-4 w-4' />
+          {isBringingToCache ? 'Bringing to Cache...' : 'Bring to Cache'}
+        </Button>
+      )}
       <Button
         variant='lightAccent'
         className='inline-flex items-center text-sm disabled:hidden'

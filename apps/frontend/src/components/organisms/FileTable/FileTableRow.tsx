@@ -35,9 +35,6 @@ import { cn } from '@/utils/cn';
 import Link from 'next/link';
 import dayjs from 'dayjs';
 import { CopiableText } from '@/components/atoms/CopiableText';
-import toast from 'react-hot-toast';
-import { useUserAsyncDownloadsStore } from '../UserAsyncDownloads/state';
-import { useFileInCache } from '@/hooks/useFileInCache';
 import { formatBytes } from '../../../utils/number';
 
 export const FileTableRow = ({
@@ -69,10 +66,8 @@ export const FileTableRow = ({
 
   const [isRowExpanded, setIsRowExpanded] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
-  const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
-  const isCached = useFileInCache(file.headCid);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -165,30 +160,10 @@ export const FileTableRow = ({
 
   const toggleExpand = useCallback(() => setIsRowExpanded((prev) => !prev), []);
 
-  const { api } = useNetwork();
-
   const toggleExpandClickHandler = useMemo(
     () =>
       stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(toggleExpand),
     [toggleExpand, stopEventPropagation],
-  );
-
-  const handleAsyncDownload = useMemo(
-    () =>
-      stopEventPropagation<React.MouseEvent<HTMLButtonElement>>(() => {
-        setShowActionsMenu(false);
-        const toastId = toast.loading('Requesting async download...');
-        api
-          .createAsyncDownload(file.headCid)
-          .then(() => {
-            toast.success('Async download requested', { id: toastId });
-            updateAsyncDownloads();
-          })
-          .catch(() => {
-            toast.error('Failed to request async download', { id: toastId });
-          });
-      }),
-    [api, file.headCid, stopEventPropagation, updateAsyncDownloads],
   );
 
   const handleDownload = useMemo(
@@ -240,6 +215,7 @@ export const FileTableRow = ({
             )}
             <Link
               href={fileDetailPath(network.id, file.headCid)}
+              prefetch={false}
               className='relative ml-2 flex flex-row items-center text-sm font-medium'
             >
               {file.type === 'folder' ? (
@@ -326,27 +302,6 @@ export const FileTableRow = ({
                       Share
                     </button>
                   )}
-
-                  {actionButtons.includes(FileActionButtons.ASYNC_DOWNLOAD) &&
-                    !isCached && (
-                      <button
-                        className={cn(
-                          'block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background',
-                          isBanned(file.tags) &&
-                            'cursor-not-allowed opacity-50',
-                        )}
-                        disabled={isBanned(file.tags)}
-                        onClick={handleAsyncDownload}
-                        role='menuitem'
-                      >
-                        Bring to Cache
-                        {isBanned(file.tags) && (
-                          <div className='mt-1 text-xs text-gray-500'>
-                            File is banned
-                          </div>
-                        )}
-                      </button>
-                    )}
 
                   {actionButtons.includes(FileActionButtons.DOWNLOAD) && (
                     <button
@@ -450,7 +405,10 @@ export const FileTableRow = ({
                     <File className='mx-2 h-5 w-5 flex-shrink-0 text-accent' />
                   )}
 
-                  <Link href={fileDetailPath(network.id, child.cid)}>
+                  <Link
+                    href={fileDetailPath(network.id, child.cid)}
+                    prefetch={false}
+                  >
                     <span
                       className={`relative text-sm font-semibold text-accent ${
                         file.type === 'folder'

@@ -98,7 +98,8 @@ const retrieveFileByteRange = async (
   })
 
   const offsetWithinFirstNode = byteRange[0] - firstNodeFileOffset
-  const upperBound = byteRange[1] ?? Number(metadata.totalSize)
+  // Byte ranges are 0-indexed and inclusive, so max valid index is totalSize - 1
+  const upperBound = byteRange[1] ?? Number(metadata.totalSize) - 1
   const length = upperBound - byteRange[0] + 1
 
   logger.info(
