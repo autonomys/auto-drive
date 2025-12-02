@@ -20,6 +20,19 @@ const getUserByPublicId = async (publicId: string): Promise<User | null> => {
   return user.rows.at(0) ?? null
 }
 
+const getUsersByPublicIds = async (publicIds: string[]): Promise<User[]> => {
+  if (publicIds.length === 0) return []
+  
+  const db = await getDatabase()
+  const placeholders = publicIds.map((_, i) => `$${i + 1}`).join(', ')
+  const users = await db.query(
+    `SELECT * FROM users.users WHERE public_id IN (${placeholders})`,
+    publicIds,
+  )
+
+  return users.rows
+}
+
 const getUserByOAuthInformation = async (
   oauth_provider: string,
   oauth_user_id: string,
@@ -154,6 +167,7 @@ const updateAvatarUrl = async (
 
 export const usersRepository = {
   getUserByPublicId,
+  getUsersByPublicIds,
   createUser,
   getUserByOAuthInformation,
   searchUsersByPublicId,

@@ -60,9 +60,27 @@ const isMemberOfOrganization = async (
   return result.rows.length > 0
 }
 
+const getOrganizationMembershipsByUsers = async (
+  users: Array<{ oauthProvider: string; oauthUserId: string }>,
+): Promise<DBOrganizationMember[]> => {
+  if (users.length === 0) return []
+
+  const db = await getDatabase()
+  const keys = users.map((u) => `${u.oauthProvider}:${u.oauthUserId}`)
+
+  const result = await db.query<DBOrganizationMember>(
+    `SELECT * FROM users.users_organizations 
+     WHERE (oauth_provider || ':' || oauth_user_id) = ANY($1::text[])`,
+    [keys],
+  )
+
+  return result.rows
+}
+
 export const organizationMembersRepository = {
   getOrganizationMemberships,
   getOrganizationMembershipsByUser,
+  getOrganizationMembershipsByUsers,
   addMemberToOrganization,
   isMemberOfOrganization,
 }

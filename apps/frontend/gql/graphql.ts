@@ -3533,7 +3533,7 @@ export type GetGlobalFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null } } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetGlobalFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null } } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type GetSharedFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -3545,7 +3545,7 @@ export type GetSharedFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetSharedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetSharedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, createdAt?: any | null, inner_metadata?: { __typename?: 'metadata', publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type GetTrashedFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -3557,7 +3557,7 @@ export type GetTrashedFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetTrashedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetTrashedFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type GetMyFilesQueryVariables = Exact<{
   oauthUserId: Scalars['String']['input'];
@@ -3570,7 +3570,7 @@ export type GetMyFilesQueryVariables = Exact<{
 }>;
 
 
-export type GetMyFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, maximumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, minimumBlockDepth: Array<{ __typename?: 'nodes', block_published_on?: number | null, tx_published_on?: string | null }>, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetMyFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type GetMetadataByHeadCidQueryVariables = Exact<{
   headCid: Scalars['String']['input'];
@@ -3715,20 +3715,6 @@ export const GetGlobalFilesDocument = gql`
     children: metadata(path: "children")
     createdAt: created_at
     inner_metadata {
-      maximumBlockDepth: nodes(
-        order_by: {block_published_on: desc_nulls_last}
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
-      }
-      minimumBlockDepth: nodes(
-        order_by: {block_published_on: desc_nulls_last}
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
-      }
       publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
         aggregate {
           count
@@ -3810,20 +3796,6 @@ export const GetSharedFilesDocument = gql`
     children: metadata(path: "children")
     createdAt: created_at
     inner_metadata {
-      maximumBlockDepth: nodes(
-        order_by: {block_published_on: desc_nulls_last}
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
-      }
-      minimumBlockDepth: nodes(
-        order_by: {block_published_on: desc_nulls_last}
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
-      }
       publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
         aggregate {
           count
@@ -3914,20 +3886,6 @@ export const GetTrashedFilesDocument = gql`
       published_objects {
         id
       }
-      maximumBlockDepth: nodes(
-        order_by: {block_published_on: desc_nulls_last}
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
-      }
-      minimumBlockDepth: nodes(
-        order_by: {block_published_on: desc_nulls_last}
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
-      }
       publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
         aggregate {
           count
@@ -4017,20 +3975,6 @@ export const GetMyFilesDocument = gql`
     inner_metadata {
       published_objects {
         id
-      }
-      maximumBlockDepth: nodes(
-        order_by: {block_published_on: desc_nulls_last}
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
-      }
-      minimumBlockDepth: nodes(
-        order_by: {block_published_on: desc_nulls_last}
-        limit: 1
-      ) {
-        block_published_on
-        tx_published_on
       }
       publishedNodes: nodes_aggregate(where: {block_published_on: {_is_null: false}}) {
         aggregate {

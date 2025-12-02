@@ -188,14 +188,18 @@ const getAccountInfo = async (
 const getUserListAccount = async (
   userPublicIds: string[],
 ): Promise<Record<string, AccountInfo>> => {
-  return Object.fromEntries(
-    await Promise.all(
-      userPublicIds.map(async (userPublicId) => {
-        const user = await AuthManager.getUserFromPublicId(userPublicId)
-        return [userPublicId, await getAccountInfo(user)]
-      }),
-    ),
+  if (userPublicIds.length === 0) return {}
+
+  const users = await AuthManager.getUsersFromPublicIds(userPublicIds)
+  const usersByPublicId = new Map(users.map((u) => [u.publicId, u]))
+
+  const entries = await Promise.all(
+    userPublicIds
+      .filter((id) => usersByPublicId.has(id))
+      .map(async (id) => [id, await getAccountInfo(usersByPublicId.get(id)!)]),
   )
+
+  return Object.fromEntries(entries)
 }
 
 const getPendingCreditsByUserAndType = async (
