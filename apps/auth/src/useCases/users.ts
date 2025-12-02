@@ -10,6 +10,7 @@ import {
   UserRole,
 } from '@auto-drive/models'
 import { usersRepository } from '../repositories/users.js'
+import { organizationMembersRepository } from '../repositories/organizationMembers.js'
 import { OrganizationsUseCases } from './organizations.js'
 import { v5 } from 'uuid'
 import { createLogger } from '../drivers/logger.js'
@@ -33,6 +34,24 @@ const getUserByPublicId = async (
     oauthUsername: dbUser.oauth_username,
     oauthAvatarUrl: dbUser.oauth_avatar_url,
   })
+}
+
+const getUsersByPublicIds = async (
+  publicIds: string[],
+): Promise<User[]> => {
+  logger.trace('Fetching users by publicIds %s', publicIds.join(', '))
+  const dbUsers = await usersRepository.getUsersByPublicIds(publicIds)
+
+  return dbUsers.map((dbUser) =>
+    userFromTable({
+      oauthProvider: dbUser.oauth_provider,
+      oauthUserId: dbUser.oauth_user_id,
+      publicId: dbUser.public_id,
+      role: dbUser.role,
+      oauthUsername: dbUser.oauth_username,
+      oauthAvatarUrl: dbUser.oauth_avatar_url,
+    }),
+  )
 }
 
 const resolveUser = async (
@@ -258,15 +277,48 @@ export const getPaginatedUserList = async (
   }
 }
 
+const getUsersWithOrganizations = async (
+  publicIds: string[],
+): Promise<MaybeUserWithOrganization[]> => {
+  const users = await getUsersByPublicIds(publicIds)
+  const onboardedUsers = users.filter((u) => u.onboarded)
+
+  const memberships =
+    await organizationMembersRepository.getOrganizationMembershipsByUsers(
+      onboardedUsers.map((u) => ({
+        oauthProvider: u.oauthProvider,
+        oauthUserId: u.oauthUserId,
+      })),
+    )
+
+  const orgByUser = new Map(
+    memberships.map((m) => [
+      `${m.oauth_provider}:${m.oauth_user_id}`,
+      m.organization_id,
+    ]),
+  )
+
+  return users.map((user) => {
+    if (!user.onboarded) {
+      return { ...user, organizationId: null }
+    }
+    const orgId =
+      orgByUser.get(`${user.oauthProvider}:${user.oauthUserId}`) || null
+    return { ...user, organizationId: orgId }
+  })
+}
+
 export const UsersUseCases = {
   onboardUser,
   getUserByOAuthUser,
   getUserByPublicId,
+  getUsersByPublicIds,
   searchUsersByPublicId,
   isAdminUser,
   updateRole,
   resolveUser,
   initUser,
   getUserWithOrganization,
+  getUsersWithOrganizations,
   getPaginatedUserList,
 }
