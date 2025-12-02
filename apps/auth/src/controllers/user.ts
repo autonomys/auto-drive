@@ -271,6 +271,27 @@ userController.get('/list', async (req: Request, res: Response) => {
   }
 })
 
+userController.post('/batch', async (req: Request, res: Response) => {
+  const isAdmin = await handleAdminAuth(req, res)
+  if (!isAdmin) {
+    return
+  }
+
+  const { publicIds } = req.body
+  if (!Array.isArray(publicIds)) {
+    res.status(400).json({ error: 'publicIds must be an array' })
+    return
+  }
+
+  try {
+    const users = await UsersUseCases.getUsersWithOrganizations(publicIds)
+    res.json(users)
+  } catch (error) {
+    logger.error(error)
+    res.status(500).json({ error: 'Failed to get users' })
+  }
+})
+
 userController.get('/:publicId', async (req: Request, res: Response) => {
   const { publicId } = req.params
 
