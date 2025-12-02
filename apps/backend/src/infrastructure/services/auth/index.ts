@@ -35,7 +35,29 @@ const getUserFromPublicId = async (
   return response.json()
 }
 
+const getUsersFromPublicIds = async (
+  publicIds: string[],
+): Promise<UserWithOrganization[]> => {
+  if (publicIds.length === 0) return []
+
+  const response = await fetch(`${config.authService.url}/users/batch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.authService.token}`,
+    },
+    body: JSON.stringify({ publicIds }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch users')
+  }
+
+  return response.json()
+}
+
 export const AuthManager = {
   getUserFromAccessToken,
   getUserFromPublicId,
+  getUsersFromPublicIds,
 }
