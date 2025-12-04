@@ -3,12 +3,15 @@ import * as dotenv from 'dotenv';
 
 dotenv.config({ path: '../.env' });
 
+const HASURA_URL =
+  process.env.HASURA_GRAPHQL_URL || 'http://localhost:6565/v1/graphql';
+
 const config: CodegenConfig = {
   generates: {
     './gql/graphql.ts': {
       schema: [
         {
-          'http://localhost:6565/v1/graphql': {
+          [HASURA_URL]: {
             headers: {
               'x-hasura-admin-secret': process.env.HASURA_GRAPHQL_ADMIN_SECRET!,
               'x-hasura-role': 'admin',
