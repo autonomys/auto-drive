@@ -96,6 +96,272 @@ export type String_Comparison_Exp = {
   _similar?: InputMaybe<Scalars['String']['input']>;
 };
 
+/** columns and relationships of "accounts" */
+export type Accounts = {
+  __typename?: 'accounts';
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  download_limit: Scalars['bigint']['output'];
+  id: Scalars['String']['output'];
+  model: Scalars['String']['output'];
+  organization_id: Scalars['String']['output'];
+  updated_at: Scalars['timestamp']['output'];
+  upload_limit: Scalars['bigint']['output'];
+};
+
+/** aggregated selection of "accounts" */
+export type Accounts_Aggregate = {
+  __typename?: 'accounts_aggregate';
+  aggregate?: Maybe<Accounts_Aggregate_Fields>;
+  nodes: Array<Accounts>;
+};
+
+/** aggregate fields of "accounts" */
+export type Accounts_Aggregate_Fields = {
+  __typename?: 'accounts_aggregate_fields';
+  avg?: Maybe<Accounts_Avg_Fields>;
+  count: Scalars['Int']['output'];
+  max?: Maybe<Accounts_Max_Fields>;
+  min?: Maybe<Accounts_Min_Fields>;
+  stddev?: Maybe<Accounts_Stddev_Fields>;
+  stddev_pop?: Maybe<Accounts_Stddev_Pop_Fields>;
+  stddev_samp?: Maybe<Accounts_Stddev_Samp_Fields>;
+  sum?: Maybe<Accounts_Sum_Fields>;
+  var_pop?: Maybe<Accounts_Var_Pop_Fields>;
+  var_samp?: Maybe<Accounts_Var_Samp_Fields>;
+  variance?: Maybe<Accounts_Variance_Fields>;
+};
+
+
+/** aggregate fields of "accounts" */
+export type Accounts_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Accounts_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** aggregate avg on columns */
+export type Accounts_Avg_Fields = {
+  __typename?: 'accounts_avg_fields';
+  download_limit?: Maybe<Scalars['Float']['output']>;
+  upload_limit?: Maybe<Scalars['Float']['output']>;
+};
+
+/** Boolean expression to filter rows from the table "accounts". All fields are combined with a logical 'AND'. */
+export type Accounts_Bool_Exp = {
+  _and?: InputMaybe<Array<Accounts_Bool_Exp>>;
+  _not?: InputMaybe<Accounts_Bool_Exp>;
+  _or?: InputMaybe<Array<Accounts_Bool_Exp>>;
+  created_at?: InputMaybe<Timestamp_Comparison_Exp>;
+  download_limit?: InputMaybe<Bigint_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  model?: InputMaybe<String_Comparison_Exp>;
+  organization_id?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
+  upload_limit?: InputMaybe<Bigint_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "accounts" */
+export enum Accounts_Constraint {
+  /** unique or primary key constraint on columns "id" */
+  SubscriptionsPkey = 'subscriptions_pkey'
+}
+
+/** input type for incrementing numeric columns in table "accounts" */
+export type Accounts_Inc_Input = {
+  download_limit?: InputMaybe<Scalars['bigint']['input']>;
+  upload_limit?: InputMaybe<Scalars['bigint']['input']>;
+};
+
+/** input type for inserting data into table "accounts" */
+export type Accounts_Insert_Input = {
+  created_at?: InputMaybe<Scalars['timestamp']['input']>;
+  download_limit?: InputMaybe<Scalars['bigint']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  model?: InputMaybe<Scalars['String']['input']>;
+  organization_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
+  upload_limit?: InputMaybe<Scalars['bigint']['input']>;
+};
+
+/** aggregate max on columns */
+export type Accounts_Max_Fields = {
+  __typename?: 'accounts_max_fields';
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  download_limit?: Maybe<Scalars['bigint']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  model?: Maybe<Scalars['String']['output']>;
+  organization_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamp']['output']>;
+  upload_limit?: Maybe<Scalars['bigint']['output']>;
+};
+
+/** aggregate min on columns */
+export type Accounts_Min_Fields = {
+  __typename?: 'accounts_min_fields';
+  created_at?: Maybe<Scalars['timestamp']['output']>;
+  download_limit?: Maybe<Scalars['bigint']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  model?: Maybe<Scalars['String']['output']>;
+  organization_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamp']['output']>;
+  upload_limit?: Maybe<Scalars['bigint']['output']>;
+};
+
+/** response of any mutation on the table "accounts" */
+export type Accounts_Mutation_Response = {
+  __typename?: 'accounts_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Accounts>;
+};
+
+/** on_conflict condition type for table "accounts" */
+export type Accounts_On_Conflict = {
+  constraint: Accounts_Constraint;
+  update_columns?: Array<Accounts_Update_Column>;
+  where?: InputMaybe<Accounts_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "accounts". */
+export type Accounts_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  download_limit?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  model?: InputMaybe<Order_By>;
+  organization_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+  upload_limit?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: accounts */
+export type Accounts_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** select columns of table "accounts" */
+export enum Accounts_Select_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  DownloadLimit = 'download_limit',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  Model = 'model',
+  /** column name */
+  OrganizationId = 'organization_id',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  UploadLimit = 'upload_limit'
+}
+
+/** input type for updating data in table "accounts" */
+export type Accounts_Set_Input = {
+  created_at?: InputMaybe<Scalars['timestamp']['input']>;
+  download_limit?: InputMaybe<Scalars['bigint']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  model?: InputMaybe<Scalars['String']['input']>;
+  organization_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
+  upload_limit?: InputMaybe<Scalars['bigint']['input']>;
+};
+
+/** aggregate stddev on columns */
+export type Accounts_Stddev_Fields = {
+  __typename?: 'accounts_stddev_fields';
+  download_limit?: Maybe<Scalars['Float']['output']>;
+  upload_limit?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_pop on columns */
+export type Accounts_Stddev_Pop_Fields = {
+  __typename?: 'accounts_stddev_pop_fields';
+  download_limit?: Maybe<Scalars['Float']['output']>;
+  upload_limit?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_samp on columns */
+export type Accounts_Stddev_Samp_Fields = {
+  __typename?: 'accounts_stddev_samp_fields';
+  download_limit?: Maybe<Scalars['Float']['output']>;
+  upload_limit?: Maybe<Scalars['Float']['output']>;
+};
+
+/** Streaming cursor of the table "accounts" */
+export type Accounts_Stream_Cursor_Input = {
+  /** Stream column input with initial value */
+  initial_value: Accounts_Stream_Cursor_Value_Input;
+  /** cursor ordering */
+  ordering?: InputMaybe<Cursor_Ordering>;
+};
+
+/** Initial value of the column from where the streaming should start */
+export type Accounts_Stream_Cursor_Value_Input = {
+  created_at?: InputMaybe<Scalars['timestamp']['input']>;
+  download_limit?: InputMaybe<Scalars['bigint']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  model?: InputMaybe<Scalars['String']['input']>;
+  organization_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
+  upload_limit?: InputMaybe<Scalars['bigint']['input']>;
+};
+
+/** aggregate sum on columns */
+export type Accounts_Sum_Fields = {
+  __typename?: 'accounts_sum_fields';
+  download_limit?: Maybe<Scalars['bigint']['output']>;
+  upload_limit?: Maybe<Scalars['bigint']['output']>;
+};
+
+/** update columns of table "accounts" */
+export enum Accounts_Update_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  DownloadLimit = 'download_limit',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  Model = 'model',
+  /** column name */
+  OrganizationId = 'organization_id',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  UploadLimit = 'upload_limit'
+}
+
+export type Accounts_Updates = {
+  /** increments the numeric columns with given value of the filtered values */
+  _inc?: InputMaybe<Accounts_Inc_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Accounts_Set_Input>;
+  /** filter the rows which have to be updated */
+  where: Accounts_Bool_Exp;
+};
+
+/** aggregate var_pop on columns */
+export type Accounts_Var_Pop_Fields = {
+  __typename?: 'accounts_var_pop_fields';
+  download_limit?: Maybe<Scalars['Float']['output']>;
+  upload_limit?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate var_samp on columns */
+export type Accounts_Var_Samp_Fields = {
+  __typename?: 'accounts_var_samp_fields';
+  download_limit?: Maybe<Scalars['Float']['output']>;
+  upload_limit?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate variance on columns */
+export type Accounts_Variance_Fields = {
+  __typename?: 'accounts_variance_fields';
+  download_limit?: Maybe<Scalars['Float']['output']>;
+  upload_limit?: Maybe<Scalars['Float']['output']>;
+};
+
 /** columns and relationships of "async_downloads" */
 export type Async_Downloads = {
   __typename?: 'async_downloads';
@@ -422,10 +688,10 @@ export enum Cursor_Ordering {
 /** columns and relationships of "interactions" */
 export type Interactions = {
   __typename?: 'interactions';
+  account_id: Scalars['String']['output'];
   created_at?: Maybe<Scalars['timestamp']['output']>;
   id: Scalars['String']['output'];
   size: Scalars['bigint']['output'];
-  subscription_id: Scalars['String']['output'];
   type: Scalars['String']['output'];
   updated_at: Scalars['timestamp']['output'];
 };
@@ -471,10 +737,10 @@ export type Interactions_Bool_Exp = {
   _and?: InputMaybe<Array<Interactions_Bool_Exp>>;
   _not?: InputMaybe<Interactions_Bool_Exp>;
   _or?: InputMaybe<Array<Interactions_Bool_Exp>>;
+  account_id?: InputMaybe<String_Comparison_Exp>;
   created_at?: InputMaybe<Timestamp_Comparison_Exp>;
   id?: InputMaybe<String_Comparison_Exp>;
   size?: InputMaybe<Bigint_Comparison_Exp>;
-  subscription_id?: InputMaybe<String_Comparison_Exp>;
   type?: InputMaybe<String_Comparison_Exp>;
   updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
 };
@@ -486,10 +752,10 @@ export type Interactions_Inc_Input = {
 
 /** input type for inserting data into table "interactions" */
 export type Interactions_Insert_Input = {
+  account_id?: InputMaybe<Scalars['String']['input']>;
   created_at?: InputMaybe<Scalars['timestamp']['input']>;
   id?: InputMaybe<Scalars['String']['input']>;
   size?: InputMaybe<Scalars['bigint']['input']>;
-  subscription_id?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
@@ -497,10 +763,10 @@ export type Interactions_Insert_Input = {
 /** aggregate max on columns */
 export type Interactions_Max_Fields = {
   __typename?: 'interactions_max_fields';
+  account_id?: Maybe<Scalars['String']['output']>;
   created_at?: Maybe<Scalars['timestamp']['output']>;
   id?: Maybe<Scalars['String']['output']>;
   size?: Maybe<Scalars['bigint']['output']>;
-  subscription_id?: Maybe<Scalars['String']['output']>;
   type?: Maybe<Scalars['String']['output']>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
 };
@@ -508,10 +774,10 @@ export type Interactions_Max_Fields = {
 /** aggregate min on columns */
 export type Interactions_Min_Fields = {
   __typename?: 'interactions_min_fields';
+  account_id?: Maybe<Scalars['String']['output']>;
   created_at?: Maybe<Scalars['timestamp']['output']>;
   id?: Maybe<Scalars['String']['output']>;
   size?: Maybe<Scalars['bigint']['output']>;
-  subscription_id?: Maybe<Scalars['String']['output']>;
   type?: Maybe<Scalars['String']['output']>;
   updated_at?: Maybe<Scalars['timestamp']['output']>;
 };
@@ -527,10 +793,10 @@ export type Interactions_Mutation_Response = {
 
 /** Ordering options when selecting data from "interactions". */
 export type Interactions_Order_By = {
+  account_id?: InputMaybe<Order_By>;
   created_at?: InputMaybe<Order_By>;
   id?: InputMaybe<Order_By>;
   size?: InputMaybe<Order_By>;
-  subscription_id?: InputMaybe<Order_By>;
   type?: InputMaybe<Order_By>;
   updated_at?: InputMaybe<Order_By>;
 };
@@ -538,13 +804,13 @@ export type Interactions_Order_By = {
 /** select columns of table "interactions" */
 export enum Interactions_Select_Column {
   /** column name */
+  AccountId = 'account_id',
+  /** column name */
   CreatedAt = 'created_at',
   /** column name */
   Id = 'id',
   /** column name */
   Size = 'size',
-  /** column name */
-  SubscriptionId = 'subscription_id',
   /** column name */
   Type = 'type',
   /** column name */
@@ -553,10 +819,10 @@ export enum Interactions_Select_Column {
 
 /** input type for updating data in table "interactions" */
 export type Interactions_Set_Input = {
+  account_id?: InputMaybe<Scalars['String']['input']>;
   created_at?: InputMaybe<Scalars['timestamp']['input']>;
   id?: InputMaybe<Scalars['String']['input']>;
   size?: InputMaybe<Scalars['bigint']['input']>;
-  subscription_id?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
@@ -589,10 +855,10 @@ export type Interactions_Stream_Cursor_Input = {
 
 /** Initial value of the column from where the streaming should start */
 export type Interactions_Stream_Cursor_Value_Input = {
+  account_id?: InputMaybe<Scalars['String']['input']>;
   created_at?: InputMaybe<Scalars['timestamp']['input']>;
   id?: InputMaybe<Scalars['String']['input']>;
   size?: InputMaybe<Scalars['bigint']['input']>;
-  subscription_id?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
   updated_at?: InputMaybe<Scalars['timestamp']['input']>;
 };
@@ -1294,6 +1560,10 @@ export type Metadata_Updates = {
 /** mutation root */
 export type Mutation_Root = {
   __typename?: 'mutation_root';
+  /** delete data from the table: "accounts" */
+  delete_accounts?: Maybe<Accounts_Mutation_Response>;
+  /** delete single row from the table: "accounts" */
+  delete_accounts_by_pk?: Maybe<Accounts>;
   /** delete data from the table: "async_downloads" */
   delete_async_downloads?: Maybe<Async_Downloads_Mutation_Response>;
   /** delete single row from the table: "async_downloads" */
@@ -1308,8 +1578,6 @@ export type Mutation_Root = {
   delete_metadata_roots?: Maybe<Metadata_Roots_Mutation_Response>;
   /** delete data from the table: "nodes" */
   delete_nodes?: Maybe<Nodes_Mutation_Response>;
-  /** delete single row from the table: "nodes" */
-  delete_nodes_by_pk?: Maybe<Nodes>;
   /** delete data from the table: "object_ownership" */
   delete_object_ownership?: Maybe<Object_Ownership_Mutation_Response>;
   /** delete single row from the table: "object_ownership" */
@@ -1318,10 +1586,10 @@ export type Mutation_Root = {
   delete_published_objects?: Maybe<Published_Objects_Mutation_Response>;
   /** delete single row from the table: "published_objects" */
   delete_published_objects_by_pk?: Maybe<Published_Objects>;
-  /** delete data from the table: "subscriptions" */
-  delete_subscriptions?: Maybe<Subscriptions_Mutation_Response>;
-  /** delete single row from the table: "subscriptions" */
-  delete_subscriptions_by_pk?: Maybe<Subscriptions>;
+  /** insert data into the table: "accounts" */
+  insert_accounts?: Maybe<Accounts_Mutation_Response>;
+  /** insert a single row into the table: "accounts" */
+  insert_accounts_one?: Maybe<Accounts>;
   /** insert data into the table: "async_downloads" */
   insert_async_downloads?: Maybe<Async_Downloads_Mutation_Response>;
   /** insert a single row into the table: "async_downloads" */
@@ -1350,10 +1618,12 @@ export type Mutation_Root = {
   insert_published_objects?: Maybe<Published_Objects_Mutation_Response>;
   /** insert a single row into the table: "published_objects" */
   insert_published_objects_one?: Maybe<Published_Objects>;
-  /** insert data into the table: "subscriptions" */
-  insert_subscriptions?: Maybe<Subscriptions_Mutation_Response>;
-  /** insert a single row into the table: "subscriptions" */
-  insert_subscriptions_one?: Maybe<Subscriptions>;
+  /** update data of the table: "accounts" */
+  update_accounts?: Maybe<Accounts_Mutation_Response>;
+  /** update single row of the table: "accounts" */
+  update_accounts_by_pk?: Maybe<Accounts>;
+  /** update multiples rows of table: "accounts" */
+  update_accounts_many?: Maybe<Array<Maybe<Accounts_Mutation_Response>>>;
   /** update data of the table: "async_downloads" */
   update_async_downloads?: Maybe<Async_Downloads_Mutation_Response>;
   /** update single row of the table: "async_downloads" */
@@ -1376,8 +1646,6 @@ export type Mutation_Root = {
   update_metadata_roots_many?: Maybe<Array<Maybe<Metadata_Roots_Mutation_Response>>>;
   /** update data of the table: "nodes" */
   update_nodes?: Maybe<Nodes_Mutation_Response>;
-  /** update single row of the table: "nodes" */
-  update_nodes_by_pk?: Maybe<Nodes>;
   /** update multiples rows of table: "nodes" */
   update_nodes_many?: Maybe<Array<Maybe<Nodes_Mutation_Response>>>;
   /** update data of the table: "object_ownership" */
@@ -1392,12 +1660,18 @@ export type Mutation_Root = {
   update_published_objects_by_pk?: Maybe<Published_Objects>;
   /** update multiples rows of table: "published_objects" */
   update_published_objects_many?: Maybe<Array<Maybe<Published_Objects_Mutation_Response>>>;
-  /** update data of the table: "subscriptions" */
-  update_subscriptions?: Maybe<Subscriptions_Mutation_Response>;
-  /** update single row of the table: "subscriptions" */
-  update_subscriptions_by_pk?: Maybe<Subscriptions>;
-  /** update multiples rows of table: "subscriptions" */
-  update_subscriptions_many?: Maybe<Array<Maybe<Subscriptions_Mutation_Response>>>;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_AccountsArgs = {
+  where: Accounts_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Accounts_By_PkArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -1445,12 +1719,6 @@ export type Mutation_RootDelete_NodesArgs = {
 
 
 /** mutation root */
-export type Mutation_RootDelete_Nodes_By_PkArgs = {
-  cid: Scalars['String']['input'];
-};
-
-
-/** mutation root */
 export type Mutation_RootDelete_Object_OwnershipArgs = {
   where: Object_Ownership_Bool_Exp;
 };
@@ -1477,14 +1745,16 @@ export type Mutation_RootDelete_Published_Objects_By_PkArgs = {
 
 
 /** mutation root */
-export type Mutation_RootDelete_SubscriptionsArgs = {
-  where: Subscriptions_Bool_Exp;
+export type Mutation_RootInsert_AccountsArgs = {
+  objects: Array<Accounts_Insert_Input>;
+  on_conflict?: InputMaybe<Accounts_On_Conflict>;
 };
 
 
 /** mutation root */
-export type Mutation_RootDelete_Subscriptions_By_PkArgs = {
-  id: Scalars['String']['input'];
+export type Mutation_RootInsert_Accounts_OneArgs = {
+  object: Accounts_Insert_Input;
+  on_conflict?: InputMaybe<Accounts_On_Conflict>;
 };
 
 
@@ -1543,14 +1813,12 @@ export type Mutation_RootInsert_Metadata_Roots_OneArgs = {
 /** mutation root */
 export type Mutation_RootInsert_NodesArgs = {
   objects: Array<Nodes_Insert_Input>;
-  on_conflict?: InputMaybe<Nodes_On_Conflict>;
 };
 
 
 /** mutation root */
 export type Mutation_RootInsert_Nodes_OneArgs = {
   object: Nodes_Insert_Input;
-  on_conflict?: InputMaybe<Nodes_On_Conflict>;
 };
 
 
@@ -1583,16 +1851,24 @@ export type Mutation_RootInsert_Published_Objects_OneArgs = {
 
 
 /** mutation root */
-export type Mutation_RootInsert_SubscriptionsArgs = {
-  objects: Array<Subscriptions_Insert_Input>;
-  on_conflict?: InputMaybe<Subscriptions_On_Conflict>;
+export type Mutation_RootUpdate_AccountsArgs = {
+  _inc?: InputMaybe<Accounts_Inc_Input>;
+  _set?: InputMaybe<Accounts_Set_Input>;
+  where: Accounts_Bool_Exp;
 };
 
 
 /** mutation root */
-export type Mutation_RootInsert_Subscriptions_OneArgs = {
-  object: Subscriptions_Insert_Input;
-  on_conflict?: InputMaybe<Subscriptions_On_Conflict>;
+export type Mutation_RootUpdate_Accounts_By_PkArgs = {
+  _inc?: InputMaybe<Accounts_Inc_Input>;
+  _set?: InputMaybe<Accounts_Set_Input>;
+  pk_columns: Accounts_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Accounts_ManyArgs = {
+  updates: Array<Accounts_Updates>;
 };
 
 
@@ -1689,14 +1965,6 @@ export type Mutation_RootUpdate_NodesArgs = {
 
 
 /** mutation root */
-export type Mutation_RootUpdate_Nodes_By_PkArgs = {
-  _inc?: InputMaybe<Nodes_Inc_Input>;
-  _set?: InputMaybe<Nodes_Set_Input>;
-  pk_columns: Nodes_Pk_Columns_Input;
-};
-
-
-/** mutation root */
 export type Mutation_RootUpdate_Nodes_ManyArgs = {
   updates: Array<Nodes_Updates>;
 };
@@ -1739,28 +2007,6 @@ export type Mutation_RootUpdate_Published_Objects_By_PkArgs = {
 /** mutation root */
 export type Mutation_RootUpdate_Published_Objects_ManyArgs = {
   updates: Array<Published_Objects_Updates>;
-};
-
-
-/** mutation root */
-export type Mutation_RootUpdate_SubscriptionsArgs = {
-  _inc?: InputMaybe<Subscriptions_Inc_Input>;
-  _set?: InputMaybe<Subscriptions_Set_Input>;
-  where: Subscriptions_Bool_Exp;
-};
-
-
-/** mutation root */
-export type Mutation_RootUpdate_Subscriptions_By_PkArgs = {
-  _inc?: InputMaybe<Subscriptions_Inc_Input>;
-  _set?: InputMaybe<Subscriptions_Set_Input>;
-  pk_columns: Subscriptions_Pk_Columns_Input;
-};
-
-
-/** mutation root */
-export type Mutation_RootUpdate_Subscriptions_ManyArgs = {
-  updates: Array<Subscriptions_Updates>;
 };
 
 /** columns and relationships of "nodes" */
@@ -1864,8 +2110,6 @@ export type Nodes_Aggregate_Order_By = {
 /** input type for inserting array relation for remote table "nodes" */
 export type Nodes_Arr_Rel_Insert_Input = {
   data: Array<Nodes_Insert_Input>;
-  /** upsert condition */
-  on_conflict?: InputMaybe<Nodes_On_Conflict>;
 };
 
 /** aggregate avg on columns */
@@ -1903,12 +2147,6 @@ export type Nodes_Bool_Exp = {
   type?: InputMaybe<String_Comparison_Exp>;
   updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
 };
-
-/** unique or primary key constraints on table "nodes" */
-export enum Nodes_Constraint {
-  /** unique or primary key constraint on columns "cid" */
-  NodesPkey = 'nodes_pkey'
-}
 
 /** input type for incrementing numeric columns in table "nodes" */
 export type Nodes_Inc_Input = {
@@ -2008,15 +2246,6 @@ export type Nodes_Mutation_Response = {
 /** input type for inserting object relation for remote table "nodes" */
 export type Nodes_Obj_Rel_Insert_Input = {
   data: Nodes_Insert_Input;
-  /** upsert condition */
-  on_conflict?: InputMaybe<Nodes_On_Conflict>;
-};
-
-/** on_conflict condition type for table "nodes" */
-export type Nodes_On_Conflict = {
-  constraint: Nodes_Constraint;
-  update_columns?: Array<Nodes_Update_Column>;
-  where?: InputMaybe<Nodes_Bool_Exp>;
 };
 
 /** Ordering options when selecting data from "nodes". */
@@ -2034,11 +2263,6 @@ export type Nodes_Order_By = {
   tx_published_on?: InputMaybe<Order_By>;
   type?: InputMaybe<Order_By>;
   updated_at?: InputMaybe<Order_By>;
-};
-
-/** primary key columns input for table: nodes */
-export type Nodes_Pk_Columns_Input = {
-  cid: Scalars['String']['input'];
 };
 
 /** select columns of table "nodes" */
@@ -2164,32 +2388,6 @@ export type Nodes_Sum_Order_By = {
   piece_index?: InputMaybe<Order_By>;
   piece_offset?: InputMaybe<Order_By>;
 };
-
-/** update columns of table "nodes" */
-export enum Nodes_Update_Column {
-  /** column name */
-  BlockPublishedOn = 'block_published_on',
-  /** column name */
-  Cid = 'cid',
-  /** column name */
-  CreatedAt = 'created_at',
-  /** column name */
-  EncodedNode = 'encoded_node',
-  /** column name */
-  HeadCid = 'head_cid',
-  /** column name */
-  PieceIndex = 'piece_index',
-  /** column name */
-  PieceOffset = 'piece_offset',
-  /** column name */
-  RootCid = 'root_cid',
-  /** column name */
-  TxPublishedOn = 'tx_published_on',
-  /** column name */
-  Type = 'type',
-  /** column name */
-  UpdatedAt = 'updated_at'
-}
 
 export type Nodes_Updates = {
   /** increments the numeric columns with given value of the filtered values */
@@ -2712,6 +2910,12 @@ export type Published_Objects_Updates = {
 
 export type Query_Root = {
   __typename?: 'query_root';
+  /** fetch data from the table: "accounts" */
+  accounts: Array<Accounts>;
+  /** fetch aggregated fields from the table: "accounts" */
+  accounts_aggregate: Accounts_Aggregate;
+  /** fetch data from the table: "accounts" using primary key columns */
+  accounts_by_pk?: Maybe<Accounts>;
   /** fetch data from the table: "async_downloads" */
   async_downloads: Array<Async_Downloads>;
   /** fetch aggregated fields from the table: "async_downloads" */
@@ -2736,8 +2940,6 @@ export type Query_Root = {
   nodes: Array<Nodes>;
   /** An aggregate relationship */
   nodes_aggregate: Nodes_Aggregate;
-  /** fetch data from the table: "nodes" using primary key columns */
-  nodes_by_pk?: Maybe<Nodes>;
   /** An array relationship */
   object_ownership: Array<Object_Ownership>;
   /** An aggregate relationship */
@@ -2750,12 +2952,29 @@ export type Query_Root = {
   published_objects_aggregate: Published_Objects_Aggregate;
   /** fetch data from the table: "published_objects" using primary key columns */
   published_objects_by_pk?: Maybe<Published_Objects>;
-  /** fetch data from the table: "subscriptions" */
-  subscriptions: Array<Subscriptions>;
-  /** fetch aggregated fields from the table: "subscriptions" */
-  subscriptions_aggregate: Subscriptions_Aggregate;
-  /** fetch data from the table: "subscriptions" using primary key columns */
-  subscriptions_by_pk?: Maybe<Subscriptions>;
+};
+
+
+export type Query_RootAccountsArgs = {
+  distinct_on?: InputMaybe<Array<Accounts_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Accounts_Order_By>>;
+  where?: InputMaybe<Accounts_Bool_Exp>;
+};
+
+
+export type Query_RootAccounts_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Accounts_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Accounts_Order_By>>;
+  where?: InputMaybe<Accounts_Bool_Exp>;
+};
+
+
+export type Query_RootAccounts_By_PkArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -2860,11 +3079,6 @@ export type Query_RootNodes_AggregateArgs = {
 };
 
 
-export type Query_RootNodes_By_PkArgs = {
-  cid: Scalars['String']['input'];
-};
-
-
 export type Query_RootObject_OwnershipArgs = {
   distinct_on?: InputMaybe<Array<Object_Ownership_Select_Column>>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -2912,31 +3126,16 @@ export type Query_RootPublished_Objects_By_PkArgs = {
   id: Scalars['String']['input'];
 };
 
-
-export type Query_RootSubscriptionsArgs = {
-  distinct_on?: InputMaybe<Array<Subscriptions_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Subscriptions_Order_By>>;
-  where?: InputMaybe<Subscriptions_Bool_Exp>;
-};
-
-
-export type Query_RootSubscriptions_AggregateArgs = {
-  distinct_on?: InputMaybe<Array<Subscriptions_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Subscriptions_Order_By>>;
-  where?: InputMaybe<Subscriptions_Bool_Exp>;
-};
-
-
-export type Query_RootSubscriptions_By_PkArgs = {
-  id: Scalars['String']['input'];
-};
-
 export type Subscription_Root = {
   __typename?: 'subscription_root';
+  /** fetch data from the table: "accounts" */
+  accounts: Array<Accounts>;
+  /** fetch aggregated fields from the table: "accounts" */
+  accounts_aggregate: Accounts_Aggregate;
+  /** fetch data from the table: "accounts" using primary key columns */
+  accounts_by_pk?: Maybe<Accounts>;
+  /** fetch data from the table in a streaming manner: "accounts" */
+  accounts_stream: Array<Accounts>;
   /** fetch data from the table: "async_downloads" */
   async_downloads: Array<Async_Downloads>;
   /** fetch aggregated fields from the table: "async_downloads" */
@@ -2969,8 +3168,6 @@ export type Subscription_Root = {
   nodes: Array<Nodes>;
   /** An aggregate relationship */
   nodes_aggregate: Nodes_Aggregate;
-  /** fetch data from the table: "nodes" using primary key columns */
-  nodes_by_pk?: Maybe<Nodes>;
   /** fetch data from the table in a streaming manner: "nodes" */
   nodes_stream: Array<Nodes>;
   /** An array relationship */
@@ -2989,14 +3186,36 @@ export type Subscription_Root = {
   published_objects_by_pk?: Maybe<Published_Objects>;
   /** fetch data from the table in a streaming manner: "published_objects" */
   published_objects_stream: Array<Published_Objects>;
-  /** fetch data from the table: "subscriptions" */
-  subscriptions: Array<Subscriptions>;
-  /** fetch aggregated fields from the table: "subscriptions" */
-  subscriptions_aggregate: Subscriptions_Aggregate;
-  /** fetch data from the table: "subscriptions" using primary key columns */
-  subscriptions_by_pk?: Maybe<Subscriptions>;
-  /** fetch data from the table in a streaming manner: "subscriptions" */
-  subscriptions_stream: Array<Subscriptions>;
+};
+
+
+export type Subscription_RootAccountsArgs = {
+  distinct_on?: InputMaybe<Array<Accounts_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Accounts_Order_By>>;
+  where?: InputMaybe<Accounts_Bool_Exp>;
+};
+
+
+export type Subscription_RootAccounts_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Accounts_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Accounts_Order_By>>;
+  where?: InputMaybe<Accounts_Bool_Exp>;
+};
+
+
+export type Subscription_RootAccounts_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAccounts_StreamArgs = {
+  batch_size: Scalars['Int']['input'];
+  cursor: Array<InputMaybe<Accounts_Stream_Cursor_Input>>;
+  where?: InputMaybe<Accounts_Bool_Exp>;
 };
 
 
@@ -3129,11 +3348,6 @@ export type Subscription_RootNodes_AggregateArgs = {
 };
 
 
-export type Subscription_RootNodes_By_PkArgs = {
-  cid: Scalars['String']['input'];
-};
-
-
 export type Subscription_RootNodes_StreamArgs = {
   batch_size: Scalars['Int']['input'];
   cursor: Array<InputMaybe<Nodes_Stream_Cursor_Input>>;
@@ -3202,302 +3416,6 @@ export type Subscription_RootPublished_Objects_StreamArgs = {
   where?: InputMaybe<Published_Objects_Bool_Exp>;
 };
 
-
-export type Subscription_RootSubscriptionsArgs = {
-  distinct_on?: InputMaybe<Array<Subscriptions_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Subscriptions_Order_By>>;
-  where?: InputMaybe<Subscriptions_Bool_Exp>;
-};
-
-
-export type Subscription_RootSubscriptions_AggregateArgs = {
-  distinct_on?: InputMaybe<Array<Subscriptions_Select_Column>>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  order_by?: InputMaybe<Array<Subscriptions_Order_By>>;
-  where?: InputMaybe<Subscriptions_Bool_Exp>;
-};
-
-
-export type Subscription_RootSubscriptions_By_PkArgs = {
-  id: Scalars['String']['input'];
-};
-
-
-export type Subscription_RootSubscriptions_StreamArgs = {
-  batch_size: Scalars['Int']['input'];
-  cursor: Array<InputMaybe<Subscriptions_Stream_Cursor_Input>>;
-  where?: InputMaybe<Subscriptions_Bool_Exp>;
-};
-
-/** columns and relationships of "subscriptions" */
-export type Subscriptions = {
-  __typename?: 'subscriptions';
-  created_at?: Maybe<Scalars['timestamp']['output']>;
-  download_limit: Scalars['bigint']['output'];
-  granularity: Scalars['String']['output'];
-  id: Scalars['String']['output'];
-  organization_id: Scalars['String']['output'];
-  updated_at: Scalars['timestamp']['output'];
-  upload_limit: Scalars['bigint']['output'];
-};
-
-/** aggregated selection of "subscriptions" */
-export type Subscriptions_Aggregate = {
-  __typename?: 'subscriptions_aggregate';
-  aggregate?: Maybe<Subscriptions_Aggregate_Fields>;
-  nodes: Array<Subscriptions>;
-};
-
-/** aggregate fields of "subscriptions" */
-export type Subscriptions_Aggregate_Fields = {
-  __typename?: 'subscriptions_aggregate_fields';
-  avg?: Maybe<Subscriptions_Avg_Fields>;
-  count: Scalars['Int']['output'];
-  max?: Maybe<Subscriptions_Max_Fields>;
-  min?: Maybe<Subscriptions_Min_Fields>;
-  stddev?: Maybe<Subscriptions_Stddev_Fields>;
-  stddev_pop?: Maybe<Subscriptions_Stddev_Pop_Fields>;
-  stddev_samp?: Maybe<Subscriptions_Stddev_Samp_Fields>;
-  sum?: Maybe<Subscriptions_Sum_Fields>;
-  var_pop?: Maybe<Subscriptions_Var_Pop_Fields>;
-  var_samp?: Maybe<Subscriptions_Var_Samp_Fields>;
-  variance?: Maybe<Subscriptions_Variance_Fields>;
-};
-
-
-/** aggregate fields of "subscriptions" */
-export type Subscriptions_Aggregate_FieldsCountArgs = {
-  columns?: InputMaybe<Array<Subscriptions_Select_Column>>;
-  distinct?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-/** aggregate avg on columns */
-export type Subscriptions_Avg_Fields = {
-  __typename?: 'subscriptions_avg_fields';
-  download_limit?: Maybe<Scalars['Float']['output']>;
-  upload_limit?: Maybe<Scalars['Float']['output']>;
-};
-
-/** Boolean expression to filter rows from the table "subscriptions". All fields are combined with a logical 'AND'. */
-export type Subscriptions_Bool_Exp = {
-  _and?: InputMaybe<Array<Subscriptions_Bool_Exp>>;
-  _not?: InputMaybe<Subscriptions_Bool_Exp>;
-  _or?: InputMaybe<Array<Subscriptions_Bool_Exp>>;
-  created_at?: InputMaybe<Timestamp_Comparison_Exp>;
-  download_limit?: InputMaybe<Bigint_Comparison_Exp>;
-  granularity?: InputMaybe<String_Comparison_Exp>;
-  id?: InputMaybe<String_Comparison_Exp>;
-  organization_id?: InputMaybe<String_Comparison_Exp>;
-  updated_at?: InputMaybe<Timestamp_Comparison_Exp>;
-  upload_limit?: InputMaybe<Bigint_Comparison_Exp>;
-};
-
-/** unique or primary key constraints on table "subscriptions" */
-export enum Subscriptions_Constraint {
-  /** unique or primary key constraint on columns "id" */
-  SubscriptionsPkey = 'subscriptions_pkey'
-}
-
-/** input type for incrementing numeric columns in table "subscriptions" */
-export type Subscriptions_Inc_Input = {
-  download_limit?: InputMaybe<Scalars['bigint']['input']>;
-  upload_limit?: InputMaybe<Scalars['bigint']['input']>;
-};
-
-/** input type for inserting data into table "subscriptions" */
-export type Subscriptions_Insert_Input = {
-  created_at?: InputMaybe<Scalars['timestamp']['input']>;
-  download_limit?: InputMaybe<Scalars['bigint']['input']>;
-  granularity?: InputMaybe<Scalars['String']['input']>;
-  id?: InputMaybe<Scalars['String']['input']>;
-  organization_id?: InputMaybe<Scalars['String']['input']>;
-  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
-  upload_limit?: InputMaybe<Scalars['bigint']['input']>;
-};
-
-/** aggregate max on columns */
-export type Subscriptions_Max_Fields = {
-  __typename?: 'subscriptions_max_fields';
-  created_at?: Maybe<Scalars['timestamp']['output']>;
-  download_limit?: Maybe<Scalars['bigint']['output']>;
-  granularity?: Maybe<Scalars['String']['output']>;
-  id?: Maybe<Scalars['String']['output']>;
-  organization_id?: Maybe<Scalars['String']['output']>;
-  updated_at?: Maybe<Scalars['timestamp']['output']>;
-  upload_limit?: Maybe<Scalars['bigint']['output']>;
-};
-
-/** aggregate min on columns */
-export type Subscriptions_Min_Fields = {
-  __typename?: 'subscriptions_min_fields';
-  created_at?: Maybe<Scalars['timestamp']['output']>;
-  download_limit?: Maybe<Scalars['bigint']['output']>;
-  granularity?: Maybe<Scalars['String']['output']>;
-  id?: Maybe<Scalars['String']['output']>;
-  organization_id?: Maybe<Scalars['String']['output']>;
-  updated_at?: Maybe<Scalars['timestamp']['output']>;
-  upload_limit?: Maybe<Scalars['bigint']['output']>;
-};
-
-/** response of any mutation on the table "subscriptions" */
-export type Subscriptions_Mutation_Response = {
-  __typename?: 'subscriptions_mutation_response';
-  /** number of rows affected by the mutation */
-  affected_rows: Scalars['Int']['output'];
-  /** data from the rows affected by the mutation */
-  returning: Array<Subscriptions>;
-};
-
-/** on_conflict condition type for table "subscriptions" */
-export type Subscriptions_On_Conflict = {
-  constraint: Subscriptions_Constraint;
-  update_columns?: Array<Subscriptions_Update_Column>;
-  where?: InputMaybe<Subscriptions_Bool_Exp>;
-};
-
-/** Ordering options when selecting data from "subscriptions". */
-export type Subscriptions_Order_By = {
-  created_at?: InputMaybe<Order_By>;
-  download_limit?: InputMaybe<Order_By>;
-  granularity?: InputMaybe<Order_By>;
-  id?: InputMaybe<Order_By>;
-  organization_id?: InputMaybe<Order_By>;
-  updated_at?: InputMaybe<Order_By>;
-  upload_limit?: InputMaybe<Order_By>;
-};
-
-/** primary key columns input for table: subscriptions */
-export type Subscriptions_Pk_Columns_Input = {
-  id: Scalars['String']['input'];
-};
-
-/** select columns of table "subscriptions" */
-export enum Subscriptions_Select_Column {
-  /** column name */
-  CreatedAt = 'created_at',
-  /** column name */
-  DownloadLimit = 'download_limit',
-  /** column name */
-  Granularity = 'granularity',
-  /** column name */
-  Id = 'id',
-  /** column name */
-  OrganizationId = 'organization_id',
-  /** column name */
-  UpdatedAt = 'updated_at',
-  /** column name */
-  UploadLimit = 'upload_limit'
-}
-
-/** input type for updating data in table "subscriptions" */
-export type Subscriptions_Set_Input = {
-  created_at?: InputMaybe<Scalars['timestamp']['input']>;
-  download_limit?: InputMaybe<Scalars['bigint']['input']>;
-  granularity?: InputMaybe<Scalars['String']['input']>;
-  id?: InputMaybe<Scalars['String']['input']>;
-  organization_id?: InputMaybe<Scalars['String']['input']>;
-  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
-  upload_limit?: InputMaybe<Scalars['bigint']['input']>;
-};
-
-/** aggregate stddev on columns */
-export type Subscriptions_Stddev_Fields = {
-  __typename?: 'subscriptions_stddev_fields';
-  download_limit?: Maybe<Scalars['Float']['output']>;
-  upload_limit?: Maybe<Scalars['Float']['output']>;
-};
-
-/** aggregate stddev_pop on columns */
-export type Subscriptions_Stddev_Pop_Fields = {
-  __typename?: 'subscriptions_stddev_pop_fields';
-  download_limit?: Maybe<Scalars['Float']['output']>;
-  upload_limit?: Maybe<Scalars['Float']['output']>;
-};
-
-/** aggregate stddev_samp on columns */
-export type Subscriptions_Stddev_Samp_Fields = {
-  __typename?: 'subscriptions_stddev_samp_fields';
-  download_limit?: Maybe<Scalars['Float']['output']>;
-  upload_limit?: Maybe<Scalars['Float']['output']>;
-};
-
-/** Streaming cursor of the table "subscriptions" */
-export type Subscriptions_Stream_Cursor_Input = {
-  /** Stream column input with initial value */
-  initial_value: Subscriptions_Stream_Cursor_Value_Input;
-  /** cursor ordering */
-  ordering?: InputMaybe<Cursor_Ordering>;
-};
-
-/** Initial value of the column from where the streaming should start */
-export type Subscriptions_Stream_Cursor_Value_Input = {
-  created_at?: InputMaybe<Scalars['timestamp']['input']>;
-  download_limit?: InputMaybe<Scalars['bigint']['input']>;
-  granularity?: InputMaybe<Scalars['String']['input']>;
-  id?: InputMaybe<Scalars['String']['input']>;
-  organization_id?: InputMaybe<Scalars['String']['input']>;
-  updated_at?: InputMaybe<Scalars['timestamp']['input']>;
-  upload_limit?: InputMaybe<Scalars['bigint']['input']>;
-};
-
-/** aggregate sum on columns */
-export type Subscriptions_Sum_Fields = {
-  __typename?: 'subscriptions_sum_fields';
-  download_limit?: Maybe<Scalars['bigint']['output']>;
-  upload_limit?: Maybe<Scalars['bigint']['output']>;
-};
-
-/** update columns of table "subscriptions" */
-export enum Subscriptions_Update_Column {
-  /** column name */
-  CreatedAt = 'created_at',
-  /** column name */
-  DownloadLimit = 'download_limit',
-  /** column name */
-  Granularity = 'granularity',
-  /** column name */
-  Id = 'id',
-  /** column name */
-  OrganizationId = 'organization_id',
-  /** column name */
-  UpdatedAt = 'updated_at',
-  /** column name */
-  UploadLimit = 'upload_limit'
-}
-
-export type Subscriptions_Updates = {
-  /** increments the numeric columns with given value of the filtered values */
-  _inc?: InputMaybe<Subscriptions_Inc_Input>;
-  /** sets the columns of the filtered rows to the given values */
-  _set?: InputMaybe<Subscriptions_Set_Input>;
-  /** filter the rows which have to be updated */
-  where: Subscriptions_Bool_Exp;
-};
-
-/** aggregate var_pop on columns */
-export type Subscriptions_Var_Pop_Fields = {
-  __typename?: 'subscriptions_var_pop_fields';
-  download_limit?: Maybe<Scalars['Float']['output']>;
-  upload_limit?: Maybe<Scalars['Float']['output']>;
-};
-
-/** aggregate var_samp on columns */
-export type Subscriptions_Var_Samp_Fields = {
-  __typename?: 'subscriptions_var_samp_fields';
-  download_limit?: Maybe<Scalars['Float']['output']>;
-  upload_limit?: Maybe<Scalars['Float']['output']>;
-};
-
-/** aggregate variance on columns */
-export type Subscriptions_Variance_Fields = {
-  __typename?: 'subscriptions_variance_fields';
-  download_limit?: Maybe<Scalars['Float']['output']>;
-  upload_limit?: Maybe<Scalars['Float']['output']>;
-};
-
 /** Boolean expression to compare columns of type "timestamp". All fields are combined with logical 'AND'. */
 export type Timestamp_Comparison_Exp = {
   _eq?: InputMaybe<Scalars['timestamp']['input']>;
@@ -3564,13 +3482,12 @@ export type GetMyFilesQueryVariables = Exact<{
   oauthProvider: Scalars['String']['input'];
   limit: Scalars['Int']['input'];
   offset: Scalars['Int']['input'];
-  orderBy?: InputMaybe<Array<Metadata_Roots_Order_By> | Metadata_Roots_Order_By>;
   search: Scalars['String']['input'];
-  aggregateLimit: Scalars['Int']['input'];
+  orderBy?: InputMaybe<Array<Object_Ownership_Order_By> | Object_Ownership_Order_By>;
 }>;
 
 
-export type GetMyFilesQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', tags?: Array<string> | null, created_at?: any | null, cid?: string | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, inner_metadata?: { __typename?: 'metadata', published_objects?: { __typename?: 'published_objects', id: string } | null, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, object_ownership: Array<{ __typename?: 'object_ownership', oauth_provider: string, oauth_user_id: string, is_admin?: boolean | null }> } | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type GetMyFilesQuery = { __typename?: 'query_root', object_ownership: Array<{ __typename?: 'object_ownership', cid: string, is_admin?: boolean | null, oauth_provider: string, oauth_user_id: string, metadata?: { __typename?: 'metadata', tags?: Array<string> | null, created_at?: any | null, cid: string, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, children?: any | null, published_objects?: { __typename?: 'published_objects', id: string } | null, publishedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, archivedNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null }, totalNodes: { __typename?: 'nodes_aggregate', aggregate?: { __typename?: 'nodes_aggregate_fields', count: number } | null } } | null }>, object_ownership_aggregate: { __typename?: 'object_ownership_aggregate', aggregate?: { __typename?: 'object_ownership_aggregate_fields', count: number } | null } };
 
 export type GetMetadataByHeadCidQueryVariables = Exact<{
   headCid: Scalars['String']['input'];
@@ -3957,22 +3874,26 @@ export type GetTrashedFilesLazyQueryHookResult = ReturnType<typeof useGetTrashed
 export type GetTrashedFilesSuspenseQueryHookResult = ReturnType<typeof useGetTrashedFilesSuspenseQuery>;
 export type GetTrashedFilesQueryResult = Apollo.QueryResult<GetTrashedFilesQuery, GetTrashedFilesQueryVariables>;
 export const GetMyFilesDocument = gql`
-    query GetMyFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String!, $aggregateLimit: Int!) {
-  metadata_roots(
-    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
+    query GetMyFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $search: String!, $orderBy: [object_ownership_order_by!]) {
+  object_ownership(
+    where: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}, _or: [{metadata: {head_cid: {_ilike: $search}}}, {metadata: {name: {_ilike: $search}}}]}
     limit: $limit
     offset: $offset
     order_by: $orderBy
   ) {
-    cid: head_cid
-    tags
-    type: metadata(path: "type")
-    name: metadata(path: "name")
-    mimeType: metadata(path: "mimeType")
-    size: metadata(path: "totalSize")
-    children: metadata(path: "children")
-    created_at
-    inner_metadata {
+    cid
+    is_admin
+    oauth_provider
+    oauth_user_id
+    metadata {
+      cid: head_cid
+      tags
+      type: metadata(path: "type")
+      name: metadata(path: "name")
+      mimeType: metadata(path: "mimeType")
+      size: metadata(path: "totalSize")
+      children: metadata(path: "children")
+      created_at
       published_objects {
         id
       }
@@ -3991,16 +3912,10 @@ export const GetMyFilesDocument = gql`
           count
         }
       }
-      object_ownership {
-        oauth_provider
-        oauth_user_id
-        is_admin
-      }
     }
   }
-  metadata_roots_aggregate(
-    limit: $aggregateLimit
-    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}, _or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}}
+  object_ownership_aggregate(
+    where: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}, _or: [{metadata: {head_cid: {_ilike: $search}}}, {metadata: {name: {_ilike: $search}}}]}
   ) {
     aggregate {
       count
@@ -4025,9 +3940,8 @@ export const GetMyFilesDocument = gql`
  *      oauthProvider: // value for 'oauthProvider'
  *      limit: // value for 'limit'
  *      offset: // value for 'offset'
- *      orderBy: // value for 'orderBy'
  *      search: // value for 'search'
- *      aggregateLimit: // value for 'aggregateLimit'
+ *      orderBy: // value for 'orderBy'
  *   },
  * });
  */
