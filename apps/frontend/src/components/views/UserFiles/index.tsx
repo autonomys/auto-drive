@@ -6,7 +6,11 @@ import { useUserStore } from 'globalStates/user';
 import { SearchBar } from '@/components/molecules/SearchBar';
 import { FileActionButtons, FileTable } from '@/components/organisms/FileTable';
 import { NoUploadsPlaceholder } from '@/components/molecules/NoUploadsPlaceholder';
-import { GetMyFilesDocument, GetMyFilesQuery } from 'gql/graphql';
+import {
+  GetMyFilesDocument,
+  GetMyFilesQuery,
+  Metadata_Roots_Order_By,
+} from 'gql/graphql';
 import { objectSummaryFromUserFilesQuery } from './utils';
 import { Fetcher, useFileTableState } from '../../organisms/FileTable/state';
 import { useNetwork } from 'contexts/network';
@@ -14,11 +18,14 @@ import { UploadButton } from '../../molecules/UploadButton';
 import { UserAsyncDownloads } from '../../organisms/UserAsyncDownloads';
 import { ToBeReviewedFiles } from '../../organisms/FilesToBeReviewed';
 
+const toOwnershipOrderBy = (sortBy: Metadata_Roots_Order_By) => ({
+  metadata: sortBy,
+});
+
 export const UserFiles = () => {
   const setObjects = useFileTableState((e) => e.setObjects);
   const setFetcher = useFileTableState((e) => e.setFetcher);
   const user = useUserStore((state) => state.user);
-  const aggregateLimit = useFileTableState((e) => e.aggregateLimit);
   const { gql } = useNetwork();
 
   const fetcher: Fetcher = useCallback(
@@ -30,19 +37,18 @@ export const UserFiles = () => {
           offset: page * limit,
           oauthUserId: user?.oauthUserId ?? '',
           oauthProvider: user?.oauthProvider ?? '',
-          orderBy: sortBy,
           search: `%${searchQuery}%`,
-          aggregateLimit,
+          orderBy: toOwnershipOrderBy(sortBy),
         },
         fetchPolicy: 'no-cache',
       });
 
       return {
         objects: objectSummaryFromUserFilesQuery(data),
-        total: data.metadata_roots_aggregate?.aggregate?.count ?? 0,
+        total: data.object_ownership_aggregate?.aggregate?.count ?? 0,
       };
     },
-    [gql, user?.oauthProvider, user?.oauthUserId, aggregateLimit],
+    [gql, user?.oauthProvider, user?.oauthUserId],
   );
 
   useEffect(() => {
