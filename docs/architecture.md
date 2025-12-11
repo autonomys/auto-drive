@@ -218,7 +218,38 @@ Hasura provides a GraphQL API layer on top of PostgreSQL:
 
 ### Message Queue (RabbitMQ)
 
-RabbitMQ handles asynchronous task processing:
+RabbitMQ handles asynchronous task processing with automatic retries and error handling.
+
+#### Architecture
+
+```mermaid
+flowchart LR
+    subgraph Publishers
+        Backend["Backend API"]
+        Workers["Worker Processes"]
+    end
+
+    subgraph Queues["RabbitMQ Queues"]
+        TM["task-manager"]
+        DM["download-manager"]
+        FE["frontend-errors"]
+        DE["download-errors"]
+    end
+
+    subgraph Consumers
+        FW["Frontend Worker"]
+        DW["Download Worker"]
+    end
+
+    Backend --> TM
+    Backend --> DM
+    TM --> FW
+    DM --> DW
+    FW -->|"retries exhausted"| FE
+    DW -->|"retries exhausted"| DE
+    FW -->|"retry"| TM
+    DW -->|"retry"| DM
+```
 
 #### Task Types
 
@@ -233,6 +264,46 @@ RabbitMQ handles asynchronous task processing:
 | `async-download-created`  | download-manager | Prepare async download          |
 | `object-archived`         | download-manager | Handle post-archival tasks      |
 | `populate-cache`          | download-manager | Pre-populate download cache     |
+
+#### Retry & Error Handling
+
+Each task includes a `retriesLeft` counter (configured via `TASK_MANAGER_MAX_RETRIES`):
+
+1. **On success**: Message is acknowledged and removed from queue
+2. **On failure with retries remaining**: Task is re-published with decremented `retriesLeft`
+3. **On failure with no retries**: Task is moved to the error queue (`frontend-errors` or `download-errors`)
+
+```typescript
+// Task structure
+interface Task {
+  id: string; // Task type identifier
+  params: object; // Task-specific parameters
+  retriesLeft: number; // Remaining retry attempts
+}
+```
+
+#### Configuration
+
+| Variable                   | Description                              |
+| -------------------------- | ---------------------------------------- |
+| `RABBITMQ_URL`             | Connection string                        |
+| `RABBITMQ_PREFETCH`        | Max unacknowledged messages per consumer |
+| `TASK_MANAGER_MAX_RETRIES` | Default retry count for new tasks        |
+
+#### Implementation
+
+```
+apps/backend/src/infrastructure/
+├── drivers/
+│   └── rabbit.ts           # Connection, publish/subscribe, keepalive
+└── eventRouter/
+    ├── index.ts            # Task routing (queue selection)
+    ├── tasks.ts            # Task schemas (Zod validation)
+    ├── utils.ts            # Retry wrapper with error handling
+    └── processors/
+        ├── frontend.ts     # Upload/publish task handlers
+        └── download.ts     # Download/cache task handlers
+```
 
 ---
 
