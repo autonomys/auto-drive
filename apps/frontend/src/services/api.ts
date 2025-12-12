@@ -333,10 +333,13 @@ export const createApiService = ({
     cid: string,
     password?: string,
   ): Promise<AsyncIterable<Buffer>> => {
+    const session = await getAuthSession();
+   
     const api = createAutoDriveApi({
       downloadServiceUrl: downloadApiUrl,
       apiUrl: apiBaseUrl,
-      apiKey: null,
+      apiKey: session?.accessToken ?? null,
+      provider: (session?.authProvider as AuthProvider | undefined) ?? undefined,
     });
 
     return api.downloadFile(cid, password);
