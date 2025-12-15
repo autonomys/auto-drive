@@ -125,7 +125,7 @@ export const createApiService = ({
     }
 
     return response.json();
-  },  
+  },
   getUserList: async (
     userPublicIds: string[],
   ): Promise<Record<string, AccountInfo>> => {
@@ -331,16 +331,36 @@ export const createApiService = ({
   // Download
   downloadObject: async (
     cid: string,
-    password?: string,
+    options?: {
+      password?: string;
+      skipDecryption?: boolean;
+    },
   ): Promise<AsyncIterable<Buffer>> => {
-    const session = await getAuthSession();
-   
+    const { password, skipDecryption } = options ?? {};
+    const session = await getAuthSession().catch(() => null);
+
     const api = createAutoDriveApi({
       downloadServiceUrl: downloadApiUrl,
       apiUrl: apiBaseUrl,
       apiKey: session?.accessToken ?? null,
-      provider: (session?.authProvider as AuthProvider | undefined) ?? undefined,
+      provider:
+        (session?.authProvider as AuthProvider | undefined) ?? undefined,
     });
+
+    if (skipDecryption) {
+      const { asyncFromStream } = await import('@autonomys/asynchronous');
+      const response = await api.sendDownloadRequest(
+        `/downloads/${cid}?ignoreEncoding=true`,
+        { method: 'GET' },
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to download file: ${response.statusText}`);
+      }
+      if (!response.body) {
+        throw new Error('No body returned from download request');
+      }
+      return asyncFromStream(response.body);
+    }
 
     return api.downloadFile(cid, password);
   },
