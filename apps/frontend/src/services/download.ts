@@ -1,24 +1,39 @@
 'use client';
 
-import { handleFileDownload } from 'utils/file';
+import {
+  handleFileDownload,
+  DownloadProgressCallback,
+  DownloadProgressInfo,
+} from 'utils/file';
 import { openDatabase } from 'utils/indexedb';
 import { bufferToIterable } from 'utils/async';
 import { useNetwork } from 'contexts/network';
 import { Api } from 'services/api';
 
+export type { DownloadProgressInfo };
+
+export interface DownloadOptions {
+  password?: string;
+  skipDecryption?: boolean;
+  onProgress?: DownloadProgressCallback;
+}
+
 export interface DownloadApi {
-  fetchFile: (cid: string, password?: string) => Promise<void>;
+  fetchFile: (cid: string, options?: DownloadOptions) => Promise<void>;
 }
 
 export const createDownloadService = (api: Api) => {
-  const fetchFile = async (cid: string, password?: string) => {
-    const fileInCache = await hasFileInCache(cid);
+  const fetchFile = async (cid: string, options?: DownloadOptions) => {
+    const { password, skipDecryption, onProgress } = options ?? {};
 
-    if (fileInCache) {
-      return fetchFromCache(cid);
+    if (!skipDecryption) {
+      const fileInCache = await hasFileInCache(cid);
+      if (fileInCache) {
+        return fetchFromCache(cid, onProgress);
+      }
     }
 
-    return fetchFromApi(cid, password);
+    return fetchFromApi(cid, password, skipDecryption, onProgress);
   };
 
   const hasFileInCache = async (cid: string) => {
@@ -48,12 +63,12 @@ export const createDownloadService = (api: Api) => {
       resolve: (data: Buffer) => void;
     },
   ): AsyncIterable<Buffer> {
-    let buffer = Buffer.alloc(0);
+    const chunks: Buffer[] = [];
     for await (const chunk of file) {
-      buffer = Buffer.concat([buffer, chunk]);
+      chunks.push(chunk);
       yield chunk;
     }
-    promiseResolvers.resolve(buffer);
+    promiseResolvers.resolve(Buffer.concat(chunks));
   };
 
   const saveFileToCache = async (cid: string, buffer: Buffer) => {
@@ -88,31 +103,51 @@ export const createDownloadService = (api: Api) => {
     return `files-${objectStoreVersion}`;
   };
 
-  const fetchFromApi = async (cid: string, password?: string) => {
+  const fetchFromApi = async (
+    cid: string,
+    password?: string,
+    skipDecryption?: boolean,
+    onProgress?: DownloadProgressCallback,
+  ) => {
     const { metadata } = await api.fetchUploadedObjectMetadata(cid);
+    const totalSize = Number(metadata.totalSize);
 
     const StreamSaver = await import('streamsaver');
 
-    let download = await api.downloadObject(metadata.dataCid, password);
+    let download = await api.downloadObject(metadata.dataCid, {
+      password,
+      skipDecryption,
+    });
 
-    if (metadata.totalSize < MAX_CACHEABLE_FILE_SIZE) {
+    if (!skipDecryption && totalSize < MAX_CACHEABLE_FILE_SIZE) {
       new Promise<Buffer>((resolve) => {
         download = addFileToCache(download, { resolve });
       }).then((buffer) => saveFileToCache(cid, buffer));
     }
 
+    const fileName =
+      metadata.type === 'file' ? metadata.name! : `${metadata.name!}.zip`;
+    const downloadFileName = skipDecryption
+      ? `${fileName}.encrypted`
+      : fileName;
+
     // Create a writable stream using StreamSaver
-    const fileStream = StreamSaver.createWriteStream(
-      metadata.type === 'file' ? metadata.name! : `${metadata.name!}.zip`,
-      { size: Number(metadata.totalSize) },
-    );
+    const fileStream = StreamSaver.createWriteStream(downloadFileName, {
+      size: totalSize,
+    });
     const writer = fileStream.getWriter();
     writer.write(Buffer.alloc(0));
 
-    await handleFileDownload(download, writer);
+    await handleFileDownload(download, writer, {
+      totalSize,
+      onProgress,
+    });
   };
 
-  const fetchFromCache = async (cid: string) => {
+  const fetchFromCache = async (
+    cid: string,
+    onProgress?: DownloadProgressCallback,
+  ) => {
     try {
       const objectStoreName = getObjectStoreName();
       const db = await openDatabase(objectStoreName);
@@ -126,22 +161,25 @@ export const createDownloadService = (api: Api) => {
       });
 
       const { metadata } = await api.fetchUploadedObjectMetadata(cid);
+      const totalSize = Number(metadata.totalSize);
 
       const StreamSaver = await import('streamsaver');
 
       // Create a writable stream using StreamSaver
       const fileStream = StreamSaver.createWriteStream(
         metadata.type === 'file' ? metadata.name! : `${metadata.name!}.zip`,
-        { size: Number(metadata.totalSize) },
+        { size: totalSize },
       );
       const writer = fileStream.getWriter();
       writer.write(Buffer.alloc(0));
 
-      await handleFileDownload(bufferToIterable(buffer), writer);
+      await handleFileDownload(bufferToIterable(buffer), writer, {
+        totalSize,
+        onProgress,
+      });
     } catch (error) {
       console.error('Fetching from cache failed:', error);
-      // Fall back to API fetch
-      await fetchFromApi(cid);
+      await fetchFromApi(cid, undefined, false, onProgress);
     }
   };
 
