@@ -13,7 +13,7 @@
     "@apollo/client": "^3.11.10",
     "@auto-drive/models": "workspace:*",
     "@auto-drive/ui": "workspace:*",
-    "@autonomys/auto-dag-data": "1.6.4-beta.1",
+    "@autonomys/auto-dag-data": "1.6.4",
     "@autonomys/auto-design-system": "1.6.4-beta.1",
     "@autonomys/auto-drive": "1.6.4-beta.1",
     "@cyntler/react-doc-viewer": "^1.17.0",
