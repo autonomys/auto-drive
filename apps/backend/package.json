@@ -27,7 +27,7 @@
     "@autonomys/auto-dag-data": "1.6.4-beta.1",
     "@autonomys/auto-drive": "1.6.4-beta.1",
     "@autonomys/auto-files": "1.6.4-beta.1",
-    "@autonomys/file-server": "1.6.4-beta.1",
+    "@autonomys/file-server": "1.6.4",
     "@autonomys/rpc": "1.6.4-beta.1",
     "@keyvhq/sqlite": "^2.1.6",
     "@polkadot/api": "^15.8.1",
