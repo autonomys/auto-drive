@@ -25,7 +25,7 @@
     "@autonomys/asynchronous": "1.6.4-beta.1",
     "@autonomys/auto-consensus": "1.6.4-beta.1",
     "@autonomys/auto-dag-data": "1.6.4-beta.1",
-    "@autonomys/auto-drive": "1.6.4-beta.1",
+    "@autonomys/auto-drive": "1.6.4",
     "@autonomys/auto-files": "1.6.4-beta.1",
     "@autonomys/file-server": "1.6.4-beta.1",
     "@autonomys/rpc": "1.6.4-beta.1",
