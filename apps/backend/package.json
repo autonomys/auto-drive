@@ -23,7 +23,7 @@
     "@auto-drive/s3": "workspace:*",
     "@auto-files/rpc-apis": "workspace:*",
     "@autonomys/asynchronous": "1.6.4-beta.1",
-    "@autonomys/auto-consensus": "1.6.4-beta.1",
+    "@autonomys/auto-consensus": "1.6.4",
     "@autonomys/auto-dag-data": "1.6.4-beta.1",
     "@autonomys/auto-drive": "1.6.4-beta.1",
     "@autonomys/auto-files": "1.6.4-beta.1",
