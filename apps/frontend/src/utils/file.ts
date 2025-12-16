@@ -49,9 +49,10 @@ export const handleFileDownload = async (
       onProgress({
         downloadedBytes: writtenSize,
         totalBytes: totalSize ?? null,
-        percentage: totalSize
-          ? Math.round((writtenSize / totalSize) * 100)
-          : null,
+        percentage:
+          typeof totalSize === 'number' && totalSize > 0
+            ? Math.round((writtenSize / totalSize) * 100)
+            : null,
       });
     }
   };

@@ -354,7 +354,19 @@ export const createApiService = ({
         { method: 'GET' },
       );
       if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.statusText}`);
+        let errorMsg: string;
+        if (response.status === 401) {
+          errorMsg = 'Authentication required to download this file';
+        } else if (response.status === 403) {
+          errorMsg = 'You do not have permission to download this file';
+        } else if (response.status === 404) {
+          errorMsg = 'File not found';
+        } else if (response.status >= 500) {
+          errorMsg = 'Server error occurred while downloading the file';
+        } else {
+          errorMsg = `Failed to download file: ${response.statusText}`;
+        }
+        throw new Error(errorMsg);
       }
       if (!response.body) {
         throw new Error('No body returned from download request');

@@ -23,16 +23,9 @@ import { useGetMetadataByHeadCidQuery } from 'gql/graphql';
 import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { useNetwork } from 'contexts/network';
 import { DownloadProgressInfo } from 'services/download';
+import { formatBytes } from 'utils/number';
 
 const toastId = 'object-download-modal';
-
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-};
 
 export const ObjectDownloadModal = ({
   cid,
@@ -79,7 +72,9 @@ export const ObjectDownloadModal = ({
       const summary = mapObjectInformationFromQueryResult(data);
       setMetadata(summary.metadata);
       setInsecure(summary.tags.includes('insecure'));
-      if (downloadInitiatedRef.current !== cid) {
+
+      const dataCid = summary.metadata?.dataCid;
+      if (dataCid && downloadInitiatedRef.current !== dataCid) {
         setPassword(undefined);
         setPasswordConfirmed(false);
         if (defaultPassword && !wrongPassword) {
@@ -94,7 +89,7 @@ export const ObjectDownloadModal = ({
   });
 
   const onDownload = useCallback(async () => {
-    if (!metadata) return <DialogTitle>Fetching metadata...</DialogTitle>;
+    if (!metadata) return;
     const passwordToUse = skipDecryption ? undefined : password;
 
     setDownloadError(null);
@@ -121,9 +116,10 @@ export const ObjectDownloadModal = ({
         setSkipDecryption(false);
         setWrongPassword(true);
         setIsDownloading(false);
+        downloadInitiatedRef.current = null;
       } else {
-        const errorMessage =
-          e instanceof Error ? e.message : 'Download failed. Please try again.';
+        console.error('Download failed:', e);
+        const errorMessage = 'Download failed. Please try again.';
         setDownloadError(errorMessage);
         toast.error(errorMessage, { id: toastId });
         setIsDownloading(false);
@@ -184,6 +180,10 @@ export const ObjectDownloadModal = ({
             <div
               className='h-full rounded-full bg-primary transition-all duration-300 ease-out'
               style={{ width: `${percentage}%` }}
+              role='progressbar'
+              aria-valuenow={percentage}
+              aria-valuemin={0}
+              aria-valuemax={100}
             />
           </div>
           <div className='mt-2 text-center text-sm font-medium text-gray-700'>
@@ -270,7 +270,7 @@ export const ObjectDownloadModal = ({
               <input
                 type='password'
                 id='password'
-                value={password}
+                value={password ?? ''}
                 onChange={(e) => setPassword(e.target.value)}
                 className='block w-full rounded-md border border-gray-300 p-2 shadow-sm'
                 placeholder='Password'
