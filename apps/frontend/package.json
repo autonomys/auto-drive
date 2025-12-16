@@ -14,7 +14,7 @@
     "@auto-drive/models": "workspace:*",
     "@auto-drive/ui": "workspace:*",
     "@autonomys/auto-dag-data": "1.6.4-beta.1",
-    "@autonomys/auto-design-system": "1.6.4-beta.1",
+    "@autonomys/auto-design-system": "1.6.4",
     "@autonomys/auto-drive": "1.6.4-beta.1",
     "@cyntler/react-doc-viewer": "^1.17.0",
     "@graphql-codegen/cli": "^5.0.3",
