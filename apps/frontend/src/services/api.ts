@@ -357,6 +357,8 @@ export const createApiService = ({
         let errorMsg: string;
         if (response.status === 401) {
           errorMsg = 'Authentication required to download this file';
+        } else if (response.status === 402) {
+          errorMsg = 'Download limit exceeded';
         } else if (response.status === 403) {
           errorMsg = 'You do not have permission to download this file';
         } else if (response.status === 404) {
