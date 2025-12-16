@@ -39,9 +39,20 @@ export const handleOptionalAuth = async (
   req: Request,
   res: Response,
 ): Promise<UserWithOrganization | boolean | null> => {
-  if (config.params.optionalAuth) {
-    return true
+  const accessToken = req.headers.authorization?.split(' ')[1]
+  const providerHeader = req.headers['x-auth-provider']
+  const hasAuthHeaders =
+    typeof accessToken === 'string' && typeof providerHeader === 'string'
+
+  // If credentials are provided, always attempt to authenticate the user,
+  // regardless of OPTIONAL_AUTH flag. This ensures API keys and tokens are honored.
+  if (hasAuthHeaders) {
+    return handleAuth(req, res)
   }
+
+  // If OPTIONAL_AUTH is enabled and no credentials are provided,
+  // allow anonymous access by returning true.
+  if (config.params.optionalAuth) return true
 
   return handleAuth(req, res)
 }
