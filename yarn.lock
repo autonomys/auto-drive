@@ -184,7 +184,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autonomys/asynchronous@npm:1.6.5":
+"@autonomys/asynchronous@npm:1.6.5, @autonomys/asynchronous@npm:^1.4.36, @autonomys/asynchronous@npm:^1.5.14, @autonomys/asynchronous@npm:^1.6.5":
   version: 1.6.5
   resolution: "@autonomys/asynchronous@npm:1.6.5"
   dependencies:
@@ -203,7 +203,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-dag-data@npm:1.6.5":
+"@autonomys/auto-dag-data@npm:1.6.5, @autonomys/auto-dag-data@npm:^1.4.31, @autonomys/auto-dag-data@npm:^1.4.35, @autonomys/auto-dag-data@npm:^1.5.14, @autonomys/auto-dag-data@npm:^1.6.5":
   version: 1.6.5
   resolution: "@autonomys/auto-dag-data@npm:1.6.5"
   dependencies:
@@ -280,7 +280,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-utils@npm:1.6.5":
+"@autonomys/auto-utils@npm:1.6.5, @autonomys/auto-utils@npm:^1.4.31, @autonomys/auto-utils@npm:^1.5.14, @autonomys/auto-utils@npm:^1.6.5":
   version: 1.6.5
   resolution: "@autonomys/auto-utils@npm:1.6.5"
   dependencies:
@@ -341,7 +341,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/rpc@npm:1.6.5":
+"@autonomys/rpc@npm:1.6.5, @autonomys/rpc@npm:^1.4.31, @autonomys/rpc@npm:^1.5.6":
   version: 1.6.5
   resolution: "@autonomys/rpc@npm:1.6.5"
   dependencies:
