@@ -1,54 +1,45 @@
-# Auto-Drive (Front-End)
+# Frontend
 
-This application is the frontend for interacting with Auto-Drive's API.
+Next.js web application for Auto Drive providing file upload, download, sharing, and API key management.
 
-This application enables the user to:
-
-- Upload files
-- Download files
-- Create API Keys
-- Share files
-
-## Getting Started
-
-To clone the repository, run the following command in your terminal:
+## Quick Start
 
 ```bash
-git clone https://github.com/autonomys/auto-drive
-
-cd auto-drive/frontend
-```
-
-Once the repository is cloned, you need to setup your environment.
-
-Execute this command for creating the environment file and then fulfill every missing entry.
-
-```
+# Set up environment
 cp .env.sample .env.local
-```
 
-Install dependencies with this command:
-
-```bash
-npm install
-# or
+# Install dependencies (from repo root)
 yarn install
-# or
-pnpm install
-# or
-bun install
+
+# Start development server
+yarn workspace frontend dev
 ```
 
-Once, all this is setup you can launch it with:
+Open [http://localhost:8080](http://localhost:8080) in your browser.
+
+## Features
+
+- Upload and download files to/from Autonomys Network
+- Share files with other users
+- Manage API keys for programmatic access
+- Web3 wallet authentication (SIWE)
+- OAuth authentication (Google, Discord, GitHub)
+
+## Environment Variables
+
+See `.env.sample` for required configuration.
+
+## GraphQL Codegen
+
+To regenerate GraphQL types after schema changes:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+yarn workspace frontend codegen
 ```
 
-Open [http://localhost:8080](http://localhost:8080) with your browser to see the result.
+## Build
+
+```bash
+yarn workspace frontend build
+yarn workspace frontend start
+```
