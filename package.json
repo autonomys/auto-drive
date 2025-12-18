@@ -42,9 +42,9 @@
     "siwe": "^3.0.0"
   },
   "resolutions": {
-    "@autonomys/asynchronous": "1.6.4-beta.1",
-    "@autonomys/auto-dag-data": "1.6.4-beta.1",
-    "@autonomys/auto-utils": "1.6.4-beta.1",
-    "@autonomys/rpc": "1.6.4-beta.1"
+    "@autonomys/asynchronous": "1.6.5",
+    "@autonomys/auto-dag-data": "1.6.5",
+    "@autonomys/auto-utils": "1.6.5",
+    "@autonomys/rpc": "1.6.5"
   }
 }
