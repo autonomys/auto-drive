@@ -30,7 +30,7 @@ The service supports multiple authentication providers:
 
 - Uses GitHub API
 - Validates access tokens via `https://api.github.com/user`
-- Uses GitHub login as username
+- Uses GitHub login as username and avatar URL from profile
 
 ### 4. **Web3 Wallet (SIWE)**
 
@@ -50,8 +50,6 @@ The service supports multiple authentication providers:
 - Used for authenticated sessions after OAuth login
 - Supports access tokens (1 hour expiry) and refresh tokens (7 days expiry)
 - Includes Hasura-compatible claims for GraphQL authorization
-
-## User Flow
 
 ## Configuration
 
@@ -89,7 +87,7 @@ User public IDs are generated using UUID v5 with a deterministic namespace:
 
 ```typescript
 const input = `${oauthProvider}-${oauthUserId}`;
-const publicId = v5(input, Buffer.from("public-id-user-1"));
+const publicId = v5(input, Buffer.from('public-id-user-1'));
 ```
 
 This ensures the same OAuth user always gets the same public ID across service restarts.
@@ -100,7 +98,6 @@ The service includes a Dockerfile that:
 
 - Uses Node.js 20.18.3
 - Installs build dependencies
-- Runs migrations
 - Exposes port 3030
 - Includes health check endpoint
 
@@ -173,6 +170,8 @@ yarn workspace auth lambda:build
 #### `GET /users/list`: Lists all users (paginated)
 
 #### `GET /users/:publicId`: Gets user information by public ID
+
+#### `POST /users/batch`: Gets multiple users by publicIds (admin only)
 
 ### Organization Endpoints
 

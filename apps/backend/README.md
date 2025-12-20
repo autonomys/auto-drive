@@ -1,56 +1,50 @@
-## API Usage
+# Backend Service
 
-You can interact with the server using the following curl commands:
+Core API service for Auto Drive handling file uploads, downloads, object management, and blockchain interactions.
 
-### Submit Data
-
-To submit data to the server:
+## Quick Start
 
 ```bash
-curl -X POST http://localhost:3000/upload-file \
-     -H "Content-Type: application/json" \
-     -d '{
-       "data": "Your data here",
-       "dataType": "raw",
-       "name": "example.txt",
-       "mimeType": "text/plain"
-     }'
+# Set up environment
+cp .env.sample .env
+
+# Start required services (PostgreSQL, RabbitMQ)
+docker compose -f dev-docker-compose.yml up -d
+
+# Start the frontend API server
+yarn workspace backend dev start:fe
 ```
 
-This will return a JSON response with the metadata CID of the stored data:
+## Available Servers
 
-```json
-{
-  "metadataCid": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-}
-```
+The backend runs multiple server modes:
 
-### Retrieve Data
+| Command                 | Description                    |
+| ----------------------- | ------------------------------ |
+| `start:fe`              | Frontend API server            |
+| `start:fe:api`          | Frontend API only (no workers) |
+| `start:fe:worker`       | Frontend worker only           |
+| `start:download`        | Download server                |
+| `start:download:api`    | Download API only              |
+| `start:download:worker` | Download worker only           |
 
-To retrieve data from the server using its metadata CID:
+## Environment Variables
+
+See `.env.sample` for required configuration including:
+
+- `DATABASE_URL` - PostgreSQL connection string
+- `RABBITMQ_URL` - RabbitMQ connection string
+- `RPC_ENDPOINT` - Autonomys Network RPC endpoint
+- `AUTH_SERVICE_URL` - Auth service URL
+
+## Testing
 
 ```bash
-curl http://localhost:3000/retrieve/1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+yarn workspace backend test
 ```
 
-Replace the CID in the URL with the actual metadata CID you received when submitting the data.
+## Further Documentation
 
-This will return a JSON response with the retrieved data:
-
-```json
-{
-  "data": "Your data here"
-}
-```
-
-If the data is not found, you'll receive a 404 error response.
-
-Note: Make sure the server is running (use `yarn start:server`) before executing these commands.
-
-### Additional Information
-
-- The server can handle both small and large data submissions.
-- For large data (>64KB), the server will automatically chunk the data and store it accordingly.
-- The `dataType` field in the submit request can be either "raw" or "file".
-- You can include optional `name` and `mimeType` fields for better metadata management.
-- Custom metadata can be included in the submit request as additional fields.
+- [docs/file-lifecycle.md](../../docs/file-lifecycle.md) - File upload and archival process
+- [docs/payments.md](../../docs/payments.md) - Payment and credits system
+- [docs/architecture.md](../../docs/architecture.md) - System architecture
