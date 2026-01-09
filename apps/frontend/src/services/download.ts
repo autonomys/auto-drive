@@ -9,6 +9,7 @@ import { openDatabase } from 'utils/indexedb';
 import { bufferToIterable } from 'utils/async';
 import { useNetwork } from 'contexts/network';
 import { Api } from 'services/api';
+import { getAuthSession } from '@/utils/auth';
 
 export type { DownloadProgressInfo };
 
@@ -96,6 +97,9 @@ export const createDownloadService = (api: Api) => {
 
   const MiB = 1024 * 1024;
   const MAX_CACHEABLE_FILE_SIZE = 150 * MiB;
+  const MAX_ANONYMOUS_DOWNLOAD_SIZE = Number(
+    process.env.NEXT_PUBLIC_MAX_ANONYMOUS_DOWNLOAD_SIZE ?? 100 * MiB,
+  );
 
   const getObjectStoreName = () => {
     const objectStoreVersion =
@@ -114,9 +118,22 @@ export const createDownloadService = (api: Api) => {
 
     const StreamSaver = await import('streamsaver');
 
+    const session = await getAuthSession().catch(() => null);
+    const hasSession = !!session?.accessToken && !!session?.authProvider;
+
+    if (totalSize > MAX_ANONYMOUS_DOWNLOAD_SIZE && !hasSession) {
+      throw new Error(
+        'Downloading large files require authorization, please login via gauth, wallet, github or discord',
+      );
+    }
+
+    const authMode =
+      totalSize > MAX_ANONYMOUS_DOWNLOAD_SIZE ? 'session' : 'anonymous';
+
     let download = await api.downloadObject(metadata.dataCid, {
       password,
       skipDecryption,
+      authMode,
     });
 
     if (!skipDecryption && totalSize < MAX_CACHEABLE_FILE_SIZE) {

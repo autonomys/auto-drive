@@ -119,7 +119,10 @@ export const ObjectDownloadModal = ({
         downloadInitiatedRef.current = null;
       } else {
         console.error('Download failed:', e);
-        const errorMessage = 'Download failed. Please try again.';
+        const errorMessage =
+          e instanceof Error && e.message
+            ? e.message
+            : 'Download failed. Please try again.';
         setDownloadError(errorMessage);
         toast.error(errorMessage, { id: toastId });
         setIsDownloading(false);
