@@ -97,9 +97,20 @@ export const createDownloadService = (api: Api) => {
 
   const MiB = 1024 * 1024;
   const MAX_CACHEABLE_FILE_SIZE = 150 * MiB;
-  const MAX_ANONYMOUS_DOWNLOAD_SIZE = Number(
-    process.env.NEXT_PUBLIC_MAX_ANONYMOUS_DOWNLOAD_SIZE ?? 100 * MiB,
-  );
+  const LARGE_DOWNLOAD_LOGIN_MESSAGE =
+    'Downloading large files require authorization, please login via gauth, wallet, github or discord';
+
+  const isAnonymousTooLargeError = (e: unknown): boolean => {
+    if (!(e instanceof Error)) return false;
+    const msg = e.message.toLowerCase();
+    return (
+      msg.includes('downloading large files') ||
+      msg.includes('file too large') ||
+      msg.includes('payment required') ||
+      msg.includes('402') ||
+      msg.includes('download limit exceeded')
+    );
+  };
 
   const getObjectStoreName = () => {
     const objectStoreVersion =
@@ -121,20 +132,29 @@ export const createDownloadService = (api: Api) => {
     const session = await getAuthSession().catch(() => null);
     const hasSession = !!session?.accessToken && !!session?.authProvider;
 
-    if (totalSize > MAX_ANONYMOUS_DOWNLOAD_SIZE && !hasSession) {
-      throw new Error(
-        'Downloading large files require authorization, please login via gauth, wallet, github or discord',
-      );
+    let download: AsyncIterable<Buffer>;
+    try {
+      download = await api.downloadObject(metadata.dataCid, {
+        password,
+        skipDecryption,
+        authMode: 'anonymous',
+      });
+    } catch (e) {
+      // Option A: rely on backend logic — if anonymous is rejected (402),
+      // retry with session; otherwise propagate the original error.
+      if (!isAnonymousTooLargeError(e)) {
+        throw e;
+      }
+      if (!hasSession) {
+        throw new Error(LARGE_DOWNLOAD_LOGIN_MESSAGE);
+      }
+
+      download = await api.downloadObject(metadata.dataCid, {
+        password,
+        skipDecryption,
+        authMode: 'session',
+      });
     }
-
-    const authMode =
-      totalSize > MAX_ANONYMOUS_DOWNLOAD_SIZE ? 'session' : 'anonymous';
-
-    let download = await api.downloadObject(metadata.dataCid, {
-      password,
-      skipDecryption,
-      authMode,
-    });
 
     if (!skipDecryption && totalSize < MAX_CACHEABLE_FILE_SIZE) {
       new Promise<Buffer>((resolve) => {

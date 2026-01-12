@@ -340,9 +340,12 @@ export const createApiService = ({
     const { password, skipDecryption, authMode = 'auto' } = options ?? {};
     const session = await getAuthSession().catch(() => null);
 
-    if (authMode === 'session' && (!session?.accessToken || !session?.authProvider)) {
+    if (
+      authMode === 'session' &&
+      (!session?.accessToken || !session?.authProvider)
+    ) {
       throw new Error(
-        'Downloading large files requires authorization, please login via gauth, wallet, github or discord',
+        'Downloading large files require authorization, please login via gauth, wallet, github or discord',
       );
     }
 
@@ -375,7 +378,7 @@ export const createApiService = ({
           // and "not enough download credits". Use authMode to pick messaging.
           errorMsg =
             authMode === 'anonymous'
-              ? 'Downloading large files requires authorization, please login via gauth, wallet, github or discord'
+              ? 'Downloading large files require authorization, please login via gauth, wallet, github or discord'
               : 'Download limit exceeded';
         } else if (response.status === 403) {
           errorMsg = 'You do not have permission to download this file';
