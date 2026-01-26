@@ -18,6 +18,8 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+.infisical.json
+.tool-versions
 
 # IDE files
 .vscode/
