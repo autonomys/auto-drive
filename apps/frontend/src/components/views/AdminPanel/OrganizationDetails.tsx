@@ -149,9 +149,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       });
 
       const accountData = accountResult.data?.accounts?.[0];
-      if (accountData) {
-        setAccount(accountData);
-      }
+      setAccount(accountData || null);
 
       // Use the account.id for interactions query (organizationId param might be account.id or organization_id)
       const accountIdForInteractions = accountData?.id || organizationId;
