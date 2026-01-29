@@ -246,10 +246,12 @@ const getTopAccounts = async (
     fromDate,
     toDate,
     limit = 10,
+    type = 'upload',
   }: {
     limit: number | undefined
     fromDate: Date | null
     toDate: Date | null
+    type?: 'upload' | 'download'
   },
 ): Promise<Result<AccountWithTotalSize[], ForbiddenError>> => {
   if (user.role !== UserRole.Admin) {
@@ -258,9 +260,11 @@ const getTopAccounts = async (
     })
     return err(new ForbiddenError('User does not have admin privileges'))
   }
+  const interactionType =
+    type === 'download' ? InteractionType.Download : InteractionType.Upload
   return ok(
     await accountsRepository.getTopAccountsWithinPeriod(
-      InteractionType.Upload,
+      interactionType,
       fromDate ?? new Date(0),
       toDate ?? new Date(),
       limit,

@@ -57,6 +57,8 @@ export const ROUTES = {
   developers: (networkId: NetworkId) => `/${networkId}/drive/developers`,
   purchase: (networkId: NetworkId) => `/${networkId}/drive/purchase`,
   admin: (networkId: NetworkId) => `/${networkId}/drive/admin`,
+  adminOrganization: (networkId: NetworkId, organizationId: string) =>
+    `/${networkId}/drive/admin/organization/${organizationId}`,
   explorer: (networkId: NetworkId) => `/${networkId}/explorer`,
   publicFileDetails: (networkId: NetworkId, cid: string) =>
     `/${networkId}/explorer/${cid}`,
