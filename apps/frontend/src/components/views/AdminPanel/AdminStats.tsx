@@ -274,11 +274,15 @@ export const AdminStats = () => {
         </h2>
         <div className='flex flex-wrap items-end gap-4'>
           <div className='flex flex-col'>
-            <label className='mb-1 flex items-center gap-1 text-sm text-gray-500'>
+            <label
+              htmlFor='date-from'
+              className='mb-1 flex items-center gap-1 text-sm text-gray-500'
+            >
               <Calendar className='h-4 w-4' />
               From
             </label>
             <input
+              id='date-from'
               type='date'
               value={dayjs(dateRange.from).format('YYYY-MM-DD')}
               onChange={handleFromDateChange}
@@ -286,11 +290,15 @@ export const AdminStats = () => {
             />
           </div>
           <div className='flex flex-col'>
-            <label className='mb-1 flex items-center gap-1 text-sm text-gray-500'>
+            <label
+              htmlFor='date-to'
+              className='mb-1 flex items-center gap-1 text-sm text-gray-500'
+            >
               <Calendar className='h-4 w-4' />
               To
             </label>
             <input
+              id='date-to'
               type='date'
               value={dayjs(dateRange.to).format('YYYY-MM-DD')}
               onChange={handleToDateChange}
