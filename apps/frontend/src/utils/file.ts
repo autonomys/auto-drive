@@ -1,8 +1,8 @@
 import { OffchainMetadata } from '@autonomys/auto-dag-data';
 
 export class InvalidDecryptKey extends Error {
-  constructor() {
-    super('Invalid decrypt key');
+  constructor(cause?: Error) {
+    super('Invalid decrypt key', { cause });
   }
 }
 
@@ -77,7 +77,7 @@ export const handleFileDownload = async (
         errorMessage.includes('gcm') ||
         errorMessage.includes('tag')
       ) {
-        throw new InvalidDecryptKey();
+        throw new InvalidDecryptKey(error instanceof Error ? error : undefined);
       }
     }
     console.error('Download error after writing bytes:', writtenSize, error);
