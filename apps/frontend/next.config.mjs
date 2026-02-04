@@ -2,6 +2,11 @@ import path from 'path';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable standalone output for Docker deployments
+  // This creates a minimal Node.js server in .next/standalone
+  // See: https://nextjs.org/docs/app/api-reference/next-config-js/output
+  output: 'standalone',
+
   webpack: (config, { isServer }) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
