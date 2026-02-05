@@ -71,12 +71,21 @@ export const handleFileDownload = async (
       // Check if this looks like a decryption error (typically from encrypted file streams)
       const errorMessage =
         error instanceof Error ? error.message.toLowerCase() : '';
-      if (
+      const errorName = error instanceof Error ? error.name : '';
+
+      const isDecryptionError =
+        // Common keyword patterns
         errorMessage.includes('decrypt') ||
         errorMessage.includes('cipher') ||
         errorMessage.includes('gcm') ||
-        errorMessage.includes('tag')
-      ) {
+        errorMessage.includes('tag') ||
+        // Node.js crypto error: "Unsupported state or unable to authenticate data"
+        errorMessage.includes('unable to authenticate') ||
+        errorMessage.includes('unsupported state') ||
+        // Web Crypto API throws OperationError for decryption failures
+        errorName === 'OperationError';
+
+      if (isDecryptionError) {
         throw new InvalidDecryptKey(error instanceof Error ? error : undefined);
       }
     }
