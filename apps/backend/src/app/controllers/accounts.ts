@@ -75,6 +75,7 @@ accountController.get(
     }
 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 10
+    const type = req.query.type === 'download' ? 'download' : 'upload'
 
     const fromDate = req.query.from
       ? new Date(parseInt(req.query.from as string))
@@ -92,6 +93,7 @@ accountController.get(
         limit,
         fromDate,
         toDate,
+        type,
       }),
       'Failed to get top accounts',
     )

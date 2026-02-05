@@ -15,7 +15,7 @@ type DBAccount = {
 }
 
 type DBAccountWithTotalSize = DBAccount & {
-  total_size: number
+  total_size: string | number
 }
 
 const mapRows = (rows: DBAccount[]): Account[] => {
@@ -37,7 +37,7 @@ const mapRowsWithSize = (
     downloadLimit: Number(row.download_limit),
     organizationId: row.organization_id,
     model: row.model as AccountModel,
-    totalSize: row.total_size,
+    totalSize: Number(row.total_size),
   }))
 }
 
@@ -105,8 +105,18 @@ export const getTopAccountsWithinPeriod = async (
 ): Promise<AccountWithTotalSize[]> => {
   const db = await getDatabase()
 
+  // Move filter conditions to JOIN clause to preserve LEFT JOIN semantics
+  // and only return accounts that have interactions in the period
   const result = await db.query<DBAccountWithTotalSize>(
-    'SELECT a.*, COALESCE(SUM(i.size), 0) as total_size FROM accounts a LEFT JOIN interactions i ON a.id = i.account_id WHERE ($1 IS NULL OR i.type = $1) AND ($2 IS NULL OR i.created_at > $2) AND ($3 IS NULL OR i.created_at < $3) GROUP BY a.id ORDER BY total_size DESC LIMIT $4',
+    `SELECT a.*, COALESCE(SUM(i.size), 0)::bigint as total_size 
+     FROM accounts a 
+     INNER JOIN interactions i ON a.id = i.account_id 
+       AND i.type = $1 
+       AND i.created_at >= $2 
+       AND i.created_at <= $3
+     GROUP BY a.id 
+     ORDER BY total_size DESC 
+     LIMIT $4`,
     [type, fromDate, toDate, limit],
   )
   return mapRowsWithSize(result.rows)
