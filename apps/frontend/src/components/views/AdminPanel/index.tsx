@@ -10,6 +10,7 @@ import {
 } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
 import { Button } from '@auto-drive/ui';
+import { AdminStats } from './AdminStats';
 
 export const AdminPanel = () => {
   const [accountsWithUsers, setAccountsWithUsers] = useState<
@@ -127,53 +128,63 @@ export const AdminPanel = () => {
   };
 
   return (
-    <div>
-      <h1 className='mb-4 text-2xl font-bold'>Users</h1>
+    <div className='space-y-8'>
+      <h1 className='text-2xl font-bold'>Admin Dashboard</h1>
 
-      <div className='mb-6'>
-        <form onSubmit={handleSearchUser} className='flex items-end gap-2'>
-          <div className='flex flex-col'>
-            <label htmlFor='publicId' className='mb-1 text-sm'>
-              Search by Public ID
-            </label>
-            <input
-              id='publicId'
-              type='text'
-              value={searchPublicId}
-              onChange={(e) => setSearchPublicId(e.target.value)}
-              placeholder='Enter exact public ID'
-              className='bg-background-hover text-foreground-hover rounded border px-3 py-2'
-            />
-          </div>
-          <Button
-            variant='primary'
-            disabled={isSearching}
-            className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground disabled:opacity-50'
-          >
-            {isSearching ? 'Searching...' : 'Search'}
-          </Button>
-          {searchPublicId && (
+      {/* Analytics Section */}
+      <AdminStats />
+
+      {/* Users Section */}
+      <div className='rounded-lg border border-gray-200 bg-background p-6'>
+        <h2 className='mb-4 text-xl font-semibold'>Users</h2>
+
+        <div className='mb-6'>
+          <form onSubmit={handleSearchUser} className='flex items-end gap-2'>
+            <div className='flex flex-col'>
+              <label htmlFor='publicId' className='mb-1 text-sm'>
+                Search by Public ID
+              </label>
+              <input
+                id='publicId'
+                type='text'
+                value={searchPublicId}
+                onChange={(e) => setSearchPublicId(e.target.value)}
+                placeholder='Enter exact public ID'
+                className='bg-background-hover text-foreground-hover rounded border px-3 py-2'
+              />
+            </div>
             <Button
-              variant='danger'
-              onClick={handleResetSearch}
-              className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground'
+              variant='primary'
+              disabled={isSearching}
+              className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground disabled:opacity-50'
             >
-              Reset
+              {isSearching ? 'Searching...' : 'Search'}
             </Button>
+            {searchPublicId && (
+              <Button
+                variant='danger'
+                onClick={handleResetSearch}
+                className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground'
+              >
+                Reset
+              </Button>
+            )}
+          </form>
+          {searchError && (
+            <p className='text-light-danger mt-2'>{searchError}</p>
           )}
-        </form>
-        {searchError && <p className='text-light-danger mt-2'>{searchError}</p>}
-      </div>
+        </div>
 
-      <div className='flex flex-col gap-2'>
-        <UserAccountsTable
-          users={accountsWithUsers}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          itemsPerPage={itemsPerPage}
-          onPageChange={handlePageChange}
-          onItemsPerPageChange={handleItemsPerPageChange}
-        />
+        <div className='flex flex-col gap-2'>
+          <UserAccountsTable
+            users={accountsWithUsers}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            itemsPerPage={itemsPerPage}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
+        </div>
       </div>
     </div>
   );

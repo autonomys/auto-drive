@@ -170,9 +170,16 @@ downloadController.get(
         },
       )
 
+      // When ignoreEncoding=true is passed, the SDK is telling us it will handle
+      // decompression itself. We should NOT decompress server-side in this case.
+      // The library incorrectly sets shouldDecompressBody=true when ignoreEncoding=true,
+      // so we override it here.
+      const callerHandlesDecompression = req.query.ignoreEncoding === 'true'
+      const actuallyDecompress = shouldDecompressBody && !callerHandlesDecompression
+
       const sourceStream = await startDownload()
 
-      if (shouldDecompressBody) {
+      if (actuallyDecompress) {
         // Decompress zlib/deflate compressed content for media files
         // Note: We decompress the full file and let the client handle seeking
         pipeline(sourceStream, createInflate(), res, (err: Error | null) => {
