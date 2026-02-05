@@ -20,14 +20,19 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
     if (session.data === null) {
       setUser(null);
     } else {
-      AuthService.getMe().then((user) => {
-        if (user.onboarded) {
-          setUser(user);
-        } else {
+      AuthService.getMe()
+        .then((user) => {
+          if (user.onboarded) {
+            setUser(user);
+          } else {
+            setUser(null);
+            router.push('/onboarding');
+          }
+        })
+        .catch(() => {
+          // Session may have expired or be invalid
           setUser(null);
-          router.push('/onboarding');
-        }
-      });
+        });
     }
   }, [api, router, session, session?.data, setAccount, setUser]);
 

@@ -85,7 +85,9 @@ export const useFileTableState = create<FileTableStore>()((set, get) => {
           }
         })
         .catch(() => {
-          // Ignore all errors, including aborted requests
+          if (requestId === get().currentRequestId) {
+            set({ isLoading: false });
+          }
         });
     },
     setLimit: (limit: number) => {

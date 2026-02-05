@@ -18,9 +18,14 @@ export const useUserAsyncDownloadsStore = create<UserAsyncDownloadsStore>(
     },
     update: () => {
       const fetcher = get().fetcher?.();
-      fetcher?.then((asyncDownloads) => {
-        set({ asyncDownloads });
-      });
+      fetcher
+        ?.then((asyncDownloads) => {
+          set({ asyncDownloads });
+        })
+        .catch(() => {
+          // Silently ignore errors (e.g., async_downloads table not available)
+          // This prevents unhandled promise rejections
+        });
     },
   }),
 );

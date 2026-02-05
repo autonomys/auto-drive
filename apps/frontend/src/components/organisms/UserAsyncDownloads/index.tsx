@@ -49,12 +49,18 @@ export const UserAsyncDownloads = () => {
   }, [dismissOutdatedAsyncDownloads]);
 
   const fetcher = useCallback(async () => {
-    const { data } = await gql.query<MyUndismissedAsyncDownloadsQuery>({
-      query: MyUndismissedAsyncDownloadsDocument,
-      fetchPolicy: 'network-only',
-    });
+    try {
+      const { data } = await gql.query<MyUndismissedAsyncDownloadsQuery>({
+        query: MyUndismissedAsyncDownloadsDocument,
+        fetchPolicy: 'network-only',
+      });
 
-    return (data?.async_downloads as AsyncDownload[]) ?? [];
+      return (data?.async_downloads as AsyncDownload[]) ?? [];
+    } catch {
+      // async_downloads table may not exist in production Hasura
+      // Return empty array to avoid breaking the UI
+      return [];
+    }
   }, [gql]);
 
   useEffect(() => {
