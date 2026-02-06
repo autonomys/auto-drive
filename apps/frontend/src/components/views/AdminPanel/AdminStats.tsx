@@ -34,7 +34,7 @@ import { ROUTES } from '@auto-drive/ui';
 
 // GraphQL query for stats
 const GET_ALL_STATS = gql`
-  query GetAllStats($fromDate: timestamp!, $toDate: timestamp!) {
+  query GetAllStats($fromDate: timestamptz!, $toDate: timestamptz!) {
     upload_stats: interactions_aggregate(
       where: {
         type: { _eq: "upload" }
