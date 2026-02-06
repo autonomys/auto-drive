@@ -9,6 +9,7 @@ import { openDatabase } from 'utils/indexedb';
 import { bufferToIterable } from 'utils/async';
 import { useNetwork } from 'contexts/network';
 import { Api } from 'services/api';
+import { getAuthSession } from '@/utils/auth';
 
 export type { DownloadProgressInfo };
 
@@ -96,6 +97,20 @@ export const createDownloadService = (api: Api) => {
 
   const MiB = 1024 * 1024;
   const MAX_CACHEABLE_FILE_SIZE = 150 * MiB;
+  const LARGE_DOWNLOAD_LOGIN_MESSAGE =
+    'Downloading large files require authorization, please login via gauth, wallet, github or discord';
+
+  const isAnonymousTooLargeError = (e: unknown): boolean => {
+    if (!(e instanceof Error)) return false;
+    const msg = e.message.toLowerCase();
+    return (
+      msg.includes('downloading large files') ||
+      msg.includes('file too large') ||
+      msg.includes('payment required') ||
+      msg.includes('402') ||
+      msg.includes('download limit exceeded')
+    );
+  };
 
   const getObjectStoreName = () => {
     const objectStoreVersion =
@@ -114,10 +129,32 @@ export const createDownloadService = (api: Api) => {
 
     const StreamSaver = await import('streamsaver');
 
-    let download = await api.downloadObject(metadata.dataCid, {
-      password,
-      skipDecryption,
-    });
+    const session = await getAuthSession().catch(() => null);
+    const hasSession = !!session?.accessToken && !!session?.authProvider;
+
+    let download: AsyncIterable<Buffer>;
+    try {
+      download = await api.downloadObject(metadata.dataCid, {
+        password,
+        skipDecryption,
+        authMode: 'anonymous',
+      });
+    } catch (e) {
+      // Option A: rely on backend logic — if anonymous is rejected (402),
+      // retry with session; otherwise propagate the original error.
+      if (!isAnonymousTooLargeError(e)) {
+        throw e;
+      }
+      if (!hasSession) {
+        throw new Error(LARGE_DOWNLOAD_LOGIN_MESSAGE);
+      }
+
+      download = await api.downloadObject(metadata.dataCid, {
+        password,
+        skipDecryption,
+        authMode: 'session',
+      });
+    }
 
     if (!skipDecryption && totalSize < MAX_CACHEABLE_FILE_SIZE) {
       new Promise<Buffer>((resolve) => {
