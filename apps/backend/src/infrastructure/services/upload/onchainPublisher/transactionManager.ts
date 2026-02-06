@@ -36,17 +36,21 @@ const submitTransaction = (
       }
     }, 60_000) // 3 minutes timeout
 
+    const onApiError = (error: Error) => {
+      cleanup()
+      reject(error)
+    }
+
     const cleanup = () => {
       clearTimeout(timeout)
+      // Remove the API error listener to prevent accumulation
+      api.off('error', onApiError)
       if (unsubscribe) {
         unsubscribe()
       }
     }
 
-    api.once('error', (error) => {
-      cleanup()
-      reject(error)
-    })
+    api.once('error', onApiError)
 
     transaction
       .signAndSend(

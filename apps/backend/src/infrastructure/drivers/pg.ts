@@ -18,7 +18,9 @@ const createDB = async (): Promise<pg.Pool> => {
       : {}),
   })
 
-  await pool.connect()
+  // Verify the connection works, then release the client back to the pool
+  const client = await pool.connect()
+  client.release()
 
   logger.info('Connected to PostgreSQL at %s', config.postgres.url)
 

@@ -34,7 +34,7 @@ import { ROUTES } from '@auto-drive/ui';
 
 // GraphQL query for stats
 const GET_ALL_STATS = gql`
-  query GetAllStats($fromDate: timestamp!, $toDate: timestamp!) {
+  query GetAllStats($fromDate: timestamptz!, $toDate: timestamptz!) {
     upload_stats: interactions_aggregate(
       where: {
         type: { _eq: "upload" }
@@ -72,17 +72,20 @@ const GET_ALL_STATS = gql`
 `;
 
 // GraphQL query to get interactions for top accounts calculation
+// Limited to top 200 largest interactions - sufficient for ranking top 10 accounts
 const GET_INTERACTIONS_FOR_RANKING = gql`
   query GetInteractionsForRanking(
     $type: String!
-    $fromDate: timestamp!
-    $toDate: timestamp!
+    $fromDate: timestamptz!
+    $toDate: timestamptz!
   ) {
     interactions(
       where: {
         type: { _eq: $type }
         created_at: { _gte: $fromDate, _lte: $toDate }
       }
+      order_by: { size: desc }
+      limit: 200
     ) {
       account_id
       size

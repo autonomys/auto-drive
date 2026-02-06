@@ -31,6 +31,13 @@ export const sliceReadable = async (
     let bytesPushed = 0
     const pass = new PassThrough()
 
+    // Helper to clean up all listeners to prevent memory leaks
+    function cleanup() {
+      readable.removeListener('data', onData)
+      readable.removeListener('end', onEnd)
+      readable.removeListener('error', onError)
+    }
+
     function onData(chunk: Buffer) {
       logger.info(
         'onData called (bytesRead=%s, start=%s, length=%s)',
@@ -67,9 +74,7 @@ export const sliceReadable = async (
 
       // If we've pushed enough, end the stream
       if (bytesPushed >= length) {
-        readable.removeListener('data', onData)
-        readable.removeListener('end', onEnd)
-        readable.removeListener('error', onError)
+        cleanup()
         pass.end()
       } else {
         // If there are leftover bytes in the chunk, but we only needed part of it, update bytesRead
@@ -80,17 +85,19 @@ export const sliceReadable = async (
     }
 
     function onEnd() {
+      cleanup()
       pass.end()
     }
 
     function onError(err: Error) {
+      cleanup()
       pass.destroy(err)
       reject(err)
     }
 
     readable.on('data', onData)
-    readable.once('end', onEnd)
-    readable.once('error', onError)
+    readable.on('end', onEnd)
+    readable.on('error', onError)
 
     // If the readable is already ended, resolve immediately
     pass.on('close', () => {
