@@ -72,6 +72,7 @@ const GET_ALL_STATS = gql`
 `;
 
 // GraphQL query to get interactions for top accounts calculation
+// Limited to 10,000 largest interactions to prevent memory issues on client
 const GET_INTERACTIONS_FOR_RANKING = gql`
   query GetInteractionsForRanking(
     $type: String!
@@ -83,6 +84,8 @@ const GET_INTERACTIONS_FOR_RANKING = gql`
         type: { _eq: $type }
         created_at: { _gte: $fromDate, _lte: $toDate }
       }
+      order_by: { size: desc }
+      limit: 10000
     ) {
       account_id
       size
