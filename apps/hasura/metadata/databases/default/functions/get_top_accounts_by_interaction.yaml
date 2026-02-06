@@ -1,8 +1,0 @@
-function:
-  name: get_top_accounts_by_interaction
-  schema: public
-configuration:
-  exposed_as: query
-permissions:
-  - role: user
-

@@ -71,24 +71,21 @@ const GET_ALL_STATS = gql`
   }
 `;
 
-// GraphQL query to get top accounts by interaction type (server-side aggregation)
-const GET_TOP_ACCOUNTS_BY_INTERACTION = gql`
-  query GetTopAccountsByInteraction(
+// GraphQL query to get interactions for top accounts calculation
+const GET_INTERACTIONS_FOR_RANKING = gql`
+  query GetInteractionsForRanking(
     $type: String!
     $fromDate: timestamptz!
     $toDate: timestamptz!
-    $limit: Int!
   ) {
-    get_top_accounts_by_interaction(
-      args: {
-        interaction_type: $type
-        from_date: $fromDate
-        to_date: $toDate
-        result_limit: $limit
+    interactions(
+      where: {
+        type: { _eq: $type }
+        created_at: { _gte: $fromDate, _lte: $toDate }
       }
     ) {
       account_id
-      total_size
+      size
     }
   }
 `;
@@ -161,54 +158,66 @@ export const AdminStats = () => {
     }
   }, [apolloClient, dateRange]);
 
-  // Helper function to transform server response to RankingAccount format
-  const transformToRankingAccounts = (
-    accounts: Array<{ account_id: string; total_size: string | number }>,
+  // Helper function to aggregate interactions by account
+  const aggregateByAccount = (
+    interactions: Array<{ account_id: string; size: string | number }>,
   ): RankingAccount[] => {
-    return accounts.map((account) => ({
-      id: account.account_id,
-      organizationId: account.account_id,
-      totalSize: Number(account.total_size),
-      uploadLimit: 0,
-      downloadLimit: 0,
-      model: AccountModel.Monthly,
-    }));
+    const accountTotals = new Map<string, number>();
+
+    for (const interaction of interactions) {
+      const currentTotal = accountTotals.get(interaction.account_id) || 0;
+      accountTotals.set(
+        interaction.account_id,
+        currentTotal + Number(interaction.size),
+      );
+    }
+
+    // Convert to array, sort by totalSize descending, take top 10
+    const sorted = Array.from(accountTotals.entries())
+      .map(([accountId, totalSize]) => ({
+        id: accountId,
+        organizationId: accountId, // Using account_id as organizationId for display
+        totalSize,
+        uploadLimit: 0,
+        downloadLimit: 0,
+        model: AccountModel.Monthly,
+      }))
+      .sort((a, b) => b.totalSize - a.totalSize)
+      .slice(0, 10);
+
+    return sorted;
   };
 
-  // Fetch top accounts via GraphQL (server-side aggregation)
+  // Fetch top accounts via GraphQL
   const fetchTopAccounts = useCallback(async () => {
     setIsLoadingRanking(true);
     try {
       const [uploadersResult, downloadersResult] = await Promise.all([
         apolloClient.query({
-          query: GET_TOP_ACCOUNTS_BY_INTERACTION,
+          query: GET_INTERACTIONS_FOR_RANKING,
           variables: {
             type: 'upload',
             fromDate: dateRange.from.toISOString(),
             toDate: dateRange.to.toISOString(),
-            limit: 10,
           },
           fetchPolicy: 'network-only',
         }),
         apolloClient.query({
-          query: GET_TOP_ACCOUNTS_BY_INTERACTION,
+          query: GET_INTERACTIONS_FOR_RANKING,
           variables: {
             type: 'download',
             fromDate: dateRange.from.toISOString(),
             toDate: dateRange.to.toISOString(),
-            limit: 10,
           },
           fetchPolicy: 'network-only',
         }),
       ]);
 
-      const topUploadAccounts =
-        uploadersResult.data?.get_top_accounts_by_interaction || [];
-      const topDownloadAccounts =
-        downloadersResult.data?.get_top_accounts_by_interaction || [];
+      const uploadInteractions = uploadersResult.data?.interactions || [];
+      const downloadInteractions = downloadersResult.data?.interactions || [];
 
-      setTopUploaders(transformToRankingAccounts(topUploadAccounts));
-      setTopDownloaders(transformToRankingAccounts(topDownloadAccounts));
+      setTopUploaders(aggregateByAccount(uploadInteractions));
+      setTopDownloaders(aggregateByAccount(downloadInteractions));
     } catch (error) {
       console.error('Error fetching top accounts:', error);
     } finally {
