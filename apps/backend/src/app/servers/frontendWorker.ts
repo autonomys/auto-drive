@@ -19,7 +19,11 @@
   const { paymentManager } = await import(
     '../../infrastructure/services/paymentManager/index.js'
   )
-  
+
+  const { Rabbit } = await import(
+    '../../infrastructure/drivers/rabbit.js'
+  )
+
   let somethingActive = false
   if (config.featureFlags.flags.taskManager.active) {
     EventRouter.listenFrontendEvents()
@@ -40,4 +44,16 @@
     logger.info('No services active, exiting')
     process.exit(1)
   }
+
+  const shutdown = async () => {
+    logger.info('Shutting down frontend worker...')
+    objectMappingArchiver.stop()
+    paymentManager.stop()
+    await Rabbit.close()
+    logger.info('Frontend worker shut down successfully')
+    process.exit(0)
+  }
+
+  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', shutdown)
 })()
