@@ -4,7 +4,7 @@ import { AccountModel } from '@auto-drive/models'
 import { optionalBoolEnvironmentVariable, env } from './shared/utils/misc.js'
 import { getAddress } from 'viem'
 
-const DEFAULT_MAX_CACHE_SIZE = BigInt(10 * 1024 ** 3)
+const DEFAULT_MAX_CACHE_SIZE = BigInt(1024 ** 3) // 1GB
 
 const DEFAULT_CACHE_MAX_SIZE = 10 * 1024 ** 3 // 10GB
 const DEFAULT_CACHE_TTL = 0 // No TTL
