@@ -13,6 +13,43 @@ import { ApiPromise, WsProvider } from '@polkadot/api'
 
 const logger = createLogger('IntentsUseCases')
 
+// Singleton API instance for price queries to prevent memory leaks.
+// Each ApiPromise creates WebSocket connections and loads ~50-100MB of WASM
+// modules that are never garbage collected if not properly managed.
+let priceApiPromise: Promise<ApiPromise> | null = null
+
+const getPriceApi = async (): Promise<ApiPromise> => {
+  if (priceApiPromise) {
+    const api = await priceApiPromise
+    // Check if still connected
+    if (api.isConnected) {
+      return api
+    }
+    // Connection lost, reset and reconnect
+    logger.warn('Price API disconnected, reconnecting...')
+    priceApiPromise = null
+  }
+
+  logger.debug('Creating singleton Polkadot API for price queries')
+  const provider = new WsProvider(config.chain.endpoint)
+  priceApiPromise = ApiPromise.create({ provider })
+
+  const api = await priceApiPromise
+
+  // Handle disconnection - reset singleton so next call reconnects
+  api.on('disconnected', () => {
+    logger.warn('Price API disconnected, will reconnect on next query')
+    priceApiPromise = null
+  })
+
+  api.on('error', (error) => {
+    logger.error(error, 'Price API error, resetting connection')
+    priceApiPromise = null
+  })
+
+  return api
+}
+
 const randomBytes32 = () => {
   return '0x' + randomBytes(32).toString('hex')
 }
@@ -153,9 +190,8 @@ const getConfirmedIntents = async () => {
 }
 
 const getPrice = async (): Promise<{ price: number }> => {
-  const { current: currentPricePerByte } = await transactionByteFee(
-    new ApiPromise({ provider: new WsProvider(config.chain.endpoint) }),
-  )
+  const api = await getPriceApi()
+  const { current: currentPricePerByte } = await transactionByteFee(api)
 
   return {
     price: Math.floor(

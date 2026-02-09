@@ -29,10 +29,14 @@ export const sliceReadable = async (
   return new Promise<Readable>((resolve, reject) => {
     let bytesRead = 0
     let bytesPushed = 0
+    let cleanedUp = false
     const pass = new PassThrough()
 
-    // Helper to clean up all listeners to prevent memory leaks
+    // Helper to clean up all listeners to prevent memory leaks.
+    // Uses a flag to prevent double-cleanup in edge cases.
     function cleanup() {
+      if (cleanedUp) return
+      cleanedUp = true
       readable.removeListener('data', onData)
       readable.removeListener('end', onEnd)
       readable.removeListener('error', onError)
@@ -96,8 +100,8 @@ export const sliceReadable = async (
     }
 
     readable.on('data', onData)
-    readable.on('end', onEnd)
-    readable.on('error', onError)
+    readable.once('end', onEnd)   // Use .once() - end fires at most once
+    readable.once('error', onError) // Use .once() - error fires at most once
 
     // If the readable is already ended, resolve immediately
     pass.on('close', () => {
