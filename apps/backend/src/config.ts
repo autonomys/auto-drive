@@ -4,7 +4,7 @@ import { AccountModel } from '@auto-drive/models'
 import { optionalBoolEnvironmentVariable, env } from './shared/utils/misc.js'
 import { getAddress } from 'viem'
 
-const DEFAULT_MAX_CACHE_SIZE = BigInt(1024 ** 3) // 1GB
+const DEFAULT_MEMORY_CACHE_MAX_SIZE = BigInt(1024 ** 3) // 1GB
 
 const DEFAULT_CACHE_MAX_SIZE = 10 * 1024 ** 3 // 10GB
 const DEFAULT_CACHE_TTL = 0 // No TTL
@@ -28,7 +28,7 @@ export const config = {
   },
   memoryDownloadCache: {
     maxCacheSize: Number(
-      env('MEMORY_DOWNLOAD_CACHE_MAX_SIZE', DEFAULT_MAX_CACHE_SIZE.toString()),
+      env('MEMORY_DOWNLOAD_CACHE_MAX_SIZE', DEFAULT_MEMORY_CACHE_MAX_SIZE.toString()),
     ),
   },
   objectMappingArchiver: {
