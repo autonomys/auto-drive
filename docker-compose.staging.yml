@@ -34,6 +34,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-autodrive}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./apps/hasura/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -99,6 +100,12 @@ services:
       - ./apps/hasura:/app
     ports:
       - "127.0.0.1:${HASURA_GRAPHQL_PORT:-6565}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - auto-drive-network
 
@@ -283,8 +290,10 @@ services:
     container_name: autodrive-frontend
     restart: unless-stopped
     depends_on:
-      - backend-api
-      - hasura
+      backend-api:
+        condition: service_healthy
+      hasura:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       NEXTAUTH_URL: ${NEXTAUTH_URL}

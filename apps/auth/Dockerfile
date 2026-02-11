@@ -20,6 +20,6 @@ RUN yarn workspace auth build
 
 EXPOSE 3030
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD curl -f http://localhost:3030/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD curl -f http://localhost:3000/health || exit 1
 
 CMD ["yarn", "auth", "start"]
