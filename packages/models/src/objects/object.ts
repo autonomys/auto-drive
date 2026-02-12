@@ -67,16 +67,23 @@ export type ObjectSummary = {
 );
 
 export const objectStatus = (uploadState: ObjectUploadState) => {
+  // Check for Processing state first - when we don't have valid node counts yet
+  if (
+    uploadState.totalNodes === null ||
+    uploadState.totalNodes === 0 ||
+    uploadState.uploadedNodes === null ||
+    uploadState.uploadedNodes === 0
+  ) {
+    return ObjectStatus.Processing;
+  }
+
+  // Now we know we have valid node counts
   if (uploadState.archivedNodes === uploadState.totalNodes) {
     return ObjectStatus.Archived;
   }
 
   if (uploadState.uploadedNodes === uploadState.totalNodes) {
     return ObjectStatus.Archiving;
-  }
-
-  if (uploadState.uploadedNodes === null || uploadState.uploadedNodes === 0) {
-    return ObjectStatus.Processing;
   }
 
   return ObjectStatus.Publishing;
