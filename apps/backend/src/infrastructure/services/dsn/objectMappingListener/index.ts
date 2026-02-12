@@ -12,8 +12,10 @@ type ObjectMappingIndexerRpcClient = ReturnType<
 
 const ONE_MINUTE = 60_000
 
+let client: ObjectMappingIndexerRpcClient | null = null
+
 const start = async () => {
-  const initSubscription = async (client: ObjectMappingIndexerRpcClient) => {
+  const initSubscription = async (ws: ObjectMappingIndexerRpcClient) => {
     const node = await nodesRepository.getLastArchivedPieceNode()
 
     const pieceIndex = node?.piece_index ?? 0
@@ -25,7 +27,7 @@ const start = async () => {
 
     // To be properly solved later
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (client.api as any).subscribe_recover_object_mappings({
+    await (ws.api as any).subscribe_recover_object_mappings({
       pieceIndex,
       step: config.objectMappingArchiver.step,
     })
@@ -48,6 +50,8 @@ const start = async () => {
     },
   })
 
+  client = ws
+
   ws.onNotification('object_mapping_list', async (message) => {
     logger.debug('Received object mapping list', message)
     if (message.length > 0) {
@@ -60,6 +64,15 @@ const start = async () => {
   })
 }
 
+const stop = () => {
+  logger.info('Stopping object mapping archiver')
+  if (client) {
+    client.close()
+    client = null
+  }
+}
+
 export const objectMappingArchiver = {
   start,
+  stop,
 }
