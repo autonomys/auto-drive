@@ -5,6 +5,7 @@
   "repository": "https://github.com/autonomys/auto-drive.git",
   "author": "Autonomys Network",
   "license": "MIT",
+  "private": true,
   "workspaces": [
     "apps/*",
     "packages/*",
