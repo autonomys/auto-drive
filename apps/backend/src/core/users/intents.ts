@@ -24,16 +24,22 @@ const getPriceApi = async (): Promise<ApiPromise> => {
     priceApiPromise = ApiPromise.create({ provider })
 
     // Handle disconnection - reset the singleton so it reconnects on next call
-    priceApiPromise.then((api) => {
-      api.on('disconnected', () => {
-        logger.warn('Price API disconnected, will reconnect on next query')
+    priceApiPromise
+      .then((api) => {
+        api.on('disconnected', () => {
+          logger.warn('Price API disconnected, will reconnect on next query')
+          priceApiPromise = null
+        })
+        api.on('error', (error) => {
+          logger.error(error, 'Price API error, resetting connection')
+          priceApiPromise = null
+        })
+      })
+      .catch((error) => {
+        // Reset on initial connection failure to allow recovery on next call
+        logger.error(error, 'Price API failed to connect, resetting for retry')
         priceApiPromise = null
       })
-      api.on('error', (error) => {
-        logger.error(error, 'Price API error, resetting connection')
-        priceApiPromise = null
-      })
-    })
   }
 
   return priceApiPromise
