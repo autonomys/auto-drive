@@ -3,4 +3,14 @@ node_modules
 .gitignore
 .dockerignore
 .env
-.dist
+.env.*
+**/dist
+**/.next
+**/node_modules
+packages/contracts
+**/__tests__
+**/*.test.ts
+**/*.spec.ts
+.github
+ansible
+nginx

@@ -2,6 +2,7 @@
 import { JWT } from 'next-auth/jwt';
 import jwt from 'jsonwebtoken';
 
+// Server-side API route: process.env is read at runtime
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_AUTH_API_URL || 'http://localhost:3030';
 

@@ -11,36 +11,60 @@ export interface Network {
   gql: string
 }
 
+export interface NetworkConfig {
+  mainnetHttpUrl?: string
+  mainnetDownloadUrl?: string
+  mainnetGqlUrl?: string
+  env?: string
+  localRpcUrl?: string
+  localDownloadUrl?: string
+  localGqlUrl?: string
+}
+
 export const defaultNetworkId = NetworkId.MAINNET
 
-export const networks: Partial<Record<NetworkId, Network>> = {
-  [NetworkId.MAINNET]: {
-    id: NetworkId.MAINNET,
-    name: 'Mainnet',
-    http:
-      process.env.NEXT_PUBLIC_MAINNET_HTTP_URL ||
-      'https://mainnet.auto-drive.autonomys.xyz/api',
-    download:
-      process.env.NEXT_PUBLIC_MAINNET_DOWNLOAD_URL ||
-      'https://public.auto-drive.autonomys.xyz/api',
-    gql:
-      process.env.NEXT_PUBLIC_MAINNET_GQL_URL ||
-      'https://mainnet.auto-drive.autonomys.xyz/hasura/v1/graphql',
-  },
+export function buildNetworks(
+  config: NetworkConfig = {},
+): Partial<Record<NetworkId, Network>> {
+  const result: Partial<Record<NetworkId, Network>> = {
+    [NetworkId.MAINNET]: {
+      id: NetworkId.MAINNET,
+      name: 'Mainnet',
+      http:
+        config.mainnetHttpUrl ||
+        'https://mainnet.auto-drive.autonomys.xyz/api',
+      download:
+        config.mainnetDownloadUrl ||
+        'https://public.auto-drive.autonomys.xyz/api',
+      gql:
+        config.mainnetGqlUrl ||
+        'https://mainnet.auto-drive.autonomys.xyz/hasura/v1/graphql',
+    },
+  }
+
+  if (config.env === 'local') {
+    result[NetworkId.LOCAL] = {
+      id: NetworkId.LOCAL,
+      name: 'Local',
+      http: config.localRpcUrl || 'http://localhost:3000',
+      download: config.localDownloadUrl || 'http://localhost:3030',
+      gql: config.localGqlUrl || 'http://localhost:6565/v1/graphql',
+    }
+  }
+
+  return result
 }
 
-if (process.env.NEXT_PUBLIC_ENV === 'local') {
-  networks[NetworkId.LOCAL] = {
-    id: NetworkId.LOCAL,
-    name: 'Local',
-    http: process.env.NEXT_PUBLIC_LOCAL_RPC_URL || 'http://localhost:3000',
-    download:
-      process.env.NEXT_PUBLIC_LOCAL_DOWNLOAD_URL || 'http://localhost:3030',
-    gql:
-      process.env.NEXT_PUBLIC_LOCAL_GQL_URL ||
-      'http://localhost:6565/v1/graphql',
-  }
-}
+// Backward compat: static export for non-Docker / local dev usage
+export const networks: Partial<Record<NetworkId, Network>> = buildNetworks({
+  mainnetHttpUrl: process.env.NEXT_PUBLIC_MAINNET_HTTP_URL,
+  mainnetDownloadUrl: process.env.NEXT_PUBLIC_MAINNET_DOWNLOAD_URL,
+  mainnetGqlUrl: process.env.NEXT_PUBLIC_MAINNET_GQL_URL,
+  env: process.env.NEXT_PUBLIC_ENV,
+  localRpcUrl: process.env.NEXT_PUBLIC_LOCAL_RPC_URL,
+  localDownloadUrl: process.env.NEXT_PUBLIC_LOCAL_DOWNLOAD_URL,
+  localGqlUrl: process.env.NEXT_PUBLIC_LOCAL_GQL_URL,
+})
 
 export const getNetwork = (networkId: NetworkId) => {
   if (!networks[networkId]) {

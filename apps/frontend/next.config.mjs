@@ -2,6 +2,10 @@ import path from 'path';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
+  experimental: {
+    outputFileTracingRoot: path.resolve(import.meta.dirname, '../../'),
+  },
   webpack: (config, { isServer }) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
