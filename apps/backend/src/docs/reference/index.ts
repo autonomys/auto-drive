@@ -3,6 +3,7 @@ import { downloads } from './downloads.js'
 import { objects } from './objects.js'
 import { accounts } from './accounts.js'
 import { uploads } from './uploads.js'
+import { price } from './price.js'
 
 export const swagger = {
   openapi: '3.0.0',
@@ -54,6 +55,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
     ...uploads.paths,
     ...objects.paths,
     ...downloads.paths,
+    ...price.paths,
   },
   security: [
     {
@@ -68,6 +70,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
       ...common.components.schemas,
       ...accounts.components.schemas,
       ...downloads.components.schemas,
+      ...price.components.schemas,
     },
     securitySchemes: {
       apiKey: {

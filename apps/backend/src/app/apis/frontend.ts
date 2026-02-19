@@ -10,6 +10,7 @@ import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { docsController } from '../controllers/docs.js'
 import { intentsController } from '../controllers/intents.js'
+import { priceController } from '../controllers/price.js'
 import { featuresController } from '../controllers/features.js'
 import { featureFlagMiddleware } from '../../core/featureFlags/express.js'
 
@@ -51,6 +52,8 @@ const createServer = async () => {
   app.use('/subscriptions', accountController)
   app.use('/accounts', accountController)
   app.use('/uploads', uploadController)
+  // Public price endpoint — no auth, no feature-flag gating
+  app.use('/intents/price', priceController)
   app.use('/intents', featureFlagMiddleware('buyCredits'), intentsController)
   app.use('/features', featuresController)
   app.use('/docs', docsController)
