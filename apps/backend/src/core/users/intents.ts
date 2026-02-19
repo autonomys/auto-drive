@@ -184,15 +184,29 @@ const getConfirmedIntents = async () => {
   return intentsRepository.getByStatus(IntentStatus.CONFIRMED)
 }
 
+// --- Price caching ---
+// The on-chain fee changes slowly (block-by-block), so we cache for 60 s to
+// avoid hammering the RPC on every public request.
+const PRICE_CACHE_TTL_MS = 60_000
+let cachedPrice: { price: number; fetchedAt: number } | null = null
+
 const getPrice = async (): Promise<{ price: number }> => {
+  const now = Date.now()
+  if (cachedPrice && now - cachedPrice.fetchedAt < PRICE_CACHE_TTL_MS) {
+    logger.trace('Returning cached price (age %d ms)', now - cachedPrice.fetchedAt)
+    return { price: cachedPrice.price }
+  }
+
+  logger.debug('Fetching fresh price from chain')
   const api = await getPriceApi()
   const { current: currentPricePerByte } = await transactionByteFee(api)
 
-  return {
-    price: Math.floor(
-      currentPricePerByte * config.paymentManager.priceMultiplier,
-    ),
-  }
+  const price = Math.floor(
+    currentPricePerByte * config.paymentManager.priceMultiplier,
+  )
+
+  cachedPrice = { price, fetchedAt: now }
+  return { price }
 }
 
 export const IntentsUseCases = {

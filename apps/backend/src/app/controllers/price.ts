@@ -9,6 +9,11 @@ import { handleError } from '../../errors/index.js'
  *
  * Returns the current cost of storage in shannons-per-byte.
  * No authentication or feature-flag gating required.
+ *
+ * Security:
+ *  - Response is served from a 60 s in-memory cache (see IntentsUseCases)
+ *  - Only GET is exposed; POST/PUT/DELETE are not registered
+ *  - Nginx restricts the public domain to this specific path
  */
 export const priceController = Router()
 
@@ -24,7 +29,8 @@ priceController.get(
       return
     }
 
+    // Allow CDN / browser caching for 30 s to further reduce load
+    res.set('Cache-Control', 'public, max-age=30')
     res.status(200).json(result.value)
   }),
 )
-

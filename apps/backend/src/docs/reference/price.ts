@@ -1,5 +1,13 @@
 import { autoDriveServers } from './servers.js'
 
+const publicServers = [
+  {
+    url: 'https://public.auto-drive.autonomys.xyz/api',
+    description: 'Public Auto Drive Gateway (Mainnet)',
+  },
+  ...autoDriveServers,
+]
+
 export const price = {
   paths: {
     '/intents/price': {
@@ -9,7 +17,13 @@ export const price = {
 
 This is a **public endpoint** — no authentication or feature flags required.
 
-The price is calculated as:
+### Caching
+
+Responses include \`Cache-Control: public, max-age=30\`.  The underlying chain
+price is refreshed at most once every 60 seconds server-side.
+
+### Price calculation
+
 \`\`\`
 price = transactionByteFee × priceMultiplier
 \`\`\`
@@ -20,7 +34,7 @@ Where:
 
 To convert to AI3 per MiB: \`(price × 1048576) / 10^18\``,
         tags: ['Auto Drive API'],
-        servers: autoDriveServers,
+        servers: publicServers,
         security: [],
         responses: {
           '200': {
@@ -30,6 +44,13 @@ To convert to AI3 per MiB: \`(price × 1048576) / 10^18\``,
                 schema: {
                   $ref: '#/components/schemas/PriceResponse',
                 },
+              },
+            },
+            headers: {
+              'Cache-Control': {
+                description:
+                  'Caching directive — typically `public, max-age=30`',
+                schema: { type: 'string' },
               },
             },
           },
@@ -57,4 +78,3 @@ To convert to AI3 per MiB: \`(price × 1048576) / 10^18\``,
     },
   },
 }
-

@@ -35,23 +35,9 @@ intentsController.post(
   }),
 )
 
-intentsController.get(
-  '/price',
-  asyncSafeHandler(async (req, res) => {
-    const result = await handleInternalError(
-      new Promise<{ price: number }>((resolve) =>
-        resolve(IntentsUseCases.getPrice()),
-      ),
-      'Failed to get price',
-    )
-    if (result.isErr()) {
-      handleError(result.error, res)
-      return
-    }
-
-    res.status(200).json(result.value)
-  }),
-)
+// NOTE: The /price endpoint has been moved to the dedicated priceController
+// (mounted at /intents/price in frontend.ts) so it can be served publicly
+// with its own rate limiting, independently of the buyCredits feature flag.
 
 intentsController.get(
   '/:id',
