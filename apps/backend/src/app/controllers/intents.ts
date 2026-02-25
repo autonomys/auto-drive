@@ -39,7 +39,7 @@ intentsController.get(
   '/price',
   asyncSafeHandler(async (req, res) => {
     const result = await handleInternalError(
-      new Promise<{ price: number }>((resolve) =>
+      new Promise<{ price: number; pricePerGB: number }>((resolve) =>
         resolve(IntentsUseCases.getPrice()),
       ),
       'Failed to get price',

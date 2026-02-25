@@ -184,14 +184,19 @@ const getConfirmedIntents = async () => {
   return intentsRepository.getByStatus(IntentStatus.CONFIRMED)
 }
 
-const getPrice = async (): Promise<{ price: number }> => {
+const BYTES_PER_GB = 1024 * 1024 * 1024
+
+const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
   const api = await getPriceApi()
   const { current: currentPricePerByte } = await transactionByteFee(api)
 
+  const price = Math.floor(
+    currentPricePerByte * config.paymentManager.priceMultiplier,
+  )
+
   return {
-    price: Math.floor(
-      currentPricePerByte * config.paymentManager.priceMultiplier,
-    ),
+    price,
+    pricePerGB: price * BYTES_PER_GB,
   }
 }
 

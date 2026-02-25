@@ -59,7 +59,7 @@ const createServer = async () => {
     '/intents/price',
     asyncSafeHandler(async (_req, res) => {
       const result = await handleInternalError(
-        new Promise<{ price: number }>((resolve) =>
+        new Promise<{ price: number; pricePerGB: number }>((resolve) =>
           resolve(IntentsUseCases.getPrice()),
         ),
         'Failed to get price',
