@@ -185,6 +185,7 @@ const getConfirmedIntents = async () => {
 }
 
 const BYTES_PER_GB = 1024 * 1024 * 1024
+const SHANNONS_PER_AI3 = 1e18
 
 const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
   const api = await getPriceApi()
@@ -196,7 +197,7 @@ const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
 
   return {
     price,
-    pricePerGB: price * BYTES_PER_GB,
+    pricePerGB: Math.round((price * BYTES_PER_GB) / SHANNONS_PER_AI3 * 100) / 100,
   }
 }
 
