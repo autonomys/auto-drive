@@ -12,6 +12,10 @@ import { docsController } from '../controllers/docs.js'
 import { intentsController } from '../controllers/intents.js'
 import { featuresController } from '../controllers/features.js'
 import { featureFlagMiddleware } from '../../core/featureFlags/express.js'
+import { IntentsUseCases } from '../../core/users/intents.js'
+import { asyncSafeHandler } from '../../shared/utils/express.js'
+import { handleInternalError } from '../../shared/utils/neverthrow.js'
+import { handleError } from '../../errors/index.js'
 
 const logger = createLogger('api:frontend')
 
@@ -51,6 +55,22 @@ const createServer = async () => {
   app.use('/subscriptions', accountController)
   app.use('/accounts', accountController)
   app.use('/uploads', uploadController)
+  app.get(
+    '/intents/price',
+    asyncSafeHandler(async (_req, res) => {
+      const result = await handleInternalError(
+        new Promise<{ price: number }>((resolve) =>
+          resolve(IntentsUseCases.getPrice()),
+        ),
+        'Failed to get price',
+      )
+      if (result.isErr()) {
+        handleError(result.error, res)
+        return
+      }
+      res.status(200).json(result.value)
+    }),
+  )
   app.use('/intents', featureFlagMiddleware('buyCredits'), intentsController)
   app.use('/features', featuresController)
   app.use('/docs', docsController)
