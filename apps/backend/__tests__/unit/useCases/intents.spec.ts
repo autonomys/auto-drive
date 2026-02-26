@@ -20,7 +20,7 @@ describe('IntentsUseCases', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({ price: 1 })
+    jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({ price: 1, pricePerGB: 1073741824 })
   })
 
   afterEach(() => {
