@@ -12,7 +12,7 @@ import {
   Calendar,
   Clock,
 } from 'lucide-react';
-import { gql, useApolloClient } from '@apollo/client';
+import { gql, useApolloClient, ApolloError } from '@apollo/client';
 import { Table } from '@/components/molecules/Table';
 import {
   TableHead,
@@ -195,15 +195,22 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       };
 
       // Try the query that includes cid first (requires migration 20260227000000).
-      // If Hasura rejects the field (migration not yet applied), fall back to the
-      // legacy query so the activity log stays functional at all times.
+      // Only fall back to the legacy query when Hasura rejects the cid field
+      // (migration not yet applied). Any other error is re-thrown so it surfaces
+      // to the caller rather than being silently swallowed.
       try {
         return await apolloClient.query({
           query: GET_ACCOUNT_INTERACTIONS,
           variables,
           fetchPolicy: 'network-only',
         });
-      } catch {
+      } catch (err) {
+        const isMissingField =
+          err instanceof ApolloError &&
+          err.graphQLErrors.some((e) =>
+            e.message.toLowerCase().includes("field 'cid'"),
+          );
+        if (!isMissingField) throw err;
         return await apolloClient.query({
           query: GET_ACCOUNT_INTERACTIONS_LEGACY,
           variables,
