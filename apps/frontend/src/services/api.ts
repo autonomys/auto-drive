@@ -448,7 +448,7 @@ export const createApiService = ({
       (data) => data.status,
     );
   },
-  getCreditPrice: async (): Promise<{ price: number }> => {
+  getCreditPrice: async (): Promise<{ price: number; pricePerGB: number }> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
