@@ -13,8 +13,10 @@ import {
   Trophy,
   Info,
   FileStack,
+  Users,
 } from 'lucide-react';
 import { gql, useApolloClient } from '@apollo/client';
+import { AuthService } from 'services/auth/auth';
 import { Table } from '@/components/molecules/Table';
 import {
   TableHead,
@@ -115,6 +117,7 @@ type RankingAccount = {
 export const AdminStats = () => {
   const { network } = useNetwork();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [totalUsers, setTotalUsers] = useState<number | null>(null);
   const [topUploaders, setTopUploaders] = useState<RankingAccount[]>([]);
   const [topDownloaders, setTopDownloaders] = useState<RankingAccount[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
@@ -225,10 +228,21 @@ export const AdminStats = () => {
     }
   }, [apolloClient, dateRange]);
 
+  // Fetch total user count from auth service
+  const fetchTotalUsers = useCallback(async () => {
+    try {
+      const result = await AuthService.getUserList(1, 1);
+      setTotalUsers(result.totalCount);
+    } catch (error) {
+      console.error('Error fetching total users:', error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats();
     fetchTopAccounts();
-  }, [fetchStats, fetchTopAccounts]);
+    fetchTotalUsers();
+  }, [fetchStats, fetchTopAccounts, fetchTotalUsers]);
 
   const handleFromDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const date = e.target.value
@@ -351,7 +365,25 @@ export const AdminStats = () => {
           </div>
         ) : stats ? (
           <>
-            <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5'>
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'>
+              {/* Total Users */}
+              <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-teal-50 to-teal-100 p-4 dark:from-teal-900/20 dark:to-teal-800/20'>
+                <div className='flex items-center gap-3'>
+                  <div className='rounded-lg bg-teal-500 p-2'>
+                    <Users className='h-5 w-5 text-white' />
+                  </div>
+                  <div>
+                    <p className='text-xs text-gray-500 dark:text-gray-400'>
+                      Total Users
+                    </p>
+                    <p className='text-2xl font-bold text-teal-600 dark:text-teal-400'>
+                      {totalUsers !== null
+                        ? totalUsers.toLocaleString()
+                        : '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
               {/* Total Files */}
               <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 dark:from-indigo-900/20 dark:to-indigo-800/20'>
                 <div className='flex items-center gap-3'>
@@ -611,4 +643,3 @@ export const AdminStats = () => {
     </div>
   );
 };
-
