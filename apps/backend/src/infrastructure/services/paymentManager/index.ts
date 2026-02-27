@@ -119,13 +119,16 @@ const parseEventLogs = <
   return viemParseEventLogs<abi, strict, eventName>(parameters)
 }
 
+let checkInterval: NodeJS.Timeout | null = null
+let unwatchContractEvent: (() => void) | null = null
+
 const start = () => {
   logger.info('Starting payment manager')
-  setInterval(
+  checkInterval = setInterval(
     safeCallback(paymentManager._checkConfirmedIntents),
     config.paymentManager.checkInterval,
   )
-  viemClient.watchContractEvent({
+  unwatchContractEvent = viemClient.watchContractEvent({
     abi: depositEventAbi,
     address: config.paymentManager.contractAddress,
     eventName: depositEventAbi[0].name,
@@ -133,9 +136,22 @@ const start = () => {
   })
 }
 
+const stop = () => {
+  logger.info('Stopping payment manager')
+  if (checkInterval) {
+    clearInterval(checkInterval)
+    checkInterval = null
+  }
+  if (unwatchContractEvent) {
+    unwatchContractEvent()
+    unwatchContractEvent = null
+  }
+}
+
 export const paymentManager = {
   watchTransaction,
   start,
+  stop,
   _onLogs: onLogs,
   _checkConfirmedIntents: _checkConfirmedIntents,
   _viemClient: viemClient,

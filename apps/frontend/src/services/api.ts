@@ -334,17 +334,33 @@ export const createApiService = ({
     options?: {
       password?: string;
       skipDecryption?: boolean;
+      authMode?: 'auto' | 'anonymous' | 'session';
     },
   ): Promise<AsyncIterable<Buffer>> => {
-    const { password, skipDecryption } = options ?? {};
+    const { password, skipDecryption, authMode = 'auto' } = options ?? {};
     const session = await getAuthSession().catch(() => null);
+
+    if (
+      authMode === 'session' &&
+      (!session?.accessToken || !session?.authProvider)
+    ) {
+      throw new Error(
+        'Downloading large files require authorization, please login via gauth, wallet, github or discord',
+      );
+    }
+
+    const apiKey =
+      authMode === 'anonymous' ? null : (session?.accessToken ?? null);
+    const provider =
+      authMode === 'anonymous'
+        ? undefined
+        : ((session?.authProvider as AuthProvider | undefined) ?? undefined);
 
     const api = createAutoDriveApi({
       downloadServiceUrl: downloadApiUrl,
       apiUrl: apiBaseUrl,
-      apiKey: session?.accessToken ?? null,
-      provider:
-        (session?.authProvider as AuthProvider | undefined) ?? undefined,
+      apiKey,
+      provider,
     });
 
     if (skipDecryption) {
@@ -358,7 +374,12 @@ export const createApiService = ({
         if (response.status === 401) {
           errorMsg = 'Authentication required to download this file';
         } else if (response.status === 402) {
-          errorMsg = 'Download limit exceeded';
+          // Backend uses 402 for both "file too large to download anonymously"
+          // and "not enough download credits". Use authMode to pick messaging.
+          errorMsg =
+            authMode === 'anonymous'
+              ? 'Downloading large files require authorization, please login via gauth, wallet, github or discord'
+              : 'Download limit exceeded';
         } else if (response.status === 403) {
           errorMsg = 'You do not have permission to download this file';
         } else if (response.status === 404) {
@@ -427,7 +448,7 @@ export const createApiService = ({
       (data) => data.status,
     );
   },
-  getCreditPrice: async (): Promise<{ price: number }> => {
+  getCreditPrice: async (): Promise<{ price: number; pricePerGB: number }> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');

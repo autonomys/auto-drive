@@ -1,8 +1,8 @@
 import { OffchainMetadata } from '@autonomys/auto-dag-data';
 
 export class InvalidDecryptKey extends Error {
-  constructor() {
-    super('Invalid decrypt key');
+  constructor(cause?: Error) {
+    super('Invalid decrypt key', { cause });
   }
 }
 
@@ -66,14 +66,31 @@ export const handleFileDownload = async (
     reportProgress(true);
     writer.close();
   } catch (error) {
+    writer.abort();
     if (writtenSize === 0) {
-      writer.abort();
-      throw new InvalidDecryptKey();
-    } else {
-      console.error('Download error after writing bytes:', writtenSize, error);
-      writer.close();
-      throw error;
+      // Check if this looks like a decryption error (typically from encrypted file streams)
+      const errorMessage =
+        error instanceof Error ? error.message.toLowerCase() : '';
+      const errorName = error instanceof Error ? error.name : '';
+
+      const isDecryptionError =
+        // Common keyword patterns
+        errorMessage.includes('decrypt') ||
+        errorMessage.includes('cipher') ||
+        errorMessage.includes('gcm') ||
+        errorMessage.includes('tag') ||
+        // Node.js crypto error: "Unsupported state or unable to authenticate data"
+        errorMessage.includes('unable to authenticate') ||
+        errorMessage.includes('unsupported state') ||
+        // Web Crypto API throws OperationError for decryption failures
+        errorName === 'OperationError';
+
+      if (isDecryptionError) {
+        throw new InvalidDecryptKey(error instanceof Error ? error : undefined);
+      }
     }
+    console.error('Download error after writing bytes:', writtenSize, error);
+    throw error;
   }
 };
 
