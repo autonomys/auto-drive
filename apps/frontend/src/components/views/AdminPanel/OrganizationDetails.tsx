@@ -12,7 +12,7 @@ import {
   Calendar,
   Clock,
 } from 'lucide-react';
-import { gql, useApolloClient } from '@apollo/client';
+import { gql, useApolloClient, ApolloError } from '@apollo/client';
 import { Table } from '@/components/molecules/Table';
 import {
   TableHead,
@@ -49,9 +49,56 @@ const GET_ACCOUNT_BY_ID = gql`
   }
 `;
 
-// GraphQL query for account interactions
+// GraphQL query for account interactions — includes cid (requires migration 20260227000000)
 const GET_ACCOUNT_INTERACTIONS = gql`
   query GetAccountInteractions(
+    $accountId: String!
+    $limit: Int!
+    $offset: Int!
+  ) {
+    interactions(
+      where: { account_id: { _eq: $accountId } }
+      order_by: { created_at: desc }
+      limit: $limit
+      offset: $offset
+    ) {
+      id
+      type
+      size
+      cid
+      created_at
+    }
+    interactions_aggregate(where: { account_id: { _eq: $accountId } }) {
+      aggregate {
+        count
+      }
+    }
+    upload_stats: interactions_aggregate(
+      where: { account_id: { _eq: $accountId }, type: { _eq: "upload" } }
+    ) {
+      aggregate {
+        count
+        sum {
+          size
+        }
+      }
+    }
+    download_stats: interactions_aggregate(
+      where: { account_id: { _eq: $accountId }, type: { _eq: "download" } }
+    ) {
+      aggregate {
+        count
+        sum {
+          size
+        }
+      }
+    }
+  }
+`;
+
+// Fallback query used before the cid migration has been applied
+const GET_ACCOUNT_INTERACTIONS_LEGACY = gql`
+  query GetAccountInteractionsLegacy(
     $accountId: String!
     $limit: Int!
     $offset: Int!
@@ -109,6 +156,7 @@ type Interaction = {
   id: string;
   type: 'upload' | 'download';
   size: string;
+  cid: string | null;
   created_at: string;
 };
 
@@ -138,6 +186,41 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
     }
   }, [user, router, network.id]);
 
+  const fetchInteractions = useCallback(
+    async (accountId: string) => {
+      const variables = {
+        accountId,
+        limit: itemsPerPage,
+        offset: (currentPage - 1) * itemsPerPage,
+      };
+
+      // Try the query that includes cid first (requires migration 20260227000000).
+      // Only fall back to the legacy query when Hasura rejects the cid field
+      // (migration not yet applied). Any other error is re-thrown so it surfaces
+      // to the caller rather than being silently swallowed.
+      try {
+        return await apolloClient.query({
+          query: GET_ACCOUNT_INTERACTIONS,
+          variables,
+          fetchPolicy: 'network-only',
+        });
+      } catch (err) {
+        const isMissingField =
+          err instanceof ApolloError &&
+          err.graphQLErrors.some((e) =>
+            e.message.toLowerCase().includes("field 'cid'"),
+          );
+        if (!isMissingField) throw err;
+        return await apolloClient.query({
+          query: GET_ACCOUNT_INTERACTIONS_LEGACY,
+          variables,
+          fetchPolicy: 'network-only',
+        });
+      }
+    },
+    [apolloClient, currentPage],
+  );
+
   const fetchAccountDetails = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -154,31 +237,30 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       // Use the account.id for interactions query (organizationId param might be account.id or organization_id)
       const accountIdForInteractions = accountData?.id || organizationId;
 
-      // Fetch interactions
-      const interactionsResult = await apolloClient.query({
-        query: GET_ACCOUNT_INTERACTIONS,
-        variables: {
-          accountId: accountIdForInteractions,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        },
-        fetchPolicy: 'network-only',
-      });
+      // Fetch interactions (with automatic fallback if cid column isn't migrated yet)
+      const interactionsResult = await fetchInteractions(
+        accountIdForInteractions,
+      );
 
-      setInteractions(interactionsResult.data?.interactions || []);
+      setInteractions(
+        (interactionsResult.data?.interactions || []).map(
+          (i: Omit<Interaction, 'cid'> & { cid?: string | null }) => ({
+            ...i,
+            cid: i.cid ?? null,
+          }),
+        ),
+      );
       setTotalInteractions(
         interactionsResult.data?.interactions_aggregate?.aggregate?.count || 0,
       );
       setUploadStats({
-        count:
-          interactionsResult.data?.upload_stats?.aggregate?.count || 0,
+        count: interactionsResult.data?.upload_stats?.aggregate?.count || 0,
         size: Number(
           interactionsResult.data?.upload_stats?.aggregate?.sum?.size || 0,
         ),
       });
       setDownloadStats({
-        count:
-          interactionsResult.data?.download_stats?.aggregate?.count || 0,
+        count: interactionsResult.data?.download_stats?.aggregate?.count || 0,
         size: Number(
           interactionsResult.data?.download_stats?.aggregate?.sum?.size || 0,
         ),
@@ -188,7 +270,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
     } finally {
       setIsLoading(false);
     }
-  }, [apolloClient, organizationId, currentPage]);
+  }, [apolloClient, organizationId, fetchInteractions]);
 
   useEffect(() => {
     fetchAccountDetails();
@@ -340,14 +422,12 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
           <Clock className='h-5 w-5' />
           Activity Log
         </h2>
-        <p className='mb-4 text-sm text-gray-500'>
-          Note: The current system tracks aggregate upload/download events. Individual file CIDs are not stored in the activity log.
-        </p>
         <div className='overflow-hidden rounded-lg border border-gray-200'>
           <Table className='min-w-full'>
             <TableHead>
               <TableHeadRow>
                 <TableHeadCell>Type</TableHeadCell>
+                <TableHeadCell>File (CID)</TableHeadCell>
                 <TableHeadCell>Size</TableHeadCell>
                 <TableHeadCell>Date</TableHeadCell>
               </TableHeadRow>
@@ -355,7 +435,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
             <TableBody>
               {isLoading ? (
                 <TableBodyRow>
-                  <TableBodyCell colSpan={3} className='text-center'>
+                  <TableBodyCell colSpan={4} className='text-center'>
                     <span className='flex items-center justify-center py-4'>
                       <Loader className='h-5 w-5 animate-spin' />
                     </span>
@@ -380,6 +460,23 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
                         {interaction.type}
                       </span>
                     </TableBodyCell>
+                    <TableBodyCell className='font-mono text-xs'>
+                      {interaction.cid ? (
+                        <Link
+                          href={ROUTES.objectDetails(
+                            network.id,
+                            interaction.cid,
+                          )}
+                          className='text-blue-600 hover:underline dark:text-blue-400'
+                          title={interaction.cid}
+                        >
+                          {interaction.cid.slice(0, 8)}…
+                          {interaction.cid.slice(-6)}
+                        </Link>
+                      ) : (
+                        <span className='text-gray-400'>—</span>
+                      )}
+                    </TableBodyCell>
                     <TableBodyCell className='font-medium'>
                       {formatBytes(Number(interaction.size))}
                     </TableBodyCell>
@@ -396,7 +493,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
               ) : (
                 <TableBodyRow>
                   <TableBodyCell
-                    colSpan={3}
+                    colSpan={4}
                     className='py-6 text-center text-gray-500'
                   >
                     No activity found
