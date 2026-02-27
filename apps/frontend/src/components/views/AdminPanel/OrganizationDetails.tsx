@@ -208,7 +208,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
         const isMissingField =
           err instanceof ApolloError &&
           err.graphQLErrors.some((e) =>
-            e.message.toLowerCase().includes("field 'cid'"),
+            e.message.toLowerCase().includes(`field 'cid'`),
           );
         if (!isMissingField) throw err;
         return await apolloClient.query({
