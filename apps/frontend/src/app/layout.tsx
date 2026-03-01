@@ -4,6 +4,8 @@ import './globals.css';
 import { getNoFlashScript } from '@auto-drive/ui';
 import NextTopLoader from 'nextjs-toploader';
 import { Toaster } from 'react-hot-toast';
+import { getServerRuntimeConfig } from '@/config/runtime';
+import { RuntimeConfigProvider } from '@/config/RuntimeConfigProvider';
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -87,6 +89,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const runtimeConfig = getServerRuntimeConfig();
+
   return (
     <html lang='en' suppressHydrationWarning>
       <body
@@ -94,7 +98,9 @@ export default function RootLayout({
       >
         <script dangerouslySetInnerHTML={{ __html: getNoFlashScript() }} />
         <NextTopLoader color='#1949D2' height={2} showSpinner={false} />
-        {children}
+        <RuntimeConfigProvider config={runtimeConfig}>
+          {children}
+        </RuntimeConfigProvider>
         <Toaster position='top-center' />
       </body>
     </html>

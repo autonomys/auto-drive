@@ -1,131 +1,354 @@
+# ============================================================================
+# Auto Drive — Local Development Docker Compose
+# ============================================================================
+# Mirrors the prod compose but builds images locally from source.
+# Run from repo root: docker compose -f docker-compose.dev.yml up -d --build
+#
+# All env vars are explicit — no env_file references.
+# Use ${VAR:-default} syntax. Required vars are marked with # REQUIRED.
+# ============================================================================
+
 volumes:
-  node-data: {}
   postgres_data: {}
+  files_cache: {}
+
+x-database-url: &database-url
+  DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-auto_drive}}
+
+x-backend-build: &backend-build
+  build:
+    context: .
+    dockerfile: apps/backend/Dockerfile
+
+x-auth-build: &auth-build
+  build:
+    context: .
+    dockerfile: apps/auth/Dockerfile
+
+x-backend-env: &backend-env
+  PORT: 3000
+  # ── Database & messaging ──
+  <<: *database-url
+  RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@rabbitmq:5672}
+  RABBITMQ_PREFETCH: ${RABBITMQ_PREFETCH:-10}
+  RABBITMQ_KEEP_ALIVE_INTERVAL: ${RABBITMQ_KEEP_ALIVE_INTERVAL:-60000}      # ms
+  # ── Substrate chain ──
+  RPC_ENDPOINT: ${RPC_ENDPOINT:-ws://localhost:9944}
+  PRIVATE_KEYS_PATH: ${PRIVATE_KEYS_PATH:-//Alice}
+  # ── Auth service ──
+  AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth:3030}
+  AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}                              # REQUIRED
+  # ── Files gateway (DSN retrieval) ──
+  FILES_GATEWAY_URL: ${FILES_GATEWAY_URL}                                   # REQUIRED
+  FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}                               # REQUIRED
+  # ── Object mapping archiver ──
+  OBJECT_MAPPING_ARCHIVER_URL: ${OBJECT_MAPPING_ARCHIVER_URL}               # REQUIRED
+  OBJECT_MAPPING_ARCHIVER_STEP: ${OBJECT_MAPPING_ARCHIVER_STEP:-1000}
+  # ── EVM / payment ──
+  EVM_CHAIN_ENDPOINT: ${EVM_CHAIN_ENDPOINT}                                 # REQUIRED
+  EVM_CHAIN_CONTRACT_ADDRESS: ${EVM_CHAIN_CONTRACT_ADDRESS}                 # REQUIRED
+  EVM_CHAIN_CONFIRMATIONS: ${EVM_CHAIN_CONFIRMATIONS:-6}
+  EVM_CHAIN_CHECK_INTERVAL: ${EVM_CHAIN_CHECK_INTERVAL:-30000}              # ms
+  CREDITS_PRICE_MULTIPLIER: ${CREDITS_PRICE_MULTIPLIER:-5.00}
+  # ── HTTP ──
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+  REQUEST_SIZE_LIMIT: ${REQUEST_SIZE_LIMIT:-200mb}
+  # ── Cache ──
+  MEMORY_DOWNLOAD_CACHE_MAX_SIZE: ${MEMORY_DOWNLOAD_CACHE_MAX_SIZE:-1073741824}  # 1 GiB
+  CACHE_DIR: ${CACHE_DIR:-./.cache}
+  CACHE_MAX_SIZE: ${CACHE_MAX_SIZE:-10737418240}                            # 10 GiB
+  CACHE_TTL: ${CACHE_TTL:-0}                                                # 0 = no TTL
+  # ── Upload / download limits ──
+  MAX_CONCURRENT_UPLOADS: ${MAX_CONCURRENT_UPLOADS:-40}
+  MAX_ANONYMOUS_DOWNLOAD_SIZE: ${MAX_ANONYMOUS_DOWNLOAD_SIZE:-104857600}     # 100 MiB
+  OPTIONAL_AUTH: ${OPTIONAL_AUTH:-false}
+  DEFAULT_ACCOUNT_MODE: ${DEFAULT_ACCOUNT_MODE:-OneOff}
+  DEFAULT_ACCOUNT_UPLOAD_LIMIT: ${DEFAULT_ACCOUNT_UPLOAD_LIMIT:-104857600}
+  DEFAULT_ACCOUNT_DOWNLOAD_LIMIT: ${DEFAULT_ACCOUNT_DOWNLOAD_LIMIT:-5368709120}
+  WEB3_DEFAULT_ACCOUNT_UPLOAD_LIMIT: ${WEB3_DEFAULT_ACCOUNT_UPLOAD_LIMIT:-1048576}
+  WEB3_DEFAULT_ACCOUNT_DOWNLOAD_LIMIT: ${WEB3_DEFAULT_ACCOUNT_DOWNLOAD_LIMIT:-104857600}
+  FORBIDDEN_EXTENSIONS: ${FORBIDDEN_EXTENSIONS:-}
+  # ── Feature flags ──
+  TASK_MANAGER_MAX_RETRIES: ${TASK_MANAGER_MAX_RETRIES:-3}
+  TASK_MANAGER_ACTIVE: ${TASK_MANAGER_ACTIVE:-}
+  TASK_MANAGER_DISABLED: ${TASK_MANAGER_DISABLED:-}
+  ALL_SERVICES_ACTIVE: ${ALL_SERVICES_ACTIVE:-}
+  OBJECT_MAPPING_ARCHIVER_ACTIVE: ${OBJECT_MAPPING_ARCHIVER_ACTIVE:-}
+  OBJECT_MAPPING_ARCHIVER_DISABLED: ${OBJECT_MAPPING_ARCHIVER_DISABLED:-}
+  BUY_CREDITS_ACTIVE: ${BUY_CREDITS_ACTIVE:-}
+  BUY_CREDITS_STAFF_ONLY: ${BUY_CREDITS_STAFF_ONLY:-}
+  STAFF_USERNAME_ALLOWLIST: ${STAFF_USERNAME_ALLOWLIST:-}
+  STAFF_DOMAINS: ${STAFF_DOMAINS:-}
+  # ── Monitoring (VictoriaMetrics) ──
+  VICTORIA_ACTIVE: ${VICTORIA_ACTIVE:-false}
+  VICTORIA_ENDPOINT: ${VICTORIA_ENDPOINT:-}
+  VICTORIA_USERNAME: ${VICTORIA_USERNAME:-}
+  VICTORIA_PASSWORD: ${VICTORIA_PASSWORD:-}
+  METRIC_ENVIRONMENT_TAG: ${METRIC_ENVIRONMENT_TAG:-chain=unknown}
 
 services:
+  # ──────────────────────────────────────────────────────────────────────
+  # PostgreSQL
+  # ──────────────────────────────────────────────────────────────────────
   postgres:
-    image: postgres:latest
-    container_name: auto_drive_postgres_db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    ports:
-      - "127.0.0.1:5432:5432"
+    image: postgres:16
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '127.0.0.1:5432:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-auto_drive}
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
-      interval: 10s
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 5s
       timeout: 5s
       retries: 5
-    profiles:
-      - infrastructure
-  backend:
-    build:
-      context: .
-      dockerfile: ./backend/Dockerfile
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
-      RPC_ENDPOINT: ${RPC_ENDPOINT}
-      PRIVATE_KEYS_PATH: ${PRIVATE_KEYS_PATH}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
-      OBJECT_MAPPING_ARCHIVER_URL: ${OBJECT_MAPPING_ARCHIVER_URL}
-      MAX_CACHE_SIZE: ${MAX_CACHE_SIZE}
-      JWT_SECRET: ${JWT_SECRET}
-      FILES_GATEWAY_URL: ${FILES_GATEWAY_URL}
-      FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}
-      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
-      AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-    ports:
-      - "${PORT}:3000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 20s
-      timeout: 2s
-      retries: 3
-    profiles:
-      - backend
-  hasura:
-    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
-    volumes:
-      - ./hasura:/app
-    restart: unless-stopped
-    environment:
-      # Essential Environment Variables
-      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
-      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
-      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET} # Admin access secret
-      HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET} # JWT authentication secret
 
-      # Console and Development Mode
-      HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE} # Disable console in production
-      HASURA_GRAPHQL_DEV_MODE: "true" # Disable development mode features
-
-      # Role and CORS Settings
-      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous # Default role for unauthenticated users
-      HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN} # Allowed domains for CORS
-      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: "true"
-
-      # Performance and Connection Settings
-      HASURA_GRAPHQL_MAX_CONNECTIONS: 100 # Maximum number of database connections
-      HASURA_GRAPHQL_STRIPES: 2 # Number of connection pool stripes
-      HASURA_GRAPHQL_CONNECTIONS_PER_STRIPE: 50 # Connections per stripe
-      HASURA_GRAPHQL_IDLE_TIMEOUT: 180 # Idle connection timeout in seconds
-      HASURA_GRAPHQL_TIMEOUT: 60 # Request timeout in seconds
-
-      # Logging Settings
-      HASURA_GRAPHQL_LOG_LEVEL: "warn" # Log verbosity level
-      HASURA_GRAPHQL_ENABLED_LOG_TYPES: "startup,http-log,webhook-log,websocket-log,query-log" # Enabled log types
-
-      # Security and Authorization
-      HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false" # Disable query allowlisting
-
-    ports:
-      - "${HASURA_GRAPHQL_PORT}:8080"
-    command:
-      - graphql-engine
-      - serve
-    profiles:
-      - infrastructure
+  # ──────────────────────────────────────────────────────────────────────
+  # RabbitMQ
+  # ──────────────────────────────────────────────────────────────────────
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - '${RABBITMQ_PORT:-5672}:5672'
+      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
     environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles:
-      - infrastructure
-  auth:
-    build:
-      context: .
-      dockerfile: ./auth/Dockerfile
     restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Database Migrations — Backend (one-shot init container)
+  # ──────────────────────────────────────────────────────────────────────
+  backend-migrate:
+    <<: *backend-build
+    environment:
+      <<: *database-url
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "${AUTH_PORT}:3030"
+    command: ['yarn', 'backend', 'db-migrate', 'up']
+    restart: 'no'
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Database Migrations — Auth (one-shot init container)
+  # ──────────────────────────────────────────────────────────────────────
+  auth-migrate:
+    <<: *auth-build
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
-      - AUTH_PORT=${AUTH_PORT}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_SECRET_ALGORITHM=${JWT_SECRET_ALGORITHM}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
-      - API_SECRET=${API_SECRET}
-    profiles:
-      - auth
+      <<: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['yarn', 'auth', 'migrate', 'up']
+    restart: 'no'
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Hasura GraphQL Engine
+  # ──────────────────────────────────────────────────────────────────────
+  hasura:
+    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
+    volumes:
+      - ./apps/hasura/metadata:/hasura-metadata
+      - ./apps/hasura/migrations:/hasura-migrations
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    environment:
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-auto_drive}}
+      HASURA_GRAPHQL_DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-auto_drive}}
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET}             # REQUIRED
+      HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET}                 # REQUIRED
+      HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE:-false}
+      HASURA_GRAPHQL_DEV_MODE: 'true'
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
+      HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN:-*}
+      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: 'true'
+      HASURA_GRAPHQL_MAX_CONNECTIONS: 100
+      HASURA_GRAPHQL_STRIPES: 2
+      HASURA_GRAPHQL_CONNECTIONS_PER_STRIPE: 50
+      HASURA_GRAPHQL_IDLE_TIMEOUT: 180
+      HASURA_GRAPHQL_TIMEOUT: 60
+      HASURA_GRAPHQL_LOG_LEVEL: 'warn'
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: 'startup,http-log,webhook-log,websocket-log,query-log'
+      HASURA_GRAPHQL_ENABLE_ALLOWLIST: 'false'
+    ports:
+      - '${HASURA_GRAPHQL_PORT:-8080}:8080'
+    command:
+      - graphql-engine
+      - serve
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Backend — Frontend API
+  # ──────────────────────────────────────────────────────────────────────
+  backend-api:
+    <<: *backend-build
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    ports:
+      - '${BACKEND_API_PORT:-3000}:3000'
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:fe:api
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Backend — Frontend Worker (upload processing)
+  # ──────────────────────────────────────────────────────────────────────
+  backend-worker:
+    <<: *backend-build
+    ports:
+      - '${BACKEND_WORKER_PORT:-3001}:3000'
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:fe:worker
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Backend — Download API
+  # ──────────────────────────────────────────────────────────────────────
+  backend-download-api:
+    <<: *backend-build
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    ports:
+      - '${BACKEND_DOWNLOAD_API_PORT:-3003}:3000'
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:download:api
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Backend — Download Worker
+  # ──────────────────────────────────────────────────────────────────────
+  backend-download-worker:
+    <<: *backend-build
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    restart: unless-stopped
+    ports:
+      - '${BACKEND_DOWNLOAD_WORKER_PORT:-3002}:3000'
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:download:worker
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Auth Service
+  # ──────────────────────────────────────────────────────────────────────
+  auth:
+    <<: *auth-build
+    ports:
+      - '${AUTH_PORT:-3030}:3030'
+    restart: unless-stopped
+    environment:
+      AUTH_PORT: 3030
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-auto_drive}}
+      JWT_SECRET: ${JWT_SECRET}                                             # REQUIRED
+      JWT_SECRET_ALGORITHM: ${JWT_SECRET_ALGORITHM:-RS256}
+      API_SECRET: ${API_SECRET}                                             # REQUIRED
+      CORS_ALLOWED_ORIGINS: ${AUTH_CORS_ALLOWED_ORIGINS:-}
+      LOG_LEVEL: ${AUTH_LOG_LEVEL:-info}
+      REVOKE_TOKEN_EMITTED_BEFORE_IN_SECONDS: ${REVOKE_TOKEN_EMITTED_BEFORE_IN_SECONDS:-0}
+    depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3030/health']
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Frontend (Next.js)
+  # Env-agnostic image: NEXT_PUBLIC_* vars are read at request time
+  # ──────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    ports:
+      - '${FRONTEND_PORT:-8080}:3000'
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      # ── NextAuth (server-side) ──
+      NEXTAUTH_URL: ${NEXTAUTH_URL}                                         # REQUIRED
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}                                   # REQUIRED
+      GOOGLE_AUTH_CLIENT_ID: ${GOOGLE_AUTH_CLIENT_ID:-}
+      GOOGLE_AUTH_CLIENT_SECRET: ${GOOGLE_AUTH_CLIENT_SECRET:-}
+      DISCORD_AUTH_CLIENT_ID: ${DISCORD_AUTH_CLIENT_ID:-}
+      DISCORD_AUTH_CLIENT_SECRET: ${DISCORD_AUTH_CLIENT_SECRET:-}
+      GITHUB_AUTH_CLIENT_ID: ${GITHUB_AUTH_CLIENT_ID:-}
+      GITHUB_AUTH_CLIENT_SECRET: ${GITHUB_AUTH_CLIENT_SECRET:-}
+      REFRESHING_TOKEN_THRESHOLD: ${REFRESHING_TOKEN_THRESHOLD:-}
+      # ── Runtime config (read at request time, NOT baked into JS) ──
+      NEXT_PUBLIC_AUTH_API_URL: ${NEXT_PUBLIC_AUTH_API_URL:-http://auth:3030}
+      NEXT_PUBLIC_MAX_FILES_LIMIT: ${NEXT_PUBLIC_MAX_FILES_LIMIT:-10}
+      NEXT_PUBLIC_PROJECT_ID: ${NEXT_PUBLIC_PROJECT_ID:-}
+      NEXT_PUBLIC_RPC_ENDPOINT: ${NEXT_PUBLIC_RPC_ENDPOINT:-}
+      NEXT_PUBLIC_OBJECT_STORE_VERSION: ${NEXT_PUBLIC_OBJECT_STORE_VERSION:-v1}
+      NEXT_PUBLIC_ENV: ${NEXT_PUBLIC_ENV:-}
+      NEXT_PUBLIC_MAINNET_HTTP_URL: ${NEXT_PUBLIC_MAINNET_HTTP_URL:-}
+      NEXT_PUBLIC_MAINNET_DOWNLOAD_URL: ${NEXT_PUBLIC_MAINNET_DOWNLOAD_URL:-}
+      NEXT_PUBLIC_MAINNET_GQL_URL: ${NEXT_PUBLIC_MAINNET_GQL_URL:-}
+      NEXT_PUBLIC_LOCAL_RPC_URL: ${NEXT_PUBLIC_LOCAL_RPC_URL:-}
+      NEXT_PUBLIC_LOCAL_DOWNLOAD_URL: ${NEXT_PUBLIC_LOCAL_DOWNLOAD_URL:-}
+      NEXT_PUBLIC_LOCAL_GQL_URL: ${NEXT_PUBLIC_LOCAL_GQL_URL:-}
+    depends_on:
+      backend-api:
+        condition: service_healthy
+      auth:
+        condition: service_healthy

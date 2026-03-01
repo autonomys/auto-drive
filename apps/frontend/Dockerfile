@@ -32,30 +32,28 @@ FROM deps AS builder
 # Copy full source
 COPY . .
 
-# Build in dependency order: models → auth
+# Build in dependency order: models → ui → frontend
 RUN yarn models build \
-  && yarn auth build
+  && yarn ui build \
+  && yarn frontend build
 
 # ---- Production ----
-FROM base AS production
+FROM node:20.18.3-bookworm-slim AS production
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-  && rm -rf /var/lib/apt/lists/*
+WORKDIR /usr/src/app
 
-# Copy built artifacts and runtime files
-COPY --from=builder /usr/src/app/package.json /usr/src/app/yarn.lock /usr/src/app/.yarnrc.yml ./
-COPY --from=builder /usr/src/app/node_modules ./node_modules
-COPY --from=builder /usr/src/app/apps/auth/dist ./apps/auth/dist
-COPY --from=builder /usr/src/app/apps/auth/package.json ./apps/auth/package.json
-COPY --from=builder /usr/src/app/apps/auth/migrations ./apps/auth/migrations
-COPY --from=builder /usr/src/app/apps/auth/node_modules ./apps/auth/node_modules
-COPY --from=builder /usr/src/app/packages/models/dist ./packages/models/dist
-COPY --from=builder /usr/src/app/packages/models/package.json ./packages/models/package.json
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nextjs
 
-EXPOSE 3030
+# Copy Next.js standalone output
+COPY --from=builder /usr/src/app/apps/frontend/public ./apps/frontend/public
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/apps/frontend/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/apps/frontend/.next/static ./apps/frontend/.next/static
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3030/health || exit 1
+USER nextjs
 
-CMD ["yarn", "auth", "start"]
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "apps/frontend/server.js"]

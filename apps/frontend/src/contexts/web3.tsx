@@ -13,19 +13,21 @@ import { FC, ReactNode, useMemo, useState } from 'react';
 import { WagmiProvider } from 'wagmi';
 import { evmChains } from '@auto-drive/ui';
 import { useNetwork } from './network';
+import { useRuntimeConfig } from '@/config/RuntimeConfigProvider';
 
 export const Web3Provider: FC<{ children: ReactNode }> = ({ children }) => {
   const [queryClient] = useState(() => new QueryClient({}));
   const { network } = useNetwork();
+  const { projectId } = useRuntimeConfig();
   const config = useMemo(
     () =>
       getDefaultConfig({
         appName: 'Auto Drive',
-        projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
+        projectId,
         chains: [evmChains[network.id]],
         ssr: false,
       }),
-    [],
+    [projectId],
   );
 
   return (

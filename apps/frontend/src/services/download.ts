@@ -10,6 +10,7 @@ import { bufferToIterable } from 'utils/async';
 import { useNetwork } from 'contexts/network';
 import { Api } from 'services/api';
 import { getAuthSession } from '@/utils/auth';
+import { getClientRuntimeConfig } from '@/config/RuntimeConfigProvider';
 
 export type { DownloadProgressInfo };
 
@@ -114,7 +115,7 @@ export const createDownloadService = (api: Api) => {
 
   const getObjectStoreName = () => {
     const objectStoreVersion =
-      process.env.NEXT_PUBLIC_OBJECT_STORE_VERSION ?? 'v1';
+      getClientRuntimeConfig().objectStoreVersion;
     return `files-${objectStoreVersion}`;
   };
 
