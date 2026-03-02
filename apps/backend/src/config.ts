@@ -69,6 +69,18 @@ export const config = {
     checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
     priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
+  credits: {
+    // How many days a purchased credit row remains valid before expiring.
+    // Free-tier and one-off allocation credits are unaffected — they live on
+    // accounts.upload_limit / accounts.download_limit and never expire.
+    expiryDays: Number(env('CREDIT_EXPIRY_DAYS', '90')),
+    // Maximum total purchased credit balance (in bytes) per account, summed
+    // across all active purchased_credits rows.
+    // Default: 100 GiB — matches the economic protection design document.
+    maxBytesPerUser: BigInt(env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3))),
+    // How often (in ms) the credit expiry background job runs.
+    expiryCheckIntervalMs: Number(env('CREDIT_EXPIRY_CHECK_INTERVAL', '3600000')),
+  },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
     maxAnonymousDownloadSize: Number(
