@@ -207,9 +207,12 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       } catch (err) {
         const isMissingField =
           err instanceof ApolloError &&
-          err.graphQLErrors.some((e) =>
-            e.message.toLowerCase().includes('field \'cid\''),
-          );
+          err.graphQLErrors.some((e) => {
+            const msg = e.message.toLowerCase();
+            return (
+              msg.includes('field "cid"') || msg.includes("field 'cid'")
+            );
+          });
         if (!isMissingField) throw err;
         return await apolloClient.query({
           query: GET_ACCOUNT_INTERACTIONS_LEGACY,
