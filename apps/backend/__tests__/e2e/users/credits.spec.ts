@@ -1,6 +1,7 @@
 import {
   InteractionType,
   AccountModel,
+  IntentStatus,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { PreconditionError } from '../../utils/error.js'
@@ -16,6 +17,19 @@ import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { accountsRepository } from '../../../src/infrastructure/repositories/index.js'
 import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
 import { jest } from '@jest/globals'
+import { v4 as uuidv4 } from 'uuid'
+
+// Inserts a minimal intent row so the purchased_credits.intent_id FK is satisfied.
+const createTestIntent = async (userPublicId: string): Promise<string> => {
+  const db = await getDatabase()
+  const id = `test-intent-${uuidv4()}`
+  await db.query(
+    `INSERT INTO intents (id, user_public_id, status, shannons_per_byte)
+     VALUES ($1, $2, $3, $4)`,
+    [id, userPublicId, IntentStatus.COMPLETED, '1'],
+  )
+  return id
+}
 
 describe('CreditsUseCases', () => {
   let mockUser: UserWithOrganization
@@ -81,7 +95,7 @@ describe('CreditsUseCases', () => {
     const account = await AccountsUseCases.getOrCreateAccount(mockUser)
 
     const creditsToAdd = BigInt(123)
-    const intentId = 'mock-intent-id-001'
+    const intentId = await createTestIntent(mockUser.publicId)
 
     const result = await AccountsUseCases.addCreditsToAccount(
       mockUser.publicId,
@@ -110,7 +124,7 @@ describe('CreditsUseCases', () => {
     const account = await AccountsUseCases.getOrCreateAccount(mockUser)
 
     const creditsToAdd = BigInt(100 * 1024)
-    const intentId = 'mock-intent-id-002'
+    const intentId = await createTestIntent(mockUser.publicId)
 
     const before = await AccountsUseCases.getPendingCreditsByUserAndType(
       mockUser,
@@ -149,10 +163,11 @@ describe('CreditsUseCases', () => {
       account.downloadLimit,
     )
 
+    const intentId = await createTestIntent(mockUser.publicId)
     const result = await AccountsUseCases.addCreditsToAccount(
       mockUser.publicId,
       BigInt(50),
-      'mock-intent-id-003',
+      intentId,
     )
 
     expect(result.isOk()).toBe(true)
@@ -172,19 +187,21 @@ describe('CreditsUseCases', () => {
 
     // Insert a large existing credit row directly so the cap check fires.
     const largeBytes = BigInt(100 * 1024 * 1024 * 1024) // 100 GiB
+    const existingIntentId = await createTestIntent(mockUser.publicId)
     await purchasedCreditsRepository.createPurchasedCredit({
       accountId: account.id,
-      intentId: 'existing-intent',
+      intentId: existingIntentId,
       uploadBytesOriginal: largeBytes,
       downloadBytesOriginal: largeBytes,
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
     })
 
     // Trying to add even 1 more byte should be rejected.
+    const overCapIntentId = await createTestIntent(mockUser.publicId)
     const result = await AccountsUseCases.addCreditsToAccount(
       mockUser.publicId,
       BigInt(1),
-      'over-cap-intent',
+      overCapIntentId,
     )
 
     expect(result.isErr()).toBe(true)
