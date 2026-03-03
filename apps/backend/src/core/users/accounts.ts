@@ -6,11 +6,16 @@ import {
   AccountModel,
   Account,
   InteractionType,
+  InteractionSource,
   AccountInfo,
   AccountWithTotalSize,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
+import {
+  purchasedCreditsRepository,
+  InsufficientPurchasedCreditsError,
+} from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
 import { config } from '../../config.js'
@@ -144,12 +149,16 @@ const getPendingCreditsByAccountAndType = async (
       ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
       : new Date(0)
 
+  // Only count free-tier interactions against the free/one-off limit.
+  // Interactions sourced from purchased credits are tracked separately and
+  // must not reduce the free allocation.
   const interactions =
     await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
       account.id,
       type,
       start,
       end,
+      InteractionSource.FreeTier,
     )
 
   const spentCredits = interactions.reduce((acc, interaction) => {
@@ -215,26 +224,119 @@ const registerInteraction = async (
   user: UserWithOrganization,
   type: InteractionType,
   size: bigint,
-) => {
+): Promise<void> => {
   const account = await getOrCreateAccount(user)
+  const creditType = type === InteractionType.Upload ? 'upload' : 'download'
 
-  await InteractionsUseCases.createInteraction(account.id, type, size)
-}
+  logger.debug(
+    'Registering interaction (accountId=%s, type=%s, size=%d)',
+    account.id,
+    type,
+    size,
+  )
 
-const addCreditsToAccount = async (publicId: string, credits: number) => {
-  const user = await AuthManager.getUserFromPublicId(publicId)
+  // --- Step 1: try to cover the full amount from purchased credits. ---
+  const consumeResult = await purchasedCreditsRepository.consumeCredits(
+    account.id,
+    creditType,
+    size,
+  )
 
-  const account = await AccountsUseCases.getOrCreateAccount(user)
-
-  if (account.model !== AccountModel.OneOff) {
-    return err(new ForbiddenError('Account is not OneOff'))
+  if (consumeResult.isOk()) {
+    // Purchased credits covered everything.
+    await InteractionsUseCases.createInteraction(
+      account.id,
+      type,
+      size,
+      InteractionSource.Purchased,
+    )
+    return
   }
 
-  await accountsRepository.updateAccount(
+  // --- Step 2: purchased credits are insufficient (or zero). ---
+  const insufficientErr = consumeResult.error as InsufficientPurchasedCreditsError
+  const fromPurchased = insufficientErr.available
+
+  // Drain whatever purchased bytes remain before falling back to the free tier.
+  if (fromPurchased > BigInt(0)) {
+    // consumeCredits with the exact available amount is guaranteed to succeed.
+    await purchasedCreditsRepository.consumeCredits(
+      account.id,
+      creditType,
+      fromPurchased,
+    )
+    await InteractionsUseCases.createInteraction(
+      account.id,
+      type,
+      fromPurchased,
+      InteractionSource.Purchased,
+    )
+  }
+
+  // --- Step 3: cover the remainder from the free/one-off allocation. ---
+  const fromFree = size - fromPurchased
+
+  logger.debug(
+    'Falling back to free-tier for remainder (accountId=%s, fromPurchased=%d, fromFree=%d)',
     account.id,
-    account.model,
-    account.uploadLimit + credits,
-    account.downloadLimit + credits,
+    fromPurchased,
+    fromFree,
+  )
+
+  await InteractionsUseCases.createInteraction(
+    account.id,
+    type,
+    fromFree,
+    InteractionSource.FreeTier,
+  )
+}
+
+const addCreditsToAccount = async (
+  publicId: string,
+  credits: bigint,
+  intentId: string,
+): Promise<Result<void, ForbiddenError>> => {
+  const user = await AuthManager.getUserFromPublicId(publicId)
+  const account = await AccountsUseCases.getOrCreateAccount(user)
+
+  // Enforce per-user purchased-credit cap before inserting the new row.
+  const current = await purchasedCreditsRepository.getRemainingCredits(account.id)
+  const newUploadTotal = current.uploadBytesRemaining + credits
+  const newDownloadTotal = current.downloadBytesRemaining + credits
+
+  if (
+    newUploadTotal > config.credits.maxBytesPerUser ||
+    newDownloadTotal > config.credits.maxBytesPerUser
+  ) {
+    logger.warn(
+      'Purchase would exceed per-user cap (accountId=%s, currentUpload=%d, currentDownload=%d, adding=%d, cap=%d)',
+      account.id,
+      current.uploadBytesRemaining,
+      current.downloadBytesRemaining,
+      credits,
+      config.credits.maxBytesPerUser,
+    )
+    return err(new ForbiddenError('Purchase would exceed per-user credit cap'))
+  }
+
+  const expiresAt = new Date(
+    Date.now() + config.credits.expiryDays * 24 * 60 * 60 * 1000,
+  )
+
+  await purchasedCreditsRepository.createPurchasedCredit({
+    accountId: account.id,
+    intentId,
+    uploadBytesOriginal: credits,
+    downloadBytesOriginal: credits,
+    expiresAt,
+  })
+
+  logger.info(
+    'Purchased credits created (accountId=%s, intentId=%s, bytes=%d, expiresAt=%s)',
+    account.id,
+    intentId,
+    credits,
+    expiresAt.toISOString(),
   )
 
   return ok()
