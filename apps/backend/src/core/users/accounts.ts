@@ -175,8 +175,14 @@ const getPendingCreditsByAccountAndType = async (
   // Also include any active purchased credits so the upload/download gate
   // (pendingCredits < metadata.totalSize) grants access when the user has
   // enough purchased bytes, even if their free allocation is exhausted.
-  // When buyCredits is disabled, getRemainingCredits returns 0, so there
-  // is no change in behaviour for pure free/one-off accounts.
+  //
+  // getRemainingCredits is a plain DB query with no awareness of the
+  // buyCredits feature flag. If the flag is OFF and no rows exist in
+  // purchased_credits (because the /intents routes are gated), this returns
+  // zero and behaviour is identical to the pre-purchased-credits state.
+  // If credits were purchased while the flag was ON and it is later turned
+  // OFF, those already-purchased credits remain visible and usable — this is
+  // intentional: users should not lose credits they already paid for.
   const purchased = await purchasedCreditsRepository.getRemainingCredits(
     account.id,
   )
@@ -269,32 +275,48 @@ const registerInteraction = async (
   }
 
   // --- Step 2: purchased credits are insufficient (or zero). ---
+  // NOTE: the available count from step 1 is a snapshot from inside that
+  // transaction. By the time we issue a second call, a concurrent request may
+  // have consumed those same bytes. We treat this drain as best-effort and
+  // check the result so the ledger stays consistent regardless of races.
   const insufficientErr = consumeResult.error as InsufficientPurchasedCreditsError
-  const fromPurchased = insufficientErr.available
+  const reportedAvailable = insufficientErr.available
 
-  // Drain whatever purchased bytes remain before falling back to the free tier.
-  if (fromPurchased > BigInt(0)) {
-    // consumeCredits with the exact available amount is guaranteed to succeed.
-    await purchasedCreditsRepository.consumeCredits(
+  let actuallyDrained = BigInt(0)
+
+  if (reportedAvailable > BigInt(0)) {
+    const drainResult = await purchasedCreditsRepository.consumeCredits(
       account.id,
       creditType,
-      fromPurchased,
+      reportedAvailable,
     )
-    await InteractionsUseCases.createInteraction(
-      account.id,
-      type,
-      fromPurchased,
-      InteractionSource.Purchased,
-    )
+    if (drainResult.isOk()) {
+      actuallyDrained = reportedAvailable
+      await InteractionsUseCases.createInteraction(
+        account.id,
+        type,
+        actuallyDrained,
+        InteractionSource.Purchased,
+      )
+    } else {
+      // A concurrent request consumed the remaining bytes between our two calls.
+      // Fall through with actuallyDrained = 0 and charge the full size against
+      // the free tier below. No purchased interaction is recorded.
+      logger.warn(
+        'Concurrent request consumed purchased credits between drain attempts (accountId=%s, reportedAvailable=%d)',
+        account.id,
+        reportedAvailable,
+      )
+    }
   }
 
   // --- Step 3: cover the remainder from the free/one-off allocation. ---
-  const fromFree = size - fromPurchased
+  const fromFree = size - actuallyDrained
 
   logger.debug(
-    'Falling back to free-tier for remainder (accountId=%s, fromPurchased=%d, fromFree=%d)',
+    'Falling back to free-tier for remainder (accountId=%s, actuallyDrained=%d, fromFree=%d)',
     account.id,
-    fromPurchased,
+    actuallyDrained,
     fromFree,
   )
 
