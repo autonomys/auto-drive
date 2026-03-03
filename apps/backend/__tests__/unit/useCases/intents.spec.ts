@@ -158,10 +158,11 @@ describe('IntentsUseCases', () => {
 
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
-    const credits = Number(paymentAmount / intent.shannonsPerByte)
+    // getIntentCredits now returns bigint; intentId is forwarded as third arg.
+    const credits = paymentAmount / intent.shannonsPerByte
 
     expect(res.isOk()).toBe(true)
-    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, credits)
+    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, credits, intent.id)
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         id: intent.id,
@@ -192,8 +193,9 @@ describe('IntentsUseCases', () => {
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
     expect(res.isOk()).toBe(true)
-    const credits = Number(paymentAmount / intent.shannonsPerByte)
-    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, credits)
+    // getIntentCredits now returns bigint; intentId is forwarded as third arg.
+    const credits = paymentAmount / intent.shannonsPerByte
+    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, credits, intent.id)
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         id: intent.id,
@@ -320,10 +322,10 @@ describe('IntentsUseCases', () => {
     }
 
     const credits = IntentsUseCases.getIntentCredits(intent)
-    expect(credits).toBe(100)
+    expect(credits).toBe(100n)
   })
 
-  it('getIntentCredits should return 0 when paymentAmount is undefined', () => {
+  it('getIntentCredits should return 0n when paymentAmount is undefined', () => {
     const intent: Intent = {
       id: '0x13',
       userPublicId: user.publicId,
@@ -333,7 +335,7 @@ describe('IntentsUseCases', () => {
     }
 
     const credits = IntentsUseCases.getIntentCredits(intent)
-    expect(credits).toBe(0)
+    expect(credits).toBe(0n)
   })
 
   it('updateIntent should proxy repository', async () => {
