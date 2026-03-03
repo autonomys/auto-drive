@@ -1,5 +1,5 @@
 import { v4 } from 'uuid'
-import { InteractionType } from '@auto-drive/models'
+import { InteractionSource, InteractionType } from '@auto-drive/models'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
 import {
   Metric,
@@ -30,12 +30,14 @@ const createInteraction = async (
   accountId: string,
   type: InteractionType,
   size: bigint,
+  source: InteractionSource,
 ): Promise<void> => {
   logger.debug(
-    'Creating new interaction (accountId=%s, type=%s, size=%d)',
+    'Creating new interaction (accountId=%s, type=%s, size=%d, source=%s)',
     accountId,
     type,
     size,
+    source,
   )
 
   try {
@@ -53,12 +55,14 @@ const createInteraction = async (
       accountId,
       type,
       size,
+      source,
     )
     logger.info(
-      'Interaction created successfully (id=%s, accountId=%s, type=%s)',
+      'Interaction created successfully (id=%s, accountId=%s, type=%s, source=%s)',
       interactionId,
       accountId,
       type,
+      source,
     )
   } catch (error) {
     logger.error(
