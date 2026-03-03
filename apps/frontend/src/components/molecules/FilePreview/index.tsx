@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FilePreview as AutoFilePreview } from '@autonomys/auto-design-system';
 import {
   OffchainMetadata,
@@ -15,6 +15,8 @@ import {
 } from '@auto-drive/ui';
 import { sanitizeHTML } from '../../../utils/sanitizeHTML';
 
+const MAX_PREVIEW_SIZE = BigInt(100 * 1024 * 1024); // 100 MB
+
 export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   const { network } = useNetwork();
   const [isFilePreview, setIsFilePreview] = useState(false);
@@ -24,6 +26,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   const [decryptionError, setDecryptionError] = useState<string | null>(null);
   const [file, setFile] = useState<Blob | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const safeSetTextContent = useCallback((text: string) => {
     setTextContent(sanitizeHTML(text));
@@ -41,8 +44,24 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
 
   const gatewayUrl = EXTERNAL_ROUTES.gatewayObjectDownload(metadata.dataCid);
 
+  const isPreviewable = useMemo(() => {
+    if (metadata.type !== 'file') return false;
+    if (metadata.totalSize > MAX_PREVIEW_SIZE) return false;
+    return canDisplayDirectly(metadata) || needsContentParsing(metadata) || !!metadata.uploadOptions?.encryption;
+  }, [metadata]);
+
   const fetchFile = useCallback(
     async (password?: string) => {
+      // Reset error states on every attempt
+      setError(null);
+      setDecryptionError(null);
+
+      if (!isPreviewable) {
+        setIsFilePreview(false);
+        setLoading(false);
+        return;
+      }
+
       // If file is encrypted and no password provided, don't fetch
       if (metadata.uploadOptions?.encryption && !password && !isDecrypted) {
         setIsFilePreview(false);
@@ -51,6 +70,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       }
 
       // For non-encrypted files that can be displayed directly,
+      // use gateway URL directly (no fetch needed)
       if (!metadata.uploadOptions?.encryption && canDisplayDirectly(metadata)) {
         setIsFilePreview(true);
         setFile(null);
@@ -58,12 +78,18 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         return;
       }
 
-      // Encrypted files always need to be fetched and decrypted
+      // Cancel any in-flight request
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       setIsFilePreview(true);
       setLoading(true);
 
       try {
-        const response = await fetch(gatewayUrl);
+        const response = await fetch(gatewayUrl, {
+          signal: controller.signal,
+        });
         if (!response.ok) {
           throw new Error(
             `Failed to fetch file: ${response.status} ${response.statusText}`,
@@ -97,10 +123,15 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
             return;
           } catch {
             setDecryptionError('Invalid password or decryption failed');
+            setLoading(false);
+            return;
           }
         }
         setLoading(false);
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
         console.error('Error fetching file:', error);
         setError(
           error instanceof Error ? error.message : 'Failed to fetch file',
@@ -108,11 +139,14 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         setLoading(false);
       }
     },
-    [metadata, isDecrypted, gatewayUrl, safeSetTextContent],
+    [metadata, isDecrypted, isPreviewable, gatewayUrl, safeSetTextContent],
   );
 
   useEffect(() => {
     fetchFile();
+    return () => {
+      abortControllerRef.current?.abort();
+    };
   }, [fetchFile]);
 
   return (

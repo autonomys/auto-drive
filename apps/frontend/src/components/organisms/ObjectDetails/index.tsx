@@ -60,14 +60,16 @@ export const ObjectDetails = ({
       </div>
       <ObjectUploadDetails object={object} isOwner={isOwner} />
       <ObjectUploadOptions object={object} />
-      <div className='rounded-lg border border-gray-200 p-6 dark:bg-darkWhite'>
-        <h2 className='mb-4 text-lg font-medium text-gray-900 dark:text-gray-100'>
-          Preview
-        </h2>
-        <div className='overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800'>
-          <FilePreview metadata={object.metadata} />
+      {object.metadata.type === 'file' && (
+        <div className='rounded-lg border border-gray-200 p-6 dark:bg-darkWhite'>
+          <h2 className='mb-4 text-lg font-medium text-gray-900 dark:text-gray-100'>
+            Preview
+          </h2>
+          <div className='overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800'>
+            <FilePreview metadata={object.metadata} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
