@@ -210,7 +210,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
           err.graphQLErrors.some((e) => {
             const msg = e.message.toLowerCase();
             return (
-              msg.includes('field "cid"') || msg.includes("field 'cid'")
+              msg.includes('field "cid"') || msg.includes(`field 'cid'`)
             );
           });
         if (!isMissingField) throw err;
