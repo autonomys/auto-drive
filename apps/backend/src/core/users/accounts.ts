@@ -170,7 +170,22 @@ const getPendingCreditsByAccountAndType = async (
       ? account.uploadLimit
       : account.downloadLimit
 
-  return limit - spentCredits
+  const freeRemaining = limit - spentCredits
+
+  // Also include any active purchased credits so the upload/download gate
+  // (pendingCredits < metadata.totalSize) grants access when the user has
+  // enough purchased bytes, even if their free allocation is exhausted.
+  // When buyCredits is disabled, getRemainingCredits returns 0, so there
+  // is no change in behaviour for pure free/one-off accounts.
+  const purchased = await purchasedCreditsRepository.getRemainingCredits(
+    account.id,
+  )
+  const purchasedRemaining =
+    type === InteractionType.Upload
+      ? Number(purchased.uploadBytesRemaining)
+      : Number(purchased.downloadBytesRemaining)
+
+  return freeRemaining + purchasedRemaining
 }
 
 const getAccountInfo = async (
