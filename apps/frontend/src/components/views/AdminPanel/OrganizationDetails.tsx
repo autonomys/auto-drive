@@ -205,12 +205,18 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
           fetchPolicy: 'network-only',
         });
       } catch (err) {
+        // Hasura/GraphQL errors for unknown fields always mention the field name
+        // with double quotes (e.g. `field "cid" not found` or
+        // `Cannot query field "cid"`). Using a regex avoids hardcoding any
+        // quote characters, which prevents Prettier/ESLint quote-style issues.
         const isMissingField =
           err instanceof ApolloError &&
           err.graphQLErrors.some((e) => {
-            const msg = e.message.toLowerCase();
+            const msg = e.message;
             return (
-              msg.includes('field "cid"') || msg.includes('field \'cid\'')
+              (/cannot query field/i.test(msg) ||
+                /field .+ not found/i.test(msg)) &&
+              /\bcid\b/.test(msg)
             );
           });
         if (!isMissingField) throw err;
