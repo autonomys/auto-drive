@@ -7,6 +7,8 @@ import {
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
+import { config } from '../../config.js'
+import { hasGoogleAuth } from '../../core/featureFlags/index.js'
 
 export const intentsController = Router()
 
@@ -15,6 +17,20 @@ intentsController.post(
   asyncSafeHandler(async (req, res) => {
     const user = await handleAuth(req, res)
     if (!user) {
+      return
+    }
+
+    // Defense-in-depth: when the feature is publicly active, intent creation
+    // requires Google authentication.  The featureFlagMiddleware already blocks
+    // non-Google users from reaching this route (buyCredits returns false for
+    // them), but we check explicitly here to return a clear error code rather
+    // than a silent 404 in case of any middleware bypass.
+    if (config.featureFlags.flags.buyCredits.active && !hasGoogleAuth(user)) {
+      res.status(403).json({
+        error: 'GOOGLE_AUTH_REQUIRED',
+        message:
+          'Google authentication is required to purchase storage credits.',
+      })
       return
     }
 

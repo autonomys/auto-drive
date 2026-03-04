@@ -17,12 +17,25 @@ const get = (user: User | null) => {
   )
 }
 
+// Returns true if the user authenticated via Google OAuth.
+// Used as the purchase gate when the feature is publicly active.
+export const hasGoogleAuth = (user: User | null): boolean => {
+  return Boolean(user && user.oauthProvider === 'google')
+}
+
 const isActive = (value: FeatureFlag, user: User | null) => {
+  // Public mode (BUY_CREDITS_ACTIVE=true): only users authenticated via Google
+  // can access the feature.  This prevents Sybil purchases — Google accounts
+  // require phone verification and are much harder to mass-create than web3
+  // wallets or pseudonymous OAuth accounts.
   if (value.active) {
-    return true
+    return hasGoogleAuth(user)
   }
 
-  return value.staffOnly && isStaff(user)
+  // Staff-only mode (BUY_CREDITS_ACTIVE=false, BUY_CREDITS_STAFF_ONLY=true):
+  // access is granted via the STAFF_DOMAINS / STAFF_USERNAME_ALLOWLIST config,
+  // which in production is set to @subspace.network and @autonomys.xyz.
+  return Boolean(value.staffOnly && isStaff(user))
 }
 
 const isStaffDomain = (user: User | null) => {
@@ -55,4 +68,5 @@ const isStaff = (user: User | null) => {
 export const FeatureFlagsUseCases = {
   get,
   isStaff,
+  hasGoogleAuth,
 }
