@@ -74,6 +74,15 @@ export class ForbiddenError extends HttpError {
   }
 }
 
+// 410 Gone — resource existed but is no longer available (e.g. expired intent).
+export class GoneError extends HttpError {
+  static readonly statusCode = 410
+  constructor(message: string) {
+    super(GoneError.statusCode, message)
+    this.name = 'GoneError'
+  }
+}
+
 export const handleError = (error: Error, res: Response) => {
   if (error instanceof HttpError) {
     error.handleResponse(res)

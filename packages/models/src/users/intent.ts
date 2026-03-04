@@ -5,6 +5,7 @@ export enum IntentStatus {
   CONFIRMED = "confirmed",
   COMPLETED = "completed",
   FAILED = "failed",
+  EXPIRED = "expired",
 }
 
 export const IntentSchema = z.object({
@@ -14,6 +15,9 @@ export const IntentSchema = z.object({
   txHash: z.string().optional(),
   paymentAmount: z.bigint().optional(),
   shannonsPerByte: z.bigint(),
+  // Price-lock window: set at creation, intent is rejected after this time.
+  // NULL for intents created before this feature was introduced.
+  expiresAt: z.date().optional(),
 });
 
 export type Intent = z.infer<typeof IntentSchema>;
