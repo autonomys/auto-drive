@@ -88,7 +88,7 @@ export const ObjectUploadDetails = ({
                   )}
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='hover:text-accent-hover text-accent hover:underline'
+                  className='text-primary hover:text-primary/80 hover:underline'
                 >
                   {formatNumberWithCommas(object.uploadState.minimumBlockDepth)}
                 </a>
@@ -142,7 +142,7 @@ export const ObjectUploadDetails = ({
                   )}
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='hover:text-accent-hover text-accent hover:underline'
+                  className='text-primary hover:text-primary/80 hover:underline'
                 >
                   {formatNumberWithCommas(object.uploadState.minimumBlockDepth)}
                 </a>
