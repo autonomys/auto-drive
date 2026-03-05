@@ -98,6 +98,7 @@ const downloadObjectByUser = async (
         reader,
         InteractionType.Download,
         totalSize,
+        cid,
       )
 
       const download = await downloadService.download(cid, options)
