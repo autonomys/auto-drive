@@ -84,7 +84,7 @@ export const ToBeReviewedFiles = () => {
             leaveFrom='opacity-100'
             leaveTo='opacity-0'
           >
-            <div className='fixed inset-0 bg-black/25 dark:bg-darkBlack/25' />
+            <div className='fixed inset-0 bg-black/25' />
           </TransitionChild>
           <div className='flex min-h-screen items-center justify-center px-4 pb-20 text-center'>
             <span
@@ -103,7 +103,7 @@ export const ToBeReviewedFiles = () => {
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='inline-block flex h-[60vh] w-full max-w-md transform flex-col justify-between overflow-y-scroll rounded-2xl bg-backgroundLight bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-darkWhiteHover'>
+              <DialogPanel className='inline-block flex h-[60vh] w-full max-w-md transform flex-col justify-between overflow-y-scroll rounded-2xl bg-card p-6 text-left align-middle text-card-foreground shadow-xl transition-all'>
                 <div>
                   <DialogTitle
                     as='h3'

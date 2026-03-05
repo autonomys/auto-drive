@@ -49,7 +49,7 @@ export const ObjectDetails = ({
       </div>
       <div className='flex items-center justify-between'>
         <div className='flex items-center space-x-3'>
-          <div className='rounded-lg bg-blue-100 p-2 dark:bg-darkPrimary'>
+          <div className='rounded-lg bg-blue-100 p-2 dark:bg-primary'>
             <IconByFileType
               fileType={getTypeFromMetadata(object.metadata) ?? ''}
             />
@@ -61,7 +61,7 @@ export const ObjectDetails = ({
       <ObjectUploadDetails object={object} isOwner={isOwner} />
       <ObjectUploadOptions object={object} />
       {object.metadata.type === 'file' && (
-        <div className='rounded-lg border border-gray-200 p-6 dark:bg-darkWhite'>
+        <div className='rounded-lg border border-border bg-card p-6'>
           <h2 className='mb-4 text-lg font-medium text-gray-900 dark:text-gray-100'>
             Preview
           </h2>

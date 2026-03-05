@@ -98,7 +98,7 @@ export const UserAsyncDownloads = () => {
             leaveFrom='opacity-100'
             leaveTo='opacity-0'
           >
-            <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black/25' />
+            <div className='fixed inset-0 bg-black/25' />
           </TransitionChild>
           <div className='flex min-h-screen items-center justify-center px-4 pb-20 text-center'>
             <span
