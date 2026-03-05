@@ -56,7 +56,7 @@ export const DefaultPasswordModal = ({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='dark:bg-darkBlack/25 fixed inset-0 bg-black' />
+          <div className='fixed inset-0 bg-black/25' />
         </TransitionChild>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -70,7 +70,7 @@ export const DefaultPasswordModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='dark:bg-darkWhite w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-card p-6 text-left align-middle text-card-foreground shadow-xl transition-all'>
                 <DialogTitle
                   as='h3'
                   className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-100'
@@ -87,14 +87,14 @@ export const DefaultPasswordModal = ({
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder='New Password'
-                  className='dark:bg-darkWhite mt-2 block w-full rounded-md border border-gray-300 p-2 shadow-sm dark:border-gray-600 dark:text-gray-100'
+                  className='mt-2 block w-full rounded-md border border-border bg-background p-2 text-foreground shadow-sm'
                 />
                 <input
                   type='password'
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder='Confirm Password'
-                  className='dark:bg-darkWhite mt-2 block w-full rounded-md border border-gray-300 p-2 shadow-sm dark:border-gray-600 dark:text-gray-100'
+                  className='mt-2 block w-full rounded-md border border-border bg-background p-2 text-foreground shadow-sm'
                 />
                 <div className='mt-4 flex justify-center gap-2'>
                   <Button
