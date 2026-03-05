@@ -90,9 +90,9 @@ All colors MUST be HSL.
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
 
-    --light-accent: 189 64% 80%;
+    --light-accent: 234 55% 55%;
     --light-accent-foreground: 0 0% 100%;
-    --light-danger: 348 73% 80%;
+    --light-danger: 350 68% 54%;
     --light-danger-foreground: 0 0% 100%;
 
     --danger: 350 68% 54%;
@@ -127,8 +127,8 @@ All colors MUST be HSL.
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --border: 217.2 32.6% 30%;
+    --input: 217.2 32.6% 30%;
     --ring: 212.7 26.8% 83.9%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
