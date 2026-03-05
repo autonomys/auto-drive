@@ -102,7 +102,7 @@ export const TablePaginator = () => {
       <div className='flex items-center gap-2'>
         <button
           disabled={page === 0}
-          className='border-light-gray cursor-pointer rounded-md border p-2 transition-all hover:scale-[102%] disabled:scale-100 disabled:opacity-50'
+          className='cursor-pointer rounded-md border border-border p-2 transition-all hover:bg-background-hover disabled:opacity-50'
           onClick={() => setInternalPage(0)}
           title='First page'
         >
@@ -110,7 +110,7 @@ export const TablePaginator = () => {
         </button>
         <button
           disabled={page === 0}
-          className='border-light-gray cursor-pointer rounded-md border p-2 transition-all hover:scale-[102%] disabled:scale-100 disabled:opacity-50'
+          className='cursor-pointer rounded-md border border-border p-2 transition-all hover:bg-background-hover disabled:opacity-50'
           onClick={() => setInternalPage(page - 1)}
           title='Previous page'
         >
@@ -130,7 +130,7 @@ export const TablePaginator = () => {
         </div>
         <button
           disabled={page >= totalPages - 1}
-          className='border-light-gray cursor-pointer rounded-md border p-2 transition-all hover:scale-[102%] disabled:scale-100 disabled:opacity-50'
+          className='cursor-pointer rounded-md border border-border p-2 transition-all hover:bg-background-hover disabled:opacity-50'
           onClick={() => setInternalPage(page + 1)}
           title='Next page'
         >
@@ -138,7 +138,7 @@ export const TablePaginator = () => {
         </button>
         <button
           disabled={page >= totalPages - 1}
-          className='border-light-gray cursor-pointer rounded-md border p-2 transition-all hover:scale-[102%] disabled:scale-100 disabled:opacity-50'
+          className='cursor-pointer rounded-md border border-border p-2 transition-all hover:bg-background-hover disabled:opacity-50'
           onClick={() => setInternalPage(totalPages - 1)}
           title='Last page'
         >
