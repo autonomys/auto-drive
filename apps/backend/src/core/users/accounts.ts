@@ -264,13 +264,47 @@ const registerInteraction = async (
     size,
   )
 
+  // consumeUpTo commits its own transaction before we record the interaction.
+  // If createInteraction fails, the credits are already deducted with no
+  // ledger entry — permanent financial loss. Guard with a compensating refund.
   if (fromPurchased > BigInt(0)) {
-    await InteractionsUseCases.createInteraction(
-      account.id,
-      type,
-      fromPurchased,
-      InteractionSource.Purchased,
-    )
+    try {
+      await InteractionsUseCases.createInteraction(
+        account.id,
+        type,
+        fromPurchased,
+        InteractionSource.Purchased,
+      )
+    } catch (interactionError) {
+      logger.error(
+        interactionError,
+        'registerInteraction: purchased interaction recording failed after consumeUpTo committed — attempting compensating refund (accountId=%s, type=%s, bytes=%d)',
+        account.id,
+        creditType,
+        fromPurchased,
+      )
+      try {
+        await purchasedCreditsRepository.refundCredits(
+          account.id,
+          creditType,
+          fromPurchased,
+        )
+        logger.warn(
+          'registerInteraction: compensating refund succeeded (accountId=%s, bytes=%d)',
+          account.id,
+          fromPurchased,
+        )
+      } catch (refundError) {
+        logger.error(
+          refundError,
+          'CRITICAL: registerInteraction: interaction recording AND refund both failed — manual recovery required (accountId=%s, type=%s, bytes=%d)',
+          account.id,
+          creditType,
+          fromPurchased,
+        )
+      }
+      throw interactionError
+    }
   }
 
   const fromFree = size - fromPurchased
@@ -300,37 +334,34 @@ const addCreditsToAccount = async (
   const user = await AuthManager.getUserFromPublicId(publicId)
   const account = await AccountsUseCases.getOrCreateAccount(user)
 
-  // Enforce per-user purchased-credit cap before inserting the new row.
-  const current = await purchasedCreditsRepository.getRemainingCredits(account.id)
-  const newUploadTotal = current.uploadBytesRemaining + credits
-  const newDownloadTotal = current.downloadBytesRemaining + credits
+  const expiresAt = new Date(
+    Date.now() + config.credits.expiryDays * 24 * 60 * 60 * 1000,
+  )
 
-  if (
-    newUploadTotal > config.credits.maxBytesPerUser ||
-    newDownloadTotal > config.credits.maxBytesPerUser
-  ) {
+  // Atomically check the per-user cap and insert inside a single transaction
+  // protected by a per-account advisory lock. This prevents two concurrent
+  // onConfirmedIntent calls for different intents from both passing the cap
+  // check and both inserting, which would push the account over the cap.
+  const result = await purchasedCreditsRepository.createPurchasedCreditWithCapCheck(
+    {
+      accountId: account.id,
+      intentId,
+      uploadBytesOriginal: credits,
+      downloadBytesOriginal: credits,
+      expiresAt,
+    },
+    config.credits.maxBytesPerUser,
+  )
+
+  if (result.isErr()) {
     logger.warn(
-      'Purchase would exceed per-user cap (accountId=%s, currentUpload=%d, currentDownload=%d, adding=%d, cap=%d)',
+      'Purchase would exceed per-user cap (accountId=%s, adding=%d, cap=%d)',
       account.id,
-      current.uploadBytesRemaining,
-      current.downloadBytesRemaining,
       credits,
       config.credits.maxBytesPerUser,
     )
     return err(new ForbiddenError('Purchase would exceed per-user credit cap'))
   }
-
-  const expiresAt = new Date(
-    Date.now() + config.credits.expiryDays * 24 * 60 * 60 * 1000,
-  )
-
-  await purchasedCreditsRepository.createPurchasedCredit({
-    accountId: account.id,
-    intentId,
-    uploadBytesOriginal: credits,
-    downloadBytesOriginal: credits,
-    expiresAt,
-  })
 
   logger.info(
     'Purchased credits created (accountId=%s, intentId=%s, bytes=%d, expiresAt=%s)',
