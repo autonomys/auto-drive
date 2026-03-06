@@ -10,6 +10,7 @@ import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { docsController } from '../controllers/docs.js'
 import { intentsController } from '../controllers/intents.js'
+import { creditsController } from '../controllers/credits.js'
 import { featuresController } from '../controllers/features.js'
 import { featureFlagMiddleware } from '../../core/featureFlags/express.js'
 import { IntentsUseCases } from '../../core/users/intents.js'
@@ -72,6 +73,7 @@ const createServer = async () => {
     }),
   )
   app.use('/intents', featureFlagMiddleware('buyCredits'), intentsController)
+  app.use('/credits', featureFlagMiddleware('buyCredits'), creditsController)
   app.use('/features', featuresController)
   app.use('/docs', docsController)
 
