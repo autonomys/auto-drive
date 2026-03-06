@@ -12,10 +12,7 @@ import {
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
-import {
-  purchasedCreditsRepository,
-  InsufficientPurchasedCreditsError,
-} from '../../infrastructure/repositories/users/purchasedCredits.js'
+import { purchasedCreditsRepository } from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
 import { config } from '../../config.js'
@@ -256,76 +253,43 @@ const registerInteraction = async (
     size,
   )
 
-  // --- Step 1: try to cover the full amount from purchased credits. ---
-  const consumeResult = await purchasedCreditsRepository.consumeCredits(
+  // Atomically consume as many bytes as possible from purchased credits in a
+  // single transaction. Returns the number of bytes actually deducted. This
+  // avoids the TOCTOU race that existed with the previous two-phase approach
+  // where releasing FOR UPDATE locks between calls allowed concurrent requests
+  // to consume the same credits.
+  const fromPurchased = await purchasedCreditsRepository.consumeUpTo(
     account.id,
     creditType,
     size,
   )
 
-  if (consumeResult.isOk()) {
-    // Purchased credits covered everything.
+  if (fromPurchased > BigInt(0)) {
     await InteractionsUseCases.createInteraction(
       account.id,
       type,
-      size,
+      fromPurchased,
       InteractionSource.Purchased,
     )
-    return
   }
 
-  // --- Step 2: purchased credits are insufficient (or zero). ---
-  // NOTE: the available count from step 1 is a snapshot from inside that
-  // transaction. By the time we issue a second call, a concurrent request may
-  // have consumed those same bytes. We treat this drain as best-effort and
-  // check the result so the ledger stays consistent regardless of races.
-  const insufficientErr = consumeResult.error as InsufficientPurchasedCreditsError
-  const reportedAvailable = insufficientErr.available
+  const fromFree = size - fromPurchased
 
-  let actuallyDrained = BigInt(0)
-
-  if (reportedAvailable > BigInt(0)) {
-    const drainResult = await purchasedCreditsRepository.consumeCredits(
+  if (fromFree > BigInt(0)) {
+    logger.debug(
+      'Covering remainder from free-tier (accountId=%s, fromPurchased=%d, fromFree=%d)',
       account.id,
-      creditType,
-      reportedAvailable,
+      fromPurchased,
+      fromFree,
     )
-    if (drainResult.isOk()) {
-      actuallyDrained = reportedAvailable
-      await InteractionsUseCases.createInteraction(
-        account.id,
-        type,
-        actuallyDrained,
-        InteractionSource.Purchased,
-      )
-    } else {
-      // A concurrent request consumed the remaining bytes between our two calls.
-      // Fall through with actuallyDrained = 0 and charge the full size against
-      // the free tier below. No purchased interaction is recorded.
-      logger.warn(
-        'Concurrent request consumed purchased credits between drain attempts (accountId=%s, reportedAvailable=%d)',
-        account.id,
-        reportedAvailable,
-      )
-    }
+
+    await InteractionsUseCases.createInteraction(
+      account.id,
+      type,
+      fromFree,
+      InteractionSource.FreeTier,
+    )
   }
-
-  // --- Step 3: cover the remainder from the free/one-off allocation. ---
-  const fromFree = size - actuallyDrained
-
-  logger.debug(
-    'Falling back to free-tier for remainder (accountId=%s, actuallyDrained=%d, fromFree=%d)',
-    account.id,
-    actuallyDrained,
-    fromFree,
-  )
-
-  await InteractionsUseCases.createInteraction(
-    account.id,
-    type,
-    fromFree,
-    InteractionSource.FreeTier,
-  )
 }
 
 const addCreditsToAccount = async (

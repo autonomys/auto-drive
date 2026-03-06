@@ -216,6 +216,84 @@ const consumeCredits = async (
 }
 
 // ---------------------------------------------------------------------------
+// consumeUpTo
+// Atomically consumes up to `bytes` from purchased credit rows in FIFO order
+// (soonest-expiry first). Returns the number of bytes actually consumed.
+// Unlike consumeCredits, this never fails — if fewer than `bytes` are
+// available it simply drains whatever exists and returns that amount.
+// This eliminates the TOCTOU race that existed when callers had to make two
+// separate consumeCredits calls with a lock gap in between.
+// ---------------------------------------------------------------------------
+
+const consumeUpTo = async (
+  accountId: string,
+  creditType: 'upload' | 'download',
+  bytes: bigint,
+): Promise<bigint> => {
+  if (bytes <= BigInt(0)) return BigInt(0)
+
+  const db = await getDatabase()
+  const client = await db.connect()
+
+  try {
+    await client.query('BEGIN')
+
+    const remainingCol =
+      creditType === 'upload'
+        ? 'upload_bytes_remaining'
+        : 'download_bytes_remaining'
+
+    const rowsResult = await client.query<DBPurchasedCredit>(
+      `SELECT *
+       FROM purchased_credits
+       WHERE account_id = $1
+         AND expired = FALSE
+         AND expires_at > NOW()
+         AND ${remainingCol} > 0
+       ORDER BY expires_at ASC, purchased_at ASC
+       FOR UPDATE`,
+      [accountId],
+    )
+
+    const rows = rowsResult.rows
+    let toConsume = bytes
+    let totalConsumed = BigInt(0)
+
+    for (const row of rows) {
+      if (toConsume <= BigInt(0)) break
+
+      const rowRemaining = BigInt(
+        creditType === 'upload'
+          ? row.upload_bytes_remaining
+          : row.download_bytes_remaining,
+      )
+
+      const deduction = toConsume < rowRemaining ? toConsume : rowRemaining
+      const newRemaining = rowRemaining - deduction
+
+      await client.query(
+        `UPDATE purchased_credits
+         SET ${remainingCol} = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [newRemaining.toString(), row.id],
+      )
+
+      toConsume -= deduction
+      totalConsumed += deduction
+    }
+
+    await client.query('COMMIT')
+    return totalConsumed
+  } catch (error) {
+    await client.query('ROLLBACK')
+    logger.error(error, 'consumeUpTo: transaction failed, rolled back')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+// ---------------------------------------------------------------------------
 // getRemainingCredits
 // Single-query aggregate: total remaining purchased bytes + nearest expiry.
 // Used by cap enforcement and the credits summary API endpoint.
@@ -344,6 +422,7 @@ export const purchasedCreditsRepository = {
   createPurchasedCredit,
   getActiveByAccountId,
   consumeCredits,
+  consumeUpTo,
   getRemainingCredits,
   getExpiringCredits,
   markExpiredCredits,
