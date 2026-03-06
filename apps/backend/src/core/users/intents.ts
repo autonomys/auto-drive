@@ -2,7 +2,11 @@ import { Intent, IntentStatus, User } from '@auto-drive/models'
 import { intentsRepository } from '../../infrastructure/repositories/users/intents.js'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../infrastructure/eventRouter/tasks.js'
-import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
+import {
+  ForbiddenError,
+  GoneError,
+  ObjectNotFoundError,
+} from '../../errors/index.js'
 import { err, ok } from 'neverthrow'
 import { config } from '../../config.js'
 import { randomBytes } from 'crypto'
@@ -49,8 +53,19 @@ const randomBytes32 = () => {
   return '0x' + randomBytes(32).toString('hex')
 }
 
+// Returns true if the intent has passed its price-lock window.
+// Intents without an expiresAt (pre-feature rows) are never considered expired.
+const isIntentExpired = (intent: Intent): boolean => {
+  if (!intent.expiresAt) return false
+  return intent.expiresAt < new Date()
+}
+
 const createIntent = async (executor: User): Promise<Intent> => {
   const { price } = await IntentsUseCases.getPrice()
+
+  const expiresAt = new Date(
+    Date.now() + config.credits.intentExpiryMinutes * 60 * 1000,
+  )
 
   const intent = await intentsRepository.createIntent({
     id: randomBytes32(),
@@ -58,6 +73,7 @@ const createIntent = async (executor: User): Promise<Intent> => {
     status: IntentStatus.PENDING,
     paymentAmount: undefined,
     shannonsPerByte: BigInt(price),
+    expiresAt,
   })
 
   return intent
@@ -71,6 +87,10 @@ const getIntent = async (user: User, id: string) => {
 
   if (user.publicId !== intent.userPublicId) {
     return err(new ForbiddenError('Intent not found'))
+  }
+
+  if (isIntentExpired(intent)) {
+    return err(new GoneError('Intent has expired'))
   }
 
   return ok(intent)
@@ -182,6 +202,26 @@ const getConfirmedIntents = async () => {
   return intentsRepository.getByStatus(IntentStatus.CONFIRMED)
 }
 
+// Marks all PENDING intents whose price-lock window has expired.
+// Called periodically by the background job so that stale PENDING rows do not
+// accumulate.  CONFIRMED intents are not touched — once payment is confirmed
+// the intent must be processed regardless of the original expiry window.
+const cleanupExpiredIntents = async (): Promise<void> => {
+  const expired = await intentsRepository.getExpiredPendingIntents()
+  if (expired.length === 0) return
+
+  logger.info('Marking expired intents', { count: expired.length })
+
+  await Promise.all(
+    expired.map((intent) =>
+      intentsRepository.updateIntent({
+        ...intent,
+        status: IntentStatus.EXPIRED,
+      }),
+    ),
+  )
+}
+
 const BYTES_PER_GB = 1024 * 1024 * 1024
 const SHANNONS_PER_AI3 = 1e18
 
@@ -209,4 +249,5 @@ export const IntentsUseCases = {
   getConfirmedIntents,
   getIntentCredits,
   getPrice,
+  cleanupExpiredIntents,
 }

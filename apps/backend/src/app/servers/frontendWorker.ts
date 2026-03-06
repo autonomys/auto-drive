@@ -38,6 +38,12 @@
     config.featureFlags.flags.buyCredits.staffOnly
   ) {
     paymentManager.start()
+
+    const { creditExpiryJob } = await import(
+      '../../infrastructure/services/creditExpiryJob.js'
+    )
+    creditExpiryJob.start()
+
     somethingActive = true
   }
   if (!somethingActive) {
@@ -49,6 +55,10 @@
     logger.info('Shutting down frontend worker...')
     objectMappingArchiver.stop()
     paymentManager.stop()
+    const { creditExpiryJob } = await import(
+      '../../infrastructure/services/creditExpiryJob.js'
+    )
+    creditExpiryJob.stop()
     await Rabbit.close()
     logger.info('Frontend worker shut down successfully')
     process.exit(0)
