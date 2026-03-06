@@ -3,7 +3,6 @@ import {
   PurchasedCreditSummary,
 } from '@auto-drive/models'
 import { getDatabase } from '../../drivers/pg.js'
-import { err, ok, Result } from 'neverthrow'
 import { createLogger } from '../../drivers/logger.js'
 
 const logger = createLogger('repositories:purchasedCredits')
@@ -41,23 +40,6 @@ const mapRow = (row: DBPurchasedCredit): PurchasedCredit => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 })
-
-// ---------------------------------------------------------------------------
-// Error type
-// ---------------------------------------------------------------------------
-
-export class InsufficientPurchasedCreditsError extends Error {
-  constructor(
-    public readonly requested: bigint,
-    public readonly available: bigint,
-    public readonly creditType: 'upload' | 'download',
-  ) {
-    super(
-      `Insufficient purchased ${creditType} credits: requested ${requested} bytes, available ${available} bytes`,
-    )
-    this.name = 'InsufficientPurchasedCreditsError'
-  }
-}
 
 // ---------------------------------------------------------------------------
 // createPurchasedCredit
@@ -122,107 +104,13 @@ const getActiveByAccountId = async (
 }
 
 // ---------------------------------------------------------------------------
-// consumeCredits
-// Deducts bytes from the account's active purchased credit rows in FIFO
-// order (soonest-expiry first). Runs in a transaction with FOR UPDATE row
-// locking to prevent concurrent uploads from double-spending the same bytes.
-//
-// Returns ok() if there were enough purchased credits to cover the full
-// request, or InsufficientPurchasedCreditsError otherwise. The caller
-// (AccountsUseCases.registerInteraction) uses the Result to decide whether
-// to fall back to the free/one-off allocation.
-// ---------------------------------------------------------------------------
-
-const consumeCredits = async (
-  accountId: string,
-  creditType: 'upload' | 'download',
-  bytes: bigint,
-): Promise<Result<void, InsufficientPurchasedCreditsError>> => {
-  const db = await getDatabase()
-  const client = await db.connect()
-
-  try {
-    await client.query('BEGIN')
-
-    const remainingCol =
-      creditType === 'upload'
-        ? 'upload_bytes_remaining'
-        : 'download_bytes_remaining'
-
-    // Lock the relevant rows for this account so concurrent requests cannot
-    // read stale remaining values and over-commit the same credits.
-    const rowsResult = await client.query<DBPurchasedCredit>(
-      `SELECT *
-       FROM purchased_credits
-       WHERE account_id = $1
-         AND expired = FALSE
-         AND expires_at > NOW()
-         AND ${remainingCol} > 0
-       ORDER BY expires_at ASC, purchased_at ASC
-       FOR UPDATE`,
-      [accountId],
-    )
-
-    const rows = rowsResult.rows
-
-    const totalAvailable = rows.reduce((sum, r) => {
-      const remaining =
-        creditType === 'upload'
-          ? r.upload_bytes_remaining
-          : r.download_bytes_remaining
-      return sum + BigInt(remaining)
-    }, BigInt(0))
-
-    if (totalAvailable < bytes) {
-      await client.query('ROLLBACK')
-      return err(
-        new InsufficientPurchasedCreditsError(bytes, totalAvailable, creditType),
-      )
-    }
-
-    let toConsume = bytes
-
-    for (const row of rows) {
-      if (toConsume <= BigInt(0)) break
-
-      const rowRemaining = BigInt(
-        creditType === 'upload'
-          ? row.upload_bytes_remaining
-          : row.download_bytes_remaining,
-      )
-
-      const deduction = toConsume < rowRemaining ? toConsume : rowRemaining
-      const newRemaining = rowRemaining - deduction
-
-      await client.query(
-        `UPDATE purchased_credits
-         SET ${remainingCol} = $1, updated_at = NOW()
-         WHERE id = $2`,
-        [newRemaining.toString(), row.id],
-      )
-
-      toConsume -= deduction
-    }
-
-    await client.query('COMMIT')
-    return ok()
-  } catch (error) {
-    await client.query('ROLLBACK')
-    logger.error(error, 'consumeCredits: transaction failed, rolled back')
-    throw error
-  } finally {
-    client.release()
-  }
-}
-
-// ---------------------------------------------------------------------------
 // consumeUpTo
 // Atomically consumes up to `bytes` from purchased credit rows in FIFO order
 // (soonest-expiry first). Returns the number of bytes actually consumed.
-// Unlike consumeCredits, this never fails — if fewer than `bytes` are
-// available it simply drains whatever exists and returns that amount.
-// This eliminates the TOCTOU race that existed when callers had to make two
-// separate consumeCredits calls with a lock gap in between.
+// Never fails — if fewer than `bytes` are available it simply drains whatever
+// exists and returns that amount. This is the sole consumption path; it
+// replaced an earlier two-phase approach that had a TOCTOU race between
+// transactions.
 // ---------------------------------------------------------------------------
 
 const consumeUpTo = async (
@@ -421,7 +309,6 @@ const getByAccountId = async (
 export const purchasedCreditsRepository = {
   createPurchasedCredit,
   getActiveByAccountId,
-  consumeCredits,
   consumeUpTo,
   getRemainingCredits,
   getExpiringCredits,

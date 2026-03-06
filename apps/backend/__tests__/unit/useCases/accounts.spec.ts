@@ -265,6 +265,11 @@ describe('AccountsUseCases', () => {
         .spyOn(purchasedCreditsRepository, 'createPurchasedCredit')
         .mockResolvedValue({} as any)
 
+      // Install spy BEFORE the call so it intercepts any invocation
+      const updateSpy = jest
+        .spyOn(accountsRepository, 'updateAccount')
+        .mockResolvedValue()
+
       const result = await AccountsUseCases.addCreditsToAccount(
         'pub1',
         BigInt(500),
@@ -280,8 +285,7 @@ describe('AccountsUseCases', () => {
           downloadBytesOriginal: BigInt(500),
         }),
       )
-      // accounts table must NOT be touched
-      const updateSpy = jest.spyOn(accountsRepository, 'updateAccount')
+      // accounts table must NOT be touched — credit goes to purchased_credits
       expect(updateSpy).not.toHaveBeenCalled()
     })
 
