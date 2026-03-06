@@ -270,22 +270,30 @@ const registerInteraction = async (
 
   // --- Step 2: purchased credits are insufficient (or zero). ---
   const insufficientErr = consumeResult.error as InsufficientPurchasedCreditsError
-  const fromPurchased = insufficientErr.available
+  let fromPurchased = insufficientErr.available
 
   // Drain whatever purchased bytes remain before falling back to the free tier.
   if (fromPurchased > BigInt(0)) {
-    // consumeCredits with the exact available amount is guaranteed to succeed.
-    await purchasedCreditsRepository.consumeCredits(
+    // Attempt to consume the exact available amount.
+    const secondConsumeResult = await purchasedCreditsRepository.consumeCredits(
       account.id,
       creditType,
       fromPurchased,
     )
-    await InteractionsUseCases.createInteraction(
-      account.id,
-      type,
-      fromPurchased,
-      InteractionSource.Purchased,
-    )
+
+    // Under concurrency, another request might have consumed these credits
+    // between our first call's ROLLBACK and this call. Check the result.
+    if (secondConsumeResult.isOk()) {
+      await InteractionsUseCases.createInteraction(
+        account.id,
+        type,
+        fromPurchased,
+        InteractionSource.Purchased,
+      )
+    } else {
+      // Concurrent request consumed the credits; set fromPurchased to 0.
+      fromPurchased = BigInt(0)
+    }
   }
 
   // --- Step 3: cover the remainder from the free/one-off allocation. ---
