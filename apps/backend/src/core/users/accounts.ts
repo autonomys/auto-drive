@@ -215,10 +215,11 @@ const registerInteraction = async (
   user: UserWithOrganization,
   type: InteractionType,
   size: bigint,
+  cid?: string,
 ) => {
   const account = await getOrCreateAccount(user)
 
-  await InteractionsUseCases.createInteraction(account.id, type, size)
+  await InteractionsUseCases.createInteraction(account.id, type, size, cid)
 }
 
 const addCreditsToAccount = async (publicId: string, credits: number) => {

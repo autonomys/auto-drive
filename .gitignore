@@ -50,3 +50,5 @@ environment.yaml
 
 # Next
 **/.next/
+# Claude Code worktrees
+.claude/worktrees/
