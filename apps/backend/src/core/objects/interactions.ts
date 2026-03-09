@@ -30,12 +30,14 @@ const createInteraction = async (
   accountId: string,
   type: InteractionType,
   size: bigint,
+  cid?: string,
 ): Promise<void> => {
   logger.debug(
-    'Creating new interaction (accountId=%s, type=%s, size=%d)',
+    'Creating new interaction (accountId=%s, type=%s, size=%d, cid=%s)',
     accountId,
     type,
     size,
+    cid,
   )
 
   try {
@@ -53,12 +55,14 @@ const createInteraction = async (
       accountId,
       type,
       size,
+      cid,
     )
     logger.info(
-      'Interaction created successfully (id=%s, accountId=%s, type=%s)',
+      'Interaction created successfully (id=%s, accountId=%s, type=%s, cid=%s)',
       interactionId,
       accountId,
       type,
+      cid,
     )
   } catch (error) {
     logger.error(
