@@ -30,6 +30,11 @@ export function memoizePromise<
   let sharedPromise: Promise<Awaited<ReturnType<F>>> | null = null;
   let timestamp: number | null = null;
 
+  const invalidate = () => {
+    sharedPromise = null;
+    timestamp = null;
+  };
+
   return function throttled(
     this: any,
     ...args: Parameters<F>
@@ -39,6 +44,17 @@ export function memoizePromise<
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore - apply variadic args
         fn.apply(this, args),
+      ).then(
+        (result) => {
+          // Don't cache null/undefined results (e.g. failed or logged-out sessions)
+          if (result == null) invalidate();
+          return result;
+        },
+        (error) => {
+          // Don't cache rejected promises (e.g. transient network errors)
+          invalidate();
+          throw error;
+        },
       ) as Promise<Awaited<ReturnType<F>>>;
       timestamp = Date.now();
     }
