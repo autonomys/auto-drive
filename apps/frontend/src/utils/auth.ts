@@ -4,7 +4,7 @@ import { memoizePromise } from '@/utils/async';
 
 const memoizedFrontend = memoizePromise(
   () => import('next-auth/react').then((m) => m.getSession()),
-  500,
+  30_000, // 30 seconds — prevents the storm of concurrent /api/auth/session calls
 );
 
 const internalGetAuthSession = async (): Promise<Session | null> => {
