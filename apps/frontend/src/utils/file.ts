@@ -6,6 +6,15 @@ export class InvalidDecryptKey extends Error {
   }
 }
 
+export class InvalidDecompressionError extends Error {
+  constructor(cause?: Error) {
+    super(
+      'File appears uncompressed despite compression metadata — please retry as raw download',
+      { cause },
+    );
+  }
+}
+
 export const uploadFileContent = (file: File) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -87,6 +96,21 @@ export const handleFileDownload = async (
 
       if (isDecryptionError) {
         throw new InvalidDecryptKey(error instanceof Error ? error : undefined);
+      }
+
+      // Detect fflate zlib decompression failures (e.g. file metadata says
+      // compressed but stored bytes are actually raw / uncompressed).
+      // fflate throws FlateError with messages like "invalid zlib data".
+      const isDecompressionError =
+        errorMessage.includes('invalid zlib') ||
+        errorMessage.includes('invalid deflate') ||
+        errorMessage.includes('invalid block') ||
+        errorName === 'FlateError';
+
+      if (isDecompressionError) {
+        throw new InvalidDecompressionError(
+          error instanceof Error ? error : undefined,
+        );
       }
     }
     console.error('Download error after writing bytes:', writtenSize, error);

@@ -5,3 +5,4 @@ export * from "./organization.js";
 export * from "./apiKey.js";
 export * from "./jwt.js";
 export * from "./intent.js";
+export * from "./purchasedCredit.js";
