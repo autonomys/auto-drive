@@ -189,7 +189,13 @@ export const createDownloadService = (api: Api) => {
       // bytes are not actually compressed despite the metadata claiming so.
       // Re-download as raw bytes (skipDecryption=true bypasses SDK
       // decompression) and save with the original filename.
-      if (e instanceof InvalidDecompressionError && !skipDecryption) {
+      const isEncrypted =
+        !!password || !!metadata.uploadOptions?.encryption;
+      if (
+        e instanceof InvalidDecompressionError &&
+        !skipDecryption &&
+        !isEncrypted
+      ) {
         const rawDownload = await api.downloadObject(metadata.dataCid, {
           password: undefined,
           skipDecryption: true,
