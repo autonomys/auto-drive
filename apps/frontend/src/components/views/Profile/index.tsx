@@ -6,6 +6,7 @@ import { useUserStore } from 'globalStates/user';
 import { DefaultPasswordModal } from '../../molecules/DefaultPasswordModal';
 import { Button } from '@auto-drive/ui';
 import { signOut } from 'next-auth/react';
+import { clearSessionCache } from '@/utils/auth';
 import { LogOut } from 'lucide-react';
 
 export const Profile = () => {
@@ -61,7 +62,10 @@ export const Profile = () => {
             <Button
               variant='lightDanger'
               className='flex items-center gap-2 text-sm'
-              onClick={() => signOut()}
+              onClick={() => {
+                clearSessionCache();
+                signOut();
+              }}
             >
               Log out
               <LogOut className='h-4 w-4' />

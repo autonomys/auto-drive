@@ -35,7 +35,7 @@ export function memoizePromise<
     timestamp = null;
   };
 
-  return function throttled(
+  const memoized = function (
     this: any,
     ...args: Parameters<F>
   ): Promise<Awaited<ReturnType<F>>> {
@@ -61,4 +61,8 @@ export function memoizePromise<
 
     return sharedPromise as Promise<Awaited<ReturnType<F>>>;
   };
+
+  memoized.invalidate = invalidate;
+
+  return memoized;
 }

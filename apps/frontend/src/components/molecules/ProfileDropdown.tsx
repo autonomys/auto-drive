@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useUserStore } from '@/globalStates/user';
 import { LogOut, UserRoundIcon } from 'lucide-react';
 import { signOut } from 'next-auth/react';
+import { clearSessionCache } from '@/utils/auth';
 import { CopiableText } from '@/components/atoms/CopiableText';
 import { formatCid } from '@/utils/table';
 
@@ -68,6 +69,7 @@ export const ProfileDropdown: React.FC = () => {
           <div className='py-1'>
             <button
               onClick={() => {
+                clearSessionCache();
                 signOut();
               }}
               className='flex w-full items-center gap-2 px-4 py-2 text-left text-base text-red-600 hover:bg-background-hover dark:text-red-500'
