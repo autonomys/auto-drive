@@ -242,6 +242,7 @@ const registerInteraction = async (
   user: UserWithOrganization,
   type: InteractionType,
   size: bigint,
+  cid?: string,
 ): Promise<void> => {
   const account = await getOrCreateAccount(user)
   const creditType = type === InteractionType.Upload ? 'upload' : 'download'
@@ -274,6 +275,7 @@ const registerInteraction = async (
         type,
         fromPurchased,
         InteractionSource.Purchased,
+        cid,
       )
     } catch (interactionError) {
       logger.error(
@@ -322,6 +324,7 @@ const registerInteraction = async (
       type,
       fromFree,
       InteractionSource.FreeTier,
+      cid,
     )
   }
 }

@@ -17,7 +17,7 @@ export const ObjectUploadDetails = ({
 }) => {
   return (
     <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
-      <div className='dark:bg-darkWhite rounded-lg border border-gray-200 p-6 dark:border-gray-200'>
+      <div className='rounded-lg border border-border bg-card p-6'>
         <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
           <IconWithTooltip
             icon={
@@ -88,7 +88,7 @@ export const ObjectUploadDetails = ({
                   )}
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='hover:text-accent-hover text-accent hover:underline'
+                  className='text-primary hover:text-primary/80 hover:underline'
                 >
                   {formatNumberWithCommas(object.uploadState.minimumBlockDepth)}
                 </a>
@@ -105,7 +105,7 @@ export const ObjectUploadDetails = ({
           </div>
         </div>
       </div>
-      <div className='dark:bg-darkWhite rounded-lg border border-gray-200 p-6'>
+      <div className='rounded-lg border border-border bg-card p-6'>
         <h2 className='mb-4 flex items-center text-lg font-medium text-gray-900 dark:text-gray-100'>
           <IconWithTooltip
             icon={<CloudArrowUpIcon className='mr-2 h-5 w-5 text-gray-500' />}
@@ -142,7 +142,7 @@ export const ObjectUploadDetails = ({
                   )}
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='hover:text-accent-hover text-accent hover:underline'
+                  className='text-primary hover:text-primary/80 hover:underline'
                 >
                   {formatNumberWithCommas(object.uploadState.minimumBlockDepth)}
                 </a>

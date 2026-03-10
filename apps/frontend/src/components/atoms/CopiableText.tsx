@@ -45,7 +45,7 @@ export const CopiableText = ({
         ) : (
           <Copy
             className={cn(
-              'dark:text-darkBlack h-4 w-4 text-gray-400 hover:text-gray-700 dark:hover:text-gray-100',
+              'h-4 w-4 text-gray-400 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-100',
               copyButtonClassName,
             )}
             onClick={(e) => {

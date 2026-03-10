@@ -114,7 +114,7 @@ export const CreditsUpdateModal = ({
                         Model
                       </label>
                       <select
-                        className='dark:bg-darkWhite dark:text-darkBlack dark:ring-darkWhiteHover w-full rounded border border-gray-300 bg-white px-2 py-1 text-black dark:ring-1'
+                        className='w-full rounded border border-border bg-background px-2 py-1 text-foreground'
                         id='model'
                         value={model}
                         onChange={(e) =>
