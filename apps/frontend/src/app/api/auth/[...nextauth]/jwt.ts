@@ -65,6 +65,10 @@ export const generateAccessToken = async ({
 
   const nextJWT: JWT = {
     ...token,
+    // Store the access token's expiry separately — NextAuth overwrites `exp`
+    // with its own session expiry (now + maxAge), so we can't rely on `exp`
+    // to know when the access token actually expires.
+    accessTokenExp: token.exp,
     authProvider: 'custom-jwt',
     authUserId: token.oauthUserId,
     underlyingProvider: provider,
@@ -102,6 +106,7 @@ export const refreshAccessToken = async ({
 
   const nextJWT: JWT = {
     ...token,
+    accessTokenExp: token.exp,
     authProvider: 'custom-jwt',
     authUserId: token.oauthUserId,
     accessToken,

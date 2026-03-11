@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 
 import { useUserStore } from '@/globalStates/user';
 import { LogOut, UserRoundIcon } from 'lucide-react';
-import { signOut } from 'next-auth/react';
+import { useLogOut } from '@/hooks/useAuth';
 import { CopiableText } from '@/components/atoms/CopiableText';
 import { formatCid } from '@/utils/table';
 
 export const ProfileDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUserStore((state) => state);
+  const { logOut } = useLogOut();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const toggleDropdown = () => setIsOpen(!isOpen);
@@ -67,9 +68,7 @@ export const ProfileDropdown: React.FC = () => {
           </div>
           <div className='py-1'>
             <button
-              onClick={() => {
-                signOut();
-              }}
+              onClick={logOut}
               className='flex w-full items-center gap-2 px-4 py-2 text-left text-base text-red-600 hover:bg-background-hover dark:text-red-500'
             >
               Logout
