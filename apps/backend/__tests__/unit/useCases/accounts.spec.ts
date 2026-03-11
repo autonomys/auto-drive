@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   jest,
   describe,
@@ -251,19 +250,16 @@ describe('AccountsUseCases', () => {
     })
 
     it('should create a purchased_credits row on success', async () => {
-      // Simulate account well within cap
-      jest
-        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
-        .mockResolvedValue({
-          uploadBytesRemaining: BigInt(0),
-          downloadBytesRemaining: BigInt(0),
-          nextExpiryDate: null,
-          activeRowCount: 0,
-        })
+      const { ok: neverthrowOk } = await import('neverthrow')
 
       const createSpy = jest
-        .spyOn(purchasedCreditsRepository, 'createPurchasedCredit')
-        .mockResolvedValue({} as any)
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowOk({} as any))
+
+      // Install spy BEFORE the call so it intercepts any invocation
+      const updateSpy = jest
+        .spyOn(accountsRepository, 'updateAccount')
+        .mockResolvedValue(undefined as any)
 
       const result = await AccountsUseCases.addCreditsToAccount(
         'pub1',
@@ -279,22 +275,18 @@ describe('AccountsUseCases', () => {
           uploadBytesOriginal: BigInt(500),
           downloadBytesOriginal: BigInt(500),
         }),
+        expect.anything(),
       )
-      // accounts table must NOT be touched
-      const updateSpy = jest.spyOn(accountsRepository, 'updateAccount')
+      // accounts table must NOT be touched — credit goes to purchased_credits
       expect(updateSpy).not.toHaveBeenCalled()
     })
 
     it('should reject when purchase would exceed per-user cap', async () => {
-      const cap = BigInt(100 * 1024 * 1024 * 1024) // default 100 GiB
+      const { err: neverthrowErr } = await import('neverthrow')
+
       jest
-        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
-        .mockResolvedValue({
-          uploadBytesRemaining: cap,
-          downloadBytesRemaining: cap,
-          nextExpiryDate: null,
-          activeRowCount: 1,
-        })
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowErr('cap_exceeded' as const))
 
       const result = await AccountsUseCases.addCreditsToAccount(
         'pub1',
@@ -307,21 +299,14 @@ describe('AccountsUseCases', () => {
     })
 
     it('should work for any account model (not restricted to OneOff)', async () => {
+      const { ok: neverthrowOk } = await import('neverthrow')
       const monthlyAccount = { ...account, model: AccountModel.Monthly }
       jest
         .spyOn(AccountsUseCases, 'getOrCreateAccount')
         .mockResolvedValue(monthlyAccount as any)
       jest
-        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
-        .mockResolvedValue({
-          uploadBytesRemaining: BigInt(0),
-          downloadBytesRemaining: BigInt(0),
-          nextExpiryDate: null,
-          activeRowCount: 0,
-        })
-      jest
-        .spyOn(purchasedCreditsRepository, 'createPurchasedCredit')
-        .mockResolvedValue({} as any)
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowOk({} as any))
 
       const result = await AccountsUseCases.addCreditsToAccount(
         'pub1',
