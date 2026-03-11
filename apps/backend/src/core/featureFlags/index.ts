@@ -13,7 +13,7 @@ const get = (user: User | null) => {
   const entries = Object.entries(config.featureFlags.flags)
 
   return Object.fromEntries(
-    entries.map(([key, value]) => [key, isActive(value, user)]),
+    entries.map(([key, value]) => [key, isActive(key, value, user)]),
   )
 }
 
@@ -23,19 +23,25 @@ export const hasGoogleAuth = (user: User | null): boolean => {
   return Boolean(user && user.oauthProvider === 'google')
 }
 
-const isActive = (value: FeatureFlag, user: User | null) => {
-  // Public mode (BUY_CREDITS_ACTIVE=true): only users authenticated via Google
-  // can access the feature.  This prevents Sybil purchases — Google accounts
-  // require phone verification and are much harder to mass-create than web3
-  // wallets or pseudonymous OAuth accounts.
-  if (value.active) {
-    return hasGoogleAuth(user)
+const isActive = (key: string, value: FeatureFlag, user: User | null) => {
+  // buyCredits flag has special Google auth gating logic
+  if (key === 'buyCredits') {
+    // Public mode (BUY_CREDITS_ACTIVE=true): only users authenticated via Google
+    // can access the feature.  This prevents Sybil purchases — Google accounts
+    // require phone verification and are much harder to mass-create than web3
+    // wallets or pseudonymous OAuth accounts.
+    if (value.active) {
+      return hasGoogleAuth(user)
+    }
+
+    // Staff-only mode (BUY_CREDITS_ACTIVE=false, BUY_CREDITS_STAFF_ONLY=true):
+    // access is granted via the STAFF_DOMAINS / STAFF_USERNAME_ALLOWLIST config,
+    // which in production is set to @subspace.network and @autonomys.xyz.
+    return Boolean(value.staffOnly && isStaff(user))
   }
 
-  // Staff-only mode (BUY_CREDITS_ACTIVE=false, BUY_CREDITS_STAFF_ONLY=true):
-  // access is granted via the STAFF_DOMAINS / STAFF_USERNAME_ALLOWLIST config,
-  // which in production is set to @subspace.network and @autonomys.xyz.
-  return Boolean(value.staffOnly && isStaff(user))
+  // All other flags: return active status directly
+  return value.active
 }
 
 const isStaffDomain = (user: User | null) => {
