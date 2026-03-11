@@ -330,10 +330,6 @@ const refundCredits = async (
       creditType === 'upload'
         ? 'upload_bytes_remaining'
         : 'download_bytes_remaining'
-    const originalCol =
-      creditType === 'upload'
-        ? 'upload_bytes_original'
-        : 'download_bytes_original'
 
     // Lock in the same FIFO order as consumeUpTo so we refund to the rows
     // that were actually consumed from.
