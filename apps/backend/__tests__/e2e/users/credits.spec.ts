@@ -233,10 +233,11 @@ describe('CreditsUseCases', () => {
     )
 
     // Fire two concurrent 90 MB upload interactions simultaneously.
-    // consumeUpTo uses a FOR UPDATE lock so only one call can consume from the
-    // same credit rows at a time.  The first caller gets 90 MB; the second
-    // can only get the remaining 10 MB from purchased credits.
-    await Promise.all([
+    // consumeUpTo serialises access via FOR UPDATE: one caller gets 90 MB,
+    // the other only gets 10 MB from purchased credits.  The free-tier guard
+    // then detects that the remaining 80 MB cannot be covered by free-tier
+    // (uploadLimit = 0), refunds the 10 MB back, and throws.
+    const [result1, result2] = await Promise.allSettled([
       AccountsUseCases.registerInteraction(
         mockUser,
         InteractionType.Upload,
@@ -249,13 +250,18 @@ describe('CreditsUseCases', () => {
       ),
     ])
 
-    // The purchased credit pool must be fully drained but never go negative.
+    // Exactly one upload succeeds and exactly one is rejected.
+    const statuses = [result1.status, result2.status].sort()
+    expect(statuses).toEqual(['fulfilled', 'rejected'])
+
+    // The rejected upload must have thrown PaymentRequiredError and refunded
+    // the partial purchased-credit deduction.  10 MB (= 100 - 90) must remain.
     const remaining =
       await purchasedCreditsRepository.getRemainingCredits(account.id)
-    expect(remaining.uploadBytesRemaining).toBe(BigInt(0))
+    expect(remaining.uploadBytesRemaining).toBe(MB(10))
 
-    // Total bytes recorded from purchased credits must equal exactly 100 MB —
-    // not 180 MB (which would indicate both calls each consumed 90 MB).
+    // Only 90 MB should be recorded as consumed from purchased credits —
+    // the second caller's partial deduction was rolled back via refundCredits.
     const now = new Date()
     const purchasedInteractions =
       await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
@@ -269,15 +275,15 @@ describe('CreditsUseCases', () => {
       (sum, i) => sum + i.size,
       0,
     )
-    expect(totalPurchasedConsumed).toBe(Number(MB(100)))
+    expect(totalPurchasedConsumed).toBe(Number(MB(90)))
 
-    // After both uploads the user's effective credit balance must be below
-    // 90 MB, so a third 90 MB upload would be denied at the gate.
+    // After the race, only 10 MB of purchased credits remain and 0 free-tier
+    // bytes are available — a new 90 MB upload must be denied at the gate.
     const pendingAfter =
       await AccountsUseCases.getPendingCreditsByUserAndType(
         mockUser,
         InteractionType.Upload,
       )
-    expect(pendingAfter).toBeLessThan(Number(MB(90)))
+    expect(pendingAfter).toBe(Number(MB(10)))
   })
 })

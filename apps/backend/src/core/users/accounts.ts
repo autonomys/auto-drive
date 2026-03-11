@@ -17,7 +17,11 @@ import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
 import { config } from '../../config.js'
 import { err, ok, Result } from 'neverthrow'
-import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
+import {
+  ForbiddenError,
+  ObjectNotFoundError,
+  PaymentRequiredError,
+} from '../../errors/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('AccountsUseCases')
@@ -312,6 +316,53 @@ const registerInteraction = async (
   const fromFree = size - fromPurchased
 
   if (fromFree > BigInt(0)) {
+    // Guard: verify the user actually has enough free-tier budget to cover
+    // the remainder. This is the last line of defence against double-spend
+    // races where both callers pass the gate check before either consumes
+    // credits: consumeUpTo serialises the purchased pool, but a concurrent
+    // request that only got a partial allocation from purchased must not be
+    // allowed to silently overflow into free-tier credits it does not have.
+    const end = new Date()
+    const start =
+      account.model === AccountModel.Monthly
+        ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
+        : new Date(0)
+
+    const freeTierInteractions =
+      await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
+        account.id,
+        type,
+        start,
+        end,
+        InteractionSource.FreeTier,
+      )
+
+    const spentFree = freeTierInteractions.reduce(
+      (acc, i) => acc + BigInt(i.size),
+      BigInt(0),
+    )
+    const freeLimit = BigInt(
+      type === InteractionType.Upload ? account.uploadLimit : account.downloadLimit,
+    )
+    const freeAvailable = freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
+
+    if (fromFree > freeAvailable) {
+      logger.warn(
+        'registerInteraction: insufficient free-tier credits — refunding purchased bytes and rejecting (accountId=%s, fromFree=%d, freeAvailable=%d)',
+        account.id,
+        fromFree,
+        freeAvailable,
+      )
+      if (fromPurchased > BigInt(0)) {
+        await purchasedCreditsRepository.refundCredits(
+          account.id,
+          creditType,
+          fromPurchased,
+        )
+      }
+      throw new PaymentRequiredError('Insufficient credits to process upload')
+    }
+
     logger.debug(
       'Covering remainder from free-tier (accountId=%s, fromPurchased=%d, fromFree=%d)',
       account.id,
