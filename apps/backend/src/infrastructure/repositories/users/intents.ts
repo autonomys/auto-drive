@@ -84,18 +84,37 @@ const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
   return mapRows(result.rows)
 }
 
-// Returns all PENDING intents whose expires_at has passed.
-// Used by the cleanup background job.
+// Returns PENDING intents whose expires_at has passed and that have no
+// tx_hash — i.e. no on-chain transaction was submitted yet. Intents with a
+// tx_hash are actively being watched and must not be expired by cleanup;
+// their resolution comes from the on-chain watcher (markIntentAsConfirmed).
 const getExpiredPendingIntents = async (): Promise<Intent[]> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
     `SELECT * FROM intents
      WHERE status = $1
        AND expires_at IS NOT NULL
-       AND expires_at < NOW()`,
+       AND expires_at < NOW()
+       AND tx_hash IS NULL`,
     [IntentStatus.PENDING],
   )
   return mapRows(result.rows)
+}
+
+// Atomically marks a single intent as EXPIRED only if it is still PENDING.
+// Returns true if the row was updated, false if the status had already changed
+// (e.g. concurrent markIntentAsConfirmed promoted it to CONFIRMED).
+// This prevents the TOCTOU race where a stale read-then-write could overwrite
+// a CONFIRMED status and its paymentAmount.
+const expireIntentIfPending = async (intentId: string): Promise<boolean> => {
+  const db = await getDatabase()
+  const result = await db.query(
+    `UPDATE intents
+     SET status = $1
+     WHERE id = $2 AND status = $3`,
+    [IntentStatus.EXPIRED, intentId, IntentStatus.PENDING],
+  )
+  return (result.rowCount ?? 0) > 0
 }
 
 export const intentsRepository = {
@@ -104,4 +123,5 @@ export const intentsRepository = {
   updateIntent,
   getByStatus,
   getExpiredPendingIntents,
+  expireIntentIfPending,
 }

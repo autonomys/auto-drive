@@ -206,20 +206,31 @@ const getConfirmedIntents = async () => {
 // Called periodically by the background job so that stale PENDING rows do not
 // accumulate.  CONFIRMED intents are not touched — once payment is confirmed
 // the intent must be processed regardless of the original expiry window.
+//
+// Uses expireIntentIfPending (atomic conditional UPDATE with
+// WHERE status = 'pending') instead of a read-then-write to avoid a TOCTOU
+// race: if markIntentAsConfirmed promotes the intent to CONFIRMED between our
+// SELECT and UPDATE, the conditional UPDATE simply no-ops instead of
+// overwriting the CONFIRMED status and paymentAmount with stale data.
 const cleanupExpiredIntents = async (): Promise<void> => {
   const expired = await intentsRepository.getExpiredPendingIntents()
   if (expired.length === 0) return
 
   logger.info('Marking expired intents', { count: expired.length })
 
-  await Promise.all(
+  const results = await Promise.all(
     expired.map((intent) =>
-      intentsRepository.updateIntent({
-        ...intent,
-        status: IntentStatus.EXPIRED,
-      }),
+      intentsRepository.expireIntentIfPending(intent.id),
     ),
   )
+
+  const actuallyExpired = results.filter(Boolean).length
+  if (actuallyExpired < expired.length) {
+    logger.info(
+      'Some intents were not expired (status changed concurrently)',
+      { attempted: expired.length, expired: actuallyExpired },
+    )
+  }
 }
 
 const BYTES_PER_GB = 1024 * 1024 * 1024
