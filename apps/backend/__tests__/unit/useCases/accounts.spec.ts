@@ -260,7 +260,7 @@ describe('AccountsUseCases', () => {
       // Install spy BEFORE the call so it intercepts any invocation
       const updateSpy = jest
         .spyOn(accountsRepository, 'updateAccount')
-        .mockResolvedValue()
+        .mockResolvedValue(undefined as any)
 
       const result = await AccountsUseCases.addCreditsToAccount(
         'pub1',
