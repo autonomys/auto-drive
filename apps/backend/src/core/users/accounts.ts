@@ -319,7 +319,7 @@ const registerInteraction = async (
           fromPurchased,
         )
       }
-      throw new PaymentRequiredError('Insufficient credits to process upload')
+      throw new PaymentRequiredError(`Insufficient credits to process ${creditType}`)
     }
   }
 
