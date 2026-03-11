@@ -1,5 +1,6 @@
 import {
   InteractionType,
+  InteractionSource,
   AccountModel,
   IntentStatus,
   UserWithOrganization,
@@ -16,6 +17,7 @@ import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { accountsRepository } from '../../../src/infrastructure/repositories/index.js'
 import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
+import { interactionsRepository } from '../../../src/infrastructure/repositories/objects/interactions.js'
 import { jest } from '@jest/globals'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -205,5 +207,77 @@ describe('CreditsUseCases', () => {
     )
 
     expect(result.isErr()).toBe(true)
+  })
+
+  it('should prevent double-spend when two concurrent 90 MB uploads race against 100 MB of purchased credits', async () => {
+    jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
+    const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+
+    const MB = (n: number) => BigInt(n * 1024 * 1024)
+
+    // Seed exactly 100 MB of purchased credits and zero out the free-tier
+    // allocation so the only available budget is the purchased pool.
+    const intentId = await createTestIntent(mockUser.publicId)
+    await purchasedCreditsRepository.createPurchasedCredit({
+      accountId: account.id,
+      intentId,
+      uploadBytesOriginal: MB(100),
+      downloadBytesOriginal: MB(100),
+      expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+    })
+    await accountsRepository.updateAccount(
+      account.id,
+      AccountModel.OneOff,
+      0, // uploadLimit = 0 (no free-tier bytes)
+      0, // downloadLimit = 0
+    )
+
+    // Fire two concurrent 90 MB upload interactions simultaneously.
+    // consumeUpTo uses a FOR UPDATE lock so only one call can consume from the
+    // same credit rows at a time.  The first caller gets 90 MB; the second
+    // can only get the remaining 10 MB from purchased credits.
+    await Promise.all([
+      AccountsUseCases.registerInteraction(
+        mockUser,
+        InteractionType.Upload,
+        MB(90),
+      ),
+      AccountsUseCases.registerInteraction(
+        mockUser,
+        InteractionType.Upload,
+        MB(90),
+      ),
+    ])
+
+    // The purchased credit pool must be fully drained but never go negative.
+    const remaining =
+      await purchasedCreditsRepository.getRemainingCredits(account.id)
+    expect(remaining.uploadBytesRemaining).toBe(BigInt(0))
+
+    // Total bytes recorded from purchased credits must equal exactly 100 MB —
+    // not 180 MB (which would indicate both calls each consumed 90 MB).
+    const now = new Date()
+    const purchasedInteractions =
+      await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
+        account.id,
+        InteractionType.Upload,
+        new Date(0),
+        now,
+        InteractionSource.Purchased,
+      )
+    const totalPurchasedConsumed = purchasedInteractions.reduce(
+      (sum, i) => sum + i.size,
+      0,
+    )
+    expect(totalPurchasedConsumed).toBe(Number(MB(100)))
+
+    // After both uploads the user's effective credit balance must be below
+    // 90 MB, so a third 90 MB upload would be denied at the gate.
+    const pendingAfter =
+      await AccountsUseCases.getPendingCreditsByUserAndType(
+        mockUser,
+        InteractionType.Upload,
+      )
+    expect(pendingAfter).toBeLessThan(Number(MB(90)))
   })
 })
