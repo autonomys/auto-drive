@@ -5,8 +5,7 @@ import toast from 'react-hot-toast';
 import { useUserStore } from 'globalStates/user';
 import { DefaultPasswordModal } from '../../molecules/DefaultPasswordModal';
 import { Button } from '@auto-drive/ui';
-import { signOut } from 'next-auth/react';
-import { clearSessionCache } from '@/utils/auth';
+import { useLogOut } from '@/hooks/useAuth';
 import { LogOut } from 'lucide-react';
 
 export const Profile = () => {
@@ -14,6 +13,7 @@ export const Profile = () => {
     useState<boolean>(false);
 
   const publicId = useUserStore((state) => state.user?.publicId);
+  const { logOut } = useLogOut();
 
   const copyPublicId = useCallback(() => {
     if (!publicId) return;
@@ -62,10 +62,7 @@ export const Profile = () => {
             <Button
               variant='lightDanger'
               className='flex items-center gap-2 text-sm'
-              onClick={() => {
-                clearSessionCache();
-                signOut();
-              }}
+              onClick={logOut}
             >
               Log out
               <LogOut className='h-4 w-4' />
