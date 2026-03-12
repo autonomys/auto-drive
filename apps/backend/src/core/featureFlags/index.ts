@@ -24,21 +24,18 @@ export const hasGoogleAuth = (user: User | null): boolean => {
 }
 
 const isActive = (key: string, value: FeatureFlag, user: User | null) => {
-  if (key === 'buyCredits') {
-    // Public mode: only Google-authenticated users can purchase credits.
-    // This prevents Sybil purchases — Google accounts require phone
-    // verification and are much harder to mass-create than web3 wallets
-    // or pseudonymous OAuth accounts.
-    if (value.active) {
-      return hasGoogleAuth(user)
-    }
-
-    // Staff-only mode: access is granted via STAFF_DOMAINS /
-    // STAFF_USERNAME_ALLOWLIST config.
-    return Boolean(value.staffOnly && isStaff(user))
+  // buyCredits requires Google auth when publicly active (Sybil protection).
+  if (key === 'buyCredits' && value.active) {
+    return hasGoogleAuth(user)
   }
 
-  return value.active
+  if (value.active) {
+    return true
+  }
+
+  // Staff-only mode: access is granted via STAFF_DOMAINS /
+  // STAFF_USERNAME_ALLOWLIST config. Works for any flag.
+  return Boolean(value.staffOnly && isStaff(user))
 }
 
 const isStaffDomain = (user: User | null) => {

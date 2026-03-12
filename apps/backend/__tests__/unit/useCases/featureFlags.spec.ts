@@ -176,9 +176,13 @@ describe('FeatureFlagsUseCases.get — buyCredits gating', () => {
 
 describe('FeatureFlagsUseCases.get — non-buyCredits flags', () => {
   const originalFlags = config.featureFlags.flags
+  const originalDomains = config.featureFlags.staffDomains
+  const originalAllowlist = config.featureFlags.allowlistedUsernames
 
   afterEach(() => {
     config.featureFlags.flags = originalFlags
+    config.featureFlags.staffDomains = originalDomains
+    config.featureFlags.allowlistedUsernames = originalAllowlist
   })
 
   it('taskManager active=true returns true regardless of user auth', () => {
@@ -214,5 +218,65 @@ describe('FeatureFlagsUseCases.get — non-buyCredits flags', () => {
       objectMappingArchiver: { active: false },
     }
     expect(FeatureFlagsUseCases.get(makeUser({ oauthProvider: 'google' })).objectMappingArchiver).toBe(false)
+  })
+
+  it('generic staffOnly=true grants access to staff domain users', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      taskManager: { active: false, staffOnly: true },
+    }
+    config.featureFlags.staffDomains = ['subspace.network']
+    const user = makeUser({
+      oauthProvider: 'github',
+      oauthUsername: 'dev@subspace.network',
+    })
+    expect(FeatureFlagsUseCases.get(user).taskManager).toBe(true)
+  })
+
+  it('generic staffOnly=true grants access to allowlisted users', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      taskManager: { active: false, staffOnly: true },
+    }
+    config.featureFlags.allowlistedUsernames = ['special@example.com']
+    const user = makeUser({
+      oauthProvider: 'google',
+      oauthUsername: 'special@example.com',
+    })
+    expect(FeatureFlagsUseCases.get(user).taskManager).toBe(true)
+  })
+
+  it('generic staffOnly=true rejects non-staff users', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      taskManager: { active: false, staffOnly: true },
+    }
+    config.featureFlags.staffDomains = ['subspace.network']
+    const user = makeUser({
+      oauthProvider: 'google',
+      oauthUsername: 'random@gmail.com',
+    })
+    expect(FeatureFlagsUseCases.get(user).taskManager).toBe(false)
+  })
+
+  it('generic staffOnly=true rejects web3-wallet even with matching domain', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      taskManager: { active: false, staffOnly: true },
+    }
+    config.featureFlags.staffDomains = ['subspace.network']
+    const user = makeUser({
+      oauthProvider: 'web3-wallet',
+      oauthUsername: 'dev@subspace.network',
+    })
+    expect(FeatureFlagsUseCases.get(user).taskManager).toBe(false)
+  })
+
+  it('generic staffOnly=true rejects null user', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      taskManager: { active: false, staffOnly: true },
+    }
+    expect(FeatureFlagsUseCases.get(null).taskManager).toBe(false)
   })
 })
