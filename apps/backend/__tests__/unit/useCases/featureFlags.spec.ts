@@ -173,3 +173,46 @@ describe('FeatureFlagsUseCases.get — buyCredits gating', () => {
     expect(FeatureFlagsUseCases.get(null).buyCredits).toBe(false)
   })
 })
+
+describe('FeatureFlagsUseCases.get — non-buyCredits flags', () => {
+  const originalFlags = config.featureFlags.flags
+
+  afterEach(() => {
+    config.featureFlags.flags = originalFlags
+  })
+
+  it('taskManager active=true returns true regardless of user auth', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      taskManager: { active: true },
+    }
+    expect(FeatureFlagsUseCases.get(null).taskManager).toBe(true)
+    expect(FeatureFlagsUseCases.get(makeUser({ oauthProvider: 'github' })).taskManager).toBe(true)
+    expect(FeatureFlagsUseCases.get(makeUser({ oauthProvider: 'web3-wallet' })).taskManager).toBe(true)
+  })
+
+  it('taskManager active=false returns false', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      taskManager: { active: false },
+    }
+    expect(FeatureFlagsUseCases.get(makeUser({ oauthProvider: 'google' })).taskManager).toBe(false)
+  })
+
+  it('objectMappingArchiver active=true returns true regardless of user auth', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      objectMappingArchiver: { active: true },
+    }
+    expect(FeatureFlagsUseCases.get(null).objectMappingArchiver).toBe(true)
+    expect(FeatureFlagsUseCases.get(makeUser({ oauthProvider: 'web3-wallet' })).objectMappingArchiver).toBe(true)
+  })
+
+  it('objectMappingArchiver active=false returns false', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      objectMappingArchiver: { active: false },
+    }
+    expect(FeatureFlagsUseCases.get(makeUser({ oauthProvider: 'google' })).objectMappingArchiver).toBe(false)
+  })
+})
