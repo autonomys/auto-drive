@@ -2,8 +2,10 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useCallback, useEffect, useState } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
 import { getMessageToSign } from '../app/api/auth/[...nextauth]/web3';
-import { signIn as nextAuthSignIn } from 'next-auth/react';
+import { signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react';
 import { defaultNetworkId } from '@auto-drive/ui';
+import { clearSessionCache } from '@/utils/auth';
+import { useUserStore } from '@/globalStates/user';
 
 export type AuthProvider = 'google' | 'discord' | 'web3-wallet' | 'github';
 
@@ -54,4 +56,16 @@ export const useLogIn = (): UseAuth => {
   }, [address, signInWithWallet, isClicked]);
 
   return { signIn };
+};
+
+export const useLogOut = () => {
+  const clearUser = useUserStore((state) => state.clearUser);
+
+  const logOut = useCallback(() => {
+    clearSessionCache();
+    clearUser();
+    nextAuthSignOut();
+  }, [clearUser]);
+
+  return { logOut };
 };
