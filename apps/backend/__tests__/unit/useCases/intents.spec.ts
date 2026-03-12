@@ -131,6 +131,21 @@ describe('IntentsUseCases', () => {
     expect(result.isOk()).toBe(false)
   })
 
+  it('getIntent should return ok for PENDING intent with txHash even if expiresAt is past', async () => {
+    const watched: Intent = {
+      id: '0x1w',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      txHash: '0xsubmitted',
+      expiresAt: new Date(Date.now() - 60 * 1000), // 1 min in the past
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(watched)
+
+    const result = await IntentsUseCases.getIntent(user, watched.id)
+    expect(result.isOk()).toBe(true)
+  })
+
   it('getIntent should return ok for CONFIRMED intent even if expiresAt is past', async () => {
     const confirmed: Intent = {
       id: '0x1c',

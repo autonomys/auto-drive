@@ -56,10 +56,13 @@ const randomBytes32 = () => {
 // Returns true if the intent has passed its price-lock window.
 // Only PENDING intents can expire — once an intent is CONFIRMED or COMPLETED
 // the expiry window is irrelevant.
+// Intents with a txHash are actively being watched on-chain and must not be
+// treated as expired — their resolution comes from markIntentAsConfirmed.
 // Intents without an expiresAt (pre-feature rows) are considered expired.
 const isIntentExpired = (intent: Intent): boolean => {
   if (intent.status === IntentStatus.EXPIRED) return true
   if (intent.status !== IntentStatus.PENDING) return false
+  if (intent.txHash) return false
   if (!intent.expiresAt) return true
   return intent.expiresAt < new Date()
 }
