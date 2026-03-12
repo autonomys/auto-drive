@@ -159,6 +159,21 @@ describe('IntentsUseCases', () => {
     expect(result.isOk()).toBe(true)
   })
 
+  it('getIntent should return GoneError when intent status is EXPIRED', async () => {
+    const expired: Intent = {
+      id: '0x1x',
+      userPublicId: user.publicId,
+      status: IntentStatus.EXPIRED,
+      shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() - 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(expired)
+
+    const result = await IntentsUseCases.getIntent(user, expired.id)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(GoneError)
+  })
+
   it('getIntent should error with forbidden when user does not match', async () => {
     const intent: Intent = {
       id: '0x9',
