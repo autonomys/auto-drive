@@ -130,6 +130,34 @@ describe('IntentsUseCases', () => {
     expect(result.isOk()).toBe(true)
   })
 
+  it('getIntent should return ok for CONFIRMED intent even if expiresAt is past', async () => {
+    const confirmed: Intent = {
+      id: '0x1c',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() - 60 * 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(confirmed)
+
+    const result = await IntentsUseCases.getIntent(user, confirmed.id)
+    expect(result.isOk()).toBe(true)
+  })
+
+  it('getIntent should return ok for COMPLETED intent even if expiresAt is past', async () => {
+    const completed: Intent = {
+      id: '0x1d',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() - 60 * 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(completed)
+
+    const result = await IntentsUseCases.getIntent(user, completed.id)
+    expect(result.isOk()).toBe(true)
+  })
+
   it('getIntent should error with forbidden when user does not match', async () => {
     const intent: Intent = {
       id: '0x9',
