@@ -136,15 +136,12 @@ const markIntentAsConfirmed = async ({
   )
 }
 
-const getIntentCredits = (intent: Intent) => {
+const getIntentCredits = (intent: Intent): bigint => {
   if (!intent.paymentAmount) {
-    return 0
+    return BigInt(0)
   }
 
-  const creditsInBytes =
-    BigInt(intent.paymentAmount) / BigInt(intent.shannonsPerByte)
-
-  return Number(creditsInBytes).valueOf()
+  return BigInt(intent.paymentAmount) / BigInt(intent.shannonsPerByte)
 }
 
 const onConfirmedIntent = async (intentId: string) => {
@@ -167,6 +164,7 @@ const onConfirmedIntent = async (intentId: string) => {
   const addResult = await AccountsUseCases.addCreditsToAccount(
     intent.userPublicId,
     IntentsUseCases.getIntentCredits(intent),
+    intentId,
   )
   if (addResult.isErr()) {
     return err(addResult.error)

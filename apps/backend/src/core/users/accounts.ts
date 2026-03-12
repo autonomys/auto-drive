@@ -6,16 +6,22 @@ import {
   AccountModel,
   Account,
   InteractionType,
+  InteractionSource,
   AccountInfo,
   AccountWithTotalSize,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
+import { purchasedCreditsRepository } from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
 import { config } from '../../config.js'
 import { err, ok, Result } from 'neverthrow'
-import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
+import {
+  ForbiddenError,
+  ObjectNotFoundError,
+  PaymentRequiredError,
+} from '../../errors/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('AccountsUseCases')
@@ -144,12 +150,16 @@ const getPendingCreditsByAccountAndType = async (
       ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
       : new Date(0)
 
+  // Only count free-tier interactions against the free/one-off limit.
+  // Interactions sourced from purchased credits are tracked separately and
+  // must not reduce the free allocation.
   const interactions =
     await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
       account.id,
       type,
       start,
       end,
+      InteractionSource.FreeTier,
     )
 
   const spentCredits = interactions.reduce((acc, interaction) => {
@@ -161,7 +171,28 @@ const getPendingCreditsByAccountAndType = async (
       ? account.uploadLimit
       : account.downloadLimit
 
-  return limit - spentCredits
+  const freeRemaining = limit - spentCredits
+
+  // Also include any active purchased credits so the upload/download gate
+  // (pendingCredits < metadata.totalSize) grants access when the user has
+  // enough purchased bytes, even if their free allocation is exhausted.
+  //
+  // getRemainingCredits is a plain DB query with no awareness of the
+  // buyCredits feature flag. If the flag is OFF and no rows exist in
+  // purchased_credits (because the /intents routes are gated), this returns
+  // zero and behaviour is identical to the pre-purchased-credits state.
+  // If credits were purchased while the flag was ON and it is later turned
+  // OFF, those already-purchased credits remain visible and usable — this is
+  // intentional: users should not lose credits they already paid for.
+  const purchased = await purchasedCreditsRepository.getRemainingCredits(
+    account.id,
+  )
+  const purchasedRemaining =
+    type === InteractionType.Upload
+      ? Number(purchased.uploadBytesRemaining)
+      : Number(purchased.downloadBytesRemaining)
+
+  return freeRemaining + purchasedRemaining
 }
 
 const getAccountInfo = async (
@@ -216,26 +247,187 @@ const registerInteraction = async (
   type: InteractionType,
   size: bigint,
   cid?: string,
-) => {
+): Promise<void> => {
   const account = await getOrCreateAccount(user)
+  const creditType = type === InteractionType.Upload ? 'upload' : 'download'
 
-  await InteractionsUseCases.createInteraction(account.id, type, size, cid)
-}
+  logger.debug(
+    'Registering interaction (accountId=%s, type=%s, size=%d)',
+    account.id,
+    type,
+    size,
+  )
 
-const addCreditsToAccount = async (publicId: string, credits: number) => {
-  const user = await AuthManager.getUserFromPublicId(publicId)
+  // Atomically consume as many bytes as possible from purchased credits in a
+  // single transaction. Returns the number of bytes actually deducted. This
+  // avoids the TOCTOU race that existed with the previous two-phase approach
+  // where releasing FOR UPDATE locks between calls allowed concurrent requests
+  // to consume the same credits.
+  const fromPurchased = await purchasedCreditsRepository.consumeUpTo(
+    account.id,
+    creditType,
+    size,
+  )
 
-  const account = await AccountsUseCases.getOrCreateAccount(user)
+  const fromFree = size - fromPurchased
 
-  if (account.model !== AccountModel.OneOff) {
-    return err(new ForbiddenError('Account is not OneOff'))
+  // Guard: verify the user has enough free-tier budget to cover any remainder
+  // BEFORE writing any interaction records.  This is the last line of defence
+  // against double-spend races: consumeUpTo serialises the purchased pool, but
+  // a concurrent request that only received a partial purchased allocation must
+  // not silently overflow into free-tier credits it does not own.
+  //
+  // Critically, this check runs before either interaction ledger entry is
+  // written so that if the guard fires, the compensating refund leaves the
+  // system in a fully clean state — no dangling Purchased ledger entries.
+  if (fromFree > BigInt(0)) {
+    const end = new Date()
+    const start =
+      account.model === AccountModel.Monthly
+        ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
+        : new Date(0)
+
+    const freeTierInteractions =
+      await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
+        account.id,
+        type,
+        start,
+        end,
+        InteractionSource.FreeTier,
+      )
+
+    const spentFree = freeTierInteractions.reduce(
+      (acc, i) => acc + BigInt(i.size),
+      BigInt(0),
+    )
+    const freeLimit = BigInt(
+      type === InteractionType.Upload ? account.uploadLimit : account.downloadLimit,
+    )
+    const freeAvailable = freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
+
+    if (fromFree > freeAvailable) {
+      logger.warn(
+        'registerInteraction: insufficient free-tier credits — refunding purchased bytes and rejecting (accountId=%s, fromFree=%d, freeAvailable=%d)',
+        account.id,
+        fromFree,
+        freeAvailable,
+      )
+      if (fromPurchased > BigInt(0)) {
+        await purchasedCreditsRepository.refundCredits(
+          account.id,
+          creditType,
+          fromPurchased,
+        )
+      }
+      throw new PaymentRequiredError(`Insufficient credits to process ${creditType}`)
+    }
   }
 
-  await accountsRepository.updateAccount(
+  // consumeUpTo commits its own transaction before we record the interaction.
+  // If createInteraction fails, the credits are already deducted with no
+  // ledger entry — permanent financial loss. Guard with a compensating refund.
+  if (fromPurchased > BigInt(0)) {
+    try {
+      await InteractionsUseCases.createInteraction(
+        account.id,
+        type,
+        fromPurchased,
+        InteractionSource.Purchased,
+        cid,
+      )
+    } catch (interactionError) {
+      logger.error(
+        interactionError,
+        'registerInteraction: purchased interaction recording failed after consumeUpTo committed — attempting compensating refund (accountId=%s, type=%s, bytes=%d)',
+        account.id,
+        creditType,
+        fromPurchased,
+      )
+      try {
+        await purchasedCreditsRepository.refundCredits(
+          account.id,
+          creditType,
+          fromPurchased,
+        )
+        logger.warn(
+          'registerInteraction: compensating refund succeeded (accountId=%s, bytes=%d)',
+          account.id,
+          fromPurchased,
+        )
+      } catch (refundError) {
+        logger.error(
+          refundError,
+          'CRITICAL: registerInteraction: interaction recording AND refund both failed — manual recovery required (accountId=%s, type=%s, bytes=%d)',
+          account.id,
+          creditType,
+          fromPurchased,
+        )
+      }
+      throw interactionError
+    }
+  }
+
+  if (fromFree > BigInt(0)) {
+    logger.debug(
+      'Covering remainder from free-tier (accountId=%s, fromPurchased=%d, fromFree=%d)',
+      account.id,
+      fromPurchased,
+      fromFree,
+    )
+
+    await InteractionsUseCases.createInteraction(
+      account.id,
+      type,
+      fromFree,
+      InteractionSource.FreeTier,
+      cid,
+    )
+  }
+}
+
+const addCreditsToAccount = async (
+  publicId: string,
+  credits: bigint,
+  intentId: string,
+): Promise<Result<void, ForbiddenError>> => {
+  const user = await AuthManager.getUserFromPublicId(publicId)
+  const account = await AccountsUseCases.getOrCreateAccount(user)
+
+  const expiresAt = new Date(
+    Date.now() + config.credits.expiryDays * 24 * 60 * 60 * 1000,
+  )
+
+  // Atomically check the per-user cap and insert inside a single transaction
+  // protected by a per-account advisory lock. This prevents two concurrent
+  // onConfirmedIntent calls for different intents from both passing the cap
+  // check and both inserting, which would push the account over the cap.
+  const result = await purchasedCreditsRepository.createPurchasedCreditWithCapCheck(
+    {
+      accountId: account.id,
+      intentId,
+      uploadBytesOriginal: credits,
+      downloadBytesOriginal: credits,
+      expiresAt,
+    },
+    config.credits.maxBytesPerUser,
+  )
+
+  if (result.isErr()) {
+    logger.warn(
+      'Purchase would exceed per-user cap (accountId=%s, adding=%d, cap=%d)',
+      account.id,
+      credits,
+      config.credits.maxBytesPerUser,
+    )
+    return err(new ForbiddenError('Purchase would exceed per-user credit cap'))
+  }
+
+  logger.info(
+    'Purchased credits created (accountId=%s, intentId=%s, bytes=%d, expiresAt=%s)',
     account.id,
-    account.model,
-    account.uploadLimit + credits,
-    account.downloadLimit + credits,
+    intentId,
+    credits,
+    expiresAt.toISOString(),
   )
 
   return ok()
