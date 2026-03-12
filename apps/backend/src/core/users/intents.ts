@@ -56,10 +56,10 @@ const randomBytes32 = () => {
 // Returns true if the intent has passed its price-lock window.
 // Only PENDING intents can expire — once an intent is CONFIRMED or COMPLETED
 // the expiry window is irrelevant.
-// Intents without an expiresAt (pre-feature rows) are never considered expired.
+// Intents without an expiresAt (pre-feature rows) are considered expired.
 const isIntentExpired = (intent: Intent): boolean => {
   if (intent.status !== IntentStatus.PENDING) return false
-  if (!intent.expiresAt) return false
+  if (!intent.expiresAt) return true
   return intent.expiresAt < new Date()
 }
 

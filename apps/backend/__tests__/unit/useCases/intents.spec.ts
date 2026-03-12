@@ -73,6 +73,7 @@ describe('IntentsUseCases', () => {
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
       shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
 
@@ -116,18 +117,18 @@ describe('IntentsUseCases', () => {
     expect(result.isOk()).toBe(true)
   })
 
-  it('getIntent should not treat missing expiresAt as expired (legacy rows)', async () => {
+  it('getIntent should treat missing expiresAt as expired (legacy rows)', async () => {
     const legacy: Intent = {
       id: '0x1l',
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
       shannonsPerByte: 1n,
-      // no expiresAt
+      // no expiresAt — pre-feature row, must be treated as expired
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(legacy)
 
     const result = await IntentsUseCases.getIntent(user, legacy.id)
-    expect(result.isOk()).toBe(true)
+    expect(result.isOk()).toBe(false)
   })
 
   it('getIntent should return ok for CONFIRMED intent even if expiresAt is past', async () => {
@@ -182,6 +183,7 @@ describe('IntentsUseCases', () => {
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
       shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const updateSpy = jest
