@@ -3,7 +3,7 @@ import { IntentsUseCases } from '../../../src/core/users/intents.js'
 import { intentsRepository } from '../../../src/infrastructure/repositories/users/intents.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
-import { ForbiddenError, GoneError } from '../../../src/errors/index.js'
+import { ConflictError, ForbiddenError, GoneError } from '../../../src/errors/index.js'
 import { IntentStatus, type Intent, type User } from '@auto-drive/models'
 import { ok } from 'neverthrow'
 
@@ -637,6 +637,95 @@ describe('IntentsUseCases', () => {
 
     expect(result.isOk()).toBe(true)
     expect(result._unsafeUnwrap()).toEqual([])
+  })
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // reprocessOverCapIntent
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('reprocessOverCapIntent should reset OVER_CAP intent to CONFIRMED', async () => {
+    const admin = { ...user, role: 'admin' } as unknown as User
+    const overCapIntent: Intent = {
+      id: '0xrp1',
+      userPublicId: user.publicId,
+      status: IntentStatus.OVER_CAP,
+      paymentAmount: 100n,
+      shannonsPerByte: 1n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(overCapIntent)
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockResolvedValue({ ...overCapIntent, status: IntentStatus.CONFIRMED })
+
+    const result = await IntentsUseCases.reprocessOverCapIntent(admin, overCapIntent.id)
+
+    expect(result.isOk()).toBe(true)
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: overCapIntent.id,
+        status: IntentStatus.CONFIRMED,
+      }),
+    )
+  })
+
+  it('reprocessOverCapIntent should return ForbiddenError for non-admin', async () => {
+    const nonAdmin = { ...user, role: 'user' } as unknown as User
+    const repoSpy = jest.spyOn(intentsRepository, 'getById')
+
+    const result = await IntentsUseCases.reprocessOverCapIntent(nonAdmin, '0xrp2')
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    expect(repoSpy).not.toHaveBeenCalled()
+  })
+
+  it('reprocessOverCapIntent should return ObjectNotFoundError when intent missing', async () => {
+    const admin = { ...user, role: 'admin' } as unknown as User
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(null)
+
+    const result = await IntentsUseCases.reprocessOverCapIntent(admin, '0xrp3')
+
+    expect(result.isErr()).toBe(true)
+  })
+
+  it('reprocessOverCapIntent should return ConflictError when intent is not OVER_CAP', async () => {
+    const admin = { ...user, role: 'admin' } as unknown as User
+    const completedIntent: Intent = {
+      id: '0xrp4',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      paymentAmount: 100n,
+      shannonsPerByte: 1n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(completedIntent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+
+    const result = await IntentsUseCases.reprocessOverCapIntent(admin, completedIntent.id)
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)
+    // Must not attempt to update an intent that isn't OVER_CAP
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('reprocessOverCapIntent should return ConflictError for PENDING, CONFIRMED, EXPIRED statuses', async () => {
+    const admin = { ...user, role: 'admin' } as unknown as User
+    const statuses = [IntentStatus.PENDING, IntentStatus.CONFIRMED, IntentStatus.EXPIRED]
+
+    for (const status of statuses) {
+      const intent: Intent = {
+        id: `0xrp-${status}`,
+        userPublicId: user.publicId,
+        status,
+        shannonsPerByte: 1n,
+      }
+      jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+
+      const result = await IntentsUseCases.reprocessOverCapIntent(admin, intent.id)
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)
+    }
   })
 
   it('getConfirmedIntents should proxy repository', async () => {

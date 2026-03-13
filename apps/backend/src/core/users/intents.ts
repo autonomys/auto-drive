@@ -3,6 +3,7 @@ import { intentsRepository } from '../../infrastructure/repositories/users/inten
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../infrastructure/eventRouter/tasks.js'
 import {
+  ConflictError,
   ForbiddenError,
   GoneError,
   ObjectNotFoundError,
@@ -236,6 +237,47 @@ const getOverCapIntents = async (executor: User) => {
   return ok(intents)
 }
 
+// Resets an OVER_CAP intent back to CONFIRMED so the payment manager polling
+// loop will attempt to grant credits on its next tick.
+//
+// Intended admin workflow:
+//  1. Admin calls POST /accounts/update to raise the user's credit cap.
+//  2. Admin calls POST /intents/:id/reprocess to re-queue this intent.
+//  3. The polling loop picks it up within 30 seconds and calls onConfirmedIntent.
+//
+// Returns ConflictError if the intent is not in OVER_CAP status — this guards
+// against accidentally re-queuing an already COMPLETED or PENDING intent.
+const reprocessOverCapIntent = async (executor: User, intentId: string) => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('Admin access required'))
+  }
+
+  const intent = await intentsRepository.getById(intentId)
+  if (!intent) {
+    return err(new ObjectNotFoundError('Intent not found'))
+  }
+
+  if (intent.status !== IntentStatus.OVER_CAP) {
+    return err(
+      new ConflictError(
+        `Intent is not in OVER_CAP status (current: ${intent.status})`,
+      ),
+    )
+  }
+
+  await intentsRepository.updateIntent({
+    ...intent,
+    status: IntentStatus.CONFIRMED,
+  })
+
+  logger.info('Admin requeued OVER_CAP intent for reprocessing', {
+    intentId,
+    adminPublicId: executor.publicId,
+  })
+
+  return ok()
+}
+
 // Marks all PENDING intents whose price-lock window has expired.
 // Called periodically by the background job so that stale PENDING rows do not
 // accumulate.  CONFIRMED intents are not touched — once payment is confirmed
@@ -293,6 +335,7 @@ export const IntentsUseCases = {
   markIntentAsConfirmed,
   getConfirmedIntents,
   getOverCapIntents,
+  reprocessOverCapIntent,
   getIntentCredits,
   getPrice,
   cleanupExpiredIntents,
