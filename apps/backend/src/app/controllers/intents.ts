@@ -108,3 +108,39 @@ intentsController.post(
     res.sendStatus(204)
   }),
 )
+
+// ---------------------------------------------------------------------------
+// GET /intents/over-cap  (admin only)
+// Lists all intents that were confirmed on-chain but could not be converted
+// to credits because the user was already at the per-user cap.
+// These are terminal — the polling loop skips them.  An admin must review
+// and either adjust the user's cap and reprocess manually, or arrange a
+// refund out-of-band.
+// ---------------------------------------------------------------------------
+
+intentsController.get(
+  '/over-cap',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      IntentsUseCases.getOverCapIntents(user),
+      'Failed to get over-cap intents',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json(
+      result.value.map((intent) => ({
+        ...intent,
+        shannonsPerByte: intent.shannonsPerByte.toString(),
+        paymentAmount: intent.paymentAmount?.toString(),
+      })),
+    )
+  }),
+)

@@ -6,6 +6,12 @@ export enum IntentStatus {
   COMPLETED = "completed",
   FAILED = "failed",
   EXPIRED = "expired",
+  // Payment was confirmed on-chain but the user's purchased credit balance
+  // is at or above the per-user cap, so credits could not be granted.
+  // This is a terminal state — the polling loop will not retry it.
+  // An admin must review and either adjust the cap + reprocess, or arrange
+  // an out-of-band refund.
+  OVER_CAP = "over_cap",
 }
 
 export const IntentSchema = z.object({

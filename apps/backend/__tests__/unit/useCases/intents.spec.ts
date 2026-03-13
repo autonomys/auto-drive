@@ -440,7 +440,7 @@ describe('IntentsUseCases', () => {
     expect(res.isErr()).toBe(true)
   })
 
-  it('onConfirmedIntent should error when addCreditsToAccount fails', async () => {
+  it('onConfirmedIntent should mark OVER_CAP (not retry) when cap is exceeded', async () => {
     const intent: Intent = {
       id: '0x11',
       userPublicId: user.publicId,
@@ -453,12 +453,45 @@ describe('IntentsUseCases', () => {
     jest
       .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(
-        neverthrowErr(new ForbiddenError('Add credits failed')),
+        neverthrowErr(new ForbiddenError('Purchase would exceed per-user credit cap')),
       )
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockResolvedValue({ ...intent, status: IntentStatus.OVER_CAP })
 
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
-    expect(res.isErr()).toBe(true)
+    // Must succeed (not error) so the polling loop stops retrying
+    expect(res.isOk()).toBe(true)
+    // Intent must be marked OVER_CAP, not COMPLETED or left as CONFIRMED
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: intent.id, status: IntentStatus.OVER_CAP }),
+    )
+  })
+
+  it('onConfirmedIntent should NOT mark COMPLETED when capped — update must use OVER_CAP status', async () => {
+    const intent: Intent = {
+      id: '0x11c',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      paymentAmount: 500n,
+      shannonsPerByte: 1n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const { err: neverthrowErr } = await import('neverthrow')
+    jest
+      .spyOn(AccountsUseCases, 'addCreditsToAccount')
+      .mockResolvedValue(neverthrowErr(new ForbiddenError('cap')))
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockResolvedValue({ ...intent, status: IntentStatus.OVER_CAP })
+
+    await IntentsUseCases.onConfirmedIntent(intent.id)
+
+    // Verify status is specifically OVER_CAP, not COMPLETED
+    expect(updateSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: IntentStatus.COMPLETED }),
+    )
   })
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -560,6 +593,51 @@ describe('IntentsUseCases', () => {
   // ────────────────────────────────────────────────────────────────────────────
   // Miscellaneous
   // ────────────────────────────────────────────────────────────────────────────
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // getOverCapIntents
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('getOverCapIntents should return intents for admin users', async () => {
+    const admin = { ...user, role: 'admin' } as unknown as User
+    const overCapIntent: Intent = {
+      id: '0xoc1',
+      userPublicId: user.publicId,
+      status: IntentStatus.OVER_CAP,
+      paymentAmount: 100n,
+      shannonsPerByte: 1n,
+    }
+    jest
+      .spyOn(intentsRepository, 'getOverCapIntents')
+      .mockResolvedValue([overCapIntent])
+
+    const result = await IntentsUseCases.getOverCapIntents(admin)
+
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap()).toEqual([overCapIntent])
+  })
+
+  it('getOverCapIntents should return ForbiddenError for non-admin users', async () => {
+    const nonAdmin = { ...user, role: 'user' } as unknown as User
+    const repoSpy = jest.spyOn(intentsRepository, 'getOverCapIntents')
+
+    const result = await IntentsUseCases.getOverCapIntents(nonAdmin)
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    // Repository must not be called — admin check happens first
+    expect(repoSpy).not.toHaveBeenCalled()
+  })
+
+  it('getOverCapIntents should return empty array when no capped intents exist', async () => {
+    const admin = { ...user, role: 'admin' } as unknown as User
+    jest.spyOn(intentsRepository, 'getOverCapIntents').mockResolvedValue([])
+
+    const result = await IntentsUseCases.getOverCapIntents(admin)
+
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap()).toEqual([])
+  })
 
   it('getConfirmedIntents should proxy repository', async () => {
     const intents: Intent[] = [

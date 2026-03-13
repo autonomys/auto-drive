@@ -117,6 +117,17 @@ const expireIntentIfPending = async (intentId: string): Promise<boolean> => {
   return (result.rowCount ?? 0) > 0
 }
 
+// Returns all intents that were blocked by the per-user cap.
+// These are terminal — the polling loop skips them — and require admin review.
+const getOverCapIntents = async (): Promise<Intent[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    'SELECT * FROM intents WHERE status = $1 ORDER BY id',
+    [IntentStatus.OVER_CAP],
+  )
+  return mapRows(result.rows)
+}
+
 export const intentsRepository = {
   getById,
   createIntent,
@@ -124,4 +135,5 @@ export const intentsRepository = {
   getByStatus,
   getExpiredPendingIntents,
   expireIntentIfPending,
+  getOverCapIntents,
 }
