@@ -26,9 +26,9 @@ const createTestIntent = async (userPublicId: string): Promise<string> => {
   const db = await getDatabase()
   const id = `test-intent-${uuidv4()}`
   await db.query(
-    `INSERT INTO intents (id, user_public_id, status, shannons_per_byte)
-     VALUES ($1, $2, $3, $4)`,
-    [id, userPublicId, IntentStatus.COMPLETED, '1'],
+    `INSERT INTO intents (id, user_public_id, status, shannons_per_byte, expires_at)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [id, userPublicId, IntentStatus.COMPLETED, '1', new Date()],
   )
   return id
 }

@@ -80,6 +80,10 @@ export const config = {
     maxBytesPerUser: BigInt(env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3))),
     // How often (in ms) the credit expiry background job runs.
     expiryCheckIntervalMs: Number(env('CREDIT_EXPIRY_CHECK_INTERVAL', '3600000')),
+    // Price-lock window: how many minutes a PENDING intent remains valid.
+    // After this window the intent is treated as expired and all operations on
+    // it are rejected.  Default: 10 minutes.
+    intentExpiryMinutes: Number(env('INTENT_EXPIRY_MINUTES', '10')),
   },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
