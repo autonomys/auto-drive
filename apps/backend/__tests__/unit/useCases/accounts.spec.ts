@@ -9,6 +9,7 @@ import {
 } from '@jest/globals'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { accountsRepository } from '../../../src/infrastructure/repositories/users/accounts.js'
+import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { AccountModel, UserRole } from '@auto-drive/models'
 import {
@@ -231,59 +232,89 @@ describe('AccountsUseCases', () => {
   })
 
   describe('addCreditsToAccount', () => {
-    it('should error when account is not OneOff model', async () => {
+    const account = {
+      id: 'acc123',
+      organizationId: 'org123',
+      model: AccountModel.OneOff,
+      uploadLimit: 1000,
+      downloadLimit: 1000,
+    }
+
+    beforeEach(() => {
       jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue({
         organizationId: 'org123',
       } as any)
-
-      const account = {
-        id: 'acc123',
-        organizationId: 'org123',
-        model: AccountModel.Monthly,
-        uploadLimit: 1000,
-        downloadLimit: 1000,
-      }
-
       jest
         .spyOn(AccountsUseCases, 'getOrCreateAccount')
         .mockResolvedValue(account as any)
+    })
 
-      const result = await AccountsUseCases.addCreditsToAccount('pub1', 100)
+    it('should create a purchased_credits row on success', async () => {
+      const { ok: neverthrowOk } = await import('neverthrow')
+
+      const createSpy = jest
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowOk({} as any))
+
+      // Install spy BEFORE the call so it intercepts any invocation
+      const updateSpy = jest
+        .spyOn(accountsRepository, 'updateAccount')
+        .mockResolvedValue(undefined as any)
+
+      const result = await AccountsUseCases.addCreditsToAccount(
+        'pub1',
+        BigInt(500),
+        'intent-xyz',
+      )
+
+      expect(result.isOk()).toBe(true)
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountId: 'acc123',
+          intentId: 'intent-xyz',
+          uploadBytesOriginal: BigInt(500),
+          downloadBytesOriginal: BigInt(500),
+        }),
+        expect.anything(),
+      )
+      // accounts table must NOT be touched — credit goes to purchased_credits
+      expect(updateSpy).not.toHaveBeenCalled()
+    })
+
+    it('should reject when purchase would exceed per-user cap', async () => {
+      const { err: neverthrowErr } = await import('neverthrow')
+
+      jest
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowErr('cap_exceeded' as const))
+
+      const result = await AccountsUseCases.addCreditsToAccount(
+        'pub1',
+        BigInt(1),
+        'intent-over-cap',
+      )
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
     })
 
-    it('should add credits successfully', async () => {
-      jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue({
-        organizationId: 'org123',
-      } as any)
-
-      const account = {
-        id: 'acc123',
-        organizationId: 'org123',
-        model: AccountModel.OneOff,
-        uploadLimit: 1000,
-        downloadLimit: 1000,
-      }
-
+    it('should work for any account model (not restricted to OneOff)', async () => {
+      const { ok: neverthrowOk } = await import('neverthrow')
+      const monthlyAccount = { ...account, model: AccountModel.Monthly }
       jest
         .spyOn(AccountsUseCases, 'getOrCreateAccount')
-        .mockResolvedValue(account as any)
+        .mockResolvedValue(monthlyAccount as any)
+      jest
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowOk({} as any))
 
-      const updateSpy = jest
-        .spyOn(accountsRepository, 'updateAccount')
-        .mockResolvedValue(account as any)
-
-      const result = await AccountsUseCases.addCreditsToAccount('pub1', 100)
+      const result = await AccountsUseCases.addCreditsToAccount(
+        'pub1',
+        BigInt(100),
+        'intent-monthly',
+      )
 
       expect(result.isOk()).toBe(true)
-      expect(updateSpy).toHaveBeenCalledWith(
-        'acc123',
-        AccountModel.OneOff,
-        1100,
-        1100,
-      )
     })
   })
 
