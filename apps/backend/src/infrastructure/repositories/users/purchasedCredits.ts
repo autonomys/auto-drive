@@ -222,7 +222,8 @@ const getRemainingCredits = async (
 
 // ---------------------------------------------------------------------------
 // getExpiringCredits
-// Returns active rows expiring within N days. Used by expiry warning banners.
+// Returns active rows expiring within N days. System-wide — no account filter.
+// Used by the admin /credits/economics endpoint for system-level monitoring.
 // ---------------------------------------------------------------------------
 
 const getExpiringCredits = async (
@@ -238,6 +239,31 @@ const getExpiringCredits = async (
        AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)
      ORDER BY expires_at ASC`,
     [withinDays],
+  )
+  return result.rows.map(mapRow)
+}
+
+// ---------------------------------------------------------------------------
+// getExpiringCreditsByAccountId
+// Returns active rows for a specific account expiring within N days.
+// Used by the per-user /credits/batches/expiring endpoint.
+// ---------------------------------------------------------------------------
+
+const getExpiringCreditsByAccountId = async (
+  accountId: string,
+  withinDays: number,
+): Promise<PurchasedCredit[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPurchasedCredit>(
+    `SELECT *
+     FROM purchased_credits
+     WHERE account_id = $1
+       AND expired = FALSE
+       AND expires_at > NOW()
+       AND expires_at <= NOW() + ($2 * INTERVAL '1 day')
+       AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)
+     ORDER BY expires_at ASC`,
+    [accountId, withinDays],
   )
   return result.rows.map(mapRow)
 }
@@ -492,6 +518,7 @@ export const purchasedCreditsRepository = {
   refundCredits,
   getRemainingCredits,
   getExpiringCredits,
+  getExpiringCreditsByAccountId,
   createPurchasedCreditWithCapCheck,
   markExpiredCredits,
   getByAccountId,
