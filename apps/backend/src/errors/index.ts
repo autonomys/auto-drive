@@ -74,6 +74,16 @@ export class ForbiddenError extends HttpError {
   }
 }
 
+// 409 Conflict — request is valid but the resource is in the wrong state for
+// the operation (e.g. trying to reprocess an intent that is not OVER_CAP).
+export class ConflictError extends HttpError {
+  static readonly statusCode = 409
+  constructor(message: string) {
+    super(ConflictError.statusCode, message)
+    this.name = 'ConflictError'
+  }
+}
+
 // 410 Gone — resource existed but is no longer available (e.g. expired intent).
 export class GoneError extends HttpError {
   static readonly statusCode = 410

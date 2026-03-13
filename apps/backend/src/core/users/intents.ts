@@ -1,8 +1,9 @@
-import { Intent, IntentStatus, User } from '@auto-drive/models'
+import { Intent, IntentStatus, User, UserRole } from '@auto-drive/models'
 import { intentsRepository } from '../../infrastructure/repositories/users/intents.js'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../infrastructure/eventRouter/tasks.js'
 import {
+  ConflictError,
   ForbiddenError,
   GoneError,
   ObjectNotFoundError,
@@ -193,7 +194,24 @@ const onConfirmedIntent = async (intentId: string) => {
     IntentsUseCases.getIntentCredits(intent),
     intentId,
   )
+
   if (addResult.isErr()) {
+    if (addResult.error instanceof ForbiddenError) {
+      // The user's purchased credit balance is at or above the per-user cap.
+      // Mark the intent OVER_CAP (terminal) so the polling loop stops retrying
+      // and an admin can review.  The payment is on-chain; resolution requires
+      // a manual decision (adjust cap + reprocess, or arrange a refund).
+      logger.warn('Intent blocked by per-user cap — marking OVER_CAP', {
+        intentId,
+        userPublicId: intent.userPublicId,
+        paymentAmount: intent.paymentAmount.toString(),
+      })
+      await intentsRepository.updateIntent({
+        ...intent,
+        status: IntentStatus.OVER_CAP,
+      })
+      return ok()
+    }
     return err(addResult.error)
   }
 
@@ -207,6 +225,57 @@ const onConfirmedIntent = async (intentId: string) => {
 
 const getConfirmedIntents = async () => {
   return intentsRepository.getByStatus(IntentStatus.CONFIRMED)
+}
+
+// Returns all intents stuck in OVER_CAP for admin review.
+// Only accessible to admin users — returns ForbiddenError for everyone else.
+const getOverCapIntents = async (executor: User) => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('Admin access required'))
+  }
+  const intents = await intentsRepository.getOverCapIntents()
+  return ok(intents)
+}
+
+// Resets an OVER_CAP intent back to CONFIRMED so the payment manager polling
+// loop will attempt to grant credits on its next tick.
+//
+// Intended admin workflow:
+//  1. Admin calls POST /accounts/update to raise the user's credit cap.
+//  2. Admin calls POST /intents/:id/reprocess to re-queue this intent.
+//  3. The polling loop picks it up within 30 seconds and calls onConfirmedIntent.
+//
+// Returns ConflictError if the intent is not in OVER_CAP status — this guards
+// against accidentally re-queuing an already COMPLETED or PENDING intent.
+const reprocessOverCapIntent = async (executor: User, intentId: string) => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('Admin access required'))
+  }
+
+  const intent = await intentsRepository.getById(intentId)
+  if (!intent) {
+    return err(new ObjectNotFoundError('Intent not found'))
+  }
+
+  if (intent.status !== IntentStatus.OVER_CAP) {
+    return err(
+      new ConflictError(
+        `Intent is not in OVER_CAP status (current: ${intent.status})`,
+      ),
+    )
+  }
+
+  await intentsRepository.updateIntent({
+    ...intent,
+    status: IntentStatus.CONFIRMED,
+  })
+
+  logger.info('Admin requeued OVER_CAP intent for reprocessing', {
+    intentId,
+    adminPublicId: executor.publicId,
+  })
+
+  return ok()
 }
 
 // Marks all PENDING intents whose price-lock window has expired.
@@ -265,6 +334,8 @@ export const IntentsUseCases = {
   onConfirmedIntent,
   markIntentAsConfirmed,
   getConfirmedIntents,
+  getOverCapIntents,
+  reprocessOverCapIntent,
   getIntentCredits,
   getPrice,
   cleanupExpiredIntents,
