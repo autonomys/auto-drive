@@ -95,12 +95,23 @@ export const authOptions: AuthOptions = {
       const isTokenSetupAndRefreshable =
         token.accessToken && token.authProvider && token.refreshToken;
       if (isTokenSetupAndRefreshable) {
-        const accessToken = await refreshAccessToken({
-          underlyingUserId: token.underlyingUserId!,
-          underlyingProvider: token.underlyingProvider!,
-          refreshToken: token.refreshToken!,
-        });
-        return accessToken;
+        // Only refresh if the access token is near expiry — avoids a network
+        // call to the auth service on every single session check.
+        // Note: token.exp is the NextAuth session JWT expiry (reset to
+        // now + maxAge on every encode), NOT the access token's expiry.
+        // We use accessTokenExp which is set explicitly in jwt.ts.
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        const accessTokenExp = (token.accessTokenExp as number) ?? 0;
+        const isNearExpiry =
+          accessTokenExp < nowInSeconds + refreshingTokenThresholdInSeconds;
+        if (isNearExpiry) {
+          return refreshAccessToken({
+            underlyingUserId: token.underlyingUserId!,
+            underlyingProvider: token.underlyingProvider!,
+            refreshToken: token.refreshToken!,
+          });
+        }
+        return token;
       }
 
       const isOAuthSuccessfullyLoggedIn = account && account.access_token;
@@ -115,17 +126,6 @@ export const authOptions: AuthOptions = {
       throw new Error('No account or token found');
     },
     async session({ session, token }) {
-      const nowInSeconds = Math.floor(Date.now() / 1000);
-      const isTokenExpired =
-        token.exp < nowInSeconds + refreshingTokenThresholdInSeconds;
-      if (isTokenExpired) {
-        const accessToken = await refreshAccessToken({
-          underlyingUserId: token.underlyingUserId!,
-          underlyingProvider: token.underlyingProvider!,
-          refreshToken: token.refreshToken!,
-        });
-        session.accessToken = accessToken.accessToken;
-      }
       session.accessToken = token.accessToken;
       session.authProvider = token.authProvider;
       session.authUserId = token.authUserId;

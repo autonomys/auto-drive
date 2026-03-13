@@ -43,12 +43,7 @@ CREATE TABLE purchased_credits (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
 
   CONSTRAINT upload_remaining_lte_original   CHECK (upload_bytes_remaining   <= upload_bytes_original),
-  CONSTRAINT download_remaining_lte_original CHECK (download_bytes_remaining <= download_bytes_original),
-
-  -- Each intent may only produce one credit row. Without this, a retried or
-  -- concurrent onConfirmedIntent call could insert duplicate rows before either
-  -- call marks the intent as COMPLETED, effectively granting double credits.
-  CONSTRAINT uq_purchased_credits_intent UNIQUE (intent_id)
+  CONSTRAINT download_remaining_lte_original CHECK (download_bytes_remaining <= download_bytes_original)
 );
 
 -- Primary query: active credits for an account ordered soonest-expiry first.

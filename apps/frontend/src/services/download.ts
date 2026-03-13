@@ -2,6 +2,7 @@
 
 import {
   handleFileDownload,
+  InvalidDecompressionError,
   DownloadProgressCallback,
   DownloadProgressInfo,
 } from 'utils/file';
@@ -132,6 +133,8 @@ export const createDownloadService = (api: Api) => {
     const session = await getAuthSession().catch(() => null);
     const hasSession = !!session?.accessToken && !!session?.authProvider;
 
+    // Track which authMode succeeded so we can reuse it on a decompression retry.
+    let successfulAuthMode: 'anonymous' | 'session' = 'anonymous';
     let download: AsyncIterable<Buffer>;
     try {
       download = await api.downloadObject(metadata.dataCid, {
@@ -154,6 +157,7 @@ export const createDownloadService = (api: Api) => {
         skipDecryption,
         authMode: 'session',
       });
+      successfulAuthMode = 'session';
     }
 
     if (!skipDecryption && totalSize < MAX_CACHEABLE_FILE_SIZE) {
@@ -175,10 +179,41 @@ export const createDownloadService = (api: Api) => {
     const writer = fileStream.getWriter();
     writer.write(Buffer.alloc(0));
 
-    await handleFileDownload(download, writer, {
-      totalSize,
-      onProgress,
-    });
+    try {
+      await handleFileDownload(download, writer, {
+        totalSize,
+        onProgress,
+      });
+    } catch (e) {
+      // If decompression failed before writing any bytes, the file's stored
+      // bytes are not actually compressed despite the metadata claiming so.
+      // Re-download as raw bytes (skipDecryption=true bypasses SDK
+      // decompression) and save with the original filename.
+      const isEncrypted =
+        !!password || !!metadata.uploadOptions?.encryption;
+      if (
+        e instanceof InvalidDecompressionError &&
+        !skipDecryption &&
+        !isEncrypted
+      ) {
+        const rawDownload = await api.downloadObject(metadata.dataCid, {
+          password: undefined,
+          skipDecryption: true,
+          authMode: successfulAuthMode,
+        });
+        const rawFileStream = StreamSaver.createWriteStream(fileName, {
+          size: totalSize,
+        });
+        const rawWriter = rawFileStream.getWriter();
+        rawWriter.write(Buffer.alloc(0));
+        await handleFileDownload(rawDownload, rawWriter, {
+          totalSize,
+          onProgress,
+        });
+        return;
+      }
+      throw e;
+    }
   };
 
   const fetchFromCache = async (

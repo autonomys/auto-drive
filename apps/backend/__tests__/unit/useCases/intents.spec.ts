@@ -73,6 +73,7 @@ describe('IntentsUseCases', () => {
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
       shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
 
@@ -116,18 +117,76 @@ describe('IntentsUseCases', () => {
     expect(result.isOk()).toBe(true)
   })
 
-  it('getIntent should not treat missing expiresAt as expired (legacy rows)', async () => {
+  it('getIntent should treat missing expiresAt as expired (legacy rows)', async () => {
     const legacy: Intent = {
       id: '0x1l',
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
       shannonsPerByte: 1n,
-      // no expiresAt
+      // no expiresAt — pre-feature row, must be treated as expired
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(legacy)
 
     const result = await IntentsUseCases.getIntent(user, legacy.id)
+    expect(result.isOk()).toBe(false)
+  })
+
+  it('getIntent should return ok for PENDING intent with txHash even if expiresAt is past', async () => {
+    const watched: Intent = {
+      id: '0x1w',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      txHash: '0xsubmitted',
+      expiresAt: new Date(Date.now() - 60 * 1000), // 1 min in the past
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(watched)
+
+    const result = await IntentsUseCases.getIntent(user, watched.id)
     expect(result.isOk()).toBe(true)
+  })
+
+  it('getIntent should return ok for CONFIRMED intent even if expiresAt is past', async () => {
+    const confirmed: Intent = {
+      id: '0x1c',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() - 60 * 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(confirmed)
+
+    const result = await IntentsUseCases.getIntent(user, confirmed.id)
+    expect(result.isOk()).toBe(true)
+  })
+
+  it('getIntent should return ok for COMPLETED intent even if expiresAt is past', async () => {
+    const completed: Intent = {
+      id: '0x1d',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() - 60 * 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(completed)
+
+    const result = await IntentsUseCases.getIntent(user, completed.id)
+    expect(result.isOk()).toBe(true)
+  })
+
+  it('getIntent should return GoneError when intent status is EXPIRED', async () => {
+    const expired: Intent = {
+      id: '0x1x',
+      userPublicId: user.publicId,
+      status: IntentStatus.EXPIRED,
+      shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() - 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(expired)
+
+    const result = await IntentsUseCases.getIntent(user, expired.id)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(GoneError)
   })
 
   it('getIntent should error with forbidden when user does not match', async () => {
@@ -154,6 +213,7 @@ describe('IntentsUseCases', () => {
       userPublicId: user.publicId,
       status: IntentStatus.PENDING,
       shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const updateSpy = jest
@@ -405,7 +465,7 @@ describe('IntentsUseCases', () => {
   // cleanupExpiredIntents
   // ────────────────────────────────────────────────────────────────────────────
 
-  it('cleanupExpiredIntents should mark expired PENDING intents as EXPIRED', async () => {
+  it('cleanupExpiredIntents should call expireIntentIfPending for each expired intent', async () => {
     const expiredIntent: Intent = {
       id: '0xexp1',
       userPublicId: user.publicId,
@@ -416,32 +476,27 @@ describe('IntentsUseCases', () => {
     jest
       .spyOn(intentsRepository, 'getExpiredPendingIntents')
       .mockResolvedValue([expiredIntent])
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockResolvedValue({ ...expiredIntent, status: IntentStatus.EXPIRED })
+    const expireSpy = jest
+      .spyOn(intentsRepository, 'expireIntentIfPending')
+      .mockResolvedValue(true)
 
     await IntentsUseCases.cleanupExpiredIntents()
 
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: expiredIntent.id,
-        status: IntentStatus.EXPIRED,
-      }),
-    )
+    expect(expireSpy).toHaveBeenCalledWith(expiredIntent.id)
   })
 
   it('cleanupExpiredIntents should do nothing when no expired intents', async () => {
     jest
       .spyOn(intentsRepository, 'getExpiredPendingIntents')
       .mockResolvedValue([])
-    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const expireSpy = jest.spyOn(intentsRepository, 'expireIntentIfPending')
 
     await IntentsUseCases.cleanupExpiredIntents()
 
-    expect(updateSpy).not.toHaveBeenCalled()
+    expect(expireSpy).not.toHaveBeenCalled()
   })
 
-  it('cleanupExpiredIntents should mark multiple expired intents', async () => {
+  it('cleanupExpiredIntents should handle multiple expired intents', async () => {
     const expiredIntents: Intent[] = [
       {
         id: '0xexp2',
@@ -461,21 +516,45 @@ describe('IntentsUseCases', () => {
     jest
       .spyOn(intentsRepository, 'getExpiredPendingIntents')
       .mockResolvedValue(expiredIntents)
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (intent) => intent)
+    const expireSpy = jest
+      .spyOn(intentsRepository, 'expireIntentIfPending')
+      .mockResolvedValue(true)
 
     await IntentsUseCases.cleanupExpiredIntents()
 
-    expect(updateSpy).toHaveBeenCalledTimes(2)
-    for (const expired of expiredIntents) {
-      expect(updateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: expired.id,
-          status: IntentStatus.EXPIRED,
-        }),
-      )
-    }
+    expect(expireSpy).toHaveBeenCalledTimes(2)
+    expect(expireSpy).toHaveBeenCalledWith('0xexp2')
+    expect(expireSpy).toHaveBeenCalledWith('0xexp3')
+  })
+
+  it('cleanupExpiredIntents should tolerate concurrent status changes (no-op on already-confirmed)', async () => {
+    const expiredIntents: Intent[] = [
+      {
+        id: '0xexp4',
+        userPublicId: user.publicId,
+        status: IntentStatus.PENDING,
+        shannonsPerByte: 1n,
+        expiresAt: new Date(Date.now() - 1000),
+      },
+      {
+        id: '0xexp5',
+        userPublicId: user.publicId,
+        status: IntentStatus.PENDING,
+        shannonsPerByte: 1n,
+        expiresAt: new Date(Date.now() - 2000),
+      },
+    ]
+    jest
+      .spyOn(intentsRepository, 'getExpiredPendingIntents')
+      .mockResolvedValue(expiredIntents)
+    const expireSpy = jest
+      .spyOn(intentsRepository, 'expireIntentIfPending')
+      .mockResolvedValueOnce(true) // first intent expired normally
+      .mockResolvedValueOnce(false) // second was confirmed concurrently
+
+    await IntentsUseCases.cleanupExpiredIntents()
+
+    expect(expireSpy).toHaveBeenCalledTimes(2)
   })
 
   // ────────────────────────────────────────────────────────────────────────────

@@ -223,7 +223,7 @@ export const FileTableRow = ({
               ) : (
                 <DocumentIcon className='mr-2 h-5 w-5 text-gray-400' />
               )}
-              <span className='font-semibold text-foreground hover:cursor-pointer hover:text-accent hover:underline'>
+              <span className='font-semibold text-foreground hover:cursor-pointer hover:text-primary hover:underline'>
                 {file.name
                   ? shortenString(file.name, 30)
                   : `No name (${file.headCid.slice(0, 12)})`}
@@ -292,7 +292,7 @@ export const FileTableRow = ({
                   {actionButtons.includes(FileActionButtons.SHARE) && (
                     <button
                       className={cn(
-                        'block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background',
+                        'block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background-hover',
                         !isOwner && 'cursor-not-allowed opacity-50',
                       )}
                       disabled={!isOwner}
@@ -306,7 +306,7 @@ export const FileTableRow = ({
                   {actionButtons.includes(FileActionButtons.DOWNLOAD) && (
                     <button
                       className={cn(
-                        'block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background',
+                        'block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background-hover',
                         (file.uploadState.totalNodes === null ||
                           file.tags.includes(ObjectTag.Banned)) &&
                           'cursor-not-allowed opacity-50',
@@ -335,7 +335,7 @@ export const FileTableRow = ({
                   {actionButtons.includes(FileActionButtons.DELETE) && (
                     <button
                       className={cn(
-                        'block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-background',
+                        'block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-background-hover',
                         !hasFileOwnership && 'cursor-not-allowed opacity-50',
                       )}
                       disabled={!hasFileOwnership}
@@ -348,7 +348,7 @@ export const FileTableRow = ({
 
                   {actionButtons.includes(FileActionButtons.RESTORE) && (
                     <button
-                      className='block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background'
+                      className='block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background-hover'
                       onClick={handleRestore}
                       role='menuitem'
                     >
@@ -359,7 +359,7 @@ export const FileTableRow = ({
                     !isToBeReviewed(file.tags) &&
                     !isBanned(file.tags) && (
                       <button
-                        className='block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background'
+                        className='block w-full px-4 py-2 text-left text-sm text-foreground hover:bg-background-hover'
                         onClick={handleReport}
                         role='menuitem'
                       >

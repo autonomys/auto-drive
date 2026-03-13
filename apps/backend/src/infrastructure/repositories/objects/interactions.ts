@@ -7,6 +7,7 @@ type DBInteraction = {
   type: InteractionType
   size: string
   source: InteractionSource
+  cid: string | null
   created_at: string | Date
 }
 
@@ -14,6 +15,7 @@ type Interaction = Omit<DBInteraction, 'size' | 'created_at'> & {
   size: number
   createdAt: Date
   accountId: string
+  cid: string | null
 }
 
 const mapRows = (rows: DBInteraction[]): Interaction[] => {
@@ -22,6 +24,7 @@ const mapRows = (rows: DBInteraction[]): Interaction[] => {
     size: Number(e.size),
     createdAt: new Date(e.created_at),
     accountId: e.account_id,
+    cid: e.cid ?? null,
   }))
 }
 
@@ -31,12 +34,13 @@ const createInteraction = async (
   type: InteractionType,
   size: bigint,
   source: InteractionSource,
+  cid?: string,
 ): Promise<Interaction> => {
   const db = await getDatabase()
 
   const interaction = await db.query<DBInteraction>(
-    'INSERT INTO interactions (id, account_id, type, size, source) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [id, accountId, type, size.toString(), source],
+    'INSERT INTO interactions (id, account_id, type, size, source, cid) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    [id, accountId, type, size.toString(), source, cid ?? null],
   )
 
   return mapRows(interaction.rows)[0]

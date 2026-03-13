@@ -9,6 +9,7 @@ select_permissions:
         - account_id
         - type
         - size
+        - cid
         - created_at
         - updated_at
       filter: {}

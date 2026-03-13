@@ -12,19 +12,27 @@ const logger = createLogger('CreditExpiryJob')
 const runExpiryCheck = async (): Promise<void> => {
   logger.info('Running credit expiry check')
 
-  const forfeited = await purchasedCreditsRepository.markExpiredCredits()
-  if (
-    forfeited.totalUploadBytesForfeited > 0n ||
-    forfeited.totalDownloadBytesForfeited > 0n
-  ) {
-    logger.info('Forfeited expired purchased credits', {
-      uploadBytes: forfeited.totalUploadBytesForfeited.toString(),
-      downloadBytes: forfeited.totalDownloadBytesForfeited.toString(),
-      rows: forfeited.expiredCount,
-    })
+  try {
+    const forfeited = await purchasedCreditsRepository.markExpiredCredits()
+    if (
+      forfeited.totalUploadBytesForfeited > 0n ||
+      forfeited.totalDownloadBytesForfeited > 0n
+    ) {
+      logger.info('Forfeited expired purchased credits', {
+        uploadBytes: forfeited.totalUploadBytesForfeited.toString(),
+        downloadBytes: forfeited.totalDownloadBytesForfeited.toString(),
+        rows: forfeited.expiredCount,
+      })
+    }
+  } catch (error) {
+    logger.error('Failed to mark expired credits', error)
   }
 
-  await IntentsUseCases.cleanupExpiredIntents()
+  try {
+    await IntentsUseCases.cleanupExpiredIntents()
+  } catch (error) {
+    logger.error('Failed to cleanup expired intents', error)
+  }
 
   logger.info('Credit expiry check complete')
 }
