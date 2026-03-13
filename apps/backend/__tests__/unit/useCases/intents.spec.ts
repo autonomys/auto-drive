@@ -5,7 +5,7 @@ import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { ConflictError, ForbiddenError, GoneError } from '../../../src/errors/index.js'
 import { IntentStatus, type Intent, type User } from '@auto-drive/models'
-import { ok } from 'neverthrow'
+import { ok, err } from 'neverthrow'
 
 describe('IntentsUseCases', () => {
   const now = new Date()
@@ -449,11 +449,10 @@ describe('IntentsUseCases', () => {
       shannonsPerByte: 1n,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
-    const { err: neverthrowErr } = await import('neverthrow')
     jest
       .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(
-        neverthrowErr(new ForbiddenError('Purchase would exceed per-user credit cap')),
+        err(new ForbiddenError('Purchase would exceed per-user credit cap')),
       )
     const updateSpy = jest
       .spyOn(intentsRepository, 'updateIntent')
@@ -478,10 +477,9 @@ describe('IntentsUseCases', () => {
       shannonsPerByte: 1n,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
-    const { err: neverthrowErr } = await import('neverthrow')
     jest
       .spyOn(AccountsUseCases, 'addCreditsToAccount')
-      .mockResolvedValue(neverthrowErr(new ForbiddenError('cap')))
+      .mockResolvedValue(err(new ForbiddenError('cap')))
     const updateSpy = jest
       .spyOn(intentsRepository, 'updateIntent')
       .mockResolvedValue({ ...intent, status: IntentStatus.OVER_CAP })
