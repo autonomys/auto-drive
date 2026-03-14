@@ -1,0 +1,320 @@
+# =============================================================================
+# AUTO-DRIVE STAGING DOCKER COMPOSE
+# =============================================================================
+# This file runs ALL services in Docker, including the frontend.
+# This differs from local development where frontend runs outside Docker.
+#
+# Usage:
+#   docker compose -f docker-compose.staging.yml build
+#   docker compose -f docker-compose.staging.yml up -d
+#
+# See STAGING_SETUP_GUIDE.md for complete documentation.
+# =============================================================================
+
+volumes:
+  postgres_data: {}
+  files_cache: {}
+  rabbitmq_data: {}
+
+networks:
+  auto-drive-network:
+    driver: bridge
+
+services:
+  # ---------------------------------------------------------------------------
+  # DATABASE
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: autodrive-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-autodrive}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-autodrive}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./apps/hasura/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autodrive} -d ${POSTGRES_DB:-autodrive}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auto-drive-network
+
+  # ---------------------------------------------------------------------------
+  # MESSAGE QUEUE
+  # ---------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: autodrive-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-autodrive}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auto-drive-network
+
+  # ---------------------------------------------------------------------------
+  # HASURA GRAPHQL ENGINE
+  # ---------------------------------------------------------------------------
+  hasura:
+    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
+    container_name: autodrive-hasura
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: ${DATABASE_URL}
+      HASURA_GRAPHQL_DATABASE_URL: ${DATABASE_URL}
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET}
+      HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET}
+      HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE:-true}
+      HASURA_GRAPHQL_DEV_MODE: "false"
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
+      HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN:-*}
+      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: "true"
+      HASURA_GRAPHQL_MAX_CONNECTIONS: 100
+      HASURA_GRAPHQL_STRIPES: 2
+      HASURA_GRAPHQL_CONNECTIONS_PER_STRIPE: 50
+      HASURA_GRAPHQL_IDLE_TIMEOUT: 180
+      HASURA_GRAPHQL_TIMEOUT: 60
+      HASURA_GRAPHQL_LOG_LEVEL: warn
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup,http-log,webhook-log,websocket-log,query-log
+      HASURA_GRAPHQL_ENABLE_ALLOWLIST: "false"
+    volumes:
+      - ./apps/hasura:/app
+    ports:
+      - "127.0.0.1:${HASURA_GRAPHQL_PORT:-6565}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - auto-drive-network
+
+  # ---------------------------------------------------------------------------
+  # AUTH SERVICE
+  # ---------------------------------------------------------------------------
+  auth:
+    build:
+      context: .
+      dockerfile: apps/auth/Dockerfile
+    container_name: autodrive-auth
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      AUTH_PORT: "3050"
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET_ALGORITHM: ${JWT_SECRET_ALGORITHM:-RS256}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      API_SECRET: ${API_SECRET}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:3050:3050"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3050/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - auto-drive-network
+
+  # ---------------------------------------------------------------------------
+  # BACKEND API
+  # ---------------------------------------------------------------------------
+  backend-api:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: autodrive-backend-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-autodrive}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+      AUTH_SERVICE_URL: http://auth:3050
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    command: ["yarn", "workspace", "backend", "start:fe:api"]
+    networks:
+      - auto-drive-network
+
+  # ---------------------------------------------------------------------------
+  # BACKEND WORKER
+  # ---------------------------------------------------------------------------
+  backend-worker:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: autodrive-backend-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      PORT: "3001"
+      DATABASE_URL: ${DATABASE_URL}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-autodrive}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+      AUTH_SERVICE_URL: http://auth:3050
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    ports:
+      - "127.0.0.1:3001:3001"
+    command: ["yarn", "workspace", "backend", "start:fe:worker"]
+    networks:
+      - auto-drive-network
+
+  # ---------------------------------------------------------------------------
+  # DOWNLOAD API
+  # ---------------------------------------------------------------------------
+  backend-download-api:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: autodrive-download-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      PORT: "3030"
+      DATABASE_URL: ${DATABASE_URL}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-autodrive}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    ports:
+      - "127.0.0.1:3030:3030"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    command: ["yarn", "workspace", "backend", "start:download:api"]
+    networks:
+      - auto-drive-network
+
+  # ---------------------------------------------------------------------------
+  # DOWNLOAD WORKER
+  # ---------------------------------------------------------------------------
+  backend-download-worker:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: autodrive-download-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      PORT: "3031"
+      DATABASE_URL: ${DATABASE_URL}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-autodrive}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    ports:
+      - "127.0.0.1:3031:3031"
+    command: ["yarn", "workspace", "backend", "start:download:worker"]
+    networks:
+      - auto-drive-network
+
+  # ---------------------------------------------------------------------------
+  # FRONTEND (Next.js)
+  # ---------------------------------------------------------------------------
+  # ⚠️ NOTE: This is NEW for staging. The frontend does not have a Dockerfile
+  # in the current repository and runs outside Docker in local development.
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        # Next.js NEXT_PUBLIC_* vars must be passed at build time
+        NEXT_PUBLIC_ENV: ${NEXT_PUBLIC_ENV:-local}
+        NEXT_PUBLIC_AUTH_API_URL: ${NEXT_PUBLIC_AUTH_API_URL}
+        NEXT_PUBLIC_LOCAL_RPC_URL: ${NEXT_PUBLIC_LOCAL_RPC_URL}
+        NEXT_PUBLIC_LOCAL_DOWNLOAD_URL: ${NEXT_PUBLIC_LOCAL_DOWNLOAD_URL}
+        NEXT_PUBLIC_LOCAL_GQL_URL: ${NEXT_PUBLIC_LOCAL_GQL_URL}
+        NEXT_PUBLIC_PROJECT_ID: ${NEXT_PUBLIC_PROJECT_ID:-}
+        NEXT_PUBLIC_MAX_FILES_LIMIT: ${NEXT_PUBLIC_MAX_FILES_LIMIT:-10}
+        NEXT_PUBLIC_MAINNET_HTTP_URL: ${NEXT_PUBLIC_MAINNET_HTTP_URL:-}
+        NEXT_PUBLIC_MAINNET_DOWNLOAD_URL: ${NEXT_PUBLIC_MAINNET_DOWNLOAD_URL:-}
+        NEXT_PUBLIC_MAINNET_GQL_URL: ${NEXT_PUBLIC_MAINNET_GQL_URL:-}
+    container_name: autodrive-frontend
+    restart: unless-stopped
+    depends_on:
+      backend-api:
+        condition: service_healthy
+      hasura:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      GOOGLE_AUTH_CLIENT_ID: ${GOOGLE_AUTH_CLIENT_ID:-}
+      GOOGLE_AUTH_CLIENT_SECRET: ${GOOGLE_AUTH_CLIENT_SECRET:-}
+      DISCORD_AUTH_CLIENT_ID: ${DISCORD_AUTH_CLIENT_ID:-}
+      DISCORD_AUTH_CLIENT_SECRET: ${DISCORD_AUTH_CLIENT_SECRET:-}
+      GITHUB_AUTH_CLIENT_ID: ${GITHUB_AUTH_CLIENT_ID:-}
+      GITHUB_AUTH_CLIENT_SECRET: ${GITHUB_AUTH_CLIENT_SECRET:-}
+    ports:
+      - "127.0.0.1:8080:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - auto-drive-network
+
