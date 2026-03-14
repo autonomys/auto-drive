@@ -7,7 +7,7 @@ import {
   User,
 } from '@auto-drive/models';
 import { getAuthSession } from 'utils/auth';
-import { API_BASE_URL } from 'services/auth/config';
+import { getApiBaseUrl } from 'services/auth/config';
 
 export const AuthService = {
   onboardUser: async (): Promise<User> => {
@@ -16,7 +16,7 @@ export const AuthService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/@me/onboard`, {
+    const response = await fetch(`${getApiBaseUrl()}/users/@me/onboard`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
@@ -36,7 +36,7 @@ export const AuthService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/admin/add`, {
+    const response = await fetch(`${getApiBaseUrl()}/users/admin/add`, {
       method: 'POST',
       body: JSON.stringify({ publicId }),
       headers: {
@@ -56,7 +56,7 @@ export const AuthService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/admin/remove`, {
+    const response = await fetch(`${getApiBaseUrl()}/users/admin/remove`, {
       method: 'POST',
       body: JSON.stringify({ publicId }),
       headers: {
@@ -76,7 +76,7 @@ export const AuthService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/@me/apiKeys/create`, {
+    const response = await fetch(`${getApiBaseUrl()}/users/@me/apiKeys/create`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
@@ -98,7 +98,7 @@ export const AuthService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/users/@me/apiKeys/${apiKeyId}`,
+      `${getApiBaseUrl()}/users/@me/apiKeys/${apiKeyId}`,
       {
         method: 'DELETE',
         headers: {
@@ -118,7 +118,7 @@ export const AuthService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/@me`, {
+    const response = await fetch(`${getApiBaseUrl()}/users/@me`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
@@ -137,7 +137,7 @@ export const AuthService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/@me/apiKeys`, {
+    const response = await fetch(`${getApiBaseUrl()}/users/@me/apiKeys`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
@@ -160,7 +160,7 @@ export const AuthService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/users/list?page=${page}&limit=${limit}&api`,
+      `${getApiBaseUrl()}/users/list?page=${page}&limit=${limit}&api`,
       {
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
@@ -181,7 +181,7 @@ export const AuthService = {
       throw new Error('No session');
     }
 
-    const response = await fetch(`${API_BASE_URL}/users/${publicId}`, {
+    const response = await fetch(`${getApiBaseUrl()}/users/${publicId}`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,

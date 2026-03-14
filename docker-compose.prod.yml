@@ -1,186 +1,340 @@
+# ============================================================================
+# Auto Drive — Self-Contained Production Docker Compose
+# ============================================================================
+# Copy this file + hasura/{metadata,migrations} to a machine, create a .env
+# with required values, and run: docker compose up -d
+#
+# All env vars are explicit — no env_file references.
+# Use ${VAR:-default} syntax. Required vars are marked with # REQUIRED.
+# ============================================================================
+
 volumes:
-  node-data: {}
-  postgres_db: {}
+  postgres_data: {}
   files_cache: {}
 
+x-database-url: &database-url
+  DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-auto_drive}}
+
+x-backend-env: &backend-env
+  PORT: 3000
+  # ── Database & messaging ──
+  <<: *database-url
+  RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@rabbitmq:5672}
+  RABBITMQ_PREFETCH: ${RABBITMQ_PREFETCH:-10}
+  RABBITMQ_KEEP_ALIVE_INTERVAL: ${RABBITMQ_KEEP_ALIVE_INTERVAL:-60000}      # ms
+  # ── Substrate chain ──
+  RPC_ENDPOINT: ${RPC_ENDPOINT:-ws://localhost:9944}
+  PRIVATE_KEYS_PATH: ${PRIVATE_KEYS_PATH:-//Alice}
+  # ── Auth service ──
+  AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth:3030}
+  AUTH_SERVICE_API_KEY: ${AUTH_SERVICE_API_KEY}                              # REQUIRED
+  # ── Files gateway (DSN retrieval) ──
+  FILES_GATEWAY_URL: ${FILES_GATEWAY_URL}                                   # REQUIRED
+  FILES_GATEWAY_TOKEN: ${FILES_GATEWAY_TOKEN}                               # REQUIRED
+  # ── Object mapping archiver ──
+  OBJECT_MAPPING_ARCHIVER_URL: ${OBJECT_MAPPING_ARCHIVER_URL}               # REQUIRED
+  OBJECT_MAPPING_ARCHIVER_STEP: ${OBJECT_MAPPING_ARCHIVER_STEP:-1000}
+  # ── EVM / payment ──
+  EVM_CHAIN_ENDPOINT: ${EVM_CHAIN_ENDPOINT}                                 # REQUIRED
+  EVM_CHAIN_CONTRACT_ADDRESS: ${EVM_CHAIN_CONTRACT_ADDRESS}                 # REQUIRED
+  EVM_CHAIN_CONFIRMATIONS: ${EVM_CHAIN_CONFIRMATIONS:-6}
+  EVM_CHAIN_CHECK_INTERVAL: ${EVM_CHAIN_CHECK_INTERVAL:-30000}              # ms
+  CREDITS_PRICE_MULTIPLIER: ${CREDITS_PRICE_MULTIPLIER:-5.00}
+  # ── HTTP ──
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+  REQUEST_SIZE_LIMIT: ${REQUEST_SIZE_LIMIT:-200mb}
+  # ── Cache ──
+  MEMORY_DOWNLOAD_CACHE_MAX_SIZE: ${MEMORY_DOWNLOAD_CACHE_MAX_SIZE:-1073741824}  # 1 GiB
+  CACHE_DIR: ${CACHE_DIR:-./.cache}
+  CACHE_MAX_SIZE: ${CACHE_MAX_SIZE:-10737418240}                            # 10 GiB
+  CACHE_TTL: ${CACHE_TTL:-0}                                                # 0 = no TTL
+  # ── Upload / download limits ──
+  MAX_CONCURRENT_UPLOADS: ${MAX_CONCURRENT_UPLOADS:-40}
+  MAX_ANONYMOUS_DOWNLOAD_SIZE: ${MAX_ANONYMOUS_DOWNLOAD_SIZE:-104857600}     # 100 MiB
+  OPTIONAL_AUTH: ${OPTIONAL_AUTH:-false}
+  DEFAULT_ACCOUNT_MODE: ${DEFAULT_ACCOUNT_MODE:-OneOff}
+  DEFAULT_ACCOUNT_UPLOAD_LIMIT: ${DEFAULT_ACCOUNT_UPLOAD_LIMIT:-104857600}
+  DEFAULT_ACCOUNT_DOWNLOAD_LIMIT: ${DEFAULT_ACCOUNT_DOWNLOAD_LIMIT:-5368709120}
+  WEB3_DEFAULT_ACCOUNT_UPLOAD_LIMIT: ${WEB3_DEFAULT_ACCOUNT_UPLOAD_LIMIT:-1048576}
+  WEB3_DEFAULT_ACCOUNT_DOWNLOAD_LIMIT: ${WEB3_DEFAULT_ACCOUNT_DOWNLOAD_LIMIT:-104857600}
+  FORBIDDEN_EXTENSIONS: ${FORBIDDEN_EXTENSIONS:-}
+  # ── Feature flags ──
+  TASK_MANAGER_MAX_RETRIES: ${TASK_MANAGER_MAX_RETRIES:-3}
+  TASK_MANAGER_ACTIVE: ${TASK_MANAGER_ACTIVE:-}
+  TASK_MANAGER_DISABLED: ${TASK_MANAGER_DISABLED:-}
+  ALL_SERVICES_ACTIVE: ${ALL_SERVICES_ACTIVE:-}
+  OBJECT_MAPPING_ARCHIVER_ACTIVE: ${OBJECT_MAPPING_ARCHIVER_ACTIVE:-}
+  OBJECT_MAPPING_ARCHIVER_DISABLED: ${OBJECT_MAPPING_ARCHIVER_DISABLED:-}
+  BUY_CREDITS_ACTIVE: ${BUY_CREDITS_ACTIVE:-}
+  BUY_CREDITS_STAFF_ONLY: ${BUY_CREDITS_STAFF_ONLY:-}
+  STAFF_USERNAME_ALLOWLIST: ${STAFF_USERNAME_ALLOWLIST:-}
+  STAFF_DOMAINS: ${STAFF_DOMAINS:-}
+  # ── Monitoring (VictoriaMetrics) ──
+  VICTORIA_ACTIVE: ${VICTORIA_ACTIVE:-false}
+  VICTORIA_ENDPOINT: ${VICTORIA_ENDPOINT:-}
+  VICTORIA_USERNAME: ${VICTORIA_USERNAME:-}
+  VICTORIA_PASSWORD: ${VICTORIA_PASSWORD:-}
+  METRIC_ENVIRONMENT_TAG: ${METRIC_ENVIRONMENT_TAG:-chain=unknown}
+
 services:
-  # Hasura GraphQL Engine
-  hasura:
-    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
+  # ──────────────────────────────────────────────────────────────────────
+  # PostgreSQL
+  # ──────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16
     volumes:
-      - ./apps/hasura/metadata:/hasura-metadata
-      - ./apps/hasura/migrations:/hasura-migrations
-    restart: unless-stopped
+      - postgres_data:/var/lib/postgresql/data
     environment:
-      # Essential Environment Variables
-      HASURA_GRAPHQL_METADATA_DATABASE_URL: ${DATABASE_URL}
-      HASURA_GRAPHQL_DATABASE_URL: ${DATABASE_URL}
-      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET} # Admin access secret
-      HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET} # JWT authentication secret
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-auto_drive}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
-      # Console and Development Mode
-      HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE} # Disable console in production
-      HASURA_GRAPHQL_DEV_MODE: 'false' # Disable development mode features
-
-      # Role and CORS Settings
-      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous # Default role for unauthenticated users
-      HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN} # Allowed domains for CORS
-      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: 'true'
-
-      # Performance and Connection Settings
-      HASURA_GRAPHQL_MAX_CONNECTIONS: 100 # Maximum number of database connections
-      HASURA_GRAPHQL_STRIPES: 2 # Number of connection pool stripes
-      HASURA_GRAPHQL_CONNECTIONS_PER_STRIPE: 50 # Connections per stripe
-      HASURA_GRAPHQL_IDLE_TIMEOUT: 180 # Idle connection timeout in seconds
-      HASURA_GRAPHQL_TIMEOUT: 60 # Request timeout in seconds
-
-      # Logging Settings
-      HASURA_GRAPHQL_LOG_LEVEL: 'warn' # Log verbosity level
-      HASURA_GRAPHQL_ENABLED_LOG_TYPES: 'startup,http-log,webhook-log,websocket-log,query-log' # Enabled log types
-
-      # Security and Authorization
-      HASURA_GRAPHQL_ENABLE_ALLOWLIST: 'false' # Disable query allowlisting
-
-    ports:
-      - '${HASURA_GRAPHQL_PORT}:8080'
-    command:
-      - graphql-engine
-      - serve
-    profiles:
-      - base
-    logging:
-      driver: loki
-      options:
-        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
+  # ──────────────────────────────────────────────────────────────────────
+  # RabbitMQ
+  # ──────────────────────────────────────────────────────────────────────
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - '${RABBITMQ_PORT}:5672'
-      - '${RABBITMQ_MANAGEMENT_PORT}:15672'
+      - '${RABBITMQ_PORT:-5672}:5672'
+      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
     environment:
-      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
-    profiles:
-      - rabbit
-    logging:
-      driver: loki
-      options:
-        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
-  backend-worker:
-    image: ${BACKEND_IMAGE}
-    ports:
-      - '${BACKEND_WORKER_PORT}:3000'
-    volumes:
-      - files_cache:/usr/src/app/apps/backend/.cache
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
-    env_file:
-      - .env
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Database Migrations — Backend (one-shot init container)
+  # ──────────────────────────────────────────────────────────────────────
+  backend-migrate:
+    image: ${BACKEND_IMAGE:-ghcr.io/autonomys/auto-drive-backend:latest}
     environment:
-      - PORT=3000
-    profiles:
-      - frontend
-      - frontend-worker
-    logging:
-      driver: loki
-      options:
-        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
+      <<: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['yarn', 'backend', 'db-migrate', 'up']
+    restart: 'no'
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Database Migrations — Auth (one-shot init container)
+  # ──────────────────────────────────────────────────────────────────────
+  auth-migrate:
+    image: ${AUTH_IMAGE:-ghcr.io/autonomys/auto-drive-auth:latest}
+    environment:
+      <<: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['yarn', 'auth', 'migrate', 'up']
+    restart: 'no'
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Hasura GraphQL Engine
+  # ──────────────────────────────────────────────────────────────────────
+  hasura:
+    image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
+    volumes:
+      - ./hasura/metadata:/hasura-metadata
+      - ./hasura/migrations:/hasura-migrations
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    environment:
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-auto_drive}}
+      HASURA_GRAPHQL_DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-auto_drive}}
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET}             # REQUIRED
+      HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET}                 # REQUIRED
+      HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE:-false}
+      HASURA_GRAPHQL_DEV_MODE: 'false'
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
+      HASURA_GRAPHQL_CORS_DOMAIN: ${HASURA_GRAPHQL_CORS_DOMAIN:-*}
+      HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES: 'true'
+      HASURA_GRAPHQL_MAX_CONNECTIONS: 100
+      HASURA_GRAPHQL_STRIPES: 2
+      HASURA_GRAPHQL_CONNECTIONS_PER_STRIPE: 50
+      HASURA_GRAPHQL_IDLE_TIMEOUT: 180
+      HASURA_GRAPHQL_TIMEOUT: 60
+      HASURA_GRAPHQL_LOG_LEVEL: 'warn'
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: 'startup,http-log,webhook-log,websocket-log,query-log'
+      HASURA_GRAPHQL_ENABLE_ALLOWLIST: 'false'
+    ports:
+      - '${HASURA_GRAPHQL_PORT:-8080}:8080'
     command:
-      - yarn
-      - workspace
-      - backend
-      - start:fe:worker
+      - graphql-engine
+      - serve
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Backend — Frontend API
+  # ──────────────────────────────────────────────────────────────────────
   backend-api:
-    image: ${BACKEND_IMAGE}
+    image: ${BACKEND_IMAGE:-ghcr.io/autonomys/auto-drive-backend:latest}
     volumes:
       - files_cache:/usr/src/app/apps/backend/.cache
     ports:
-      - '${BACKEND_API_PORT}:3000'
+      - '${BACKEND_API_PORT:-3000}:3000'
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      - PORT=3000
+      <<: *backend-env
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
       interval: 15s
       timeout: 10s
       retries: 3
-    profiles:
-      - frontend
-      - frontend-api
-    logging:
-      driver: loki
-      options:
-        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
     command:
       - yarn
       - workspace
       - backend
       - start:fe:api
-  backend-download-worker:
-    image: ${BACKEND_IMAGE}
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Backend — Frontend Worker (upload processing)
+  # ──────────────────────────────────────────────────────────────────────
+  backend-worker:
+    image: ${BACKEND_IMAGE:-ghcr.io/autonomys/auto-drive-backend:latest}
+    ports:
+      - '${BACKEND_WORKER_PORT:-3001}:3000'
     volumes:
       - files_cache:/usr/src/app/apps/backend/.cache
     restart: unless-stopped
-    ports:
-      - '${BACKEND_DOWNLOAD_WORKER_PORT}:3000'
-    env_file:
-      - .env
     environment:
-      - PORT=3000
-    profiles:
-      - download-worker
-      - download
-    logging:
-      driver: loki
-      options:
-        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
+      <<: *backend-env
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     command:
       - yarn
       - workspace
       - backend
-      - start:download:worker
+      - start:fe:worker
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Backend — Download API
+  # ──────────────────────────────────────────────────────────────────────
   backend-download-api:
-    image: ${BACKEND_IMAGE}
+    image: ${BACKEND_IMAGE:-ghcr.io/autonomys/auto-drive-backend:latest}
     volumes:
       - files_cache:/usr/src/app/apps/backend/.cache
     ports:
-      - '${BACKEND_DOWNLOAD_API_PORT}:3000'
+      - '${BACKEND_DOWNLOAD_API_PORT:-3003}:3000'
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      - PORT=3000
-    profiles:
-      - download-api
-      - download
-    logging:
-      driver: loki
-      options:
-        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
+      <<: *backend-env
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     command:
       - yarn
       - workspace
       - backend
       - start:download:api
-  agent:
-    container_name: newrelic-infra
-    image: newrelic/infrastructure:latest
-    cap_add:
-      - SYS_PTRACE
-    network_mode: bridge
-    pid: host
-    privileged: true
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Backend — Download Worker
+  # ──────────────────────────────────────────────────────────────────────
+  backend-download-worker:
+    image: ${BACKEND_IMAGE:-ghcr.io/autonomys/auto-drive-backend:latest}
     volumes:
-      - '/:/host:ro'
-      - '/var/run/docker.sock:/var/run/docker.sock'
-    environment:
-      NRIA_LICENSE_KEY: '${NR_API_KEY}'
-      NRIA_DISPLAY_NAME: '${NR_AGENT_IDENTIFIER}'
+      - files_cache:/usr/src/app/apps/backend/.cache
     restart: unless-stopped
-    profiles:
-      - base
-    logging:
-      driver: loki
-      options:
-        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
+    ports:
+      - '${BACKEND_DOWNLOAD_WORKER_PORT:-3002}:3000'
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:download:worker
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Auth Service
+  # ──────────────────────────────────────────────────────────────────────
+  auth:
+    image: ${AUTH_IMAGE:-ghcr.io/autonomys/auto-drive-auth:latest}
+    ports:
+      - '${AUTH_PORT:-3030}:3030'
+    restart: unless-stopped
+    environment:
+      AUTH_PORT: 3030
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-auto_drive}}
+      JWT_SECRET: ${JWT_SECRET}                                             # REQUIRED
+      JWT_SECRET_ALGORITHM: ${JWT_SECRET_ALGORITHM:-RS256}
+      API_SECRET: ${API_SECRET}                                             # REQUIRED
+      CORS_ALLOWED_ORIGINS: ${AUTH_CORS_ALLOWED_ORIGINS:-}
+      LOG_LEVEL: ${AUTH_LOG_LEVEL:-info}
+      REVOKE_TOKEN_EMITTED_BEFORE_IN_SECONDS: ${REVOKE_TOKEN_EMITTED_BEFORE_IN_SECONDS:-0}
+    depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3030/health']
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Frontend (Next.js)
+  # Env-agnostic image: NEXT_PUBLIC_* vars are read at request time
+  # ──────────────────────────────────────────────────────────────────────
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/autonomys/auto-drive-frontend:latest}
+    ports:
+      - '${FRONTEND_PORT:-8080}:3000'
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      # ── NextAuth (server-side) ──
+      NEXTAUTH_URL: ${NEXTAUTH_URL}                                         # REQUIRED
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}                                   # REQUIRED
+      GOOGLE_AUTH_CLIENT_ID: ${GOOGLE_AUTH_CLIENT_ID:-}
+      GOOGLE_AUTH_CLIENT_SECRET: ${GOOGLE_AUTH_CLIENT_SECRET:-}
+      DISCORD_AUTH_CLIENT_ID: ${DISCORD_AUTH_CLIENT_ID:-}
+      DISCORD_AUTH_CLIENT_SECRET: ${DISCORD_AUTH_CLIENT_SECRET:-}
+      GITHUB_AUTH_CLIENT_ID: ${GITHUB_AUTH_CLIENT_ID:-}
+      GITHUB_AUTH_CLIENT_SECRET: ${GITHUB_AUTH_CLIENT_SECRET:-}
+      REFRESHING_TOKEN_THRESHOLD: ${REFRESHING_TOKEN_THRESHOLD:-}
+      # ── Runtime config (read at request time, NOT baked into JS) ──
+      NEXT_PUBLIC_AUTH_API_URL: ${NEXT_PUBLIC_AUTH_API_URL:-http://auth:3030}
+      NEXT_PUBLIC_MAX_FILES_LIMIT: ${NEXT_PUBLIC_MAX_FILES_LIMIT:-10}
+      NEXT_PUBLIC_PROJECT_ID: ${NEXT_PUBLIC_PROJECT_ID:-}
+      NEXT_PUBLIC_RPC_ENDPOINT: ${NEXT_PUBLIC_RPC_ENDPOINT:-}
+      NEXT_PUBLIC_OBJECT_STORE_VERSION: ${NEXT_PUBLIC_OBJECT_STORE_VERSION:-v1}
+      NEXT_PUBLIC_ENV: ${NEXT_PUBLIC_ENV:-}
+      NEXT_PUBLIC_MAINNET_HTTP_URL: ${NEXT_PUBLIC_MAINNET_HTTP_URL:-}
+      NEXT_PUBLIC_MAINNET_DOWNLOAD_URL: ${NEXT_PUBLIC_MAINNET_DOWNLOAD_URL:-}
+      NEXT_PUBLIC_MAINNET_GQL_URL: ${NEXT_PUBLIC_MAINNET_GQL_URL:-}
+      NEXT_PUBLIC_LOCAL_RPC_URL: ${NEXT_PUBLIC_LOCAL_RPC_URL:-}
+      NEXT_PUBLIC_LOCAL_DOWNLOAD_URL: ${NEXT_PUBLIC_LOCAL_DOWNLOAD_URL:-}
+      NEXT_PUBLIC_LOCAL_GQL_URL: ${NEXT_PUBLIC_LOCAL_GQL_URL:-}
+    depends_on:
+      backend-api:
+        condition: service_healthy
+      auth:
+        condition: service_healthy

@@ -1,8 +1,9 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { defaultNetworkId, NetworkId, networks } from '@auto-drive/ui';
+import { buildNetworks, defaultNetworkId, NetworkId } from '@auto-drive/ui';
 import { NetworkProvider } from '../../contexts/network';
+import { useRuntimeConfig } from '@/config/RuntimeConfigProvider';
 
 const WalletProvider = dynamic(
   () => import('@/contexts/web3').then((mod) => mod.Web3Provider),
@@ -18,10 +19,12 @@ export default function Layout({
   children: React.ReactNode;
   params: { chain: NetworkId };
 }) {
+  const config = useRuntimeConfig();
+  const nets = buildNetworks(config);
   const network =
-    params.chain in networks
-      ? networks[params.chain as NetworkId]!
-      : networks[defaultNetworkId]!;
+    params.chain in nets
+      ? nets[params.chain as NetworkId]!
+      : nets[defaultNetworkId]!;
 
   return (
     <NetworkProvider network={network}>
