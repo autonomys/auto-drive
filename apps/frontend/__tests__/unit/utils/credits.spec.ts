@@ -79,11 +79,11 @@ describe('daysUntilExpiry', () => {
     expect(daysUntilExpiry(expiresAt)).toBe(2)
   })
 
-  it('returns a negative value for a past expiry date', () => {
+  it('returns 0 for a past expiry date (clamped)', () => {
     const now = new Date('2026-01-05T00:00:00Z')
     jest.setSystemTime(now)
     const expiresAt = new Date('2026-01-01T00:00:00Z')
-    expect(daysUntilExpiry(expiresAt)).toBeLessThan(0)
+    expect(daysUntilExpiry(expiresAt)).toBe(0)
   })
 
   it('returns 30 when expiry is exactly 30 days away', () => {
