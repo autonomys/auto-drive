@@ -90,7 +90,7 @@ export const useTransactionConfirmation = ({
 
   // After confirmations threshold, poll backend until IntentStatus.COMPLETED
   useEffect(() => {
-    if (!api || !intentId || !isFullyConfirmed || isBackendCompleted) return;
+    if (!api || !intentId || !isFullyConfirmed || isBackendCompleted || isOverCap) return;
     setIsPollingBackend(true);
     let timer: NodeJS.Timeout | undefined;
     let cancelled = false;
@@ -126,7 +126,7 @@ export const useTransactionConfirmation = ({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [api, intentId, isFullyConfirmed, isBackendCompleted, queryClient]);
+  }, [api, intentId, isFullyConfirmed, isBackendCompleted, isOverCap, queryClient]);
 
   return {
     isWaitingReceipt,
