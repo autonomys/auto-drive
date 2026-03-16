@@ -4,7 +4,7 @@ import { intentsRepository } from '../../../src/infrastructure/repositories/user
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { ConflictError, ForbiddenError, GoneError } from '../../../src/errors/index.js'
-import { IntentStatus, type Intent, type User } from '@auto-drive/models'
+import { IntentStatus, UserRole, type Intent, type User } from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
 
 describe('IntentsUseCases', () => {
@@ -597,7 +597,7 @@ describe('IntentsUseCases', () => {
   // ────────────────────────────────────────────────────────────────────────────
 
   it('getOverCapIntents should return intents for admin users', async () => {
-    const admin = { ...user, role: 'admin' } as unknown as User
+    const admin = { ...user, role: UserRole.Admin } as unknown as User
     const overCapIntent: Intent = {
       id: '0xoc1',
       userPublicId: user.publicId,
@@ -616,7 +616,7 @@ describe('IntentsUseCases', () => {
   })
 
   it('getOverCapIntents should return ForbiddenError for non-admin users', async () => {
-    const nonAdmin = { ...user, role: 'user' } as unknown as User
+    const nonAdmin = { ...user, role: UserRole.User } as unknown as User
     const repoSpy = jest.spyOn(intentsRepository, 'getOverCapIntents')
 
     const result = await IntentsUseCases.getOverCapIntents(nonAdmin)
@@ -628,7 +628,7 @@ describe('IntentsUseCases', () => {
   })
 
   it('getOverCapIntents should return empty array when no capped intents exist', async () => {
-    const admin = { ...user, role: 'admin' } as unknown as User
+    const admin = { ...user, role: UserRole.Admin } as unknown as User
     jest.spyOn(intentsRepository, 'getOverCapIntents').mockResolvedValue([])
 
     const result = await IntentsUseCases.getOverCapIntents(admin)
@@ -642,7 +642,7 @@ describe('IntentsUseCases', () => {
   // ────────────────────────────────────────────────────────────────────────────
 
   it('reprocessOverCapIntent should reset OVER_CAP intent to CONFIRMED', async () => {
-    const admin = { ...user, role: 'admin' } as unknown as User
+    const admin = { ...user, role: UserRole.Admin } as unknown as User
     const overCapIntent: Intent = {
       id: '0xrp1',
       userPublicId: user.publicId,
@@ -667,7 +667,7 @@ describe('IntentsUseCases', () => {
   })
 
   it('reprocessOverCapIntent should return ForbiddenError for non-admin', async () => {
-    const nonAdmin = { ...user, role: 'user' } as unknown as User
+    const nonAdmin = { ...user, role: UserRole.User } as unknown as User
     const repoSpy = jest.spyOn(intentsRepository, 'getById')
 
     const result = await IntentsUseCases.reprocessOverCapIntent(nonAdmin, '0xrp2')
@@ -678,7 +678,7 @@ describe('IntentsUseCases', () => {
   })
 
   it('reprocessOverCapIntent should return ObjectNotFoundError when intent missing', async () => {
-    const admin = { ...user, role: 'admin' } as unknown as User
+    const admin = { ...user, role: UserRole.Admin } as unknown as User
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(null)
 
     const result = await IntentsUseCases.reprocessOverCapIntent(admin, '0xrp3')
@@ -687,7 +687,7 @@ describe('IntentsUseCases', () => {
   })
 
   it('reprocessOverCapIntent should return ConflictError when intent is not OVER_CAP', async () => {
-    const admin = { ...user, role: 'admin' } as unknown as User
+    const admin = { ...user, role: UserRole.Admin } as unknown as User
     const completedIntent: Intent = {
       id: '0xrp4',
       userPublicId: user.publicId,
@@ -707,7 +707,7 @@ describe('IntentsUseCases', () => {
   })
 
   it('reprocessOverCapIntent should return ConflictError for PENDING, CONFIRMED, EXPIRED statuses', async () => {
-    const admin = { ...user, role: 'admin' } as unknown as User
+    const admin = { ...user, role: UserRole.Admin } as unknown as User
     const statuses = [IntentStatus.PENDING, IntentStatus.CONFIRMED, IntentStatus.EXPIRED]
 
     for (const status of statuses) {
