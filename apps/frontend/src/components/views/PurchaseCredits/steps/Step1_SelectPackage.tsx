@@ -13,12 +13,14 @@ type PackageOption = {
   creditsInMB?: number;
   sizeLabel: string;
   popular?: boolean;
-  features?: string[];
+  /** Features that don't depend on runtime config (no expiry string here) */
+  baseFeatures?: string[];
   buttonLabel?: string;
 };
 
-// Credits expire after this many days (must match CREDIT_EXPIRY_DAYS in backend)
-const CREDIT_EXPIRY_DAYS = 90;
+// Fallback used only before the credit summary API responds.
+// The real value comes from CREDIT_EXPIRY_DAYS env-var via GET /credits/summary.
+const DEFAULT_EXPIRY_DAYS = 90;
 
 const PACKAGES: PackageOption[] = [
   {
@@ -26,11 +28,7 @@ const PACKAGES: PackageOption[] = [
     title: 'Starter',
     creditsInMB: 10,
     sizeLabel: '10MB',
-    features: [
-      'Permanent storage',
-      'Instant activation',
-      `Credits valid for ${CREDIT_EXPIRY_DAYS} days`,
-    ],
+    baseFeatures: ['Permanent storage', 'Instant activation'],
   },
   {
     id: 'pro',
@@ -38,29 +36,21 @@ const PACKAGES: PackageOption[] = [
     creditsInMB: 100,
     sizeLabel: '100MB',
     popular: true,
-    features: [
-      'Permanent storage',
-      'Instant activation',
-      `Credits valid for ${CREDIT_EXPIRY_DAYS} days`,
-    ],
+    baseFeatures: ['Permanent storage', 'Instant activation'],
   },
   {
     id: 'ent',
     title: 'Enterprise',
     creditsInMB: 1024,
     sizeLabel: '1GB',
-    features: [
-      'Permanent storage',
-      'Instant activation',
-      `Credits valid for ${CREDIT_EXPIRY_DAYS} days`,
-    ],
+    baseFeatures: ['Permanent storage', 'Instant activation'],
   },
   {
     id: 'custom',
     title: 'Custom Amount',
     sizeLabel: 'Variable',
     popular: false,
-    features: ['Choose your amount', 'Flexible pricing', 'Pay what you need'],
+    baseFeatures: ['Choose your amount', 'Flexible pricing', 'Pay what you need'],
     buttonLabel: 'Configure',
   },
 ];
@@ -76,6 +66,11 @@ export const PurchaseStep1SelectPackage = ({
   const { MINIMUM_CONFIRMATIONS } = usePaymentIntent();
 
   const creditSummary = useUserStore((s) => s.creditSummary);
+
+  // Number of days credits are valid — sourced from CREDIT_EXPIRY_DAYS env-var
+  // on the backend and returned by GET /credits/summary.  Falls back to the
+  // default until the API responds (free-tier users loading the page).
+  const expiryDays = creditSummary?.expiryDays ?? DEFAULT_EXPIRY_DAYS;
 
   // canPurchase is null when the summary hasn't loaded yet — allow in that case
   // so the UI is not blocked for users with no purchased credits (free tier).
@@ -175,9 +170,17 @@ export const PurchaseStep1SelectPackage = ({
                     </>
                   )}
 
-                  {p.features && (
+                  {p.baseFeatures && (
                     <div className='mt-2 flex flex-col gap-2 text-sm'>
-                      {p.features.map((f) => (
+                      {[
+                        ...p.baseFeatures,
+                        // Append the server-driven expiry duration.
+                        // Only shown for named (non-custom) packages that
+                        // have a fixed credit amount.
+                        ...(p.creditsInMB
+                          ? [`Credits valid for ${expiryDays} days`]
+                          : []),
+                      ].map((f) => (
                         <div
                           key={f}
                           className='flex items-center gap-2 text-muted-foreground'

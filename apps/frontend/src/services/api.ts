@@ -16,6 +16,8 @@ export type CreditSummaryResponse = {
   canPurchase: boolean;
   maxPurchasableBytes: string;
   googleVerified: boolean;
+  /** Number of days after purchase before credits expire (from CREDIT_EXPIRY_DAYS env var). */
+  expiryDays: number;
 };
 
 // Wire-format of individual rows from GET /credits/batches/expiring
