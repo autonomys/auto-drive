@@ -244,6 +244,47 @@ const getExpiringCredits = async (
 }
 
 // ---------------------------------------------------------------------------
+// getExpiringCreditsAggregate
+// Single-query aggregate: count + byte sums for system-wide expiring credits.
+// Avoids transferring all rows into Node.js memory.
+// ---------------------------------------------------------------------------
+
+export type ExpiringCreditsAggregate = {
+  count: number
+  totalUploadBytesRemaining: bigint
+  totalDownloadBytesRemaining: bigint
+}
+
+const getExpiringCreditsAggregate = async (
+  withinDays: number,
+): Promise<ExpiringCreditsAggregate> => {
+  const db = await getDatabase()
+  const result = await db.query<{
+    count: string
+    total_upload: string
+    total_download: string
+  }>(
+    `SELECT
+       COUNT(*)                                     AS count,
+       COALESCE(SUM(upload_bytes_remaining),   0)  AS total_upload,
+       COALESCE(SUM(download_bytes_remaining), 0)  AS total_download
+     FROM purchased_credits
+     WHERE expired = FALSE
+       AND expires_at > NOW()
+       AND expires_at <= NOW() + ($1 * INTERVAL '1 day')
+       AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)`,
+    [withinDays],
+  )
+
+  const row = result.rows[0]
+  return {
+    count: Number(row.count),
+    totalUploadBytesRemaining: BigInt(row.total_upload),
+    totalDownloadBytesRemaining: BigInt(row.total_download),
+  }
+}
+
+// ---------------------------------------------------------------------------
 // getExpiringCreditsByAccountId
 // Returns active rows for a specific account expiring within N days.
 // Used by the per-user /credits/batches/expiring endpoint.
@@ -518,6 +559,7 @@ export const purchasedCreditsRepository = {
   refundCredits,
   getRemainingCredits,
   getExpiringCredits,
+  getExpiringCreditsAggregate,
   getExpiringCreditsByAccountId,
   createPurchasedCreditWithCapCheck,
   markExpiredCredits,

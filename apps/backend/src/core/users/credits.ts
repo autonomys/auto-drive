@@ -121,22 +121,15 @@ const getEconomics = async (
     return err(new ForbiddenError('Admin access required'))
   }
 
-  const expiring =
-    await purchasedCreditsRepository.getExpiringCredits(EXPIRING_WITHIN_DAYS)
-
-  const totalExpiringUploadBytes = expiring.reduce(
-    (sum, c) => sum + c.uploadBytesRemaining,
-    0n,
-  )
-  const totalExpiringDownloadBytes = expiring.reduce(
-    (sum, c) => sum + c.downloadBytesRemaining,
-    0n,
-  )
+  const aggregate =
+    await purchasedCreditsRepository.getExpiringCreditsAggregate(
+      EXPIRING_WITHIN_DAYS,
+    )
 
   return ok({
-    totalExpiringWithin30Days: expiring.length,
-    totalExpiringUploadBytes,
-    totalExpiringDownloadBytes,
+    totalExpiringWithin30Days: aggregate.count,
+    totalExpiringUploadBytes: aggregate.totalUploadBytesRemaining,
+    totalExpiringDownloadBytes: aggregate.totalDownloadBytesRemaining,
   })
 }
 

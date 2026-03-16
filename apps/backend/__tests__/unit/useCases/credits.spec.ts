@@ -286,32 +286,31 @@ describe('CreditsUseCases', () => {
 
   describe('getEconomics', () => {
     it('returns 403 ForbiddenError for non-admin user', async () => {
-      const getExpiringSpy = jest
-        .spyOn(purchasedCreditsRepository, 'getExpiringCredits')
-        .mockResolvedValue([])
+      const getAggregateSpy = jest
+        .spyOn(purchasedCreditsRepository, 'getExpiringCreditsAggregate')
+        .mockResolvedValue({
+          count: 0,
+          totalUploadBytesRemaining: 0n,
+          totalDownloadBytesRemaining: 0n,
+        })
 
       const result = await CreditsUseCases.getEconomics(nonAdminUser)
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
-      expect(getExpiringSpy).not.toHaveBeenCalled()
+      expect(getAggregateSpy).not.toHaveBeenCalled()
     })
 
     it('returns aggregated economics for admin user', async () => {
-      const expiringRows = [
-        makeCreditRow({
-          uploadBytesRemaining: BigInt(2 * 1024 ** 3),
-          downloadBytesRemaining: BigInt(3 * 1024 ** 3),
-        }),
-        makeCreditRow({
-          id: 'credit-2',
-          uploadBytesRemaining: BigInt(1024 ** 3),
-          downloadBytesRemaining: BigInt(2 * 1024 ** 3),
-        }),
-      ]
       jest
-        .spyOn(purchasedCreditsRepository, 'getExpiringCredits')
-        .mockResolvedValue(expiringRows)
+        .spyOn(purchasedCreditsRepository, 'getExpiringCreditsAggregate')
+        .mockResolvedValue({
+          count: 2,
+          totalUploadBytesRemaining:
+            BigInt(2 * 1024 ** 3) + BigInt(1024 ** 3),
+          totalDownloadBytesRemaining:
+            BigInt(3 * 1024 ** 3) + BigInt(2 * 1024 ** 3),
+        })
 
       const result = await CreditsUseCases.getEconomics(adminUser)
 
@@ -328,8 +327,12 @@ describe('CreditsUseCases', () => {
 
     it('returns zeros when no credits are expiring soon', async () => {
       jest
-        .spyOn(purchasedCreditsRepository, 'getExpiringCredits')
-        .mockResolvedValue([])
+        .spyOn(purchasedCreditsRepository, 'getExpiringCreditsAggregate')
+        .mockResolvedValue({
+          count: 0,
+          totalUploadBytesRemaining: 0n,
+          totalDownloadBytesRemaining: 0n,
+        })
 
       const result = await CreditsUseCases.getEconomics(adminUser)
 
@@ -342,13 +345,17 @@ describe('CreditsUseCases', () => {
 
     it('queries within 30 days window', async () => {
       jest
-        .spyOn(purchasedCreditsRepository, 'getExpiringCredits')
-        .mockResolvedValue([])
+        .spyOn(purchasedCreditsRepository, 'getExpiringCreditsAggregate')
+        .mockResolvedValue({
+          count: 0,
+          totalUploadBytesRemaining: 0n,
+          totalDownloadBytesRemaining: 0n,
+        })
 
       await CreditsUseCases.getEconomics(adminUser)
 
       expect(
-        purchasedCreditsRepository.getExpiringCredits,
+        purchasedCreditsRepository.getExpiringCreditsAggregate,
       ).toHaveBeenCalledWith(30)
     })
   })
