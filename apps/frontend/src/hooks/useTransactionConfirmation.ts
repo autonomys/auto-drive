@@ -19,6 +19,8 @@ interface UseTransactionConfirmationReturn {
   isFullyConfirmed: boolean;
   isPollingBackend: boolean;
   isBackendCompleted: boolean;
+  /** True when the backend put the intent in the over_cap terminal state. */
+  isOverCap: boolean;
   waitError: Error | null;
 }
 
@@ -45,6 +47,7 @@ export const useTransactionConfirmation = ({
   // Backend polling state
   const [isPollingBackend, setIsPollingBackend] = useState(false);
   const [isBackendCompleted, setIsBackendCompleted] = useState(false);
+  const [isOverCap, setIsOverCap] = useState(false);
 
   // Start watching block numbers to compute confirmations once included
   useEffect(() => {
@@ -96,8 +99,17 @@ export const useTransactionConfirmation = ({
       try {
         const intent = await api.getIntent(intentId);
         if (intent.status === 'completed') {
+          // Refresh both the legacy account query and the new credit summary
           queryClient.invalidateQueries({ queryKey: ['account'] });
+          queryClient.invalidateQueries({ queryKey: ['creditSummary'] });
           setIsBackendCompleted(true);
+          setIsPollingBackend(false);
+          return;
+        }
+        // over_cap is a terminal state — credits will NOT be applied without
+        // admin intervention.  Stop polling immediately and surface the error.
+        if (intent.status === 'over_cap') {
+          setIsOverCap(true);
           setIsPollingBackend(false);
           return;
         }
@@ -123,6 +135,7 @@ export const useTransactionConfirmation = ({
     isFullyConfirmed,
     isPollingBackend,
     isBackendCompleted,
+    isOverCap,
     waitError,
   };
 };

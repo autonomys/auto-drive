@@ -1,14 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { AccountInfo, User } from '@auto-drive/models';
+import { CreditSummaryResponse } from '../services/api';
 
 interface UserStore {
   user: User | null;
   account: AccountInfo | null;
   features: Record<string, boolean>;
+  creditSummary: CreditSummaryResponse | null;
   setFeatures: (features: Record<string, boolean>) => void;
   setAccount: (account: AccountInfo) => void;
   setUser: (user: User | null) => void;
+  setCreditSummary: (summary: CreditSummaryResponse | null) => void;
   clearUser: () => void;
 }
 
@@ -17,15 +20,18 @@ export const useUserStore = create<UserStore>()(
     (set) => ({
       user: null,
       account: null,
+      creditSummary: null,
       setUser: (user: User | null) =>
         set({
           user: user,
         }),
-      clearUser: () => set({ user: null, account: null }),
+      clearUser: () => set({ user: null, account: null, creditSummary: null }),
       setAccount: (account: AccountInfo) =>
         set({
           account,
         }),
+      setCreditSummary: (summary: CreditSummaryResponse | null) =>
+        set({ creditSummary: summary }),
       features: {},
       setFeatures: (features: Record<string, boolean>) => set({ features }),
     }),

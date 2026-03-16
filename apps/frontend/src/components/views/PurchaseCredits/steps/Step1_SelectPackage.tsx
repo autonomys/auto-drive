@@ -4,6 +4,8 @@ import { Button, Card, cn } from '@auto-drive/ui';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
 import { usePrices } from '../../../../hooks/usePrices';
 import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
+import { useUserStore } from '../../../../globalStates/user';
+import { isPackageOverCap } from '../../../../utils/credits';
 
 type PackageOption = {
   id: string;
@@ -15,13 +17,20 @@ type PackageOption = {
   buttonLabel?: string;
 };
 
+// Credits expire after this many days (must match CREDIT_EXPIRY_DAYS in backend)
+const CREDIT_EXPIRY_DAYS = 90;
+
 const PACKAGES: PackageOption[] = [
   {
     id: 'starter',
     title: 'Starter',
     creditsInMB: 10,
     sizeLabel: '10MB',
-    features: ['Permanent storage', 'Instant activation', 'No expiration'],
+    features: [
+      'Permanent storage',
+      'Instant activation',
+      `Credits valid for ${CREDIT_EXPIRY_DAYS} days`,
+    ],
   },
   {
     id: 'pro',
@@ -29,14 +38,22 @@ const PACKAGES: PackageOption[] = [
     creditsInMB: 100,
     sizeLabel: '100MB',
     popular: true,
-    features: ['Permanent storage', 'Instant activation', 'No expiration'],
+    features: [
+      'Permanent storage',
+      'Instant activation',
+      `Credits valid for ${CREDIT_EXPIRY_DAYS} days`,
+    ],
   },
   {
     id: 'ent',
     title: 'Enterprise',
     creditsInMB: 1024,
     sizeLabel: '1GB',
-    features: ['Permanent storage', 'Instant activation', 'No expiration'],
+    features: [
+      'Permanent storage',
+      'Instant activation',
+      `Credits valid for ${CREDIT_EXPIRY_DAYS} days`,
+    ],
   },
   {
     id: 'custom',
@@ -57,6 +74,22 @@ export const PurchaseStep1SelectPackage = ({
   const { formatCreditsInMbAsAi3, formatCreditsInMbAsUsd } = usePrices();
 
   const { MINIMUM_CONFIRMATIONS } = usePaymentIntent();
+
+  const creditSummary = useUserStore((s) => s.creditSummary);
+
+  // canPurchase is null when the summary hasn't loaded yet — allow in that case
+  // so the UI is not blocked for users with no purchased credits (free tier).
+  const purchaseBlocked =
+    creditSummary !== null && creditSummary.canPurchase === false;
+
+  // Maximum bytes the user may still purchase (string bigint from API)
+  const maxPurchasableBytes = creditSummary
+    ? BigInt(creditSummary.maxPurchasableBytes)
+    : null;
+
+  // Check whether a named package's size exceeds the user's remaining cap
+  const checkPackageOverCap = (creditsInMB: number | undefined): boolean =>
+    isPackageOverCap(creditsInMB, maxPurchasableBytes);
 
   const CheckIcon = () => (
     <svg
@@ -84,68 +117,96 @@ export const PurchaseStep1SelectPackage = ({
           Purchase storage credits using AI3 tokens
         </h3>
 
+        {purchaseBlocked && (
+          <div className='mt-4 rounded-md bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
+            <strong>Credit cap reached.</strong> You have reached your maximum
+            credit limit. Please use your existing credits before purchasing
+            more.
+          </div>
+        )}
+
         <div className='mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-          {PACKAGES.map((p) => (
-            <Card
-              key={p.id}
-              className={`cursor-pointer transition-all duration-300 ${
-                p.popular
-                  ? 'ring-2 ring-primary'
-                  : 'hover:ring-2 hover:ring-primary'
-              }`}
-              onClick={() => onNext({ packageId: p.id })}
-            >
-              <div className='flex h-full flex-col gap-3 p-5'>
-                <div className='flex items-center justify-between'>
-                  <div className='text-sm font-medium'>{p.title}</div>
-                  {p.popular && (
-                    <span className='rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary'>
-                      Most Popular
-                    </span>
-                  )}
-                </div>
-                <div className='text-3xl font-bold'>{p.sizeLabel}</div>
-                {p.creditsInMB && (
-                  <>
-                    <div className='text-sm'>
-                      {formatCreditsInMbAsAi3(p.creditsInMB).toFixed(2)} AI3
-                    </div>
-                    <div className='text-xs text-muted-foreground'>
-                      ≈ ${formatCreditsInMbAsUsd(p.creditsInMB).toFixed(2)}
-                    </div>
-                  </>
-                )}
-
-                {p.features && (
-                  <div className='mt-2 flex flex-col gap-2 text-sm'>
-                    {p.features.map((f) => (
-                      <div
-                        key={f}
-                        className='flex items-center gap-2 text-muted-foreground'
-                      >
-                        <CheckIcon />
-                        <span>{f}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className='mt-auto'>
-                  <Button
-                    variant={p.popular ? 'primary' : 'secondary'}
-                    className={cn(
-                      'w-full transition-all duration-300',
-                      p.popular
-                        ? 'hover:bg-primary-hover hover:text-primary-foreground'
-                        : 'hover:bg-secondary-hover hover:text-secondary-foreground',
+          {PACKAGES.map((p) => {
+            // Named packages have a fixed size; disable them if they exceed the
+            // remaining cap.  The "custom" package is never disabled here —
+            // Step 2 validates the exact amount the user enters.
+            const overCap =
+              p.id !== 'custom' && checkPackageOverCap(p.creditsInMB);
+            const disabled = purchaseBlocked || overCap;
+            return (
+              <Card
+                key={p.id}
+                className={`transition-all duration-300 ${
+                  disabled
+                    ? 'cursor-not-allowed opacity-50'
+                    : `cursor-pointer ${
+                        p.popular
+                          ? 'ring-2 ring-primary'
+                          : 'hover:ring-2 hover:ring-primary'
+                      }`
+                }`}
+                onClick={() => {
+                  if (!disabled) onNext({ packageId: p.id });
+                }}
+              >
+                <div className='flex h-full flex-col gap-3 p-5'>
+                  <div className='flex items-center justify-between'>
+                    <div className='text-sm font-medium'>{p.title}</div>
+                    {p.popular && !disabled && (
+                      <span className='rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary'>
+                        Most Popular
+                      </span>
                     )}
-                  >
-                    {p.buttonLabel ?? 'Select Package'}
-                  </Button>
+                    {overCap && (
+                      <span className='rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900 dark:text-amber-300'>
+                        Exceeds cap
+                      </span>
+                    )}
+                  </div>
+                  <div className='text-3xl font-bold'>{p.sizeLabel}</div>
+                  {p.creditsInMB && (
+                    <>
+                      <div className='text-sm'>
+                        {formatCreditsInMbAsAi3(p.creditsInMB).toFixed(2)} AI3
+                      </div>
+                      <div className='text-xs text-muted-foreground'>
+                        ≈ ${formatCreditsInMbAsUsd(p.creditsInMB).toFixed(2)}
+                      </div>
+                    </>
+                  )}
+
+                  {p.features && (
+                    <div className='mt-2 flex flex-col gap-2 text-sm'>
+                      {p.features.map((f) => (
+                        <div
+                          key={f}
+                          className='flex items-center gap-2 text-muted-foreground'
+                        >
+                          <CheckIcon />
+                          <span>{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className='mt-auto'>
+                    <Button
+                      variant={p.popular && !disabled ? 'primary' : 'secondary'}
+                      disabled={disabled}
+                      className={cn(
+                        'w-full transition-all duration-300',
+                        !disabled && p.popular
+                          ? 'hover:bg-primary-hover hover:text-primary-foreground'
+                          : 'hover:bg-secondary-hover hover:text-secondary-foreground',
+                      )}
+                    >
+                      {p.buttonLabel ?? 'Select Package'}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
 
         <div className='mt-8 rounded-xl border bg-muted/30 p-6'>
