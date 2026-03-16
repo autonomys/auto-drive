@@ -38,6 +38,8 @@ export const useUserStore = create<UserStore>()(
     {
       name: 'user-dto-storage',
       version: 1,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      partialize: ({ creditSummary: _, ...rest }) => rest,
     },
   ),
 );
