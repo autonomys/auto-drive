@@ -60,7 +60,9 @@ export const ExpiryWarningBanner = () => {
         <strong>Credits expiring soon!</strong>{' '}
         {totalMB > 0 ? `${totalMB.toFixed(0)} MiB of` : 'Some of your'}{' '}
         purchased storage credits will expire
-        {daysLeft !== null ? ` in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}` : ' soon'}.
+        {daysLeft !== null && daysLeft > 0
+          ? ` in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
+          : ' today'}.
         Use them before they expire.
       </span>
     </div>

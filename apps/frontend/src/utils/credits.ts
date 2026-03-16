@@ -23,8 +23,9 @@ export const isPackageOverCap = (
  */
 export const daysUntilExpiry = (expiresAt: Date | null): number | null => {
   if (!expiresAt) return null;
-  return Math.ceil(
-    (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+  return Math.max(
+    0,
+    Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
   );
 };
 
