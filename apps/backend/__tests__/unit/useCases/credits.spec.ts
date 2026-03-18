@@ -184,9 +184,9 @@ describe('CreditsUseCases', () => {
       expect(summary.maxPurchasableBytes).toBe(0n)
     })
 
-    it('handles asymmetric remaining bytes (download higher than upload)', async () => {
+    it('uses upload bytes only for cap even when download remaining is higher', async () => {
       const uploadRemaining = BigInt(30 * 1024 ** 3)
-      const downloadRemaining = BigInt(70 * 1024 ** 3) // download is binding
+      const downloadRemaining = BigInt(70 * 1024 ** 3)
       const cap = config.credits.maxBytesPerUser
 
       jest
@@ -200,8 +200,9 @@ describe('CreditsUseCases', () => {
 
       const summary = await CreditsUseCases.getSummary(baseUser)
 
-      // Download (70 GiB) is the binding constraint
-      expect(summary.maxPurchasableBytes).toBe(cap - downloadRemaining)
+      // Cap is upload-only — download bytes are not allocated on purchase
+      // and do not factor into maxPurchasableBytes.
+      expect(summary.maxPurchasableBytes).toBe(cap - uploadRemaining)
       expect(summary.canPurchase).toBe(true)
     })
 
