@@ -33,7 +33,15 @@ export const PurchaseStep2ConnectWallet = ({
 
   const isCustom = String(context.packageId ?? 'custom') === 'custom';
 
-  const uploadPending = useUserStore((u) => u.account?.pendingUploadCredits);
+  // creditSummary.uploadBytesRemaining is the user's current purchased-credit
+  // pool (a decimal bigint string from the API).  We display this — not the
+  // free-tier pendingUploadCredits — because Step 2 is in the purchase flow
+  // and the user is buying more purchased credits.
+  // Safely defaults to 0 while the summary is still loading or when the user
+  // has no purchased credits yet.
+  const currentPurchasedBytes = useUserStore((s) =>
+    s.creditSummary ? Number(s.creditSummary.uploadBytesRemaining) : 0,
+  );
 
   const { title, sizeMB } = useMemo(() => {
     const id = String(context.packageId ?? 'custom');
@@ -175,13 +183,20 @@ export const PurchaseStep2ConnectWallet = ({
           <Section title='Complete Payment'>
             <div className='flex flex-col gap-3 p-4'>
               <InfoRow
-                label='Current Credits Balance'
+                label='Current Purchased Credits'
                 className='rounded-md bg-gray-100 p-4 dark:bg-gray-800'
-                value={<span>{formatBytes(uploadPending ?? 0, 2)}</span>}
+                value={<span>{formatBytes(currentPurchasedBytes, 2)}</span>}
               />
               <InfoRow
                 label='After Purchase'
-                value={<span className='font-semibold'>{sizeMB}MiB</span>}
+                value={
+                  <span className='font-semibold'>
+                    {formatBytes(
+                      currentPurchasedBytes + Number(sizeMB) * 1024 * 1024,
+                      2,
+                    )}
+                  </span>
+                }
                 className='rounded-md bg-primary/20 p-4'
                 accent
               />
