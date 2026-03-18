@@ -173,9 +173,13 @@ const getPendingCreditsByAccountAndType = async (
 
   const freeRemaining = limit - spentCredits
 
-  // Also include any active purchased credits so the upload/download gate
+  // For uploads, also include any active purchased credits so the upload gate
   // (pendingCredits < metadata.totalSize) grants access when the user has
   // enough purchased bytes, even if their free allocation is exhausted.
+  //
+  // Download credits are not enforced right now — infrastructure exists for
+  // future use but purchased download bytes are not allocated on purchase and
+  // are not counted here.
   //
   // getRemainingCredits is a plain DB query with no awareness of the
   // buyCredits feature flag. If the flag is OFF and no rows exist in
@@ -184,15 +188,14 @@ const getPendingCreditsByAccountAndType = async (
   // If credits were purchased while the flag was ON and it is later turned
   // OFF, those already-purchased credits remain visible and usable — this is
   // intentional: users should not lose credits they already paid for.
-  const purchased = await purchasedCreditsRepository.getRemainingCredits(
-    account.id,
-  )
-  const purchasedRemaining =
-    type === InteractionType.Upload
-      ? Number(purchased.uploadBytesRemaining)
-      : Number(purchased.downloadBytesRemaining)
+  if (type === InteractionType.Upload) {
+    const purchased = await purchasedCreditsRepository.getRemainingCredits(
+      account.id,
+    )
+    return freeRemaining + Number(purchased.uploadBytesRemaining)
+  }
 
-  return freeRemaining + purchasedRemaining
+  return freeRemaining
 }
 
 const getAccountInfo = async (
@@ -263,11 +266,14 @@ const registerInteraction = async (
   // avoids the TOCTOU race that existed with the previous two-phase approach
   // where releasing FOR UPDATE locks between calls allowed concurrent requests
   // to consume the same credits.
-  const fromPurchased = await purchasedCreditsRepository.consumeUpTo(
-    account.id,
-    creditType,
-    size,
-  )
+  //
+  // Download credits are not enforced right now — purchased bytes are not
+  // allocated on purchase and are not consumed here. The consumeUpTo path
+  // and all compensation logic below is upload-only for now.
+  const fromPurchased =
+    type === InteractionType.Upload
+      ? await purchasedCreditsRepository.consumeUpTo(account.id, creditType, size)
+      : BigInt(0)
 
   const fromFree = size - fromPurchased
 
@@ -406,7 +412,9 @@ const addCreditsToAccount = async (
       accountId: account.id,
       intentId,
       uploadBytesOriginal: credits,
-      downloadBytesOriginal: credits,
+      // Download credits are not allocated on purchase — infrastructure is
+      // kept for future use but download limits are not enforced right now.
+      downloadBytesOriginal: 0n,
       expiresAt,
     },
     config.credits.maxBytesPerUser,
