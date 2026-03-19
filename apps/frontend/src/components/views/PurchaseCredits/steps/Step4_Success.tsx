@@ -6,6 +6,8 @@ import { Section } from '../atoms/Section';
 import { usePrices } from '../../../../hooks/usePrices';
 import { shortenString } from '../../../../utils/misc';
 import { CopiableText } from '../../../atoms/CopiableText';
+import { useUserStore } from '../../../../globalStates/user';
+import { formatBytes } from '../../../../utils/number';
 
 export const PurchaseStep4Success = ({
   context,
@@ -15,6 +17,17 @@ export const PurchaseStep4Success = ({
   const { formatCreditsInMbAsAi3 } = usePrices();
 
   const sizeMB = context.sizeMB as number;
+
+  // creditSummary is invalidated by useTransactionConfirmation once the
+  // backend marks the intent as completed, so by the time Step 4 renders
+  // the store should already hold the updated balance.
+  // We show it only when it has loaded and is non-zero to avoid showing
+  // "0 B" to free-tier users who somehow reach this page edge-case.
+  const newPurchasedBalance = useUserStore((s) => {
+    if (!s.creditSummary) return null;
+    const bytes = Number(s.creditSummary.uploadBytesRemaining);
+    return bytes > 0 ? bytes : null;
+  });
 
   return (
     <div className='flex flex-col gap-4'>
@@ -67,6 +80,16 @@ export const PurchaseStep4Success = ({
                     </span>
                   }
                 />
+                {newPurchasedBalance !== null && (
+                  <InfoRow
+                    label='New Purchased Credits Total'
+                    value={
+                      <span className='font-bold text-primary'>
+                        {formatBytes(newPurchasedBalance, 2)}
+                      </span>
+                    }
+                  />
+                )}
               </div>
             </div>
 
