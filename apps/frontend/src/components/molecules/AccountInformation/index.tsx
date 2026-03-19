@@ -1,6 +1,7 @@
 import { utcToLocalRelativeTime } from '../../../utils/time';
 import { AccountModel } from '@auto-drive/models';
 import { formatBytes } from '../../../utils/number';
+import Link from 'next/link';
 
 interface CreditLimitsProps {
   uploadPending: number;
@@ -18,6 +19,12 @@ interface CreditLimitsProps {
    * Shown as a hint when the purchased-credits section is rendered.
    */
   nextExpiryDate?: Date | null;
+  /**
+   * href to the credit history page. When provided, a "View history" link is
+   * shown below the purchased credits row. Only passed when the buyCredits
+   * feature flag is active.
+   */
+  creditHistoryHref?: string;
 }
 
 export const AccountInformation = ({
@@ -27,6 +34,7 @@ export const AccountInformation = ({
   renewalDate,
   purchasedBytesRemaining = 0,
   nextExpiryDate = null,
+  creditHistoryHref,
 }: CreditLimitsProps) => {
   const uploadUsed = uploadLimit - uploadPending;
 
@@ -76,6 +84,14 @@ export const AccountInformation = ({
               </span>
             )}
           </div>
+          {creditHistoryHref && (
+            <Link
+              href={creditHistoryHref}
+              className='mt-1 block text-xs text-primary hover:underline'
+            >
+              View history →
+            </Link>
+          )}
         </div>
       )}
     </div>
