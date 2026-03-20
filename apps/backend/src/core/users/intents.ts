@@ -155,8 +155,28 @@ const markIntentAsConfirmed = async ({
     return err(new ObjectNotFoundError('Intent not found'))
   }
 
+  // Idempotency guard — do not overwrite an intent that is already in a
+  // post-PENDING state.  Duplicate calls arise from:
+  //   • chain reorgs causing the same event to be re-emitted
+  //   • the payment manager reconnecting and re-processing already-seen logs
+  //   • watchTransaction and the _checkConfirmedIntents polling loop racing
+  //
+  // We return ok() rather than an error so the caller does not treat a
+  // duplicate as a failure and does not retry indefinitely.
+  if (
+    intent.status === IntentStatus.CONFIRMED ||
+    intent.status === IntentStatus.COMPLETED ||
+    intent.status === IntentStatus.OVER_CAP
+  ) {
+    logger.info('markIntentAsConfirmed: intent already processed — skipping', {
+      intentId,
+      currentStatus: intent.status,
+    })
+    return ok(intent)
+  }
+
   return ok(
-    intentsRepository.updateIntent({
+    await intentsRepository.updateIntent({
       ...intent,
       status: IntentStatus.CONFIRMED,
       paymentAmount,
