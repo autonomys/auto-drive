@@ -216,22 +216,25 @@ const onConfirmedIntent = async (intentId: string) => {
   // intent COMPLETED while giving the user nothing — a misleading outcome that
   // wastes a DB row and silently discards the payment.
   //
-  // Instead we log a warning and return an error so the polling loop retries
-  // (in case of a transient pricing mismatch) and operators are alerted.
-  // In practice this should never happen because the frontend enforces a
-  // minimum package size, but the guard defends against buggy clients or
-  // future contract changes.
+  // Both paymentAmount and shannonsPerByte are immutable on a confirmed intent,
+  // so this condition is permanent.  We mark the intent FAILED (terminal) so
+  // the polling loop stops retrying.  The on-chain payment is irreversible;
+  // resolution requires admin review (similar to OVER_CAP handling).
   const creditBytes = IntentsUseCases.getIntentCredits(intent)
   if (creditBytes === BigInt(0)) {
     logger.warn(
-      'onConfirmedIntent: payment too small to yield any credits — skipping',
+      'onConfirmedIntent: payment too small to yield any credits — marking FAILED',
       {
         intentId,
         paymentAmount: intent.paymentAmount.toString(),
         shannonsPerByte: intent.shannonsPerByte.toString(),
       },
     )
-    return err(new Error('Payment amount yields zero credits'))
+    await intentsRepository.updateIntent({
+      ...intent,
+      status: IntentStatus.FAILED,
+    })
+    return ok()
   }
 
   const addResult = await AccountsUseCases.addCreditsToAccount(
