@@ -371,6 +371,13 @@ const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
   }
 }
 
+// Returns PENDING intents that already have a tx_hash — used by the payment
+// manager startup sweep to re-watch transactions that were submitted but never
+// confirmed due to a service restart or RPC outage.
+const getPendingWithTxHash = async (): Promise<Intent[]> => {
+  return intentsRepository.getPendingWithTxHash()
+}
+
 export const IntentsUseCases = {
   createIntent,
   getIntent,
@@ -380,6 +387,7 @@ export const IntentsUseCases = {
   markIntentAsConfirmed,
   getConfirmedIntents,
   getOverCapIntents,
+  getPendingWithTxHash,
   reprocessOverCapIntent,
   getIntentCredits,
   getPrice,
