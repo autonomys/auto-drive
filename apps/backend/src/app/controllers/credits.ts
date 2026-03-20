@@ -118,6 +118,44 @@ creditsController.get(
 )
 
 // ---------------------------------------------------------------------------
+// GET /credits/batches/all
+// Admin-only: all credit batches across every user, newest-first.
+// Each row includes the owner's userPublicId for easy cross-referencing
+// with the admin user table.  Returns 403 for non-admin callers.
+//
+// NOTE: registered BEFORE GET /credits/batches so Express does not attempt
+// to match the literal string "all" against the existing /batches route
+// (they are separate paths and Express won't confuse them, but ordering
+// here keeps the admin routes grouped together).
+// ---------------------------------------------------------------------------
+
+creditsController.get(
+  '/batches/all',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      CreditsUseCases.getAllBatches(user),
+      'Failed to get all credit batches',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json(
+      result.value.map((batch) => ({
+        ...serializeCredit(batch),
+        userPublicId: batch.userPublicId,
+      })),
+    )
+  }),
+)
+
+// ---------------------------------------------------------------------------
 // GET /credits/economics
 // Admin-only: system-wide credit stats (expiring totals, byte volumes).
 // Returns 403 for non-admin users.
