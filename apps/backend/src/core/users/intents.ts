@@ -166,7 +166,9 @@ const markIntentAsConfirmed = async ({
   if (
     intent.status === IntentStatus.CONFIRMED ||
     intent.status === IntentStatus.COMPLETED ||
-    intent.status === IntentStatus.OVER_CAP
+    intent.status === IntentStatus.OVER_CAP ||
+    intent.status === IntentStatus.FAILED ||
+    intent.status === IntentStatus.EXPIRED
   ) {
     logger.info('markIntentAsConfirmed: intent already processed — skipping', {
       intentId,
