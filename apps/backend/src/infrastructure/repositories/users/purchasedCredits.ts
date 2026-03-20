@@ -549,6 +549,30 @@ const createPurchasedCreditWithCapCheck = async (
 }
 
 // ---------------------------------------------------------------------------
+// getAllWithUserPublicId
+// Admin view: every credit batch across all users, joined with the
+// user_public_id from the originating intent row. Ordered newest-first.
+// ---------------------------------------------------------------------------
+
+export type AdminCreditBatchRow = PurchasedCredit & {
+  userPublicId: string
+}
+
+const getAllWithUserPublicId = async (): Promise<AdminCreditBatchRow[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPurchasedCredit & { user_public_id: string }>(
+    `SELECT pc.*, i.user_public_id
+     FROM purchased_credits pc
+     JOIN intents i ON i.id = pc.intent_id
+     ORDER BY pc.purchased_at DESC`,
+  )
+  return result.rows.map((row) => ({
+    ...mapRow(row),
+    userPublicId: row.user_public_id,
+  }))
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -564,4 +588,5 @@ export const purchasedCreditsRepository = {
   createPurchasedCreditWithCapCheck,
   markExpiredCredits,
   getByAccountId,
+  getAllWithUserPublicId,
 }
