@@ -209,9 +209,34 @@ const onConfirmedIntent = async (intentId: string) => {
     return err(new Error('Intent has no deposit amount'))
   }
 
+  // Guard: reject payments whose value is too small to purchase even a single
+  // byte of storage.  getIntentCredits divides paymentAmount by shannonsPerByte
+  // using BigInt integer division, so a dust payment (paymentAmount <
+  // shannonsPerByte) yields 0 credits.  Granting 0 credits would mark the
+  // intent COMPLETED while giving the user nothing — a misleading outcome that
+  // wastes a DB row and silently discards the payment.
+  //
+  // Instead we log a warning and return an error so the polling loop retries
+  // (in case of a transient pricing mismatch) and operators are alerted.
+  // In practice this should never happen because the frontend enforces a
+  // minimum package size, but the guard defends against buggy clients or
+  // future contract changes.
+  const creditBytes = IntentsUseCases.getIntentCredits(intent)
+  if (creditBytes === BigInt(0)) {
+    logger.warn(
+      'onConfirmedIntent: payment too small to yield any credits — skipping',
+      {
+        intentId,
+        paymentAmount: intent.paymentAmount.toString(),
+        shannonsPerByte: intent.shannonsPerByte.toString(),
+      },
+    )
+    return err(new Error('Payment amount yields zero credits'))
+  }
+
   const addResult = await AccountsUseCases.addCreditsToAccount(
     intent.userPublicId,
-    IntentsUseCases.getIntentCredits(intent),
+    creditBytes,
     intentId,
   )
 
