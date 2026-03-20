@@ -82,10 +82,12 @@ const OverCapPanel = ({
   intents,
   onReprocess,
   reprocessingId,
+  isPending,
 }: {
   intents: OverCapIntent[];
   onReprocess: (id: string) => void;
   reprocessingId: string | null;
+  isPending: boolean;
 }) => {
   if (intents.length === 0) {
     return (
@@ -130,12 +132,12 @@ const OverCapPanel = ({
               <td className='py-2'>
                 <Button
                   variant='outline'
-                  disabled={reprocessingId === intent.id}
+                  disabled={isPending && reprocessingId === intent.id}
                   onClick={() => onReprocess(intent.id)}
                   className='flex items-center gap-1 text-xs'
                 >
                   <RotateCcw className='h-3 w-3' />
-                  {reprocessingId === intent.id ? 'Reprocessing…' : 'Reprocess'}
+                  {isPending && reprocessingId === intent.id ? 'Reprocessing…' : 'Reprocess'}
                 </Button>
               </td>
             </tr>
@@ -269,7 +271,7 @@ export const AdminCredits = () => {
     staleTime: 30_000,
   });
 
-  const { mutate: reprocess, variables: reprocessingId } = useMutation<
+  const { mutate: reprocess, variables: reprocessingId, isPending: isReprocessing } = useMutation<
     void,
     Error,
     string
@@ -330,6 +332,7 @@ export const AdminCredits = () => {
           intents={overCapIntents}
           onReprocess={(id) => reprocess(id)}
           reprocessingId={reprocessingId ?? null}
+          isPending={isReprocessing}
         />
       </div>
 
