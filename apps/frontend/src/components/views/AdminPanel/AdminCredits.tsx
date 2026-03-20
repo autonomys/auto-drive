@@ -6,42 +6,12 @@ import { formatBytes } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import { RefreshCw, AlertTriangle, RotateCcw } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
+import { getBatchStatus, STATUS_CLASSES, STATUS_LABEL } from '../../../utils/credits';
 import type {
   AdminCreditBatch,
   CreditEconomicsResponse,
   OverCapIntent,
 } from '../../../services/api';
-
-// ---------------------------------------------------------------------------
-// Batch status helpers (mirrors CreditHistory)
-// ---------------------------------------------------------------------------
-
-type BatchStatus = 'active' | 'expiring' | 'depleted' | 'expired';
-
-const getBatchStatus = (batch: AdminCreditBatch): BatchStatus => {
-  if (batch.expired) return 'expired';
-  if (BigInt(batch.uploadBytesRemaining) === BigInt(0)) return 'depleted';
-  const msLeft =
-    new Date(batch.expiresAt).getTime() - Date.now();
-  const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
-  if (daysLeft <= 30) return 'expiring';
-  return 'active';
-};
-
-const STATUS_CLASSES: Record<BatchStatus, string> = {
-  active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  expiring:
-    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  depleted: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-  expired: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-};
-
-const STATUS_LABEL: Record<BatchStatus, string> = {
-  active: 'Active',
-  expiring: 'Expiring soon',
-  depleted: 'Depleted',
-  expired: 'Expired',
-};
 
 // ---------------------------------------------------------------------------
 // Economics summary card

@@ -1,4 +1,4 @@
-import { isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes } from '../../../src/utils/credits'
+import { isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus } from '../../../src/utils/credits'
 
 // ---------------------------------------------------------------------------
 // isPackageOverCap
@@ -126,5 +126,56 @@ describe('sumExpiringUploadBytes', () => {
       { uploadBytesRemaining: oneMiB.toString() },
     ]
     expect(sumExpiringUploadBytes(batches)).toBe(oneMiB * 3n)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getBatchStatus
+// ---------------------------------------------------------------------------
+
+describe('getBatchStatus', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date('2026-06-01T00:00:00Z'))
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  const makeBatch = (overrides: Partial<{ expired: boolean; uploadBytesRemaining: string; expiresAt: string }> = {}) => ({
+    expired: false,
+    uploadBytesRemaining: '1048576',
+    expiresAt: '2026-12-01T00:00:00Z',
+    ...overrides,
+  })
+
+  it('returns "expired" when batch.expired is true', () => {
+    expect(getBatchStatus(makeBatch({ expired: true }))).toBe('expired')
+  })
+
+  it('returns "depleted" when uploadBytesRemaining is zero', () => {
+    expect(getBatchStatus(makeBatch({ uploadBytesRemaining: '0' }))).toBe('depleted')
+  })
+
+  it('returns "expiring" when the batch expires within 30 days', () => {
+    // 15 days from "now" (2026-06-01)
+    expect(getBatchStatus(makeBatch({ expiresAt: '2026-06-16T00:00:00Z' }))).toBe('expiring')
+  })
+
+  it('returns "expiring" when the batch expires in exactly 30 days', () => {
+    expect(getBatchStatus(makeBatch({ expiresAt: '2026-07-01T00:00:00Z' }))).toBe('expiring')
+  })
+
+  it('returns "active" when the batch expires in more than 30 days', () => {
+    expect(getBatchStatus(makeBatch({ expiresAt: '2026-07-02T00:00:00Z' }))).toBe('active')
+  })
+
+  it('prioritises "expired" over "depleted"', () => {
+    expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '0' }))).toBe('expired')
+  })
+
+  it('prioritises "depleted" over "expiring"', () => {
+    expect(getBatchStatus(makeBatch({ uploadBytesRemaining: '0', expiresAt: '2026-06-10T00:00:00Z' }))).toBe('depleted')
   })
 })
