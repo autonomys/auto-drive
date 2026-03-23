@@ -41,7 +41,8 @@
     "minimatch@^5": "^5.1.8",
     "minimatch@^9": "^9.0.7",
     "undici": "^6.24.0",
-    "h3": "^1.15.6"
+    "h3": "^1.15.6",
+    "socket.io-parser": "^4.2.6"
   },
   "dependencies": {
     "@icons-pack/react-simple-icons": "^13.7.0",
