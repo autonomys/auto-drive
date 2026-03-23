@@ -40,7 +40,8 @@
     "minimatch@^3": "^3.1.3",
     "minimatch@^5": "^5.1.8",
     "minimatch@^9": "^9.0.7",
-    "undici": "^6.24.0"
+    "undici": "^6.24.0",
+    "h3": "^1.15.6"
   },
   "dependencies": {
     "@icons-pack/react-simple-icons": "^13.7.0",
