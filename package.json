@@ -35,7 +35,8 @@
     "eslint-plugin-neverthrow": "^1.1.4"
   },
   "resolutions": {
-    "flatted": "^3.4.0"
+    "flatted": "^3.4.0",
+    "fast-xml-parser": "^5.5.6"
   },
   "dependencies": {
     "@icons-pack/react-simple-icons": "^13.7.0",
