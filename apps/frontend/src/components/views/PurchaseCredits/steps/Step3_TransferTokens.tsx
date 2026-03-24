@@ -41,6 +41,7 @@ export const PurchaseStep3TransferTokens = ({
     isPollingBackend,
     isBackendCompleted,
     isOverCap,
+    isExpired,
     waitError,
   } = useTransactionConfirmation({
     txHash,
@@ -196,15 +197,22 @@ export const PurchaseStep3TransferTokens = ({
                   assistance.
                 </div>
               )}
+              {isExpired && (
+                <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
+                  <strong>Payment intent expired.</strong> The payment window
+                  has closed and credits could not be applied. Please contact
+                  support for assistance.
+                </div>
+              )}
               {waitError && (
                 <div className='text-xs text-red-600'>{waitError.message}</div>
               )}
               <div className='flex gap-3'>
                 <Button
                   onClick={() => onNext({ txHash })}
-                  disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap}
+                  disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap || isExpired}
                 >
-                  {isFullyConfirmed && !isBackendCompleted && !isOverCap
+                  {isFullyConfirmed && !isBackendCompleted && !isOverCap && !isExpired
                     ? 'Finalizing…'
                     : 'Continue'}
                 </Button>
