@@ -1,30 +1,45 @@
 /**
  * Unit tests for the intent-polling decision logic extracted from
  * useTransactionConfirmation.  These tests verify the correct terminal-state
- * handling for completed and over_cap intents without requiring a React
- * rendering environment.
+ * handling for completed, over_cap, and expired intents without requiring a
+ * React rendering environment.
+ *
+ * IMPORTANT: The backend returns HTTP 410 Gone for expired intents instead of
+ * an `{ status: 'expired' }` response body.  The `getIntent` call throws an
+ * `ApiError(410, …)` before the caller ever sees a status string.  The polling
+ * loop detects this via the catch block, not via `intent.status === 'expired'`.
  */
 
 // ---------------------------------------------------------------------------
-// Polling decision logic (extracted inline to test independently)
+// Minimal ApiError replica (mirrors apps/frontend/src/services/api.ts)
 // ---------------------------------------------------------------------------
 
-type IntentStatus = 'pending' | 'confirmed' | 'completed' | 'failed' | 'expired' | 'over_cap'
+class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Polling decision logic (mirrors the try/catch in the `poll` callback)
+// ---------------------------------------------------------------------------
+
+type IntentStatus = 'pending' | 'confirmed' | 'completed' | 'failed' | 'over_cap'
 
 interface PollResult {
-  /** True if the backend has successfully applied credits. */
   completed: boolean
-  /** True if the intent hit the per-user cap and credits were NOT applied. */
   overCap: boolean
-  /** True if the intent has expired and credits will never be applied. */
   expired: boolean
-  /** True if polling should continue on the next iteration. */
   shouldContinue: boolean
 }
 
 /**
- * Pure function mirroring the decision branch inside the `poll` callback of
- * useTransactionConfirmation.  This is what we test here.
+ * Mirrors the try-branch: evaluates the status string returned in the
+ * response body when the API call succeeds (HTTP 2xx).
  */
 function evaluateIntentStatus(status: IntentStatus): PollResult {
   if (status === 'completed') {
@@ -33,19 +48,27 @@ function evaluateIntentStatus(status: IntentStatus): PollResult {
   if (status === 'over_cap') {
     return { completed: false, overCap: true, expired: false, shouldContinue: false }
   }
-  if (status === 'expired') {
+  return { completed: false, overCap: false, expired: false, shouldContinue: true }
+}
+
+/**
+ * Mirrors the catch-branch: evaluates the thrown error.  The backend returns
+ * HTTP 410 for expired intents, so this is the only path through which
+ * `expired` can become true.
+ */
+function evaluatePollError(error: unknown): PollResult {
+  if (error instanceof ApiError && error.status === 410) {
     return { completed: false, overCap: false, expired: true, shouldContinue: false }
   }
-  // Any other status (pending, confirmed, failed) → keep polling
   return { completed: false, overCap: false, expired: false, shouldContinue: true }
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Tests — successful response branch (try)
 // ---------------------------------------------------------------------------
 
-describe('evaluateIntentStatus (useTransactionConfirmation polling logic)', () => {
-  it('marks completed=true and stops polling when status is "completed"', () => {
+describe('evaluateIntentStatus (try branch)', () => {
+  it('marks completed and stops polling for "completed"', () => {
     const result = evaluateIntentStatus('completed')
     expect(result.completed).toBe(true)
     expect(result.overCap).toBe(false)
@@ -53,7 +76,7 @@ describe('evaluateIntentStatus (useTransactionConfirmation polling logic)', () =
     expect(result.shouldContinue).toBe(false)
   })
 
-  it('marks overCap=true and stops polling when status is "over_cap"', () => {
+  it('marks overCap and stops polling for "over_cap"', () => {
     const result = evaluateIntentStatus('over_cap')
     expect(result.completed).toBe(false)
     expect(result.overCap).toBe(true)
@@ -61,42 +84,58 @@ describe('evaluateIntentStatus (useTransactionConfirmation polling logic)', () =
     expect(result.shouldContinue).toBe(false)
   })
 
-  it('marks expired=true and stops polling when status is "expired"', () => {
-    const result = evaluateIntentStatus('expired')
+  it('continues polling for "pending"', () => {
+    const result = evaluateIntentStatus('pending')
+    expect(result).toEqual({ completed: false, overCap: false, expired: false, shouldContinue: true })
+  })
+
+  it('continues polling for "confirmed"', () => {
+    const result = evaluateIntentStatus('confirmed')
+    expect(result).toEqual({ completed: false, overCap: false, expired: false, shouldContinue: true })
+  })
+
+  it('continues polling for "failed"', () => {
+    const result = evaluateIntentStatus('failed')
+    expect(result).toEqual({ completed: false, overCap: false, expired: false, shouldContinue: true })
+  })
+
+  it('over_cap and completed are mutually exclusive', () => {
+    expect(evaluateIntentStatus('over_cap').completed).toBe(false)
+    expect(evaluateIntentStatus('completed').overCap).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests — error branch (catch)
+// ---------------------------------------------------------------------------
+
+describe('evaluatePollError (catch branch — expired intent detection)', () => {
+  it('marks expired and stops polling on ApiError with status 410', () => {
+    const error = new ApiError(410, 'Intent has expired')
+    const result = evaluatePollError(error)
+    expect(result.expired).toBe(true)
     expect(result.completed).toBe(false)
     expect(result.overCap).toBe(false)
-    expect(result.expired).toBe(true)
     expect(result.shouldContinue).toBe(false)
   })
 
-  it('continues polling when status is "pending"', () => {
-    const result = evaluateIntentStatus('pending')
-    expect(result.completed).toBe(false)
-    expect(result.overCap).toBe(false)
+  it('continues polling on ApiError with non-410 status (e.g. 500)', () => {
+    const error = new ApiError(500, 'Internal server error')
+    const result = evaluatePollError(error)
     expect(result.expired).toBe(false)
     expect(result.shouldContinue).toBe(true)
   })
 
-  it('continues polling when status is "confirmed"', () => {
-    const result = evaluateIntentStatus('confirmed')
-    expect(result.completed).toBe(false)
-    expect(result.overCap).toBe(false)
+  it('continues polling on generic Error (network failure, etc.)', () => {
+    const error = new Error('fetch failed')
+    const result = evaluatePollError(error)
     expect(result.expired).toBe(false)
     expect(result.shouldContinue).toBe(true)
   })
 
-  it('continues polling when status is "failed" (surface through continued polling)', () => {
-    const result = evaluateIntentStatus('failed')
-    expect(result.completed).toBe(false)
-    expect(result.overCap).toBe(false)
+  it('continues polling on non-Error thrown value', () => {
+    const result = evaluatePollError('unexpected string')
     expect(result.expired).toBe(false)
     expect(result.shouldContinue).toBe(true)
-  })
-
-  it('over_cap is NOT the same as completed — they are mutually exclusive', () => {
-    const overCapResult = evaluateIntentStatus('over_cap')
-    const completedResult = evaluateIntentStatus('completed')
-    expect(overCapResult.completed).toBe(false)
-    expect(completedResult.overCap).toBe(false)
   })
 })

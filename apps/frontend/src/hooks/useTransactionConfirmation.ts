@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { usePublicClient, useWaitForTransactionReceipt } from 'wagmi';
 import { type Hash } from 'viem';
 import { useQueryClient } from '@tanstack/react-query';
+import { ApiError } from '../services/api';
 
 interface UseTransactionConfirmationProps {
   txHash: Hash | undefined;
@@ -116,15 +117,16 @@ export const useTransactionConfirmation = ({
           setIsPollingBackend(false);
           return;
         }
-        // expired is a terminal state — the payment window has closed and the
-        // intent will never transition to completed.  Stop polling immediately.
-        if (intent.status === 'expired') {
+      } catch (error) {
+        // The backend returns 410 Gone for expired intents (isIntentExpired
+        // triggers a GoneError before the status string reaches the client).
+        // Detect this via the ApiError status and stop polling.
+        if (error instanceof ApiError && error.status === 410) {
           setIsExpired(true);
           setIsPollingBackend(false);
           return;
         }
-      } catch {
-        // ignore and retry
+        // Any other error — ignore and retry
       }
       if (!cancelled) {
         timer = setTimeout(poll, 2000);
