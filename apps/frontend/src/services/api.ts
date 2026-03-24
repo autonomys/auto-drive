@@ -38,6 +38,16 @@ export type ExpiringCreditBatch = {
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
 
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 export interface UploadResponse {
   cid: string;
 }
@@ -111,7 +121,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      throw new ApiError(
+        response.status,
+        `Network response was not ok: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<Intent>;

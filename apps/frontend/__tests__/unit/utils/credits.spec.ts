@@ -71,12 +71,20 @@ describe('daysUntilExpiry', () => {
     expect(daysUntilExpiry(expiresAt)).toBe(1)
   })
 
-  it('rounds up partial days to the nearest whole day', () => {
+  it('rounds down partial days so credits expiring today show 0', () => {
     const now = new Date('2026-01-01T00:00:00Z')
     jest.setSystemTime(now)
-    // 1.5 days → ceil → 2
+    // 1.5 days → floor → 1
     const expiresAt = new Date('2026-01-02T12:00:00Z')
-    expect(daysUntilExpiry(expiresAt)).toBe(2)
+    expect(daysUntilExpiry(expiresAt)).toBe(1)
+  })
+
+  it('returns 0 when credits expire later today (< 1 whole day remaining)', () => {
+    const now = new Date('2026-01-01T00:00:00Z')
+    jest.setSystemTime(now)
+    // 0.5 days → floor → 0
+    const expiresAt = new Date('2026-01-01T12:00:00Z')
+    expect(daysUntilExpiry(expiresAt)).toBe(0)
   })
 
   it('returns 0 for a past expiry date (clamped)', () => {
