@@ -16,6 +16,8 @@ interface PollResult {
   completed: boolean
   /** True if the intent hit the per-user cap and credits were NOT applied. */
   overCap: boolean
+  /** True if the intent has expired and credits will never be applied. */
+  expired: boolean
   /** True if polling should continue on the next iteration. */
   shouldContinue: boolean
 }
@@ -26,13 +28,16 @@ interface PollResult {
  */
 function evaluateIntentStatus(status: IntentStatus): PollResult {
   if (status === 'completed') {
-    return { completed: true, overCap: false, shouldContinue: false }
+    return { completed: true, overCap: false, expired: false, shouldContinue: false }
   }
   if (status === 'over_cap') {
-    return { completed: false, overCap: true, shouldContinue: false }
+    return { completed: false, overCap: true, expired: false, shouldContinue: false }
   }
-  // Any other status → keep polling
-  return { completed: false, overCap: false, shouldContinue: true }
+  if (status === 'expired') {
+    return { completed: false, overCap: false, expired: true, shouldContinue: false }
+  }
+  // Any other status (pending, confirmed, failed) → keep polling
+  return { completed: false, overCap: false, expired: false, shouldContinue: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -44,6 +49,7 @@ describe('evaluateIntentStatus (useTransactionConfirmation polling logic)', () =
     const result = evaluateIntentStatus('completed')
     expect(result.completed).toBe(true)
     expect(result.overCap).toBe(false)
+    expect(result.expired).toBe(false)
     expect(result.shouldContinue).toBe(false)
   })
 
@@ -51,6 +57,15 @@ describe('evaluateIntentStatus (useTransactionConfirmation polling logic)', () =
     const result = evaluateIntentStatus('over_cap')
     expect(result.completed).toBe(false)
     expect(result.overCap).toBe(true)
+    expect(result.expired).toBe(false)
+    expect(result.shouldContinue).toBe(false)
+  })
+
+  it('marks expired=true and stops polling when status is "expired"', () => {
+    const result = evaluateIntentStatus('expired')
+    expect(result.completed).toBe(false)
+    expect(result.overCap).toBe(false)
+    expect(result.expired).toBe(true)
     expect(result.shouldContinue).toBe(false)
   })
 
@@ -58,6 +73,7 @@ describe('evaluateIntentStatus (useTransactionConfirmation polling logic)', () =
     const result = evaluateIntentStatus('pending')
     expect(result.completed).toBe(false)
     expect(result.overCap).toBe(false)
+    expect(result.expired).toBe(false)
     expect(result.shouldContinue).toBe(true)
   })
 
@@ -65,6 +81,7 @@ describe('evaluateIntentStatus (useTransactionConfirmation polling logic)', () =
     const result = evaluateIntentStatus('confirmed')
     expect(result.completed).toBe(false)
     expect(result.overCap).toBe(false)
+    expect(result.expired).toBe(false)
     expect(result.shouldContinue).toBe(true)
   })
 
@@ -72,13 +89,7 @@ describe('evaluateIntentStatus (useTransactionConfirmation polling logic)', () =
     const result = evaluateIntentStatus('failed')
     expect(result.completed).toBe(false)
     expect(result.overCap).toBe(false)
-    expect(result.shouldContinue).toBe(true)
-  })
-
-  it('continues polling when status is "expired"', () => {
-    const result = evaluateIntentStatus('expired')
-    expect(result.completed).toBe(false)
-    expect(result.overCap).toBe(false)
+    expect(result.expired).toBe(false)
     expect(result.shouldContinue).toBe(true)
   })
 
