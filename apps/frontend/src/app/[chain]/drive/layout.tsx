@@ -9,6 +9,7 @@ import { SidebarProvider } from '@/components/molecules/Sidebar';
 import { SideNavbar } from 'frontend/src/components/organisms/SideNavBar';
 import { SessionEnsurer } from '@/components/atoms/SessionEnsurer';
 import { AutomaticLoginWrapper } from '../../../components/atoms/AutomaticLoginWrapper';
+import { ExpiryWarningBanner } from '../../../components/atoms/ExpiryWarningBanner';
 
 export default function AppLayout({
   children,
@@ -29,6 +30,7 @@ export default function AppLayout({
                 <div className='flex flex-1 overflow-hidden'>
                   <main className='flex-1 overflow-auto px-6 pb-6'>
                     <TableRouteChangeListener />
+                    <ExpiryWarningBanner />
                     {children}
                   </main>
                 </div>

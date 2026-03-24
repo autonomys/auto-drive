@@ -5,6 +5,7 @@ import { useNetwork } from '../../contexts/network';
 import { AuthService } from '../../services/auth/auth';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { CreditSummaryResponse } from '../../services/api';
 
 export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
@@ -12,6 +13,7 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const setUser = useUserStore(({ setUser }) => setUser);
   const setFeatures = useUserStore(({ setFeatures }) => setFeatures);
   const setAccount = useUserStore((m) => m.setAccount);
+  const setCreditSummary = useUserStore((m) => m.setCreditSummary);
   const { api } = useNetwork();
 
   useEffect(() => {
@@ -43,6 +45,14 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
     enabled: !!session?.data,
   });
 
+  const { data: creditSummary } = useQuery<CreditSummaryResponse>({
+    queryKey: ['creditSummary'],
+    queryFn: () => api.getCreditSummary(),
+    // Refresh every 30 s so the cap / balance stays reasonably fresh
+    refetchInterval: 30_000,
+    enabled: !!session?.data,
+  });
+
   useEffect(() => {
     if (account) setAccount(account);
   }, [account, setAccount]);
@@ -50,6 +60,10 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (features) setFeatures(features);
   }, [features, setFeatures]);
+
+  useEffect(() => {
+    setCreditSummary(creditSummary ?? null);
+  }, [creditSummary, setCreditSummary]);
 
   if (session === undefined) {
     // TODO: Add a loading state

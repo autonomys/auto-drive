@@ -35,6 +35,12 @@ export type CreditSummary = {
   maxPurchasableBytes: bigint
   /** True when the user is authenticated via Google OAuth. */
   googleVerified: boolean
+  /**
+   * Number of days after purchase before credits expire.
+   * Driven by the CREDIT_EXPIRY_DAYS environment variable so the frontend
+   * can display the correct duration without a separate API call.
+   */
+  expiryDays: number
 }
 
 const getSummary = async (
@@ -59,6 +65,7 @@ const getSummary = async (
     canPurchase,
     maxPurchasableBytes,
     googleVerified: hasGoogleAuth(user),
+    expiryDays: config.credits.expiryDays,
   }
 }
 

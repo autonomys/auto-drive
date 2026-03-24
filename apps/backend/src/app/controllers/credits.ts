@@ -58,6 +58,7 @@ creditsController.get(
       canPurchase: summary.canPurchase,
       maxPurchasableBytes: summary.maxPurchasableBytes.toString(),
       googleVerified: summary.googleVerified,
+      expiryDays: summary.expiryDays,
     })
   }),
 )

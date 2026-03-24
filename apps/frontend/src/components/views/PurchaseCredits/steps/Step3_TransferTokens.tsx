@@ -40,6 +40,8 @@ export const PurchaseStep3TransferTokens = ({
     isFullyConfirmed,
     isPollingBackend,
     isBackendCompleted,
+    isOverCap,
+    isExpired,
     waitError,
   } = useTransactionConfirmation({
     txHash,
@@ -180,11 +182,26 @@ export const PurchaseStep3TransferTokens = ({
                   </div>
                 </div>
               )}
-              {isFullyConfirmed && (
+              {isFullyConfirmed && !isOverCap && !isExpired && (
                 <div className='text-xs text-muted-foreground'>
                   {isPollingBackend
                     ? 'Waiting for backend to update credits…'
                     : ''}
+                </div>
+              )}
+              {isOverCap && (
+                <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
+                  <strong>Credit cap reached.</strong> Your account has reached
+                  its maximum credit limit. Your payment was received but
+                  credits could not be applied. Please contact support for
+                  assistance.
+                </div>
+              )}
+              {isExpired && (
+                <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
+                  <strong>Payment expired.</strong> The payment window for this
+                  transaction has closed and credits will not be applied. Please
+                  try again or contact support for assistance.
                 </div>
               )}
               {waitError && (
@@ -193,9 +210,9 @@ export const PurchaseStep3TransferTokens = ({
               <div className='flex gap-3'>
                 <Button
                   onClick={() => onNext({ txHash })}
-                  disabled={!isFullyConfirmed || !isBackendCompleted}
+                  disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap || isExpired}
                 >
-                  {isFullyConfirmed && !isBackendCompleted
+                  {isFullyConfirmed && !isBackendCompleted && !isOverCap && !isExpired
                     ? 'Finalizing…'
                     : 'Continue'}
                 </Button>
