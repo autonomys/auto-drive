@@ -155,7 +155,7 @@ export const CreditHistoryView = () => {
   const { account, features } = useUserStore();
 
   const hasBuyCreditsFeature =
-    features.buyCredits && account?.model === AccountModel.OneOff;
+    !!features.buyCredits && account?.model === AccountModel.OneOff;
 
   const purchaseHref = `/${network.id}/drive/purchase`;
 
