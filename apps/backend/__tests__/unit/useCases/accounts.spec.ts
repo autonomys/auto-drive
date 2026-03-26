@@ -273,7 +273,8 @@ describe('AccountsUseCases', () => {
           accountId: 'acc123',
           intentId: 'intent-xyz',
           uploadBytesOriginal: BigInt(500),
-          downloadBytesOriginal: BigInt(500),
+          // Download credits are not allocated on purchase
+          downloadBytesOriginal: 0n,
         }),
         expect.anything(),
       )
