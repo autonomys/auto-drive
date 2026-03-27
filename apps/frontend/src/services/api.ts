@@ -10,8 +10,47 @@ import {
   DownloadStatus,
   Intent,
 } from '@auto-drive/models';
+
+// Wire-format of GET /credits/summary (bigint fields serialised as strings)
+export type CreditSummaryResponse = {
+  uploadBytesRemaining: string;
+  downloadBytesRemaining: string;
+  nextExpiryDate: string | null;
+  batchCount: number;
+  canPurchase: boolean;
+  maxPurchasableBytes: string;
+  googleVerified: boolean;
+  /** Number of days after purchase before credits expire (from CREDIT_EXPIRY_DAYS env var). */
+  expiryDays: number;
+};
+
+// Wire-format of individual rows from GET /credits/batches/expiring
+export type ExpiringCreditBatch = {
+  id: string;
+  accountId: string;
+  intentId: string;
+  uploadBytesOriginal: string;
+  uploadBytesRemaining: string;
+  downloadBytesOriginal: string;
+  downloadBytesRemaining: string;
+  purchasedAt: string;
+  expiresAt: string;
+  expired: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 export interface UploadResponse {
   cid: string;
@@ -86,7 +125,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      throw new ApiError(
+        response.status,
+        `Network response was not ok: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<Intent>;
@@ -622,6 +664,44 @@ export const createApiService = ({
     return (response.json() as Promise<{ status: DownloadStatus }>).then(
       (data) => data.status,
     );
+  },
+  getCreditSummary: async (): Promise<CreditSummaryResponse> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/summary`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<CreditSummaryResponse>;
+  },
+  getExpiringCreditBatches: async (): Promise<ExpiringCreditBatch[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/batches/expiring`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<ExpiringCreditBatch[]>;
   },
   getCreditPrice: async (): Promise<{ price: number; pricePerGB: number }> => {
     const session = await getAuthSession();
