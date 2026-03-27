@@ -2,6 +2,10 @@ import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
   AccountInfo,
   AccountModel,
+  Banner,
+  BannerCriticality,
+  BannerInteractionType,
+  BannerWithStats,
   ObjectInformation,
   DownloadStatus,
   Intent,
@@ -398,6 +402,177 @@ export const createApiService = ({
     }
 
     return api.downloadFile(cid, password);
+  },
+  // Banners
+  getActiveBanners: async (): Promise<Banner[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      return [];
+    }
+
+    const response = await fetch(`${apiBaseUrl}/banners/active`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    return response.json() as Promise<Banner[]>;
+  },
+  interactWithBanner: async (
+    bannerId: string,
+    type: BannerInteractionType,
+  ): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    await fetch(`${apiBaseUrl}/banners/${bannerId}/interact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify({ type }),
+    });
+  },
+  // Admin banner methods
+  getAllBanners: async (): Promise<Banner[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/banners/admin`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get banners: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Banner[]>;
+  },
+  createBanner: async (params: {
+    title: string;
+    body: string;
+    criticality: BannerCriticality;
+    dismissable: boolean;
+    requiresAcknowledgement: boolean;
+    displayStart: string;
+    displayEnd: string | null;
+    active: boolean;
+  }): Promise<Banner> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/banners/admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create banner: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Banner>;
+  },
+  updateBanner: async (
+    bannerId: string,
+    params: {
+      title?: string;
+      body?: string;
+      criticality?: BannerCriticality;
+      dismissable?: boolean;
+      requiresAcknowledgement?: boolean;
+      displayStart?: string;
+      displayEnd?: string | null;
+      active?: boolean;
+    },
+  ): Promise<Banner> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/banners/admin/${bannerId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update banner: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Banner>;
+  },
+  toggleBanner: async (bannerId: string, active: boolean): Promise<Banner> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/banners/admin/${bannerId}/toggle`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+        body: JSON.stringify({ active }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to toggle banner: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Banner>;
+  },
+  getBannerStats: async (bannerId: string): Promise<BannerWithStats> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/banners/admin/${bannerId}/stats`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get banner stats: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<BannerWithStats>;
   },
   createAsyncDownload: async (cid: string): Promise<void> => {
     const session = await getAuthSession();

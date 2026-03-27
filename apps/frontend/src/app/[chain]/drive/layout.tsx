@@ -9,6 +9,7 @@ import { SidebarProvider } from '@/components/molecules/Sidebar';
 import { SideNavbar } from 'frontend/src/components/organisms/SideNavBar';
 import { SessionEnsurer } from '@/components/atoms/SessionEnsurer';
 import { AutomaticLoginWrapper } from '../../../components/atoms/AutomaticLoginWrapper';
+import { BannerNotifications } from '@/components/organisms/BannerNotifications';
 
 export default function AppLayout({
   children,
@@ -26,6 +27,7 @@ export default function AppLayout({
               <SideNavbar networkId={network.id} />
               <div className='flex h-screen flex-1 flex-col rounded-lg bg-background text-foreground'>
                 <TopNavbar networkId={network.id} />
+                <BannerNotifications />
                 <div className='flex flex-1 overflow-hidden'>
                   <main className='flex-1 overflow-auto px-6 pb-6'>
                     <TableRouteChangeListener />
