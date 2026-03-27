@@ -91,8 +91,9 @@ export const BannerForm = ({
   return (
     <form onSubmit={handleSubmit} className='space-y-4'>
       <div>
-        <label className='block text-sm font-medium mb-1'>Title</label>
+        <label htmlFor='banner-title' className='block text-sm font-medium mb-1'>Title</label>
         <input
+          id='banner-title'
           type='text'
           value={form.title}
           onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -102,8 +103,9 @@ export const BannerForm = ({
       </div>
 
       <div>
-        <label className='block text-sm font-medium mb-1'>Body</label>
+        <label htmlFor='banner-body' className='block text-sm font-medium mb-1'>Body</label>
         <textarea
+          id='banner-body'
           value={form.body}
           onChange={(e) => setForm({ ...form, body: e.target.value })}
           className='w-full rounded-md border border-border bg-background px-3 py-2 text-sm'
@@ -113,8 +115,9 @@ export const BannerForm = ({
       </div>
 
       <div>
-        <label className='block text-sm font-medium mb-1'>Criticality</label>
+        <label htmlFor='banner-criticality' className='block text-sm font-medium mb-1'>Criticality</label>
         <select
+          id='banner-criticality'
           value={form.criticality}
           onChange={(e) =>
             setForm({
@@ -163,10 +166,11 @@ export const BannerForm = ({
 
       <div className='flex gap-4'>
         <div className='flex-1'>
-          <label className='block text-sm font-medium mb-1'>
+          <label htmlFor='banner-display-start' className='block text-sm font-medium mb-1'>
             Display Start
           </label>
           <input
+            id='banner-display-start'
             type='datetime-local'
             value={form.displayStart}
             onChange={(e) =>
@@ -177,10 +181,11 @@ export const BannerForm = ({
           />
         </div>
         <div className='flex-1'>
-          <label className='block text-sm font-medium mb-1'>
+          <label htmlFor='banner-display-end' className='block text-sm font-medium mb-1'>
             Display End (optional)
           </label>
           <input
+            id='banner-display-end'
             type='datetime-local'
             value={form.displayEnd}
             onChange={(e) => setForm({ ...form, displayEnd: e.target.value })}
