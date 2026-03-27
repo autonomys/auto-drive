@@ -139,7 +139,7 @@ describe('BannersUseCases — admin user can perform admin operations', () => {
     const banners = [makeBanner(), makeBanner()]
     jest
       .spyOn(bannersRepository, 'getAllBanners')
-      .mockResolvedValue(banners as any)
+      .mockResolvedValue(banners)
 
     const result = await BannersUseCases.getAllBanners(adminUser)
     expect(result.isOk()).toBe(true)
@@ -150,7 +150,7 @@ describe('BannersUseCases — admin user can perform admin operations', () => {
     const banner = makeBanner()
     jest
       .spyOn(bannersRepository, 'createBanner')
-      .mockResolvedValue(banner as any)
+      .mockResolvedValue(banner)
 
     const result = await BannersUseCases.createBanner(adminUser, CREATE_PARAMS)
     expect(result.isOk()).toBe(true)
@@ -161,7 +161,7 @@ describe('BannersUseCases — admin user can perform admin operations', () => {
     const banner = makeBanner({ title: 'Updated' })
     jest
       .spyOn(bannersRepository, 'updateBanner')
-      .mockResolvedValue(banner as any)
+      .mockResolvedValue(banner)
 
     const result = await BannersUseCases.updateBanner(adminUser, banner.id, {
       title: 'Updated',
@@ -174,7 +174,7 @@ describe('BannersUseCases — admin user can perform admin operations', () => {
     const stats = { ...makeBanner(), acknowledgementCount: 3, dismissalCount: 1 }
     jest
       .spyOn(bannersRepository, 'getBannerWithStats')
-      .mockResolvedValue(stats as any)
+      .mockResolvedValue(stats)
 
     const result = await BannersUseCases.getBannerWithStats(adminUser, stats.id)
     expect(result.isOk()).toBe(true)
@@ -223,7 +223,7 @@ describe('BannersUseCases.recordInteraction', () => {
     const banner = makeBanner({ dismissable: false })
     jest
       .spyOn(bannersRepository, 'getBannerById')
-      .mockResolvedValue(banner as any)
+      .mockResolvedValue(banner)
 
     const result = await BannersUseCases.recordInteraction(
       user,
@@ -238,7 +238,7 @@ describe('BannersUseCases.recordInteraction', () => {
     const banner = makeBanner({ requiresAcknowledgement: false })
     jest
       .spyOn(bannersRepository, 'getBannerById')
-      .mockResolvedValue(banner as any)
+      .mockResolvedValue(banner)
 
     const result = await BannersUseCases.recordInteraction(
       user,
@@ -253,7 +253,7 @@ describe('BannersUseCases.recordInteraction', () => {
     const banner = makeBanner({ dismissable: true })
     jest
       .spyOn(bannersRepository, 'getBannerById')
-      .mockResolvedValue(banner as any)
+      .mockResolvedValue(banner)
     jest
       .spyOn(bannersRepository, 'createInteraction')
       .mockResolvedValue(null)
@@ -270,7 +270,7 @@ describe('BannersUseCases.recordInteraction', () => {
     const banner = makeBanner({ requiresAcknowledgement: true })
     jest
       .spyOn(bannersRepository, 'getBannerById')
-      .mockResolvedValue(banner as any)
+      .mockResolvedValue(banner)
     jest
       .spyOn(bannersRepository, 'createInteraction')
       .mockResolvedValue(null)
