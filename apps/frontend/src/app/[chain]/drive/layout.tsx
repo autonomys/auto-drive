@@ -28,7 +28,7 @@ export default function AppLayout({
               <SideNavbar networkId={network.id} />
               <div className='flex h-screen flex-1 flex-col rounded-lg bg-background text-foreground'>
                 <TopNavbar networkId={network.id} />
-                <div className='flex flex-col gap-2 px-6 pt-4 empty:hidden'>
+                <div className='flex flex-col gap-2 px-6 pt-4 pb-4 empty:hidden'>
                   <BannerNotifications />
                   <ExpiryWarningBanner />
                 </div>

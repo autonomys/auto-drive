@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Banner, BannerCriticality } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
+import { useBannerStore } from 'globalStates/banners';
 import { BannerForm, BannerFormData } from './BannerForm';
 
 const criticalityBadge: Record<BannerCriticality, string> = {
@@ -16,6 +17,7 @@ const criticalityBadge: Record<BannerCriticality, string> = {
 
 export const BannerAdmin = () => {
   const { api } = useNetwork();
+  const { setBanners: setActiveBanners } = useBannerStore();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +30,14 @@ export const BannerAdmin = () => {
       const result = await api.getAllBanners();
       setBanners(result);
       setError(null);
+      // Also refresh the active banners shown in the notification area
+      api.getActiveBanners().then(setActiveBanners).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load banners');
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, setActiveBanners]);
 
   useEffect(() => {
     fetchBanners();
