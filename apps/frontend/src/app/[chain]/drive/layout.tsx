@@ -28,11 +28,13 @@ export default function AppLayout({
               <SideNavbar networkId={network.id} />
               <div className='flex h-screen flex-1 flex-col rounded-lg bg-background text-foreground'>
                 <TopNavbar networkId={network.id} />
-                <BannerNotifications />
+                <div className='flex flex-col gap-2 px-6 pt-4 empty:hidden'>
+                  <BannerNotifications />
+                  <ExpiryWarningBanner />
+                </div>
                 <div className='flex flex-1 overflow-hidden'>
                   <main className='flex-1 overflow-auto px-6 pb-6'>
                     <TableRouteChangeListener />
-                    <ExpiryWarningBanner />
                     {children}
                   </main>
                 </div>

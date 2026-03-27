@@ -36,7 +36,7 @@ export const BannerNotifications = () => {
   if (banners.length === 0) return null;
 
   return (
-    <div className='flex flex-col gap-2 px-6 pt-4'>
+    <>
       {banners.map((banner) => (
         <BannerItem
           key={banner.id}
@@ -44,6 +44,6 @@ export const BannerNotifications = () => {
           onInteract={handleInteract}
         />
       ))}
-    </div>
+    </>
   );
 };
