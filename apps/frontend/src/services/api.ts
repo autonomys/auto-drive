@@ -474,15 +474,24 @@ export const createApiService = ({
       throw new Error('No session');
     }
 
-    await fetch(`${apiBaseUrl}/banners/${bannerId}/interact`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
+    const response = await fetch(
+      `${apiBaseUrl}/banners/${bannerId}/interact`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+        body: JSON.stringify({ type }),
       },
-      body: JSON.stringify({ type }),
-    });
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to interact with banner: ${response.statusText}`,
+      );
+    }
   },
   // Admin banner methods
   getAllBanners: async (): Promise<Banner[]> => {
