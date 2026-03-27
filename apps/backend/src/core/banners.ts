@@ -117,8 +117,15 @@ const updateBanner = async (
   }
 
   const banner = await bannersRepository.updateBanner(bannerId, params)
-  if (!banner) {
-    return err(new NotFoundError('Banner not found'))
+  if (banner === null) {
+    // updateBanner returns null both when no fields were provided and when
+    // the banner doesn't exist.  Disambiguate by checking existence.
+    const existing = await bannersRepository.getBannerById(bannerId)
+    if (!existing) {
+      return err(new NotFoundError('Banner not found'))
+    }
+    // Banner exists but no fields to update — return it unchanged.
+    return ok(existing)
   }
 
   return ok(banner)
