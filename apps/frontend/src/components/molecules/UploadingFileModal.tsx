@@ -4,6 +4,7 @@ import { Button } from '@auto-drive/ui';
 import { useEncryptionStore } from 'globalStates/encryption';
 import { useNetwork } from 'contexts/network';
 import { useFileTableState } from '@/components/organisms/FileTable/state';
+import { useRuntimeConfig } from '@/config/RuntimeConfigProvider';
 
 type FileProgress = {
   progress: number;
@@ -14,11 +15,6 @@ type FileProgress = {
   errorMessage?: string;
 };
 
-// Maximum number of files allowed to upload at once
-const MAX_FILES_LIMIT = parseInt(
-  process.env.NEXT_PUBLIC_MAX_FILES_LIMIT || '10',
-);
-
 export const UploadingFileModal = ({
   files,
   onClose,
@@ -28,6 +24,7 @@ export const UploadingFileModal = ({
   password?: string;
   compress?: boolean;
 }) => {
+  const { maxFilesLimit } = useRuntimeConfig();
   const [fileProgresses, setFileProgresses] = useState<FileProgress[]>([]);
   const [overallProgress, setOverallProgress] = useState(0);
   const [password, setPassword] = useState<string>();
@@ -59,7 +56,7 @@ export const UploadingFileModal = ({
 
   // Check if too many files are selected
   useEffect(() => {
-    if (files && files.length > MAX_FILES_LIMIT) {
+    if (files && files.length > maxFilesLimit) {
       setTooManyFiles(true);
     } else {
       setTooManyFiles(false);
@@ -74,7 +71,7 @@ export const UploadingFileModal = ({
       return;
     }
 
-    if (files.length <= MAX_FILES_LIMIT) {
+    if (files.length <= maxFilesLimit) {
       const initialProgresses = files.map((file) => ({
         progress: 0,
         fileName: file.name,
@@ -89,7 +86,7 @@ export const UploadingFileModal = ({
     async (password: string | undefined) => {
       if (!files || files.length === 0) return;
       // Don't proceed if too many files
-      if (files.length > MAX_FILES_LIMIT) {
+      if (files.length > maxFilesLimit) {
         return;
       }
 
@@ -212,7 +209,7 @@ export const UploadingFileModal = ({
                   Too many files selected
                 </div>
                 <div className='text-foreground-hover mb-6 text-center text-sm'>
-                  You can upload a maximum of {MAX_FILES_LIMIT} files at once.
+                  You can upload a maximum of {maxFilesLimit} files at once.
                   Please select fewer files and try again.
                 </div>
                 <div className='flex justify-center'>

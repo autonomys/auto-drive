@@ -1,5 +1,5 @@
 import { MaybeUser } from '@auto-drive/models';
-import { API_BASE_URL } from 'services/auth/config';
+import { getApiBaseUrl } from 'services/auth/config';
 
 export const checkAuth = async (
   provider?: string,
@@ -9,7 +9,7 @@ export const checkAuth = async (
     throw new Error('Provider or token is not defined');
   }
 
-  const response = await fetch(`${API_BASE_URL}/users/@me`, {
+  const response = await fetch(`${getApiBaseUrl()}/users/@me`, {
     headers: {
       Authorization: `Bearer ${token}`,
       'X-Auth-Provider': provider,
