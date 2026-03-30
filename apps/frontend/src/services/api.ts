@@ -750,7 +750,7 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      return { accepted: true, currentVersion: null, pendingVersion: null };
+      throw new Error(`Failed to fetch ToU status: ${response.statusText}`);
     }
 
     return response.json() as Promise<TouStatus>;

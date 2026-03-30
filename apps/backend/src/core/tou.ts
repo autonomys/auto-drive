@@ -258,6 +258,10 @@ const promoteToPending = async (
     TouVersionStatus.Pending,
   )
 
+  if (!promoted) {
+    return err(new NotFoundError('ToU version not found after update'))
+  }
+
   if (version.changeType === TouChangeType.Material) {
     await bannersRepository.createBanner({
       title: `Terms of Use Update (${version.versionLabel})`,
@@ -285,7 +289,7 @@ const promoteToPending = async (
     adminId: executor.publicId,
   })
 
-  return ok(promoted!)
+  return ok(promoted)
 }
 
 // ---------------------------------------------------------------------------
@@ -315,12 +319,16 @@ const activateVersion = async (
 
   const activated = await touRepository.activateVersionTransactional(id)
 
+  if (!activated) {
+    return err(new NotFoundError('ToU version not found after activation'))
+  }
+
   logger.info('ToU version %s manually activated', version.versionLabel, {
     id,
     adminId: executor.publicId,
   })
 
-  return ok(activated!)
+  return ok(activated)
 }
 
 // ---------------------------------------------------------------------------
@@ -358,12 +366,16 @@ const archiveVersion = async (
     TouVersionStatus.Archived,
   )
 
+  if (!archived) {
+    return err(new NotFoundError('ToU version not found after archival'))
+  }
+
   logger.info('ToU version %s archived', version.versionLabel, {
     id,
     adminId: executor.publicId,
   })
 
-  return ok(archived!)
+  return ok(archived)
 }
 
 // ---------------------------------------------------------------------------
