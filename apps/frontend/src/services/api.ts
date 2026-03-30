@@ -874,7 +874,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to promote ToU version: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to promote ToU version: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<TouVersion>;

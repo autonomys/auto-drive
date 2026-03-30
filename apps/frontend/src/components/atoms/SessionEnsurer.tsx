@@ -27,15 +27,20 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
 
     if (session.data === null) {
       setUser(null);
+      setTouStatus(null);
     } else {
-      AuthService.getMe().then((user) => {
-        if (user.onboarded) {
-          setUser(user);
-        } else {
+      AuthService.getMe()
+        .then((user) => {
+          if (user.onboarded) {
+            setUser(user);
+          } else {
+            setUser(null);
+            router.push('/onboarding');
+          }
+        })
+        .catch(() => {
           setUser(null);
-          router.push('/onboarding');
-        }
-      });
+        });
     }
   }, [api, router, session, session?.data, setAccount, setUser]);
 
@@ -87,6 +92,7 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (
+    session?.data &&
     touStatus &&
     !touStatus.accepted &&
     touStatus.currentVersion?.changeType === TouChangeType.Material

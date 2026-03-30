@@ -36,7 +36,7 @@ export const TouAcceptanceInterstitial = ({
   }, []);
 
   return (
-    <div className='flex h-screen flex-col items-center justify-center bg-background'>
+    <div className='flex h-screen w-screen flex-col items-center justify-center bg-background'>
       <header className='mb-8 flex flex-col items-center justify-between gap-4 md:flex-row md:gap-0'>
         <div className='flex items-center space-x-2 text-foreground'>
           <AutonomysSymbol />

@@ -7,6 +7,7 @@ import {
   TouVersionStatus,
 } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
+import { useQueryClient } from '@tanstack/react-query';
 import { TouVersionForm, TouVersionFormData } from './TouVersionForm';
 
 const statusBadge: Record<TouVersionStatus, string> = {
@@ -29,6 +30,7 @@ const changeTypeBadge: Record<TouChangeType, string> = {
 
 export const TouAdmin = () => {
   const { api } = useNetwork();
+  const queryClient = useQueryClient();
   const [versions, setVersions] = useState<TouVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +95,7 @@ export const TouAdmin = () => {
     async (id: string) => {
       try {
         await api.promoteTouVersion(id);
+        queryClient.invalidateQueries({ queryKey: ['touStatus'] });
         fetchVersions();
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to promote';
@@ -115,6 +118,7 @@ export const TouAdmin = () => {
         promoteOverride.reason,
       );
       setPromoteOverride(null);
+      queryClient.invalidateQueries({ queryKey: ['touStatus'] });
       fetchVersions();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to promote');
@@ -125,6 +129,7 @@ export const TouAdmin = () => {
     async (id: string) => {
       try {
         await api.activateTouVersion(id);
+        queryClient.invalidateQueries({ queryKey: ['touStatus'] });
         fetchVersions();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to activate');
@@ -137,6 +142,7 @@ export const TouAdmin = () => {
     async (id: string) => {
       try {
         await api.archiveTouVersion(id);
+        queryClient.invalidateQueries({ queryKey: ['touStatus'] });
         fetchVersions();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to archive');
