@@ -74,6 +74,22 @@ export class ForbiddenError extends HttpError {
   }
 }
 
+export class NotFoundError extends HttpError {
+  static readonly statusCode = 404
+  constructor(message: string) {
+    super(NotFoundError.statusCode, message)
+    this.name = 'NotFoundError'
+  }
+}
+
+export class BadRequestError extends HttpError {
+  static readonly statusCode = 400
+  constructor(message: string) {
+    super(BadRequestError.statusCode, message)
+    this.name = 'BadRequestError'
+  }
+}
+
 // 409 Conflict — request is valid but the resource is in the wrong state for
 // the operation (e.g. trying to reprocess an intent that is not OVER_CAP).
 export class ConflictError extends HttpError {
