@@ -268,7 +268,7 @@ const promoteToPending = async (
       body:
         'Updated Terms of Use take effect on ' +
         `${version.effectiveDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. ` +
-        `Review the changes: ${version.contentUrl}`,
+        'You will be asked to review and accept the changes when they take effect.',
       criticality: BannerCriticality.Warning,
       dismissable: true,
       requiresAcknowledgement: false,
