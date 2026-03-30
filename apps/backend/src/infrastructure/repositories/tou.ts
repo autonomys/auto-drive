@@ -106,18 +106,6 @@ const ensureActiveVersion = async (): Promise<TouVersion | null> => {
 }
 
 // ---------------------------------------------------------------------------
-// getActiveVersion
-// ---------------------------------------------------------------------------
-
-const getActiveVersion = async (): Promise<TouVersion | null> => {
-  const db = await getDatabase()
-  const result = await db.query<DBTouVersion>(
-    'SELECT * FROM tou_versions WHERE status = \'active\' LIMIT 1',
-  )
-  return result.rows[0] ? mapVersionRow(result.rows[0]) : null
-}
-
-// ---------------------------------------------------------------------------
 // getPendingVersion
 // ---------------------------------------------------------------------------
 
@@ -366,7 +354,6 @@ const getVersionWithStats = async (
 
 export const touRepository = {
   ensureActiveVersion,
-  getActiveVersion,
   getPendingVersion,
   getVersionById,
   getAllVersions,

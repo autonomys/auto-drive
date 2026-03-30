@@ -64,7 +64,7 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
     enabled: !!session?.data,
   });
 
-  const { data: touStatusData } = useQuery({
+  const { data: touStatusData, isLoading: touStatusLoading } = useQuery({
     queryKey: ['touStatus'],
     queryFn: () => api.getTouStatus(),
     enabled: !!session?.data,
@@ -88,6 +88,10 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
 
   if (session === undefined) {
     // TODO: Add a loading state
+    return <div>Loading...</div>;
+  }
+
+  if (session?.data && touStatusLoading) {
     return <div>Loading...</div>;
   }
 
