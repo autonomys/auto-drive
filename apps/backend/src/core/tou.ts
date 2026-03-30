@@ -313,18 +313,7 @@ const activateVersion = async (
     )
   }
 
-  const currentActive = await touRepository.getActiveVersion()
-  if (currentActive) {
-    await touRepository.updateVersionStatus(
-      currentActive.id,
-      TouVersionStatus.Archived,
-    )
-  }
-
-  const activated = await touRepository.updateVersionStatus(
-    id,
-    TouVersionStatus.Active,
-  )
+  const activated = await touRepository.activateVersionTransactional(id)
 
   logger.info('ToU version %s manually activated', version.versionLabel, {
     id,
@@ -411,10 +400,7 @@ const getVersionWithStats = async (
     return err(new NotFoundError('ToU version not found'))
   }
 
-  return ok({
-    ...stats,
-    totalActiveUsers: 0,
-  })
+  return ok(stats)
 }
 
 export const TouUseCases = {

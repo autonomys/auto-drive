@@ -408,38 +408,20 @@ describe('TouUseCases.activateVersion', () => {
     expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
   })
 
-  it('archives current active version and activates pending', async () => {
+  it('activates pending version via transactional method', async () => {
     const pending = makeVersion({ status: TouVersionStatus.Pending })
-    const currentActive = makeVersion({ status: TouVersionStatus.Active })
     const activated = makeVersion({
       ...pending,
       status: TouVersionStatus.Active,
     })
     jest.spyOn(touRepository, 'getVersionById').mockResolvedValue(pending)
-    jest
-      .spyOn(touRepository, 'getActiveVersion')
-      .mockResolvedValue(currentActive)
-    const statusSpy = jest
-      .spyOn(touRepository, 'updateVersionStatus')
-      .mockResolvedValueOnce(
-        makeVersion({
-          ...currentActive,
-          status: TouVersionStatus.Archived,
-        }),
-      )
-      .mockResolvedValueOnce(activated)
+    const activateSpy = jest
+      .spyOn(touRepository, 'activateVersionTransactional')
+      .mockResolvedValue(activated)
 
     const result = await TouUseCases.activateVersion(adminUser, pending.id)
     expect(result.isOk()).toBe(true)
-    expect(statusSpy).toHaveBeenCalledTimes(2)
-    expect(statusSpy).toHaveBeenCalledWith(
-      currentActive.id,
-      TouVersionStatus.Archived,
-    )
-    expect(statusSpy).toHaveBeenCalledWith(
-      pending.id,
-      TouVersionStatus.Active,
-    )
+    expect(activateSpy).toHaveBeenCalledWith(pending.id)
   })
 })
 

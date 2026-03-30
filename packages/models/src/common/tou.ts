@@ -33,7 +33,6 @@ export type TouAcceptance = {
 
 export type TouVersionWithStats = TouVersion & {
   acceptanceCount: number
-  totalActiveUsers: number
 }
 
 export type TouStatus = {

@@ -261,6 +261,39 @@ const updateVersionStatus = async (
 }
 
 // ---------------------------------------------------------------------------
+// activateVersionTransactional — atomically archive current active + activate
+// ---------------------------------------------------------------------------
+
+const activateVersionTransactional = async (
+  id: string,
+): Promise<TouVersion | null> => {
+  const pool = await getDatabase()
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+
+    await client.query(
+      `UPDATE tou_versions SET status = 'archived', updated_at = NOW()
+       WHERE status = 'active'`,
+    )
+
+    const result = await client.query<DBTouVersion>(
+      `UPDATE tou_versions SET status = 'active', updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id],
+    )
+
+    await client.query('COMMIT')
+    return result.rows[0] ? mapVersionRow(result.rows[0]) : null
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
+}
+
+// ---------------------------------------------------------------------------
 // hasUserAcceptedVersion
 // ---------------------------------------------------------------------------
 
@@ -340,6 +373,7 @@ export const touRepository = {
   createVersion,
   updateVersion,
   updateVersionStatus,
+  activateVersionTransactional,
   hasUserAcceptedVersion,
   createAcceptance,
   getVersionWithStats,
