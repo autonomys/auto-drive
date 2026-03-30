@@ -227,6 +227,32 @@ const handleFolderUploadFinalization = async (
     uploadId,
     user.oauthUserId,
   )
+
+  // Credit guard: verify the user has a non-negative credit balance before
+  // finalising the folder DAG structure.
+  //
+  // NOTE: Each child file upload is individually finalised via
+  // handleFileUploadFinalization, which calls registerInteraction and deducts
+  // the file's bytes from the user's credit pool. By the time this function
+  // runs, all child credit deductions have already been committed.
+  //
+  // The folder root itself is a small IPLD directory node whose
+  // metadata.totalSize equals the SUM of its children's totalSize values — it
+  // carries no independent byte cost beyond what the children already paid for.
+  // Calling registerInteraction(metadata.totalSize) here would therefore
+  // double-charge the user for all folder content, which is incorrect.
+  //
+  // Instead we perform a guard-only check: if the balance has somehow gone
+  // negative (which should never happen under normal operation) we surface the
+  // error early rather than silently producing an inconsistent folder object.
+  const pendingCredits = await AccountsUseCases.getPendingCreditsByUserAndType(
+    user,
+    InteractionType.Upload,
+  )
+  if (pendingCredits < 0) {
+    throw new Error('Insufficient upload credits')
+  }
+
   const { metadata, childrenArtifacts } =
     await UploadArtifactsUseCase.generateFolderArtifacts(uploadId)
 
