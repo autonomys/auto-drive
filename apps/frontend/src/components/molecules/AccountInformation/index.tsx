@@ -68,9 +68,7 @@ export const AccountInformation = ({
         </p>
       )}
 
-      {/* Purchased credits — only rendered when the user has active purchased
-          credits (i.e. hasBuyCreditsFeature AND uploadBytesRemaining > 0).
-          Invisible to all other account types and feature-flag states. */}
+      {/* Purchased credits — rendered when the user has remaining balance. */}
       {hasPurchasedCredits && (
         <div className='border-t border-border pt-2'>
           <div className='text-xs text-muted-foreground'>Purchased credits</div>
@@ -84,14 +82,16 @@ export const AccountInformation = ({
               </span>
             )}
           </div>
-          {creditHistoryHref && (
-            <Link
-              href={creditHistoryHref}
-              className='mt-1 block text-xs text-primary hover:underline'
-            >
-              View history →
-            </Link>
-          )}
+        </div>
+      )}
+      {creditHistoryHref && (
+        <div className={hasPurchasedCredits ? '' : 'border-t border-border pt-2'}>
+          <Link
+            href={creditHistoryHref}
+            className='mt-1 block text-xs text-primary hover:underline'
+          >
+            View history →
+          </Link>
         </div>
       )}
     </div>
