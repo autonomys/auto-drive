@@ -169,6 +169,33 @@ export const TouAdmin = () => {
         )}
       </div>
 
+      <div className='rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground'>
+        <p className='mb-2 font-medium text-foreground'>How it works</p>
+        <ol className='ml-4 list-decimal space-y-1'>
+          <li>
+            <strong>Create</strong> a new version as a draft with a version
+            label, effective date, and a link to the full terms.
+          </li>
+          <li>
+            <strong>Promote</strong> the draft to pending. Material changes
+            require 30 days advance notice (a banner is created automatically).
+            Only one version can be pending at a time.
+          </li>
+          <li>
+            <strong>Activate</strong> manually, or let it activate automatically
+            when the effective date arrives. The previous active version is
+            archived.
+          </li>
+        </ol>
+        <p className='mt-3'>
+          <strong>Material</strong> changes require users to re-accept via a
+          full-screen interstitial before they can continue. Users who sign up
+          while a version is active accept it automatically during onboarding.{' '}
+          <strong>Non-material</strong> changes are recorded but do not require
+          re-acceptance.
+        </p>
+      </div>
+
       {error && (
         <div className='rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/40 dark:text-red-300'>
           {error}
