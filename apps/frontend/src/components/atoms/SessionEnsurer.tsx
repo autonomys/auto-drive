@@ -61,7 +61,9 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
     queryFn: () => api.getCreditSummary(),
     // Refresh every 30 s so the cap / balance stays reasonably fresh
     refetchInterval: 30_000,
-    enabled: !!session?.data,
+    // Only fetch when the buyCredits feature flag is enabled – the backend
+    // returns 404 for these endpoints when the flag is off.
+    enabled: !!session?.data && !!features?.buyCredits,
   });
 
   const { data: touStatusData, isLoading: touStatusLoading } = useQuery({

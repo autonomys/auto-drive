@@ -11,6 +11,7 @@ import {
   sumExpiringUploadBytes,
 } from '../../utils/credits';
 import { BannerShell } from '../organisms/BannerNotifications/BannerShell';
+import { useUserStore } from '../../globalStates/user';
 
 /**
  * Displays a warning banner when the user has purchased credits that will
@@ -20,13 +21,16 @@ import { BannerShell } from '../organisms/BannerNotifications/BannerShell';
 export const ExpiryWarningBanner = () => {
   const { api } = useNetwork();
   const session = useContext(SessionContext);
+  const features = useUserStore((m) => m.features);
 
   const { data: expiringBatches } = useQuery<ExpiringCreditBatch[]>({
     queryKey: ['expiringCreditBatches'],
     queryFn: () => api.getExpiringCreditBatches(),
     // Refresh every 5 minutes – expiry warnings don't need to be real-time
     refetchInterval: 5 * 60 * 1000,
-    enabled: !!session?.data,
+    // Only fetch when the buyCredits feature flag is enabled – the backend
+    // returns 404 for these endpoints when the flag is off.
+    enabled: !!session?.data && !!features?.buyCredits,
   });
 
   if (!expiringBatches || expiringBatches.length === 0) return null;
