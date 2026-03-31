@@ -82,8 +82,19 @@ export const DeletionAdmin = () => {
 
   return (
     <div className='flex flex-col gap-6 p-2'>
-      <div className='flex items-center justify-between'>
+      <div>
         <h1 className='text-2xl font-bold'>Account Deletions</h1>
+        <p className='mt-2 text-sm text-gray-600 dark:text-gray-400'>
+          Users may request account deletion for GDPR/CCPA compliance. Once
+          requested, a 30-day grace period begins during which the user can
+          cancel. After the grace period, a background worker anonymises
+          their data: object ownership is soft-deleted, purchased credits and
+          pending intents are expired, and PII (username, avatar) is replaced
+          with a hashed placeholder. Data already stored on the DSN cannot be
+          removed. All actions are recorded in the audit log.
+        </p>
+      </div>
+      <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           <label
             htmlFor='deletion-status-filter'
