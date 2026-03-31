@@ -5,14 +5,39 @@ import { Button, Checkbox } from '@headlessui/react';
 import { CheckIcon } from 'lucide-react';
 import { AuthService } from 'services/auth/auth';
 import { Disclaimer } from '@/components/atoms/Disclaimer';
-import { ROUTES, AutonomysSymbol } from '@auto-drive/ui';
+import {
+  ROUTES,
+  AutonomysSymbol,
+  defaultNetworkId,
+  getNetwork,
+} from '@auto-drive/ui';
+import { getAuthSession } from 'utils/auth';
+
+const acceptTouAfterOnboarding = async () => {
+  try {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) return;
+    const network = getNetwork(defaultNetworkId);
+    await fetch(`${network.http}/tou/accept`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+  } catch {
+    // Best-effort: if ToU acceptance fails here, the interstitial will catch it
+  }
+};
 
 export const Onboarding = () => {
   const [accepted, setAccepted] = useState(false);
 
   const onboardUser = useCallback(async () => {
     AuthService.onboardUser()
-      .then(() => {
+      .then(async () => {
+        await acceptTouAfterOnboarding();
         window.location.assign(ROUTES.drive());
       })
       .catch((error) => {

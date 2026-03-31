@@ -2,12 +2,83 @@ import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
   AccountInfo,
   AccountModel,
+  Banner,
+  BannerCriticality,
+  BannerInteractionType,
+  BannerWithStats,
   ObjectInformation,
   DownloadStatus,
   Intent,
+  TouChangeType,
+  TouStatus,
+  TouVersion,
+  TouVersionWithStats,
 } from '@auto-drive/models';
+
+// Wire-format of GET /credits/summary (bigint fields serialised as strings)
+export type CreditSummaryResponse = {
+  uploadBytesRemaining: string;
+  downloadBytesRemaining: string;
+  nextExpiryDate: string | null;
+  batchCount: number;
+  canPurchase: boolean;
+  maxPurchasableBytes: string;
+  googleVerified: boolean;
+  /** Number of days after purchase before credits expire (from CREDIT_EXPIRY_DAYS env var). */
+  expiryDays: number;
+};
+
+// Wire-format of individual rows from GET /credits/batches/expiring
+export type ExpiringCreditBatch = {
+  id: string;
+  accountId: string;
+  intentId: string;
+  uploadBytesOriginal: string;
+  uploadBytesRemaining: string;
+  downloadBytesOriginal: string;
+  downloadBytesRemaining: string;
+  purchasedAt: string;
+  expiresAt: string;
+  expired: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// Wire-format of rows from GET /credits/batches/all (admin endpoint).
+// Extends ExpiringCreditBatch with the owner's userPublicId.
+export type AdminCreditBatch = ExpiringCreditBatch & {
+  userPublicId: string;
+};
+
+// Wire-format of GET /credits/economics (admin)
+export type CreditEconomicsResponse = {
+  totalExpiringWithin30Days: number;
+  totalExpiringUploadBytes: string;
+  totalExpiringDownloadBytes: string;
+};
+
+// Wire-format of rows from GET /intents/over-cap (admin)
+export type OverCapIntent = {
+  id: string;
+  userPublicId: string;
+  status: string;
+  txHash?: string;
+  paymentAmount?: string;
+  shannonsPerByte: string;
+  expiresAt?: string;
+};
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 export interface UploadResponse {
   cid: string;
@@ -82,7 +153,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      throw new ApiError(
+        response.status,
+        `Network response was not ok: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<Intent>;
@@ -399,6 +473,186 @@ export const createApiService = ({
 
     return api.downloadFile(cid, password);
   },
+  // Banners
+  getActiveBanners: async (): Promise<Banner[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      return [];
+    }
+
+    const response = await fetch(`${apiBaseUrl}/banners/active`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    return response.json() as Promise<Banner[]>;
+  },
+  interactWithBanner: async (
+    bannerId: string,
+    type: BannerInteractionType,
+  ): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/banners/${bannerId}/interact`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+        body: JSON.stringify({ type }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to interact with banner: ${response.statusText}`,
+      );
+    }
+  },
+  // Admin banner methods
+  getAllBanners: async (): Promise<Banner[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/banners/admin`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get banners: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Banner[]>;
+  },
+  createBanner: async (params: {
+    title: string;
+    body: string;
+    criticality: BannerCriticality;
+    dismissable: boolean;
+    requiresAcknowledgement: boolean;
+    displayStart: string;
+    displayEnd: string | null;
+    active: boolean;
+  }): Promise<Banner> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/banners/admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create banner: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Banner>;
+  },
+  updateBanner: async (
+    bannerId: string,
+    params: {
+      title?: string;
+      body?: string;
+      criticality?: BannerCriticality;
+      dismissable?: boolean;
+      requiresAcknowledgement?: boolean;
+      displayStart?: string;
+      displayEnd?: string | null;
+      active?: boolean;
+    },
+  ): Promise<Banner> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/banners/admin/${bannerId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update banner: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Banner>;
+  },
+  toggleBanner: async (bannerId: string, active: boolean): Promise<Banner> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/banners/admin/${bannerId}/toggle`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+        body: JSON.stringify({ active }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to toggle banner: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Banner>;
+  },
+  getBannerStats: async (bannerId: string): Promise<BannerWithStats> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/banners/admin/${bannerId}/stats`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get banner stats: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<BannerWithStats>;
+  },
   createAsyncDownload: async (cid: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
@@ -448,6 +702,63 @@ export const createApiService = ({
       (data) => data.status,
     );
   },
+  getCreditSummary: async (): Promise<CreditSummaryResponse> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/summary`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<CreditSummaryResponse>;
+  },
+  getCreditBatches: async (): Promise<ExpiringCreditBatch[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/batches`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<ExpiringCreditBatch[]>;
+  },
+  getExpiringCreditBatches: async (): Promise<ExpiringCreditBatch[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/batches/expiring`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<ExpiringCreditBatch[]>;
+  },
   getCreditPrice: async (): Promise<{ price: number; pricePerGB: number }> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
@@ -466,5 +777,318 @@ export const createApiService = ({
     }
 
     return response.json();
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: all credit batches across all users
+  // -------------------------------------------------------------------------
+
+  getAdminCreditBatches: async (): Promise<AdminCreditBatch[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/batches/all`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<AdminCreditBatch[]>;
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: system-wide credit economics summary
+  // -------------------------------------------------------------------------
+
+  getCreditEconomics: async (): Promise<CreditEconomicsResponse> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/economics`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<CreditEconomicsResponse>;
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: list OVER_CAP intents
+  // -------------------------------------------------------------------------
+
+  getOverCapIntents: async (): Promise<OverCapIntent[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/intents/over-cap`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<OverCapIntent[]>;
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: reprocess a single OVER_CAP intent
+  // -------------------------------------------------------------------------
+
+  reprocessIntent: async (intentId: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/intents/${intentId}/reprocess`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+  },
+
+  // Terms of Use
+  getTouStatus: async (): Promise<TouStatus> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      return { accepted: true, currentVersion: null, pendingVersion: null };
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/status`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ToU status: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<TouStatus>;
+  },
+  acceptTou: async (): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/accept`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to accept ToU: ${response.statusText}`);
+    }
+  },
+  // Admin ToU methods
+  getAllTouVersions: async (): Promise<TouVersion[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get ToU versions: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<TouVersion[]>;
+  },
+  createTouVersion: async (params: {
+    versionLabel: string;
+    effectiveDate: string;
+    contentUrl: string;
+    changeType: TouChangeType;
+    adminNotes?: string;
+  }): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create ToU version: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  updateTouVersion: async (
+    id: string,
+    params: {
+      versionLabel?: string;
+      effectiveDate?: string;
+      contentUrl?: string;
+      changeType?: TouChangeType;
+      adminNotes?: string | null;
+    },
+  ): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update ToU version: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  promoteTouVersion: async (
+    id: string,
+    overrideNotice?: boolean,
+    overrideReason?: string,
+  ): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}/promote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify({ overrideNotice, overrideReason }),
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to promote ToU version: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  activateTouVersion: async (id: string): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}/activate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to activate ToU version: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  archiveTouVersion: async (id: string): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}/archive`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to archive ToU version: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  getTouVersionStats: async (id: string): Promise<TouVersionWithStats> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}/stats`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get ToU version stats: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<TouVersionWithStats>;
   },
 });

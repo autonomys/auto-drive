@@ -6,6 +6,8 @@ import {
   UserIcon,
   CodeXmlIcon,
   SettingsIcon,
+  MegaphoneIcon,
+  FileTextIcon,
 } from 'lucide-react';
 import { NetworkId, ROUTES } from '@auto-drive/ui';
 import { SidebarSection } from './SideNavBarContent';
@@ -69,6 +71,18 @@ export const SIDEBAR_DEFINITION: SidebarSection[] = [
         href: (networkId: NetworkId) => ROUTES.admin(networkId),
         icon: SettingsIcon,
         label: 'Admin',
+        requiresSession: true,
+      },
+      {
+        href: (networkId: NetworkId) => ROUTES.adminBanners(networkId),
+        icon: MegaphoneIcon,
+        label: 'Banners',
+        requiresSession: true,
+      },
+      {
+        href: (networkId: NetworkId) => ROUTES.adminTou(networkId),
+        icon: FileTextIcon,
+        label: 'Terms of Use',
         requiresSession: true,
       },
     ],

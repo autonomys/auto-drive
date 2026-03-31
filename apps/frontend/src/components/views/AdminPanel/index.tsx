@@ -11,6 +11,7 @@ import {
 import { useNetwork } from 'contexts/network';
 import { Button } from '@auto-drive/ui';
 import { AdminStats } from './AdminStats';
+import { AdminCredits } from './AdminCredits';
 
 export const AdminPanel = () => {
   const [accountsWithUsers, setAccountsWithUsers] = useState<
@@ -133,6 +134,11 @@ export const AdminPanel = () => {
 
       {/* Analytics Section */}
       <AdminStats />
+
+      {/* Purchased Credits Section */}
+      <div className='rounded-lg border border-gray-200 bg-background p-6'>
+        <AdminCredits />
+      </div>
 
       {/* Users Section */}
       <div className='rounded-lg border border-gray-200 bg-background p-6'>

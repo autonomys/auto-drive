@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { Button } from '@auto-drive/ui';
-import { FileWarning } from 'lucide-react';
+import { AlertTriangle, FileWarning } from 'lucide-react';
 import { useEncryptionStore } from 'globalStates/encryption';
 import { useNetwork } from 'contexts/network';
 import { useFileTableState } from '@/components/organisms/FileTable/state';
+import { useUserStore } from 'globalStates/user';
+import { AccountModel } from '@auto-drive/models';
+import { BuyMoreCreditsButton } from 'components/atoms/BuyMoreCreditsButton';
+import { formatBytes } from 'utils/number';
 
 export const UploadingFolderModal = ({
   data,
@@ -90,6 +94,29 @@ export const UploadingFolderModal = ({
     setPasswordConfirmed(true);
   }, [defaultPassword]);
 
+  // ---------------------------------------------------------------------------
+  // Pre-flight credit check
+  // ---------------------------------------------------------------------------
+
+  const { account, features } = useUserStore();
+
+  // Total bytes in the selected FileList.
+  const folderTotalSize = useMemo(() => {
+    if (!data) return 0;
+    return Array.from(data).reduce((sum, f) => sum + f.size, 0);
+  }, [data]);
+
+  // Only block when we have a definitive account read AND the folder is larger
+  // than the combined free+purchased credit pool. If account is null (still
+  // loading) we let the upload proceed — the backend enforces the hard limit.
+  const hasBuyCreditsFeature =
+    features.buyCredits &&
+    account !== null &&
+    account.model === AccountModel.OneOff;
+
+  const hasInsufficientCredits =
+    account !== null && folderTotalSize > account.pendingUploadCredits;
+
   return (
     <Transition show={!!data}>
       <Dialog as='div' onClose={handleClose}>
@@ -98,7 +125,41 @@ export const UploadingFolderModal = ({
             <h3 className='text-foreground-hover mb-4 text-center text-lg font-medium'>
               Uploading Folder
             </h3>
-            {passwordConfirmed ? (
+            {hasInsufficientCredits && !passwordConfirmed ? (
+              <div className='flex flex-col gap-4 p-4'>
+                <div className='flex flex-col items-center gap-2 text-center'>
+                  <AlertTriangle className='text-light-warning h-8 w-8' />
+                  <p className='font-semibold text-foreground'>
+                    Not enough upload credits
+                  </p>
+                  <p className='text-sm text-foreground-hover'>
+                    This folder is{' '}
+                    <span className='font-medium'>
+                      {formatBytes(folderTotalSize)}
+                    </span>{' '}
+                    but you only have{' '}
+                    <span className='font-medium'>
+                      {formatBytes(account.pendingUploadCredits)}
+                    </span>{' '}
+                    of upload credit remaining.
+                  </p>
+                </div>
+                {hasBuyCreditsFeature && (
+                  <div className='flex justify-center'>
+                    <BuyMoreCreditsButton />
+                  </div>
+                )}
+                <div className='flex justify-center'>
+                  <Button
+                    className='text-sm'
+                    variant='lightDanger'
+                    onClick={handleClose}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            ) : passwordConfirmed ? (
               <div>
                 {error ? (
                   <div className='p-4'>

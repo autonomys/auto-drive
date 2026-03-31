@@ -222,7 +222,8 @@ const getRemainingCredits = async (
 
 // ---------------------------------------------------------------------------
 // getExpiringCredits
-// Returns active rows expiring within N days. Used by expiry warning banners.
+// Returns active rows expiring within N days. System-wide — no account filter.
+// Used by the admin /credits/economics endpoint for system-level monitoring.
 // ---------------------------------------------------------------------------
 
 const getExpiringCredits = async (
@@ -238,6 +239,72 @@ const getExpiringCredits = async (
        AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)
      ORDER BY expires_at ASC`,
     [withinDays],
+  )
+  return result.rows.map(mapRow)
+}
+
+// ---------------------------------------------------------------------------
+// getExpiringCreditsAggregate
+// Single-query aggregate: count + byte sums for system-wide expiring credits.
+// Avoids transferring all rows into Node.js memory.
+// ---------------------------------------------------------------------------
+
+export type ExpiringCreditsAggregate = {
+  count: number
+  totalUploadBytesRemaining: bigint
+  totalDownloadBytesRemaining: bigint
+}
+
+const getExpiringCreditsAggregate = async (
+  withinDays: number,
+): Promise<ExpiringCreditsAggregate> => {
+  const db = await getDatabase()
+  const result = await db.query<{
+    count: string
+    total_upload: string
+    total_download: string
+  }>(
+    `SELECT
+       COUNT(*)                                     AS count,
+       COALESCE(SUM(upload_bytes_remaining),   0)  AS total_upload,
+       COALESCE(SUM(download_bytes_remaining), 0)  AS total_download
+     FROM purchased_credits
+     WHERE expired = FALSE
+       AND expires_at > NOW()
+       AND expires_at <= NOW() + ($1 * INTERVAL '1 day')
+       AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)`,
+    [withinDays],
+  )
+
+  const row = result.rows[0]
+  return {
+    count: Number(row.count),
+    totalUploadBytesRemaining: BigInt(row.total_upload),
+    totalDownloadBytesRemaining: BigInt(row.total_download),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// getExpiringCreditsByAccountId
+// Returns active rows for a specific account expiring within N days.
+// Used by the per-user /credits/batches/expiring endpoint.
+// ---------------------------------------------------------------------------
+
+const getExpiringCreditsByAccountId = async (
+  accountId: string,
+  withinDays: number,
+): Promise<PurchasedCredit[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPurchasedCredit>(
+    `SELECT *
+     FROM purchased_credits
+     WHERE account_id = $1
+       AND expired = FALSE
+       AND expires_at > NOW()
+       AND expires_at <= NOW() + ($2 * INTERVAL '1 day')
+       AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)
+     ORDER BY expires_at ASC`,
+    [accountId, withinDays],
   )
   return result.rows.map(mapRow)
 }
@@ -399,7 +466,10 @@ const refundCredits = async (
 // Atomically checks the per-user cap and inserts a new credit row in a
 // single transaction, using a PostgreSQL advisory lock keyed to the account
 // to serialize concurrent calls. Returns err('cap_exceeded') if the purchase
-// would push either upload or download remaining over the cap.
+// would push upload remaining over the cap.
+// Download bytes are not capped — they are not allocated on purchase right
+// now (downloadBytesOriginal is expected to be 0n). Infrastructure is kept
+// for future use.
 // ---------------------------------------------------------------------------
 
 const createPurchasedCreditWithCapCheck = async (
@@ -437,12 +507,8 @@ const createPurchasedCreditWithCapCheck = async (
 
     const currentRow = currentResult.rows[0]
     const currentUpload = BigInt(currentRow.upload_bytes_remaining)
-    const currentDownload = BigInt(currentRow.download_bytes_remaining)
 
-    if (
-      currentUpload + params.uploadBytesOriginal > maxBytesPerUser ||
-      currentDownload + params.downloadBytesOriginal > maxBytesPerUser
-    ) {
+    if (currentUpload + params.uploadBytesOriginal > maxBytesPerUser) {
       await client.query('ROLLBACK')
       return err('cap_exceeded' as const)
     }
@@ -482,6 +548,30 @@ const createPurchasedCreditWithCapCheck = async (
 }
 
 // ---------------------------------------------------------------------------
+// getAllWithUserPublicId
+// Admin view: every credit batch across all users, joined with the
+// user_public_id from the originating intent row. Ordered newest-first.
+// ---------------------------------------------------------------------------
+
+export type AdminCreditBatchRow = PurchasedCredit & {
+  userPublicId: string
+}
+
+const getAllWithUserPublicId = async (): Promise<AdminCreditBatchRow[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPurchasedCredit & { user_public_id: string }>(
+    `SELECT pc.*, i.user_public_id
+     FROM purchased_credits pc
+     JOIN intents i ON i.id = pc.intent_id
+     ORDER BY pc.purchased_at DESC`,
+  )
+  return result.rows.map((row) => ({
+    ...mapRow(row),
+    userPublicId: row.user_public_id,
+  }))
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -492,7 +582,10 @@ export const purchasedCreditsRepository = {
   refundCredits,
   getRemainingCredits,
   getExpiringCredits,
+  getExpiringCreditsAggregate,
+  getExpiringCreditsByAccountId,
   createPurchasedCreditWithCapCheck,
   markExpiredCredits,
   getByAccountId,
+  getAllWithUserPublicId,
 }

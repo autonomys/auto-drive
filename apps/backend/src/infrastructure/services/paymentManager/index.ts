@@ -122,8 +122,56 @@ const parseEventLogs = <
 let checkInterval: NodeJS.Timeout | null = null
 let unwatchContractEvent: (() => void) | null = null
 
+// On startup, re-watch any PENDING intents that already have a tx_hash.
+// These represent transactions submitted by users before the last service
+// restart or during an EVM RPC outage.  The cleanup job explicitly skips
+// PENDING+txHash rows (they are not abandoned — they are actively watched),
+// so without this sweep they would sit in limbo indefinitely: the user paid
+// on-chain but receives no credits.
+//
+// Re-calling watchTransaction for each orphan is safe:
+//   • waitForTransactionReceipt returns immediately for already-mined txs
+//   • markIntentAsConfirmed is idempotent — a duplicate CONFIRMED write is a
+//     no-op if the intent was already processed before the restart
+const _recoverOrphanedTransactions = async () => {
+  const pending = await IntentsUseCases.getPendingWithTxHash()
+  if (pending.length === 0) {
+    logger.info('Startup recovery: no orphaned transactions found')
+    return
+  }
+
+  logger.info('Startup recovery: re-watching orphaned transactions', {
+    count: pending.length,
+    intentIds: pending.map((i) => i.id),
+  })
+
+  await Promise.allSettled(
+    pending.map(async (intent) => {
+      if (!intent.txHash) return
+      try {
+        await paymentManager.watchTransaction(intent.txHash)
+        logger.info('Startup recovery: transaction recovered', {
+          intentId: intent.id,
+          txHash: intent.txHash,
+        })
+      } catch (err) {
+        logger.error('Startup recovery: failed to recover transaction', {
+          intentId: intent.id,
+          txHash: intent.txHash,
+          err,
+        })
+      }
+    }),
+  )
+}
+
 const start = () => {
   logger.info('Starting payment manager')
+
+  // Run the recovery sweep asynchronously so it does not block startup.
+  // Errors inside the sweep are caught per-intent and logged individually.
+  safeCallback(paymentManager._recoverOrphanedTransactions)()
+
   checkInterval = setInterval(
     safeCallback(paymentManager._checkConfirmedIntents),
     config.paymentManager.checkInterval,
@@ -154,6 +202,7 @@ export const paymentManager = {
   stop,
   _onLogs: onLogs,
   _checkConfirmedIntents: _checkConfirmedIntents,
+  _recoverOrphanedTransactions: _recoverOrphanedTransactions,
   _viemClient: viemClient,
   _parseEventLogs: parseEventLogs,
 }

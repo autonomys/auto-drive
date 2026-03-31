@@ -117,6 +117,34 @@ const expireIntentIfPending = async (intentId: string): Promise<boolean> => {
   return (result.rowCount ?? 0) > 0
 }
 
+// Returns PENDING intents that already have an on-chain tx_hash.
+// These are intents where the user submitted a transaction but the payment
+// manager did not process the confirmation event — typically because the
+// service was restarted or the EVM RPC was temporarily unavailable.
+// Used by the startup recovery sweep so that no paid transaction is silently
+// abandoned across a service restart.
+const getPendingWithTxHash = async (): Promise<Intent[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    `SELECT * FROM intents
+     WHERE status = $1
+       AND tx_hash IS NOT NULL`,
+    [IntentStatus.PENDING],
+  )
+  return mapRows(result.rows)
+}
+
+// Returns all intents that were blocked by the per-user cap.
+// These are terminal — the polling loop skips them — and require admin review.
+const getOverCapIntents = async (): Promise<Intent[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    'SELECT * FROM intents WHERE status = $1 ORDER BY id',
+    [IntentStatus.OVER_CAP],
+  )
+  return mapRows(result.rows)
+}
+
 export const intentsRepository = {
   getById,
   createIntent,
@@ -124,4 +152,6 @@ export const intentsRepository = {
   getByStatus,
   getExpiredPendingIntents,
   expireIntentIfPending,
+  getOverCapIntents,
+  getPendingWithTxHash,
 }

@@ -12,6 +12,11 @@ import { hasGoogleAuth } from '../../core/featureFlags/index.js'
 
 export const intentsController = Router()
 
+// ---------------------------------------------------------------------------
+// POST /intents/
+// Creates a PENDING intent with the current price locked in.
+// ---------------------------------------------------------------------------
+
 intentsController.post(
   '/',
   asyncSafeHandler(async (req, res) => {
@@ -51,6 +56,48 @@ intentsController.post(
   }),
 )
 
+// ---------------------------------------------------------------------------
+// GET /intents/over-cap  (admin only)
+// Lists all intents that were confirmed on-chain but could not be converted
+// to credits because the user was already at the per-user cap.
+// These are terminal — the polling loop skips them.  An admin must review
+// and either raise the cap + reprocess, or arrange a refund out-of-band.
+//
+// NOTE: this static route must be registered BEFORE GET /:id so Express does
+// not match the literal string "over-cap" as a dynamic :id parameter.
+// ---------------------------------------------------------------------------
+
+intentsController.get(
+  '/over-cap',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      IntentsUseCases.getOverCapIntents(user),
+      'Failed to get over-cap intents',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json(
+      result.value.map((intent) => ({
+        ...intent,
+        shannonsPerByte: intent.shannonsPerByte.toString(),
+        paymentAmount: intent.paymentAmount?.toString(),
+      })),
+    )
+  }),
+)
+
+// ---------------------------------------------------------------------------
+// GET /intents/:id
+// ---------------------------------------------------------------------------
+
 intentsController.get(
   '/:id',
   asyncSafeHandler(async (req, res) => {
@@ -76,6 +123,11 @@ intentsController.get(
   }),
 )
 
+// ---------------------------------------------------------------------------
+// POST /intents/:id/watch
+// Attaches a txHash to a pending intent and queues on-chain watching.
+// ---------------------------------------------------------------------------
+
 intentsController.post(
   '/:id/watch',
   asyncSafeHandler(async (req, res) => {
@@ -99,6 +151,41 @@ intentsController.post(
         intentId: req.params.id,
       }),
       'Failed to confirm intent',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.sendStatus(204)
+  }),
+)
+
+// ---------------------------------------------------------------------------
+// POST /intents/:id/reprocess  (admin only)
+// Resets an OVER_CAP intent back to CONFIRMED so the payment manager polling
+// loop will re-attempt credit grant on its next tick (~30 s).
+//
+// Typical workflow:
+//  1. Admin raises the user's cap via POST /accounts/update.
+//  2. Admin calls this endpoint to re-queue the intent.
+//  3. The polling loop picks it up within ~30 seconds.
+//
+// Returns 409 if the intent is not currently in OVER_CAP status, preventing
+// accidental re-queuing of COMPLETED or PENDING intents.
+// ---------------------------------------------------------------------------
+
+intentsController.post(
+  '/:id/reprocess',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      IntentsUseCases.reprocessOverCapIntent(user, req.params.id),
+      'Failed to reprocess intent',
     )
     if (result.isErr()) {
       handleError(result.error, res)

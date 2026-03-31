@@ -24,7 +24,7 @@ export type SideNavbarProps = {
 
 export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const { user, account, features } = useUserStore();
+  const { user, account, features, creditSummary } = useUserStore();
   const { state } = useSidebar();
 
   const session = useContext(SessionContext);
@@ -52,6 +52,26 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
 
   const hasBuyCreditsFeature =
     features.buyCredits && isLoggedIn && account?.model === AccountModel.OneOff;
+
+  // Purchased-credit fields — only derived when the buyCredits feature is
+  // active for this user.  Both values default to "not shown" otherwise,
+  // which keeps the sidebar unchanged for Monthly, free-only OneOff, and
+  // any account whose operator has disabled the feature flag.
+  const purchasedBytesRemaining = useMemo(() => {
+    if (!hasBuyCreditsFeature || !creditSummary) return 0;
+    // creditSummary.uploadBytesRemaining is a decimal-string bigint from the
+    // API.  Max value is 100 GiB which is well within Number's safe range.
+    return Number(creditSummary.uploadBytesRemaining);
+  }, [hasBuyCreditsFeature, creditSummary]);
+
+  const nextExpiryDate = useMemo(() => {
+    if (!hasBuyCreditsFeature || !creditSummary?.nextExpiryDate) return null;
+    return new Date(creditSummary.nextExpiryDate);
+  }, [hasBuyCreditsFeature, creditSummary]);
+
+  const creditHistoryHref = hasBuyCreditsFeature
+    ? `/${networkId}/drive/credits`
+    : undefined;
 
   return (
     <Sidebar className='bg-card'>
@@ -86,6 +106,9 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             renewalDate={renewalDate}
             uploadLimit={account?.uploadLimit ?? 0}
             uploadPending={account?.pendingUploadCredits ?? 0}
+            purchasedBytesRemaining={purchasedBytesRemaining}
+            nextExpiryDate={nextExpiryDate}
+            creditHistoryHref={creditHistoryHref}
           />
         )}
         {isLoggedIn && account ? (
