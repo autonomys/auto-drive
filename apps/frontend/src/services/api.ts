@@ -9,6 +9,10 @@ import {
   ObjectInformation,
   DownloadStatus,
   Intent,
+  TouChangeType,
+  TouStatus,
+  TouVersion,
+  TouVersionWithStats,
 } from '@auto-drive/models';
 
 // Wire-format of GET /credits/summary (bigint fields serialised as strings)
@@ -871,5 +875,220 @@ export const createApiService = ({
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
+  },
+
+  // Terms of Use
+  getTouStatus: async (): Promise<TouStatus> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      return { accepted: true, currentVersion: null, pendingVersion: null };
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/status`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ToU status: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<TouStatus>;
+  },
+  acceptTou: async (): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/accept`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to accept ToU: ${response.statusText}`);
+    }
+  },
+  // Admin ToU methods
+  getAllTouVersions: async (): Promise<TouVersion[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get ToU versions: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<TouVersion[]>;
+  },
+  createTouVersion: async (params: {
+    versionLabel: string;
+    effectiveDate: string;
+    contentUrl: string;
+    changeType: TouChangeType;
+    adminNotes?: string;
+  }): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create ToU version: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  updateTouVersion: async (
+    id: string,
+    params: {
+      versionLabel?: string;
+      effectiveDate?: string;
+      contentUrl?: string;
+      changeType?: TouChangeType;
+      adminNotes?: string | null;
+    },
+  ): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update ToU version: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  promoteTouVersion: async (
+    id: string,
+    overrideNotice?: boolean,
+    overrideReason?: string,
+  ): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}/promote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify({ overrideNotice, overrideReason }),
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to promote ToU version: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  activateTouVersion: async (id: string): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}/activate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to activate ToU version: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  archiveTouVersion: async (id: string): Promise<TouVersion> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}/archive`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to archive ToU version: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<TouVersion>;
+  },
+  getTouVersionStats: async (id: string): Promise<TouVersionWithStats> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/tou/admin/${id}/stats`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get ToU version stats: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<TouVersionWithStats>;
   },
 });

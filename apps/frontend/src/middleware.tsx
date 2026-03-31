@@ -17,17 +17,21 @@ const getUserFromSession = async (session: JWT) => {
     session.authProvider &&
     session.accessToken
   ) {
-    const newAccessToken = await refreshAccessToken({
-      underlyingUserId: session.authUserId,
-      underlyingProvider: session.authProvider,
-      refreshToken: session.refreshToken,
-    });
+    try {
+      const newAccessToken = await refreshAccessToken({
+        underlyingUserId: session.authUserId,
+        underlyingProvider: session.authProvider,
+        refreshToken: session.refreshToken,
+      });
 
-    if (newAccessToken) {
-      userInfo = await checkAuth(
-        session.authProvider,
-        newAccessToken.accessToken,
-      );
+      if (newAccessToken) {
+        userInfo = await checkAuth(
+          session.authProvider,
+          newAccessToken.accessToken,
+        );
+      }
+    } catch {
+      // Refresh token is stale/invalid — treat as unauthenticated
     }
   }
 
