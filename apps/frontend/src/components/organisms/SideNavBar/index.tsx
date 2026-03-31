@@ -69,6 +69,10 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     return new Date(creditSummary.nextExpiryDate);
   }, [hasBuyCreditsFeature, creditSummary]);
 
+  const creditHistoryHref = hasBuyCreditsFeature
+    ? `/${networkId}/drive/credits`
+    : undefined;
+
   return (
     <Sidebar className='bg-card'>
       <AuthModal
@@ -104,6 +108,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             uploadPending={account?.pendingUploadCredits ?? 0}
             purchasedBytesRemaining={purchasedBytesRemaining}
             nextExpiryDate={nextExpiryDate}
+            creditHistoryHref={creditHistoryHref}
           />
         )}
         {isLoggedIn && account ? (
