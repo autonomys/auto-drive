@@ -155,8 +155,30 @@ const markIntentAsConfirmed = async ({
     return err(new ObjectNotFoundError('Intent not found'))
   }
 
+  // Idempotency guard — do not overwrite an intent that is already in a
+  // post-PENDING state.  Duplicate calls arise from:
+  //   • chain reorgs causing the same event to be re-emitted
+  //   • the payment manager reconnecting and re-processing already-seen logs
+  //   • watchTransaction and the _checkConfirmedIntents polling loop racing
+  //
+  // We return ok() rather than an error so the caller does not treat a
+  // duplicate as a failure and does not retry indefinitely.
+  if (
+    intent.status === IntentStatus.CONFIRMED ||
+    intent.status === IntentStatus.COMPLETED ||
+    intent.status === IntentStatus.OVER_CAP ||
+    intent.status === IntentStatus.FAILED ||
+    intent.status === IntentStatus.EXPIRED
+  ) {
+    logger.info('markIntentAsConfirmed: intent already processed — skipping', {
+      intentId,
+      currentStatus: intent.status,
+    })
+    return ok(intent)
+  }
+
   return ok(
-    intentsRepository.updateIntent({
+    await intentsRepository.updateIntent({
       ...intent,
       status: IntentStatus.CONFIRMED,
       paymentAmount,
@@ -189,9 +211,37 @@ const onConfirmedIntent = async (intentId: string) => {
     return err(new Error('Intent has no deposit amount'))
   }
 
+  // Guard: reject payments whose value is too small to purchase even a single
+  // byte of storage.  getIntentCredits divides paymentAmount by shannonsPerByte
+  // using BigInt integer division, so a dust payment (paymentAmount <
+  // shannonsPerByte) yields 0 credits.  Granting 0 credits would mark the
+  // intent COMPLETED while giving the user nothing — a misleading outcome that
+  // wastes a DB row and silently discards the payment.
+  //
+  // Both paymentAmount and shannonsPerByte are immutable on a confirmed intent,
+  // so this condition is permanent.  We mark the intent FAILED (terminal) so
+  // the polling loop stops retrying.  The on-chain payment is irreversible;
+  // resolution requires admin review (similar to OVER_CAP handling).
+  const creditBytes = IntentsUseCases.getIntentCredits(intent)
+  if (creditBytes === BigInt(0)) {
+    logger.warn(
+      'onConfirmedIntent: payment too small to yield any credits — marking FAILED',
+      {
+        intentId,
+        paymentAmount: intent.paymentAmount.toString(),
+        shannonsPerByte: intent.shannonsPerByte.toString(),
+      },
+    )
+    await intentsRepository.updateIntent({
+      ...intent,
+      status: IntentStatus.FAILED,
+    })
+    return ok()
+  }
+
   const addResult = await AccountsUseCases.addCreditsToAccount(
     intent.userPublicId,
-    IntentsUseCases.getIntentCredits(intent),
+    creditBytes,
     intentId,
   )
 
@@ -326,6 +376,13 @@ const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
   }
 }
 
+// Returns PENDING intents that already have a tx_hash — used by the payment
+// manager startup sweep to re-watch transactions that were submitted but never
+// confirmed due to a service restart or RPC outage.
+const getPendingWithTxHash = async (): Promise<Intent[]> => {
+  return intentsRepository.getPendingWithTxHash()
+}
+
 export const IntentsUseCases = {
   createIntent,
   getIntent,
@@ -335,6 +392,7 @@ export const IntentsUseCases = {
   markIntentAsConfirmed,
   getConfirmedIntents,
   getOverCapIntents,
+  getPendingWithTxHash,
   reprocessOverCapIntent,
   getIntentCredits,
   getPrice,

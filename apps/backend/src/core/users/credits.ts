@@ -1,5 +1,8 @@
 import { PurchasedCredit, User, UserRole, UserWithOrganization } from '@auto-drive/models'
-import { purchasedCreditsRepository } from '../../infrastructure/repositories/users/purchasedCredits.js'
+import {
+  AdminCreditBatchRow,
+  purchasedCreditsRepository,
+} from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { AccountsUseCases } from './accounts.js'
 import { config } from '../../config.js'
 import { ForbiddenError } from '../../errors/index.js'
@@ -135,9 +138,30 @@ const getEconomics = async (
   })
 }
 
+// ---------------------------------------------------------------------------
+// getAllBatches
+// Admin-only: full purchase history across all users with their publicId.
+// Returns 403 for non-admin callers.
+// ---------------------------------------------------------------------------
+
+const getAllBatches = async (
+  executor: User,
+): Promise<Result<AdminCreditBatchRow[], ForbiddenError>> => {
+  if (executor.role !== UserRole.Admin) {
+    logger.warn('Non-admin user attempted to access all credit batches', {
+      publicId: executor.publicId,
+    })
+    return err(new ForbiddenError('Admin access required'))
+  }
+
+  const rows = await purchasedCreditsRepository.getAllWithUserPublicId()
+  return ok(rows)
+}
+
 export const CreditsUseCases = {
   getSummary,
   getBatches,
   getExpiringBatches,
   getEconomics,
+  getAllBatches,
 }

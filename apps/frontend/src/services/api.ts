@@ -39,6 +39,30 @@ export type ExpiringCreditBatch = {
   createdAt: string;
   updatedAt: string;
 };
+
+// Wire-format of rows from GET /credits/batches/all (admin endpoint).
+// Extends ExpiringCreditBatch with the owner's userPublicId.
+export type AdminCreditBatch = ExpiringCreditBatch & {
+  userPublicId: string;
+};
+
+// Wire-format of GET /credits/economics (admin)
+export type CreditEconomicsResponse = {
+  totalExpiringWithin30Days: number;
+  totalExpiringUploadBytes: string;
+  totalExpiringDownloadBytes: string;
+};
+
+// Wire-format of rows from GET /intents/over-cap (admin)
+export type OverCapIntent = {
+  id: string;
+  userPublicId: string;
+  status: string;
+  txHash?: string;
+  paymentAmount?: string;
+  shannonsPerByte: string;
+  expiresAt?: string;
+};
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
 
@@ -749,5 +773,103 @@ export const createApiService = ({
     }
 
     return response.json();
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: all credit batches across all users
+  // -------------------------------------------------------------------------
+
+  getAdminCreditBatches: async (): Promise<AdminCreditBatch[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/batches/all`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<AdminCreditBatch[]>;
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: system-wide credit economics summary
+  // -------------------------------------------------------------------------
+
+  getCreditEconomics: async (): Promise<CreditEconomicsResponse> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/economics`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<CreditEconomicsResponse>;
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: list OVER_CAP intents
+  // -------------------------------------------------------------------------
+
+  getOverCapIntents: async (): Promise<OverCapIntent[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/intents/over-cap`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<OverCapIntent[]>;
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: reprocess a single OVER_CAP intent
+  // -------------------------------------------------------------------------
+
+  reprocessIntent: async (intentId: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/intents/${intentId}/reprocess`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
   },
 });

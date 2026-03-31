@@ -6,41 +6,17 @@ import { useUserStore } from '../../../globalStates/user';
 import { AccountModel } from '@auto-drive/models';
 import { formatBytes } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
-import { daysUntilExpiry } from '../../../utils/credits';
+import {
+  daysUntilExpiry,
+  getBatchStatus,
+  STATUS_CLASSES,
+  STATUS_LABEL,
+} from '../../../utils/credits';
 import Link from 'next/link';
 import { Button } from '@auto-drive/ui';
 import { ShoppingCart, RefreshCw } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ExpiringCreditBatch } from '../../../services/api';
-
-// ---------------------------------------------------------------------------
-// Batch status helpers
-// ---------------------------------------------------------------------------
-
-type BatchStatus = 'active' | 'expiring' | 'depleted' | 'expired';
-
-const getBatchStatus = (batch: ExpiringCreditBatch): BatchStatus => {
-  if (batch.expired) return 'expired';
-  if (BigInt(batch.uploadBytesRemaining) === BigInt(0)) return 'depleted';
-  const days = daysUntilExpiry(new Date(batch.expiresAt));
-  if (days !== null && days <= 30) return 'expiring';
-  return 'active';
-};
-
-const STATUS_LABEL: Record<BatchStatus, string> = {
-  active: 'Active',
-  expiring: 'Expiring soon',
-  depleted: 'Depleted',
-  expired: 'Expired',
-};
-
-const STATUS_CLASSES: Record<BatchStatus, string> = {
-  active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  expiring:
-    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  depleted: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-  expired: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-};
 
 // ---------------------------------------------------------------------------
 // Consumption progress bar
