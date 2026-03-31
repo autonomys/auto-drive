@@ -46,17 +46,16 @@
 
     somethingActive = true
   }
+  if (!somethingActive) {
+    logger.info('No services active, exiting')
+    process.exit(1)
+  }
+
   // Deletion anonymisation job runs unconditionally
   const { deletionAnonymisationJob } = await import(
     '../../infrastructure/services/deletionAnonymisationJob.js'
   )
   deletionAnonymisationJob.start()
-  somethingActive = true
-
-  if (!somethingActive) {
-    logger.info('No services active, exiting')
-    process.exit(1)
-  }
 
   const shutdown = async () => {
     logger.info('Shutting down frontend worker...')

@@ -185,6 +185,7 @@ const markAsCompleted = async (
   const row = await deletionRequestsRepository.updateStatus(
     requestId,
     DeletionRequestStatus.Completed,
+    DeletionRequestStatus.Processing,
   )
   return row ? mapRowToDeletionRequest(row) : null
 }
@@ -199,6 +200,7 @@ const markAsFailed = async (
   const row = await deletionRequestsRepository.updateStatus(
     requestId,
     DeletionRequestStatus.Failed,
+    DeletionRequestStatus.Processing,
   )
   return row ? mapRowToDeletionRequest(row) : null
 }
