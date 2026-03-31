@@ -163,7 +163,7 @@ describe('DeletionUseCases — processAnonymisation', () => {
 
     jest
       .spyOn(AuthManager, 'markDeletionAsProcessing')
-      .mockResolvedValue(null as unknown as DeletionRequest)
+      .mockResolvedValue(null)
 
     const executeAuthSpy = jest
       .spyOn(AuthManager, 'executeAuthAnonymisation')

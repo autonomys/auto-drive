@@ -75,7 +75,7 @@ const getDeletionRequestsDue = async (): Promise<DeletionRequest[]> => {
 
 const markDeletionAsProcessing = async (
   requestId: string,
-): Promise<DeletionRequest> => {
+): Promise<DeletionRequest | null> => {
   const response = await fetch(
     `${config.authService.url}/users/admin/deletions/${requestId}/process`,
     {
@@ -85,6 +85,11 @@ const markDeletionAsProcessing = async (
       },
     },
   )
+
+  // 404/409 means the request is no longer pending (race with another worker)
+  if (response.status === 404 || response.status === 409) {
+    return null
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to mark deletion ${requestId} as processing`)

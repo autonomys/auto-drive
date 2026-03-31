@@ -42,13 +42,8 @@ const anonymiseBackendData = async (
   })
 
   // Look up the user's account via their organization
-  let organizationId: string | null = null
-  try {
-    const user = await AuthManager.getUserFromPublicId(publicId)
-    organizationId = user.organizationId
-  } catch {
-    logger.warn('Could not resolve user %s for account lookup', publicId)
-  }
+  const user = await AuthManager.getUserFromPublicId(publicId)
+  const organizationId = user.organizationId
 
   const account = organizationId
     ? await accountsRepository.getByOrganizationId(organizationId)
