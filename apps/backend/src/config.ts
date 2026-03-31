@@ -85,6 +85,12 @@ export const config = {
     // it are rejected.  Default: 10 minutes.
     intentExpiryMinutes: Number(env('INTENT_EXPIRY_MINUTES', '10')),
   },
+  deletion: {
+    gracePeriodDays: Number(env('DELETION_GRACE_PERIOD_DAYS', '30')),
+    anonymisationCheckIntervalMs: Number(
+      env('DELETION_ANONYMISATION_CHECK_INTERVAL', '3600000'),
+    ),
+  },
   params: {
     maxConcurrentUploads: Number(env('MAX_CONCURRENT_UPLOADS', '40')),
     maxAnonymousDownloadSize: Number(

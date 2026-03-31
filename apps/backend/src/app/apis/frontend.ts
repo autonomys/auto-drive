@@ -13,6 +13,7 @@ import { intentsController } from '../controllers/intents.js'
 import { creditsController } from '../controllers/credits.js'
 import { bannersController } from '../controllers/banners.js'
 import { touController } from '../controllers/tou.js'
+import { deletionController } from '../controllers/deletion.js'
 import { featuresController } from '../controllers/features.js'
 import { featureFlagMiddleware } from '../../core/featureFlags/express.js'
 import { IntentsUseCases } from '../../core/users/intents.js'
@@ -78,6 +79,7 @@ const createServer = async () => {
   app.use('/credits', featureFlagMiddleware('buyCredits'), creditsController)
   app.use('/banners', bannersController)
   app.use('/tou', touController)
+  app.use('/deletion', deletionController)
   app.use('/features', featuresController)
   app.use('/docs', docsController)
 

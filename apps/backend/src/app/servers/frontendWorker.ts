@@ -46,6 +46,13 @@
 
     somethingActive = true
   }
+  // Deletion anonymisation job runs unconditionally
+  const { deletionAnonymisationJob } = await import(
+    '../../infrastructure/services/deletionAnonymisationJob.js'
+  )
+  deletionAnonymisationJob.start()
+  somethingActive = true
+
   if (!somethingActive) {
     logger.info('No services active, exiting')
     process.exit(1)
@@ -59,6 +66,10 @@
       '../../infrastructure/services/creditExpiryJob.js'
     )
     creditExpiryJob.stop()
+    const { deletionAnonymisationJob } = await import(
+      '../../infrastructure/services/deletionAnonymisationJob.js'
+    )
+    deletionAnonymisationJob.stop()
     await Rabbit.close()
     logger.info('Frontend worker shut down successfully')
     process.exit(0)
