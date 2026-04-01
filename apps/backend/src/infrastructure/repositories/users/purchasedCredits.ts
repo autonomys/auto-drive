@@ -23,7 +23,6 @@ type DBPurchasedCredit = {
   purchased_at: Date
   expires_at: Date
   expired: boolean
-  refunded: boolean
   refunded_at: Date | null
   created_at: Date
   updated_at: Date
@@ -40,7 +39,6 @@ const mapRow = (row: DBPurchasedCredit): PurchasedCredit => ({
   purchasedAt: row.purchased_at,
   expiresAt: row.expires_at,
   expired: row.expired,
-  refunded: row.refunded,
   refundedAt: row.refunded_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -566,7 +564,6 @@ const markAsRefunded = async (id: string): Promise<PurchasedCredit | null> => {
     `UPDATE purchased_credits
      SET upload_bytes_remaining   = 0,
          download_bytes_remaining = 0,
-         refunded                 = TRUE,
          refunded_at              = NOW(),
          updated_at               = NOW()
      WHERE id = $1

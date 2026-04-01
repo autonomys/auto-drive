@@ -13,12 +13,11 @@ export const PurchasedCreditSchema = z.object({
   expiresAt: z.date(),
   expired: z.boolean(),
   /**
-   * True once an admin has processed an out-of-band refund for this batch.
-   * Set by POST /credits/batches/:id/refund — zeros remaining bytes and
-   * records the timestamp so the admin dashboard can show refund history.
+   * Timestamp when an admin recorded an out-of-band refund for this batch,
+   * or null if not yet refunded.  Non-null is the canonical source of truth
+   * that a refund has occurred — no separate boolean needed.
+   * Set by POST /credits/batches/:id/refund, which also zeros remaining bytes.
    */
-  refunded: z.boolean(),
-  /** Timestamp when the refund was recorded, or null if not yet refunded. */
   refundedAt: z.date().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),

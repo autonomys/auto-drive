@@ -146,7 +146,7 @@ export const AdminUserCredits = ({
           <div className='rounded-lg border border-border bg-card p-4'>
             <p className='text-xs text-muted-foreground'>Refunded</p>
             <p className='mt-1 text-2xl font-semibold'>
-              {batches.filter((b) => b.refunded).length}
+              {batches.filter((b) => b.refundedAt !== null).length}
             </p>
           </div>
         </div>
@@ -198,7 +198,7 @@ export const AdminUserCredits = ({
                         >
                           {STATUS_LABEL[status]}
                         </span>
-                        {batch.refunded && (
+                        {batch.refundedAt !== null && (
                           <span className='inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400'>
                             <CheckCircle2 className='h-3 w-3' />
                             Refunded
@@ -252,11 +252,9 @@ export const AdminUserCredits = ({
 
                     {/* Refund action */}
                     <td className='px-4 py-3'>
-                      {batch.refunded ? (
+                      {batch.refundedAt !== null ? (
                         <span className='text-xs text-muted-foreground'>
-                          {batch.refundedAt
-                            ? formatDate(batch.refundedAt)
-                            : 'Refunded'}
+                          {formatDate(batch.refundedAt)}
                         </span>
                       ) : (
                         <Button

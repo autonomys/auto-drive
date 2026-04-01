@@ -69,7 +69,7 @@ export type AdminUserCreditBatch = ExpiringCreditBatch & {
   shannonsPerByte: string;
   txHash: string | null;
   fromAddress: string | null;
-  refunded: boolean;
+  /** ISO timestamp of the refund action, or null if not yet refunded. */
   refundedAt: string | null;
 };
 import { getAuthSession } from 'utils/auth';
