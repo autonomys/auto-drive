@@ -24,6 +24,13 @@ const logger = createLogger('TouUseCases')
 
 const NOTICE_DAYS = 30
 
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  timeZone: 'UTC',
+})
+
 // ---------------------------------------------------------------------------
 // getTouStatus — user-facing
 // ---------------------------------------------------------------------------
@@ -267,7 +274,7 @@ const promoteToPending = async (
       title: `Terms of Use Update (${version.versionLabel})`,
       body:
         'Updated Terms of Use take effect on ' +
-        `${version.effectiveDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. ` +
+        `${dateFormatter.format(version.effectiveDate)}. ` +
         'You will be asked to review and accept the changes when they take effect.',
       criticality: BannerCriticality.Warning,
       dismissable: true,
