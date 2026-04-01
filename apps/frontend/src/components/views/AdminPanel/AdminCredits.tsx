@@ -5,13 +5,14 @@ import { useNetwork } from '../../../contexts/network';
 import { formatBytes } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import { RefreshCw, AlertTriangle, RotateCcw } from 'lucide-react';
-import { Button } from '@auto-drive/ui';
+import { Button, ROUTES, type NetworkId } from '@auto-drive/ui';
 import { getBatchStatus, STATUS_CLASSES, STATUS_LABEL } from '../../../utils/credits';
 import type {
   AdminCreditBatch,
   CreditEconomicsResponse,
   OverCapIntent,
 } from '../../../services/api';
+import Link from 'next/link';
 
 // ---------------------------------------------------------------------------
 // Economics summary card
@@ -122,7 +123,13 @@ const OverCapPanel = ({
 // All credit batches table
 // ---------------------------------------------------------------------------
 
-const AllBatchesTable = ({ batches }: { batches: AdminCreditBatch[] }) => {
+const AllBatchesTable = ({
+  batches,
+  networkId,
+}: {
+  batches: AdminCreditBatch[];
+  networkId: NetworkId;
+}) => {
   if (batches.length === 0) {
     return (
       <p className='text-sm text-muted-foreground'>
@@ -161,7 +168,13 @@ const AllBatchesTable = ({ batches }: { batches: AdminCreditBatch[] }) => {
                 className='border-b border-border last:border-0'
               >
                 <td className='py-2 pr-4 font-mono text-xs'>
-                  {batch.userPublicId.slice(0, 14)}…
+                  <Link
+                    href={ROUTES.adminUserCredits(networkId, batch.userPublicId)}
+                    className='text-blue-500 hover:underline'
+                    title={batch.userPublicId}
+                  >
+                    {batch.userPublicId.slice(0, 14)}…
+                  </Link>
                 </td>
                 <td className='py-2 pr-4'>
                   <span
@@ -215,7 +228,7 @@ const AllBatchesTable = ({ batches }: { batches: AdminCreditBatch[] }) => {
 // ---------------------------------------------------------------------------
 
 export const AdminCredits = () => {
-  const { api } = useNetwork();
+  const { api, network } = useNetwork();
   const queryClient = useQueryClient();
 
   const { data: economics, isLoading: economicsLoading } =
@@ -311,7 +324,7 @@ export const AdminCredits = () => {
         <h3 className='mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wide'>
           All Purchase Batches ({batches.length})
         </h3>
-        <AllBatchesTable batches={batches} />
+        <AllBatchesTable batches={batches} networkId={network.id} />
       </div>
     </div>
   );

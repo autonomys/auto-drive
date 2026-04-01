@@ -12,6 +12,14 @@ export const PurchasedCreditSchema = z.object({
   /** Every purchased credit row has a hard expiry date — never null. */
   expiresAt: z.date(),
   expired: z.boolean(),
+  /**
+   * True once an admin has processed an out-of-band refund for this batch.
+   * Set by POST /credits/batches/:id/refund — zeros remaining bytes and
+   * records the timestamp so the admin dashboard can show refund history.
+   */
+  refunded: z.boolean(),
+  /** Timestamp when the refund was recorded, or null if not yet refunded. */
+  refundedAt: z.date().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

@@ -156,6 +156,77 @@ creditsController.get(
 )
 
 // ---------------------------------------------------------------------------
+// GET /credits/batches/user/:userPublicId
+// Admin-only: all credit batches for a specific user, newest-first.
+// Each row includes intent fields (paymentAmount, shannonsPerByte, txHash,
+// fromAddress) so the admin can calculate the AI3 price paid and identify
+// the wallet used for the on-chain payment.
+// Returns 403 for non-admin callers.
+// ---------------------------------------------------------------------------
+
+creditsController.get(
+  '/batches/user/:userPublicId',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const { userPublicId } = req.params
+
+    const result = await handleInternalErrorResult(
+      CreditsUseCases.getUserBatches(user, userPublicId),
+      'Failed to get user credit batches',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json(
+      result.value.map((batch) => ({
+        ...serializeCredit(batch),
+        userPublicId: batch.userPublicId,
+        paymentAmount: batch.paymentAmount?.toString() ?? null,
+        shannonsPerByte: batch.shannonsPerByte.toString(),
+        txHash: batch.txHash ?? null,
+        fromAddress: batch.fromAddress ?? null,
+      })),
+    )
+  }),
+)
+
+// ---------------------------------------------------------------------------
+// POST /credits/batches/:id/refund
+// Admin-only: marks a credit batch as refunded (zeros remaining bytes,
+// sets refunded = true). Idempotent — safe to call multiple times.
+// Returns 403 for non-admin callers, 404 if the batch is not found.
+// ---------------------------------------------------------------------------
+
+creditsController.post(
+  '/batches/:id/refund',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const { id } = req.params
+
+    const result = await handleInternalErrorResult(
+      CreditsUseCases.refundBatch(user, id),
+      'Failed to refund credit batch',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json({ ok: true })
+  }),
+)
+
+// ---------------------------------------------------------------------------
 // GET /credits/economics
 // Admin-only: system-wide credit stats (expiring totals, byte volumes).
 // Returns 403 for non-admin users.
