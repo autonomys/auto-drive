@@ -53,16 +53,22 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const hasBuyCreditsFeature =
     features.buyCredits && isLoggedIn && account?.model === AccountModel.OneOff;
 
-  // Purchased-credit fields — only derived when the buyCredits feature is
-  // active for this user.  Both values default to "not shown" otherwise,
-  // which keeps the sidebar unchanged for Monthly, free-only OneOff, and
-  // any account whose operator has disabled the feature flag.
+  // creditSummary is always loaded for any logged-in user (see SessionEnsurer),
+  // so we can safely derive purchasedBytesRemaining from it regardless of the
+  // feature flag.  This is needed to separate free vs. purchased bytes in the
+  // progress bar even when the buy-credits UI is hidden.
   const purchasedBytesRemaining = useMemo(() => {
-    if (!hasBuyCreditsFeature || !creditSummary) return 0;
-    // creditSummary.uploadBytesRemaining is a decimal-string bigint from the
-    // API.  Max value is 100 GiB which is well within Number's safe range.
+    if (!creditSummary) return 0;
+    // uploadBytesRemaining is a decimal-string bigint from the API.
+    // Max safe value is 100 GiB which is well within Number's safe range.
     return Number(creditSummary.uploadBytesRemaining);
-  }, [hasBuyCreditsFeature, creditSummary]);
+  }, [creditSummary]);
+
+  // account.pendingUploadCredits = freeRemaining + purchasedRemaining.
+  // Strip out the purchased portion so the progress bar and "used/limit" label
+  // only reflect the free allocation.  Negative means the free quota is
+  // exhausted (user is relying entirely on purchased credits).
+  const freeRemaining = (account?.pendingUploadCredits ?? 0) - purchasedBytesRemaining;
 
   const nextExpiryDate = useMemo(() => {
     if (!hasBuyCreditsFeature || !creditSummary?.nextExpiryDate) return null;
@@ -105,8 +111,8 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             model={account?.model ?? AccountModel.OneOff}
             renewalDate={renewalDate}
             uploadLimit={account?.uploadLimit ?? 0}
-            uploadPending={account?.pendingUploadCredits ?? 0}
-            purchasedBytesRemaining={purchasedBytesRemaining}
+            uploadPending={freeRemaining}
+            purchasedBytesRemaining={hasBuyCreditsFeature ? purchasedBytesRemaining : 0}
             nextExpiryDate={nextExpiryDate}
             creditHistoryHref={creditHistoryHref}
           />
