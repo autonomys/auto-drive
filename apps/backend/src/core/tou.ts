@@ -88,7 +88,7 @@ const getTouStatus = async (
 const acceptCurrentVersion = async (
   user: UserWithOrganization,
   ipAddress: string | null,
-): Promise<Result<TouAcceptance | null, NotFoundError>> => {
+): Promise<Result<TouAcceptance, NotFoundError>> => {
   const activeVersion = await touRepository.ensureActiveVersion()
   if (!activeVersion) {
     return err(new NotFoundError('No active ToU version'))

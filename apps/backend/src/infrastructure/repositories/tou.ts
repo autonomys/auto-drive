@@ -308,7 +308,7 @@ const createAcceptance = async (
   userId: string,
   versionId: string,
   ipAddress: string | null,
-): Promise<TouAcceptance | null> => {
+): Promise<TouAcceptance> => {
   const db = await getDatabase()
   const result = await db.query<DBTouAcceptance>(
     `INSERT INTO user_tou_acceptance (user_id, version_id, ip_address)
@@ -317,7 +317,15 @@ const createAcceptance = async (
      RETURNING *`,
     [userId, versionId, ipAddress],
   )
-  return result.rows[0] ? mapAcceptanceRow(result.rows[0]) : null
+  if (result.rows[0]) return mapAcceptanceRow(result.rows[0])
+
+  // Already accepted — return existing record
+  const existing = await db.query<DBTouAcceptance>(
+    `SELECT * FROM user_tou_acceptance
+     WHERE user_id = $1 AND version_id = $2`,
+    [userId, versionId],
+  )
+  return mapAcceptanceRow(existing.rows[0])
 }
 
 // ---------------------------------------------------------------------------
