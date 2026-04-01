@@ -79,7 +79,7 @@ export const TouAcceptanceInterstitial = ({
               target='_blank'
               href={
                 touStatus.currentVersion?.contentUrl ||
-                'https://www.autonomys.xyz/terms-of-use'
+                'https://autonomys.xyz/auto-drive-terms-of-use'
               }
               className='underline'
             >

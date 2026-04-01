@@ -4,6 +4,7 @@ export const EXTERNAL_ROUTES = {
   autonomys: "https://autonomys.xyz/",
   academy: "https://academy.autonomys.xyz/",
   privacyPolicy: "https://www.autonomys.xyz/privacy-policy",
+  termsOfUse: "https://autonomys.xyz/auto-drive-terms-of-use",
   forum: "https://forum.autonomys.xyz/",
   docs: "https://docs.autonomys.xyz/",
   status: "https://status.autonomys.xyz/",
