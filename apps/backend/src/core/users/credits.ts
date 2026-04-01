@@ -31,8 +31,8 @@ export type CreditSummary = {
   batchCount: number
   /**
    * True when the user can still make a purchase without exceeding the cap.
-   * Determined by taking the larger of upload/download remaining (both grow
-   * equally on each purchase) and checking it against maxBytesPerUser.
+   * Cap is enforced on upload bytes only — download credits are not allocated
+   * on purchase right now, so only uploadBytesRemaining is checked.
    */
   canPurchase: boolean
   /** Maximum bytes the user could purchase right now without hitting the cap. */
@@ -55,15 +55,10 @@ const getSummary = async (
 
   const cap = config.credits.maxBytesPerUser
 
-  // Each purchase adds the same number of bytes to both upload and download.
-  // The binding constraint is whichever type already has the most remaining
-  // — buying more would push that type over the cap first.
-  const maxConsumed =
-    summary.uploadBytesRemaining > summary.downloadBytesRemaining
-      ? summary.uploadBytesRemaining
-      : summary.downloadBytesRemaining
-
-  const maxPurchasableBytes = cap > maxConsumed ? cap - maxConsumed : 0n
+  // Cap is enforced on upload bytes only. Download credits are not allocated
+  // on purchase right now so there is no download cap to check.
+  const maxPurchasableBytes =
+    cap > summary.uploadBytesRemaining ? cap - summary.uploadBytesRemaining : 0n
   const canPurchase = maxPurchasableBytes > 0n
 
   return {

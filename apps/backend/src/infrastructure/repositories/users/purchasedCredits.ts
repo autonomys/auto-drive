@@ -468,7 +468,10 @@ const refundCredits = async (
 // Atomically checks the per-user cap and inserts a new credit row in a
 // single transaction, using a PostgreSQL advisory lock keyed to the account
 // to serialize concurrent calls. Returns err('cap_exceeded') if the purchase
-// would push either upload or download remaining over the cap.
+// would push upload remaining over the cap.
+// Download bytes are not capped — they are not allocated on purchase right
+// now (downloadBytesOriginal is expected to be 0n). Infrastructure is kept
+// for future use.
 // ---------------------------------------------------------------------------
 
 const createPurchasedCreditWithCapCheck = async (
@@ -506,12 +509,8 @@ const createPurchasedCreditWithCapCheck = async (
 
     const currentRow = currentResult.rows[0]
     const currentUpload = BigInt(currentRow.upload_bytes_remaining)
-    const currentDownload = BigInt(currentRow.download_bytes_remaining)
 
-    if (
-      currentUpload + params.uploadBytesOriginal > maxBytesPerUser ||
-      currentDownload + params.downloadBytesOriginal > maxBytesPerUser
-    ) {
+    if (currentUpload + params.uploadBytesOriginal > maxBytesPerUser) {
       await client.query('ROLLBACK')
       return err('cap_exceeded' as const)
     }

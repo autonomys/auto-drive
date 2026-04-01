@@ -3,14 +3,18 @@
 import { useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useUserStore } from 'globalStates/user';
+import { useDeletionStore } from 'globalStates/deletion';
 import { DefaultPasswordModal } from '../../molecules/DefaultPasswordModal';
+import { DeleteAccountModal } from './DeleteAccountModal';
 import { Button } from '@auto-drive/ui';
 import { useLogOut } from '@/hooks/useAuth';
-import { LogOut } from 'lucide-react';
+import { LogOut, Trash2 } from 'lucide-react';
 
 export const Profile = () => {
   const [isDefaultPasswordModalOpen, setIsDefaultPasswordModalOpen] =
     useState<boolean>(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const deletionRequest = useDeletionStore((state) => state.deletionRequest);
 
   const publicId = useUserStore((state) => state.user?.publicId);
   const { logOut } = useLogOut();
@@ -34,6 +38,11 @@ export const Profile = () => {
       <DefaultPasswordModal
         isOpen={isDefaultPasswordModalOpen}
         onClose={closeDefaultPasswordModal}
+      />
+      <DeleteAccountModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onDeleted={() => {}}
       />
       <div className='flex flex-col gap-4 p-2'>
         <span className='mb-4 text-2xl font-bold'>My Account</span>
@@ -68,6 +77,18 @@ export const Profile = () => {
               <LogOut className='h-4 w-4' />
             </Button>
           </span>
+          {!deletionRequest && (
+            <span>
+              <Button
+                variant='lightDanger'
+                className='flex items-center gap-2 text-sm'
+                onClick={() => setIsDeleteModalOpen(true)}
+              >
+                Delete Account
+                <Trash2 className='h-4 w-4' />
+              </Button>
+            </span>
+          )}
         </div>
       </div>
     </div>

@@ -6,8 +6,9 @@ import {
   refreshAccessToken,
 } from '../services/authManager/express.js'
 import { UsersUseCases } from '../useCases/index.js'
+import { DeletionUseCases } from '../useCases/deletion.js'
 import { ApiKeysUseCases } from '../useCases/apikeys.js'
-import { UserRole } from '@auto-drive/models'
+import { DeletionRequestStatus, UserRole } from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
 import { createLogger } from '../drivers/logger.js'
 
@@ -291,6 +292,218 @@ userController.post('/batch', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to get users' })
   }
 })
+
+// --- Account Deletion Endpoints ---
+
+userController.post('/@me/deletion', async (req: Request, res: Response) => {
+  const user = await handleAuth(req, res)
+  if (!user) {
+    return
+  }
+
+  try {
+    const { reason } = req.body ?? {}
+    const request = await DeletionUseCases.requestDeletion(
+      user,
+      typeof reason === 'string' ? reason : undefined,
+    )
+    res.status(201).json(request)
+  } catch (error) {
+    logger.error(error)
+    res.status(500).json({ error: 'Failed to request account deletion' })
+  }
+})
+
+userController.delete('/@me/deletion', async (req: Request, res: Response) => {
+  const user = await handleAuth(req, res)
+  if (!user) {
+    return
+  }
+
+  try {
+    const result = await DeletionUseCases.cancelDeletion(user)
+    if (!result) {
+      res.status(404).json({ error: 'No pending deletion request found' })
+      return
+    }
+    res.json(result)
+  } catch (error) {
+    logger.error(error)
+    res.status(500).json({ error: 'Failed to cancel deletion' })
+  }
+})
+
+userController.get('/@me/deletion', async (req: Request, res: Response) => {
+  const user = await handleAuth(req, res)
+  if (!user) {
+    return
+  }
+
+  try {
+    const request = await DeletionUseCases.getDeletionStatus(user)
+    res.json(request)
+  } catch (error) {
+    logger.error(error)
+    res.status(500).json({ error: 'Failed to get deletion status' })
+  }
+})
+
+// --- Admin Deletion Endpoints ---
+
+userController.get(
+  '/admin/deletions',
+  async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    try {
+      const status = req.query.status as DeletionRequestStatus | undefined
+      const requests = await DeletionUseCases.getAllDeletionRequests(user, status)
+      res.json(requests)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({ error: 'Failed to get deletion requests' })
+    }
+  },
+)
+
+userController.post(
+  '/admin/deletions/:id/notes',
+  async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const { notes } = req.body
+    if (typeof notes !== 'string') {
+      res.status(400).json({ error: 'Missing or invalid attribute `notes` in body' })
+      return
+    }
+
+    try {
+      const request = await DeletionUseCases.updateAdminNotes(
+        user,
+        req.params.id,
+        notes,
+      )
+      res.json(request)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({ error: 'Failed to update admin notes' })
+    }
+  },
+)
+
+// --- Internal Deletion Endpoints (called by backend service) ---
+
+userController.get(
+  '/admin/deletions/due',
+  async (req: Request, res: Response) => {
+    const isAdmin = await handleAdminAuth(req, res)
+    if (!isAdmin) {
+      return
+    }
+
+    try {
+      const requests = await DeletionUseCases.getDueForAnonymisation()
+      res.json(requests)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({ error: 'Failed to get due deletion requests' })
+    }
+  },
+)
+
+userController.post(
+  '/admin/deletions/:id/process',
+  async (req: Request, res: Response) => {
+    const isAdmin = await handleAdminAuth(req, res)
+    if (!isAdmin) {
+      return
+    }
+
+    try {
+      const result = await DeletionUseCases.markAsProcessing(req.params.id)
+      if (!result) {
+        res.status(404).json({ error: 'Deletion request not found or not pending' })
+        return
+      }
+      res.json(result)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({ error: 'Failed to mark as processing' })
+    }
+  },
+)
+
+userController.post(
+  '/admin/deletions/:id/anonymise',
+  async (req: Request, res: Response) => {
+    const isAdmin = await handleAdminAuth(req, res)
+    if (!isAdmin) {
+      return
+    }
+
+    try {
+      await DeletionUseCases.anonymiseUser(req.params.id)
+      res.sendStatus(200)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({ error: 'Failed to anonymise user' })
+    }
+  },
+)
+
+userController.post(
+  '/admin/deletions/:id/complete',
+  async (req: Request, res: Response) => {
+    const isAdmin = await handleAdminAuth(req, res)
+    if (!isAdmin) {
+      return
+    }
+
+    try {
+      const result = await DeletionUseCases.markAsCompleted(req.params.id)
+      if (!result) {
+        res.status(404).json({ error: 'Deletion request not found' })
+        return
+      }
+      res.json(result)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({ error: 'Failed to mark as completed' })
+    }
+  },
+)
+
+userController.post(
+  '/admin/deletions/:id/fail',
+  async (req: Request, res: Response) => {
+    const isAdmin = await handleAdminAuth(req, res)
+    if (!isAdmin) {
+      return
+    }
+
+    try {
+      const { adminNotes } = req.body ?? {}
+      const result = await DeletionUseCases.markAsFailed(
+        req.params.id,
+        typeof adminNotes === 'string' ? adminNotes : undefined,
+      )
+      if (!result) {
+        res.status(404).json({ error: 'Deletion request not found' })
+        return
+      }
+      res.json(result)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({ error: 'Failed to mark as failed' })
+    }
+  },
+)
 
 userController.get('/:publicId', async (req: Request, res: Response) => {
   const { publicId } = req.params

@@ -92,40 +92,48 @@ export const authOptions: AuthOptions = {
   ],
   callbacks: {
     async jwt({ account, token }) {
-      const isTokenSetupAndRefreshable =
-        token.accessToken && token.authProvider && token.refreshToken;
-      if (isTokenSetupAndRefreshable) {
-        // Only refresh if the access token is near expiry — avoids a network
-        // call to the auth service on every single session check.
-        // Note: token.exp is the NextAuth session JWT expiry (reset to
-        // now + maxAge on every encode), NOT the access token's expiry.
-        // We use accessTokenExp which is set explicitly in jwt.ts.
-        const nowInSeconds = Math.floor(Date.now() / 1000);
-        const accessTokenExp = (token.accessTokenExp as number) ?? 0;
-        const isNearExpiry =
-          accessTokenExp < nowInSeconds + refreshingTokenThresholdInSeconds;
-        if (isNearExpiry) {
-          return refreshAccessToken({
-            underlyingUserId: token.underlyingUserId!,
-            underlyingProvider: token.underlyingProvider!,
-            refreshToken: token.refreshToken!,
+      try {
+        const isTokenSetupAndRefreshable =
+          token.accessToken && token.authProvider && token.refreshToken;
+        if (isTokenSetupAndRefreshable) {
+          // Only refresh if the access token is near expiry — avoids a network
+          // call to the auth service on every single session check.
+          // Note: token.exp is the NextAuth session JWT expiry (reset to
+          // now + maxAge on every encode), NOT the access token's expiry.
+          // We use accessTokenExp which is set explicitly in jwt.ts.
+          const nowInSeconds = Math.floor(Date.now() / 1000);
+          const accessTokenExp = (token.accessTokenExp as number) ?? 0;
+          const isNearExpiry =
+            accessTokenExp < nowInSeconds + refreshingTokenThresholdInSeconds;
+          if (isNearExpiry) {
+            return refreshAccessToken({
+              underlyingUserId: token.underlyingUserId!,
+              underlyingProvider: token.underlyingProvider!,
+              refreshToken: token.refreshToken!,
+            });
+          }
+          return token;
+        }
+
+        const isOAuthSuccessfullyLoggedIn = account && account.access_token;
+        if (isOAuthSuccessfullyLoggedIn) {
+          return generateAccessToken({
+            provider: account.provider,
+            userId: account.providerAccountId,
+            oauthAccessToken: account.access_token!,
           });
         }
-        return token;
-      }
 
-      const isOAuthSuccessfullyLoggedIn = account && account.access_token;
-      if (isOAuthSuccessfullyLoggedIn) {
-        return generateAccessToken({
-          provider: account.provider,
-          userId: account.providerAccountId,
-          oauthAccessToken: account.access_token!,
-        });
+        throw new Error('No account or token found');
+      } catch (error) {
+        console.error('JWT callback error, invalidating session:', error);
+        return { ...token, error: 'RefreshTokenError' };
       }
-
-      throw new Error('No account or token found');
     },
     async session({ session, token }) {
+      if (token.error === 'RefreshTokenError') {
+        session.error = 'RefreshTokenError';
+      }
       session.accessToken = token.accessToken;
       session.authProvider = token.authProvider;
       session.authUserId = token.authUserId;

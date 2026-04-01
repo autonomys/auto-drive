@@ -23,12 +23,17 @@ export const featureFlagMiddleware =
 export const getFeatureFlags = async (req: Request, res: Response) => {
   // If is authenticated, get the user from the request
   if (req.headers.authorization) {
-    const user = await handleAuth(req, res)
-    if (!user) {
-      return
-    }
+    try {
+      const user = await handleAuth(req, res)
+      if (!user) {
+        return
+      }
 
-    return FeatureFlagsUseCases.get(user)
+      return FeatureFlagsUseCases.get(user)
+    } catch {
+      // Auth failure — fall through to unauthenticated flags
+      return FeatureFlagsUseCases.get(null)
+    }
   }
 
   return FeatureFlagsUseCases.get(null)

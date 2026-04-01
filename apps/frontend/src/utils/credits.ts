@@ -18,14 +18,15 @@ export const isPackageOverCap = (
 };
 
 /**
- * Computes the number of days remaining until `expiresAt`, rounding up to the
- * nearest whole day.  Returns null when `expiresAt` is not provided.
+ * Computes the number of whole days remaining until `expiresAt`, rounding
+ * down so that credits expiring today (< 1 day remaining) return 0.
+ * Returns null when `expiresAt` is not provided.
  */
 export const daysUntilExpiry = (expiresAt: Date | null): number | null => {
   if (!expiresAt) return null;
   return Math.max(
     0,
-    Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+    Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
   );
 };
 

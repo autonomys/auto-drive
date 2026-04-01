@@ -27,8 +27,11 @@ Yarn 4.2.2 monorepo with workspaces in `apps/`, `packages/`, and `submodules/`.
 # Install dependencies
 yarn install
 
-# Initialize git submodules (required first time)
+# Initialize git submodules (required first time, and in each new worktree)
 make init-submodules
+# ⚠️ Worktrees do NOT inherit initialized submodules from the main repo.
+# If `yarn install` fails with "Workspace not found (@auto-files/rpc-apis)",
+# run `git submodule update --init --recursive` or `make init-submodules`.
 
 # Build everything (submodules + models + ui + s3 + frontend + backend)
 make all

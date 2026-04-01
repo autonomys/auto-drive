@@ -1,11 +1,14 @@
 import { SessionContext } from 'next-auth/react';
 import { useContext, useEffect } from 'react';
 import { useUserStore } from '../../globalStates/user';
+import { useTouStore } from '../../globalStates/tou';
 import { useNetwork } from '../../contexts/network';
 import { AuthService } from '../../services/auth/auth';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CreditSummaryResponse } from '../../services/api';
+import { TouChangeType } from '@auto-drive/models';
+import { TouAcceptanceInterstitial } from '../views/TouAcceptance';
 
 export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
@@ -14,22 +17,30 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const setFeatures = useUserStore(({ setFeatures }) => setFeatures);
   const setAccount = useUserStore((m) => m.setAccount);
   const setCreditSummary = useUserStore((m) => m.setCreditSummary);
+  const touStatus = useTouStore((m) => m.touStatus);
+  const setTouStatus = useTouStore((m) => m.setTouStatus);
   const { api } = useNetwork();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (session === undefined) return;
 
     if (session.data === null) {
       setUser(null);
+      setTouStatus(null);
     } else {
-      AuthService.getMe().then((user) => {
-        if (user.onboarded) {
-          setUser(user);
-        } else {
+      AuthService.getMe()
+        .then((user) => {
+          if (user.onboarded) {
+            setUser(user);
+          } else {
+            setUser(null);
+            router.push('/onboarding');
+          }
+        })
+        .catch(() => {
           setUser(null);
-          router.push('/onboarding');
-        }
-      });
+        });
     }
   }, [api, router, session, session?.data, setAccount, setUser]);
 
@@ -53,6 +64,16 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
     enabled: !!session?.data,
   });
 
+  const { data: touStatusData, isLoading: touStatusLoading } = useQuery({
+    queryKey: ['touStatus'],
+    queryFn: () => api.getTouStatus(),
+    enabled: !!session?.data,
+  });
+
+  useEffect(() => {
+    setTouStatus(touStatusData ?? null);
+  }, [touStatusData, setTouStatus]);
+
   useEffect(() => {
     if (account) setAccount(account);
   }, [account, setAccount]);
@@ -68,6 +89,26 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   if (session === undefined) {
     // TODO: Add a loading state
     return <div>Loading...</div>;
+  }
+
+  if (session?.data && touStatusLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (
+    session?.data &&
+    touStatus &&
+    !touStatus.accepted &&
+    touStatus.currentVersion?.changeType === TouChangeType.Material
+  ) {
+    return (
+      <TouAcceptanceInterstitial
+        touStatus={touStatus}
+        onAccepted={() =>
+          queryClient.invalidateQueries({ queryKey: ['touStatus'] })
+        }
+      />
+    );
   }
 
   return <>{children}</>;

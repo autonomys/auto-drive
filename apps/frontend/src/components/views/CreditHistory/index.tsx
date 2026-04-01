@@ -131,7 +131,7 @@ export const CreditHistoryView = () => {
   const { account, features } = useUserStore();
 
   const hasBuyCreditsFeature =
-    features.buyCredits && account?.model === AccountModel.OneOff;
+    !!features.buyCredits && account?.model === AccountModel.OneOff;
 
   const purchaseHref = `/${network.id}/drive/purchase`;
 
@@ -145,7 +145,7 @@ export const CreditHistoryView = () => {
   // Show CTA when user has no active non-depleted batches or all are expiring
   // within 7 days.
   const showBuyMoreCta = useMemo(() => {
-    if (!hasBuyCreditsFeature) return false;
+    if (!hasBuyCreditsFeature || isLoading) return false;
     if (batches.length === 0) return true;
     const activeBatches = batches.filter((b: ExpiringCreditBatch) => {
       if (b.expired) return false;
@@ -154,7 +154,7 @@ export const CreditHistoryView = () => {
       return days === null || days > 7;
     });
     return activeBatches.length === 0;
-  }, [batches, hasBuyCreditsFeature]);
+  }, [batches, hasBuyCreditsFeature, isLoading]);
 
   if (!hasBuyCreditsFeature) {
     return (
