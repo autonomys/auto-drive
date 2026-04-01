@@ -54,16 +54,6 @@ export const TouAcceptanceInterstitial = ({
             . Please review the changes and accept to continue using Auto Drive.
           </p>
         </div>
-        {touStatus.currentVersion?.contentUrl && (
-          <a
-            rel='noreferrer'
-            target='_blank'
-            href={touStatus.currentVersion.contentUrl}
-            className='text-sm underline'
-          >
-            Read the full Terms of Use
-          </a>
-        )}
         <div className='flex items-center gap-2'>
           <Checkbox
             checked={accepted}
