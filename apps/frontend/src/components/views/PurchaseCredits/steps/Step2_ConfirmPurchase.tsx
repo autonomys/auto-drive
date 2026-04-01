@@ -3,16 +3,47 @@
 import { Button } from '@auto-drive/ui';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
-import { useCallback, useMemo } from 'react';
-import { Zap } from 'lucide-react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
+import { Zap, AlertTriangle } from 'lucide-react';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
 import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
-import {
-  formatBytes,
-  truncateNumberWithDecimals,
-} from '../../../../utils/number';
+import { formatBytes } from '../../../../utils/number';
 import { useUserStore } from '../../../../globalStates/user';
+
+// ---------------------------------------------------------------------------
+// Unit helpers
+// ---------------------------------------------------------------------------
+
+const UNITS = ['MB', 'GB', 'TB'] as const;
+type Unit = (typeof UNITS)[number];
+
+// All internal sizes use MiB. We treat MB=MiB, GB=GiB, TB=TiB to match the
+// existing package definitions (e.g. "1GB" preset = 1024 MiB).
+const MIB_PER_UNIT: Record<Unit, number> = {
+  MB: 1,
+  GB: 1024,
+  TB: 1024 * 1024,
+};
+
+/** Pick the most human-readable unit for a given MiB value. */
+const bestUnit = (mib: number): Unit => {
+  if (mib >= MIB_PER_UNIT.TB) return 'TB';
+  if (mib >= MIB_PER_UNIT.GB) return 'GB';
+  return 'MB';
+};
+
+/** Convert a MiB value to the display value in a given unit, trimmed to 4 sig-figs. */
+const mibToDisplay = (mib: number, unit: Unit): string => {
+  if (mib <= 0) return '';
+  const val = mib / MIB_PER_UNIT[unit];
+  // Up to 4 significant digits, no trailing zeros
+  return parseFloat(val.toPrecision(4)).toString();
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export const PurchaseStep2ConnectWallet = ({
   onNext,
@@ -25,68 +56,121 @@ export const PurchaseStep2ConnectWallet = ({
   context: Record<string, unknown>;
   onContextChange: (data: Record<string, unknown>) => void;
 }) => {
-  const {
-    formatCreditsInMbAsUsd,
-    formatAi3AsCreditsInMb,
-    formatCreditsInMbAsAi3,
-  } = usePrices();
+  const { formatCreditsInMbAsUsd, formatCreditsInMbAsAi3 } = usePrices();
 
   const isCustom = String(context.packageId ?? 'custom') === 'custom';
 
-  // creditSummary.uploadBytesRemaining is the user's current purchased-credit
-  // pool (a decimal bigint string from the API).  We display this — not the
-  // free-tier pendingUploadCredits — because Step 2 is in the purchase flow
-  // and the user is buying more purchased credits.
-  // Safely defaults to 0 while the summary is still loading or when the user
-  // has no purchased credits yet.
   const currentPurchasedBytes = useUserStore((s) =>
     s.creditSummary ? Number(s.creditSummary.uploadBytesRemaining) : 0,
   );
+
+  const maxPurchasableBytes = useUserStore((s) =>
+    s.creditSummary ? BigInt(s.creditSummary.maxPurchasableBytes) : null,
+  );
+
+  // -------------------------------------------------------------------------
+  // Derive fixed-package title & size
+  // -------------------------------------------------------------------------
 
   const { title, sizeMB } = useMemo(() => {
     const id = String(context.packageId ?? 'custom');
     switch (id) {
       case 'starter':
-        return {
-          title: 'Starter',
-          sizeMB: 10,
-        };
+        return { title: 'Starter', sizeMB: 10 };
       case 'pro':
-        return {
-          title: 'Professional Package',
-          sizeMB: 100,
-        };
+        return { title: 'Professional Package', sizeMB: 100 };
       case 'ent':
-        return {
-          title: 'Enterprise',
-          sizeMB: 1024,
-        };
+        return { title: 'Enterprise', sizeMB: 1024 };
       default:
-        return {
-          title: 'Custom Amount',
-          sizeMB: (context.sizeMB as number) ?? 0,
-        };
+        return { title: 'Custom Amount', sizeMB: (context.sizeMB as number) ?? 0 };
     }
   }, [context.packageId, context.sizeMB]);
 
-  const onChangeMb = useCallback(
-    (value: string) => {
-      const mb = Math.max(0, Number(value) || 0);
-      onContextChange({ sizeMB: mb });
-    },
-    [onContextChange],
+  // -------------------------------------------------------------------------
+  // Custom-amount local state: unit selector + raw string input value
+  // -------------------------------------------------------------------------
+
+  const [unit, setUnit] = useState<Unit>(() => bestUnit(sizeMB || 1));
+  const [inputValue, setInputValue] = useState<string>(() =>
+    mibToDisplay(sizeMB, bestUnit(sizeMB || 1)),
   );
 
-  const onChangeAi3 = useCallback(
-    (value: string) => {
-      const mb = truncateNumberWithDecimals(
-        formatAi3AsCreditsInMb(Number(value)),
-        2,
-      );
-      onContextChange({ sizeMB: mb });
+  // When context sizeMB changes externally (e.g. navigating back), re-sync
+  // the display value only if the input is empty (avoids clobbering typing).
+  useEffect(() => {
+    if (isCustom && sizeMB > 0 && inputValue === '') {
+      const u = bestUnit(sizeMB);
+      setUnit(u);
+      setInputValue(mibToDisplay(sizeMB, u));
+    }
+  }, [isCustom, sizeMB, inputValue]);
+
+  /** MiB value derived from the current input + unit. */
+  const customSizeMib = useMemo(() => {
+    const num = parseFloat(inputValue);
+    if (!isFinite(num) || num <= 0) return 0;
+    return Math.round(num * MIB_PER_UNIT[unit]);
+  }, [inputValue, unit]);
+
+  /** The effective MiB value for price calculations. */
+  const effectiveMib = isCustom ? customSizeMib : sizeMB;
+
+  // -------------------------------------------------------------------------
+  // Cap validation
+  // -------------------------------------------------------------------------
+
+  const capExceeded = useMemo(() => {
+    if (!isCustom || !maxPurchasableBytes || effectiveMib <= 0) return false;
+    const requestedBytes = BigInt(effectiveMib) * BigInt(1024 * 1024);
+    return requestedBytes > maxPurchasableBytes;
+  }, [isCustom, maxPurchasableBytes, effectiveMib]);
+
+  const maxPurchasableMib = useMemo(() => {
+    if (!maxPurchasableBytes) return null;
+    return Number(maxPurchasableBytes / BigInt(1024 * 1024));
+  }, [maxPurchasableBytes]);
+
+  // -------------------------------------------------------------------------
+  // Handlers
+  // -------------------------------------------------------------------------
+
+  const handleInputChange = useCallback(
+    (raw: string) => {
+      // Allow only digits and a single decimal point — prevents leading zeros,
+      // scientific notation ("1e5"), and negative values.
+      const sanitised = raw.replace(/[^0-9.]/g, '').replace(/^(\d*\.?\d*).*$/, '$1');
+      setInputValue(sanitised);
+      const num = parseFloat(sanitised);
+      const mib = isFinite(num) && num > 0 ? Math.round(num * MIB_PER_UNIT[unit]) : 0;
+      onContextChange({ sizeMB: mib });
     },
-    [formatAi3AsCreditsInMb, onContextChange],
+    [unit, onContextChange],
   );
+
+  const handleUnitChange = useCallback(
+    (newUnit: Unit) => {
+      // Convert the current MiB value into the new unit to keep the
+      // displayed number consistent with the underlying purchase size.
+      const currentMib = parseFloat(inputValue) * MIB_PER_UNIT[unit];
+      setUnit(newUnit);
+      setInputValue(isFinite(currentMib) && currentMib > 0 ? mibToDisplay(currentMib, newUnit) : '');
+    },
+    [inputValue, unit],
+  );
+
+  // -------------------------------------------------------------------------
+  // Derived price display values
+  // -------------------------------------------------------------------------
+
+  const ai3Amount = formatCreditsInMbAsAi3(effectiveMib);
+  const usdAmount = formatCreditsInMbAsUsd(effectiveMib);
+  const afterPurchaseBytes = currentPurchasedBytes + effectiveMib * 1024 * 1024;
+
+  const canConfirm = effectiveMib > 0 && !capExceeded;
+
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
 
   return (
     <div className='flex flex-col gap-4'>
@@ -94,7 +178,9 @@ export const PurchaseStep2ConnectWallet = ({
         <GoBackButton onClick={onBack} />
       </div>
       <CreditCurrentPrice />
+
       <div className='grid grid-cols-1 gap-4 xl:grid-cols-3'>
+        {/* Left: Order details */}
         <div className='xl:col-span-2'>
           <div className='flex flex-col gap-3 p-4'>
             <Section
@@ -105,6 +191,7 @@ export const PurchaseStep2ConnectWallet = ({
                 </div>
               }
             >
+              {/* Summary banner */}
               <div className='flex items-center justify-between rounded-md bg-muted p-4 dark:bg-gray-800'>
                 <div className='flex flex-col'>
                   <div className='text-sm font-medium'>{title}</div>
@@ -113,53 +200,86 @@ export const PurchaseStep2ConnectWallet = ({
                   </div>
                 </div>
                 <div className='text-right'>
-                  <div className='text-xl font-bold'>{sizeMB}MiB</div>
+                  <div className='text-xl font-bold'>
+                    {formatBytes(effectiveMib * 1024 * 1024, 2)}
+                  </div>
                   <div className='text-xs text-muted-foreground'>Storage</div>
                 </div>
               </div>
 
+              {/* Custom amount input */}
+              {isCustom && (
+                <div className='mt-2 flex flex-col gap-3 rounded-md border p-4'>
+                  <div className='text-sm font-medium text-muted-foreground'>
+                    Storage Amount
+                  </div>
+
+                  {/* Unit toggle + numeric input */}
+                  <div className='flex items-center gap-3'>
+                    <input
+                      type='text'
+                      inputMode='decimal'
+                      placeholder='0'
+                      className='w-40 rounded-md border px-3 py-2 text-xl font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-800'
+                      value={inputValue}
+                      onChange={(e) => handleInputChange(e.target.value)}
+                    />
+                    {/* Unit selector */}
+                    <div className='flex overflow-hidden rounded-md border'>
+                      {UNITS.map((u) => (
+                        <button
+                          key={u}
+                          type='button'
+                          onClick={() => handleUnitChange(u)}
+                          className={`px-4 py-2 text-sm font-medium transition-colors ${
+                            unit === u
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-background text-muted-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Cap-exceeded warning */}
+                  {capExceeded && maxPurchasableMib !== null && (
+                    <div className='flex items-start gap-2 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
+                      <AlertTriangle className='mt-0.5 h-4 w-4 shrink-0' />
+                      <span>
+                        Exceeds your remaining cap.{' '}
+                        Maximum you can purchase:{' '}
+                        <strong>{formatBytes(maxPurchasableMib * 1024 * 1024, 2)}</strong>
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Zero-amount hint */}
+                  {effectiveMib === 0 && inputValue !== '' && (
+                    <div className='text-xs text-muted-foreground'>
+                      Enter an amount greater than 0.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Price breakdown (read-only) */}
               <InfoRow
                 label='Storage Amount'
-                value={
-                  isCustom ? (
-                    <input
-                      type='number'
-                      min={0}
-                      step={1}
-                      className='w-28 rounded-md border px-2 py-1 text-right dark:bg-gray-800'
-                      value={Number(sizeMB) || 0}
-                      onChange={(e) => onChangeMb(e.target.value)}
-                    />
-                  ) : (
-                    <span>{sizeMB}MiB</span>
-                  )
-                }
+                value={<span>{formatBytes(effectiveMib * 1024 * 1024, 2)}</span>}
               />
               <InfoRow
                 label='AI3 Token Amount'
                 value={
-                  isCustom ? (
-                    <input
-                      style={{ appearance: 'none', MozAppearance: 'textfield' }}
-                      type='number'
-                      min={0}
-                      step={1}
-                      className='w-28 rounded-md border px-2 py-1 text-right dark:bg-gray-800'
-                      value={formatCreditsInMbAsAi3(Number(sizeMB))}
-                      onChange={(e) => onChangeAi3(e.target.value)}
-                    />
-                  ) : (
-                    <span className='bg-background'>
-                      {formatCreditsInMbAsAi3(Number(sizeMB)).toFixed(2)} AI3
-                    </span>
-                  )
+                  <span>{ai3Amount > 0 ? `${ai3Amount.toFixed(6)} AI3` : '—'}</span>
                 }
               />
               <InfoRow
                 label='USD Equivalent'
                 value={
                   <span>
-                    ${formatCreditsInMbAsUsd(Number(sizeMB)).toFixed(2)}
+                    {usdAmount > 0 ? `$${usdAmount.toFixed(2)}` : '—'}
                   </span>
                 }
               />
@@ -169,7 +289,7 @@ export const PurchaseStep2ConnectWallet = ({
                   label='Total'
                   value={
                     <span className='font-semibold'>
-                      {formatCreditsInMbAsAi3(Number(sizeMB)).toFixed(2)} AI3
+                      {ai3Amount > 0 ? `${ai3Amount.toFixed(2)} AI3` : '—'}
                     </span>
                   }
                   accent
@@ -179,6 +299,7 @@ export const PurchaseStep2ConnectWallet = ({
           </div>
         </div>
 
+        {/* Right: Payment summary */}
         <div className='xl:col-span-1'>
           <Section title='Complete Payment'>
             <div className='flex flex-col gap-3 p-4'>
@@ -191,10 +312,9 @@ export const PurchaseStep2ConnectWallet = ({
                 label='After Purchase'
                 value={
                   <span className='font-semibold'>
-                    {formatBytes(
-                      currentPurchasedBytes + Number(sizeMB) * 1024 * 1024,
-                      2,
-                    )}
+                    {effectiveMib > 0
+                      ? formatBytes(afterPurchaseBytes, 2)
+                      : formatBytes(currentPurchasedBytes, 2)}
                   </span>
                 }
                 className='rounded-md bg-primary/20 p-4'
@@ -205,8 +325,9 @@ export const PurchaseStep2ConnectWallet = ({
                   Back
                 </Button>
                 <Button
+                  disabled={!canConfirm}
                   onClick={() => {
-                    onNext({ sizeMB });
+                    if (canConfirm) onNext({ sizeMB: effectiveMib });
                   }}
                   className='w-2/3'
                 >
