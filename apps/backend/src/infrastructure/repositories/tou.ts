@@ -325,6 +325,9 @@ const createAcceptance = async (
      WHERE user_id = $1 AND version_id = $2`,
     [userId, versionId],
   )
+  if (!existing.rows[0]) {
+    throw new Error('ToU acceptance record unexpectedly missing')
+  }
   return mapAcceptanceRow(existing.rows[0])
 }
 
