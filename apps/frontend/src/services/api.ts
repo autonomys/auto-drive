@@ -6,6 +6,7 @@ import {
   BannerCriticality,
   BannerInteractionType,
   BannerWithStats,
+  DeletionAuditEntry,
   ObjectInformation,
   DownloadStatus,
   Intent,
@@ -1090,5 +1091,59 @@ export const createApiService = ({
     }
 
     return response.json() as Promise<TouVersionWithStats>;
+  },
+
+  // --- Deletion Admin (backend) ---
+
+  getDeletionAuditLog: async (
+    publicId: string,
+  ): Promise<DeletionAuditEntry[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/deletion/admin/audit/${publicId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get deletion audit log: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<DeletionAuditEntry[]>;
+  },
+
+  getDeletionStats: async (): Promise<{
+    totalAnonymisations: number;
+    recentAnonymisations: number;
+  }> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/deletion/admin/stats`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get deletion stats: ${response.statusText}`,
+      );
+    }
+
+    return response.json();
   },
 });
