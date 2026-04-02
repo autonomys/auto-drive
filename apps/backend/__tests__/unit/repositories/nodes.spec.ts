@@ -537,4 +537,109 @@ describe('Nodes Repository', () => {
     expect(result?.piece_index).toBe(2)
     expect(result?.piece_offset).toBe(200)
   })
+
+  // -------------------------------------------------------------------------
+  // Regression tests for concurrent / duplicate-CID upload fix
+  // -------------------------------------------------------------------------
+
+  it('saveNode: second insert with same CID does not throw and updates encoded_node', async () => {
+    const node: Node = {
+      cid: 'dup-cid-savenode',
+      root_cid: 'dup-root-cid',
+      head_cid: 'dup-head-cid',
+      type: 'file',
+      encoded_node: 'original-encoded-node',
+      piece_index: null,
+      piece_offset: null,
+      block_published_on: null,
+      tx_published_on: null,
+    }
+
+    await nodesRepository.saveNode(node)
+
+    // Simulate second concurrent upload of same file: same CID, fresh encoded_node
+    await expect(
+      nodesRepository.saveNode({ ...node, encoded_node: 'updated-encoded-node' }),
+    ).resolves.not.toThrow()
+
+    const result = await nodesRepository.getNode(node.cid)
+    expect(result?.encoded_node).toBe('updated-encoded-node')
+  })
+
+  it('saveNodes: duplicate CIDs in batch do not throw and update encoded_node', async () => {
+    const nodes: Node[] = [
+      {
+        cid: 'dup-batch-cid-1',
+        root_cid: 'dup-batch-root',
+        head_cid: 'dup-batch-head',
+        type: 'file',
+        encoded_node: 'original-1',
+        piece_index: null,
+        piece_offset: null,
+        block_published_on: null,
+        tx_published_on: null,
+      },
+      {
+        cid: 'dup-batch-cid-2',
+        root_cid: 'dup-batch-root',
+        head_cid: 'dup-batch-head',
+        type: 'file',
+        encoded_node: 'original-2',
+        piece_index: null,
+        piece_offset: null,
+        block_published_on: null,
+        tx_published_on: null,
+      },
+    ]
+
+    await nodesRepository.saveNodes(nodes)
+
+    // Second migration of identical file (same CIDs)
+    const updatedNodes = nodes.map((n) => ({
+      ...n,
+      encoded_node: n.encoded_node + '-updated',
+    }))
+    await expect(nodesRepository.saveNodes(updatedNodes)).resolves.not.toThrow()
+
+    const result1 = await nodesRepository.getNode(nodes[0].cid)
+    const result2 = await nodesRepository.getNode(nodes[1].cid)
+    expect(result1?.encoded_node).toBe('original-1-updated')
+    expect(result2?.encoded_node).toBe('original-2-updated')
+  })
+
+  it('saveNodes: re-upload of archived nodes preserves piece_index (COALESCE)', async () => {
+    const archivedNode: Node = {
+      cid: 'archived-dup-cid',
+      root_cid: 'archived-dup-root',
+      head_cid: 'archived-dup-head',
+      type: 'file',
+      encoded_node: 'archived-encoded-node',
+      piece_index: 42,
+      piece_offset: 1000,
+      block_published_on: 999,
+      tx_published_on: 'tx-abc',
+    }
+
+    await nodesRepository.saveNodes([archivedNode])
+
+    // Re-upload: migration runs again with piece_index=null (new upload has no archival data yet)
+    const reuploadNode: Node = {
+      ...archivedNode,
+      encoded_node: 'new-encoded-node',
+      piece_index: null,
+      piece_offset: null,
+      block_published_on: null,
+      tx_published_on: null,
+    }
+    await nodesRepository.saveNodes([reuploadNode])
+
+    const result = await nodesRepository.getNode(archivedNode.cid)
+    // encoded_node should be refreshed
+    expect(result?.encoded_node).toBe('new-encoded-node')
+    // blockchain archival data should be preserved by COALESCE
+    expect(result?.piece_index).toBe(42)
+    expect(result?.piece_offset).toBe(1000)
+    expect(result?.block_published_on).toBe(999)
+    expect(result?.tx_published_on).toBe('tx-abc')
+  })
 })
