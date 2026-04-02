@@ -578,7 +578,7 @@ const markAsRefunded = async (
   }
 
   const exists = await db.query<{ id: string }>(
-    `SELECT id FROM purchased_credits WHERE id = $1`,
+    'SELECT id FROM purchased_credits WHERE id = $1',
     [id],
   )
   return { found: exists.rows.length > 0, row: null }
