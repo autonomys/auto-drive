@@ -76,10 +76,12 @@ describe('ObjectUseCases.onObjectArchived', () => {
       .spyOn(nodesRepository, 'getNodesByRootCid')
       .mockResolvedValue(mockNodes as never)
 
-    jest.spyOn(metadataRepository, 'markAsArchived').mockResolvedValue()
+    jest
+      .spyOn(metadataRepository, 'markAsArchived')
+      .mockResolvedValue(undefined as never)
     jest
       .spyOn(nodesRepository, 'removeNodeDataByRootCid')
-      .mockResolvedValue()
+      .mockResolvedValue(undefined as never)
 
     await ObjectUseCases.onObjectArchived('cid-with-nodes')
 
