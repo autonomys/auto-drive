@@ -42,7 +42,7 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
           setUser(null);
         });
     }
-  }, [api, router, session, session?.data, setAccount, setUser]);
+  }, [api, router, session, session?.data, setAccount, setTouStatus, setUser]);
 
   const { data: account } = useQuery({
     queryKey: ['account'],

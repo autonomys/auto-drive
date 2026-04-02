@@ -8,7 +8,12 @@ import {
 } from '../../molecules/Sidebar';
 import { useUserStore } from '../../../globalStates/user';
 import { AccountModel, UserRole } from '@auto-drive/models';
-import { AutonomysSymbol, Button, NetworkId } from '@auto-drive/ui';
+import {
+  AutonomysSymbol,
+  Button,
+  EXTERNAL_ROUTES,
+  NetworkId,
+} from '@auto-drive/ui';
 import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
 import { SessionContext } from 'next-auth/react';
@@ -126,6 +131,27 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
           >
             Log In
           </Button>
+        )}
+        {!collapsed && (
+          <div className='mt-2 flex gap-2 text-[10px] text-muted-foreground'>
+            <a
+              href={EXTERNAL_ROUTES.termsOfUse}
+              target='_blank'
+              rel='noreferrer'
+              className='hover:underline'
+            >
+              Terms
+            </a>
+            <span>&middot;</span>
+            <a
+              href={EXTERNAL_ROUTES.privacyPolicy}
+              target='_blank'
+              rel='noreferrer'
+              className='hover:underline'
+            >
+              Privacy
+            </a>
+          </div>
         )}
       </SidebarFooter>
     </Sidebar>

@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button, Checkbox } from '@headlessui/react';
 import { CheckIcon } from 'lucide-react';
 import { AuthService } from 'services/auth/auth';
 import { Disclaimer } from '@/components/atoms/Disclaimer';
 import {
+  EXTERNAL_ROUTES,
   ROUTES,
   AutonomysSymbol,
   defaultNetworkId,
@@ -31,8 +32,34 @@ const acceptTouAfterOnboarding = async () => {
   }
 };
 
+const fetchCurrentTouUrl = async (): Promise<string | null> => {
+  try {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) return null;
+    const network = getNetwork(defaultNetworkId);
+    const response = await fetch(`${network.http}/tou/status`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.currentVersion?.contentUrl ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export const Onboarding = () => {
   const [accepted, setAccepted] = useState(false);
+  const [touUrl, setTouUrl] = useState(EXTERNAL_ROUTES.termsOfUse);
+
+  useEffect(() => {
+    fetchCurrentTouUrl().then((url) => {
+      if (url) setTouUrl(url);
+    });
+  }, []);
 
   const onboardUser = useCallback(async () => {
     AuthService.onboardUser()
@@ -68,10 +95,10 @@ export const Onboarding = () => {
             <a
               rel='noreferrer'
               target='_blank'
-              href='https://www.autonomys.xyz/terms-of-use'
+              href={touUrl}
               className='underline'
             >
-              terms and conditions
+              Terms of Use
             </a>
           </span>
         </div>
