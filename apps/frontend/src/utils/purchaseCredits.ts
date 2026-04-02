@@ -92,27 +92,3 @@ export const isCustomAmountOverCap = (
   const requestedBytes = BigInt(requestedMib) * BigInt(1024 * 1024);
   return requestedBytes > maxPurchasableBytes;
 };
-
-// ---------------------------------------------------------------------------
-// Payment amount
-// ---------------------------------------------------------------------------
-
-/**
- * Compute the on-chain payment amount (in shannons / smallest AI3 unit) for
- * a given storage size.
- *
- * Formula: sizeMib × 1,048,576 bytes/MiB × shannonsPerByte
- *
- * Uses BigInt arithmetic to avoid floating-point precision issues with large
- * values.  `shannonsPerByte` is expected to be a `bigint` as returned by the
- * pricing API.
- *
- * Returns BigInt(0) when either input is zero / undefined.
- */
-export const computePaymentShannons = (
-  sizeMib: number,
-  shannonsPerByte: bigint | undefined,
-): bigint => {
-  if (!sizeMib || !shannonsPerByte) return BigInt(0);
-  return BigInt(sizeMib) * BigInt(1024 * 1024) * shannonsPerByte;
-};

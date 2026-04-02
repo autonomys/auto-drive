@@ -6,7 +6,6 @@ import {
   sanitizeAmountInput,
   inputToMib,
   isCustomAmountOverCap,
-  computePaymentShannons,
 } from '../../../src/utils/purchaseCredits';
 
 // ---------------------------------------------------------------------------
@@ -269,59 +268,3 @@ describe('isCustomAmountOverCap', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// computePaymentShannons
-// ---------------------------------------------------------------------------
-
-describe('computePaymentShannons', () => {
-  it('returns 0n when sizeMib is 0', () => {
-    expect(computePaymentShannons(0, BigInt(100))).toBe(BigInt(0));
-  });
-
-  it('returns 0n when shannonsPerByte is undefined', () => {
-    expect(computePaymentShannons(10, undefined)).toBe(BigInt(0));
-  });
-
-  it('returns 0n when shannonsPerByte is 0n', () => {
-    expect(computePaymentShannons(10, BigInt(0))).toBe(BigInt(0));
-  });
-
-  it('computes payment correctly for 1 MiB at 1 shannon/byte', () => {
-    // 1 MiB = 1,048,576 bytes × 1 shannon/byte = 1,048,576 shannons
-    expect(computePaymentShannons(1, BigInt(1))).toBe(BigInt(1024 * 1024));
-  });
-
-  it('computes payment correctly for 10 MB at a realistic rate', () => {
-    // Roughly 1e12 shannons per byte is a plausible AI3 rate
-    const shannonsPerByte = BigInt('1000000000000'); // 1e12
-    const sizeMib = 10;
-    const expected = BigInt(10) * BigInt(1024 * 1024) * shannonsPerByte;
-    expect(computePaymentShannons(sizeMib, shannonsPerByte)).toBe(expected);
-  });
-
-  it('matches the formula: sizeMib × 1,048,576 × shannonsPerByte', () => {
-    const shannonsPerByte = BigInt('5000000000'); // 5e9
-    const sizeMib = 1024; // 1 GiB
-    const expected =
-      BigInt(1024) * BigInt(1024 * 1024) * BigInt('5000000000');
-    expect(computePaymentShannons(sizeMib, shannonsPerByte)).toBe(expected);
-  });
-
-  it('handles 1 TB (1,048,576 MiB) without overflow', () => {
-    const shannonsPerByte = BigInt(1);
-    const oneTibMib = 1024 * 1024;
-    const expected = BigInt(oneTibMib) * BigInt(1024 * 1024);
-    expect(computePaymentShannons(oneTibMib, shannonsPerByte)).toBe(expected);
-  });
-
-  it('is consistent with the usePrices formatCreditsInMbAsValue formula', () => {
-    // usePrices: BigInt(creditsInMb * BYTES_PER_MiB) * BigInt(shannonsPerByte)
-    // Our formula: BigInt(sizeMib) * BigInt(1024*1024) * shannonsPerByte
-    // They are equivalent; verify for a concrete value.
-    const shannonsPerByte = BigInt('3500000000'); // 3.5e9
-    const sizeMib = 256;
-    const BYTES_PER_MiB = 1024 ** 2;
-    const fromUsePrices = BigInt(sizeMib * BYTES_PER_MiB) * shannonsPerByte;
-    expect(computePaymentShannons(sizeMib, shannonsPerByte)).toBe(fromUsePrices);
-  });
-});
