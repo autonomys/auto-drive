@@ -65,6 +65,7 @@ const makeCreditRow = (
   purchasedAt: now,
   expiresAt: FUTURE_EXPIRY,
   expired: false,
+  refundedAt: null,
   createdAt: now,
   updatedAt: now,
   ...overrides,

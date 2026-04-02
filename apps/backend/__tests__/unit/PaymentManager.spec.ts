@@ -55,12 +55,14 @@ describe('PaymentManager', () => {
       const txHash = '0xabc456'
       const intentId = '0xintent123'
       const paymentAmount = 100n
+      const fromAddress = '0xSenderWallet'
 
       config.paymentManager.contractAddress = '0xContractAddress'
 
       jest
         .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
+          from: fromAddress,
           logs: [
             {
               address: '0xContractAddress',
@@ -90,11 +92,13 @@ describe('PaymentManager', () => {
 
       await paymentManager.watchTransaction(txHash)
 
-      // The function should process the logs and attempt to mark intents
+      // The function should process the logs and attempt to mark intents,
+      // passing fromAddress captured from receipt.from.
       expect(markIntentSpy).toHaveBeenCalledTimes(1)
       expect(markIntentSpy).toHaveBeenCalledWith({
         intentId,
         paymentAmount,
+        fromAddress,
       })
     })
 

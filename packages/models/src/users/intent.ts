@@ -24,6 +24,10 @@ export const IntentSchema = z.object({
   // Price-lock window: set at creation, intent is rejected after this time.
   // NULL for intents created before this feature was introduced.
   expiresAt: z.date().optional(),
+  // EVM wallet address that sent the on-chain payment. Populated by the
+  // payment manager from TransactionReceipt.from when the tx is confirmed.
+  // NULL for intents confirmed before this field was introduced.
+  fromAddress: z.string().optional(),
 });
 
 export type Intent = z.infer<typeof IntentSchema>;

@@ -68,6 +68,19 @@ export type OverCapIntent = {
   shannonsPerByte: string;
   expiresAt?: string;
 };
+
+// Wire-format of rows from GET /credits/batches/user/:userPublicId (admin).
+// Extends ExpiringCreditBatch with intent fields so the admin can see the
+// AI3 price paid and the EVM wallet address used for the on-chain payment.
+export type AdminUserCreditBatch = ExpiringCreditBatch & {
+  userPublicId: string;
+  paymentAmount: string | null;
+  shannonsPerByte: string;
+  txHash: string | null;
+  fromAddress: string | null;
+  /** ISO timestamp of the refund action, or null if not yet refunded. */
+  refundedAt: string | null;
+};
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
 
@@ -1145,5 +1158,62 @@ export const createApiService = ({
     }
 
     return response.json();
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: get all credit batches for a specific user with intent data
+  // GET /credits/batches/user/:userPublicId
+  // -------------------------------------------------------------------------
+
+  getUserCreditBatches: async (
+    userPublicId: string,
+  ): Promise<AdminUserCreditBatch[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/credits/batches/user/${encodeURIComponent(userPublicId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<AdminUserCreditBatch[]>;
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: mark a credit batch as refunded
+  // POST /credits/batches/:id/refund
+  // -------------------------------------------------------------------------
+
+  refundCreditBatch: async (batchId: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/credits/batches/${encodeURIComponent(batchId)}/refund`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
   },
 });
