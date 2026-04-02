@@ -26,7 +26,7 @@ const saveNode = async (node: Node) => {
   const db = await getDatabase()
 
   return db.query({
-    text: 'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $2, $3, $4, $5);',
+    text: 'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (cid) DO UPDATE SET encoded_node = EXCLUDED.encoded_node',
     values: [
       node.cid,
       node.root_cid,
@@ -42,7 +42,7 @@ const saveNodes = async (nodes: Node[]) => {
 
   return db.query({
     text: pgFormat(
-      'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node, piece_index, piece_offset, block_published_on, tx_published_on) VALUES %L',
+      'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node, piece_index, piece_offset, block_published_on, tx_published_on) VALUES %L ON CONFLICT (cid) DO UPDATE SET encoded_node = EXCLUDED.encoded_node, piece_index = COALESCE(piece_index, EXCLUDED.piece_index), piece_offset = COALESCE(piece_offset, EXCLUDED.piece_offset), block_published_on = COALESCE(block_published_on, EXCLUDED.block_published_on), tx_published_on = COALESCE(tx_published_on, EXCLUDED.tx_published_on)',
       nodes.map((node) => [
         node.cid,
         node.root_cid,
