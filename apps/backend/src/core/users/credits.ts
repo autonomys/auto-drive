@@ -6,7 +6,7 @@ import {
 } from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { AccountsUseCases } from './accounts.js'
 import { config } from '../../config.js'
-import { ForbiddenError } from '../../errors/index.js'
+import { ForbiddenError, NotFoundError } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 import { hasGoogleAuth } from '../featureFlags/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
@@ -188,14 +188,14 @@ const getUserBatches = async (
 const refundBatch = async (
   executor: User,
   batchId: string,
-): Promise<Result<void, ForbiddenError | Error>> => {
+): Promise<Result<void, ForbiddenError | NotFoundError>> => {
   if (executor.role !== UserRole.Admin) {
     return err(new ForbiddenError('Admin access required'))
   }
 
   const updated = await purchasedCreditsRepository.markAsRefunded(batchId)
   if (!updated) {
-    return err(new Error('Credit batch not found'))
+    return err(new NotFoundError('Credit batch not found'))
   }
 
   logger.info('Admin marked credit batch as refunded', {
