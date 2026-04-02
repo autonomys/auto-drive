@@ -76,19 +76,7 @@ export const inputToMib = (value: string, unit: Unit): number => {
 };
 
 // ---------------------------------------------------------------------------
-// Cap validation
+// Cap validation — re-exported from credits.ts to keep a single implementation
 // ---------------------------------------------------------------------------
 
-/**
- * Returns true when the requested MiB would exceed the user's remaining
- * purchasable cap.
- * Always returns false when maxPurchasableBytes is null (data not yet loaded).
- */
-export const isCustomAmountOverCap = (
-  requestedMib: number,
-  maxPurchasableBytes: bigint | null,
-): boolean => {
-  if (maxPurchasableBytes === null || requestedMib <= 0) return false;
-  const requestedBytes = BigInt(requestedMib) * BigInt(1024 * 1024);
-  return requestedBytes > maxPurchasableBytes;
-};
+export { isMibOverCap as isCustomAmountOverCap } from './credits';

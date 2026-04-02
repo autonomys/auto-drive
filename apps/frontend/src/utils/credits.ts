@@ -4,17 +4,31 @@
  */
 
 /**
+ * Returns true when `mib` whole MiB would exceed `maxPurchasableBytes`.
+ * Always returns false when the cap is null (not yet loaded) or the value
+ * is non-positive.  Shared by both the preset-package and custom-amount
+ * flows so the null-guard and bytes-conversion logic lives in one place.
+ */
+export const isMibOverCap = (
+  mib: number,
+  maxPurchasableBytes: bigint | null,
+): boolean => {
+  if (maxPurchasableBytes === null || mib <= 0) return false;
+  const bytes = BigInt(mib) * BigInt(1024 * 1024);
+  return bytes > maxPurchasableBytes;
+};
+
+/**
  * Returns true when a named package (given as MB) would exceed the user's
- * remaining purchase cap.  Always returns false when maxPurchasableBytes is
- * null (cap data not yet loaded) so the UI does not block free-tier users.
+ * remaining purchase cap.  Thin wrapper around {@link isMibOverCap} that
+ * also handles the `undefined` case for optional package sizes.
  */
 export const isPackageOverCap = (
   creditsInMB: number | undefined,
   maxPurchasableBytes: bigint | null,
 ): boolean => {
-  if (maxPurchasableBytes === null || creditsInMB === undefined) return false;
-  const packageBytes = BigInt(creditsInMB) * BigInt(1024 * 1024);
-  return packageBytes > maxPurchasableBytes;
+  if (creditsInMB === undefined) return false;
+  return isMibOverCap(creditsInMB, maxPurchasableBytes);
 };
 
 /**

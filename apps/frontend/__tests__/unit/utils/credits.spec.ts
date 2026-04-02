@@ -1,4 +1,41 @@
-import { isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus } from '../../../src/utils/credits'
+import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus } from '../../../src/utils/credits'
+
+// ---------------------------------------------------------------------------
+// isMibOverCap (shared helper used by both package and custom-amount flows)
+// ---------------------------------------------------------------------------
+
+describe('isMibOverCap', () => {
+  it('returns false when maxPurchasableBytes is null', () => {
+    expect(isMibOverCap(100, null)).toBe(false)
+  })
+
+  it('returns false when mib is 0', () => {
+    expect(isMibOverCap(0, BigInt(1024 * 1024))).toBe(false)
+  })
+
+  it('returns false when mib is negative', () => {
+    expect(isMibOverCap(-5, BigInt(1024 * 1024))).toBe(false)
+  })
+
+  it('returns true when maxPurchasableBytes is 0n', () => {
+    expect(isMibOverCap(1, 0n)).toBe(true)
+  })
+
+  it('returns false when requested bytes fit within the cap', () => {
+    const cap = BigInt(10 * 1024 * 1024)
+    expect(isMibOverCap(5, cap)).toBe(false)
+  })
+
+  it('returns false when requested bytes exactly equal the cap', () => {
+    const cap = BigInt(10 * 1024 * 1024)
+    expect(isMibOverCap(10, cap)).toBe(false)
+  })
+
+  it('returns true when requested bytes exceed the cap by 1 byte', () => {
+    const cap = BigInt(10 * 1024 * 1024) - 1n
+    expect(isMibOverCap(10, cap)).toBe(true)
+  })
+})
 
 // ---------------------------------------------------------------------------
 // isPackageOverCap
