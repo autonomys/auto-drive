@@ -105,7 +105,7 @@ export const PurchaseStep2ConnectWallet = ({
   );
 
   const maxPurchasableMib = useMemo(() => {
-    if (!maxPurchasableBytes) return null;
+    if (maxPurchasableBytes === null) return null;
     return Number(maxPurchasableBytes / BigInt(1024 * 1024));
   }, [maxPurchasableBytes]);
 

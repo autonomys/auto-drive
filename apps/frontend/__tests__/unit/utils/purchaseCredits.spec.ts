@@ -235,6 +235,10 @@ describe('isCustomAmountOverCap', () => {
     expect(isCustomAmountOverCap(100, null)).toBe(false);
   });
 
+  it('returns true when maxPurchasableBytes is 0n (cap fully exhausted)', () => {
+    expect(isCustomAmountOverCap(1, BigInt(0))).toBe(true);
+  });
+
   it('returns false when requestedMib is 0', () => {
     expect(isCustomAmountOverCap(0, BigInt(1024 * 1024))).toBe(false);
   });

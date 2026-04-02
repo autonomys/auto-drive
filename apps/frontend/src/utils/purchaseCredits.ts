@@ -88,7 +88,7 @@ export const isCustomAmountOverCap = (
   requestedMib: number,
   maxPurchasableBytes: bigint | null,
 ): boolean => {
-  if (!maxPurchasableBytes || requestedMib <= 0) return false;
+  if (maxPurchasableBytes === null || requestedMib <= 0) return false;
   const requestedBytes = BigInt(requestedMib) * BigInt(1024 * 1024);
   return requestedBytes > maxPurchasableBytes;
 };
