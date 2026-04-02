@@ -10,36 +10,16 @@ import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
 import { formatBytes } from '../../../../utils/number';
 import { useUserStore } from '../../../../globalStates/user';
-
-// ---------------------------------------------------------------------------
-// Unit helpers
-// ---------------------------------------------------------------------------
-
-const UNITS = ['MB', 'GB', 'TB'] as const;
-type Unit = (typeof UNITS)[number];
-
-// All internal sizes use MiB. We treat MB=MiB, GB=GiB, TB=TiB to match the
-// existing package definitions (e.g. "1GB" preset = 1024 MiB).
-const MIB_PER_UNIT: Record<Unit, number> = {
-  MB: 1,
-  GB: 1024,
-  TB: 1024 * 1024,
-};
-
-/** Pick the most human-readable unit for a given MiB value. */
-const bestUnit = (mib: number): Unit => {
-  if (mib >= MIB_PER_UNIT.TB) return 'TB';
-  if (mib >= MIB_PER_UNIT.GB) return 'GB';
-  return 'MB';
-};
-
-/** Convert a MiB value to the display value in a given unit, trimmed to 4 sig-figs. */
-const mibToDisplay = (mib: number, unit: Unit): string => {
-  if (mib <= 0) return '';
-  const val = mib / MIB_PER_UNIT[unit];
-  // Up to 4 significant digits, no trailing zeros
-  return parseFloat(val.toPrecision(4)).toString();
-};
+import {
+  UNITS,
+  type Unit,
+  MIB_PER_UNIT,
+  bestUnit,
+  mibToDisplay,
+  sanitizeAmountInput,
+  inputToMib,
+  isCustomAmountOverCap,
+} from '../../../../utils/purchaseCredits';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -106,11 +86,10 @@ export const PurchaseStep2ConnectWallet = ({
   }, [isCustom, sizeMB, inputValue]);
 
   /** MiB value derived from the current input + unit. */
-  const customSizeMib = useMemo(() => {
-    const num = parseFloat(inputValue);
-    if (!isFinite(num) || num <= 0) return 0;
-    return Math.round(num * MIB_PER_UNIT[unit]);
-  }, [inputValue, unit]);
+  const customSizeMib = useMemo(
+    () => inputToMib(inputValue, unit),
+    [inputValue, unit],
+  );
 
   /** The effective MiB value for price calculations. */
   const effectiveMib = isCustom ? customSizeMib : sizeMB;
@@ -119,11 +98,11 @@ export const PurchaseStep2ConnectWallet = ({
   // Cap validation
   // -------------------------------------------------------------------------
 
-  const capExceeded = useMemo(() => {
-    if (!isCustom || !maxPurchasableBytes || effectiveMib <= 0) return false;
-    const requestedBytes = BigInt(effectiveMib) * BigInt(1024 * 1024);
-    return requestedBytes > maxPurchasableBytes;
-  }, [isCustom, maxPurchasableBytes, effectiveMib]);
+  const capExceeded = useMemo(
+    () =>
+      isCustom && isCustomAmountOverCap(effectiveMib, maxPurchasableBytes ?? null),
+    [isCustom, maxPurchasableBytes, effectiveMib],
+  );
 
   const maxPurchasableMib = useMemo(() => {
     if (!maxPurchasableBytes) return null;
@@ -138,11 +117,9 @@ export const PurchaseStep2ConnectWallet = ({
     (raw: string) => {
       // Allow only digits and a single decimal point — prevents leading zeros,
       // scientific notation ("1e5"), and negative values.
-      const sanitised = raw.replace(/[^0-9.]/g, '').replace(/^(\d*\.?\d*).*$/, '$1');
+      const sanitised = sanitizeAmountInput(raw);
       setInputValue(sanitised);
-      const num = parseFloat(sanitised);
-      const mib = isFinite(num) && num > 0 ? Math.round(num * MIB_PER_UNIT[unit]) : 0;
-      onContextChange({ sizeMB: mib });
+      onContextChange({ sizeMB: inputToMib(sanitised, unit) });
     },
     [unit, onContextChange],
   );
@@ -152,10 +129,15 @@ export const PurchaseStep2ConnectWallet = ({
       // Convert the current MiB value into the new unit to keep the
       // displayed number consistent with the underlying purchase size.
       const currentMib = parseFloat(inputValue) * MIB_PER_UNIT[unit];
+      const newDisplay =
+        isFinite(currentMib) && currentMib > 0 ? mibToDisplay(currentMib, newUnit) : '';
       setUnit(newUnit);
-      setInputValue(isFinite(currentMib) && currentMib > 0 ? mibToDisplay(currentMib, newUnit) : '');
+      setInputValue(newDisplay);
+      // Keep context.sizeMB in sync so Step 3 sees the correct value
+      // even if the user navigates forward without re-typing.
+      onContextChange({ sizeMB: inputToMib(newDisplay, newUnit) });
     },
-    [inputValue, unit],
+    [inputValue, unit, onContextChange],
   );
 
   // -------------------------------------------------------------------------
