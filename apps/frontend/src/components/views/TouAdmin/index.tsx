@@ -106,7 +106,7 @@ export const TouAdmin = () => {
         }
       }
     },
-    [api, fetchVersions],
+    [api, fetchVersions, queryClient],
   );
 
   const handlePromoteOverride = useCallback(async () => {
@@ -123,7 +123,7 @@ export const TouAdmin = () => {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to promote');
     }
-  }, [api, promoteOverride, fetchVersions]);
+  }, [api, promoteOverride, fetchVersions, queryClient]);
 
   const handleActivate = useCallback(
     async (id: string) => {
@@ -135,7 +135,7 @@ export const TouAdmin = () => {
         setError(e instanceof Error ? e.message : 'Failed to activate');
       }
     },
-    [api, fetchVersions],
+    [api, fetchVersions, queryClient],
   );
 
   const handleArchive = useCallback(
@@ -148,7 +148,7 @@ export const TouAdmin = () => {
         setError(e instanceof Error ? e.message : 'Failed to archive');
       }
     },
-    [api, fetchVersions],
+    [api, fetchVersions, queryClient],
   );
 
   if (loading) {

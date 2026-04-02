@@ -36,8 +36,14 @@ export const AccountInformation = ({
   nextExpiryDate = null,
   creditHistoryHref,
 }: CreditLimitsProps) => {
+  // uploadPending is free-remaining only (purchased bytes stripped out by the
+  // caller).  uploadUsed may be negative when the free quota is fully
+  // exhausted and the user is uploading against purchased credits.
   const uploadUsed = uploadLimit - uploadPending;
 
+  // Progress bar: clamp to [0, 100]. A negative uploadUsed (free quota
+  // over-extended by purchased credits) renders as 100%, which is correct —
+  // the free allocation is fully consumed.
   const uploadPercentage = Math.max(
     0,
     Math.min(100, (uploadUsed / uploadLimit) * 100),
@@ -45,14 +51,21 @@ export const AccountInformation = ({
 
   const hasPurchasedCredits = purchasedBytesRemaining > 0;
 
+  // When the user has purchased credits, show total available (free + purchased)
+  // as the primary "left" figure.  This is the number that governs whether an
+  // upload will succeed.  When purchased credits are not in play, show only the
+  // free remaining so the label and progress bar tell the same story.
+  const totalAvailable = uploadPending + purchasedBytesRemaining;
+  const displayAvailable = hasPurchasedCredits ? totalAvailable : uploadPending;
+
   return (
     <div className='space-y-2'>
       <div className='text-xs text-muted-foreground'>Upload usage</div>
       <div className='space-y-1'>
         <div className='flex justify-between text-xs'>
-          <span>{formatBytes(uploadPending, 2)} left</span>
+          <span>{formatBytes(displayAvailable, 2)} left</span>
           <span className='text-muted-foreground'>
-            {formatBytes(uploadUsed, 2)}/{formatBytes(uploadLimit, 2)}
+            {formatBytes(Math.max(0, uploadUsed), 2)}/{formatBytes(uploadLimit, 2)}
           </span>
         </div>
         <div className='h-1.5 w-full rounded-full bg-muted'>

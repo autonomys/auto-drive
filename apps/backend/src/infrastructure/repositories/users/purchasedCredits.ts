@@ -23,6 +23,7 @@ type DBPurchasedCredit = {
   purchased_at: Date
   expires_at: Date
   expired: boolean
+  refunded_at: Date | null
   created_at: Date
   updated_at: Date
 }
@@ -38,6 +39,7 @@ const mapRow = (row: DBPurchasedCredit): PurchasedCredit => ({
   purchasedAt: row.purchased_at,
   expiresAt: row.expires_at,
   expired: row.expired,
+  refundedAt: row.refunded_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 })
@@ -548,6 +550,96 @@ const createPurchasedCreditWithCapCheck = async (
 }
 
 // ---------------------------------------------------------------------------
+// markAsRefunded
+// Admin action: zero out remaining bytes for a single purchased_credits row
+// and mark it as refunded.  Called after an admin has processed an
+// out-of-band refund (e.g. manual AI3 transfer back to the user's wallet).
+// Returns the updated row so the caller can echo it back to the client.
+// ---------------------------------------------------------------------------
+
+const markAsRefunded = async (
+  id: string,
+): Promise<{ found: boolean; row: PurchasedCredit | null }> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPurchasedCredit>(
+    `UPDATE purchased_credits
+     SET upload_bytes_remaining   = 0,
+         download_bytes_remaining = 0,
+         refunded_at              = NOW(),
+         updated_at               = NOW()
+     WHERE id = $1
+       AND refunded_at IS NULL
+     RETURNING *`,
+    [id],
+  )
+
+  if (result.rows[0]) {
+    return { found: true, row: mapRow(result.rows[0]) }
+  }
+
+  const exists = await db.query<{ id: string }>(
+    'SELECT id FROM purchased_credits WHERE id = $1',
+    [id],
+  )
+  return { found: exists.rows.length > 0, row: null }
+}
+
+// ---------------------------------------------------------------------------
+// getByUserPublicId
+// Admin view: all credit batches for a specific user (identified by their
+// user_public_id), joined with key fields from the originating intent so the
+// admin page can show the AI3 price paid and the EVM wallet used.
+// Ordered newest-first.
+// ---------------------------------------------------------------------------
+
+type DBPurchasedCreditWithIntent = DBPurchasedCredit & {
+  user_public_id: string
+  payment_amount: string | null
+  shannons_per_byte: string
+  tx_hash: string | null
+  from_address: string | null
+}
+
+export type AdminUserCreditBatchRow = PurchasedCredit & {
+  userPublicId: string
+  paymentAmount: bigint | null
+  shannonsPerByte: bigint
+  txHash: string | null
+  fromAddress: string | null
+}
+
+const mapRowWithIntent = (
+  row: DBPurchasedCreditWithIntent,
+): AdminUserCreditBatchRow => ({
+  ...mapRow(row),
+  userPublicId: row.user_public_id,
+  paymentAmount: row.payment_amount ? BigInt(row.payment_amount) : null,
+  shannonsPerByte: BigInt(row.shannons_per_byte),
+  txHash: row.tx_hash ?? null,
+  fromAddress: row.from_address ?? null,
+})
+
+const getByUserPublicId = async (
+  userPublicId: string,
+): Promise<AdminUserCreditBatchRow[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPurchasedCreditWithIntent>(
+    `SELECT pc.*,
+            i.user_public_id,
+            i.payment_amount,
+            i.shannons_per_byte,
+            i.tx_hash,
+            i.from_address
+     FROM purchased_credits pc
+     JOIN intents i ON i.id = pc.intent_id
+     WHERE i.user_public_id = $1
+     ORDER BY pc.purchased_at DESC`,
+    [userPublicId],
+  )
+  return result.rows.map(mapRowWithIntent)
+}
+
+// ---------------------------------------------------------------------------
 // getAllWithUserPublicId
 // Admin view: every credit batch across all users, joined with the
 // user_public_id from the originating intent row. Ordered newest-first.
@@ -588,4 +680,6 @@ export const purchasedCreditsRepository = {
   markExpiredCredits,
   getByAccountId,
   getAllWithUserPublicId,
+  markAsRefunded,
+  getByUserPublicId,
 }
