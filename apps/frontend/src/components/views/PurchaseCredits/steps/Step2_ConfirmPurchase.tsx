@@ -233,8 +233,8 @@ export const PurchaseStep2ConnectWallet = ({
                           That means:
                         </p>
                         <ul className='mt-1.5 space-y-0.5 text-gray-200'>
-                          <li>1 GB&nbsp;=&nbsp;1,024 MB&nbsp;<span className='text-gray-400'>(not 1,000)</span></li>
-                          <li>1 TB&nbsp;=&nbsp;1,024 GB&nbsp;<span className='text-gray-400'>(not 1,000)</span></li>
+                          <li>1 GB&nbsp;=&nbsp;1,024 MiB&nbsp;<span className='text-gray-400'>(not 1,000 MB)</span></li>
+                          <li>1 TB&nbsp;=&nbsp;1,024 GiB&nbsp;<span className='text-gray-400'>(not 1,000 GB)</span></li>
                         </ul>
                       </div>
                     </div>
