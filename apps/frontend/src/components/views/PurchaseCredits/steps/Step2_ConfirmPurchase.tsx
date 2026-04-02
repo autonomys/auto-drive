@@ -4,7 +4,7 @@ import { Button } from '@auto-drive/ui';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
 import { useCallback, useMemo, useState, useEffect } from 'react';
-import { Zap, AlertTriangle } from 'lucide-react';
+import { Zap, AlertTriangle, Info } from 'lucide-react';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
 import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
@@ -222,6 +222,21 @@ export const PurchaseStep2ConnectWallet = ({
                           {u}
                         </button>
                       ))}
+                    </div>
+                    {/* Binary-units info bubble */}
+                    <div className='group relative'>
+                      <Info className='h-4 w-4 cursor-help text-muted-foreground' />
+                      <div className='pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-64 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-gray-700'>
+                        <p className='font-semibold'>About these units</p>
+                        <p className='mt-1 text-gray-300'>
+                          We use binary units — like most storage hardware.
+                          That means:
+                        </p>
+                        <ul className='mt-1.5 space-y-0.5 text-gray-200'>
+                          <li>1 GB&nbsp;=&nbsp;1,024 MB&nbsp;<span className='text-gray-400'>(not 1,000)</span></li>
+                          <li>1 TB&nbsp;=&nbsp;1,024 GB&nbsp;<span className='text-gray-400'>(not 1,000)</span></li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
 
