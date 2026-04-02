@@ -146,9 +146,11 @@ const triggerWatchIntent = async ({
 const markIntentAsConfirmed = async ({
   intentId,
   paymentAmount,
+  fromAddress,
 }: {
   intentId: string
   paymentAmount: bigint
+  fromAddress?: string
 }) => {
   const intent = await intentsRepository.getById(intentId)
   if (!intent) {
@@ -182,6 +184,7 @@ const markIntentAsConfirmed = async ({
       ...intent,
       status: IntentStatus.CONFIRMED,
       paymentAmount,
+      fromAddress: fromAddress ?? intent.fromAddress,
     }),
   )
 }

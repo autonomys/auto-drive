@@ -4,6 +4,7 @@ export const EXTERNAL_ROUTES = {
   autonomys: "https://autonomys.xyz/",
   academy: "https://academy.autonomys.xyz/",
   privacyPolicy: "https://www.autonomys.xyz/privacy-policy",
+  termsOfUse: "https://autonomys.xyz/auto-drive-terms-of-use",
   forum: "https://forum.autonomys.xyz/",
   docs: "https://docs.autonomys.xyz/",
   status: "https://status.autonomys.xyz/",
@@ -59,8 +60,12 @@ export const ROUTES = {
   admin: (networkId: NetworkId) => `/${networkId}/drive/admin`,
   adminBanners: (networkId: NetworkId) => `/${networkId}/drive/admin/banners`,
   adminTou: (networkId: NetworkId) => `/${networkId}/drive/admin/tou`,
+  adminDeletions: (networkId: NetworkId) =>
+    `/${networkId}/drive/admin/deletions`,
   adminOrganization: (networkId: NetworkId, organizationId: string) =>
     `/${networkId}/drive/admin/organization/${organizationId}`,
+  adminUserCredits: (networkId: NetworkId, userPublicId: string) =>
+    `/${networkId}/drive/admin/credits/${encodeURIComponent(userPublicId)}`,
   explorer: (networkId: NetworkId) => `/${networkId}/explorer`,
   publicFileDetails: (networkId: NetworkId, cid: string) =>
     `/${networkId}/explorer/${cid}`,

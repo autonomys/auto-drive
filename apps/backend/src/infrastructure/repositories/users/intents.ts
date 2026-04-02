@@ -9,6 +9,7 @@ type DBIntent = {
   payment_amount: string
   shannons_per_byte: string
   expires_at: Date | null
+  from_address: string | null
 }
 
 const mapRows = (rows: DBIntent[]): Intent[] => {
@@ -22,6 +23,7 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
       : undefined,
     shannonsPerByte: BigInt(row.shannons_per_byte).valueOf(),
     expiresAt: row.expires_at ?? undefined,
+    fromAddress: row.from_address ?? undefined,
   }))
 }
 
@@ -59,8 +61,9 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
   const result = await db.query<DBIntent>(
     `UPDATE intents
      SET status = $1, user_public_id = $2, tx_hash = $3,
-         payment_amount = $4, shannons_per_byte = $5, expires_at = $6
-     WHERE id = $7
+         payment_amount = $4, shannons_per_byte = $5, expires_at = $6,
+         from_address = $7
+     WHERE id = $8
      RETURNING *`,
     [
       intent.status,
@@ -69,6 +72,7 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
       intent.paymentAmount?.toString() ?? null,
       intent.shannonsPerByte,
       intent.expiresAt ?? null,
+      intent.fromAddress ?? null,
       intent.id,
     ],
   )

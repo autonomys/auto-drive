@@ -109,7 +109,7 @@ export const TouVersionForm = ({
           type='url'
           value={form.contentUrl}
           onChange={(e) => setForm({ ...form, contentUrl: e.target.value })}
-          placeholder='https://www.autonomys.xyz/terms-of-use'
+          placeholder='https://autonomys.xyz/auto-drive-terms-of-use'
           className='w-full rounded-md border border-border bg-background px-3 py-2 text-sm'
           required
         />

@@ -25,7 +25,7 @@ export const Web3Provider: FC<{ children: ReactNode }> = ({ children }) => {
         chains: [evmChains[network.id]],
         ssr: false,
       }),
-    [],
+    [network.id],
   );
 
   return (

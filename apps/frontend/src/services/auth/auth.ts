@@ -1,6 +1,8 @@
 import {
   ApiKey,
   ApiKeyWithoutSecret,
+  DeletionRequest,
+  DeletionRequestWithUser,
   MaybeUser,
   OnboardedUser,
   PaginatedResult,
@@ -187,6 +189,131 @@ export const AuthService = {
         'X-Auth-Provider': session.authProvider,
       },
     });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  // --- Account Deletion ---
+
+  requestDeletion: async (
+    reason?: string,
+  ): Promise<DeletionRequest> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/@me/deletion`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify({ reason }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  cancelDeletion: async (): Promise<DeletionRequest> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/@me/deletion`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  getDeletionStatus: async (): Promise<DeletionRequest | null> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/@me/deletion`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  // --- Admin Deletion ---
+
+  getAdminDeletionRequests: async (
+    status?: string,
+  ): Promise<DeletionRequestWithUser[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const params = status ? `?status=${status}` : '';
+    const response = await fetch(
+      `${API_BASE_URL}/users/admin/deletions${params}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  updateDeletionAdminNotes: async (
+    requestId: string,
+    notes: string,
+  ): Promise<DeletionRequest> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/users/admin/deletions/${requestId}/notes`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+        body: JSON.stringify({ notes }),
+      },
+    );
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);

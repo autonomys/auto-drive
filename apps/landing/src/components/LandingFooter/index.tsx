@@ -62,6 +62,22 @@ const LandingFooter = () => {
               >
                 Website
               </a>
+              <a
+                href={EXTERNAL_ROUTES.termsOfUse}
+                target='_blank'
+                rel='noreferrer'
+                className='block transition-colors hover:text-primary'
+              >
+                Terms of Use
+              </a>
+              <a
+                href={EXTERNAL_ROUTES.privacyPolicy}
+                target='_blank'
+                rel='noreferrer'
+                className='block transition-colors hover:text-primary'
+              >
+                Privacy Policy
+              </a>
             </div>
           </div>
 

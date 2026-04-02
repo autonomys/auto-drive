@@ -58,6 +58,9 @@ const watchTransaction = async (txHash: string) => {
       return IntentsUseCases.markIntentAsConfirmed({
         intentId: log.args.intentId,
         paymentAmount: log.args.paymentAmount,
+        // receipt.from is the EVM wallet address that submitted the tx.
+        // Stored so admins can identify the payer and process refunds.
+        fromAddress: receipt.from,
       })
     }),
   )
