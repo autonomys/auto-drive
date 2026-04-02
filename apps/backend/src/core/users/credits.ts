@@ -193,15 +193,22 @@ const refundBatch = async (
     return err(new ForbiddenError('Admin access required'))
   }
 
-  const updated = await purchasedCreditsRepository.markAsRefunded(batchId)
-  if (!updated) {
+  const { found, row } = await purchasedCreditsRepository.markAsRefunded(batchId)
+  if (!found) {
     return err(new NotFoundError('Credit batch not found'))
   }
 
-  logger.info('Admin marked credit batch as refunded', {
-    batchId,
-    adminPublicId: executor.publicId,
-  })
+  if (row) {
+    logger.info('Admin marked credit batch as refunded', {
+      batchId,
+      adminPublicId: executor.publicId,
+    })
+  } else {
+    logger.info('Credit batch already refunded, no-op', {
+      batchId,
+      adminPublicId: executor.publicId,
+    })
+  }
 
   return ok(undefined)
 }

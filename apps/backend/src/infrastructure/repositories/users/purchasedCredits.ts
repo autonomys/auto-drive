@@ -557,7 +557,9 @@ const createPurchasedCreditWithCapCheck = async (
 // Returns the updated row so the caller can echo it back to the client.
 // ---------------------------------------------------------------------------
 
-const markAsRefunded = async (id: string): Promise<PurchasedCredit | null> => {
+const markAsRefunded = async (
+  id: string,
+): Promise<{ found: boolean; row: PurchasedCredit | null }> => {
   const db = await getDatabase()
   const result = await db.query<DBPurchasedCredit>(
     `UPDATE purchased_credits
@@ -566,10 +568,20 @@ const markAsRefunded = async (id: string): Promise<PurchasedCredit | null> => {
          refunded_at              = NOW(),
          updated_at               = NOW()
      WHERE id = $1
+       AND refunded_at IS NULL
      RETURNING *`,
     [id],
   )
-  return result.rows[0] ? mapRow(result.rows[0]) : null
+
+  if (result.rows[0]) {
+    return { found: true, row: mapRow(result.rows[0]) }
+  }
+
+  const exists = await db.query<{ id: string }>(
+    `SELECT id FROM purchased_credits WHERE id = $1`,
+    [id],
+  )
+  return { found: exists.rows.length > 0, row: null }
 }
 
 // ---------------------------------------------------------------------------
