@@ -19,15 +19,15 @@ describe('UNITS', () => {
 });
 
 describe('MIB_PER_UNIT', () => {
-  it('MB maps to 1 MiB', () => {
+  it('MB maps to 1 MiB (binary)', () => {
     expect(MIB_PER_UNIT.MB).toBe(1);
   });
 
-  it('GB maps to 1024 MiB', () => {
+  it('GB maps to 1024 MiB (binary — same as 1 GiB)', () => {
     expect(MIB_PER_UNIT.GB).toBe(1024);
   });
 
-  it('TB maps to 1,048,576 MiB (1024 * 1024)', () => {
+  it('TB maps to 1,048,576 MiB (1024 * 1024 — same as 1 TiB)', () => {
     expect(MIB_PER_UNIT.TB).toBe(1024 * 1024);
   });
 });
@@ -51,21 +51,21 @@ describe('bestUnit', () => {
     expect(bestUnit(1023)).toBe('MB');
   });
 
-  it('returns GB for exactly 1024 MiB (1 GiB)', () => {
+  it('returns GB for exactly 1024 MiB (1 GB)', () => {
     expect(bestUnit(1024)).toBe('GB');
   });
 
-  it('returns GB for values in the GiB range', () => {
+  it('returns GB for values in the GB range', () => {
     expect(bestUnit(1025)).toBe('GB');
-    expect(bestUnit(512 * 1024)).toBe('GB'); // 512 GiB
-    expect(bestUnit(1024 * 1024 - 1)).toBe('GB'); // just under 1 TiB
+    expect(bestUnit(512 * 1024)).toBe('GB'); // 512 GB
+    expect(bestUnit(1024 * 1024 - 1)).toBe('GB'); // just under 1 TB
   });
 
-  it('returns TB for exactly 1024 GiB (1 TiB = 1,048,576 MiB)', () => {
+  it('returns TB for exactly 1024 GB (1 TB = 1,048,576 MiB)', () => {
     expect(bestUnit(1024 * 1024)).toBe('TB');
   });
 
-  it('returns TB for values above 1 TiB', () => {
+  it('returns TB for values above 1 TB', () => {
     expect(bestUnit(2 * 1024 * 1024)).toBe('TB');
   });
 });
@@ -100,10 +100,9 @@ describe('mibToDisplay', () => {
   });
 
   it('trims to 4 significant figures, no trailing zeros', () => {
-    // 1 / 1024 ≈ 0.0009766 → 4 sig figs → 0.0009766
+    // 1 MiB / 1024 ≈ 0.0009766 GB → 4 sig figs → "0.0009766"
     expect(mibToDisplay(1, 'GB')).toBe('0.0009766');
-    // 1023 MiB in GB = 0.999... → 4 sig figs → 0.9990
-    // parseFloat("0.9990") => "0.999"
+    // 1023 MiB in GB = 0.9990234... → 4 sig figs → "0.999"
     expect(mibToDisplay(1023, 'GB')).toBe('0.999');
   });
 });
@@ -126,15 +125,16 @@ describe('sanitizeAmountInput', () => {
     expect(sanitizeAmountInput('100abc')).toBe('100');
   });
 
-  it('strips negative sign', () => {
+  it('strips negative sign (caller treats result as 0 / invalid)', () => {
+    // The negative sign is stripped; inputToMib returns 0 for non-positive
+    // values, so "-100" → "100" → still produces a valid positive size.
     expect(sanitizeAmountInput('-100')).toBe('100');
   });
 
   it('removes extra decimal points', () => {
     expect(sanitizeAmountInput('1.2.3')).toBe('1.2');
     // "..5" — regex captures up to and including the first dot, second dot
-    // stops the digit run, so result is "." (effectively 0 — the UI will
-    // treat this as an empty / invalid entry).
+    // stops the digit run, so result is "." (treated as 0 by the UI).
     expect(sanitizeAmountInput('..5')).toBe('.');
   });
 
@@ -172,18 +172,18 @@ describe('inputToMib', () => {
     expect(inputToMib('abc', 'MB')).toBe(0);
   });
 
-  it('converts MB value to MiB (1:1)', () => {
+  it('converts MB value (1:1)', () => {
     expect(inputToMib('10', 'MB')).toBe(10);
     expect(inputToMib('512', 'MB')).toBe(512);
   });
 
-  it('converts GB value to MiB (×1024)', () => {
+  it('converts GB to MiB (×1024)', () => {
     expect(inputToMib('1', 'GB')).toBe(1024);
     expect(inputToMib('2', 'GB')).toBe(2048);
     expect(inputToMib('0.5', 'GB')).toBe(512);
   });
 
-  it('converts TB value to MiB (×1048576)', () => {
+  it('converts TB to MiB (×1048576)', () => {
     expect(inputToMib('1', 'TB')).toBe(1024 * 1024);
     expect(inputToMib('0.5', 'TB')).toBe(512 * 1024);
   });
@@ -212,8 +212,8 @@ describe('unit conversion round-trip', () => {
   });
 
   it('GB → TB → GB preserves the MiB count for round values', () => {
-    const originalMib = 2 * 1024; // 2 GiB
-    const tbDisplay = mibToDisplay(originalMib, 'TB'); // "0.001953" or similar
+    const originalMib = 2 * 1024; // 2 GB
+    const tbDisplay = mibToDisplay(originalMib, 'TB');
     const roundTrip = inputToMib(tbDisplay, 'TB');
     // Allow ±1 MiB due to toPrecision(4) rounding
     expect(Math.abs(roundTrip - originalMib)).toBeLessThanOrEqual(1);
@@ -244,31 +244,30 @@ describe('isCustomAmountOverCap', () => {
   });
 
   it('returns false when requested bytes fit within the cap', () => {
-    const cap = BigInt(10 * 1024 * 1024); // 10 MiB cap
+    const cap = BigInt(10 * 1024 * 1024); // 10 MB cap
     expect(isCustomAmountOverCap(5, cap)).toBe(false);
   });
 
   it('returns false when requested bytes exactly equal the cap', () => {
-    const cap = BigInt(10 * 1024 * 1024); // exactly 10 MiB
+    const cap = BigInt(10 * 1024 * 1024); // exactly 10 MB
     expect(isCustomAmountOverCap(10, cap)).toBe(false);
   });
 
   it('returns true when requested bytes exceed the cap by 1 byte', () => {
-    const cap = BigInt(10 * 1024 * 1024) - BigInt(1); // 1 byte short of 10 MiB
+    const cap = BigInt(10 * 1024 * 1024) - BigInt(1); // 1 byte short of 10 MB
     expect(isCustomAmountOverCap(10, cap)).toBe(true);
   });
 
   it('returns true when requested is much larger than the cap', () => {
-    const cap = BigInt(1024 * 1024); // 1 MiB cap
-    expect(isCustomAmountOverCap(1024, cap)).toBe(true); // 1 GiB requested
+    const cap = BigInt(1024 * 1024); // 1 MB cap
+    expect(isCustomAmountOverCap(1024, cap)).toBe(true); // 1 GB requested
   });
 
-  it('handles large TiB-scale values correctly', () => {
-    // cap = 5 TiB in bytes
+  it('handles large TB-scale values correctly', () => {
+    // cap = 5 TB in bytes
     const cap = BigInt(5) * BigInt(1024) * BigInt(1024) * BigInt(1024 * 1024);
-    const fiveTibMib = 5 * 1024 * 1024;
-    expect(isCustomAmountOverCap(fiveTibMib, cap)).toBe(false);
-    expect(isCustomAmountOverCap(fiveTibMib + 1, cap)).toBe(true);
+    const fiveTbMib = 5 * 1024 * 1024;
+    expect(isCustomAmountOverCap(fiveTbMib, cap)).toBe(false);
+    expect(isCustomAmountOverCap(fiveTbMib + 1, cap)).toBe(true);
   });
 });
-

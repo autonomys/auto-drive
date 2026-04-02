@@ -15,36 +15,21 @@ import { Button, ROUTES } from '@auto-drive/ui';
 import { getBatchStatus, STATUS_CLASSES, STATUS_LABEL } from '../../../utils/credits';
 import type { AdminUserCreditBatch } from '../../../services/api';
 import Link from 'next/link';
+import { shannonsToAi3 } from '@autonomys/auto-utils';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Convert (paymentAmount shannons) / (shannonsPerByte) / (1e18 shannons per AI3)
- * into a human-readable AI3 amount.
- *
- * paymentAmount   — total shannons sent on-chain
- * shannonsPerByte — price per byte in shannons at the time of purchase
- *
- * creditBytes     = paymentAmount / shannonsPerByte  (integer division)
- * AI3 paid        = paymentAmount / 1e18
+ * Format a raw shannons string (from the wire API) as a human-readable AI3
+ * amount, e.g. "1.234567 AI3".  Uses the canonical SDK converter which
+ * handles the 1e18 shannons-per-AI3 conversion with proper precision.
  */
-const SHANNONS_PER_AI3 = BigInt('1000000000000000000') // 1e18
-
 const formatAI3Paid = (paymentAmount: string | null): string => {
   if (!paymentAmount) return '—';
   try {
-    const shannons = BigInt(paymentAmount);
-    // Format to 6 decimal places
-    const whole = shannons / SHANNONS_PER_AI3;
-    const remainder = shannons % SHANNONS_PER_AI3;
-    const decimals = remainder
-      .toString()
-      .padStart(18, '0')
-      .slice(0, 6)
-      .replace(/0+$/, '');
-    return decimals ? `${whole}.${decimals} AI3` : `${whole} AI3`;
+    return `${shannonsToAi3(BigInt(paymentAmount), { trimTrailingZeros: true })} AI3`;
   } catch {
     return '—';
   }

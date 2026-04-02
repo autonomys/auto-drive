@@ -51,7 +51,7 @@ describe('isPackageOverCap', () => {
   })
 
   it('returns false when package fits within the remaining cap', () => {
-    // 10 MB package, 20 MB remaining cap
+    // 10 MiB package, 20 MiB remaining cap
     const maxBytes = BigInt(20 * 1024 * 1024)
     expect(isPackageOverCap(10, maxBytes)).toBe(false)
   })
@@ -62,7 +62,7 @@ describe('isPackageOverCap', () => {
   })
 
   it('returns true when package exceeds the remaining cap by 1 byte', () => {
-    // cap is 1 byte short of 10 MB
+    // cap is 1 byte short of 10 MiB
     const maxBytes = BigInt(10 * 1024 * 1024) - 1n
     expect(isPackageOverCap(10, maxBytes)).toBe(true)
   })
@@ -71,14 +71,14 @@ describe('isPackageOverCap', () => {
     expect(isPackageOverCap(10, 0n)).toBe(true)
   })
 
-  it('handles large enterprise package (1 GB)', () => {
-    // 500 MB remaining — 1 GB package should be over cap
+  it('handles large enterprise package (1 GiB)', () => {
+    // 500 MiB remaining — 1 GiB package should be over cap
     const maxBytes = BigInt(500 * 1024 * 1024)
     expect(isPackageOverCap(1024, maxBytes)).toBe(true)
   })
 
   it('handles large enterprise package within generous cap', () => {
-    // 2 GB remaining — 1 GB package should fit
+    // 2 GiB remaining — 1 GiB package should fit
     const maxBytes = BigInt(2 * 1024 * 1024 * 1024)
     expect(isPackageOverCap(1024, maxBytes)).toBe(false)
   })
@@ -149,28 +149,28 @@ describe('sumExpiringUploadBytes', () => {
   })
 
   it('returns the correct sum for a single batch', () => {
-    const batches = [{ uploadBytesRemaining: '1048576' }] // 1 MB
+    const batches = [{ uploadBytesRemaining: '1048576' }] // 1 MiB
     expect(sumExpiringUploadBytes(batches)).toBe(1048576n)
   })
 
   it('sums multiple batches correctly', () => {
     const batches = [
-      { uploadBytesRemaining: '1048576' },   // 1 MB
-      { uploadBytesRemaining: '2097152' },   // 2 MB
-      { uploadBytesRemaining: '5242880' },   // 5 MB
+      { uploadBytesRemaining: '1048576' },   // 1 MiB
+      { uploadBytesRemaining: '2097152' },   // 2 MiB
+      { uploadBytesRemaining: '5242880' },   // 5 MiB
     ]
-    expect(sumExpiringUploadBytes(batches)).toBe(8388608n) // 8 MB total
+    expect(sumExpiringUploadBytes(batches)).toBe(8388608n) // 8 MiB total
   })
 
   it('handles large byte values without overflow', () => {
-    // 1 GB each, 3 batches → 3 GB total
-    const oneMiB = BigInt(1024 * 1024 * 1024)
+    // 1 GiB each, 3 batches → 3 GiB total
+    const oneGiB = BigInt(1024 * 1024 * 1024)
     const batches = [
-      { uploadBytesRemaining: oneMiB.toString() },
-      { uploadBytesRemaining: oneMiB.toString() },
-      { uploadBytesRemaining: oneMiB.toString() },
+      { uploadBytesRemaining: oneGiB.toString() },
+      { uploadBytesRemaining: oneGiB.toString() },
+      { uploadBytesRemaining: oneGiB.toString() },
     ]
-    expect(sumExpiringUploadBytes(batches)).toBe(oneMiB * 3n)
+    expect(sumExpiringUploadBytes(batches)).toBe(oneGiB * 3n)
   })
 })
 

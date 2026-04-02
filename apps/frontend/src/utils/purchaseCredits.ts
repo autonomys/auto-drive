@@ -2,8 +2,12 @@
  * Pure utility functions for the purchase-credits custom-amount UX.
  * Extracted so they can be unit-tested without a React environment.
  *
- * All internal sizes use MiB. We treat MB=MiB, GB=GiB, TB=TiB to match the
- * existing package definitions (e.g. the "1GB" preset = 1,024 MiB).
+ * All internal sizes use MiB (2^20 bytes).  The unit toggle displays the
+ * familiar consumer labels MB / GB / TB, but uses binary multipliers
+ * throughout (matching how Windows, most consumer software, and the rest
+ * of this codebase count storage):
+ *   1 "GB" here = 1,024 MB = 1,024 MiB
+ *   1 "TB" here = 1,024 GB = 1,048,576 MiB
  */
 
 // ---------------------------------------------------------------------------
@@ -13,11 +17,11 @@
 export const UNITS = ['MB', 'GB', 'TB'] as const;
 export type Unit = (typeof UNITS)[number];
 
-/** Multiplier from the given unit to MiB. */
+/** Multiplier from the displayed unit label to MiB (binary). */
 export const MIB_PER_UNIT: Record<Unit, number> = {
   MB: 1,
-  GB: 1024,
-  TB: 1024 * 1024,
+  GB: 1024,           // 1 "GB" = 1,024 MiB
+  TB: 1024 * 1024,    // 1 "TB" = 1,048,576 MiB
 };
 
 // ---------------------------------------------------------------------------
@@ -25,8 +29,8 @@ export const MIB_PER_UNIT: Record<Unit, number> = {
 // ---------------------------------------------------------------------------
 
 /**
- * Pick the most human-readable unit for a given MiB value.
- * 0 / negative values fall back to MB.
+ * Pick the most human-readable IEC unit for a given MiB value.
+ * 0 / negative values fall back to MiB.
  */
 export const bestUnit = (mib: number): Unit => {
   if (mib >= MIB_PER_UNIT.TB) return 'TB';
@@ -35,8 +39,8 @@ export const bestUnit = (mib: number): Unit => {
 };
 
 /**
- * Convert a MiB value to the display string in a given unit, trimmed to 4
- * significant figures with no trailing zeros.
+ * Convert a MiB value to the display string in a given IEC unit, trimmed to
+ * 4 significant figures with no trailing zeros.
  * Returns '' for non-positive values.
  */
 export const mibToDisplay = (mib: number, unit: Unit): string => {
@@ -53,8 +57,8 @@ export const mibToDisplay = (mib: number, unit: Unit): string => {
  * Sanitise a raw string from a numeric text input:
  * - Strips any character that is not a digit or decimal point.
  * - Collapses multiple decimal points, keeping only the first.
- * - Preserves at most one leading digit (no "007" style leading zeros except
- *   when the value starts with "0.").
+ * - Negative signs are stripped (result is treated as 0 / invalid by the
+ *   caller — inputToMib returns 0 for non-positive values).
  *
  * Returns the sanitised string (may be empty).
  */
@@ -66,7 +70,7 @@ export const sanitizeAmountInput = (raw: string): string =>
 // ---------------------------------------------------------------------------
 
 /**
- * Convert a sanitised input string + unit into whole MiB.
+ * Convert a sanitised input string + IEC unit into whole MiB.
  * Returns 0 for any non-positive or non-finite value.
  */
 export const inputToMib = (value: string, unit: Unit): number => {
