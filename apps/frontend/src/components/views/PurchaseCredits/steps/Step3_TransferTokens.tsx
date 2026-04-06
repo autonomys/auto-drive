@@ -72,13 +72,14 @@ export const PurchaseStep3TransferTokens = ({
       // fee history. Fetch the current gas price via eth_gasPrice and add a
       // 1 GWEI buffer so MetaMask can display the fee correctly and the tx
       // is reliably included without the user having to manually adjust gas.
-      const baseGasPrice = publicClient
-        ? await publicClient.getGasPrice()
-        : BigInt(0);
-      const gasPrice = baseGasPrice + parseGwei('1');
+      // When publicClient is unavailable, omit gasPrice entirely so the
+      // wallet falls back to its own fee estimation.
+      const gasPrice = publicClient
+        ? (await publicClient.getGasPrice()) + parseGwei('1')
+        : undefined;
       const hash = await writeContractAsync({
         ...depositTransaction,
-        gasPrice,
+        ...(gasPrice != null && { gasPrice }),
       });
       setIntentId(depositTransaction.intentId);
       setTxHash(hash);
