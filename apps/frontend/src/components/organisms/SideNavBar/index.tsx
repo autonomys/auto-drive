@@ -72,7 +72,10 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   // Total bytes originally purchased (sum of upload_bytes_original for active rows).
   // Used to render a "X used out of Y total" progress bar in the purchased credits section.
   const purchasedBytesTotal = useMemo(() => {
-    if (!creditSummary) return 0;
+    // totalPurchasedBytesOriginal is a new field — older backend versions will
+    // omit it. Guard with nullish coalescing so the UI degrades gracefully
+    // (hides the progress bar) rather than rendering "N/A".
+    if (!creditSummary?.totalPurchasedBytesOriginal) return 0;
     return Number(creditSummary.totalPurchasedBytesOriginal);
   }, [creditSummary]);
 

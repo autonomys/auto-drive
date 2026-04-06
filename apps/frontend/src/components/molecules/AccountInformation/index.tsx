@@ -101,18 +101,22 @@ export const AccountInformation = ({
             </span>
           </div>
 
-          {/* Progress bar: how much of the purchased total has been consumed */}
-          <div className='h-1.5 w-full rounded-full bg-muted'>
-            <div
-              className='h-1.5 rounded-full bg-green-500 transition-all'
-              style={{ width: `${purchasedPercentage}%` }}
-            />
-          </div>
-
-          <div className='text-xs text-muted-foreground'>
-            {formatBytes(purchasedUsed, 2)} used of{' '}
-            {formatBytes(purchasedBytesTotal, 2)} purchased
-          </div>
+          {/* Progress bar + usage breakdown — only shown when the backend
+              provides the total (field added in this PR; older backends omit it). */}
+          {purchasedBytesTotal > 0 && (
+            <>
+              <div className='h-1.5 w-full rounded-full bg-muted'>
+                <div
+                  className='h-1.5 rounded-full bg-green-500 transition-all'
+                  style={{ width: `${purchasedPercentage}%` }}
+                />
+              </div>
+              <div className='text-xs text-muted-foreground'>
+                {formatBytes(purchasedUsed, 2)} used of{' '}
+                {formatBytes(purchasedBytesTotal, 2)} purchased
+              </div>
+            </>
+          )}
 
           {nextExpiryDate && (
             <div className='text-xs text-amber-600 dark:text-amber-400'>
