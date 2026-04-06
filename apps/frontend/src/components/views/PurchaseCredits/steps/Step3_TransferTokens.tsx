@@ -3,9 +3,9 @@
 import { Button } from '@auto-drive/ui';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { type Hash } from 'viem';
+import { parseGwei, type Hash } from 'viem';
 import { useCallback, useEffect, useState } from 'react';
 import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 import { useNetwork } from '../../../../contexts/network';
@@ -24,6 +24,7 @@ export const PurchaseStep3TransferTokens = ({
   void onBack;
   const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
+  const publicClient = usePublicClient();
   const { formatCreditsInMbAsValue, formatCreditsInMbAsAi3 } = usePrices();
   const [intentId, setIntentId] = useState<string | undefined>(undefined);
 
@@ -67,8 +68,17 @@ export const PurchaseStep3TransferTokens = ({
       const depositTransaction = await paymentIntent(
         formatCreditsInMbAsValue(Number(context.sizeMB)),
       );
+      // Auto EVM is a Substrate-based network that does not support EIP-1559
+      // fee history. Fetch the current gas price via eth_gasPrice and add a
+      // 1 GWEI buffer so MetaMask can display the fee correctly and the tx
+      // is reliably included without the user having to manually adjust gas.
+      const baseGasPrice = publicClient
+        ? await publicClient.getGasPrice()
+        : BigInt(0);
+      const gasPrice = baseGasPrice + parseGwei('1');
       const hash = await writeContractAsync({
         ...depositTransaction,
+        gasPrice,
       });
       setIntentId(depositTransaction.intentId);
       setTxHash(hash);
@@ -80,6 +90,7 @@ export const PurchaseStep3TransferTokens = ({
     paymentIntent,
     formatCreditsInMbAsValue,
     context.sizeMB,
+    publicClient,
     writeContractAsync,
   ]);
 
