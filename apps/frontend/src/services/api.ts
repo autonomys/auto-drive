@@ -19,6 +19,8 @@ import {
 // Wire-format of GET /credits/summary (bigint fields serialised as strings)
 export type CreditSummaryResponse = {
   uploadBytesRemaining: string;
+  /** Sum of upload_bytes_original across all active (non-expired) rows. */
+  totalPurchasedBytesOriginal: string;
   downloadBytesRemaining: string;
   nextExpiryDate: string | null;
   batchCount: number;

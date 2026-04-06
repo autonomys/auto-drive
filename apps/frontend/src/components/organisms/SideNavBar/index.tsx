@@ -69,10 +69,16 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     return Number(creditSummary.uploadBytesRemaining);
   }, [creditSummary]);
 
+  // Total bytes originally purchased (sum of upload_bytes_original for active rows).
+  // Used to render a "X used out of Y total" progress bar in the purchased credits section.
+  const purchasedBytesTotal = useMemo(() => {
+    if (!creditSummary) return 0;
+    return Number(creditSummary.totalPurchasedBytesOriginal);
+  }, [creditSummary]);
+
   // account.pendingUploadCredits = freeRemaining + purchasedRemaining.
-  // Strip out the purchased portion so the progress bar and "used/limit" label
-  // only reflect the free allocation.  Negative means the free quota is
-  // exhausted (user is relying entirely on purchased credits).
+  // Strip out the purchased portion so the free-quota progress bar only
+  // reflects the free allocation.
   const freeRemaining = (account?.pendingUploadCredits ?? 0) - purchasedBytesRemaining;
 
   const nextExpiryDate = useMemo(() => {
@@ -118,6 +124,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             uploadLimit={account?.uploadLimit ?? 0}
             uploadPending={freeRemaining}
             purchasedBytesRemaining={hasBuyCreditsFeature ? purchasedBytesRemaining : 0}
+            purchasedBytesTotal={hasBuyCreditsFeature ? purchasedBytesTotal : 0}
             nextExpiryDate={nextExpiryDate}
             creditHistoryHref={creditHistoryHref}
           />

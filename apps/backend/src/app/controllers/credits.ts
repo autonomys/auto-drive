@@ -52,6 +52,7 @@ creditsController.get(
     const summary = result.value
     res.status(200).json({
       uploadBytesRemaining: summary.uploadBytesRemaining.toString(),
+      totalPurchasedBytesOriginal: summary.totalPurchasedBytesOriginal.toString(),
       downloadBytesRemaining: summary.downloadBytesRemaining.toString(),
       nextExpiryDate: summary.nextExpiryDate ?? null,
       batchCount: summary.batchCount,
