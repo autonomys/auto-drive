@@ -32,6 +32,8 @@ export type PurchasedCredit = z.infer<typeof PurchasedCreditSchema>;
  */
 export type PurchasedCreditSummary = {
   uploadBytesRemaining: bigint;
+  /** Sum of upload_bytes_original across all active (non-expired) rows. */
+  uploadBytesOriginal: bigint;
   downloadBytesRemaining: bigint;
   /** The soonest expires_at across active rows — used for expiry warnings. */
   nextExpiryDate: Date | null;

@@ -97,6 +97,7 @@ describe('CreditsUseCases', () => {
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({
           uploadBytesRemaining: 0n,
+          uploadBytesOriginal: 0n,
           downloadBytesRemaining: 0n,
           nextExpiryDate: null,
           activeRowCount: 0,
@@ -105,6 +106,7 @@ describe('CreditsUseCases', () => {
       const summary = await CreditsUseCases.getSummary(baseUser)
 
       expect(summary.uploadBytesRemaining).toBe(0n)
+      expect(summary.totalPurchasedBytesOriginal).toBe(0n)
       expect(summary.downloadBytesRemaining).toBe(0n)
       expect(summary.nextExpiryDate).toBeNull()
       expect(summary.batchCount).toBe(0)
@@ -117,6 +119,7 @@ describe('CreditsUseCases', () => {
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({
           uploadBytesRemaining: 0n,
+          uploadBytesOriginal: 0n,
           downloadBytesRemaining: 0n,
           nextExpiryDate: null,
           activeRowCount: 0,
@@ -136,6 +139,7 @@ describe('CreditsUseCases', () => {
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({
           uploadBytesRemaining: 0n,
+          uploadBytesOriginal: 0n,
           downloadBytesRemaining: 0n,
           nextExpiryDate: null,
           activeRowCount: 0,
@@ -156,6 +160,7 @@ describe('CreditsUseCases', () => {
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({
           uploadBytesRemaining: uploadRemaining,
+          uploadBytesOriginal: BigInt(100 * 1024 ** 3),
           downloadBytesRemaining: downloadRemaining,
           nextExpiryDate: FUTURE_EXPIRY,
           activeRowCount: 2,
@@ -174,6 +179,7 @@ describe('CreditsUseCases', () => {
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({
           uploadBytesRemaining: cap,
+          uploadBytesOriginal: cap,
           downloadBytesRemaining: cap,
           nextExpiryDate: FUTURE_EXPIRY,
           activeRowCount: 1,
@@ -194,6 +200,7 @@ describe('CreditsUseCases', () => {
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({
           uploadBytesRemaining: uploadRemaining,
+          uploadBytesOriginal: BigInt(50 * 1024 ** 3),
           downloadBytesRemaining: downloadRemaining,
           nextExpiryDate: FUTURE_EXPIRY,
           activeRowCount: 3,
@@ -212,6 +219,7 @@ describe('CreditsUseCases', () => {
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({
           uploadBytesRemaining: BigInt(1024),
+          uploadBytesOriginal: BigInt(2048),
           downloadBytesRemaining: BigInt(1024),
           nextExpiryDate: SOON_EXPIRY,
           activeRowCount: 5,

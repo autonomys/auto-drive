@@ -196,12 +196,14 @@ const getRemainingCredits = async (
   const db = await getDatabase()
   const result = await db.query<{
     upload_bytes_remaining: string
+    upload_bytes_original: string
     download_bytes_remaining: string
     next_expiry: Date | null
     active_row_count: string
   }>(
     `SELECT
        COALESCE(SUM(upload_bytes_remaining),   0) AS upload_bytes_remaining,
+       COALESCE(SUM(upload_bytes_original),    0) AS upload_bytes_original,
        COALESCE(SUM(download_bytes_remaining), 0) AS download_bytes_remaining,
        MIN(expires_at)                            AS next_expiry,
        COUNT(*)                                   AS active_row_count
@@ -216,6 +218,7 @@ const getRemainingCredits = async (
   const row = result.rows[0]
   return {
     uploadBytesRemaining: BigInt(row.upload_bytes_remaining),
+    uploadBytesOriginal: BigInt(row.upload_bytes_original),
     downloadBytesRemaining: BigInt(row.download_bytes_remaining),
     nextExpiryDate: row.next_expiry ?? null,
     activeRowCount: Number(row.active_row_count),
