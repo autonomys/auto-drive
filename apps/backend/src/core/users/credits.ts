@@ -24,6 +24,8 @@ const EXPIRING_WITHIN_DAYS = 30
 
 export type CreditSummary = {
   uploadBytesRemaining: bigint
+  /** Total originally-purchased upload bytes across all active (non-expired) rows. */
+  totalPurchasedBytesOriginal: bigint
   downloadBytesRemaining: bigint
   /** Soonest expires_at across active rows, or null when no active credits. */
   nextExpiryDate: Date | null
@@ -63,6 +65,7 @@ const getSummary = async (
 
   return {
     uploadBytesRemaining: summary.uploadBytesRemaining,
+    totalPurchasedBytesOriginal: summary.uploadBytesOriginal,
     downloadBytesRemaining: summary.downloadBytesRemaining,
     nextExpiryDate: summary.nextExpiryDate,
     batchCount: summary.activeRowCount,
