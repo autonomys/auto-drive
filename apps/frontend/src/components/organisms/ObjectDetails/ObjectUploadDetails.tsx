@@ -31,7 +31,6 @@ export const ObjectUploadDetails = ({
           {formatNumberWithCommas(minimumBlockDepth)}
         </a>
         {maximumBlockDepth != null &&
-          minimumBlockDepth != null &&
           maximumBlockDepth !== minimumBlockDepth && (
           <>
             <span className='text-gray-400'>→</span>
