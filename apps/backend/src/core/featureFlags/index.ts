@@ -17,14 +17,20 @@ const get = (user: User | null) => {
   )
 }
 
-// Returns true if the user authenticated via Google OAuth.
-// Used as the purchase gate when the feature is publicly active.
+// Returns true if the user's account was registered via Google OAuth.
+// Used as the purchase gate when buyCredits is publicly active.
+//
+// This checks the user's *registration* provider (oauthProvider), not the
+// current auth method.  When a request uses an API key, the auth service
+// resolves the key to its owner and returns the owner's original oauthProvider.
+// This means an API key from a Google-registered account satisfies this check,
+// enabling third-party apps to create intents server-side.
 export const hasGoogleAuth = (user: User | null): boolean => {
   return Boolean(user && user.oauthProvider === 'google')
 }
 
 const isActive = (key: string, value: FeatureFlag, user: User | null) => {
-  // buyCredits requires Google auth when publicly active (Sybil protection).
+  // buyCredits requires Google auth when publicly active.
   if (key === 'buyCredits' && value.active) {
     return hasGoogleAuth(user)
   }

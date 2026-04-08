@@ -3,6 +3,7 @@ import { downloads } from './downloads.js'
 import { objects } from './objects.js'
 import { accounts } from './accounts.js'
 import { uploads } from './uploads.js'
+import { intents } from './intents.js'
 
 export const swagger = {
   openapi: '3.0.0',
@@ -31,6 +32,20 @@ X-Auth-Provider: apikey
 
 API keys should be kept secure and not shared with unauthorized parties.
 
+## Purchasing Storage Credits (Pay with AI3)
+
+Third-party applications can purchase storage credits programmatically using the Intents API. The flow is:
+
+1. **Create an account** — Register at [ai3.storage](https://ai3.storage) via Google OAuth
+2. **Generate an API key** — From the dashboard, create an API key
+3. **Create an intent** — \`POST /intents\` with your API key returns an \`intentId\` with a locked price
+4. **Pay on-chain** — Call \`payIntent(intentId)\` on the \`AutoDriveCreditsReceiver\` contract, sending AI3 tokens
+5. **Submit tx hash** — \`POST /intents/:id/watch\` with the transaction hash
+6. **Poll for completion** — \`GET /intents/:id\` until status is \`completed\`
+7. **Upload content** — Use the Auto Drive SDK with the same API key (credits are now on the account)
+
+**Note:** A Google-verified account is currently required to purchase credits. API keys inherit the auth provider of the account that created them, so an API key from a Google-registered account satisfies this requirement.
+
 ## Auto-Drive Services
 
 Auto-Drive consists of two main services:
@@ -42,6 +57,7 @@ The Storage Service handles all file operations including uploads, downloads, an
 - Object metadata management
 - Access control and permissions
 - Account management
+- Credit purchases (Pay with AI3)
 
 ### 2. Auto-Drive Download Gateway
 
@@ -54,6 +70,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
     ...uploads.paths,
     ...objects.paths,
     ...downloads.paths,
+    ...intents.paths,
   },
   security: [
     {
@@ -68,6 +85,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
       ...common.components.schemas,
       ...accounts.components.schemas,
       ...downloads.components.schemas,
+      ...intents.components.schemas,
     },
     securitySchemes: {
       apiKey: {

@@ -40,6 +40,55 @@ describe('hasGoogleAuth', () => {
   })
 })
 
+// ── API key scenario ──────────────────────────────────────────────────────
+// When a request arrives with `x-auth-provider: apikey`, the auth service
+// resolves the API key to the owning user.  The returned User object carries
+// the *original* oauthProvider of the account (e.g. 'google').  These tests
+// verify that such a user passes the Google-auth gate, enabling third-party
+// apps to create intents server-side with an API key from a Google-registered
+// account.
+
+describe('hasGoogleAuth — API key inherits oauthProvider', () => {
+  it('returns true when API key owner registered via Google', () => {
+    // The auth service returns a user whose oauthProvider is 'google'
+    // regardless of whether the current request used OAuth or an API key.
+    const apiKeyUser = makeUser({ oauthProvider: 'google' })
+    expect(hasGoogleAuth(apiKeyUser)).toBe(true)
+  })
+
+  it('returns false when API key owner registered via GitHub', () => {
+    const apiKeyUser = makeUser({ oauthProvider: 'github' })
+    expect(hasGoogleAuth(apiKeyUser)).toBe(false)
+  })
+})
+
+describe('FeatureFlagsUseCases.get — buyCredits via API key', () => {
+  const originalFlags = config.featureFlags.flags
+
+  afterEach(() => {
+    config.featureFlags.flags = originalFlags
+  })
+
+  it('active=true: grants buyCredits for API key from Google-registered account', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      buyCredits: { active: true, staffOnly: false },
+    }
+    // Simulates the resolved user from an API key whose owner signed up with Google
+    const user = makeUser({ oauthProvider: 'google' })
+    expect(FeatureFlagsUseCases.get(user).buyCredits).toBe(true)
+  })
+
+  it('active=true: blocks API key from non-Google account', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      buyCredits: { active: true, staffOnly: false },
+    }
+    const user = makeUser({ oauthProvider: 'github' })
+    expect(FeatureFlagsUseCases.get(user).buyCredits).toBe(false)
+  })
+})
+
 describe('FeatureFlagsUseCases.get — buyCredits gating', () => {
   const originalFlags = config.featureFlags.flags
   const originalDomains = config.featureFlags.staffDomains
