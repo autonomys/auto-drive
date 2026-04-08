@@ -47,6 +47,10 @@ describe('hasGoogleAuth', () => {
 // verify that such a user passes the Google-auth gate, enabling third-party
 // apps to create intents server-side with an API key from a Google-registered
 // account.
+//
+// The fix in apps/auth/src/services/authManager/providers/apikey.ts ensures
+// that oauthUsername is resolved from the DB, so staff-only checks that
+// depend on oauthUsername (domain / allowlist) also work for API key auth.
 
 describe('hasGoogleAuth — API key inherits oauthProvider', () => {
   it('returns true when API key owner registered via Google', () => {
@@ -64,9 +68,13 @@ describe('hasGoogleAuth — API key inherits oauthProvider', () => {
 
 describe('FeatureFlagsUseCases.get — buyCredits via API key', () => {
   const originalFlags = config.featureFlags.flags
+  const originalDomains = config.featureFlags.staffDomains
+  const originalAllowlist = config.featureFlags.allowlistedUsernames
 
   afterEach(() => {
     config.featureFlags.flags = originalFlags
+    config.featureFlags.staffDomains = originalDomains
+    config.featureFlags.allowlistedUsernames = originalAllowlist
   })
 
   it('active=true: grants buyCredits for API key from Google-registered account', () => {
@@ -85,6 +93,47 @@ describe('FeatureFlagsUseCases.get — buyCredits via API key', () => {
       buyCredits: { active: true, staffOnly: false },
     }
     const user = makeUser({ oauthProvider: 'github' })
+    expect(FeatureFlagsUseCases.get(user).buyCredits).toBe(false)
+  })
+
+  it('staffOnly=true: grants buyCredits when API key user has oauthUsername on staff domain', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      buyCredits: { active: false, staffOnly: true },
+    }
+    config.featureFlags.staffDomains = ['subspace.network']
+    // Simulates a fully resolved API key user (with oauthUsername from DB)
+    const user = makeUser({
+      oauthProvider: 'google',
+      oauthUsername: 'dev@subspace.network',
+    })
+    expect(FeatureFlagsUseCases.get(user).buyCredits).toBe(true)
+  })
+
+  it('staffOnly=true: grants buyCredits when API key user is in allowlist', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      buyCredits: { active: false, staffOnly: true },
+    }
+    config.featureFlags.allowlistedUsernames = ['admin@example.com']
+    const user = makeUser({
+      oauthProvider: 'google',
+      oauthUsername: 'admin@example.com',
+    })
+    expect(FeatureFlagsUseCases.get(user).buyCredits).toBe(true)
+  })
+
+  it('staffOnly=true: blocks API key user when oauthUsername is undefined (pre-fix behaviour)', () => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      buyCredits: { active: false, staffOnly: true },
+    }
+    config.featureFlags.staffDomains = ['subspace.network']
+    // Before the fix, API key auth returned no username — this must fail
+    const user = makeUser({
+      oauthProvider: 'google',
+      oauthUsername: undefined,
+    })
     expect(FeatureFlagsUseCases.get(user).buyCredits).toBe(false)
   })
 })
