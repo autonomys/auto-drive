@@ -18,31 +18,38 @@ export type FeatureFlagKey = keyof typeof config.featureFlags.flags
 export const featureFlagMiddleware =
   (key: FeatureFlagKey) =>
   async (req: Request, res: Response, next: NextFunction) => {
-    // Authenticate the user if credentials are present.  Let auth errors
-    // propagate — the caller (asyncSafeHandler / Express error handler)
-    // will return a proper error instead of a misleading 404.
-    let user = null
-    if (req.headers.authorization) {
-      user = await handleAuth(req, res)
-      if (!user) {
-        // handleAuth already sent a 401 response
-        return
+    try {
+      // Authenticate the user if credentials are present.
+      let user = null
+      if (req.headers.authorization) {
+        user = await handleAuth(req, res)
+        if (!user) {
+          // handleAuth already sent a 401 response
+          return
+        }
       }
-    }
 
-    const featureFlags = FeatureFlagsUseCases.get(user)
+      const featureFlags = FeatureFlagsUseCases.get(user)
 
-    if (featureFlags[key]) {
-      next()
-    } else {
-      if (user) {
-        logger.debug(
-          'Feature flag %s is not active for user (oauthProvider=%s)',
-          key,
-          user.oauthProvider,
-        )
+      if (featureFlags[key]) {
+        next()
+      } else {
+        if (user) {
+          logger.debug(
+            'Feature flag %s is not active for user (oauthProvider=%s)',
+            key,
+            user.oauthProvider,
+          )
+        }
+        res.sendStatus(404)
       }
-      res.sendStatus(404)
+    } catch (error) {
+      // Log and return 500 rather than letting the rejection go unhandled,
+      // which would crash the process in Express 4.
+      logger.error(error, 'featureFlagMiddleware: unexpected error')
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' })
+      }
     }
   }
 
