@@ -39,11 +39,12 @@ Third-party applications can purchase storage credits programmatically using the
 1. **Create an account** — Register at [ai3.storage](https://ai3.storage) via Google OAuth
 2. **Generate an API key** — From the dashboard, create an API key
 3. **Get contract info** — \`GET /intents/contract\` returns the contract address, chain ID, and ABI
-4. **Create an intent** — \`POST /intents\` with your API key returns an \`intentId\` with a locked price
-5. **Pay on-chain** — Call \`payIntent(intentId)\` on the contract, sending AI3 as native value
-6. **Submit tx hash** — \`POST /intents/:id/watch\` with the transaction hash
-7. **Poll for completion** — \`GET /intents/:id\` until status is \`completed\`
-8. **Upload content** — Use the Auto Drive SDK with the same API key (credits are now on the account)
+4. **Check current price** — \`GET /intents/price\` returns the current price per byte and per GB to display to the user
+5. **Create an intent** — \`POST /intents\` with your API key returns an \`intentId\` with the price locked in
+6. **Pay on-chain** — Call \`payIntent(intentId)\` on the contract, sending AI3 as native value
+7. **Submit tx hash** — \`POST /intents/:id/watch\` with the transaction hash
+8. **Poll for completion** — \`GET /intents/:id\` until status is \`completed\`
+9. **Upload content** — Use the Auto Drive SDK with the same API key (credits are now on the account)
 
 **Note:** A Google-verified account is currently required to purchase credits. API keys inherit the auth provider of the account that created them, so an API key from a Google-registered account satisfies this requirement.
 

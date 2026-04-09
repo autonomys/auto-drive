@@ -69,11 +69,12 @@ export const intents = {
 1. Create an Auto Drive account via Google OAuth at https://ai3.storage
 2. Generate an API key from the dashboard
 3. Call \`GET /intents/contract\` to get the contract address, chain ID, and ABI
-4. Call \`POST /intents\` with the API key to get an \`intentId\` and locked price
-5. Have the end user call \`payIntent(intentId)\` on the contract, sending AI3 as native value
-6. Call \`POST /intents/:id/watch\` with the transaction hash
-7. Poll \`GET /intents/:id\` until status is \`completed\`
-8. Upload content via the Auto Drive SDK using the same API key`,
+4. Call \`GET /intents/price\` to get the current price per byte and per GB
+5. Call \`POST /intents\` with the API key to get an \`intentId\` with the price locked in
+6. Have the end user call \`payIntent(intentId)\` on the contract, sending AI3 as native value
+7. Call \`POST /intents/:id/watch\` with the transaction hash
+8. Poll \`GET /intents/:id\` until status is \`completed\`
+9. Upload content via the Auto Drive SDK using the same API key`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         responses: {
