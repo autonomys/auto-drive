@@ -26,15 +26,19 @@ intentsController.post(
     }
 
     // Defense-in-depth: when the feature is publicly active, intent creation
-    // requires Google authentication.  The featureFlagMiddleware already blocks
-    // non-Google users from reaching this route (buyCredits returns false for
-    // them), but we check explicitly here to return a clear error code rather
-    // than a silent 404 in case of any middleware bypass.
+    // requires a Google-verified account.  The featureFlagMiddleware already
+    // blocks non-Google users from reaching this route (buyCredits returns
+    // false for them), but we check explicitly here to return a clear error
+    // code rather than a silent 404 in case of any middleware bypass.
+    //
+    // Note: API keys inherit the oauthProvider of the account that created
+    // them, so an API key from a Google-registered account satisfies this
+    // check.  This enables third-party apps to create intents server-side.
     if (config.featureFlags.flags.buyCredits.active && !hasGoogleAuth(user)) {
       res.status(403).json({
-        error: 'GOOGLE_AUTH_REQUIRED',
+        error: 'GOOGLE_ACCOUNT_REQUIRED',
         message:
-          'Google authentication is required to purchase storage credits.',
+          'A Google-verified account is required to purchase storage credits. You can authenticate via Google OAuth or use an API key from a Google-registered account.',
       })
       return
     }
