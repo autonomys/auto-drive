@@ -75,6 +75,21 @@ const createServer = async () => {
       res.status(200).json(result.value)
     }),
   )
+  app.get('/intents/contract', (_req, res) => {
+    res.status(200).json({
+      chainId: config.paymentManager.chainId,
+      contractAddress: config.paymentManager.contractAddress,
+      payIntentAbi: [
+        {
+          inputs: [{ name: 'intentId', type: 'bytes32' }],
+          name: 'payIntent',
+          outputs: [],
+          stateMutability: 'payable',
+          type: 'function',
+        },
+      ],
+    })
+  })
   app.use('/intents', featureFlagMiddleware('buyCredits'), intentsController)
   app.use('/credits', featureFlagMiddleware('buyCredits'), creditsController)
   app.use('/banners', bannersController)

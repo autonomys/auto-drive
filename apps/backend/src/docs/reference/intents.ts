@@ -9,6 +9,7 @@ export const intents = {
           'Returns the current price per byte (in shannons) and price per GB (in AI3). This endpoint does not require authentication.',
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
+        security: [],
         responses: {
           '200': {
             description: 'Current price information',
@@ -33,6 +34,28 @@ export const intents = {
         },
       },
     },
+    '/intents/contract': {
+      get: {
+        summary: 'Intents - Get smart contract info',
+        description:
+          'Returns the on-chain contract address, EVM chain ID, and the minimal ABI needed to call `payIntent`. This endpoint does not require authentication. Use this to build the on-chain transaction for step 4 of the integration flow.',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
+        security: [],
+        responses: {
+          '200': {
+            description: 'Contract information',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ContractInfo',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     '/intents': {
       post: {
         summary: 'Intents - Create a purchase intent',
@@ -45,11 +68,13 @@ export const intents = {
 **Third-party integration pattern:**
 1. Create an Auto Drive account via Google OAuth at https://ai3.storage
 2. Generate an API key from the dashboard
-3. Call \`POST /intents\` with the API key to get an \`intentId\` and locked price
-4. Have the end user call \`payIntent(intentId)\` on the \`AutoDriveCreditsReceiver\` contract, sending AI3 tokens
-5. Call \`POST /intents/:id/watch\` with the transaction hash
-6. Poll \`GET /intents/:id\` until status is \`completed\`
-7. Upload content via the Auto Drive SDK using the same API key`,
+3. Call \`GET /intents/contract\` to get the contract address, chain ID, and ABI
+4. Call \`GET /intents/price\` to get the current price per byte and per GB
+5. Call \`POST /intents\` with the API key to get an \`intentId\` with the price locked in
+6. Have the end user call \`payIntent(intentId)\` on the contract, sending AI3 as native value
+7. Call \`POST /intents/:id/watch\` with the transaction hash
+8. Poll \`GET /intents/:id\` until status is \`completed\`
+9. Upload content via the Auto Drive SDK using the same API key`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         responses: {
@@ -176,6 +201,28 @@ export const intents = {
   },
   components: {
     schemas: {
+      ContractInfo: {
+        type: 'object',
+        required: ['chainId', 'contractAddress', 'payIntentAbi'],
+        properties: {
+          chainId: {
+            type: 'integer',
+            description:
+              'EVM chain ID where the contract is deployed (e.g. 870 for Auto-EVM Mainnet)',
+          },
+          contractAddress: {
+            type: 'string',
+            description:
+              'Address of the AutoDriveCreditsReceiver contract (checksummed)',
+          },
+          payIntentAbi: {
+            type: 'array',
+            description:
+              'Minimal ABI for the payIntent function — pass directly to viem/ethers/web3.js',
+            items: { type: 'object' },
+          },
+        },
+      },
       Intent: {
         type: 'object',
         properties: {
