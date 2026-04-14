@@ -487,7 +487,27 @@ export const createApiService = ({
       return asyncFromStream(response.body);
     }
 
-    return api.downloadFile(cid, password);
+    // The SDK's downloadFile calls its internal downloadObject which throws
+    // `"Failed to download file: ${response.statusText}"`. On HTTP/2 connections
+    // statusText is always empty, so the error message becomes
+    // "Failed to download file: " — which does NOT match any of the patterns
+    // in download.ts's isAnonymousTooLargeError, causing the session-auth
+    // retry to never fire for decrypted downloads.
+    // Re-throw with the known message so the retry logic kicks in correctly.
+    try {
+      return await api.downloadFile(cid, password);
+    } catch (e) {
+      if (
+        authMode === 'anonymous' &&
+        e instanceof Error &&
+        e.message.startsWith('Failed to download file:')
+      ) {
+        throw new Error(
+          'Downloading large files require authorization, please login via gauth, wallet, github or discord',
+        );
+      }
+      throw e;
+    }
   },
   // Banners
   getActiveBanners: async (): Promise<Banner[]> => {
