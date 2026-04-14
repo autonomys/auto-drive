@@ -39,7 +39,7 @@ const downloadObjectByUser = async (
 ): Promise<
   Result<
     FileDownload,
-    ObjectNotFoundError | PaymentRequiredError | NotAcceptableError
+    ObjectNotFoundError | NotAcceptableError
   >
 > => {
   logger.debug(
