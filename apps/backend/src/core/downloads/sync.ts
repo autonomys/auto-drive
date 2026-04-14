@@ -53,14 +53,11 @@ const downloadObjectByUser = async (
   }
   const metadata = getResult.value
 
-  const pendingCredits = await AccountsUseCases.getPendingCreditsByUserAndType(
-    reader,
-    InteractionType.Download,
-  )
-
-  if (pendingCredits < metadata.totalSize) {
-    return err(new PaymentRequiredError('Not enough download credits'))
-  }
+  // Download credit enforcement is intentionally disabled — see accounts.ts.
+  // The infrastructure exists for future use but download limits are not
+  // enforced right now: purchased download bytes are not allocated on purchase
+  // and the quota tracking is not exposed in the UI. Blocking authenticated
+  // users here contradicts the stated design intent.
 
   const authResult = await ObjectUseCases.authorizeDownload(
     cid,
