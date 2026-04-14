@@ -493,14 +493,15 @@ export const createApiService = ({
     // "Failed to download file: " — which does NOT match any of the patterns
     // in download.ts's isAnonymousTooLargeError, causing the session-auth
     // retry to never fire for decrypted downloads.
-    // Re-throw with the known message so the retry logic kicks in correctly.
+    // Only match the exact empty-suffix form so HTTP/1.1 errors (404, 500, etc.)
+    // with a populated statusText still propagate to isAnonymousTooLargeError.
     try {
       return await api.downloadFile(cid, password);
     } catch (e) {
       if (
         authMode === 'anonymous' &&
         e instanceof Error &&
-        e.message.startsWith('Failed to download file:')
+        e.message === 'Failed to download file: '
       ) {
         throw new Error(
           'Downloading large files require authorization, please login via gauth, wallet, github or discord',

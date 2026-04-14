@@ -174,8 +174,10 @@ describe('downloadObject — decrypted download (skipDecryption: false)', () => 
      * so `fetchFromApi` never attempted the session-auth retry.
      *
      * The fix in api.ts wraps `downloadFile` in a try-catch and re-throws
-     * with the well-known login message whenever the error starts with
-     * "Failed to download file:" AND authMode is 'anonymous'.
+     * with the well-known login message only when the error is exactly
+     * "Failed to download file: " (empty suffix) AND authMode is 'anonymous'.
+     * Errors with a populated statusText propagate unchanged so
+     * isAnonymousTooLargeError in download.ts can discriminate properly.
      */
     it('[BUG REGRESSION] HTTP/2 empty-statusText SDK error is re-thrown as the recognised login message', async () => {
       // Reproduce the exact error the SDK raises on HTTP/2 (statusText === "").
@@ -193,21 +195,28 @@ describe('downloadObject — decrypted download (skipDecryption: false)', () => 
       );
     });
 
-    it('SDK error with non-empty statusText starting with "Failed to download file:" is also re-thrown as the login message', async () => {
-      // HTTP/1.1 equivalent — statusText is populated but still represents a
-      // 402/other auth-related failure from the SDK.
+    it('HTTP/1.1 SDK errors with a populated statusText propagate unchanged (handled by isAnonymousTooLargeError in download.ts)', async () => {
+      const sdkError = new Error('Failed to download file: Payment Required');
       mockAutoDriveApi({
-        downloadFile: jest.fn().mockRejectedValue(
-          new Error('Failed to download file: Payment Required'),
-        ),
+        downloadFile: jest.fn().mockRejectedValue(sdkError),
       });
 
       const api = createApi();
       await expect(
         api.downloadObject(TEST_CID, { authMode: 'anonymous' }),
-      ).rejects.toThrow(
-        'Downloading large files require authorization, please login via gauth, wallet, github or discord',
-      );
+      ).rejects.toBe(sdkError);
+    });
+
+    it('HTTP/1.1 SDK 404 errors propagate unchanged instead of becoming the login message', async () => {
+      const sdkError = new Error('Failed to download file: Not Found');
+      mockAutoDriveApi({
+        downloadFile: jest.fn().mockRejectedValue(sdkError),
+      });
+
+      const api = createApi();
+      await expect(
+        api.downloadObject(TEST_CID, { authMode: 'anonymous' }),
+      ).rejects.toBe(sdkError);
     });
 
     it('unrelated SDK errors are propagated unchanged', async () => {
