@@ -4,6 +4,7 @@ import { Button } from '@auto-drive/ui';
 import { useEncryptionStore } from 'globalStates/encryption';
 import { useNetwork } from 'contexts/network';
 import { useFileTableState } from '@/components/organisms/FileTable/state';
+import { useQueryClient } from '@tanstack/react-query';
 
 type FileProgress = {
   progress: number;
@@ -38,6 +39,7 @@ export const UploadingFileModal = ({
   const uploadStartedRef = useRef(false);
   const network = useNetwork();
   const refetch = useFileTableState((v) => v.fetch);
+  const queryClient = useQueryClient();
 
   const totalFiles = files?.length || 0;
 
@@ -178,6 +180,8 @@ export const UploadingFileModal = ({
       const success = await manageUpload(password || undefined);
       if (success) {
         refetch();
+        queryClient.invalidateQueries({ queryKey: ['account'] });
+        queryClient.invalidateQueries({ queryKey: ['creditSummary'] });
         setTimeout(() => {
           handleClose();
         }, 1000);

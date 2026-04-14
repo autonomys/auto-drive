@@ -6,6 +6,7 @@ import { useEncryptionStore } from 'globalStates/encryption';
 import { useNetwork } from 'contexts/network';
 import { useFileTableState } from '@/components/organisms/FileTable/state';
 import { useUserStore } from 'globalStates/user';
+import { useQueryClient } from '@tanstack/react-query';
 import { AccountModel } from '@auto-drive/models';
 import { BuyMoreCreditsButton } from 'components/atoms/BuyMoreCreditsButton';
 import { formatBytes } from 'utils/number';
@@ -28,6 +29,7 @@ export const UploadingFolderModal = ({
   const progressPercentage = Math.round(progress);
 
   const refetch = useFileTableState((v) => v.fetch);
+  const queryClient = useQueryClient();
 
   const resetUploadState = useCallback(() => {
     setPassword(undefined);
@@ -72,6 +74,8 @@ export const UploadingFolderModal = ({
       const success = await handleUpload();
       if (success) {
         refetch();
+        queryClient.invalidateQueries({ queryKey: ['account'] });
+        queryClient.invalidateQueries({ queryKey: ['creditSummary'] });
         handleClose();
       }
     };
