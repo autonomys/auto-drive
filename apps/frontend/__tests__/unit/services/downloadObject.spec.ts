@@ -1,15 +1,13 @@
 /**
  * Unit tests for `createApiService().downloadObject`
  *
- * These tests cover all four download scenarios:
- *   1. Encrypted raw download (skipDecryption=true) — anonymous 402 path
- *   2. Encrypted raw download (skipDecryption=true) — session success path
- *   3. Decrypted download (skipDecryption=false) — anonymous, including the
- *      HTTP/2 empty-statusText bug regression
- *   4. Decrypted download (skipDecryption=false) — session
+ * Both the skipDecryption=true and skipDecryption=false paths now use
+ * `sendDownloadRequest` directly, checking `response.status` numerically.
+ * This is immune to HTTP/2's always-empty statusText.
  *
- * External dependencies are fully mocked so no network or Next.js runtime is
- * required.
+ * The skipDecryption=false path additionally fetches metadata via
+ * `sendAPIRequest` and applies decryption/decompression from
+ * `@autonomys/auto-dag-data`.
  */
 
 // ---------------------------------------------------------------------------
@@ -24,14 +22,21 @@ jest.mock('utils/auth', () => ({
   getAuthSession: jest.fn(),
 }));
 
-// uploadFileContent is imported by api.ts but never used in downloadObject.
 jest.mock('utils/file', () => ({
   uploadFileContent: jest.fn(),
 }));
 
-// asyncFromStream is dynamically imported inside the skipDecryption=true path.
 jest.mock('@autonomys/asynchronous', () => ({
   asyncFromStream: jest.fn(),
+}));
+
+const mockDecryptFile = jest.fn();
+const mockDecompressFile = jest.fn();
+jest.mock('@autonomys/auto-dag-data', () => ({
+  decryptFile: mockDecryptFile,
+  EncryptionAlgorithm: { AES_256_GCM: 'AES_256_GCM' },
+  decompressFile: mockDecompressFile,
+  CompressionAlgorithm: { ZLIB: 'ZLIB' },
 }));
 
 // ---------------------------------------------------------------------------
@@ -57,11 +62,11 @@ const createApi = () =>
 /** Convenience — build a mock AutoDrive API with overrideable methods. */
 const mockAutoDriveApi = (overrides: {
   sendDownloadRequest?: jest.Mock;
-  downloadFile?: jest.Mock;
+  sendAPIRequest?: jest.Mock;
 }) => {
   const mock = {
     sendDownloadRequest: overrides.sendDownloadRequest ?? jest.fn(),
-    downloadFile: overrides.downloadFile ?? jest.fn(),
+    sendAPIRequest: overrides.sendAPIRequest ?? jest.fn(),
   };
   (createAutoDriveApi as jest.Mock).mockReturnValue(mock);
   return mock;
@@ -69,6 +74,24 @@ const mockAutoDriveApi = (overrides: {
 
 /** Session fixture for an authenticated Google user. */
 const SESSION_GOOGLE = { accessToken: 'tok-abc', authProvider: 'google' };
+
+const fakeBody = {} as ReadableStream<Uint8Array>;
+
+const okDownloadResponse = () => ({
+  ok: true,
+  status: 200,
+  statusText: '',
+  body: fakeBody,
+});
+
+const metadataResponse = (uploadOptions?: {
+  encryption?: { algorithm: string };
+  compression?: { algorithm: string };
+}) => ({
+  ok: true,
+  status: 200,
+  json: jest.fn().mockResolvedValue({ uploadOptions }),
+});
 
 // ---------------------------------------------------------------------------
 // Encrypted / raw download  (skipDecryption: true)
@@ -118,18 +141,12 @@ describe('downloadObject — encrypted raw download (skipDecryption: true)', () 
   it('session — 200 returns the async iterable produced by asyncFromStream', async () => {
     (getAuthSession as jest.Mock).mockResolvedValue(SESSION_GOOGLE);
 
-    const fakeBody = {} as ReadableStream<Uint8Array>; // opaque stub
     const fakeIterable: AsyncIterable<Buffer> = (async function* () {
       yield Buffer.from('hello');
     })();
 
     mockAutoDriveApi({
-      sendDownloadRequest: jest.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        body: fakeBody,
-      }),
+      sendDownloadRequest: jest.fn().mockResolvedValue(okDownloadResponse()),
     });
     (asyncFromStream as jest.Mock).mockReturnValue(fakeIterable);
 
@@ -160,31 +177,15 @@ describe('downloadObject — decrypted download (skipDecryption: false)', () => 
       (getAuthSession as jest.Mock).mockResolvedValue(null);
     });
 
-    /**
-     * BUG REGRESSION
-     *
-     * HTTP/2 always delivers an empty statusText.  The SDK's internal
-     * downloadObject therefore throws:
-     *
-     *   new Error('Failed to download file: ' + response.statusText)
-     *   // → "Failed to download file: "  (empty suffix)
-     *
-     * Before the fix, `isAnonymousTooLargeError` in download.ts did NOT match
-     * this message (it checks for "file too large", "payment required", etc.),
-     * so `fetchFromApi` never attempted the session-auth retry.
-     *
-     * The fix in api.ts wraps `downloadFile` in a try-catch and re-throws
-     * with the well-known login message only when the error is exactly
-     * "Failed to download file: " (empty suffix) AND authMode is 'anonymous'.
-     * Errors with a populated statusText propagate unchanged so
-     * isAnonymousTooLargeError in download.ts can discriminate properly.
-     */
-    it('[BUG REGRESSION] HTTP/2 empty-statusText SDK error is re-thrown as the recognised login message', async () => {
-      // Reproduce the exact error the SDK raises on HTTP/2 (statusText === "").
+    it('backend 402 on HTTP/2 (empty statusText) throws the recognised login message', async () => {
       mockAutoDriveApi({
-        downloadFile: jest.fn().mockRejectedValue(
-          new Error('Failed to download file: '),
-        ),
+        sendAPIRequest: jest.fn().mockResolvedValue(metadataResponse()),
+        sendDownloadRequest: jest.fn().mockResolvedValue({
+          ok: false,
+          status: 402,
+          statusText: '',
+          body: null,
+        }),
       });
 
       const api = createApi();
@@ -195,61 +196,69 @@ describe('downloadObject — decrypted download (skipDecryption: false)', () => 
       );
     });
 
-    it('HTTP/1.1 SDK errors with a populated statusText propagate unchanged (handled by isAnonymousTooLargeError in download.ts)', async () => {
-      const sdkError = new Error('Failed to download file: Payment Required');
+    it('backend 402 on HTTP/1.1 (with statusText) throws the recognised login message', async () => {
       mockAutoDriveApi({
-        downloadFile: jest.fn().mockRejectedValue(sdkError),
+        sendAPIRequest: jest.fn().mockResolvedValue(metadataResponse()),
+        sendDownloadRequest: jest.fn().mockResolvedValue({
+          ok: false,
+          status: 402,
+          statusText: 'Payment Required',
+          body: null,
+        }),
       });
 
       const api = createApi();
       await expect(
         api.downloadObject(TEST_CID, { authMode: 'anonymous' }),
-      ).rejects.toBe(sdkError);
+      ).rejects.toThrow(
+        'Downloading large files require authorization, please login via gauth, wallet, github or discord',
+      );
     });
 
-    it('HTTP/1.1 SDK 404 errors propagate unchanged instead of becoming the login message', async () => {
-      const sdkError = new Error('Failed to download file: Not Found');
+    it('backend 404 throws "File not found" (not the login message)', async () => {
       mockAutoDriveApi({
-        downloadFile: jest.fn().mockRejectedValue(sdkError),
+        sendAPIRequest: jest.fn().mockResolvedValue(metadataResponse()),
+        sendDownloadRequest: jest.fn().mockResolvedValue({
+          ok: false,
+          status: 404,
+          statusText: '',
+          body: null,
+        }),
       });
 
       const api = createApi();
       await expect(
         api.downloadObject(TEST_CID, { authMode: 'anonymous' }),
-      ).rejects.toBe(sdkError);
+      ).rejects.toThrow('File not found');
     });
 
-    it('unrelated SDK errors are propagated unchanged', async () => {
-      const originalError = new Error('Network connection reset');
+    it('backend 500 throws "Server error" (not the login message)', async () => {
       mockAutoDriveApi({
-        downloadFile: jest.fn().mockRejectedValue(originalError),
+        sendAPIRequest: jest.fn().mockResolvedValue(metadataResponse()),
+        sendDownloadRequest: jest.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+          statusText: '',
+          body: null,
+        }),
       });
 
       const api = createApi();
       await expect(
         api.downloadObject(TEST_CID, { authMode: 'anonymous' }),
-      ).rejects.toThrow('Network connection reset');
+      ).rejects.toThrow('Server error occurred while downloading the file');
     });
 
-    it('non-Error rejections are propagated unchanged', async () => {
-      mockAutoDriveApi({
-        downloadFile: jest.fn().mockRejectedValue('string error'),
-      });
-
-      const api = createApi();
-      // rejects with the original non-Error value
-      await expect(
-        api.downloadObject(TEST_CID, { authMode: 'anonymous' }),
-      ).rejects.toBe('string error');
-    });
-
-    it('success path returns the iterable from downloadFile', async () => {
+    it('success path returns the iterable from asyncFromStream (no encryption)', async () => {
       const fakeIterable: AsyncIterable<Buffer> = (async function* () {
         yield Buffer.from('decrypted data');
       })();
+
       mockAutoDriveApi({
-        downloadFile: jest.fn().mockResolvedValue(fakeIterable),
+        sendAPIRequest: jest.fn().mockResolvedValue(metadataResponse()),
+        sendDownloadRequest: jest.fn().mockResolvedValue(okDownloadResponse()),
       });
+      (asyncFromStream as jest.Mock).mockReturnValue(fakeIterable);
 
       const api = createApi();
       const result = await api.downloadObject(TEST_CID, {
@@ -257,6 +266,64 @@ describe('downloadObject — decrypted download (skipDecryption: false)', () => 
       });
 
       expect(result).toBe(fakeIterable);
+    });
+
+    it('decrypts and decompresses when metadata indicates encryption + compression', async () => {
+      const rawIterable = (async function* () {
+        yield Buffer.from('raw');
+      })();
+      const decryptedIterable = (async function* () {
+        yield Buffer.from('decrypted');
+      })();
+      const decompressedIterable = (async function* () {
+        yield Buffer.from('decompressed');
+      })();
+
+      mockAutoDriveApi({
+        sendAPIRequest: jest.fn().mockResolvedValue(
+          metadataResponse({
+            encryption: { algorithm: 'AES_256_GCM' },
+            compression: { algorithm: 'ZLIB' },
+          }),
+        ),
+        sendDownloadRequest: jest.fn().mockResolvedValue(okDownloadResponse()),
+      });
+      (asyncFromStream as jest.Mock).mockReturnValue(rawIterable);
+      mockDecryptFile.mockReturnValue(decryptedIterable);
+      mockDecompressFile.mockReturnValue(decompressedIterable);
+
+      const api = createApi();
+      const result = await api.downloadObject(TEST_CID, {
+        authMode: 'anonymous',
+        password: 'secret',
+      });
+
+      expect(mockDecryptFile).toHaveBeenCalledWith(rawIterable, 'secret', {
+        algorithm: 'AES_256_GCM',
+      });
+      expect(mockDecompressFile).toHaveBeenCalledWith(decryptedIterable, {
+        algorithm: 'ZLIB',
+      });
+      expect(result).toBe(decompressedIterable);
+    });
+
+    it('throws when metadata indicates encryption but no password is provided', async () => {
+      mockAutoDriveApi({
+        sendAPIRequest: jest.fn().mockResolvedValue(
+          metadataResponse({
+            encryption: { algorithm: 'AES_256_GCM' },
+          }),
+        ),
+        sendDownloadRequest: jest.fn().mockResolvedValue(okDownloadResponse()),
+      });
+      (asyncFromStream as jest.Mock).mockReturnValue(
+        (async function* () {})(),
+      );
+
+      const api = createApi();
+      await expect(
+        api.downloadObject(TEST_CID, { authMode: 'anonymous' }),
+      ).rejects.toThrow('Password is required to decrypt the file');
     });
   });
 
@@ -269,13 +336,16 @@ describe('downloadObject — decrypted download (skipDecryption: false)', () => 
       (getAuthSession as jest.Mock).mockResolvedValue(SESSION_GOOGLE);
     });
 
-    it('success — returns the iterable from downloadFile', async () => {
+    it('success — returns the iterable from asyncFromStream', async () => {
       const fakeIterable: AsyncIterable<Buffer> = (async function* () {
         yield Buffer.from('hello session');
       })();
+
       mockAutoDriveApi({
-        downloadFile: jest.fn().mockResolvedValue(fakeIterable),
+        sendAPIRequest: jest.fn().mockResolvedValue(metadataResponse()),
+        sendDownloadRequest: jest.fn().mockResolvedValue(okDownloadResponse()),
       });
+      (asyncFromStream as jest.Mock).mockReturnValue(fakeIterable);
 
       const api = createApi();
       const result = await api.downloadObject(TEST_CID, {
@@ -285,24 +355,37 @@ describe('downloadObject — decrypted download (skipDecryption: false)', () => 
       expect(result).toBe(fakeIterable);
     });
 
-    it('"Failed to download file:" errors are NOT re-thrown — they propagate as-is in session mode', async () => {
-      // The re-throw guard is anonymous-only; session errors must bubble up
-      // unchanged so the caller gets the real error.
-      const sdkError = new Error('Failed to download file: ');
+    it('402 in session mode throws "Download limit exceeded" (not the login message)', async () => {
       mockAutoDriveApi({
-        downloadFile: jest.fn().mockRejectedValue(sdkError),
+        sendAPIRequest: jest.fn().mockResolvedValue(metadataResponse()),
+        sendDownloadRequest: jest.fn().mockResolvedValue({
+          ok: false,
+          status: 402,
+          statusText: '',
+          body: null,
+        }),
       });
 
       const api = createApi();
       await expect(
         api.downloadObject(TEST_CID, { authMode: 'session' }),
-      ).rejects.toBe(sdkError);
+      ).rejects.toThrow('Download limit exceeded');
     });
 
-    it('passes the password to downloadFile when provided', async () => {
-      const fakeIterable: AsyncIterable<Buffer> = (async function* () {})();
-      const downloadFileMock = jest.fn().mockResolvedValue(fakeIterable);
-      mockAutoDriveApi({ downloadFile: downloadFileMock });
+    it('passes the password through to decryptFile when metadata has encryption', async () => {
+      const rawIterable = (async function* () {})();
+      const decryptedIterable = (async function* () {})();
+
+      mockAutoDriveApi({
+        sendAPIRequest: jest.fn().mockResolvedValue(
+          metadataResponse({
+            encryption: { algorithm: 'AES_256_GCM' },
+          }),
+        ),
+        sendDownloadRequest: jest.fn().mockResolvedValue(okDownloadResponse()),
+      });
+      (asyncFromStream as jest.Mock).mockReturnValue(rawIterable);
+      mockDecryptFile.mockReturnValue(decryptedIterable);
 
       const api = createApi();
       await api.downloadObject(TEST_CID, {
@@ -310,7 +393,9 @@ describe('downloadObject — decrypted download (skipDecryption: false)', () => 
         password: 'hunter2',
       });
 
-      expect(downloadFileMock).toHaveBeenCalledWith(TEST_CID, 'hunter2');
+      expect(mockDecryptFile).toHaveBeenCalledWith(rawIterable, 'hunter2', {
+        algorithm: 'AES_256_GCM',
+      });
     });
   });
 
@@ -329,7 +414,6 @@ describe('downloadObject — decrypted download (skipDecryption: false)', () => 
         'Downloading large files require authorization, please login via gauth, wallet, github or discord',
       );
 
-      // createAutoDriveApi should never be reached
       expect(createAutoDriveApi).not.toHaveBeenCalled();
     });
   });
