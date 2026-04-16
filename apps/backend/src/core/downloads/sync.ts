@@ -39,7 +39,7 @@ const downloadObjectByUser = async (
 ): Promise<
   Result<
     FileDownload,
-    ObjectNotFoundError | PaymentRequiredError | NotAcceptableError
+    ObjectNotFoundError | NotAcceptableError
   >
 > => {
   logger.debug(
@@ -53,14 +53,19 @@ const downloadObjectByUser = async (
   }
   const metadata = getResult.value
 
-  const pendingCredits = await AccountsUseCases.getPendingCreditsByUserAndType(
-    reader,
-    InteractionType.Download,
-  )
-
-  if (pendingCredits < metadata.totalSize) {
-    return err(new PaymentRequiredError('Not enough download credits'))
-  }
+  // NOTE: Download credit enforcement is intentionally disabled.
+  // The infrastructure exists for future use, but download limits are not
+  // enforced right now: purchased download bytes are not allocated on purchase,
+  // so users have no way to replenish a depleted download quota — making the
+  // block permanent. Re-enable once download credit purchasing is wired up.
+  //
+  // const pendingCredits = await AccountsUseCases.getPendingCreditsByUserAndType(
+  //   reader,
+  //   InteractionType.Download,
+  // )
+  // if (pendingCredits < metadata.totalSize) {
+  //   return err(new PaymentRequiredError('Not enough download credits'))
+  // }
 
   const authResult = await ObjectUseCases.authorizeDownload(
     cid,
