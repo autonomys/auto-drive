@@ -34,9 +34,7 @@ const mockDecryptFile = jest.fn();
 const mockDecompressFile = jest.fn();
 jest.mock('@autonomys/auto-dag-data', () => ({
   decryptFile: mockDecryptFile,
-  EncryptionAlgorithm: { AES_256_GCM: 'AES_256_GCM' },
   decompressFile: mockDecompressFile,
-  CompressionAlgorithm: { ZLIB: 'ZLIB' },
 }));
 
 // ---------------------------------------------------------------------------

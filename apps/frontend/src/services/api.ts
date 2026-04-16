@@ -503,20 +503,16 @@ export const createApiService = ({
       if (!password) {
         throw new Error('Password is required to decrypt the file');
       }
-      const { decryptFile, EncryptionAlgorithm } = await import(
-        '@autonomys/auto-dag-data'
-      );
+      const { decryptFile } = await import('@autonomys/auto-dag-data');
       iterable = decryptFile(iterable, password, {
-        algorithm: EncryptionAlgorithm.AES_256_GCM,
+        algorithm: metadata.uploadOptions.encryption.algorithm,
       });
     }
 
     if (!skipDecryption && metadata?.uploadOptions?.compression) {
-      const { decompressFile, CompressionAlgorithm } = await import(
-        '@autonomys/auto-dag-data'
-      );
+      const { decompressFile } = await import('@autonomys/auto-dag-data');
       iterable = decompressFile(iterable, {
-        algorithm: CompressionAlgorithm.ZLIB,
+        algorithm: metadata.uploadOptions.compression.algorithm,
       });
     }
 
