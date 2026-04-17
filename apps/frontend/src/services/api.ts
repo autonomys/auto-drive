@@ -453,62 +453,70 @@ export const createApiService = ({
       provider,
     });
 
-    if (skipDecryption) {
-      const { asyncFromStream } = await import('@autonomys/asynchronous');
-      const response = await api.sendDownloadRequest(
-        `/downloads/${cid}?ignoreEncoding=true`,
+    const { asyncFromStream } = await import('@autonomys/asynchronous');
+
+    // Fetch upload-options metadata so we know whether to decrypt/decompress.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let metadata: any = null;
+    if (!skipDecryption) {
+      const metadataRes = await api.sendAPIRequest(
+        `/objects/${cid}/metadata`,
         { method: 'GET' },
       );
-      if (!response.ok) {
-        let errorMsg: string;
-        if (response.status === 401) {
-          errorMsg = 'Authentication required to download this file';
-        } else if (response.status === 402) {
-          // Backend uses 402 for both "file too large to download anonymously"
-          // and "not enough download credits". Use authMode to pick messaging.
-          errorMsg =
-            authMode === 'anonymous'
-              ? 'Downloading large files require authorization, please login via gauth, wallet, github or discord'
-              : 'Download limit exceeded';
-        } else if (response.status === 403) {
-          errorMsg = 'You do not have permission to download this file';
-        } else if (response.status === 404) {
-          errorMsg = 'File not found';
-        } else if (response.status >= 500) {
-          errorMsg = 'Server error occurred while downloading the file';
-        } else {
-          errorMsg = `Failed to download file: ${response.statusText}`;
-        }
-        throw new Error(errorMsg);
+      if (!metadataRes.ok) {
+        throw new Error('Failed to retrieve file metadata');
       }
-      if (!response.body) {
-        throw new Error('No body returned from download request');
-      }
-      return asyncFromStream(response.body);
+      metadata = await metadataRes.json();
     }
 
-    // The SDK's downloadFile calls its internal downloadObject which throws
-    // `"Failed to download file: ${response.statusText}"`. On HTTP/2 connections
-    // statusText is always empty, so the error message becomes
-    // "Failed to download file: " — which does NOT match any of the patterns
-    // in download.ts's isAnonymousTooLargeError, causing the session-auth
-    // retry to never fire for decrypted downloads.
-    // Only match the exact empty-suffix form so HTTP/1.1 errors (404, 500, etc.)
-    // with a populated statusText still propagate to isAnonymousTooLargeError.
-    try {
-      return await api.downloadFile(cid, password);
-    } catch (e) {
-      if (
-        authMode === 'anonymous' &&
-        e instanceof Error &&
-        e.message === 'Failed to download file: '
-      ) {
-        throw new Error(
-          'Downloading large files require authorization, please login via gauth, wallet, github or discord',
-        );
+    const response = await api.sendDownloadRequest(
+      `/downloads/${cid}?ignoreEncoding=true`,
+      { method: 'GET' },
+    );
+    if (!response.ok) {
+      let errorMsg: string;
+      if (response.status === 401) {
+        errorMsg = 'Authentication required to download this file';
+      } else if (response.status === 402) {
+        errorMsg =
+          authMode === 'anonymous'
+            ? 'Downloading large files require authorization, please login via gauth, wallet, github or discord'
+            : 'Download limit exceeded';
+      } else if (response.status === 403) {
+        errorMsg = 'You do not have permission to download this file';
+      } else if (response.status === 404) {
+        errorMsg = 'File not found';
+      } else if (response.status >= 500) {
+        errorMsg = 'Server error occurred while downloading the file';
+      } else {
+        errorMsg = `Failed to download file: ${response.statusText}`;
       }
-      throw e;
+      throw new Error(errorMsg);
     }
+    if (!response.body) {
+      throw new Error('No body returned from download request');
+    }
+
+    let iterable: AsyncIterable<Buffer> = asyncFromStream(response.body);
+
+    if (!skipDecryption && metadata?.uploadOptions?.encryption) {
+      if (!password) {
+        throw new Error('Password is required to decrypt the file');
+      }
+      const { decryptFile } = await import('@autonomys/auto-dag-data');
+      iterable = decryptFile(iterable, password, {
+        algorithm: metadata.uploadOptions.encryption.algorithm,
+      });
+    }
+
+    if (!skipDecryption && metadata?.uploadOptions?.compression) {
+      const { decompressFile } = await import('@autonomys/auto-dag-data');
+      iterable = decompressFile(iterable, {
+        algorithm: metadata.uploadOptions.compression.algorithm,
+      });
+    }
+
+    return iterable;
   },
   // Banners
   getActiveBanners: async (): Promise<Banner[]> => {
