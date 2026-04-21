@@ -306,17 +306,20 @@ const removeUploadArtifacts = async (uploadId: string): Promise<void> => {
   await fileProcessingInfoRepository.deleteFileProcessingInfo(uploadId)
 }
 
+const PUBLISH_BATCH_SIZE = 50
+
 const scheduleNodesPublish = async (cid: string): Promise<void> => {
   const nodes = await NodesUseCases.getCidsByRootCid(cid)
 
-  nodes.forEach((node) => {
+  for (let i = 0; i < nodes.length; i += PUBLISH_BATCH_SIZE) {
+    const batch = nodes.slice(i, i + PUBLISH_BATCH_SIZE)
     EventRouter.publish(
       createTask({
         id: 'publish-nodes',
-        params: { nodes: [node] },
+        params: { nodes: batch },
       }),
     )
-  })
+  }
 }
 
 const scheduleUploadTagging = async (cid: string): Promise<void> => {
