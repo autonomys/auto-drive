@@ -50,7 +50,19 @@ export const config = {
   },
   rabbitmq: {
     url: env('RABBITMQ_URL'),
+    // Default channel prefetch — used by any queue without an explicit
+    // override below. Keep conservative: each in-flight message may hold
+    // significant memory while the worker processes it.
     prefetch: Number(env('RABBITMQ_PREFETCH', '10')),
+    // Per-queue prefetch overrides. `task-manager` handles memory-heavy
+    // `publish-nodes` jobs (encoded-node buffers + Substrate subscriptions)
+    // so it needs a much smaller concurrency cap than the download queue.
+    queuePrefetch: {
+      'task-manager': Number(env('RABBITMQ_TASK_MANAGER_PREFETCH', '3')),
+      'download-manager': Number(
+        env('RABBITMQ_DOWNLOAD_MANAGER_PREFETCH', '10'),
+      ),
+    } as Record<string, number>,
     keepAliveInterval: Number(env('RABBITMQ_KEEP_ALIVE_INTERVAL', '60000')),
   },
   monitoring: {
@@ -117,6 +129,12 @@ export const config = {
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
     taskManagerMaxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
+    // How many node CIDs to bundle into a single `publish-nodes` task.
+    // Larger batches reduce queue depth and per-task memory overhead
+    // (fewer concurrent encoded-node loads, fewer Substrate tx callbacks
+    // held in memory). Set to 1 to restore legacy one-task-per-node
+    // behaviour.
+    publishNodesBatchSize: Number(env('PUBLISH_NODES_BATCH_SIZE', '50')),
   },
   featureFlags: {
     flags: {

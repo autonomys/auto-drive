@@ -309,14 +309,27 @@ const removeUploadArtifacts = async (uploadId: string): Promise<void> => {
 const scheduleNodesPublish = async (cid: string): Promise<void> => {
   const nodes = await NodesUseCases.getCidsByRootCid(cid)
 
-  nodes.forEach((node) => {
-    EventRouter.publish(
+  // Batch node publishing to avoid fanning out one RabbitMQ task per node.
+  // A single upload can produce hundreds of nodes; emitting a task per node
+  // floods `task-manager` and — combined with per-task memory overhead in
+  // the worker (encoded-node buffers + in-flight Substrate subscriptions) —
+  // has caused the frontend worker to OOM on startup when the queue is deep.
+  // Batching trades task count for larger payloads per task, which the
+  // OnchainPublisher already handles (it accepts a CID array).
+  const batchSize = Math.max(1, config.params.publishNodesBatchSize)
+  const tasks: Task[] = []
+  for (let i = 0; i < nodes.length; i += batchSize) {
+    tasks.push(
       createTask({
         id: 'publish-nodes',
-        params: { nodes: [node] },
+        params: { nodes: nodes.slice(i, i + batchSize) },
       }),
     )
-  })
+  }
+
+  if (tasks.length > 0) {
+    EventRouter.publish(tasks)
+  }
 }
 
 const scheduleUploadTagging = async (cid: string): Promise<void> => {
