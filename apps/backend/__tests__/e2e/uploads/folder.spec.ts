@@ -289,33 +289,14 @@ describe('Folder Upload', () => {
         tags: ['insecure'],
       })
 
-      const cids = [folderCID, subfileCID, subfolderCid]
+      // All nodes for the root CID are batched into a single publish-nodes message
+      const publishNodesCalls = rabbitMock.mock.calls.filter(
+        (call) => call[0] === 'task-manager' && (call[1] as { id: string }).id === 'publish-nodes',
+      )
+      expect(publishNodesCalls).toHaveLength(1)
 
-      cids.forEach((cid) => {
-        expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
-          id: 'publish-nodes',
-          params: {
-            nodes: [cid],
-          },
-          retriesLeft: expect.any(Number),
-        })
-      })
-
-      expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
-        id: 'publish-nodes',
-        params: {
-          nodes: [subfileCID],
-        },
-        retriesLeft: expect.any(Number),
-      })
-
-      expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
-        id: 'publish-nodes',
-        params: {
-          nodes: [subfolderCid],
-        },
-        retriesLeft: expect.any(Number),
-      })
+      const publishedNodes = (publishNodesCalls[0][1] as { params: { nodes: string[] } }).params.nodes
+      expect(publishedNodes).toEqual(expect.arrayContaining([folderCID, subfileCID, subfolderCid]))
     })
 
     it('upload status should be updated on node publishing', async () => {
