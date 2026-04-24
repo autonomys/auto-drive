@@ -1,33 +1,26 @@
-import { createHash, randomBytes } from 'crypto'
 import { v4 } from 'uuid'
 import { apiKeysRepository } from '../repositories/index.js'
-import {
-  User,
-  ApiKey,
-  ApiKeyWithoutSecret,
-  CreatedApiKey,
-} from '@auto-drive/models'
+import { User, ApiKey, ApiKeyWithoutSecret } from '@auto-drive/models'
 import { createLogger } from '../drivers/logger.js'
 
 const logger = createLogger('useCases:apikeys')
 
-const SECRET_PREFIX = 'ad_'
 /**
- * Length of the prefix stored in clear for UI display.
- * e.g. `ad_1a2b3c4d` — 3 brand chars + 8 hex chars.
+ * Length of the prefix exposed to UI clients. The full secret is never
+ * re-displayed, but the prefix lets users tell their keys apart in the
+ * listing.
  */
-const DISPLAY_PREFIX_LENGTH = SECRET_PREFIX.length + 8
+const DISPLAY_PREFIX_LENGTH = 8
 
-const generateSecret = (): string =>
-  SECRET_PREFIX + randomBytes(32).toString('hex')
+const generateSecret = (): string => v4().replace(/-/g, '')
 
-const hashSecret = (secret: string): string =>
-  createHash('sha256').update(secret).digest('hex')
-
-const stripSecretHash = (apiKey: ApiKey): ApiKeyWithoutSecret => {
+const stripSecret = (apiKey: ApiKey): ApiKeyWithoutSecret => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { secretHash, ...rest } = apiKey
-  return rest
+  const { secret, ...rest } = apiKey
+  return {
+    ...rest,
+    prefix: secret.slice(0, DISPLAY_PREFIX_LENGTH),
+  }
 }
 
 type CreateApiKeyOptions = {
@@ -67,7 +60,7 @@ const validateExpiresAt = (
 const createApiKey = async (
   executor: User,
   options: CreateApiKeyOptions,
-): Promise<CreatedApiKey> => {
+): Promise<ApiKey> => {
   const name = validateName(options.name)
   const expiresAt = validateExpiresAt(options.expiresAt)
 
@@ -79,15 +72,12 @@ const createApiKey = async (
   )
 
   const secret = generateSecret()
-  const secretHash = hashSecret(secret)
-  const prefix = secret.slice(0, DISPLAY_PREFIX_LENGTH)
   const id = v4().replace(/-/g, '')
 
   const apiKeyObject = await apiKeysRepository.createApiKey({
     id,
     name,
-    prefix,
-    secretHash,
+    secret,
     oauthProvider: executor.oauthProvider,
     oauthUserId: executor.oauthUserId,
     expiresAt,
@@ -101,16 +91,12 @@ const createApiKey = async (
     executor.oauthUserId,
   )
 
-  return {
-    ...stripSecretHash(apiKeyObject),
-    secret,
-  }
+  return apiKeyObject
 }
 
 const getApiKeyFromSecret = async (secret: string): Promise<ApiKey> => {
   logger.trace('Resolving API key from secret')
-  const secretHash = hashSecret(secret)
-  const apiKeyObject = await apiKeysRepository.getApiKeyBySecretHash(secretHash)
+  const apiKeyObject = await apiKeysRepository.getApiKeyBySecret(secret)
 
   if (!apiKeyObject) {
     logger.warn('API key not found for secret')
@@ -120,8 +106,15 @@ const getApiKeyFromSecret = async (secret: string): Promise<ApiKey> => {
     logger.warn('API key %s has been deleted', apiKeyObject.id)
     throw new Error('Api key has been deleted')
   }
-  if (apiKeyObject.expiresAt && apiKeyObject.expiresAt.getTime() <= Date.now()) {
-    logger.warn('API key %s has expired at %s', apiKeyObject.id, apiKeyObject.expiresAt)
+  if (
+    apiKeyObject.expiresAt &&
+    apiKeyObject.expiresAt.getTime() <= Date.now()
+  ) {
+    logger.warn(
+      'API key %s has expired at %s',
+      apiKeyObject.id,
+      apiKeyObject.expiresAt,
+    )
     throw new Error('Api key has expired')
   }
 
@@ -156,39 +149,6 @@ const deleteApiKey = async (executor: User, id: string): Promise<void> => {
   logger.info('API key %s deleted', id)
 }
 
-const rotateApiKey = async (
-  executor: User,
-  id: string,
-): Promise<CreatedApiKey> => {
-  logger.debug(
-    'Rotating API key %s by user %s:%s',
-    id,
-    executor.oauthProvider,
-    executor.oauthUserId,
-  )
-
-  const apiKeyObject = await apiKeysRepository.getApiKeyById(id)
-  if (!apiKeyObject) {
-    throw new Error('Api key not found')
-  }
-  if (apiKeyObject.deletedAt) {
-    throw new Error('Cannot rotate a deleted API key')
-  }
-  assertOwnership(executor, apiKeyObject)
-
-  const secret = generateSecret()
-  const secretHash = hashSecret(secret)
-  const prefix = secret.slice(0, DISPLAY_PREFIX_LENGTH)
-
-  const updated = await apiKeysRepository.rotateApiKey(id, secretHash, prefix)
-  logger.info('API key %s rotated', id)
-
-  return {
-    ...stripSecretHash(updated),
-    secret,
-  }
-}
-
 const getApiKeysByUser = async (
   user: User,
 ): Promise<ApiKeyWithoutSecret[]> => {
@@ -202,13 +162,12 @@ const getApiKeysByUser = async (
     user.oauthUserId,
   )
 
-  return apiKeys.map(stripSecretHash)
+  return apiKeys.map(stripSecret)
 }
 
 export const ApiKeysUseCases = {
   createApiKey,
   getApiKeyFromSecret,
   deleteApiKey,
-  rotateApiKey,
   getApiKeysByUser,
 }

@@ -4,8 +4,7 @@ import { ApiKey } from '@auto-drive/models'
 type DBApiKey = {
   id: string
   name: string
-  prefix: string
-  secret_hash: string
+  secret: string
   oauth_provider: string
   oauth_user_id: string
   deleted_at: Date | null
@@ -16,8 +15,7 @@ type DBApiKey = {
 const mapDBApiKeyToApiKey = (dbApiKey: DBApiKey): ApiKey => ({
   id: dbApiKey.id,
   name: dbApiKey.name,
-  prefix: dbApiKey.prefix,
-  secretHash: dbApiKey.secret_hash,
+  secret: dbApiKey.secret,
   oauthProvider: dbApiKey.oauth_provider,
   oauthUserId: dbApiKey.oauth_user_id,
   deletedAt: dbApiKey.deleted_at,
@@ -28,8 +26,7 @@ const mapDBApiKeyToApiKey = (dbApiKey: DBApiKey): ApiKey => ({
 type CreateApiKeyParams = {
   id: string
   name: string
-  prefix: string
-  secretHash: string
+  secret: string
   oauthProvider: string
   oauthUserId: string
   expiresAt: Date | null
@@ -38,8 +35,7 @@ type CreateApiKeyParams = {
 const createApiKey = async ({
   id,
   name,
-  prefix,
-  secretHash,
+  secret,
   oauthProvider,
   oauthUserId,
   expiresAt,
@@ -48,23 +44,21 @@ const createApiKey = async ({
 
   const result = await db.query<DBApiKey>(
     `INSERT INTO users.api_keys
-       (id, name, prefix, secret_hash, oauth_provider, oauth_user_id, expires_at, deleted_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
+       (id, name, secret, oauth_provider, oauth_user_id, expires_at, deleted_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NULL)
      RETURNING *`,
-    [id, name, prefix, secretHash, oauthProvider, oauthUserId, expiresAt],
+    [id, name, secret, oauthProvider, oauthUserId, expiresAt],
   )
 
   return mapDBApiKeyToApiKey(result.rows[0])
 }
 
-const getApiKeyBySecretHash = async (
-  secretHash: string,
-): Promise<ApiKey | null> => {
+const getApiKeyBySecret = async (secret: string): Promise<ApiKey | null> => {
   const db = await getDatabase()
 
   const result = await db.query<DBApiKey>(
-    'SELECT * FROM users.api_keys WHERE secret_hash = $1',
-    [secretHash],
+    'SELECT * FROM users.api_keys WHERE secret = $1',
+    [secret],
   )
 
   return result.rows.map(mapDBApiKeyToApiKey)[0] ?? null
@@ -93,28 +87,6 @@ const deleteApiKey = async (id: string): Promise<void> => {
   }
 }
 
-const rotateApiKey = async (
-  id: string,
-  newSecretHash: string,
-  newPrefix: string,
-): Promise<ApiKey> => {
-  const db = await getDatabase()
-
-  const result = await db.query<DBApiKey>(
-    `UPDATE users.api_keys
-        SET secret_hash = $1,
-            prefix = $2
-      WHERE id = $3
-        AND deleted_at IS NULL
-      RETURNING *`,
-    [newSecretHash, newPrefix, id],
-  )
-  if (result.rowCount === 0) {
-    throw new Error('API key not found')
-  }
-  return mapDBApiKeyToApiKey(result.rows[0])
-}
-
 const getApiKeysByOAuthUser = async (
   oauthProvider: string,
   oauthUserId: string,
@@ -138,7 +110,6 @@ export const apiKeysRepository = {
   deleteApiKey,
   createApiKey,
   getApiKeyById,
-  getApiKeyBySecretHash,
-  rotateApiKey,
+  getApiKeyBySecret,
   getApiKeysByOAuthUser,
 }

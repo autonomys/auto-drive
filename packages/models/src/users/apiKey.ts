@@ -1,14 +1,15 @@
 /**
- * Server-side representation of an API key. The raw secret is never stored
- * — only a sha256 hash. The `prefix` is the first few characters of the
- * original secret, kept in clear for UI display so users can tell their
- * keys apart.
+ * Server-side representation of an API key. The `secret` is stored in
+ * plaintext — see the auth migration for the (deliberate) tradeoff.
+ *
+ * `ApiKey` intentionally carries the raw secret so internal call sites
+ * (auth verification, the create-key response) don't need a second type.
+ * UI clients should always receive `ApiKeyWithoutSecret` instead.
  */
 export type ApiKey = {
   id: string
   name: string
-  prefix: string
-  secretHash: string
+  secret: string
   oauthProvider: string
   oauthUserId: string
   deletedAt: Date | null
@@ -17,19 +18,13 @@ export type ApiKey = {
 }
 
 /**
- * Safe to return to clients — never includes the secret or its hash.
+ * Safe shape for list responses. The secret is stripped; a short `prefix`
+ * (derived from the secret at response time) is exposed so users can
+ * visually tell their keys apart.
  */
-export type ApiKeyWithoutSecret = Omit<ApiKey, 'secretHash'> & {
-  secretHash?: never
-}
-
-/**
- * Returned once, immediately after `createApiKey` or `rotateApiKey`.
- * The plaintext `secret` is only ever visible in this response;
- * there is no endpoint that can reveal it again later.
- */
-export type CreatedApiKey = ApiKeyWithoutSecret & {
-  secret: string
+export type ApiKeyWithoutSecret = Omit<ApiKey, 'secret'> & {
+  prefix: string
+  secret?: never
 }
 
 export type CreateApiKeyInput = {
