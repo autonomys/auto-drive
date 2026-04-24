@@ -3,31 +3,51 @@ import { ApiKey } from '@auto-drive/models'
 
 type DBApiKey = {
   id: string
+  name: string | null
   secret: string
   oauth_provider: string
   oauth_user_id: string
   deleted_at: Date | null
+  expires_at: Date | null
+  created_at: Date | null
 }
 
 const mapDBApiKeyToApiKey = (dbApiKey: DBApiKey): ApiKey => ({
   id: dbApiKey.id,
+  name: dbApiKey.name,
   secret: dbApiKey.secret,
   oauthProvider: dbApiKey.oauth_provider,
   oauthUserId: dbApiKey.oauth_user_id,
   deletedAt: dbApiKey.deleted_at,
+  expiresAt: dbApiKey.expires_at,
+  createdAt: dbApiKey.created_at,
 })
 
-const createApiKey = async (
-  id: string,
-  secret: string,
-  oauthProvider: string,
-  oauthUserId: string,
-): Promise<ApiKey> => {
+type CreateApiKeyParams = {
+  id: string
+  name: string | null
+  secret: string
+  oauthProvider: string
+  oauthUserId: string
+  expiresAt: Date | null
+}
+
+const createApiKey = async ({
+  id,
+  name,
+  secret,
+  oauthProvider,
+  oauthUserId,
+  expiresAt,
+}: CreateApiKeyParams): Promise<ApiKey> => {
   const db = await getDatabase()
 
   const result = await db.query<DBApiKey>(
-    'INSERT INTO users.api_keys (id, secret, oauth_provider, oauth_user_id, deleted_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [id, secret, oauthProvider, oauthUserId, null],
+    `INSERT INTO users.api_keys
+       (id, name, secret, oauth_provider, oauth_user_id, expires_at, deleted_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NULL)
+     RETURNING *`,
+    [id, name, secret, oauthProvider, oauthUserId, expiresAt],
   )
 
   return mapDBApiKeyToApiKey(result.rows[0])
@@ -54,11 +74,12 @@ const getApiKeyById = async (id: string): Promise<ApiKey | null> => {
 
   return result.rows.map(mapDBApiKeyToApiKey)[0] ?? null
 }
+
 const deleteApiKey = async (id: string): Promise<void> => {
   const db = await getDatabase()
 
   const result = await db.query(
-    'UPDATE users.api_keys SET deleted_at = $1 WHERE id = $2',
+    'UPDATE users.api_keys SET deleted_at = $1 WHERE id = $2 AND deleted_at IS NULL',
     [new Date(), id],
   )
   if (result.rowCount === 0) {
@@ -73,7 +94,12 @@ const getApiKeysByOAuthUser = async (
   const db = await getDatabase()
 
   const result = await db.query<DBApiKey>(
-    'SELECT * FROM users.api_keys WHERE oauth_provider = $1 AND oauth_user_id = $2',
+    `SELECT *
+       FROM users.api_keys
+      WHERE oauth_provider = $1
+        AND oauth_user_id = $2
+        AND deleted_at IS NULL
+      ORDER BY created_at DESC NULLS LAST, id`,
     [oauthProvider, oauthUserId],
   )
 

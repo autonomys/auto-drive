@@ -4,7 +4,7 @@ volumes:
 
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:17
     container_name: auto_drive_postgres_db
     environment:
       POSTGRES_USER: postgres

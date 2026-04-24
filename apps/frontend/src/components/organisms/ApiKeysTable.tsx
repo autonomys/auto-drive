@@ -17,39 +17,58 @@ import {
 import { Button } from '@auto-drive/ui';
 import { useRouter } from 'next/navigation';
 
+const formatDate = (d: Date | string | null): string => {
+  if (!d) return '—';
+  const date = typeof d === 'string' ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const isExpired = (d: Date | string | null): boolean => {
+  if (!d) return false;
+  const date = typeof d === 'string' ? new Date(d) : d;
+  return !Number.isNaN(date.getTime()) && date.getTime() <= Date.now();
+};
+
+const COLUMN_COUNT = 5;
+
 export const ApiKeysTable = ({
   apiKeys,
 }: {
   apiKeys: ApiKeyWithoutSecret[] | undefined;
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [apiKeyId, setApiKeyId] = useState<string | null>(null);
+  const [isCreationOpen, setIsCreationOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const closeCreationModal = useCallback(() => setIsOpen(false), []);
-  const openCreationModal = useCallback(() => setIsOpen(true), []);
+  const closeCreationModal = useCallback(() => setIsCreationOpen(false), []);
+  const openCreationModal = useCallback(() => setIsCreationOpen(true), []);
 
-  const openDeleteModal = useCallback((apiKeyId: string) => {
-    setApiKeyId(apiKeyId);
-  }, []);
-  const closeDeleteModal = useCallback(() => setApiKeyId(null), []);
+  const openDeleteModal = useCallback((id: string) => setDeleteId(id), []);
+  const closeDeleteModal = useCallback(() => setDeleteId(null), []);
 
   const nonDeletedApiKeys = apiKeys?.filter((apiKey) => !apiKey.deletedAt);
 
   const router = useRouter();
 
-  const onSuccess = useCallback(() => {
+  const refresh = useCallback(() => router.refresh(), [router]);
+
+  const onCreationSuccess = useCallback(() => {
     closeCreationModal();
-    router.refresh();
-  }, [closeCreationModal, router]);
+    refresh();
+  }, [closeCreationModal, refresh]);
 
   return (
     <div className='flex flex-col'>
       <ApiKeyCreationModal
-        isOpen={isOpen}
+        isOpen={isCreationOpen}
         onClose={closeCreationModal}
-        onSuccess={onSuccess}
+        onSuccess={onCreationSuccess}
       />
-      <DeleteApiKeyModal apiKeyId={apiKeyId} closeModal={closeDeleteModal} />
+      <DeleteApiKeyModal apiKeyId={deleteId} closeModal={closeDeleteModal} />
       <div className='flex'>
         <Button
           className='mb-4 text-sm'
@@ -64,34 +83,72 @@ export const ApiKeysTable = ({
           <Table>
             <TableHead>
               <TableHeadRow>
-                <TableHeadCell>ID</TableHeadCell>
-                <TableHeadCell>OAuth Provider</TableHeadCell>
-                <TableHeadCell>OAuth User ID</TableHeadCell>
+                <TableHeadCell>Name</TableHeadCell>
+                <TableHeadCell>Key</TableHeadCell>
+                <TableHeadCell>Created</TableHeadCell>
+                <TableHeadCell>Expires</TableHeadCell>
                 <TableHeadCell>Actions</TableHeadCell>
               </TableHeadRow>
             </TableHead>
             <TableBody>
               {nonDeletedApiKeys &&
-                nonDeletedApiKeys.map((apiKey) => (
-                  <TableBodyRow key={apiKey.id}>
-                    <TableBodyCell>{apiKey.id}</TableBodyCell>
-                    <TableBodyCell>{apiKey.oauthProvider}</TableBodyCell>
-                    <TableBodyCell>{apiKey.oauthUserId}</TableBodyCell>
-                    <TableBodyCell>
-                      <Button
-                        variant='lightDanger'
-                        className='text-sm'
-                        onClick={() => openDeleteModal(apiKey.id)}
-                      >
-                        Delete
-                      </Button>
-                    </TableBodyCell>
-                  </TableBodyRow>
-                ))}
+                nonDeletedApiKeys.map((apiKey) => {
+                  const expired = isExpired(apiKey.expiresAt);
+                  return (
+                    <TableBodyRow key={apiKey.id}>
+                      <TableBodyCell>
+                        {apiKey.name ? (
+                          <span className='font-medium'>{apiKey.name}</span>
+                        ) : (
+                          <span className='text-gray-400'>—</span>
+                        )}
+                      </TableBodyCell>
+                      <TableBodyCell>
+                        <span className='font-mono text-xs'>
+                          {apiKey.prefix}
+                          <span className='text-gray-400'>…</span>
+                        </span>
+                      </TableBodyCell>
+                      <TableBodyCell>
+                        {formatDate(apiKey.createdAt)}
+                      </TableBodyCell>
+                      <TableBodyCell>
+                        {apiKey.expiresAt ? (
+                          <span
+                            className={
+                              expired
+                                ? 'text-red-600'
+                                : 'text-foreground'
+                            }
+                            title={
+                              expired
+                                ? 'This key has expired and can no longer be used'
+                                : undefined
+                            }
+                          >
+                            {formatDate(apiKey.expiresAt)}
+                            {expired ? ' (expired)' : ''}
+                          </span>
+                        ) : (
+                          <span className='text-gray-400'>Never</span>
+                        )}
+                      </TableBodyCell>
+                      <TableBodyCell>
+                        <Button
+                          variant='lightDanger'
+                          className='text-sm'
+                          onClick={() => openDeleteModal(apiKey.id)}
+                        >
+                          Delete
+                        </Button>
+                      </TableBodyCell>
+                    </TableBodyRow>
+                  );
+                })}
               {nonDeletedApiKeys && nonDeletedApiKeys.length === 0 && (
                 <TableBodyRow>
                   <TableBodyCell
-                    colSpan={4}
+                    colSpan={COLUMN_COUNT}
                     className='whitespace-nowrap px-6 py-4 text-center text-sm text-gray-500'
                   >
                     No API keys found
@@ -101,7 +158,7 @@ export const ApiKeysTable = ({
               {!nonDeletedApiKeys && (
                 <TableBodyRow>
                   <TableBodyCell
-                    colSpan={4}
+                    colSpan={COLUMN_COUNT}
                     className='whitespace-nowrap px-6 py-4 text-center text-sm text-gray-500'
                   >
                     <span className='flex items-center justify-center'>

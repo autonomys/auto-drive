@@ -72,7 +72,10 @@ export const AuthService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  generateApiKey: async (): Promise<ApiKey> => {
+  generateApiKey: async (input: {
+    name?: string | null;
+    expiresAt?: string | null;
+  }): Promise<ApiKey> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -85,10 +88,18 @@ export const AuthService = {
         'X-Auth-Provider': session.authProvider,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        name: input.name,
+        expiresAt: input.expiresAt ?? null,
+      }),
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      const message = await response
+        .json()
+        .then((b) => b?.error)
+        .catch(() => null);
+      throw new Error(message || `Network response was not ok: ${response.statusText}`);
     }
 
     return response.json();
