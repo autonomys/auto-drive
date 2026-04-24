@@ -8,6 +8,7 @@ import { Loader } from 'lucide-react';
 import { FilePreview } from '@/components/molecules/FilePreview';
 import { IconByFileType } from '@/components/atoms/IconByFileType';
 import { GoBackButton } from '@/components/atoms/GoBackButton';
+import { useFileInCache } from 'hooks/useFileInCache';
 import { ObjectDetailsTags } from './ObjectDetailsTags';
 import { ObjectDetailsActions } from './ObjectDetailsActions';
 import { ObjectUploadDetails } from './ObjectUploadDetails';
@@ -30,6 +31,8 @@ export const ObjectDetails = ({
       o.oauthUserId === user?.oauthUserId &&
       o.role === OwnerRole.ADMIN,
   );
+
+  const isCached = useFileInCache(object?.metadata.dataCid ?? '');
 
   const isLoading = object === null;
   if (isLoading) {
@@ -54,9 +57,9 @@ export const ObjectDetails = ({
               fileType={getTypeFromMetadata(object.metadata) ?? ''}
             />
           </div>
-          <ObjectDetailsTags object={object} />
+          <ObjectDetailsTags object={object} isCached={isCached} />
         </div>
-        <ObjectDetailsActions isOwner={isOwner} object={object} />
+        <ObjectDetailsActions isOwner={isOwner} object={object} isCached={isCached} />
       </div>
       <ObjectUploadDetails object={object} isOwner={isOwner} />
       <ObjectUploadOptions object={object} />

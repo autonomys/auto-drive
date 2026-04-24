@@ -1,13 +1,16 @@
-import { ObjectInformation, ObjectTag } from '@auto-drive/models';
+import { ObjectInformation, ObjectTag, UserRole } from '@auto-drive/models';
 import { ConditionalRender } from '../../atoms/ConditionalRender';
+import { RoleProtected } from '../../atoms/RoleProtected';
 import { Badge } from '@/components/atoms/Badge';
 import { getTypeFromMetadata } from 'utils/file';
 import { formatBytes } from '../../../utils/number';
 
 export const ObjectDetailsTags = ({
   object,
+  isCached,
 }: {
   object: ObjectInformation;
+  isCached: boolean | null;
 }) => {
   return (
     <div>
@@ -38,6 +41,18 @@ export const ObjectDetailsTags = ({
             Banned
           </span>
         </ConditionalRender>
+        {isCached !== null && (
+          <RoleProtected roles={[UserRole.Admin]}>
+            <span
+              className={`ml-2 rounded-lg p-1 text-xs font-semibold text-white ${
+                isCached ? 'bg-green-600' : 'bg-gray-500'
+              }`}
+              title='Visible to admins only'
+            >
+              {isCached ? 'Cached' : 'Not cached'}
+            </span>
+          </RoleProtected>
+        )}
       </p>
     </div>
   );
