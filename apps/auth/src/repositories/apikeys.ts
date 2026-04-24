@@ -3,7 +3,7 @@ import { ApiKey } from '@auto-drive/models'
 
 type DBApiKey = {
   id: string
-  name: string
+  name: string | null
   secret: string
   oauth_provider: string
   oauth_user_id: string
@@ -25,7 +25,7 @@ const mapDBApiKeyToApiKey = (dbApiKey: DBApiKey): ApiKey => ({
 
 type CreateApiKeyParams = {
   id: string
-  name: string
+  name: string | null
   secret: string
   oauthProvider: string
   oauthUserId: string

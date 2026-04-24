@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react';
 import { ApiKeyCreationModal } from '../molecules/ApiKeyCreationModal';
 import { ApiKeyWithoutSecret } from '@auto-drive/models';
 import { DeleteApiKeyModal } from '../molecules/DeleteApiKeyModal';
-import { RotateApiKeyModal } from '../molecules/RotateApiKeyModal';
 import { Loader } from 'lucide-react';
 import { Table } from '@/components/molecules/Table';
 import {
@@ -44,22 +43,12 @@ export const ApiKeysTable = ({
 }) => {
   const [isCreationOpen, setIsCreationOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [rotateTarget, setRotateTarget] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
 
   const closeCreationModal = useCallback(() => setIsCreationOpen(false), []);
   const openCreationModal = useCallback(() => setIsCreationOpen(true), []);
 
   const openDeleteModal = useCallback((id: string) => setDeleteId(id), []);
   const closeDeleteModal = useCallback(() => setDeleteId(null), []);
-
-  const openRotateModal = useCallback(
-    (id: string, name: string) => setRotateTarget({ id, name }),
-    [],
-  );
-  const closeRotateModal = useCallback(() => setRotateTarget(null), []);
 
   const nonDeletedApiKeys = apiKeys?.filter((apiKey) => !apiKey.deletedAt);
 
@@ -80,12 +69,6 @@ export const ApiKeysTable = ({
         onSuccess={onCreationSuccess}
       />
       <DeleteApiKeyModal apiKeyId={deleteId} closeModal={closeDeleteModal} />
-      <RotateApiKeyModal
-        apiKeyId={rotateTarget?.id ?? null}
-        apiKeyName={rotateTarget?.name ?? null}
-        closeModal={closeRotateModal}
-        onRotated={refresh}
-      />
       <div className='flex'>
         <Button
           className='mb-4 text-sm'
@@ -114,7 +97,11 @@ export const ApiKeysTable = ({
                   return (
                     <TableBodyRow key={apiKey.id}>
                       <TableBodyCell>
-                        <span className='font-medium'>{apiKey.name}</span>
+                        {apiKey.name ? (
+                          <span className='font-medium'>{apiKey.name}</span>
+                        ) : (
+                          <span className='text-gray-400'>—</span>
+                        )}
                       </TableBodyCell>
                       <TableBodyCell>
                         <span className='font-mono text-xs'>
@@ -147,24 +134,13 @@ export const ApiKeysTable = ({
                         )}
                       </TableBodyCell>
                       <TableBodyCell>
-                        <div className='flex gap-2'>
-                          <Button
-                            variant='lightAccent'
-                            className='text-sm'
-                            onClick={() =>
-                              openRotateModal(apiKey.id, apiKey.name)
-                            }
-                          >
-                            Rotate
-                          </Button>
-                          <Button
-                            variant='lightDanger'
-                            className='text-sm'
-                            onClick={() => openDeleteModal(apiKey.id)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
+                        <Button
+                          variant='lightDanger'
+                          className='text-sm'
+                          onClick={() => openDeleteModal(apiKey.id)}
+                        >
+                          Delete
+                        </Button>
                       </TableBodyCell>
                     </TableBodyRow>
                   );

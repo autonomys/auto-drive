@@ -24,17 +24,25 @@ const stripSecret = (apiKey: ApiKey): ApiKeyWithoutSecret => {
 }
 
 type CreateApiKeyOptions = {
-  name: string
+  name?: string | null
   expiresAt?: Date | null
 }
 
-const validateName = (name: unknown): string => {
+/**
+ * Name is optional; null/undefined/empty become NULL. When provided we
+ * still enforce a sensible max length so the UI doesn't have to worry
+ * about layout blow-up.
+ */
+const validateName = (name: unknown): string | null => {
+  if (name === null || name === undefined) {
+    return null
+  }
   if (typeof name !== 'string') {
-    throw new Error('API key name is required')
+    throw new Error('API key name must be a string')
   }
   const trimmed = name.trim()
   if (trimmed.length === 0) {
-    throw new Error('API key name is required')
+    return null
   }
   if (trimmed.length > 64) {
     throw new Error('API key name must be 64 characters or fewer')
@@ -66,7 +74,7 @@ const createApiKey = async (
 
   logger.debug(
     'Creating API key "%s" for user %s:%s',
-    name,
+    name ?? '(unnamed)',
     executor.oauthProvider,
     executor.oauthUserId,
   )
@@ -86,7 +94,7 @@ const createApiKey = async (
   logger.info(
     'API key %s ("%s") created for user %s:%s',
     id,
-    name,
+    name ?? '(unnamed)',
     executor.oauthProvider,
     executor.oauthUserId,
   )

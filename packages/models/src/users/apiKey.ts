@@ -8,7 +8,7 @@
  */
 export type ApiKey = {
   id: string
-  name: string
+  name: string | null
   secret: string
   oauthProvider: string
   oauthUserId: string
@@ -28,7 +28,8 @@ export type ApiKeyWithoutSecret = Omit<ApiKey, 'secret'> & {
 }
 
 export type CreateApiKeyInput = {
-  name: string
+  /** Optional human-readable label. Omitted/null = nameless. */
+  name?: string | null
   /** ISO-8601 string. `null`/omitted = never expires. */
   expiresAt?: string | null
 }

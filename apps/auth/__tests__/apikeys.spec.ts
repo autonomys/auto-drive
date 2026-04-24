@@ -1,5 +1,4 @@
-import { createHash } from 'crypto'
-import { CreatedApiKey, User } from '@auto-drive/models'
+import { ApiKey, User } from '@auto-drive/models'
 import { UsersUseCases, ApiKeysUseCases } from '../src/useCases/index.js'
 import { PreconditionError } from './utils/error.js'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
@@ -8,12 +7,9 @@ import { ApiKeyAuth } from '../src/services/authManager/providers/apikey.js'
 import { dbMigration } from './utils/dbMigrate.js'
 import { MOCK_UNONBOARDED_USER } from './utils/mocks.js'
 
-const sha256 = (value: string) =>
-  createHash('sha256').update(value).digest('hex')
-
 describe('ApiKeyUseCases', () => {
   let user: User
-  let apiKey: CreatedApiKey
+  let apiKey: ApiKey
 
   beforeAll(async () => {
     await getDatabase()
@@ -31,20 +27,29 @@ describe('ApiKeyUseCases', () => {
       id: expect.any(String),
       secret: expect.any(String),
       name: 'My key',
-      prefix: expect.any(String),
       oauthProvider: user.oauthProvider,
       oauthUserId: user.oauthUserId,
       expiresAt: null,
     })
-    expect(apiKey.secret).toMatch(/^ad_[0-9a-f]+$/)
-    expect(apiKey.prefix.length).toBeGreaterThan(0)
-    expect(apiKey.secret.startsWith(apiKey.prefix)).toBe(true)
+    expect(apiKey.secret.length).toBeGreaterThan(0)
   })
 
-  it('should reject an empty name', async () => {
+  it('should create an unnamed api key when no name is supplied', async () => {
+    const nameless = await ApiKeysUseCases.createApiKey(user, {})
+    expect(nameless.name).toBeNull()
+    await ApiKeysUseCases.deleteApiKey(user, nameless.id)
+  })
+
+  it('should coerce whitespace-only names to null', async () => {
+    const blank = await ApiKeysUseCases.createApiKey(user, { name: '   ' })
+    expect(blank.name).toBeNull()
+    await ApiKeysUseCases.deleteApiKey(user, blank.id)
+  })
+
+  it('should reject names longer than 64 characters', async () => {
     await expect(
-      ApiKeysUseCases.createApiKey(user, { name: '   ' }),
-    ).rejects.toThrow('API key name is required')
+      ApiKeysUseCases.createApiKey(user, { name: 'x'.repeat(65) }),
+    ).rejects.toThrow('API key name must be 64 characters or fewer')
   })
 
   it('should reject an expiry in the past', async () => {
@@ -56,28 +61,22 @@ describe('ApiKeyUseCases', () => {
     ).rejects.toThrow('Expiry must be in the future')
   })
 
+  it('should expose a prefix but no secret in list responses', async () => {
+    const [listed] = await ApiKeysUseCases.getApiKeysByUser(user)
+    expect(listed.name).toBe('My key')
+    expect(listed.prefix.length).toBeGreaterThan(0)
+    expect(apiKey.secret.startsWith(listed.prefix)).toBe(true)
+    expect(
+      (listed as unknown as { secret?: string }).secret,
+    ).toBeUndefined()
+  })
+
   it('should be able to be authenticated', async () => {
     const authenticatedUser = await ApiKeyAuth.getUserFromApiKey(apiKey.secret)
     expect(authenticatedUser).toMatchObject({
       provider: user.oauthProvider,
       id: user.oauthUserId,
     })
-  })
-
-  it('should rotate the secret and invalidate the old one', async () => {
-    const rotated = await ApiKeysUseCases.rotateApiKey(user, apiKey.id)
-    expect(rotated.id).toBe(apiKey.id)
-    expect(rotated.secret).not.toBe(apiKey.secret)
-
-    // Old secret no longer works.
-    await expect(ApiKeyAuth.getUserFromApiKey(apiKey.secret)).rejects.toThrow(
-      'Api key not found',
-    )
-    // New one does.
-    const authed = await ApiKeyAuth.getUserFromApiKey(rotated.secret)
-    expect(authed.id).toBe(user.oauthUserId)
-
-    apiKey = rotated
   })
 
   it('should reject expired keys at auth time', async () => {
@@ -95,8 +94,8 @@ describe('ApiKeyUseCases', () => {
   it('should be able to mark as deleted an api key', async () => {
     await ApiKeysUseCases.deleteApiKey(user, apiKey.id)
 
-    const deletedApiKey = await apiKeysRepository.getApiKeyBySecretHash(
-      sha256(apiKey.secret),
+    const deletedApiKey = await apiKeysRepository.getApiKeyBySecret(
+      apiKey.secret,
     )
     expect(deletedApiKey?.deletedAt).not.toBeNull()
   })
@@ -111,12 +110,6 @@ describe('ApiKeyUseCases', () => {
     await expect(
       ApiKeyAuth.getUserFromApiKey('non-existent-api-key'),
     ).rejects.toThrow('Api key not found')
-  })
-
-  it('should not be able to rotate a deleted api key', async () => {
-    await expect(ApiKeysUseCases.rotateApiKey(user, apiKey.id)).rejects.toThrow(
-      'Cannot rotate a deleted API key',
-    )
   })
 
   afterAll(async () => {

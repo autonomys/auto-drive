@@ -134,8 +134,13 @@ userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
 
 const parseCreateApiKeyBody = (
   body: unknown,
-): { name: string; expiresAt: Date | null } | { error: string } => {
-  if (typeof body !== 'object' || body === null) {
+): { name: string | null; expiresAt: Date | null } | { error: string } => {
+  // Allow callers to POST with no body at all — creates an unnamed,
+  // never-expiring key.
+  if (body === undefined || body === null) {
+    return { name: null, expiresAt: null }
+  }
+  if (typeof body !== 'object') {
     return { error: 'Request body must be a JSON object' }
   }
   const { name, expiresAt } = body as {
@@ -143,8 +148,18 @@ const parseCreateApiKeyBody = (
     expiresAt?: unknown
   }
 
-  if (typeof name !== 'string' || name.trim().length === 0) {
-    return { error: 'Missing or invalid attribute `name` in body' }
+  let parsedName: string | null = null
+  if (name !== undefined && name !== null) {
+    if (typeof name !== 'string') {
+      return { error: 'Attribute `name` must be a string' }
+    }
+    const trimmed = name.trim()
+    if (trimmed.length > 64) {
+      return {
+        error: 'Attribute `name` must be 64 characters or fewer',
+      }
+    }
+    parsedName = trimmed.length === 0 ? null : trimmed
   }
 
   let parsedExpiresAt: Date | null = null
@@ -162,7 +177,7 @@ const parseCreateApiKeyBody = (
     parsedExpiresAt = parsed
   }
 
-  return { name: name.trim(), expiresAt: parsedExpiresAt }
+  return { name: parsedName, expiresAt: parsedExpiresAt }
 }
 
 userController.post(
@@ -190,29 +205,6 @@ userController.post(
       logger.error(error)
       res.status(500).json({
         error: 'Failed to create API key',
-      })
-      return
-    }
-  },
-)
-
-userController.post(
-  '/@me/apiKeys/:id/rotate',
-  async (req: Request, res: Response) => {
-    const user = await handleAuth(req, res)
-    if (!user) {
-      return
-    }
-
-    const { id } = req.params
-
-    try {
-      const rotated = await ApiKeysUseCases.rotateApiKey(user, id)
-      res.json(rotated)
-    } catch (error) {
-      logger.error(error)
-      res.status(500).json({
-        error: 'Failed to rotate API key',
       })
       return
     }

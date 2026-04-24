@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@headlessui/react';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { CreatedApiKey } from '@auto-drive/models';
+import { ApiKey } from '@auto-drive/models';
 import toast from 'react-hot-toast';
 import { Button } from '@auto-drive/ui';
 import { handleEnterOrSpace } from 'utils/eventHandler';
@@ -61,7 +61,7 @@ export const ApiKeyCreationModal = ({
   const [preset, setPreset] = useState<ExpiryPreset>('never');
   const [customDate, setCustomDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [apiKey, setApiKey] = useState<CreatedApiKey | null>(null);
+  const [apiKey, setApiKey] = useState<ApiKey | null>(null);
   const [hasBeenCopied, setHasBeenCopied] = useState(false);
 
   const minDate = useMemo(() => todayPlus(1), []);
@@ -79,15 +79,18 @@ export const ApiKeyCreationModal = ({
     if (!isOpen) reset();
   }, [isOpen, reset]);
 
-  const canSubmit = name.trim().length > 0 &&
-    !submitting &&
+  const canSubmit = !submitting &&
     (preset !== 'custom' || customDate.length > 0);
 
   const createApiKey = useCallback(() => {
     if (!canSubmit) return;
     setSubmitting(true);
     const expiresAt = presetToIso(preset, customDate);
-    AuthService.generateApiKey({ name: name.trim(), expiresAt })
+    const trimmed = name.trim();
+    AuthService.generateApiKey({
+      name: trimmed.length === 0 ? null : trimmed,
+      expiresAt,
+    })
       .then(setApiKey)
       .catch((err: Error) => {
         toast.error(err.message || 'Failed to create API key');
@@ -148,8 +151,14 @@ export const ApiKeyCreationModal = ({
                   {apiKey ? (
                     <div>
                       <p className='text-foreground-hover mb-3 text-center text-sm'>
-                        Key <strong>{apiKey.name}</strong> created. Copy it
-                        now — it won&apos;t be shown again.
+                        {apiKey.name ? (
+                          <>
+                            Key <strong>{apiKey.name}</strong> created.{' '}
+                          </>
+                        ) : (
+                          <>Key created. </>
+                        )}
+                        Copy it now — it won&apos;t be shown again.
                       </p>
                       <div className='flex items-center justify-center space-x-2'>
                         <button
@@ -174,7 +183,10 @@ export const ApiKeyCreationModal = ({
                         htmlFor='api-key-name'
                         className='text-foreground-hover mb-1 block text-left text-sm'
                       >
-                        Name
+                        Name{' '}
+                        <span className='text-foreground-hover/60'>
+                          (optional)
+                        </span>
                       </label>
                       <input
                         id='api-key-name'
@@ -219,8 +231,8 @@ export const ApiKeyCreationModal = ({
 
                       <p className='text-foreground-hover mt-4 text-center text-xs'>
                         The key will only be displayed once. Store it somewhere
-                        safe — you can rotate or delete it later, but you
-                        can&apos;t recover it.
+                        safe — you can delete it later, but you can&apos;t
+                        recover it.
                       </p>
                       <span
                         className='mt-4 flex justify-center'
