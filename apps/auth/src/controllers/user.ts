@@ -132,6 +132,39 @@ userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
   }
 })
 
+const parseCreateApiKeyBody = (
+  body: unknown,
+): { name: string; expiresAt: Date | null } | { error: string } => {
+  if (typeof body !== 'object' || body === null) {
+    return { error: 'Request body must be a JSON object' }
+  }
+  const { name, expiresAt } = body as {
+    name?: unknown
+    expiresAt?: unknown
+  }
+
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    return { error: 'Missing or invalid attribute `name` in body' }
+  }
+
+  let parsedExpiresAt: Date | null = null
+  if (expiresAt !== undefined && expiresAt !== null && expiresAt !== '') {
+    if (typeof expiresAt !== 'string') {
+      return { error: 'Attribute `expiresAt` must be an ISO-8601 string' }
+    }
+    const parsed = new Date(expiresAt)
+    if (Number.isNaN(parsed.getTime())) {
+      return { error: 'Attribute `expiresAt` is not a valid date' }
+    }
+    if (parsed.getTime() <= Date.now()) {
+      return { error: 'Attribute `expiresAt` must be in the future' }
+    }
+    parsedExpiresAt = parsed
+  }
+
+  return { name: name.trim(), expiresAt: parsedExpiresAt }
+}
+
 userController.post(
   '/@me/apiKeys/create',
   async (req: Request, res: Response) => {
@@ -140,14 +173,46 @@ userController.post(
       return
     }
 
+    const parsed = parseCreateApiKeyBody(req.body)
+    if ('error' in parsed) {
+      res.status(400).json({ error: parsed.error })
+      return
+    }
+
     try {
-      const apiKey = await ApiKeysUseCases.createApiKey(user)
+      const apiKey = await ApiKeysUseCases.createApiKey(user, {
+        name: parsed.name,
+        expiresAt: parsed.expiresAt,
+      })
 
       res.json(apiKey)
     } catch (error) {
       logger.error(error)
       res.status(500).json({
         error: 'Failed to create API key',
+      })
+      return
+    }
+  },
+)
+
+userController.post(
+  '/@me/apiKeys/:id/rotate',
+  async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const { id } = req.params
+
+    try {
+      const rotated = await ApiKeysUseCases.rotateApiKey(user, id)
+      res.json(rotated)
+    } catch (error) {
+      logger.error(error)
+      res.status(500).json({
+        error: 'Failed to rotate API key',
       })
       return
     }

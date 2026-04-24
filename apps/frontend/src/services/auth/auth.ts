@@ -1,6 +1,6 @@
 import {
-  ApiKey,
   ApiKeyWithoutSecret,
+  CreatedApiKey,
   DeletionRequest,
   DeletionRequestWithUser,
   MaybeUser,
@@ -72,7 +72,10 @@ export const AuthService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  generateApiKey: async (): Promise<ApiKey> => {
+  generateApiKey: async (input: {
+    name: string;
+    expiresAt?: string | null;
+  }): Promise<CreatedApiKey> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -85,7 +88,39 @@ export const AuthService = {
         'X-Auth-Provider': session.authProvider,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        name: input.name,
+        expiresAt: input.expiresAt ?? null,
+      }),
     });
+
+    if (!response.ok) {
+      const message = await response
+        .json()
+        .then((b) => b?.error)
+        .catch(() => null);
+      throw new Error(message || `Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  rotateApiKey: async (apiKeyId: string): Promise<CreatedApiKey> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/users/@me/apiKeys/${apiKeyId}/rotate`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
