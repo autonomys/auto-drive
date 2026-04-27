@@ -55,8 +55,11 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     return true;
   });
 
-  const hasBuyCreditsFeature =
-    features.buyCredits && isLoggedIn && account?.model === AccountModel.OneOff;
+  // Pay with AI3 is gated solely by the `buyCredits` feature flag — it is
+  // available to both OneOff and Monthly accounts. The flag itself enforces
+  // the Google-auth requirement and the staff-only / public rollout state
+  // (see core/featureFlags). Account model is not part of the gate.
+  const hasBuyCreditsFeature = features.buyCredits && isLoggedIn;
 
   // creditSummary is always loaded for any logged-in user (see SessionEnsurer),
   // so we can safely derive purchasedBytesRemaining from it regardless of the

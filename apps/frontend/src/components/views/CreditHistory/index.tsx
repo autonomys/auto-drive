@@ -3,7 +3,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNetwork } from '../../../contexts/network';
 import { useUserStore } from '../../../globalStates/user';
-import { AccountModel } from '@auto-drive/models';
 import { formatBytes } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import {
@@ -128,10 +127,12 @@ const BuyMoreCta = ({ purchaseHref }: { purchaseHref: string }) => (
 
 export const CreditHistoryView = () => {
   const { api, network } = useNetwork();
-  const { account, features } = useUserStore();
+  const { features } = useUserStore();
 
-  const hasBuyCreditsFeature =
-    !!features.buyCredits && account?.model === AccountModel.OneOff;
+  // Pay with AI3 is available to both OneOff and Monthly accounts when the
+  // `buyCredits` feature flag is on (the flag itself enforces Google-auth and
+  // public-rollout state — see core/featureFlags).
+  const hasBuyCreditsFeature = !!features.buyCredits;
 
   const purchaseHref = `/${network.id}/drive/purchase`;
 
@@ -163,7 +164,7 @@ export const CreditHistoryView = () => {
           Credit History
         </h1>
         <p className='text-muted-foreground'>
-          Purchased credit history is only available for pay-as-you-go accounts.
+          Purchased credit history is not currently available.
         </p>
       </div>
     );

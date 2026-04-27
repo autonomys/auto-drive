@@ -7,7 +7,6 @@ import { useNetwork } from 'contexts/network';
 import { useFileTableState } from '@/components/organisms/FileTable/state';
 import { useUserStore } from 'globalStates/user';
 import { useQueryClient } from '@tanstack/react-query';
-import { AccountModel } from '@auto-drive/models';
 import { BuyMoreCreditsButton } from 'components/atoms/BuyMoreCreditsButton';
 import { formatBytes } from 'utils/number';
 
@@ -113,10 +112,11 @@ export const UploadingFolderModal = ({
   // Only block when we have a definitive account read AND the folder is larger
   // than the combined free+purchased credit pool. If account is null (still
   // loading) we let the upload proceed — the backend enforces the hard limit.
-  const hasBuyCreditsFeature =
-    features.buyCredits &&
-    account !== null &&
-    account.model === AccountModel.OneOff;
+  //
+  // Pay with AI3 is available to both OneOff and Monthly accounts; the
+  // `buyCredits` feature flag is the sole gate (Google-auth and rollout
+  // state are enforced inside the flag itself).
+  const hasBuyCreditsFeature = features.buyCredits && account !== null;
 
   const hasInsufficientCredits =
     account !== null && folderTotalSize > account.pendingUploadCredits;
