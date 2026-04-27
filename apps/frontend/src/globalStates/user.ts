@@ -25,7 +25,8 @@ export const useUserStore = create<UserStore>()(
         set({
           user: user,
         }),
-      clearUser: () => set({ user: null, account: null, creditSummary: null }),
+      clearUser: () =>
+        set({ user: null, account: null, creditSummary: null, features: {} }),
       setAccount: (account: AccountInfo) =>
         set({
           account,
