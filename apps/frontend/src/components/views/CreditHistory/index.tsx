@@ -127,12 +127,12 @@ const BuyMoreCta = ({ purchaseHref }: { purchaseHref: string }) => (
 
 export const CreditHistoryView = () => {
   const { api, network } = useNetwork();
-  const { features } = useUserStore();
+  const { account, features } = useUserStore();
 
-  // Pay with AI3 is available to both OneOff and Monthly accounts when the
-  // `buyCredits` feature flag is on (the flag itself enforces Google-auth and
-  // public-rollout state — see core/featureFlags).
-  const hasBuyCreditsFeature = !!features.buyCredits;
+  // Guard on `account` so we never fire API calls for logged-out users (the
+  // store persists `features` to localStorage and `clearUser` may not have
+  // run yet).
+  const hasBuyCreditsFeature = !!features.buyCredits && account !== null;
 
   const purchaseHref = `/${network.id}/drive/purchase`;
 
