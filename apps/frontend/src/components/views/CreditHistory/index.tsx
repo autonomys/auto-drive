@@ -3,7 +3,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNetwork } from '../../../contexts/network';
 import { useUserStore } from '../../../globalStates/user';
-import { AccountModel } from '@auto-drive/models';
 import { formatBytes } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import {
@@ -130,8 +129,10 @@ export const CreditHistoryView = () => {
   const { api, network } = useNetwork();
   const { account, features } = useUserStore();
 
-  const hasBuyCreditsFeature =
-    !!features.buyCredits && account?.model === AccountModel.OneOff;
+  // Guard on `account` so we never fire API calls for logged-out users (the
+  // store persists `features` to localStorage and `clearUser` may not have
+  // run yet).
+  const hasBuyCreditsFeature = !!features.buyCredits && account !== null;
 
   const purchaseHref = `/${network.id}/drive/purchase`;
 
@@ -163,7 +164,7 @@ export const CreditHistoryView = () => {
           Credit History
         </h1>
         <p className='text-muted-foreground'>
-          Purchased credit history is only available for pay-as-you-go accounts.
+          Purchased credit history is not currently available.
         </p>
       </div>
     );

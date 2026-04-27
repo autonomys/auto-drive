@@ -350,7 +350,7 @@ Triggers the backend to watch for the transaction confirmation.
 | Forbidden                          | 403         | User does not own this intent                                              |
 | Missing or invalid field: `txHash` | 400         | `POST /intents/:id/watch` body missing `txHash` or not a string            |
 | Payment not found (async)          | -           | Tx receipt does not contain the expected `IntentPaymentReceived`           |
-| Credits not applied (async)        | -           | Intent confirmed, but credit application failed (e.g. non-one-off account) |
+| Credits not applied (async)        | -           | Intent confirmed, but credit application failed (e.g. per-user cap reached — intent is parked in `over_cap` for admin review) |
 
 ### On-Chain Errors
 
