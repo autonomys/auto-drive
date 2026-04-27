@@ -10,15 +10,28 @@ import { jest } from '@jest/globals'
 import { Router } from 'express'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import {
-  UserRole,
   type UserWithOrganization,
   type User,
   AccountModel,
 } from '@auto-drive/models'
-import { v4 as uuidv4 } from 'uuid'
 
 // Mock Express for isolated testing of controller logic.
 // We'll directly invoke the controller's route handlers with mock req/res.
+
+const getRouteHandler = (router: Router, method: string, path = '/') => {
+  const layer = (router as any).stack.find(
+    (l: any) => l.route?.path === path && l.route?.methods?.[method],
+  )
+  if (!layer) {
+    throw new Error(`${method.toUpperCase()} ${path} handler not found`)
+  }
+  return layer.route.stack[0].handle as (
+    req: any,
+    res: any,
+    next?: any,
+  ) => Promise<void>
+}
+
 const createMockReq = (user: User | null) => {
   return {
     body: {},
@@ -62,17 +75,7 @@ describe('POST /intents - Google-auth gate', () => {
     const req = createMockReq(discordUser)
     const res = createMockRes()
 
-    // Mock the controller to call the route handler.
-    // The intentsController is an Express Router, so we extract the POST handler.
-    const postIntentHandler = (intentsController.stack as any[]).find(
-      (layer: any) => layer.route?.methods?.post,
-    )?.route?.methods?.post
-
-    if (!postIntentHandler) {
-      throw new Error('POST /intents handler not found in router')
-    }
-
-    // Invoke it directly with our mock req/res.
+    const postIntentHandler = getRouteHandler(intentsController, 'post')
     await postIntentHandler(req, res)
 
     // Verify the 403 response with GOOGLE_ACCOUNT_REQUIRED.
@@ -97,14 +100,7 @@ describe('POST /intents - Google-auth gate', () => {
     const req1 = createMockReq(googleUserOneOff)
     const res1 = createMockRes()
 
-    const postIntentHandler = (intentsController.stack as any[]).find(
-      (layer: any) => layer.route?.methods?.post,
-    )?.route?.methods?.post
-
-    if (!postIntentHandler) {
-      throw new Error('POST /intents handler not found in router')
-    }
-
+    const postIntentHandler = getRouteHandler(intentsController, 'post')
     await postIntentHandler(req1, res1)
 
     // Verify success (200) for Google user with OneOff.
@@ -145,14 +141,7 @@ describe('POST /intents - Google-auth gate', () => {
     const req = createMockReq(githubUser)
     const res = createMockRes()
 
-    const postIntentHandler = (intentsController.stack as any[]).find(
-      (layer: any) => layer.route?.methods?.post,
-    )?.route?.methods?.post
-
-    if (!postIntentHandler) {
-      throw new Error('POST /intents handler not found in router')
-    }
-
+    const postIntentHandler = getRouteHandler(intentsController, 'post')
     await postIntentHandler(req, res)
 
     // Verify the 403 response.
@@ -175,14 +164,7 @@ describe('POST /intents - Google-auth gate', () => {
     const req = createMockReq(web3User)
     const res = createMockRes()
 
-    const postIntentHandler = (intentsController.stack as any[]).find(
-      (layer: any) => layer.route?.methods?.post,
-    )?.route?.methods?.post
-
-    if (!postIntentHandler) {
-      throw new Error('POST /intents handler not found in router')
-    }
-
+    const postIntentHandler = getRouteHandler(intentsController, 'post')
     await postIntentHandler(req, res)
 
     // Verify the 403 response.
@@ -213,14 +195,7 @@ describe('POST /intents - Google-auth gate', () => {
     const req = createMockReq(googleUserMonthly)
     const res = createMockRes()
 
-    const postIntentHandler = (intentsController.stack as any[]).find(
-      (layer: any) => layer.route?.methods?.post,
-    )?.route?.methods?.post
-
-    if (!postIntentHandler) {
-      throw new Error('POST /intents handler not found in router')
-    }
-
+    const postIntentHandler = getRouteHandler(intentsController, 'post')
     await postIntentHandler(req, res)
 
     // Verify success (200) for Monthly + Google.
@@ -268,14 +243,7 @@ describe('Purchase credit end-to-end flow for Monthly accounts', () => {
     const req = createMockReq(googleUserMonthly)
     const res = createMockRes()
 
-    const postIntentHandler = (intentsController.stack as any[]).find(
-      (layer: any) => layer.route?.methods?.post,
-    )?.route?.methods?.post
-
-    if (!postIntentHandler) {
-      throw new Error('POST /intents handler not found in router')
-    }
-
+    const postIntentHandler = getRouteHandler(intentsController, 'post')
     await postIntentHandler(req, res)
     expect(res.status).toHaveBeenCalledWith(200)
 
