@@ -250,12 +250,11 @@ describe('Purchase credit end-to-end flow for Monthly accounts', () => {
     const intentResponse = res.json.mock.calls[0][0]
     const intentId = intentResponse.id
 
-    // Step 2: Simulate on-chain confirmation by creating a purchased_credits row.
+    // Step 2: Simulate on-chain confirmation by transitioning the intent to COMPLETED.
     const creditBytes = BigInt(10 * 1024 * 1024) // 10 MB
     await db.query(
-      `INSERT INTO intents (id, user_public_id, status, shannons_per_byte, expires_at)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [intentId, googleUserMonthly.publicId, 'COMPLETED', '1', new Date()],
+      `UPDATE intents SET status = $1 WHERE id = $2`,
+      ['COMPLETED', intentId],
     )
     await db.query(
       `INSERT INTO purchased_credits (account_id, intent_id, upload_bytes_original, upload_bytes_remaining, download_bytes_original, download_bytes_remaining, expires_at)
