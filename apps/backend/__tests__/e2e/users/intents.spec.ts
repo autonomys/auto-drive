@@ -10,6 +10,7 @@ import { jest } from '@jest/globals'
 import type { Router, NextFunction } from 'express'
 import type { Mock } from 'jest-mock'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
+import { IntentsUseCases } from '../../../src/core/users/intents.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import {
   type UserWithOrganization,
@@ -83,6 +84,10 @@ const createMockRes = (): MockResponse => {
 describe('POST /intents - Google-auth gate', () => {
   beforeEach(async () => {
     mockRabbitPublish()
+    jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({
+      price: 1,
+      pricePerGB: 1073741824,
+    })
     await getDatabase()
     await dbMigration.up()
   })
@@ -254,6 +259,10 @@ describe('POST /intents - Google-auth gate', () => {
 describe('Purchase credit end-to-end flow for Monthly accounts', () => {
   beforeEach(async () => {
     mockRabbitPublish()
+    jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({
+      price: 1,
+      pricePerGB: 1073741824,
+    })
     await getDatabase()
     await dbMigration.up()
   })
