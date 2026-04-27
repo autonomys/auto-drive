@@ -9,6 +9,7 @@ import { intentsController } from '../../../src/app/controllers/intents.js'
 import { jest } from '@jest/globals'
 import { Router } from 'express'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
+import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import {
   type UserWithOrganization,
   type User,
@@ -36,7 +37,10 @@ const createMockReq = (user: User | null) => {
   return {
     body: {},
     params: {} as Record<string, string>,
-    headers: {},
+    headers: {
+      authorization: 'Bearer mock-token',
+      'x-auth-provider': 'google',
+    },
     user,
   } as any
 }
@@ -70,6 +74,9 @@ describe('POST /intents - Google-auth gate', () => {
       oauthProvider: 'discord',
     }
     await AccountsUseCases.getOrCreateAccount(discordUser)
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(discordUser)
 
     // Directly invoke the POST /intents handler.
     const req = createMockReq(discordUser)
@@ -95,6 +102,9 @@ describe('POST /intents - Google-auth gate', () => {
     }
     const accountOneOff =
       await AccountsUseCases.getOrCreateAccount(googleUserOneOff)
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(googleUserOneOff)
 
     // Invoke the handler for OneOff.
     const req1 = createMockReq(googleUserOneOff)
@@ -137,6 +147,9 @@ describe('POST /intents - Google-auth gate', () => {
       oauthProvider: 'github',
     }
     await AccountsUseCases.getOrCreateAccount(githubUser)
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(githubUser)
 
     const req = createMockReq(githubUser)
     const res = createMockRes()
@@ -160,6 +173,9 @@ describe('POST /intents - Google-auth gate', () => {
       oauthProvider: 'web3-wallet',
     }
     await AccountsUseCases.getOrCreateAccount(web3User)
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(web3User)
 
     const req = createMockReq(web3User)
     const res = createMockRes()
@@ -184,6 +200,9 @@ describe('POST /intents - Google-auth gate', () => {
     }
     const account =
       await AccountsUseCases.getOrCreateAccount(googleUserMonthly)
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(googleUserMonthly)
 
     // Switch to Monthly.
     const db = await getDatabase()
@@ -227,6 +246,9 @@ describe('Purchase credit end-to-end flow for Monthly accounts', () => {
     }
     const account =
       await AccountsUseCases.getOrCreateAccount(googleUserMonthly)
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(googleUserMonthly)
 
     // Switch to Monthly model.
     const db = await getDatabase()
