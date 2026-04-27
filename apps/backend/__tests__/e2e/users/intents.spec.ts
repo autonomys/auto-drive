@@ -7,52 +7,77 @@ import {
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import { intentsController } from '../../../src/app/controllers/intents.js'
 import { jest } from '@jest/globals'
-import { Router } from 'express'
+import type { Router, NextFunction } from 'express'
+import type { Mock } from 'jest-mock'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import {
   type UserWithOrganization,
   type User,
   AccountModel,
+  InteractionType,
 } from '@auto-drive/models'
 
 // Mock Express for isolated testing of controller logic.
 // We'll directly invoke the controller's route handlers with mock req/res.
 
-const getRouteHandler = (router: Router, method: string, path = '/') => {
-  const layer = (router as any).stack.find(
-    (l: any) => l.route?.path === path && l.route?.methods?.[method],
+interface RouteLayer {
+  route?: {
+    path: string
+    methods: Record<string, boolean>
+    stack: Array<{ handle: (...args: unknown[]) => Promise<void> }>
+  }
+}
+
+type TestHandler = (
+  req: MockRequest,
+  res: MockResponse,
+  next?: NextFunction,
+) => Promise<void>
+
+const getRouteHandler = (router: Router, method: string, path = '/'): TestHandler => {
+  const layer = (router as unknown as { stack: RouteLayer[] }).stack.find(
+    (l) => l.route?.path === path && l.route?.methods?.[method],
   )
   if (!layer) {
     throw new Error(`${method.toUpperCase()} ${path} handler not found`)
   }
-  return layer.route.stack[0].handle as (
-    req: any,
-    res: any,
-    next?: any,
-  ) => Promise<void>
+  return layer.route!.stack[0].handle as unknown as TestHandler
 }
 
-const createMockReq = (user: User | null) => {
+interface MockRequest extends Record<string, unknown> {
+  body: Record<string, unknown>
+  params: Record<string, string>
+  headers: Record<string, string>
+  user: User | null
+}
+
+interface MockResponse extends Record<string, unknown> {
+  status: Mock
+  json: Mock
+  send: Mock
+  sendStatus: Mock
+}
+
+const createMockReq = (user: User | null): MockRequest => {
   return {
     body: {},
-    params: {} as Record<string, string>,
+    params: {},
     headers: {
       authorization: 'Bearer mock-token',
       'x-auth-provider': 'google',
     },
     user,
-  } as any
+  }
 }
 
-const createMockRes = () => {
-  const res = {
-    status: jest.fn().mockReturnThis(),
-    json: jest.fn().mockReturnThis(),
-    send: jest.fn().mockReturnThis(),
-    sendStatus: jest.fn().mockReturnThis(),
-  } as any
-  return res
+const createMockRes = (): MockResponse => {
+  return {
+    status: jest.fn().mockReturnThis() as unknown as Mock,
+    json: jest.fn().mockReturnThis() as unknown as Mock,
+    send: jest.fn().mockReturnThis() as unknown as Mock,
+    sendStatus: jest.fn().mockReturnThis() as unknown as Mock,
+  }
 }
 
 describe('POST /intents - Google-auth gate', () => {
@@ -220,7 +245,7 @@ describe('POST /intents - Google-auth gate', () => {
     // Verify success (200) for Monthly + Google.
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json).toHaveBeenCalled()
-    const response = res.json.mock.calls[0][0]
+    const response = res.json.mock.calls[0][0] as Record<string, unknown>
     expect(response).toHaveProperty('id')
     expect(response.status).toBe('PENDING')
   })
@@ -269,13 +294,13 @@ describe('Purchase credit end-to-end flow for Monthly accounts', () => {
     await postIntentHandler(req, res)
     expect(res.status).toHaveBeenCalledWith(200)
 
-    const intentResponse = res.json.mock.calls[0][0]
+    const intentResponse = res.json.mock.calls[0][0] as Record<string, unknown>
     const intentId = intentResponse.id
 
     // Step 2: Simulate on-chain confirmation by transitioning the intent to COMPLETED.
     const creditBytes = BigInt(10 * 1024 * 1024) // 10 MB
     await db.query(
-      `UPDATE intents SET status = $1 WHERE id = $2`,
+      'UPDATE intents SET status = $1 WHERE id = $2',
       ['COMPLETED', intentId],
     )
     await db.query(
@@ -294,7 +319,7 @@ describe('Purchase credit end-to-end flow for Monthly accounts', () => {
     const pendingCredits =
       await AccountsUseCases.getPendingCreditsByUserAndType(
         googleUserMonthly,
-        'upload' as any,
+        InteractionType.Upload,
       )
     expect(pendingCredits).toBeGreaterThanOrEqual(Number(creditBytes))
 
@@ -302,7 +327,7 @@ describe('Purchase credit end-to-end flow for Monthly accounts', () => {
     const uploadSize = BigInt(5 * 1024 * 1024) // 5 MB
     await AccountsUseCases.registerInteraction(
       googleUserMonthly,
-      'upload' as any,
+      InteractionType.Upload,
       uploadSize,
     )
 
@@ -310,7 +335,7 @@ describe('Purchase credit end-to-end flow for Monthly accounts', () => {
     const afterConsumption =
       await AccountsUseCases.getPendingCreditsByUserAndType(
         googleUserMonthly,
-        'upload' as any,
+        InteractionType.Upload,
       )
     expect(afterConsumption).toBeLessThan(pendingCredits)
     expect(pendingCredits - afterConsumption).toBe(Number(uploadSize))
