@@ -16,6 +16,7 @@ import {
   type UserWithOrganization,
   type User,
   AccountModel,
+  IntentStatus,
   InteractionType,
 } from '@auto-drive/models'
 
@@ -252,7 +253,7 @@ describe('POST /intents - Google-auth gate', () => {
     expect(res.json).toHaveBeenCalled()
     const response = res.json.mock.calls[0][0] as Record<string, unknown>
     expect(response).toHaveProperty('id')
-    expect(response.status).toBe('PENDING')
+    expect(response.status).toBe(IntentStatus.PENDING)
   })
 })
 
