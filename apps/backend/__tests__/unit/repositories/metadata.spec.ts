@@ -377,4 +377,36 @@ describe('Metadata Repository', () => {
       await metadataRepository.getMetadataByIsArchived(false)
     expect(nonArchivedResults.some((r) => r.head_cid === headCid)).toBe(false)
   })
+
+  // -------------------------------------------------------------------------
+  // Regression test: re-upload of archived file must reset is_archived
+  // -------------------------------------------------------------------------
+
+  it('setMetadata resets is_archived to false when file is re-uploaded after archival', async () => {
+    const rootCid = 'reupload-reset-root-cid'
+    const headCid = 'reupload-reset-head-cid'
+    const metadata: OffchainMetadata = {
+      totalSize: 100n,
+      type: 'file',
+      dataCid: 'reupload-reset-data-cid',
+      totalChunks: 1,
+      chunks: [],
+      name: 'reupload-reset-file',
+    }
+
+    // First upload
+    await metadataRepository.setMetadata(rootCid, headCid, metadata)
+
+    // File gets archived (simulates normal archival lifecycle)
+    await metadataRepository.markAsArchived(headCid)
+    const afterArchive = await metadataRepository.getMetadata(headCid)
+    expect(afterArchive?.is_archived).toBe(true)
+
+    // Same file is re-uploaded: setMetadata is called again with identical CIDs.
+    // Before the fix, is_archived would remain true (ON CONFLICT preserved it).
+    // After the fix, is_archived must be reset to false.
+    await metadataRepository.setMetadata(rootCid, headCid, metadata)
+    const afterReupload = await metadataRepository.getMetadata(headCid)
+    expect(afterReupload?.is_archived).toBe(false)
+  })
 })

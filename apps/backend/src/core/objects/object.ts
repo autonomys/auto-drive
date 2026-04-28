@@ -447,8 +447,18 @@ const populateCaches = async (cid: string) => {
 }
 
 const onObjectArchived = async (cid: string) => {
+  logger.debug('onObjectArchived called (cid=%s)', cid)
+  const nodes = await nodesRepository.getNodesByRootCid(cid)
+  if (nodes.length === 0) {
+    logger.warn(
+      'Cannot archive object with no nodes (cid=%s), skipping archival',
+      cid,
+    )
+    return
+  }
   await metadataRepository.markAsArchived(cid)
   await nodesRepository.removeNodeDataByRootCid(cid)
+  logger.info('Object archived successfully (cid=%s)', cid)
 }
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {

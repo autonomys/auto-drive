@@ -38,7 +38,7 @@ const setMetadata = async (
   const db = await getDatabase()
 
   return db.query({
-    text: 'INSERT INTO metadata (root_cid, head_cid, metadata, name) VALUES ($1, $2, $3, $4) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata, name = EXCLUDED.name',
+    text: 'INSERT INTO metadata (root_cid, head_cid, metadata, name) VALUES ($1, $2, $3, $4) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata, name = EXCLUDED.name, is_archived = false',
     values: [rootCid, headCid, stringify(metadata), metadata.name],
   })
 }
