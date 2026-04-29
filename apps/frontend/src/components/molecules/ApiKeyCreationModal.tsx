@@ -7,12 +7,63 @@ import {
   DialogPanel,
   DialogTitle,
 } from '@headlessui/react';
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { ApiKey } from '@auto-drive/models';
 import toast from 'react-hot-toast';
 import { Button } from '@auto-drive/ui';
 import { handleEnterOrSpace } from 'utils/eventHandler';
 import { AuthService } from 'services/auth/auth';
+
+type ExpiryPreset = '30d' | '60d' | '90d' | '1y' | 'custom' | 'never';
+
+const presetToIso = (preset: ExpiryPreset, custom: string): string | null => {
+  const now = new Date();
+  switch (preset) {
+    case 'never':
+      return null;
+    case '30d':
+      now.setDate(now.getDate() + 30);
+      return now.toISOString();
+    case '60d':
+      now.setDate(now.getDate() + 60);
+      return now.toISOString();
+    case '90d':
+      now.setDate(now.getDate() + 90);
+      return now.toISOString();
+    case '1y':
+      now.setFullYear(now.getFullYear() + 1);
+      return now.toISOString();
+    case 'custom': {
+      if (!custom) {
+        throw new Error('Please select an expiry date');
+      }
+      const d = new Date(`${custom}T23:59:59`);
+      if (Number.isNaN(d.getTime())) {
+        throw new Error('Invalid expiry date');
+      }
+      if (d.getTime() <= Date.now()) {
+        throw new Error('Expiry date must be in the future');
+      }
+      return d.toISOString();
+    }
+  }
+};
+
+const todayPlus = (days: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 export const ApiKeyCreationModal = ({
   isOpen,
@@ -23,38 +74,86 @@ export const ApiKeyCreationModal = ({
   onClose: () => void;
   onSuccess: () => void;
 }) => {
+  const [name, setName] = useState('');
+  const [preset, setPreset] = useState<ExpiryPreset>('never');
+  const [customDate, setCustomDate] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [apiKey, setApiKey] = useState<ApiKey | null>(null);
   const [hasBeenCopied, setHasBeenCopied] = useState(false);
 
-  const createApiKey = useCallback(() => {
-    AuthService.generateApiKey().then(setApiKey);
+  const epochRef = useRef(0);
+  const minDate = useMemo(() => todayPlus(1), []);
+
+  const reset = useCallback(() => {
+    epochRef.current += 1;
+    setName('');
+    setPreset('never');
+    setCustomDate('');
+    setApiKey(null);
+    setHasBeenCopied(false);
+    setSubmitting(false);
   }, []);
 
-  const copyToClipboard = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
+  useEffect(() => {
+    reset();
+  }, [isOpen, reset]);
+
+  const canSubmit = !submitting &&
+    (preset !== 'custom' || customDate.length > 0);
+
+  const createApiKey = useCallback(() => {
+    if (!canSubmit) return;
+
+    let expiresAt: string | null;
+    try {
+      expiresAt = presetToIso(preset, customDate);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Invalid expiry date');
+      return;
+    }
+
+    setSubmitting(true);
+    const trimmed = name.trim();
+    const epoch = epochRef.current;
+    AuthService.generateApiKey({
+      name: trimmed.length === 0 ? null : trimmed,
+      expiresAt,
+    })
+      .then((key) => {
+        if (epochRef.current === epoch) setApiKey(key);
+      })
+      .catch((err: Error) => {
+        if (epochRef.current === epoch) {
+          toast.error(err.message || 'Failed to create API key');
+          setSubmitting(false);
+        }
+      });
+  }, [canSubmit, name, preset, customDate]);
+
+  const copyToClipboard = useCallback(async (text: string) => {
+    await navigator.clipboard.writeText(text);
     toast.success('Copied to clipboard');
   }, []);
 
-  const copyApiKey = useCallback(() => {
+  const copyApiKey = useCallback(async () => {
     if (apiKey) {
-      copyToClipboard(apiKey.secret);
-      setHasBeenCopied(true);
+      try {
+        await copyToClipboard(apiKey.secret);
+        setHasBeenCopied(true);
+      } catch {
+        toast.error('Failed to copy — please select and copy the key manually');
+      }
     }
   }, [apiKey, copyToClipboard]);
-
-  useEffect(() => {
-    if (isOpen === false) {
-      setHasBeenCopied(false);
-      setApiKey(null);
-    }
-  }, [isOpen]);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog
         as='div'
         className='relative z-10'
-        onClose={hasBeenCopied ? onSuccess : onClose}
+        onClose={
+          apiKey && !hasBeenCopied ? () => {} : hasBeenCopied ? onSuccess : onClose
+        }
       >
         <TransitionChild
           as={Fragment}
@@ -86,14 +185,24 @@ export const ApiKeyCreationModal = ({
                 >
                   Create API Key
                 </DialogTitle>
-                <div className='mt-2'>
+                <div className='mt-4'>
                   {apiKey ? (
                     <div>
+                      <p className='text-foreground-hover mb-3 text-center text-sm'>
+                        {apiKey.name ? (
+                          <>
+                            Key <strong>{apiKey.name}</strong> created.{' '}
+                          </>
+                        ) : (
+                          <>Key created. </>
+                        )}
+                        Copy it now — it won&apos;t be shown again.
+                      </p>
                       <div className='flex items-center justify-center space-x-2'>
                         <button
                           tabIndex={0}
                           onKeyDown={handleEnterOrSpace(copyApiKey)}
-                          className='bg-background-hover flex cursor-pointer items-center rounded px-2 py-1 text-center font-mono text-sm'
+                          className='bg-background-hover flex cursor-pointer items-center break-all rounded px-2 py-1 text-left font-mono text-xs'
                           onClick={copyApiKey}
                           title='Click to copy'
                         >
@@ -108,13 +217,60 @@ export const ApiKeyCreationModal = ({
                     </div>
                   ) : (
                     <Fragment>
-                      <p className='text-foreground-hover text-center text-sm'>
-                        You are about to create a new API key. This key will
-                        allow you to access the API programmatically. Please
-                        keep this key secure and do not share it with anyone.
-                        <br />
-                        <br />
-                        <strong>This key won&apos;t be shown again.</strong>
+                      <label
+                        htmlFor='api-key-name'
+                        className='text-foreground-hover mb-1 block text-left text-sm'
+                      >
+                        Name{' '}
+                        <span className='text-foreground-hover/60'>
+                          (optional)
+                        </span>
+                      </label>
+                      <input
+                        id='api-key-name'
+                        type='text'
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder='e.g. CI uploader'
+                        maxLength={64}
+                        className='mb-4 w-full rounded border border-gray-300 bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none'
+                      />
+
+                      <label
+                        htmlFor='api-key-expires'
+                        className='text-foreground-hover mb-1 block text-left text-sm'
+                      >
+                        Expires
+                      </label>
+                      <select
+                        id='api-key-expires'
+                        value={preset}
+                        onChange={(e) =>
+                          setPreset(e.target.value as ExpiryPreset)
+                        }
+                        className='mb-2 w-full rounded border border-gray-300 bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none'
+                      >
+                        <option value='never'>Never</option>
+                        <option value='30d'>In 30 days</option>
+                        <option value='60d'>In 60 days</option>
+                        <option value='90d'>In 90 days</option>
+                        <option value='1y'>In 1 year</option>
+                        <option value='custom'>Custom date…</option>
+                      </select>
+                      {preset === 'custom' && (
+                        <input
+                          type='date'
+                          value={customDate}
+                          min={minDate}
+                          onChange={(e) => setCustomDate(e.target.value)}
+                          className='mb-2 w-full rounded border border-gray-300 bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none'
+                        />
+                      )}
+
+                      <p className='text-foreground-hover mt-4 text-center text-xs'>
+                        The key will only be displayed once. Store it somewhere
+                        safe — you can delete it later, but you can&apos;t
+                        recover it.
                       </p>
                       <span
                         className='mt-4 flex justify-center'
@@ -123,7 +279,9 @@ export const ApiKeyCreationModal = ({
                         role='button'
                         tabIndex={0}
                       >
-                        <Button variant='lightAccent'>Generate</Button>
+                        <Button variant='lightAccent' disabled={!canSubmit}>
+                          {submitting ? 'Generating…' : 'Generate'}
+                        </Button>
                       </span>
                     </Fragment>
                   )}
