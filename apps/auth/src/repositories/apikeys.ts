@@ -83,7 +83,7 @@ const deleteApiKey = async (id: string): Promise<void> => {
     [new Date(), id],
   )
   if (result.rowCount === 0) {
-    throw new Error('API key not found')
+    throw new Error('Api key not found')
   }
 }
 
