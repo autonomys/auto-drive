@@ -1,7 +1,7 @@
 import {
-  ApiKey,
-  ApiKeyWithoutSecret,
-  CreateApiKeyInput,
+  APIKey,
+  APIKeyWithoutSecret,
+  CreateAPIKeyInput,
   DeletionRequest,
   DeletionRequestWithUser,
   MaybeUser,
@@ -73,7 +73,7 @@ export const AuthService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
   },
-  generateApiKey: async (input: CreateApiKeyInput): Promise<ApiKey> => {
+  generateAPIKey: async (input: CreateAPIKeyInput): Promise<APIKey> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -102,7 +102,7 @@ export const AuthService = {
 
     return response.json();
   },
-  deleteApiKey: async (apiKeyId: string): Promise<void> => {
+  deleteAPIKey: async (apiKeyId: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -142,7 +142,7 @@ export const AuthService = {
 
     return response.json();
   },
-  getApiKeys: async (): Promise<ApiKeyWithoutSecret[]> => {
+  getAPIKeys: async (): Promise<APIKeyWithoutSecret[]> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -159,7 +159,7 @@ export const AuthService = {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
 
-    return response.json() as Promise<ApiKeyWithoutSecret[]>;
+    return response.json() as Promise<APIKeyWithoutSecret[]>;
   },
   getUserList: async (
     page: number,

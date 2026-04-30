@@ -1,7 +1,7 @@
 import { getDatabase } from '../drivers/index.js'
-import { ApiKey } from '@auto-drive/models'
+import { APIKey } from '@auto-drive/models'
 
-type DBApiKey = {
+type DBAPIKey = {
   id: string
   name: string | null
   secret: string
@@ -12,18 +12,18 @@ type DBApiKey = {
   created_at: Date | null
 }
 
-const mapDBApiKeyToApiKey = (dbApiKey: DBApiKey): ApiKey => ({
-  id: dbApiKey.id,
-  name: dbApiKey.name,
-  secret: dbApiKey.secret,
-  oauthProvider: dbApiKey.oauth_provider,
-  oauthUserId: dbApiKey.oauth_user_id,
-  deletedAt: dbApiKey.deleted_at,
-  expiresAt: dbApiKey.expires_at,
-  createdAt: dbApiKey.created_at,
+const mapDBAPIKeyToAPIKey = (dbAPIKey: DBAPIKey): APIKey => ({
+  id: dbAPIKey.id,
+  name: dbAPIKey.name,
+  secret: dbAPIKey.secret,
+  oauthProvider: dbAPIKey.oauth_provider,
+  oauthUserId: dbAPIKey.oauth_user_id,
+  deletedAt: dbAPIKey.deleted_at,
+  expiresAt: dbAPIKey.expires_at,
+  createdAt: dbAPIKey.created_at,
 })
 
-type CreateApiKeyParams = {
+type CreateAPIKeyParams = {
   id: string
   name: string | null
   secret: string
@@ -32,17 +32,17 @@ type CreateApiKeyParams = {
   expiresAt: Date | null
 }
 
-const createApiKey = async ({
+const createAPIKey = async ({
   id,
   name,
   secret,
   oauthProvider,
   oauthUserId,
   expiresAt,
-}: CreateApiKeyParams): Promise<ApiKey> => {
+}: CreateAPIKeyParams): Promise<APIKey> => {
   const db = await getDatabase()
 
-  const result = await db.query<DBApiKey>(
+  const result = await db.query<DBAPIKey>(
     `INSERT INTO users.api_keys
        (id, name, secret, oauth_provider, oauth_user_id, expires_at, deleted_at)
      VALUES ($1, $2, $3, $4, $5, $6, NULL)
@@ -50,32 +50,32 @@ const createApiKey = async ({
     [id, name, secret, oauthProvider, oauthUserId, expiresAt],
   )
 
-  return mapDBApiKeyToApiKey(result.rows[0])
+  return mapDBAPIKeyToAPIKey(result.rows[0])
 }
 
-const getApiKeyBySecret = async (secret: string): Promise<ApiKey | null> => {
+const getAPIKeyBySecret = async (secret: string): Promise<APIKey | null> => {
   const db = await getDatabase()
 
-  const result = await db.query<DBApiKey>(
+  const result = await db.query<DBAPIKey>(
     'SELECT * FROM users.api_keys WHERE secret = $1',
     [secret],
   )
 
-  return result.rows.map(mapDBApiKeyToApiKey)[0] ?? null
+  return result.rows.map(mapDBAPIKeyToAPIKey)[0] ?? null
 }
 
-const getApiKeyById = async (id: string): Promise<ApiKey | null> => {
+const getAPIKeyById = async (id: string): Promise<APIKey | null> => {
   const db = await getDatabase()
 
-  const result = await db.query<DBApiKey>(
+  const result = await db.query<DBAPIKey>(
     'SELECT * FROM users.api_keys WHERE id = $1',
     [id],
   )
 
-  return result.rows.map(mapDBApiKeyToApiKey)[0] ?? null
+  return result.rows.map(mapDBAPIKeyToAPIKey)[0] ?? null
 }
 
-const deleteApiKey = async (id: string): Promise<void> => {
+const deleteAPIKey = async (id: string): Promise<void> => {
   const db = await getDatabase()
 
   const result = await db.query(
@@ -83,17 +83,17 @@ const deleteApiKey = async (id: string): Promise<void> => {
     [new Date(), id],
   )
   if (result.rowCount === 0) {
-    throw new Error('Api key not found')
+    throw new Error('API key not found')
   }
 }
 
-const getApiKeysByOAuthUser = async (
+const getAPIKeysByOAuthUser = async (
   oauthProvider: string,
   oauthUserId: string,
-): Promise<ApiKey[]> => {
+): Promise<APIKey[]> => {
   const db = await getDatabase()
 
-  const result = await db.query<DBApiKey>(
+  const result = await db.query<DBAPIKey>(
     `SELECT *
        FROM users.api_keys
       WHERE oauth_provider = $1
@@ -103,13 +103,13 @@ const getApiKeysByOAuthUser = async (
     [oauthProvider, oauthUserId],
   )
 
-  return result.rows.map(mapDBApiKeyToApiKey)
+  return result.rows.map(mapDBAPIKeyToAPIKey)
 }
 
 export const apiKeysRepository = {
-  deleteApiKey,
-  createApiKey,
-  getApiKeyById,
-  getApiKeyBySecret,
-  getApiKeysByOAuthUser,
+  deleteAPIKey,
+  createAPIKey,
+  getAPIKeyById,
+  getAPIKeyBySecret,
+  getAPIKeysByOAuthUser,
 }

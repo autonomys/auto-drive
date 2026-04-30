@@ -1,6 +1,6 @@
 import { v4 } from 'uuid'
 import { apiKeysRepository } from '../repositories/index.js'
-import { User, ApiKey, ApiKeyWithoutSecret } from '@auto-drive/models'
+import { User, APIKey, APIKeyWithoutSecret } from '@auto-drive/models'
 import { createLogger } from '../drivers/logger.js'
 
 const logger = createLogger('useCases:apikeys')
@@ -12,7 +12,7 @@ const maskSecret = (secret: string): string => {
   return `${secret.slice(0, 3)}${'•'.repeat(secret.length - 6)}${secret.slice(-3)}`
 }
 
-const stripSecret = (apiKey: ApiKey): ApiKeyWithoutSecret => {
+const stripSecret = (apiKey: APIKey): APIKeyWithoutSecret => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { secret, ...rest } = apiKey
   return {
@@ -21,7 +21,7 @@ const stripSecret = (apiKey: ApiKey): ApiKeyWithoutSecret => {
   }
 }
 
-type CreateApiKeyOptions = {
+type CreateAPIKeyOptions = {
   name?: string | null
   expiresAt?: Date | null
 }
@@ -63,10 +63,10 @@ const validateExpiresAt = (
   return expiresAt
 }
 
-const createApiKey = async (
+const createAPIKey = async (
   executor: User,
-  options: CreateApiKeyOptions,
-): Promise<ApiKey> => {
+  options: CreateAPIKeyOptions,
+): Promise<APIKey> => {
   const name = validateName(options.name)
   const expiresAt = validateExpiresAt(options.expiresAt)
 
@@ -80,7 +80,7 @@ const createApiKey = async (
   const secret = generateSecret()
   const id = v4().replace(/-/g, '')
 
-  const apiKeyObject = await apiKeysRepository.createApiKey({
+  const apiKeyObject = await apiKeysRepository.createAPIKey({
     id,
     name,
     secret,
@@ -100,17 +100,17 @@ const createApiKey = async (
   return apiKeyObject
 }
 
-const getApiKeyFromSecret = async (secret: string): Promise<ApiKey> => {
+const getAPIKeyFromSecret = async (secret: string): Promise<APIKey> => {
   logger.trace('Resolving API key from secret')
-  const apiKeyObject = await apiKeysRepository.getApiKeyBySecret(secret)
+  const apiKeyObject = await apiKeysRepository.getAPIKeyBySecret(secret)
 
   if (!apiKeyObject) {
     logger.warn('API key not found for secret')
-    throw new Error('Api key not found')
+    throw new Error('API key not found')
   }
   if (apiKeyObject.deletedAt) {
     logger.warn('API key %s has been deleted', apiKeyObject.id)
-    throw new Error('Api key has been deleted')
+    throw new Error('API key has been deleted')
   }
   if (
     apiKeyObject.expiresAt &&
@@ -121,13 +121,13 @@ const getApiKeyFromSecret = async (secret: string): Promise<ApiKey> => {
       apiKeyObject.id,
       apiKeyObject.expiresAt,
     )
-    throw new Error('Api key has expired')
+    throw new Error('API key has expired')
   }
 
   return apiKeyObject
 }
 
-const assertOwnership = (executor: User, apiKey: ApiKey) => {
+const assertOwnership = (executor: User, apiKey: APIKey) => {
   if (
     apiKey.oauthProvider !== executor.oauthProvider ||
     apiKey.oauthUserId !== executor.oauthUserId
@@ -136,38 +136,38 @@ const assertOwnership = (executor: User, apiKey: ApiKey) => {
   }
 }
 
-const deleteApiKey = async (executor: User, id: string): Promise<void> => {
+const deleteAPIKey = async (executor: User, id: string): Promise<void> => {
   logger.debug(
     'Deleting API key %s by user %s:%s',
     id,
     executor.oauthProvider,
     executor.oauthUserId,
   )
-  const apiKeyObject = await apiKeysRepository.getApiKeyById(id)
+  const apiKeyObject = await apiKeysRepository.getAPIKeyById(id)
   if (!apiKeyObject) {
     logger.warn('API key not found: %s', id)
-    throw new Error('Api key not found')
+    throw new Error('API key not found')
   }
   assertOwnership(executor, apiKeyObject)
 
   if (apiKeyObject.deletedAt) {
     logger.warn('API key %s is already deleted', id)
-    throw new Error('Api key has already been deleted')
+    throw new Error('API key has already been deleted')
   }
 
-  await apiKeysRepository.deleteApiKey(id)
+  await apiKeysRepository.deleteAPIKey(id)
   logger.info('API key %s deleted', id)
 }
 
-const getApiKeysByUser = async (
+const getAPIKeysByUser = async (
   user: User,
-): Promise<ApiKeyWithoutSecret[]> => {
+): Promise<APIKeyWithoutSecret[]> => {
   logger.trace(
     'Listing API keys for user %s:%s',
     user.oauthProvider,
     user.oauthUserId,
   )
-  const apiKeys = await apiKeysRepository.getApiKeysByOAuthUser(
+  const apiKeys = await apiKeysRepository.getAPIKeysByOAuthUser(
     user.oauthProvider,
     user.oauthUserId,
   )
@@ -175,9 +175,9 @@ const getApiKeysByUser = async (
   return apiKeys.map(stripSecret)
 }
 
-export const ApiKeysUseCases = {
-  createApiKey,
-  getApiKeyFromSecret,
-  deleteApiKey,
-  getApiKeysByUser,
+export const APIKeysUseCases = {
+  createAPIKey,
+  getAPIKeyFromSecret,
+  deleteAPIKey,
+  getAPIKeysByUser,
 }

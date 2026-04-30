@@ -11,7 +11,7 @@ import { Button } from '@auto-drive/ui';
 import { AuthService } from 'services/auth/auth';
 import { useRouter } from 'next/navigation';
 
-export const DeleteApiKeyModal = ({
+export const DeleteAPIKeyModal = ({
   apiKeyId,
   closeModal,
 }: {
@@ -27,7 +27,7 @@ export const DeleteApiKeyModal = ({
       return;
     }
 
-    AuthService.deleteApiKey(apiKeyId)
+    AuthService.deleteAPIKey(apiKeyId)
       .then(() => {
         toast.success('API key deleted successfully');
         closeModal();

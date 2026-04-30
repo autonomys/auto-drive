@@ -7,7 +7,7 @@ import {
 } from '../services/authManager/express.js'
 import { UsersUseCases } from '../useCases/index.js'
 import { DeletionUseCases } from '../useCases/deletion.js'
-import { ApiKeysUseCases } from '../useCases/apikeys.js'
+import { APIKeysUseCases } from '../useCases/apikeys.js'
 import { DeletionRequestStatus, UserRole } from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
 import { createLogger } from '../drivers/logger.js'
@@ -120,7 +120,7 @@ userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
   }
 
   try {
-    const apiKeys = await ApiKeysUseCases.getApiKeysByUser(user)
+    const apiKeys = await APIKeysUseCases.getAPIKeysByUser(user)
 
     res.json(apiKeys)
   } catch (error) {
@@ -132,7 +132,7 @@ userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
   }
 })
 
-const parseCreateApiKeyBody = (
+const parseCreateAPIKeyBody = (
   body: unknown,
 ): { name: string | null; expiresAt: Date | null } | { error: string } => {
   // Allow callers to POST with no body at all — creates an unnamed,
@@ -188,14 +188,14 @@ userController.post(
       return
     }
 
-    const parsed = parseCreateApiKeyBody(req.body)
+    const parsed = parseCreateAPIKeyBody(req.body)
     if ('error' in parsed) {
       res.status(400).json({ error: parsed.error })
       return
     }
 
     try {
-      const apiKey = await ApiKeysUseCases.createApiKey(user, {
+      const apiKey = await APIKeysUseCases.createAPIKey(user, {
         name: parsed.name,
         expiresAt: parsed.expiresAt,
       })
@@ -231,15 +231,15 @@ userController.delete(
     const { id } = req.params
 
     try {
-      await ApiKeysUseCases.deleteApiKey(user, id)
+      await APIKeysUseCases.deleteAPIKey(user, id)
 
       res.sendStatus(200)
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : 'Failed to delete API key'
       if (
-        msg === 'Api key not found' ||
-        msg === 'Api key has already been deleted'
+        msg === 'API key not found' ||
+        msg === 'API key has already been deleted'
       ) {
         res.status(404).json({ error: msg })
       } else if (msg === 'User is not the owner of the API key') {

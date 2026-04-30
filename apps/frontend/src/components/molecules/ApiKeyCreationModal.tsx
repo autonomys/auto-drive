@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ApiKey } from '@auto-drive/models';
+import { APIKey } from '@auto-drive/models';
 import toast from 'react-hot-toast';
 import { Button } from '@auto-drive/ui';
 import { handleEnterOrSpace } from 'utils/eventHandler';
@@ -65,7 +65,7 @@ const todayPlus = (days: number): string => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-export const ApiKeyCreationModal = ({
+export const APIKeyCreationModal = ({
   isOpen,
   onClose,
   onSuccess,
@@ -78,7 +78,7 @@ export const ApiKeyCreationModal = ({
   const [preset, setPreset] = useState<ExpiryPreset>('never');
   const [customDate, setCustomDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [apiKey, setApiKey] = useState<ApiKey | null>(null);
+  const [apiKey, setApiKey] = useState<APIKey | null>(null);
   const [hasBeenCopied, setHasBeenCopied] = useState(false);
 
   const epochRef = useRef(0);
@@ -115,7 +115,7 @@ export const ApiKeyCreationModal = ({
     setSubmitting(true);
     const trimmed = name.trim();
     const epoch = epochRef.current;
-    AuthService.generateApiKey({
+    AuthService.generateAPIKey({
       name: trimmed.length === 0 ? null : trimmed,
       expiresAt,
     })

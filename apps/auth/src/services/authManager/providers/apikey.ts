@@ -1,9 +1,9 @@
 import { OAuthUser } from '@auto-drive/models'
-import { ApiKeysUseCases } from '../../../useCases/apikeys.js'
+import { APIKeysUseCases } from '../../../useCases/apikeys.js'
 import { usersRepository } from '../../../repositories/users.js'
 
-const getUserFromApiKey = async (secret: string): Promise<OAuthUser> => {
-  const apiKey = await ApiKeysUseCases.getApiKeyFromSecret(secret)
+const getUserFromAPIKey = async (secret: string): Promise<OAuthUser> => {
+  const apiKey = await APIKeysUseCases.getAPIKeyFromSecret(secret)
 
   // Look up the full user row so that oauthUsername and oauthAvatarUrl are
   // available downstream.  Without this, feature flag checks that inspect
@@ -22,6 +22,6 @@ const getUserFromApiKey = async (secret: string): Promise<OAuthUser> => {
   }
 }
 
-export const ApiKeyAuth = {
-  getUserFromApiKey,
+export const APIKeyAuth = {
+  getUserFromAPIKey,
 }

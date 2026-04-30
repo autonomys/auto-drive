@@ -5,7 +5,7 @@ import { UserProtectedLayout } from '../../../../components/layouts/UserProtecte
 export const dynamic = 'force-dynamic';
 
 const Page = async () => {
-  const apiKeys = await AuthService.getApiKeys();
+  const apiKeys = await AuthService.getAPIKeys();
 
   return (
     <UserProtectedLayout>

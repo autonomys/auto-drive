@@ -1,15 +1,15 @@
-import { ApiKey, User } from '@auto-drive/models'
-import { UsersUseCases, ApiKeysUseCases } from '../src/useCases/index.js'
+import { APIKey, User } from '@auto-drive/models'
+import { UsersUseCases, APIKeysUseCases } from '../src/useCases/index.js'
 import { PreconditionError } from './utils/error.js'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
 import { apiKeysRepository } from '../src/repositories/index.js'
-import { ApiKeyAuth } from '../src/services/authManager/providers/apikey.js'
+import { APIKeyAuth } from '../src/services/authManager/providers/apikey.js'
 import { dbMigration } from './utils/dbMigrate.js'
 import { MOCK_UNONBOARDED_USER } from './utils/mocks.js'
 
-describe('ApiKeyUseCases', () => {
+describe('APIKeyUseCases', () => {
   let user: User
-  let apiKey: ApiKey
+  let apiKey: APIKey
 
   beforeAll(async () => {
     await getDatabase()
@@ -21,8 +21,8 @@ describe('ApiKeyUseCases', () => {
     user = result
   })
 
-  it('should create an api key with a name and no expiry', async () => {
-    apiKey = await ApiKeysUseCases.createApiKey(user, { name: 'My key' })
+  it('should create an API key with a name and no expiry', async () => {
+    apiKey = await APIKeysUseCases.createAPIKey(user, { name: 'My key' })
     expect(apiKey).toMatchObject({
       id: expect.any(String),
       secret: expect.any(String),
@@ -34,27 +34,27 @@ describe('ApiKeyUseCases', () => {
     expect(apiKey.secret.length).toBeGreaterThan(0)
   })
 
-  it('should create an unnamed api key when no name is supplied', async () => {
-    const nameless = await ApiKeysUseCases.createApiKey(user, {})
+  it('should create an unnamed API key when no name is supplied', async () => {
+    const nameless = await APIKeysUseCases.createAPIKey(user, {})
     expect(nameless.name).toBeNull()
-    await ApiKeysUseCases.deleteApiKey(user, nameless.id)
+    await APIKeysUseCases.deleteAPIKey(user, nameless.id)
   })
 
   it('should coerce whitespace-only names to null', async () => {
-    const blank = await ApiKeysUseCases.createApiKey(user, { name: '   ' })
+    const blank = await APIKeysUseCases.createAPIKey(user, { name: '   ' })
     expect(blank.name).toBeNull()
-    await ApiKeysUseCases.deleteApiKey(user, blank.id)
+    await APIKeysUseCases.deleteAPIKey(user, blank.id)
   })
 
   it('should reject names longer than 64 characters', async () => {
     await expect(
-      ApiKeysUseCases.createApiKey(user, { name: 'x'.repeat(65) }),
+      APIKeysUseCases.createAPIKey(user, { name: 'x'.repeat(65) }),
     ).rejects.toThrow('API key name must be 64 characters or fewer')
   })
 
   it('should reject an expiry in the past', async () => {
     await expect(
-      ApiKeysUseCases.createApiKey(user, {
+      APIKeysUseCases.createAPIKey(user, {
         name: 'Backdated',
         expiresAt: new Date(Date.now() - 1000),
       }),
@@ -62,7 +62,7 @@ describe('ApiKeyUseCases', () => {
   })
 
   it('should expose a masked secret but no raw secret in list responses', async () => {
-    const [listed] = await ApiKeysUseCases.getApiKeysByUser(user)
+    const [listed] = await APIKeysUseCases.getAPIKeysByUser(user)
     expect(listed.name).toBe('My key')
     expect(listed.maskedSecret).toMatch(/^.{3}•+.{3}$/)
     expect(listed.maskedSecret.startsWith(apiKey.secret.slice(0, 3))).toBe(
@@ -75,7 +75,7 @@ describe('ApiKeyUseCases', () => {
   })
 
   it('should be able to be authenticated', async () => {
-    const authenticatedUser = await ApiKeyAuth.getUserFromApiKey(apiKey.secret)
+    const authenticatedUser = await APIKeyAuth.getUserFromAPIKey(apiKey.secret)
     expect(authenticatedUser).toMatchObject({
       provider: user.oauthProvider,
       id: user.oauthUserId,
@@ -84,41 +84,41 @@ describe('ApiKeyUseCases', () => {
 
   it('should reject expired keys at auth time', async () => {
     const soon = new Date(Date.now() + 2_000)
-    const shortLived = await ApiKeysUseCases.createApiKey(user, {
+    const shortLived = await APIKeysUseCases.createAPIKey(user, {
       name: 'Short-lived',
       expiresAt: soon,
     })
     await new Promise((r) => setTimeout(r, 2_100))
     await expect(
-      ApiKeyAuth.getUserFromApiKey(shortLived.secret),
-    ).rejects.toThrow('Api key has expired')
+      APIKeyAuth.getUserFromAPIKey(shortLived.secret),
+    ).rejects.toThrow('API key has expired')
   })
 
-  it('should be able to mark as deleted an api key', async () => {
-    await ApiKeysUseCases.deleteApiKey(user, apiKey.id)
+  it('should be able to mark as deleted an API key', async () => {
+    await APIKeysUseCases.deleteAPIKey(user, apiKey.id)
 
-    const deletedApiKey = await apiKeysRepository.getApiKeyBySecret(
+    const deletedAPIKey = await apiKeysRepository.getAPIKeyBySecret(
       apiKey.secret,
     )
-    expect(deletedApiKey?.deletedAt).not.toBeNull()
+    expect(deletedAPIKey?.deletedAt).not.toBeNull()
   })
 
   it('should give a clear error when deleting an already-deleted key', async () => {
     await expect(
-      ApiKeysUseCases.deleteApiKey(user, apiKey.id),
-    ).rejects.toThrow('Api key has already been deleted')
+      APIKeysUseCases.deleteAPIKey(user, apiKey.id),
+    ).rejects.toThrow('API key has already been deleted')
   })
 
-  it('should not be able to authenticate with a deleted api key', async () => {
-    await expect(ApiKeyAuth.getUserFromApiKey(apiKey.secret)).rejects.toThrow(
-      'Api key has been deleted',
+  it('should not be able to authenticate with a deleted API key', async () => {
+    await expect(APIKeyAuth.getUserFromAPIKey(apiKey.secret)).rejects.toThrow(
+      'API key has been deleted',
     )
   })
 
-  it('should not be able to authenticate with a non existent api key', async () => {
+  it('should not be able to authenticate with a non existent API key', async () => {
     await expect(
-      ApiKeyAuth.getUserFromApiKey('non-existent-api-key'),
-    ).rejects.toThrow('Api key not found')
+      APIKeyAuth.getUserFromAPIKey('non-existent-api-key'),
+    ).rejects.toThrow('API key not found')
   })
 
   afterAll(async () => {
