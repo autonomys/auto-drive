@@ -11,7 +11,6 @@ import {
   Fragment,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -82,7 +81,7 @@ export const APIKeyCreationModal = ({
   const [hasBeenCopied, setHasBeenCopied] = useState(false);
 
   const epochRef = useRef(0);
-  const minDate = useMemo(() => todayPlus(1), []);
+  const [minDate, setMinDate] = useState(() => todayPlus(1));
 
   const reset = useCallback(() => {
     epochRef.current += 1;
@@ -92,6 +91,7 @@ export const APIKeyCreationModal = ({
     setApiKey(null);
     setHasBeenCopied(false);
     setSubmitting(false);
+    setMinDate(todayPlus(1));
   }, []);
 
   useEffect(() => {
