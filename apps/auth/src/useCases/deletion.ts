@@ -129,16 +129,12 @@ const anonymiseUser = async (requestId: string): Promise<void> => {
 
   logger.info('Anonymising auth data for user %s (request %s)', request.user_public_id, requestId)
 
-  // Soft-delete all API keys
-  const apiKeys = await apiKeysRepository.getApiKeysByOAuthUser(
+  // Soft-delete all API keys atomically to avoid races with user-initiated
+  // deletions during the grace period.
+  await apiKeysRepository.softDeleteAllByOAuthUser(
     request.oauth_provider,
     request.oauth_user_id,
   )
-  for (const key of apiKeys) {
-    if (!key.deletedAt) {
-      await apiKeysRepository.deleteApiKey(key.id)
-    }
-  }
 
   // Remove from organizations
   const memberships = await organizationMembersRepository.getOrganizationMembershipsByUser(
