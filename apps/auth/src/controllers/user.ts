@@ -8,6 +8,7 @@ import {
 import { UsersUseCases } from '../useCases/index.js'
 import { DeletionUseCases } from '../useCases/deletion.js'
 import { APIKeysUseCases } from '../useCases/apikeys.js'
+import { APIKeyError } from '../errors/apikeys.js'
 import { DeletionRequestStatus, UserRole } from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
 import { createLogger } from '../drivers/logger.js'
@@ -202,15 +203,8 @@ userController.post(
 
       res.json(apiKey)
     } catch (error) {
-      const msg =
-        error instanceof Error ? error.message : 'Failed to create API key'
-      if (
-        msg === 'API key name must be a string' ||
-        msg === 'API key name must be 64 characters or fewer' ||
-        msg === 'Invalid expiresAt value' ||
-        msg === 'Expiry must be in the future'
-      ) {
-        res.status(400).json({ error: msg })
+      if (error instanceof APIKeyError) {
+        res.status(error.httpStatus).json({ error: error.message })
       } else {
         logger.error(error)
         res.status(500).json({ error: 'Failed to create API key' })
@@ -235,15 +229,8 @@ userController.delete(
 
       res.sendStatus(200)
     } catch (error) {
-      const msg =
-        error instanceof Error ? error.message : 'Failed to delete API key'
-      if (
-        msg === 'API key not found' ||
-        msg === 'API key has already been deleted'
-      ) {
-        res.status(404).json({ error: msg })
-      } else if (msg === 'User is not the owner of the API key') {
-        res.status(403).json({ error: msg })
+      if (error instanceof APIKeyError) {
+        res.status(error.httpStatus).json({ error: error.message })
       } else {
         logger.error(error)
         res.status(500).json({ error: 'Failed to delete API key' })

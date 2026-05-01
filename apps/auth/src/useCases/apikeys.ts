@@ -2,6 +2,11 @@ import { v4 } from 'uuid'
 import { apiKeysRepository } from '../repositories/index.js'
 import { User, APIKey, APIKeyWithoutSecret } from '@auto-drive/models'
 import { createLogger } from '../drivers/logger.js'
+import {
+  APIKeyValidationError,
+  APIKeyNotFoundError,
+  APIKeyForbiddenError,
+} from '../errors/apikeys.js'
 
 const logger = createLogger('useCases:apikeys')
 
@@ -36,14 +41,16 @@ const validateName = (name: unknown): string | null => {
     return null
   }
   if (typeof name !== 'string') {
-    throw new Error('API key name must be a string')
+    throw new APIKeyValidationError('API key name must be a string')
   }
   const trimmed = name.trim()
   if (trimmed.length === 0) {
     return null
   }
   if (trimmed.length > 64) {
-    throw new Error('API key name must be 64 characters or fewer')
+    throw new APIKeyValidationError(
+      'API key name must be 64 characters or fewer',
+    )
   }
   return trimmed
 }
@@ -55,10 +62,10 @@ const validateExpiresAt = (
     return null
   }
   if (!(expiresAt instanceof Date) || Number.isNaN(expiresAt.getTime())) {
-    throw new Error('Invalid expiresAt value')
+    throw new APIKeyValidationError('Invalid expiresAt value')
   }
   if (expiresAt.getTime() <= Date.now()) {
-    throw new Error('Expiry must be in the future')
+    throw new APIKeyValidationError('Expiry must be in the future')
   }
   return expiresAt
 }
@@ -106,11 +113,11 @@ const getAPIKeyFromSecret = async (secret: string): Promise<APIKey> => {
 
   if (!apiKeyObject) {
     logger.warn('API key not found for secret')
-    throw new Error('API key not found')
+    throw new APIKeyNotFoundError('API key not found')
   }
   if (apiKeyObject.deletedAt) {
     logger.warn('API key %s has been deleted', apiKeyObject.id)
-    throw new Error('API key has been deleted')
+    throw new APIKeyNotFoundError('API key has been deleted')
   }
   if (
     apiKeyObject.expiresAt &&
@@ -121,7 +128,7 @@ const getAPIKeyFromSecret = async (secret: string): Promise<APIKey> => {
       apiKeyObject.id,
       apiKeyObject.expiresAt,
     )
-    throw new Error('API key has expired')
+    throw new APIKeyValidationError('API key has expired')
   }
 
   return apiKeyObject
@@ -132,7 +139,7 @@ const assertOwnership = (executor: User, apiKey: APIKey) => {
     apiKey.oauthProvider !== executor.oauthProvider ||
     apiKey.oauthUserId !== executor.oauthUserId
   ) {
-    throw new Error('User is not the owner of the API key')
+    throw new APIKeyForbiddenError()
   }
 }
 
@@ -146,13 +153,13 @@ const deleteAPIKey = async (executor: User, id: string): Promise<void> => {
   const apiKeyObject = await apiKeysRepository.getAPIKeyById(id)
   if (!apiKeyObject) {
     logger.warn('API key not found: %s', id)
-    throw new Error('API key not found')
+    throw new APIKeyNotFoundError()
   }
   assertOwnership(executor, apiKeyObject)
 
   if (apiKeyObject.deletedAt) {
     logger.warn('API key %s is already deleted', id)
-    throw new Error('API key has already been deleted')
+    throw new APIKeyNotFoundError('API key has already been deleted')
   }
 
   await apiKeysRepository.deleteAPIKey(id)
