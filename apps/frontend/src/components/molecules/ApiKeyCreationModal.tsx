@@ -139,10 +139,10 @@ export const APIKeyCreationModal = ({
     if (apiKey) {
       try {
         await copyToClipboard(apiKey.secret);
-        setHasBeenCopied(true);
       } catch {
         toast.error('Failed to copy — please select and copy the key manually');
       }
+      setHasBeenCopied(true);
     }
   }, [apiKey, copyToClipboard]);
 
@@ -212,6 +212,9 @@ export const APIKeyCreationModal = ({
                       <div className='mt-4 flex w-full items-center justify-center space-x-2'>
                         <Button variant='lightAccent' onClick={copyApiKey}>
                           {hasBeenCopied ? 'Copied!' : 'Copy'}
+                        </Button>
+                        <Button variant='lightAccent' onClick={onSuccess}>
+                          Done
                         </Button>
                       </div>
                     </div>
