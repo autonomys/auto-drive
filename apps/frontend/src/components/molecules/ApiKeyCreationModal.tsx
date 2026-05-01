@@ -139,10 +139,10 @@ export const ApiKeyCreationModal = ({
     if (apiKey) {
       try {
         await copyToClipboard(apiKey.secret);
+        setHasBeenCopied(true);
       } catch {
         toast.error('Failed to copy — please select and copy the key manually');
       }
-      setHasBeenCopied(true);
     }
   }, [apiKey, copyToClipboard]);
 
