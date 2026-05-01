@@ -7,8 +7,8 @@ import {
 } from '../services/authManager/express.js'
 import { UsersUseCases } from '../useCases/index.js'
 import { DeletionUseCases } from '../useCases/deletion.js'
-import { APIKeysUseCases } from '../useCases/apikeys.js'
-import { APIKeyError } from '../errors/apikeys.js'
+import { ApiKeysUseCases } from '../useCases/apikeys.js'
+import { ApiKeyError } from '../errors/apikeys.js'
 import { DeletionRequestStatus, UserRole } from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
 import { createLogger } from '../drivers/logger.js'
@@ -121,7 +121,7 @@ userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
   }
 
   try {
-    const apiKeys = await APIKeysUseCases.getAPIKeysByUser(user)
+    const apiKeys = await ApiKeysUseCases.getApiKeysByUser(user)
 
     res.json(apiKeys)
   } catch (error) {
@@ -133,7 +133,7 @@ userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
   }
 })
 
-const parseCreateAPIKeyBody = (
+const parseCreateApiKeyBody = (
   body: unknown,
 ): { name: string | null; expiresAt: Date | null } | { error: string } => {
   // Allow callers to POST with no body at all — creates an unnamed,
@@ -189,21 +189,21 @@ userController.post(
       return
     }
 
-    const parsed = parseCreateAPIKeyBody(req.body)
+    const parsed = parseCreateApiKeyBody(req.body)
     if ('error' in parsed) {
       res.status(400).json({ error: parsed.error })
       return
     }
 
     try {
-      const apiKey = await APIKeysUseCases.createAPIKey(user, {
+      const apiKey = await ApiKeysUseCases.createApiKey(user, {
         name: parsed.name,
         expiresAt: parsed.expiresAt,
       })
 
       res.json(apiKey)
     } catch (error) {
-      if (error instanceof APIKeyError) {
+      if (error instanceof ApiKeyError) {
         res.status(error.httpStatus).json({ error: error.message })
       } else {
         logger.error(error)
@@ -225,11 +225,11 @@ userController.delete(
     const { id } = req.params
 
     try {
-      await APIKeysUseCases.deleteAPIKey(user, id)
+      await ApiKeysUseCases.deleteApiKey(user, id)
 
       res.sendStatus(200)
     } catch (error) {
-      if (error instanceof APIKeyError) {
+      if (error instanceof ApiKeyError) {
         res.status(error.httpStatus).json({ error: error.message })
       } else {
         logger.error(error)

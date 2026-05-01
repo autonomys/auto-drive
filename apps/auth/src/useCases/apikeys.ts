@@ -1,12 +1,12 @@
 import { v4 } from 'uuid'
 import { apiKeysRepository } from '../repositories/index.js'
-import { User, APIKey, APIKeyWithoutSecret } from '@auto-drive/models'
+import { User, ApiKey, ApiKeyWithoutSecret } from '@auto-drive/models'
 import { createLogger } from '../drivers/logger.js'
 import {
-  APIKeyValidationError,
-  APIKeyNotFoundError,
-  APIKeyExpiredError,
-  APIKeyForbiddenError,
+  ApiKeyValidationError,
+  ApiKeyNotFoundError,
+  ApiKeyExpiredError,
+  ApiKeyForbiddenError,
 } from '../errors/apikeys.js'
 
 const logger = createLogger('useCases:apikeys')
@@ -18,7 +18,7 @@ const maskSecret = (secret: string): string => {
   return `${secret.slice(0, 3)}${'•'.repeat(secret.length - 6)}${secret.slice(-3)}`
 }
 
-const stripSecret = (apiKey: APIKey): APIKeyWithoutSecret => {
+const stripSecret = (apiKey: ApiKey): ApiKeyWithoutSecret => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { secret, ...rest } = apiKey
   return {
@@ -27,7 +27,7 @@ const stripSecret = (apiKey: APIKey): APIKeyWithoutSecret => {
   }
 }
 
-type CreateAPIKeyOptions = {
+type CreateApiKeyOptions = {
   name?: string | null
   expiresAt?: Date | null
 }
@@ -42,14 +42,14 @@ const validateName = (name: unknown): string | null => {
     return null
   }
   if (typeof name !== 'string') {
-    throw new APIKeyValidationError('API key name must be a string')
+    throw new ApiKeyValidationError('API key name must be a string')
   }
   const trimmed = name.trim()
   if (trimmed.length === 0) {
     return null
   }
   if (trimmed.length > 64) {
-    throw new APIKeyValidationError(
+    throw new ApiKeyValidationError(
       'API key name must be 64 characters or fewer',
     )
   }
@@ -63,18 +63,18 @@ const validateExpiresAt = (
     return null
   }
   if (!(expiresAt instanceof Date) || Number.isNaN(expiresAt.getTime())) {
-    throw new APIKeyValidationError('Invalid expiresAt value')
+    throw new ApiKeyValidationError('Invalid expiresAt value')
   }
   if (expiresAt.getTime() <= Date.now()) {
-    throw new APIKeyValidationError('Expiry must be in the future')
+    throw new ApiKeyValidationError('Expiry must be in the future')
   }
   return expiresAt
 }
 
-const createAPIKey = async (
+const createApiKey = async (
   executor: User,
-  options: CreateAPIKeyOptions,
-): Promise<APIKey> => {
+  options: CreateApiKeyOptions,
+): Promise<ApiKey> => {
   const name = validateName(options.name)
   const expiresAt = validateExpiresAt(options.expiresAt)
 
@@ -88,7 +88,7 @@ const createAPIKey = async (
   const secret = generateSecret()
   const id = v4().replace(/-/g, '')
 
-  const apiKeyObject = await apiKeysRepository.createAPIKey({
+  const apiKeyObject = await apiKeysRepository.createApiKey({
     id,
     name,
     secret,
@@ -108,17 +108,17 @@ const createAPIKey = async (
   return apiKeyObject
 }
 
-const getAPIKeyFromSecret = async (secret: string): Promise<APIKey> => {
+const getApiKeyFromSecret = async (secret: string): Promise<ApiKey> => {
   logger.trace('Resolving API key from secret')
-  const apiKeyObject = await apiKeysRepository.getAPIKeyBySecret(secret)
+  const apiKeyObject = await apiKeysRepository.getApiKeyBySecret(secret)
 
   if (!apiKeyObject) {
     logger.warn('API key not found for secret')
-    throw new APIKeyNotFoundError('API key not found')
+    throw new ApiKeyNotFoundError('API key not found')
   }
   if (apiKeyObject.deletedAt) {
     logger.warn('API key %s has been deleted', apiKeyObject.id)
-    throw new APIKeyNotFoundError('API key has been deleted')
+    throw new ApiKeyNotFoundError('API key has been deleted')
   }
   if (
     apiKeyObject.expiresAt &&
@@ -129,53 +129,53 @@ const getAPIKeyFromSecret = async (secret: string): Promise<APIKey> => {
       apiKeyObject.id,
       apiKeyObject.expiresAt,
     )
-    throw new APIKeyExpiredError()
+    throw new ApiKeyExpiredError()
   }
 
   return apiKeyObject
 }
 
-const assertOwnership = (executor: User, apiKey: APIKey) => {
+const assertOwnership = (executor: User, apiKey: ApiKey) => {
   if (
     apiKey.oauthProvider !== executor.oauthProvider ||
     apiKey.oauthUserId !== executor.oauthUserId
   ) {
-    throw new APIKeyForbiddenError()
+    throw new ApiKeyForbiddenError()
   }
 }
 
-const deleteAPIKey = async (executor: User, id: string): Promise<void> => {
+const deleteApiKey = async (executor: User, id: string): Promise<void> => {
   logger.debug(
     'Deleting API key %s by user %s:%s',
     id,
     executor.oauthProvider,
     executor.oauthUserId,
   )
-  const apiKeyObject = await apiKeysRepository.getAPIKeyById(id)
+  const apiKeyObject = await apiKeysRepository.getApiKeyById(id)
   if (!apiKeyObject) {
     logger.warn('API key not found: %s', id)
-    throw new APIKeyNotFoundError()
+    throw new ApiKeyNotFoundError()
   }
   assertOwnership(executor, apiKeyObject)
 
   if (apiKeyObject.deletedAt) {
     logger.warn('API key %s is already deleted', id)
-    throw new APIKeyNotFoundError('API key has already been deleted')
+    throw new ApiKeyNotFoundError('API key has already been deleted')
   }
 
-  await apiKeysRepository.deleteAPIKey(id)
+  await apiKeysRepository.deleteApiKey(id)
   logger.info('API key %s deleted', id)
 }
 
-const getAPIKeysByUser = async (
+const getApiKeysByUser = async (
   user: User,
-): Promise<APIKeyWithoutSecret[]> => {
+): Promise<ApiKeyWithoutSecret[]> => {
   logger.trace(
     'Listing API keys for user %s:%s',
     user.oauthProvider,
     user.oauthUserId,
   )
-  const apiKeys = await apiKeysRepository.getAPIKeysByOAuthUser(
+  const apiKeys = await apiKeysRepository.getApiKeysByOAuthUser(
     user.oauthProvider,
     user.oauthUserId,
   )
@@ -183,9 +183,9 @@ const getAPIKeysByUser = async (
   return apiKeys.map(stripSecret)
 }
 
-export const APIKeysUseCases = {
-  createAPIKey,
-  getAPIKeyFromSecret,
-  deleteAPIKey,
-  getAPIKeysByUser,
+export const ApiKeysUseCases = {
+  createApiKey,
+  getApiKeyFromSecret,
+  deleteApiKey,
+  getApiKeysByUser,
 }

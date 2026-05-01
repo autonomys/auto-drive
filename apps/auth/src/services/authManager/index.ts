@@ -1,5 +1,5 @@
 import { OAuthUser } from '@auto-drive/models'
-import { APIKeyAuth } from './providers/apikey.js'
+import { ApiKeyAuth } from './providers/apikey.js'
 import { CustomJWTAuth } from './providers/custom.js'
 import {
   DiscordAuth,
@@ -18,7 +18,7 @@ const getUserFromAccessToken = async (
     case 'discord':
       return DiscordAuth.getUserFromAccessToken(accessToken)
     case 'apikey':
-      return APIKeyAuth.getUserFromAPIKey(accessToken)
+      return ApiKeyAuth.getUserFromApiKey(accessToken)
     case 'custom-jwt':
       return CustomJWTAuth.getUserFromAccessToken(accessToken)
     case 'github':

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
-import { APIKeyCreationModal } from '../molecules/ApiKeyCreationModal';
-import { APIKeyWithoutSecret } from '@auto-drive/models';
-import { DeleteAPIKeyModal } from '../molecules/DeleteApiKeyModal';
+import { ApiKeyCreationModal } from '../molecules/ApiKeyCreationModal';
+import { ApiKeyWithoutSecret } from '@auto-drive/models';
+import { DeleteApiKeyModal } from '../molecules/DeleteApiKeyModal';
 import { Loader } from 'lucide-react';
 import { Table } from '@/components/molecules/Table';
 import {
@@ -36,10 +36,10 @@ const isExpired = (d: Date | string | null): boolean => {
 
 const COLUMN_COUNT = 5;
 
-export const APIKeysTable = ({
+export const ApiKeysTable = ({
   apiKeys,
 }: {
-  apiKeys: APIKeyWithoutSecret[] | undefined;
+  apiKeys: ApiKeyWithoutSecret[] | undefined;
 }) => {
   const [isCreationOpen, setIsCreationOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -63,12 +63,12 @@ export const APIKeysTable = ({
 
   return (
     <div className='flex flex-col'>
-      <APIKeyCreationModal
+      <ApiKeyCreationModal
         isOpen={isCreationOpen}
         onClose={closeCreationModal}
         onSuccess={onCreationSuccess}
       />
-      <DeleteAPIKeyModal apiKeyId={deleteId} closeModal={closeDeleteModal} />
+      <DeleteApiKeyModal apiKeyId={deleteId} closeModal={closeDeleteModal} />
       <div className='flex'>
         <Button
           className='mb-4 text-sm'
