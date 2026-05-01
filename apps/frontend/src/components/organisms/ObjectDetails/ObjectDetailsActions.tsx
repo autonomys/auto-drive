@@ -1,4 +1,4 @@
-import { DownloadStatus, ObjectInformation, ObjectTag } from '@auto-drive/models';
+import { ObjectInformation, ObjectTag } from '@auto-drive/models';
 import { Button } from '@auto-drive/ui';
 import { cn } from '@/utils/cn';
 import {
@@ -8,7 +8,7 @@ import {
   ExclamationTriangleIcon,
   CloudArrowDownIcon,
 } from '@heroicons/react/24/outline';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useUserStore } from 'globalStates/user';
 import toast from 'react-hot-toast';
 import { useNetwork } from '../../../contexts/network';
@@ -19,9 +19,11 @@ import { ObjectDeleteModal } from '../../molecules/ObjectDeleteModal';
 export const ObjectDetailsActions = ({
   object,
   isOwner,
+  isCached,
 }: {
   object: ObjectInformation;
   isOwner: boolean;
+  isCached: boolean | null;
 }) => {
   const { user } = useUserStore();
   const { api } = useNetwork();
@@ -29,16 +31,7 @@ export const ObjectDetailsActions = ({
   const [shareModalCid, setShareModalCid] = useState<string | null>(null);
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
   const [isReporting, setIsReporting] = useState(false);
-  const [isCached, setIsCached] = useState<boolean | null>(null);
   const [isBringingToCache, setIsBringingToCache] = useState(false);
-
-  useEffect(() => {
-    if (!object?.metadata.dataCid) return;
-    
-    api.checkDownloadStatus(object.metadata.dataCid)
-      .then((status) => setIsCached(status === DownloadStatus.Cached))
-      .catch(() => setIsCached(false));
-  }, [api, object?.metadata.dataCid]);
 
   const hasFileOwnership = object?.owners.some(
     (o) =>
