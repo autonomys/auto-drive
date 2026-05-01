@@ -20,6 +20,12 @@ export class APIKeyNotFoundError extends APIKeyError {
   }
 }
 
+export class APIKeyExpiredError extends APIKeyError {
+  constructor(message = 'API key has expired') {
+    super(message, 401)
+  }
+}
+
 export class APIKeyForbiddenError extends APIKeyError {
   constructor(message = 'User is not the owner of the API key') {
     super(message, 403)

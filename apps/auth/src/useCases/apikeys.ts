@@ -5,6 +5,7 @@ import { createLogger } from '../drivers/logger.js'
 import {
   APIKeyValidationError,
   APIKeyNotFoundError,
+  APIKeyExpiredError,
   APIKeyForbiddenError,
 } from '../errors/apikeys.js'
 
@@ -128,7 +129,7 @@ const getAPIKeyFromSecret = async (secret: string): Promise<APIKey> => {
       apiKeyObject.id,
       apiKeyObject.expiresAt,
     )
-    throw new APIKeyValidationError('API key has expired')
+    throw new APIKeyExpiredError()
   }
 
   return apiKeyObject
