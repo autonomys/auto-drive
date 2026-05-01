@@ -106,10 +106,29 @@ const getAPIKeysByOAuthUser = async (
   return result.rows.map(mapDBAPIKeyToAPIKey)
 }
 
+const softDeleteAllByOAuthUser = async (
+  oauthProvider: string,
+  oauthUserId: string,
+): Promise<number> => {
+  const db = await getDatabase()
+
+  const result = await db.query(
+    `UPDATE users.api_keys
+        SET deleted_at = $1
+      WHERE oauth_provider = $2
+        AND oauth_user_id = $3
+        AND deleted_at IS NULL`,
+    [new Date(), oauthProvider, oauthUserId],
+  )
+
+  return result.rowCount ?? 0
+}
+
 export const apiKeysRepository = {
   deleteAPIKey,
   createAPIKey,
   getAPIKeyById,
   getAPIKeyBySecret,
   getAPIKeysByOAuthUser,
+  softDeleteAllByOAuthUser,
 }
