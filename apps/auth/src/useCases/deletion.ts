@@ -135,9 +135,7 @@ const anonymiseUser = async (requestId: string): Promise<void> => {
     request.oauth_user_id,
   )
   for (const key of apiKeys) {
-    if (!key.deletedAt) {
-      await apiKeysRepository.deleteAPIKey(key.id)
-    }
+    await apiKeysRepository.deleteAPIKey(key.id)
   }
 
   // Remove from organizations
