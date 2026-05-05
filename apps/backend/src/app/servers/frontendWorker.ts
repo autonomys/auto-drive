@@ -31,6 +31,16 @@
   }
   if (config.featureFlags.flags.objectMappingArchiver.active) {
     objectMappingArchiver.start()
+
+    // Start periodic reconciliation to resolve stuck nodes.
+    // Requires task manager to be active (task-manager queue consumer).
+    if (config.featureFlags.flags.taskManager.active) {
+      const { reconciliationJob } = await import(
+        '../../infrastructure/services/reconciliationJob.js'
+      )
+      reconciliationJob.start()
+    }
+
     somethingActive = true
   }
   if (
@@ -60,6 +70,10 @@
   const shutdown = async () => {
     logger.info('Shutting down frontend worker...')
     objectMappingArchiver.stop()
+    const { reconciliationJob } = await import(
+      '../../infrastructure/services/reconciliationJob.js'
+    )
+    reconciliationJob.stop()
     paymentManager.stop()
     const { creditExpiryJob } = await import(
       '../../infrastructure/services/creditExpiryJob.js'
