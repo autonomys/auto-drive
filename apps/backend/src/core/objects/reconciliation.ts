@@ -23,10 +23,12 @@ const BATCH_SIZE = 500
  * - Extracts blake3 hashes from CIDs and batch-queries the indexer
  * - Applies archival data for any nodes the indexer can resolve
  * - Triggers archival status check for affected objects
- * - If backlog remains: self-reschedules via RabbitMQ immediately
- *   (yields to other tasks in the queue between batches)
- * - If backlog is clear: returns without rescheduling. The periodic
- *   interval in the worker will enqueue the next run.
+ * - If backlog remains AND progress was made: self-reschedules via
+ *   RabbitMQ immediately (yields to other tasks in the queue between
+ *   batches)
+ * - If no progress was made or backlog is clear: returns without
+ *   rescheduling. The periodic interval in the worker will enqueue
+ *   the next run.
  */
 const processReconciliation = async (): Promise<void> => {
   const unreconciledNodes = await nodesRepository.getUnreconciledNodes(
@@ -131,21 +133,24 @@ const processReconciliation = async (): Promise<void> => {
     await ObjectUseCases.checkObjectsArchivalStatus()
   }
 
-  // If more stuck nodes remain, enqueue another batch immediately.
-  // The task goes to the back of the RabbitMQ queue, so it naturally
-  // yields to any pending uploads/publishes/archives.
-  const remainingCount = await nodesRepository.getUnreconciledNodesCount()
-  if (remainingCount > 0) {
-    logger.info(
-      'Rescheduling reconciliation, %d unreconciled nodes remaining',
-      remainingCount,
-    )
-    EventRouter.publish(
-      createTask({
-        id: 'reconcile-archival',
-        params: {},
-      }),
-    )
+  // Only reschedule immediately when the batch made progress. If zero
+  // nodes were resolved the indexer is likely down or hasn't caught up,
+  // and hammering it in a tight loop is wasteful. The periodic 5-minute
+  // interval will restart the drain once the indexer recovers.
+  if (resolvedCount > 0) {
+    const remainingCount = await nodesRepository.getUnreconciledNodesCount()
+    if (remainingCount > 0) {
+      logger.info(
+        'Rescheduling reconciliation, %d unreconciled nodes remaining',
+        remainingCount,
+      )
+      EventRouter.publish(
+        createTask({
+          id: 'reconcile-archival',
+          params: {},
+        }),
+      )
+    }
   }
 }
 
