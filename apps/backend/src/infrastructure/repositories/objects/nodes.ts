@@ -388,6 +388,31 @@ const hasEncodedNode = async (cid: string) => {
     .then((e) => e.rows[0].exists)
 }
 
+/**
+ * Given a set of head_cids, returns those where ALL nodes have
+ * piece_index set (i.e. fully archived). Single query instead of N+1.
+ */
+const getFullyArchivedHeadCids = async (
+  headCids: string[],
+): Promise<string[]> => {
+  if (headCids.length === 0) return []
+
+  const db = await getDatabase()
+
+  return db
+    .query<{ head_cid: string }>({
+      text: `
+        SELECT head_cid
+        FROM nodes
+        WHERE head_cid = ANY($1)
+        GROUP BY head_cid
+        HAVING COUNT(*) = COUNT(piece_index)
+      `,
+      values: [headCids],
+    })
+    .then((e) => e.rows.map((r) => r.head_cid))
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -411,4 +436,5 @@ export const nodesRepository = {
   hasEncodedNode,
   getUnreconciledNodes,
   getUnreconciledNodesCount,
+  getFullyArchivedHeadCids,
 }

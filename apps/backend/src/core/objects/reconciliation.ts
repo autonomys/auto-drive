@@ -13,6 +13,16 @@ const logger = createLogger('useCases:objects:reconciliation')
 
 const BATCH_SIZE = 500
 
+// Track consecutive zero-progress runs to detect permanently unresolvable
+// nodes (the indexer also missed them and can't provide their data).
+let consecutiveZeroProgressRuns = 0
+const ZERO_PROGRESS_WARN_THRESHOLD = 3
+
+// Concurrency guard — if a reconciliation is already in flight, skip.
+// Prevents duplicate work when the setInterval tick overlaps with a
+// self-rescheduled drain or when RabbitMQ prefetch delivers two tasks.
+let isRunning = false
+
 /**
  * Reconciles stuck nodes that have been published on-chain but are missing
  * piece_index/piece_offset from the indexer.
@@ -22,7 +32,7 @@ const BATCH_SIZE = 500
  *   uploaded objects are prioritized over legacy backlog
  * - Extracts blake3 hashes from CIDs and batch-queries the indexer
  * - Applies archival data for any nodes the indexer can resolve
- * - Triggers archival status check for affected objects
+ * - Triggers archival status check for affected objects (targeted, not N+1)
  * - If backlog remains AND progress was made: self-reschedules via
  *   RabbitMQ immediately (yields to other tasks in the queue between
  *   batches)
@@ -31,12 +41,27 @@ const BATCH_SIZE = 500
  *   the next run.
  */
 const processReconciliation = async (): Promise<void> => {
+  if (isRunning) {
+    logger.debug('Reconciliation already in progress, skipping')
+    return
+  }
+
+  isRunning = true
+  try {
+    await runReconciliationBatch()
+  } finally {
+    isRunning = false
+  }
+}
+
+const runReconciliationBatch = async (): Promise<void> => {
   const unreconciledNodes = await nodesRepository.getUnreconciledNodes(
     BATCH_SIZE,
   )
 
   if (unreconciledNodes.length === 0) {
     logger.debug('No unreconciled nodes found, skipping')
+    consecutiveZeroProgressRuns = 0
     return
   }
 
@@ -128,9 +153,27 @@ const processReconciliation = async (): Promise<void> => {
     affectedHeadCids.size,
   )
 
-  // Check if any objects are now fully archived
-  if (resolvedCount > 0) {
-    await ObjectUseCases.checkObjectsArchivalStatus()
+  // Check if any objects are now fully archived (targeted, single query)
+  if (affectedHeadCids.size > 0) {
+    await ObjectUseCases.checkArchivalStatusForObjects(
+      Array.from(affectedHeadCids),
+    )
+  }
+
+  // Track zero-progress runs to surface permanently unresolvable nodes
+  if (resolvedCount === 0) {
+    consecutiveZeroProgressRuns++
+    if (consecutiveZeroProgressRuns >= ZERO_PROGRESS_WARN_THRESHOLD) {
+      logger.error(
+        'Reconciliation made no progress for %d consecutive runs. ' +
+          '%d unreconciled nodes may be permanently unresolvable ' +
+          '(indexer also missing their data). Consider indexer-side backfill.',
+        consecutiveZeroProgressRuns,
+        unreconciledNodes.length,
+      )
+    }
+  } else {
+    consecutiveZeroProgressRuns = 0
   }
 
   // Only reschedule immediately when the batch made progress. If zero
