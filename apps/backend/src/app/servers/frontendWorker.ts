@@ -70,10 +70,17 @@
   const shutdown = async () => {
     logger.info('Shutting down frontend worker...')
     objectMappingArchiver.stop()
-    const { reconciliationJob } = await import(
-      '../../infrastructure/services/reconciliationJob.js'
-    )
-    reconciliationJob.stop()
+    // reconciliationJob.stop() is safe even if never started (no-op),
+    // but we only import it when it was actually activated.
+    if (
+      config.featureFlags.flags.objectMappingArchiver.active &&
+      config.featureFlags.flags.taskManager.active
+    ) {
+      const { reconciliationJob } = await import(
+        '../../infrastructure/services/reconciliationJob.js'
+      )
+      reconciliationJob.stop()
+    }
     paymentManager.stop()
     const { creditExpiryJob } = await import(
       '../../infrastructure/services/creditExpiryJob.js'

@@ -51,14 +51,15 @@ const getObjectMappings = async (
           results.push(mapping)
         }
         consecutiveFailures = 0
-      } catch {
+      } catch (error) {
         consecutiveFailures++
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
           logger.warn(
-            'Aborting individual lookups after %d consecutive failures (%d/%d resolved so far)',
+            'Aborting individual lookups after %d consecutive failures (%d/%d resolved so far). Last error: %s',
             MAX_CONSECUTIVE_FAILURES,
             results.length,
             hashes.length,
+            error instanceof Error ? error.message : String(error),
           )
           break
         }
