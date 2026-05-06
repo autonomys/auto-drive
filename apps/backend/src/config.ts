@@ -35,6 +35,9 @@ export const config = {
     url: env('OBJECT_MAPPING_ARCHIVER_URL'),
     step: Number(env('OBJECT_MAPPING_ARCHIVER_STEP', '1000')),
   },
+  reconciliation: {
+    intervalMs: Number(env('RECONCILIATION_INTERVAL_MS', '300000')), // 5 minutes
+  },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),

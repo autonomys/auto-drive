@@ -573,6 +573,36 @@ const checkObjectsArchivalStatus = async () => {
   )
 }
 
+/**
+ * Like checkObjectsArchivalStatus but scoped to a specific set of head_cids.
+ * Uses a single aggregate query instead of N+1, making it safe for large
+ * batches during reconciliation.
+ */
+const checkArchivalStatusForObjects = async (
+  headCids: string[],
+): Promise<void> => {
+  if (headCids.length === 0) return
+
+  const fullyArchived =
+    await nodesRepository.getFullyArchivedHeadCids(headCids)
+
+  logger.info(
+    'Targeted archival check: %d/%d objects fully archived',
+    fullyArchived.length,
+    headCids.length,
+  )
+
+  for (const cid of fullyArchived) {
+    logger.debug('Publishing archival task for object (cid=%s)', cid)
+    EventRouter.publish(
+      createTask({
+        id: 'object-archived',
+        params: { cid },
+      }),
+    )
+  }
+}
+
 const addTag = async (cid: string, tag: string) => {
   const tags = await metadataRepository.getMetadata(cid)
   if (!tags) {
@@ -709,6 +739,7 @@ export const ObjectUseCases = {
   downloadPublishedObject,
   unpublishObject,
   checkObjectsArchivalStatus,
+  checkArchivalStatusForObjects,
   populateCaches,
   addTag,
   banObject,

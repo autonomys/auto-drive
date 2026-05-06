@@ -238,6 +238,43 @@ const getLastArchivedPieceNode = async () => {
     .then((e) => e.rows.at(0))
 }
 
+const getUnreconciledNodes = async (limit: number) => {
+  const db = await getDatabase()
+
+  return db
+    .query<Pick<Node, 'cid' | 'head_cid'>>({
+      text: `
+        SELECT n.cid, n.head_cid
+        FROM nodes n
+        JOIN metadata m ON n.head_cid = m.head_cid
+        WHERE n.block_published_on IS NOT NULL
+          AND n.piece_index IS NULL
+          AND n.piece_offset IS NULL
+        ORDER BY m.created_at DESC
+        LIMIT $1
+      `,
+      values: [limit],
+    })
+    .then((e) => e.rows)
+}
+
+const getUnreconciledNodesCount = async () => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ count: string }>({
+      text: `
+        SELECT COUNT(*) as count
+        FROM nodes n
+        JOIN metadata m ON n.head_cid = m.head_cid
+        WHERE n.block_published_on IS NOT NULL
+          AND n.piece_index IS NULL
+          AND n.piece_offset IS NULL
+      `,
+    })
+    .then((e) => Number(e.rows[0].count))
+}
+
 const getNodesCountWithoutDataByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
   return db.query<{ count: number }>({
@@ -351,6 +388,31 @@ const hasEncodedNode = async (cid: string) => {
     .then((e) => e.rows[0].exists)
 }
 
+/**
+ * Given a set of head_cids, returns those where ALL nodes have
+ * piece_index set (i.e. fully archived). Single query instead of N+1.
+ */
+const getFullyArchivedHeadCids = async (
+  headCids: string[],
+): Promise<string[]> => {
+  if (headCids.length === 0) return []
+
+  const db = await getDatabase()
+
+  return db
+    .query<{ head_cid: string }>({
+      text: `
+        SELECT head_cid
+        FROM nodes
+        WHERE head_cid = ANY($1)
+        GROUP BY head_cid
+        HAVING COUNT(*) = COUNT(piece_index)
+      `,
+      values: [headCids],
+    })
+    .then((e) => e.rows.map((r) => r.head_cid))
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -372,4 +434,7 @@ export const nodesRepository = {
   updateNodeBlockchainData,
   updateNodesBlockchainDataBatch,
   hasEncodedNode,
+  getUnreconciledNodes,
+  getUnreconciledNodesCount,
+  getFullyArchivedHeadCids,
 }
