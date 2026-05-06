@@ -265,10 +265,11 @@ const getUnreconciledNodesCount = async () => {
     .query<{ count: string }>({
       text: `
         SELECT COUNT(*) as count
-        FROM nodes
-        WHERE block_published_on IS NOT NULL
-          AND piece_index IS NULL
-          AND piece_offset IS NULL
+        FROM nodes n
+        JOIN metadata m ON n.head_cid = m.head_cid
+        WHERE n.block_published_on IS NOT NULL
+          AND n.piece_index IS NULL
+          AND n.piece_offset IS NULL
       `,
     })
     .then((e) => Number(e.rows[0].count))
