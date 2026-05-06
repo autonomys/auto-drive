@@ -8,10 +8,54 @@ import {
   createEmptyReadable,
   sliceReadable,
 } from '../../../shared/utils/readable.js'
-import { DBObjectFetcher, FileGatewayObjectFetcher } from './fetchers.js'
+import {
+  DBObjectFetcher,
+  FileGatewayObjectFetcher,
+  ObjectFetcher,
+} from './fetchers.js'
 import { composeNodesDataAsFileReadable } from './nodeComposer.js'
 
 const logger = createLogger('useCases:objects:files')
+
+/**
+ * Returns the appropriate fetcher for a CID, with fallback logic.
+ * For archived files, tries the Files Gateway first. If that fails,
+ * falls back to the DB fetcher (which may still have data if the
+ * encoded_node strip hasn't happened yet, or if archival was
+ * interrupted).
+ */
+const getFetcherWithFallback = (isArchived: boolean): ObjectFetcher => {
+  if (!isArchived) {
+    return DBObjectFetcher
+  }
+
+  return {
+    async fetchFile(cid: string): Promise<Readable> {
+      try {
+        return await FileGatewayObjectFetcher.fetchFile(cid)
+      } catch (error) {
+        logger.warn(
+          'FileGateway fetch failed for cid=%s, falling back to DB fetcher: %s',
+          cid,
+          error instanceof Error ? error.message : String(error),
+        )
+        return DBObjectFetcher.fetchFile(cid)
+      }
+    },
+    async fetchNode(cid: string): Promise<Buffer> {
+      try {
+        return await FileGatewayObjectFetcher.fetchNode(cid)
+      } catch (error) {
+        logger.warn(
+          'FileGateway node fetch failed for cid=%s, falling back to DB fetcher: %s',
+          cid,
+          error instanceof Error ? error.message : String(error),
+        )
+        return DBObjectFetcher.fetchNode(cid)
+      }
+    },
+  }
+}
 
 const getNodesForPartialRetrieval = async (
   chunks: ChunkInfo[],
@@ -89,7 +133,7 @@ const retrieveFileByteRange = async (
   )
 
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
-  const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+  const fetcher = getFetcherWithFallback(isArchived)
 
   const reader = await composeNodesDataAsFileReadable({
     fetcher,
@@ -119,7 +163,7 @@ const retrieveFullFile = async (metadata: OffchainMetadata) => {
     metadata.type,
   )
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
-  const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+  const fetcher = getFetcherWithFallback(isArchived)
 
   return fetcher.fetchFile(metadata.dataCid)
 }

@@ -182,10 +182,11 @@ const asyncDownload = async (
     // before any data flows.  The timer only activates after the first
     // data event, so the initial reconstruction delay is unbounded but
     // subsequent stalls are caught.
-    let inactivityTimer: ReturnType<typeof setTimeout>
+    let inactivityTimer: ReturnType<typeof setTimeout> | undefined
     const resetInactivityTimer = () => {
       clearTimeout(inactivityTimer)
       inactivityTimer = setTimeout(() => {
+        if (settled) return
         logger.warn(
           'Async download id=%s cid=%s stalled — no data received for %dms (downloaded %s bytes so far)',
           downloadId,
@@ -201,7 +202,7 @@ const asyncDownload = async (
       }, inactivityMs)
     }
 
-    file.on('data', async (chunk) => {
+    file.on('data', (chunk) => {
       resetInactivityTimer()
       downloadedBytes += BigInt(chunk.length)
       logger.debug(
@@ -210,25 +211,35 @@ const asyncDownload = async (
         download.cid,
         downloadedBytes.toString(),
       )
-      const result = await AsyncDownloadsUseCases.updateProgress(
+      AsyncDownloadsUseCases.updateProgress(
         downloadId,
         downloadedBytes,
-      )
-      if (result.isErr()) {
-        settle(err(result.error))
-      }
+      ).catch((e) => {
+        logger.error(
+          e as Error,
+          'Failed to update progress for download id=%s',
+          downloadId,
+        )
+      })
     })
 
-    file.on('end', async () => {
+    file.on('end', () => {
       logger.info('Download completed id=%s cid=%s', downloadId, download.cid)
-      await AsyncDownloadsUseCases.updateStatus(
+      AsyncDownloadsUseCases.updateStatus(
         downloadId,
         AsyncDownloadStatus.Completed,
       )
-      settle(ok(undefined))
+        .catch((e) => {
+          logger.error(
+            e as Error,
+            'Failed to mark download as completed id=%s',
+            downloadId,
+          )
+        })
+        .finally(() => settle(ok(undefined)))
     })
 
-    file.on('error', async (error) => {
+    file.on('error', (error) => {
       const message =
         error instanceof Error ? error.message : JSON.stringify(error)
       logger.error(
@@ -237,8 +248,15 @@ const asyncDownload = async (
         download.cid,
         message,
       )
-      await AsyncDownloadsUseCases.setError(downloadId, message)
-      settle(err(new InternalError('Failed to download object')))
+      AsyncDownloadsUseCases.setError(downloadId, message)
+        .catch((e) => {
+          logger.error(
+            e as Error,
+            'Failed to set error for download id=%s',
+            downloadId,
+          )
+        })
+        .finally(() => settle(err(new InternalError('Failed to download object'))))
     })
   })
 }

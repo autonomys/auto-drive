@@ -24,6 +24,9 @@ import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { useNetwork } from 'contexts/network';
 import { DownloadProgressInfo } from 'services/download';
 import { formatBytes } from 'utils/number';
+import { DownloadStatus, AsyncDownloadStatus } from '@auto-drive/models';
+import { getAuthSession } from '@/utils/auth';
+import { useUserAsyncDownloadsStore } from '../organisms/UserAsyncDownloads/state';
 
 const toastId = 'object-download-modal';
 
@@ -44,8 +47,12 @@ export const ObjectDownloadModal = ({
   const [downloadProgress, setDownloadProgress] =
     useState<DownloadProgressInfo | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [asyncPreparing, setAsyncPreparing] = useState<boolean>(false);
+  const [asyncDownloadId, setAsyncDownloadId] = useState<string | null>(null);
+  const asyncPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const defaultPassword = useEncryptionStore((store) => store.password);
   const network = useNetwork();
+  const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
 
   const downloadInitiatedRef = useRef<string | null>(null);
 
@@ -59,7 +66,13 @@ export const ObjectDownloadModal = ({
       setWrongPassword(false);
       setDownloadProgress(null);
       setDownloadError(null);
+      setAsyncPreparing(false);
+      setAsyncDownloadId(null);
       downloadInitiatedRef.current = null;
+      if (asyncPollRef.current) {
+        clearInterval(asyncPollRef.current);
+        asyncPollRef.current = null;
+      }
     }
   }, [cid]);
 
@@ -88,7 +101,7 @@ export const ObjectDownloadModal = ({
     },
   });
 
-  const onDownload = useCallback(async () => {
+  const startSyncDownload = useCallback(async () => {
     if (!metadata) return;
     const passwordToUse = skipDecryption ? undefined : password;
 
@@ -129,6 +142,70 @@ export const ObjectDownloadModal = ({
       }
     }
   }, [metadata, password, skipDecryption, network.downloadService, onClose]);
+
+  const startAsyncDownloadAndPoll = useCallback(async () => {
+    if (!metadata) return;
+
+    setAsyncPreparing(true);
+    try {
+      await network.api.createAsyncDownload(metadata.dataCid);
+      updateAsyncDownloads();
+    } catch (e) {
+      console.error('Failed to create async download:', e);
+      // Fall back to sync download if async creation fails
+      setAsyncPreparing(false);
+      startSyncDownload();
+      return;
+    }
+
+    // Poll cache status every 10 seconds until the file is ready
+    asyncPollRef.current = setInterval(async () => {
+      try {
+        const status = await network.api.checkDownloadStatus(metadata.dataCid);
+        updateAsyncDownloads();
+        if (status === DownloadStatus.Cached) {
+          if (asyncPollRef.current) {
+            clearInterval(asyncPollRef.current);
+            asyncPollRef.current = null;
+          }
+          setAsyncPreparing(false);
+
+          // Auto-download now that it's cached
+          toast.success(
+            `${shortenString(metadata.name ?? 'File', 30)} is ready — downloading now`,
+            { id: toastId },
+          );
+          startSyncDownload();
+        }
+      } catch {
+        // Ignore transient poll errors
+      }
+    }, 10_000);
+  }, [metadata, network.api, updateAsyncDownloads, startSyncDownload]);
+
+  const onDownload = useCallback(async () => {
+    if (!metadata) return;
+
+    // Check if the file is already cached on the backend
+    try {
+      const session = await getAuthSession().catch(() => null);
+      const hasSession = !!session?.accessToken && !!session?.authProvider;
+
+      if (hasSession) {
+        const status = await network.api.checkDownloadStatus(metadata.dataCid);
+        if (status === DownloadStatus.NotCached) {
+          // File needs DSN reconstruction — use async path
+          startAsyncDownloadAndPoll();
+          return;
+        }
+      }
+    } catch {
+      // If status check fails, fall through to sync download
+    }
+
+    // File is cached or user is anonymous — sync download
+    startSyncDownload();
+  }, [metadata, network.api, startSyncDownload, startAsyncDownloadAndPoll]);
 
   const passwordOrNotEncrypted =
     (metadata && !metadata.uploadOptions?.encryption?.algorithm) ||
@@ -226,6 +303,35 @@ export const ObjectDownloadModal = ({
 
     if (isDownloading || downloadError) {
       return progressView;
+    }
+
+    if (asyncPreparing) {
+      return (
+        <div className='flex flex-col gap-4'>
+          <DialogTitle className='text-lg font-medium'>
+            Preparing {shortenString(metadata.name ?? 'file', 30)}
+          </DialogTitle>
+          <div className='flex items-center gap-3'>
+            <div className='h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary' />
+            <p className='text-sm text-gray-600'>
+              This file is being retrieved from the network. This may take
+              several minutes — your download will start automatically when
+              it&apos;s ready.
+            </p>
+          </div>
+          <p className='text-center text-xs text-gray-500'>
+            You can close this dialog and continue browsing. Check the Cached
+            Downloads panel for progress.
+          </p>
+          <Button
+            variant='secondary'
+            className='w-full text-xs'
+            onClick={onClose}
+          >
+            Close
+          </Button>
+        </div>
+      );
     }
 
     if (insecure) {
@@ -336,15 +442,17 @@ export const ObjectDownloadModal = ({
     isDownloading,
     downloadError,
     progressView,
+    asyncPreparing,
     insecure,
     passwordOrNotEncrypted,
     passwordConfirmed,
     password,
     wrongPassword,
+    onClose,
   ]);
 
-  // Show modal when there's a view to display OR when downloading
-  const shouldShowModal = !!cid && (!!view || isDownloading);
+  // Show modal when there's a view to display OR when downloading/preparing
+  const shouldShowModal = !!cid && (!!view || isDownloading || asyncPreparing);
 
   if (!shouldShowModal) return <></>;
 
@@ -354,8 +462,8 @@ export const ObjectDownloadModal = ({
         as='div'
         className='relative z-10'
         onClose={() => {
-          // Prevent closing during active download
-          if (!isDownloading) {
+          // Prevent closing during active sync download (but allow during async prep)
+          if (!isDownloading || asyncPreparing) {
             onClose();
           }
         }}

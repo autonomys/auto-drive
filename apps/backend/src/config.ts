@@ -120,8 +120,8 @@ export const config = {
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
     taskManagerMaxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
-    downloadInactivityTimeoutMs: Number(
-      env('DOWNLOAD_INACTIVITY_TIMEOUT_MS', '300000'),
+    downloadTaskTimeoutMs: Number(
+      env('DOWNLOAD_TASK_TIMEOUT_MS', '300000'),
     ),
   },
   featureFlags: {

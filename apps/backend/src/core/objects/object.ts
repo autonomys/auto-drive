@@ -447,7 +447,42 @@ const populateCaches = async (cid: string) => {
 }
 
 const onObjectArchived = async (cid: string) => {
+  // Step 1: Mark as archived (this is non-destructive and can be set early)
   await metadataRepository.markAsArchived(cid)
+
+  // Step 2: Verify the file is retrievable from the Files Gateway before
+  // stripping local data.  We populate the backend's download cache (FS +
+  // memory) from the DB **before** nullifying encoded_node — this guarantees
+  // the file is immediately serveable even if the gateway is unreachable.
+  try {
+    const isReconstructable = await ObjectUseCases.isReconstructable(cid)
+    if (!isReconstructable) {
+      logger.warn(
+        'Archived object is not reconstructable — skipping data removal to prevent data loss (cid=%s)',
+        cid,
+      )
+      return
+    }
+
+    // Download (from DB, since encoded_node still exists) to warm caches
+    const stream = await downloadService.download(cid)
+    await consumeStream(stream)
+
+    logger.info(
+      'Cache populated for archived object — stripping local node data (cid=%s)',
+      cid,
+    )
+  } catch (e) {
+    logger.error(
+      e as Error,
+      'Failed to populate cache for archived object — keeping local data to prevent data loss (cid=%s)',
+      cid,
+    )
+    // Do NOT strip node data if we couldn't verify recoverability
+    return
+  }
+
+  // Step 3: Only now strip the encoded_node data
   await nodesRepository.removeNodeDataByRootCid(cid)
 }
 

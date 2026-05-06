@@ -3,6 +3,7 @@ import { AsyncDownloadsUseCases } from '../../../core/downloads/index.js'
 import { Task } from '../tasks.js'
 import { createLogger } from '../../drivers/logger.js'
 import { createHandlerWithRetries } from '../utils.js'
+import { config } from '../../../config.js'
 
 const logger = createLogger('eventRouter:processor:download')
 
@@ -26,5 +27,6 @@ export const processDownloadTask = createHandlerWithRetries(
   },
   {
     errorPublishQueue: 'download-errors',
+    taskTimeoutMs: config.params.downloadTaskTimeoutMs,
   },
 )
