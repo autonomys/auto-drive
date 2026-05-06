@@ -24,7 +24,7 @@ import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { useNetwork } from 'contexts/network';
 import { DownloadProgressInfo } from 'services/download';
 import { formatBytes } from 'utils/number';
-import { DownloadStatus, AsyncDownloadStatus } from '@auto-drive/models';
+import { DownloadStatus } from '@auto-drive/models';
 import { getAuthSession } from '@/utils/auth';
 import { useUserAsyncDownloadsStore } from '../organisms/UserAsyncDownloads/state';
 
@@ -48,13 +48,22 @@ export const ObjectDownloadModal = ({
     useState<DownloadProgressInfo | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [asyncPreparing, setAsyncPreparing] = useState<boolean>(false);
-  const [asyncDownloadId, setAsyncDownloadId] = useState<string | null>(null);
   const asyncPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const defaultPassword = useEncryptionStore((store) => store.password);
   const network = useNetwork();
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
 
   const downloadInitiatedRef = useRef<string | null>(null);
+
+  // Clean up polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (asyncPollRef.current) {
+        clearInterval(asyncPollRef.current);
+        asyncPollRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!cid) {
@@ -67,7 +76,6 @@ export const ObjectDownloadModal = ({
       setDownloadProgress(null);
       setDownloadError(null);
       setAsyncPreparing(false);
-      setAsyncDownloadId(null);
       downloadInitiatedRef.current = null;
       if (asyncPollRef.current) {
         clearInterval(asyncPollRef.current);
@@ -184,7 +192,7 @@ export const ObjectDownloadModal = ({
   }, [metadata, network.api, updateAsyncDownloads, startSyncDownload]);
 
   const onDownload = useCallback(async () => {
-    if (!metadata) return;
+    if (!metadata || asyncPreparing) return;
 
     // Check if the file is already cached on the backend
     try {
@@ -205,7 +213,7 @@ export const ObjectDownloadModal = ({
 
     // File is cached or user is anonymous — sync download
     startSyncDownload();
-  }, [metadata, network.api, startSyncDownload, startAsyncDownloadAndPoll]);
+  }, [metadata, network.api, startSyncDownload, startAsyncDownloadAndPoll, asyncPreparing]);
 
   const passwordOrNotEncrypted =
     (metadata && !metadata.uploadOptions?.encryption?.algorithm) ||
