@@ -52,6 +52,11 @@ const createServer = async () => {
         origin: config.express.corsAllowedOrigins,
       }),
     )
+  } else {
+    logger.warn(
+      'CORS_ALLOWED_ORIGINS is not set - mounting permissive CORS middleware as fallback',
+    )
+    app.use(cors())
   }
 
   app.use('/objects', objectController)
