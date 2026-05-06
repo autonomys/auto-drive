@@ -5,6 +5,7 @@ import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { downloadService } from '../../infrastructure/services/download/index.js'
 import { ObjectUseCases } from '../objects/object.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { config } from '../../config.js'
 import { err, ok, Result } from 'neverthrow'
 import {
   ObjectNotFoundError,
@@ -143,11 +144,65 @@ const asyncDownload = async (
     return err(result.error)
   }
 
-  const file = await downloadService.download(download.cid)
+  let file: Awaited<ReturnType<typeof downloadService.download>>
+  try {
+    file = await downloadService.download(download.cid)
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : JSON.stringify(error)
+    logger.error(
+      'Failed to start download id=%s cid=%s: %s',
+      downloadId,
+      download.cid,
+      message,
+    )
+    await AsyncDownloadsUseCases.setError(downloadId, message)
+    return err(new InternalError('Failed to start download'))
+  }
 
   let downloadedBytes = 0n
+  const inactivityMs = config.params.downloadInactivityTimeoutMs
+
   return new Promise((resolve) => {
+    let settled = false
+    const settle = (value: Result<void, ObjectNotFoundError | InternalError>) => {
+      if (settled) return
+      settled = true
+      clearTimeout(inactivityTimer)
+      resolve(value)
+    }
+
+    // Inactivity timer — resets on every data chunk.  If no data arrives
+    // within the window the stream is destroyed and the download marked
+    // as failed.  This lets large files stream for hours while still
+    // catching hung connections that stop producing data.
+    //
+    // The timer is NOT started at stream creation — the gateway may need
+    // a long warm-up period (minutes) to begin fetching chunks from DSN
+    // before any data flows.  The timer only activates after the first
+    // data event, so the initial reconstruction delay is unbounded but
+    // subsequent stalls are caught.
+    let inactivityTimer: ReturnType<typeof setTimeout>
+    const resetInactivityTimer = () => {
+      clearTimeout(inactivityTimer)
+      inactivityTimer = setTimeout(() => {
+        logger.warn(
+          'Async download id=%s cid=%s stalled — no data received for %dms (downloaded %s bytes so far)',
+          downloadId,
+          download.cid,
+          inactivityMs,
+          downloadedBytes.toString(),
+        )
+        file.destroy(
+          new Error(
+            `Download stalled: no data received for ${inactivityMs / 1000}s`,
+          ),
+        )
+      }, inactivityMs)
+    }
+
     file.on('data', async (chunk) => {
+      resetInactivityTimer()
       downloadedBytes += BigInt(chunk.length)
       logger.debug(
         'Async download id=%s cid=%s, bytes downloaded: %s',
@@ -160,7 +215,7 @@ const asyncDownload = async (
         downloadedBytes,
       )
       if (result.isErr()) {
-        resolve(err(result.error))
+        settle(err(result.error))
       }
     })
 
@@ -170,13 +225,20 @@ const asyncDownload = async (
         downloadId,
         AsyncDownloadStatus.Completed,
       )
-      resolve(ok(undefined))
+      settle(ok(undefined))
     })
 
     file.on('error', async (error) => {
-      logger.error('Error downloading id=%s cid=%s', downloadId, download.cid)
-      await AsyncDownloadsUseCases.setError(downloadId, JSON.stringify(error))
-      resolve(err(new InternalError('Failed to download object')))
+      const message =
+        error instanceof Error ? error.message : JSON.stringify(error)
+      logger.error(
+        'Error downloading id=%s cid=%s: %s',
+        downloadId,
+        download.cid,
+        message,
+      )
+      await AsyncDownloadsUseCases.setError(downloadId, message)
+      settle(err(new InternalError('Failed to download object')))
     })
   })
 }

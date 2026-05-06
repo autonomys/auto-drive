@@ -119,7 +119,6 @@ const retrieveFullFile = async (metadata: OffchainMetadata) => {
     metadata.type,
   )
   const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
-
   const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
 
   return fetcher.fetchFile(metadata.dataCid)
