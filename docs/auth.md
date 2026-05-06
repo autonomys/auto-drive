@@ -4,11 +4,30 @@ The auth service is a microservice responsible for user authentication, authoriz
 
 ## Production deployment
 
-This service runs on AWS Lambda. To deploy a new version, follow these steps:
+This service runs on AWS Lambda (`auto-drive-auth-v2`, `us-east-2`, `nodejs24.x`). Infrastructure is managed by Terraform in the `infra` repo under `resources/terraform/auto-drive-production/auth.tf`. Code deployments are done separately from infrastructure changes.
 
-1. Generate lambda build with `yarn workspace auth lambda:build`, This will generate a file at `apps/auth/build/index.js`
-2. Compress (in zip format) the generated file.
-3. Go to AWS Lambda, select the authentication lambda, and upload the code as a ZIP
+### Deploying a new code version
+
+```bash
+# 1. Build the Lambda bundle
+yarn workspace auth lambda:build
+# Output: apps/auth/build/index.js
+
+# 2. Package it
+zip -j apps/auth/build/index.zip apps/auth/build/index.js
+
+# 3. Deploy to AWS
+aws lambda update-function-code \
+  --function-name auto-drive-auth-v2 \
+  --zip-file fileb://apps/auth/build/index.zip \
+  --region us-east-2
+```
+
+### Infrastructure changes
+
+Lambda configuration (runtime, memory, env vars, IAM, API Gateway) is managed in Terraform. See `resources/terraform/auto-drive-production/auth.tf` in the `infra` repo.
+
+> **Cutover note:** During the v1→v2 migration, the old `auto-drive-auth` Lambda continues to serve traffic. Once v2 is validated in production, update `AUTH_SERVICE_URL` in the backend and frontend configs to point to the new API Gateway URL (available as the `auth_api_gateway_url` Terraform output), then decommission the old Lambda and its us-east-1 API Gateway.
 
 ### Authentication Providers
 
@@ -96,7 +115,7 @@ This ensures the same OAuth user always gets the same public ID across service r
 
 The service includes a Dockerfile that:
 
-- Uses Node.js 20.18.3
+- Uses Node.js 24
 - Installs build dependencies
 - Exposes port 3030
 - Includes health check endpoint
