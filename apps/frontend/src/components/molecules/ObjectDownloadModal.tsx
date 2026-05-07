@@ -30,6 +30,7 @@ import { useUserAsyncDownloadsStore } from '../organisms/UserAsyncDownloads/stat
 
 const toastId = 'object-download-modal';
 const MAX_ASYNC_POLL_COUNT = 60;
+const ASYNC_POLL_INTERVAL_MS = 10_000;
 
 export const ObjectDownloadModal = ({
   cid,
@@ -53,6 +54,9 @@ export const ObjectDownloadModal = ({
   const defaultPassword = useEncryptionStore((store) => store.password);
   const network = useNetwork();
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
+  const addPendingAutoDownload = useUserAsyncDownloadsStore(
+    (e) => e.addPendingAutoDownload,
+  );
 
   const downloadInitiatedRef = useRef<string | null>(null);
 
@@ -65,6 +69,28 @@ export const ObjectDownloadModal = ({
       }
     };
   }, []);
+
+  const handleCloseWhileAsyncPreparing = useCallback(() => {
+    if (!asyncPreparing || !metadata) return;
+
+    addPendingAutoDownload({
+      cid: metadata.dataCid,
+      password: skipDecryption ? undefined : password,
+      skipDecryption,
+      fileName: metadata.name ?? undefined,
+    });
+
+    toast.success(
+      'Download continues in the background. Check Cached Downloads for progress.',
+      { id: toastId, duration: 5000 },
+    );
+  }, [
+    asyncPreparing,
+    metadata,
+    password,
+    skipDecryption,
+    addPendingAutoDownload,
+  ]);
 
   useEffect(() => {
     if (!cid) {
@@ -224,7 +250,7 @@ export const ObjectDownloadModal = ({
           // Ignore transient poll errors
         }
         schedulePoll();
-      }, 10_000);
+      }, ASYNC_POLL_INTERVAL_MS);
     };
     schedulePoll();
   }, [metadata, network.api, updateAsyncDownloads, startSyncDownload]);
@@ -362,13 +388,16 @@ export const ObjectDownloadModal = ({
             </p>
           </div>
           <p className='text-center text-xs text-gray-500'>
-            You can close this dialog and continue browsing. Check the Cached
-            Downloads panel for progress.
+            You can close this dialog and continue browsing. Your download will
+            start automatically when it&apos;s ready.
           </p>
           <Button
             variant='secondary'
             className='w-full text-xs'
-            onClick={onClose}
+            onClick={() => {
+              handleCloseWhileAsyncPreparing();
+              onClose();
+            }}
           >
             Close
           </Button>
@@ -495,6 +524,7 @@ export const ObjectDownloadModal = ({
     password,
     wrongPassword,
     onClose,
+    handleCloseWhileAsyncPreparing,
   ]);
 
   // Show modal when there's a view to display OR when downloading/preparing
@@ -508,8 +538,10 @@ export const ObjectDownloadModal = ({
         as='div'
         className='relative z-10'
         onClose={() => {
-          // Prevent closing during active sync download (but allow during async prep)
-          if (!isDownloading || asyncPreparing) {
+          if (asyncPreparing) {
+            handleCloseWhileAsyncPreparing();
+            onClose();
+          } else if (!isDownloading) {
             onClose();
           }
         }}

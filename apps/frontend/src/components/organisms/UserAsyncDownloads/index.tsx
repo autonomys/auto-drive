@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import {
   MyUndismissedAsyncDownloadsDocument,
   MyUndismissedAsyncDownloadsQuery,
@@ -21,13 +21,24 @@ import { AsyncDownloadRow } from './AsyncDownloadRow';
 import { Button } from '@auto-drive/ui';
 import { cn } from '@/utils/cn';
 import { Download } from 'lucide-react';
+import { shortenString } from '../../../utils/misc';
+import toast from 'react-hot-toast';
+
+const POLL_INTERVAL_MS = 10_000;
 
 export const UserAsyncDownloads = () => {
   const setFetcher = useUserAsyncDownloadsStore((e) => e.setFetcher);
   const asyncDownloads = useUserAsyncDownloadsStore((e) => e.asyncDownloads);
-  const { gql, api } = useNetwork();
+  const pendingAutoDownloads = useUserAsyncDownloadsStore(
+    (e) => e.pendingAutoDownloads,
+  );
+  const removePendingAutoDownload = useUserAsyncDownloadsStore(
+    (e) => e.removePendingAutoDownload,
+  );
+  const { gql, api, downloadService } = useNetwork();
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
   const [isOpen, setIsOpen] = useState(false);
+  const autoDownloadingRef = useRef<Set<string>>(new Set());
 
   const dismissOutdatedAsyncDownloads = useCallback(async () => {
     let hasDismissedSome = false;
@@ -60,6 +71,76 @@ export const UserAsyncDownloads = () => {
   useEffect(() => {
     setFetcher(fetcher);
   }, [fetcher, setFetcher]);
+
+  // Periodic polling so background async downloads are detected even when
+  // the download modal is closed.
+  useEffect(() => {
+    const hasPending = asyncDownloads.some(
+      (d) => d.status === AsyncDownloadStatus.Pending,
+    );
+    const hasPendingAuto = pendingAutoDownloads.length > 0;
+    if (!hasPending && !hasPendingAuto) return;
+
+    const interval = setInterval(() => {
+      updateAsyncDownloads();
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [asyncDownloads, pendingAutoDownloads.length, updateAsyncDownloads]);
+
+  // When a pending auto-download completes on the backend, trigger the
+  // browser download automatically.
+  useEffect(() => {
+    if (pendingAutoDownloads.length === 0) return;
+
+    for (const pending of pendingAutoDownloads) {
+      if (autoDownloadingRef.current.has(pending.cid)) continue;
+
+      const match = asyncDownloads.find((d) => d.cid === pending.cid);
+      if (!match) continue;
+
+      if (match.status === AsyncDownloadStatus.Failed) {
+        removePendingAutoDownload(pending.cid);
+        toast.error(
+          match.errorMessage ||
+            'Background download failed. Please try again.',
+        );
+        continue;
+      }
+
+      if (match.status !== AsyncDownloadStatus.Completed) continue;
+
+      autoDownloadingRef.current.add(pending.cid);
+      removePendingAutoDownload(pending.cid);
+
+      const label = pending.fileName
+        ? shortenString(pending.fileName, 30)
+        : shortenString(pending.cid, 20);
+      toast.success(`${label} is ready — downloading now`);
+
+      downloadService
+        .fetchFile(pending.cid, {
+          password: pending.password,
+          skipDecryption: pending.skipDecryption,
+        })
+        .then(() => {
+          toast.success(`${label} downloaded`);
+        })
+        .catch((err) => {
+          console.error('Auto-download failed:', err);
+          toast.error(
+            `Failed to download ${label}. Open Cached Downloads to retry.`,
+          );
+        })
+        .finally(() => {
+          autoDownloadingRef.current.delete(pending.cid);
+        });
+    }
+  }, [
+    asyncDownloads,
+    pendingAutoDownloads,
+    removePendingAutoDownload,
+    downloadService,
+  ]);
 
   const toggleModal = useCallback(() => {
     setIsOpen((prev) => !prev);
