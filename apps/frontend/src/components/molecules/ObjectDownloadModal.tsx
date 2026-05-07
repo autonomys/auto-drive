@@ -164,6 +164,7 @@ export const ObjectDownloadModal = ({
       console.error('Failed to create async download:', e);
       // Fall back to sync download if async creation fails
       setAsyncPreparing(false);
+      setIsDownloading(true);
       startSyncDownload();
       return;
     }
