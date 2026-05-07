@@ -167,7 +167,7 @@ WHERE status = 'pending'
 /*
 UPDATE async_downloads
 SET status = 'failed',
-    error = 'Marked as failed by repair script — download was stuck for over 1 hour'
+    error_message = 'Marked as failed by repair script — download was stuck for over 1 hour'
 WHERE status = 'pending'
   AND updated_at < NOW() - INTERVAL '1 hour';
 */
