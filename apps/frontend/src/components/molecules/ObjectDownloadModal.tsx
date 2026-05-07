@@ -49,18 +49,18 @@ export const ObjectDownloadModal = ({
     useState<DownloadProgressInfo | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [asyncPreparing, setAsyncPreparing] = useState<boolean>(false);
-  const asyncPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const asyncPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const defaultPassword = useEncryptionStore((store) => store.password);
   const network = useNetwork();
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
 
   const downloadInitiatedRef = useRef<string | null>(null);
 
-  // Clean up polling interval on unmount
+  // Clean up polling timeout on unmount
   useEffect(() => {
     return () => {
       if (asyncPollRef.current) {
-        clearInterval(asyncPollRef.current);
+        clearTimeout(asyncPollRef.current);
         asyncPollRef.current = null;
       }
     };
@@ -79,7 +79,7 @@ export const ObjectDownloadModal = ({
       setAsyncPreparing(false);
       downloadInitiatedRef.current = null;
       if (asyncPollRef.current) {
-        clearInterval(asyncPollRef.current);
+        clearTimeout(asyncPollRef.current);
         asyncPollRef.current = null;
       }
     }
@@ -169,66 +169,63 @@ export const ObjectDownloadModal = ({
     }
 
     let pollCount = 0;
-    asyncPollRef.current = setInterval(async () => {
-      pollCount++;
-      try {
-        const status = await network.api.checkDownloadStatus(metadata.dataCid);
-        updateAsyncDownloads();
-        if (status === DownloadStatus.Cached) {
-          if (asyncPollRef.current) {
-            clearInterval(asyncPollRef.current);
-            asyncPollRef.current = null;
-          }
-          setAsyncPreparing(false);
-          setIsDownloading(true);
-
-          toast.success(
-            `${shortenString(metadata.name ?? 'File', 30)} is ready — downloading now`,
-            { id: toastId },
+    const schedulePoll = () => {
+      asyncPollRef.current = setTimeout(async () => {
+        pollCount++;
+        try {
+          const status = await network.api.checkDownloadStatus(
+            metadata.dataCid,
           );
-          startSyncDownload();
-          return;
-        }
-
-        const asyncDownloads =
-          useUserAsyncDownloadsStore.getState().asyncDownloads;
-        const matchingDownload = asyncDownloads.find(
-          (d) => d.cid === metadata.dataCid,
-        );
-        if (
-          matchingDownload &&
-          (matchingDownload.status === AsyncDownloadStatus.Failed ||
-            matchingDownload.status === AsyncDownloadStatus.Dismissed)
-        ) {
-          if (asyncPollRef.current) {
-            clearInterval(asyncPollRef.current);
+          updateAsyncDownloads();
+          if (status === DownloadStatus.Cached) {
             asyncPollRef.current = null;
-          }
-          setAsyncPreparing(false);
-          const errorMsg =
-            matchingDownload.errorMessage ||
-            'Download failed on the server. Please try again.';
-          setDownloadError(errorMsg);
-          toast.error(errorMsg, { id: toastId });
-          return;
-        }
+            setAsyncPreparing(false);
+            setIsDownloading(true);
 
-        if (pollCount >= MAX_ASYNC_POLL_COUNT) {
-          if (asyncPollRef.current) {
-            clearInterval(asyncPollRef.current);
-            asyncPollRef.current = null;
+            toast.success(
+              `${shortenString(metadata.name ?? 'File', 30)} is ready — downloading now`,
+              { id: toastId },
+            );
+            startSyncDownload();
+            return;
           }
-          setAsyncPreparing(false);
-          const errorMsg =
-            'Download preparation timed out. Please try again later.';
-          setDownloadError(errorMsg);
-          toast.error(errorMsg, { id: toastId });
-          return;
+
+          const asyncDownloads =
+            useUserAsyncDownloadsStore.getState().asyncDownloads;
+          const matchingDownload = asyncDownloads.find(
+            (d) => d.cid === metadata.dataCid,
+          );
+          if (
+            matchingDownload &&
+            (matchingDownload.status === AsyncDownloadStatus.Failed ||
+              matchingDownload.status === AsyncDownloadStatus.Dismissed)
+          ) {
+            asyncPollRef.current = null;
+            setAsyncPreparing(false);
+            const errorMsg =
+              matchingDownload.errorMessage ||
+              'Download failed on the server. Please try again.';
+            setDownloadError(errorMsg);
+            toast.error(errorMsg, { id: toastId });
+            return;
+          }
+
+          if (pollCount >= MAX_ASYNC_POLL_COUNT) {
+            asyncPollRef.current = null;
+            setAsyncPreparing(false);
+            const errorMsg =
+              'Download preparation timed out. Please try again later.';
+            setDownloadError(errorMsg);
+            toast.error(errorMsg, { id: toastId });
+            return;
+          }
+        } catch {
+          // Ignore transient poll errors
         }
-      } catch {
-        // Ignore transient poll errors
-      }
-    }, 10_000);
+        schedulePoll();
+      }, 10_000);
+    };
+    schedulePoll();
   }, [metadata, network.api, updateAsyncDownloads, startSyncDownload]);
 
   const onDownload = useCallback(async () => {
