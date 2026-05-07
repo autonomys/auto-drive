@@ -24,11 +24,12 @@ import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { useNetwork } from 'contexts/network';
 import { DownloadProgressInfo } from 'services/download';
 import { formatBytes } from 'utils/number';
-import { DownloadStatus } from '@auto-drive/models';
+import { AsyncDownloadStatus, DownloadStatus } from '@auto-drive/models';
 import { getAuthSession } from '@/utils/auth';
 import { useUserAsyncDownloadsStore } from '../organisms/UserAsyncDownloads/state';
 
 const toastId = 'object-download-modal';
+const MAX_ASYNC_POLL_COUNT = 60;
 
 export const ObjectDownloadModal = ({
   cid,
@@ -167,8 +168,9 @@ export const ObjectDownloadModal = ({
       return;
     }
 
-    // Poll cache status every 10 seconds until the file is ready
+    let pollCount = 0;
     asyncPollRef.current = setInterval(async () => {
+      pollCount++;
       try {
         const status = await network.api.checkDownloadStatus(metadata.dataCid);
         updateAsyncDownloads();
@@ -180,12 +182,48 @@ export const ObjectDownloadModal = ({
           setAsyncPreparing(false);
           setIsDownloading(true);
 
-          // Auto-download now that it's cached
           toast.success(
             `${shortenString(metadata.name ?? 'File', 30)} is ready — downloading now`,
             { id: toastId },
           );
           startSyncDownload();
+          return;
+        }
+
+        const asyncDownloads =
+          useUserAsyncDownloadsStore.getState().asyncDownloads;
+        const matchingDownload = asyncDownloads.find(
+          (d) => d.cid === metadata.dataCid,
+        );
+        if (
+          matchingDownload &&
+          (matchingDownload.status === AsyncDownloadStatus.Failed ||
+            matchingDownload.status === AsyncDownloadStatus.Dismissed)
+        ) {
+          if (asyncPollRef.current) {
+            clearInterval(asyncPollRef.current);
+            asyncPollRef.current = null;
+          }
+          setAsyncPreparing(false);
+          const errorMsg =
+            matchingDownload.errorMessage ||
+            'Download failed on the server. Please try again.';
+          setDownloadError(errorMsg);
+          toast.error(errorMsg, { id: toastId });
+          return;
+        }
+
+        if (pollCount >= MAX_ASYNC_POLL_COUNT) {
+          if (asyncPollRef.current) {
+            clearInterval(asyncPollRef.current);
+            asyncPollRef.current = null;
+          }
+          setAsyncPreparing(false);
+          const errorMsg =
+            'Download preparation timed out. Please try again later.';
+          setDownloadError(errorMsg);
+          toast.error(errorMsg, { id: toastId });
+          return;
         }
       } catch {
         // Ignore transient poll errors

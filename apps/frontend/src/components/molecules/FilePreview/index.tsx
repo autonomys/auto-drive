@@ -14,6 +14,7 @@ import {
   NetworkId as AutoDriveNetworkId,
 } from '@auto-drive/ui';
 import { sanitizeHTML } from '../../../utils/sanitizeHTML';
+const PREVIEW_FETCH_TIMEOUT_MS = 15_000;
 
 const MAX_PREVIEW_SIZE = BigInt(100 * 1024 * 1024); // 100 MB
 
@@ -83,6 +84,15 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
+      // Abort the preview fetch if the gateway doesn't respond quickly.
+      // Non-cached archived files can take 20+ minutes to reconstruct
+      // from DSN — showing a loading spinner that long is worse than
+      // showing no preview at all.
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        PREVIEW_FETCH_TIMEOUT_MS,
+      );
+
       setIsFilePreview(true);
       setLoading(true);
 
@@ -90,6 +100,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         const response = await fetch(gatewayUrl, {
           signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         if (!response.ok) {
           throw new Error(
             `Failed to fetch file: ${response.status} ${response.statusText}`,
@@ -129,7 +140,12 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         }
         setLoading(false);
       } catch (error) {
+        clearTimeout(timeoutId);
         if (error instanceof DOMException && error.name === 'AbortError') {
+          // Timed out or cancelled — silently hide the preview instead
+          // of showing a confusing error message
+          setIsFilePreview(false);
+          setLoading(false);
           return;
         }
         console.error('Error fetching file:', error);
