@@ -154,6 +154,7 @@ export const ObjectDownloadModal = ({
   const startAsyncDownloadAndPoll = useCallback(async () => {
     if (!metadata) return;
 
+    setIsDownloading(false);
     setAsyncPreparing(true);
     try {
       await network.api.createAsyncDownload(metadata.dataCid);
@@ -177,6 +178,7 @@ export const ObjectDownloadModal = ({
             asyncPollRef.current = null;
           }
           setAsyncPreparing(false);
+          setIsDownloading(true);
 
           // Auto-download now that it's cached
           toast.success(
@@ -309,10 +311,6 @@ export const ObjectDownloadModal = ({
       return null;
     }
 
-    if (isDownloading || downloadError) {
-      return progressView;
-    }
-
     if (asyncPreparing) {
       return (
         <div className='flex flex-col gap-4'>
@@ -340,6 +338,10 @@ export const ObjectDownloadModal = ({
           </Button>
         </div>
       );
+    }
+
+    if (isDownloading || downloadError) {
+      return progressView;
     }
 
     if (insecure) {
