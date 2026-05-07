@@ -122,7 +122,12 @@ const setError = async (
 
 const asyncDownload = async (
   downloadId: string,
+  signal?: AbortSignal,
 ): Promise<Result<void, ObjectNotFoundError>> => {
+  if (signal?.aborted) {
+    return err(new ObjectNotFoundError('Task aborted before start'))
+  }
+
   const download = await asyncDownloadsRepository.getDownloadById(downloadId)
   if (!download) {
     return err(
@@ -170,6 +175,25 @@ const asyncDownload = async (
       settled = true
       clearTimeout(inactivityTimer)
       resolve(value)
+    }
+
+    const onAbort = () => {
+      if (settled) return
+      logger.warn(
+        'Async download id=%s cid=%s aborted by signal (downloaded %s bytes so far)',
+        downloadId,
+        download.cid,
+        downloadedBytes.toString(),
+      )
+      file.destroy(new Error('Download aborted by task timeout'))
+    }
+
+    if (signal) {
+      if (signal.aborted) {
+        file.destroy(new Error('Download aborted by task timeout'))
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true })
+      }
     }
 
     // Inactivity timer — resets on every data chunk.  If no data arrives
@@ -224,6 +248,7 @@ const asyncDownload = async (
     })
 
     file.on('end', () => {
+      signal?.removeEventListener('abort', onAbort)
       logger.info('Download completed id=%s cid=%s', downloadId, download.cid)
       AsyncDownloadsUseCases.updateStatus(
         downloadId,
@@ -240,6 +265,7 @@ const asyncDownload = async (
     })
 
     file.on('error', (error) => {
+      signal?.removeEventListener('abort', onAbort)
       const message =
         error instanceof Error ? error.message : JSON.stringify(error)
       logger.error(

@@ -6,7 +6,7 @@ import { withTimeout, TimeoutError } from '../../shared/utils/timeout.js'
 
 const logger = createLogger('eventRouter:utils')
 
-type Handler = (task: Task) => Promise<unknown>
+type Handler = (task: Task, signal: AbortSignal) => Promise<unknown>
 
 export const createHandlerWithRetries =
   (
@@ -28,18 +28,24 @@ export const createHandlerWithRetries =
       return
     }
 
+    const abortController = new AbortController()
+
     try {
-      const handlerPromise = handler(parsingResult.data)
+      const handlerPromise = handler(parsingResult.data, abortController.signal)
       if (taskTimeoutMs > 0) {
         await withTimeout(
           handlerPromise,
           taskTimeoutMs,
           `task:${parsingResult.data.id}`,
+          abortController,
         )
       } else {
         await handlerPromise
       }
     } catch (error) {
+      if (!abortController.signal.aborted) {
+        abortController.abort(error)
+      }
       if (error instanceof TimeoutError) {
         logger.warn(
           'Task %s timed out after %dms (retriesLeft=%d)',

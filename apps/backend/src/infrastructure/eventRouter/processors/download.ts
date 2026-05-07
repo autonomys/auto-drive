@@ -3,20 +3,19 @@ import { AsyncDownloadsUseCases } from '../../../core/downloads/index.js'
 import { Task } from '../tasks.js'
 import { createLogger } from '../../drivers/logger.js'
 import { createHandlerWithRetries } from '../utils.js'
-import { config } from '../../../config.js'
 
 const logger = createLogger('eventRouter:processor:download')
 
 export const downloadErrorPublishedQueue = 'download-errors'
 
 export const processDownloadTask = createHandlerWithRetries(
-  ({ id, params }: Task) => {
+  ({ id, params }: Task, signal: AbortSignal) => {
     if (id === 'async-download-created') {
-      return AsyncDownloadsUseCases.asyncDownload(params.downloadId)
+      return AsyncDownloadsUseCases.asyncDownload(params.downloadId, signal)
     } else if (id === 'object-archived') {
-      return ObjectUseCases.onObjectArchived(params.cid)
+      return ObjectUseCases.onObjectArchived(params.cid, signal)
     } else if (id === 'populate-cache') {
-      return ObjectUseCases.populateCaches(params.cid)
+      return ObjectUseCases.populateCaches(params.cid, signal)
     } else {
       logger.error(
         'Received task %s but no handler found (processors/download.ts)',
@@ -27,6 +26,5 @@ export const processDownloadTask = createHandlerWithRetries(
   },
   {
     errorPublishQueue: 'download-errors',
-    taskTimeoutMs: config.params.downloadTaskTimeoutMs,
   },
 )
