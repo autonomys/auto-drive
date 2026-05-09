@@ -100,13 +100,14 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         const response = await fetch(gatewayUrl, {
           signal: controller.signal,
         });
-        clearTimeout(timeoutId);
         if (!response.ok) {
+          clearTimeout(timeoutId);
           throw new Error(
             `Failed to fetch file: ${response.status} ${response.statusText}`,
           );
         }
         const blob = await response.blob();
+        clearTimeout(timeoutId);
         setFile(blob);
         // For text-based files, also read the content
         if (needsContentParsing(metadata)) {
