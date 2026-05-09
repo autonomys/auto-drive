@@ -49,6 +49,7 @@ export const ObjectDownloadModal = ({
   const [downloadProgress, setDownloadProgress] =
     useState<DownloadProgressInfo | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState<boolean>(false);
   const [asyncPreparing, setAsyncPreparing] = useState<boolean>(false);
   const asyncPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollCancelledRef = useRef(false);
@@ -104,6 +105,7 @@ export const ObjectDownloadModal = ({
       setWrongPassword(false);
       setDownloadProgress(null);
       setDownloadError(null);
+      setCheckingStatus(false);
       setAsyncPreparing(false);
       downloadInitiatedRef.current = null;
       pollCancelledRef.current = true;
@@ -266,6 +268,8 @@ export const ObjectDownloadModal = ({
   const onDownload = useCallback(async () => {
     if (!metadata || asyncPreparing) return;
 
+    setCheckingStatus(true);
+
     // Check if the file is already cached on the backend
     try {
       const session = await getAuthSession().catch(() => null);
@@ -274,7 +278,7 @@ export const ObjectDownloadModal = ({
       if (hasSession) {
         const status = await network.api.checkDownloadStatus(metadata.dataCid);
         if (status === DownloadStatus.NotCached) {
-          // File needs DSN reconstruction — use async path
+          setCheckingStatus(false);
           startAsyncDownloadAndPoll();
           return;
         }
@@ -284,6 +288,8 @@ export const ObjectDownloadModal = ({
     }
 
     // File is cached or user is anonymous — sync download
+    setCheckingStatus(false);
+    setIsDownloading(true);
     startSyncDownload();
   }, [metadata, network.api, startSyncDownload, startAsyncDownloadAndPoll, asyncPreparing]);
 
@@ -295,18 +301,21 @@ export const ObjectDownloadModal = ({
     if (
       passwordOrNotEncrypted &&
       !isDownloading &&
+      !checkingStatus &&
+      !asyncPreparing &&
       !insecure &&
       metadata?.dataCid &&
       downloadInitiatedRef.current !== metadata.dataCid
     ) {
       downloadInitiatedRef.current = metadata.dataCid;
-      setIsDownloading(true);
       onDownload();
     }
   }, [
     passwordOrNotEncrypted,
     onDownload,
     isDownloading,
+    checkingStatus,
+    asyncPreparing,
     insecure,
     metadata?.dataCid,
   ]);
@@ -379,6 +388,15 @@ export const ObjectDownloadModal = ({
   const view = useMemo(() => {
     if (!metadata) {
       return null;
+    }
+
+    if (checkingStatus) {
+      return (
+        <div className='flex items-center justify-center gap-3 py-4'>
+          <div className='h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary' />
+          <p className='text-sm text-gray-600'>Checking file availability…</p>
+        </div>
+      );
     }
 
     if (asyncPreparing) {
@@ -522,6 +540,7 @@ export const ObjectDownloadModal = ({
     );
   }, [
     metadata,
+    checkingStatus,
     isDownloading,
     downloadError,
     progressView,
@@ -536,7 +555,7 @@ export const ObjectDownloadModal = ({
   ]);
 
   // Show modal when there's a view to display OR when downloading/preparing
-  const shouldShowModal = !!cid && (!!view || isDownloading || asyncPreparing);
+  const shouldShowModal = !!cid && (!!view || isDownloading || asyncPreparing || checkingStatus);
 
   if (!shouldShowModal) return <></>;
 
