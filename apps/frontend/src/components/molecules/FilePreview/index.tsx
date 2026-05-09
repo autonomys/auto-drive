@@ -142,8 +142,11 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       } catch (error) {
         clearTimeout(timeoutId);
         if (error instanceof DOMException && error.name === 'AbortError') {
-          // Timed out or cancelled — silently hide the preview instead
-          // of showing a confusing error message
+          if (abortControllerRef.current !== controller) {
+            // A newer fetchFile call replaced us — don't touch state.
+            return;
+          }
+          // Our own timeout fired — hide the preview.
           setIsFilePreview(false);
           setLoading(false);
           return;
