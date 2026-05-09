@@ -51,6 +51,7 @@ export const ObjectDownloadModal = ({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [asyncPreparing, setAsyncPreparing] = useState<boolean>(false);
   const asyncPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollCancelledRef = useRef(false);
   const defaultPassword = useEncryptionStore((store) => store.password);
   const network = useNetwork();
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
@@ -63,6 +64,7 @@ export const ObjectDownloadModal = ({
   // Clean up polling timeout on unmount
   useEffect(() => {
     return () => {
+      pollCancelledRef.current = true;
       if (asyncPollRef.current) {
         clearTimeout(asyncPollRef.current);
         asyncPollRef.current = null;
@@ -104,6 +106,7 @@ export const ObjectDownloadModal = ({
       setDownloadError(null);
       setAsyncPreparing(false);
       downloadInitiatedRef.current = null;
+      pollCancelledRef.current = true;
       if (asyncPollRef.current) {
         clearTimeout(asyncPollRef.current);
         asyncPollRef.current = null;
@@ -195,14 +198,17 @@ export const ObjectDownloadModal = ({
       return;
     }
 
+    pollCancelledRef.current = false;
     let pollCount = 0;
     const schedulePoll = () => {
       asyncPollRef.current = setTimeout(async () => {
+        if (pollCancelledRef.current) return;
         pollCount++;
         try {
           const status = await network.api.checkDownloadStatus(
             metadata.dataCid,
           );
+          if (pollCancelledRef.current) return;
           updateAsyncDownloads();
           if (status === DownloadStatus.Cached) {
             asyncPollRef.current = null;
@@ -249,7 +255,9 @@ export const ObjectDownloadModal = ({
         } catch {
           // Ignore transient poll errors
         }
-        schedulePoll();
+        if (!pollCancelledRef.current) {
+          schedulePoll();
+        }
       }, ASYNC_POLL_INTERVAL_MS);
     };
     schedulePoll();
