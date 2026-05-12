@@ -2,6 +2,7 @@ import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -170,6 +171,20 @@ describe('AWS S3 - SDK', () => {
     expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
       SecondBody,
     )
+  })
+
+  describe('DeleteObject', () => {
+    it('should return 403 AccessDenied - storage is immutable', async () => {
+      const command = new DeleteObjectCommand({
+        Bucket,
+        Key,
+      })
+
+      await expect(s3Client.send(command)).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 403 },
+        Code: 'AccessDenied',
+      })
+    })
   })
 
   describe('Metadata handled correctly', () => {
