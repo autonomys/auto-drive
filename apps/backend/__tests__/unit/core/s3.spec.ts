@@ -38,6 +38,7 @@ describe('S3UseCases', () => {
         .mockResolvedValue(null)
 
       const result = await S3UseCases.getObject({
+        Bucket: 'my-bucket',
         Key: 'nonexistent/file.txt',
       } as any)
 
@@ -46,7 +47,7 @@ describe('S3UseCases', () => {
     })
 
     it('should return error from download use case', async () => {
-      const mapping = { key: 'file.txt', cid: 'cid123' }
+      const mapping = { bucket: 'my-bucket', key: 'file.txt', cid: 'cid123' }
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping as any)
@@ -58,6 +59,7 @@ describe('S3UseCases', () => {
         )
 
       const result = await S3UseCases.getObject({
+        Bucket: 'my-bucket',
         Key: 'file.txt',
       } as any)
 
@@ -65,7 +67,7 @@ describe('S3UseCases', () => {
     })
 
     it('should return download result successfully', async () => {
-      const mapping = { key: 'file.txt', cid: 'cid123' }
+      const mapping = { bucket: 'my-bucket', key: 'file.txt', cid: 'cid123' }
       const mockReadable = { read: jest.fn() }
 
       jest
@@ -77,6 +79,7 @@ describe('S3UseCases', () => {
         .mockResolvedValue(ok(mockReadable) as any)
 
       const result = await S3UseCases.getObject({
+        Bucket: 'my-bucket',
         Key: 'file.txt',
       } as any)
 
@@ -84,7 +87,7 @@ describe('S3UseCases', () => {
     })
 
     it('should pass byte range to download use case', async () => {
-      const mapping = { key: 'file.txt', cid: 'cid123' }
+      const mapping = { bucket: 'my-bucket', key: 'file.txt', cid: 'cid123' }
       const downloadSpy = jest
         .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(ok({} as any) as any)
@@ -94,6 +97,7 @@ describe('S3UseCases', () => {
         .mockResolvedValue(mapping as any)
 
       await S3UseCases.getObject({
+        Bucket: 'my-bucket',
         Key: 'file.txt',
         Range: [100, 200],
       } as any)
@@ -149,17 +153,21 @@ describe('S3UseCases', () => {
 
       const mappingSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ key: 'file.txt', cid: 'cid123' } as any)
+        .mockResolvedValue({
+          bucket: 'my-bucket',
+          key: 'file.txt',
+          cid: 'cid123',
+        } as any)
 
       const result = await S3UseCases.completeMultipartUpload(mockUser, {
-        Bucket: 'bucket',
+        Bucket: 'my-bucket',
         Key: 'file.txt',
         UploadId: 'upload123',
       } as any)
 
       expect(result.isOk()).toBe(true)
       expect(completeSpy).toHaveBeenCalledWith(mockUser, 'upload123')
-      expect(mappingSpy).toHaveBeenCalledWith('file.txt', 'cid123')
+      expect(mappingSpy).toHaveBeenCalledWith('my-bucket', 'file.txt', 'cid123')
     })
   })
 
@@ -179,10 +187,14 @@ describe('S3UseCases', () => {
 
       jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ key: 'file.txt', cid: 'cid123' } as any)
+        .mockResolvedValue({
+          bucket: 'my-bucket',
+          key: 'file.txt',
+          cid: 'cid123',
+        } as any)
 
       const result = await S3UseCases.putObject(mockUser, {
-        Bucket: 'bucket',
+        Bucket: 'my-bucket',
         Key: 'path/file.txt',
         Body: Buffer.from('data'),
         ContentType: 'text/plain',
@@ -207,10 +219,14 @@ describe('S3UseCases', () => {
 
       jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ key: 'deep/path/file.txt', cid: 'cid123' } as any)
+        .mockResolvedValue({
+          bucket: 'my-bucket',
+          key: 'path/file.txt',
+          cid: 'cid123',
+        } as any)
 
       await S3UseCases.putObject(mockUser, {
-        Bucket: 'bucket',
+        Bucket: 'my-bucket',
         Key: 'deep/path/file.txt',
         Body: Buffer.from('data'),
       } as any)
@@ -238,10 +254,14 @@ describe('S3UseCases', () => {
 
       jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ key: 'file.txt', cid: 'cid123' } as any)
+        .mockResolvedValue({
+          bucket: 'my-bucket',
+          key: 'file.txt',
+          cid: 'cid123',
+        } as any)
 
       const result = await S3UseCases.putObject(mockUser, {
-        Bucket: 'bucket',
+        Bucket: 'my-bucket',
         Key: 'file.txt',
         Body: Buffer.from('data'),
       } as any)

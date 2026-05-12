@@ -19,15 +19,21 @@ import { UserWithOrganization } from '@auto-drive/models'
 import { v4 } from 'uuid'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { S3BucketInfo } from '../../infrastructure/repositories/s3/objectMappings.js'
 
 const logger = createLogger('useCases:s3')
 
 const getObject = async (
   params: GetObjectCommandParams,
 ): Promise<Result<GetObjectCommandResult, ObjectNotFoundError>> => {
-  const mapping = await s3ObjectMappingsRepository.findByKey(params.Key)
+  const mapping = await s3ObjectMappingsRepository.findByKey(
+    params.Bucket,
+    params.Key,
+  )
   if (!mapping) {
-    return err(new ObjectNotFoundError(`Object ${params.Key} not found`))
+    return err(
+      new ObjectNotFoundError(`Object ${params.Bucket}/${params.Key} not found`),
+    )
   }
 
   return await DownloadUseCase.downloadObjectByAnonymous(mapping.cid, {
@@ -85,13 +91,19 @@ const completeMultipartUpload = async (
   const cid = await UploadsUseCases.completeUpload(user, params.UploadId)
 
   const mapping = await s3ObjectMappingsRepository.createMapping(
+    params.Bucket,
     params.Key,
     cid,
   )
-  logger.debug('Created mapping: key=(%s) -> cid=(%s)', mapping.key, cid)
+  logger.debug(
+    'Created mapping: bucket=(%s) key=(%s) -> cid=(%s)',
+    mapping.bucket,
+    mapping.key,
+    cid,
+  )
 
   return ok({
-    Location: objectDownloadPath(params.Key),
+    Location: objectDownloadPath(params.Bucket, params.Key),
     Bucket: params.Bucket,
     Key: params.Key,
     ETag: cid,
@@ -124,16 +136,26 @@ const putObject = async (
   const cid = await UploadsUseCases.completeUpload(user, upload.id)
 
   const mapping = await s3ObjectMappingsRepository.createMapping(
+    params.Bucket,
     params.Key,
     cid,
   )
-  logger.debug('Created mapping: key=(%s) -> cid=(%s)', mapping.key, cid)
+  logger.debug(
+    'Created mapping: bucket=(%s) key=(%s) -> cid=(%s)',
+    mapping.bucket,
+    mapping.key,
+    cid,
+  )
 
   return ok({ ETag: cid })
 }
 
-const objectDownloadPath = (key: string) => {
-  return `/s3/${key}`
+const listBuckets = async (): Promise<S3BucketInfo[]> => {
+  return s3ObjectMappingsRepository.listBuckets()
+}
+
+const objectDownloadPath = (bucket: string, key: string) => {
+  return `/s3/${bucket}/${key}`
 }
 
 export const S3UseCases = {
@@ -142,4 +164,5 @@ export const S3UseCases = {
   uploadPart,
   completeMultipartUpload,
   putObject,
+  listBuckets,
 }
