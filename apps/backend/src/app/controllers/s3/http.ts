@@ -5,6 +5,7 @@ import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import {
   completeMultipartUploadHandler,
   createMultipartUploadHandler,
+  deleteObjectHandler,
   getObjectHandler,
   headObjectHandler,
   putObjectHandler,
@@ -26,6 +27,7 @@ const S3HandlerConfig: S3HandlerConfig = {
   CreateMultipartUpload: createMultipartUploadHandler,
   UploadPart: uploadPartHandler,
   CompleteMultipartUpload: completeMultipartUploadHandler,
+  DeleteObject: deleteObjectHandler,
 }
 
 const getS3Method = (req: Request) => {
@@ -42,6 +44,9 @@ const getS3Method = (req: Request) => {
     }
     if (req.method === 'HEAD') {
       return 'HeadObject'
+    }
+    if (req.method === 'DELETE') {
+      return 'DeleteObject'
     }
   }
   return s3Method
