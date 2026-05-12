@@ -61,6 +61,7 @@ export const ObjectDownloadModal = ({
   );
 
   const downloadInitiatedRef = useRef<string | null>(null);
+  const startSyncDownloadRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   // Clean up polling timeout on unmount
   useEffect(() => {
@@ -183,6 +184,8 @@ export const ObjectDownloadModal = ({
     }
   }, [metadata, password, skipDecryption, network.downloadService, onClose]);
 
+  startSyncDownloadRef.current = startSyncDownload;
+
   const startAsyncDownloadAndPoll = useCallback(async () => {
     if (!metadata) return;
 
@@ -196,7 +199,7 @@ export const ObjectDownloadModal = ({
       // Fall back to sync download if async creation fails
       setAsyncPreparing(false);
       setIsDownloading(true);
-      startSyncDownload();
+      startSyncDownloadRef.current();
       return;
     }
 
@@ -221,7 +224,7 @@ export const ObjectDownloadModal = ({
               `${shortenString(metadata.name ?? 'File', 30)} is ready — downloading now`,
               { id: toastId },
             );
-            startSyncDownload();
+            startSyncDownloadRef.current();
             return;
           }
 
@@ -263,7 +266,7 @@ export const ObjectDownloadModal = ({
       }, ASYNC_POLL_INTERVAL_MS);
     };
     schedulePoll();
-  }, [metadata, network.api, updateAsyncDownloads, startSyncDownload]);
+  }, [metadata, network.api, updateAsyncDownloads]);
 
   const onDownload = useCallback(async () => {
     if (!metadata || asyncPreparing) return;
