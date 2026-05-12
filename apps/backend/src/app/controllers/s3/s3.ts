@@ -59,7 +59,10 @@ const getUploadOptions = (req: Request) => {
   return UploadOptions
 }
 
-export const listBucketsHandler = async (_req: Request, res: Response) => {
+export const listBucketsHandler = async (req: Request, res: Response) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
   const buckets = await S3UseCases.listBuckets()
   sendXML(res, 'ListAllMyBucketsResult', {
     Buckets: {
