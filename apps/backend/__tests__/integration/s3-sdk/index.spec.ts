@@ -48,6 +48,10 @@ describe('AWS S3 - SDK', () => {
 
     s3Client = new S3Client({
       region: 'us-east-1',
+      // endpoint is required so that operations with no Bucket param (e.g.
+      // ListBuckets) have a base URL to target; bucketEndpoint:true then
+      // overrides the endpoint with the Bucket value for per-object operations.
+      endpoint: `${BASE_PATH}/s3`,
       credentials: {
         accessKeyId: 'e046e71c8dc3459c8da189e62418203a',
         secretAccessKey: '',
