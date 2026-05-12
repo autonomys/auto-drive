@@ -63,17 +63,6 @@ export const ObjectDownloadModal = ({
   const downloadInitiatedRef = useRef<string | null>(null);
   const startSyncDownloadRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
-  // Clean up polling timeout on unmount
-  useEffect(() => {
-    return () => {
-      pollCancelledRef.current = true;
-      if (asyncPollRef.current) {
-        clearTimeout(asyncPollRef.current);
-        asyncPollRef.current = null;
-      }
-    };
-  }, []);
-
   const handleCloseWhileAsyncPreparing = useCallback(() => {
     if (!asyncPreparing || !metadata) return;
 
@@ -109,12 +98,15 @@ export const ObjectDownloadModal = ({
       setCheckingStatus(false);
       setAsyncPreparing(false);
       downloadInitiatedRef.current = null;
+    }
+
+    return () => {
       pollCancelledRef.current = true;
       if (asyncPollRef.current) {
         clearTimeout(asyncPollRef.current);
         asyncPollRef.current = null;
       }
-    }
+    };
   }, [cid]);
 
   useGetMetadataByHeadCidQuery({
