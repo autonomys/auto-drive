@@ -62,6 +62,7 @@ export const ObjectDownloadModal = ({
 
   const downloadInitiatedRef = useRef<string | null>(null);
   const startSyncDownloadRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const downloadAbortRef = useRef<AbortController | null>(null);
 
   const handleCloseWhileAsyncPreparing = useCallback(() => {
     if (!asyncPreparing || !metadata) return;
@@ -101,6 +102,8 @@ export const ObjectDownloadModal = ({
     }
 
     return () => {
+      downloadAbortRef.current?.abort();
+      downloadAbortRef.current = null;
       pollCancelledRef.current = true;
       if (asyncPollRef.current) {
         clearTimeout(asyncPollRef.current);
@@ -263,15 +266,21 @@ export const ObjectDownloadModal = ({
   const onDownload = useCallback(async () => {
     if (!metadata || asyncPreparing) return;
 
+    downloadAbortRef.current?.abort();
+    const abortController = new AbortController();
+    downloadAbortRef.current = abortController;
+    const { signal } = abortController;
+
     setCheckingStatus(true);
 
-    // Check if the file is already cached on the backend
     try {
       const session = await getAuthSession().catch(() => null);
+      if (signal.aborted) return;
       const hasSession = !!session?.accessToken && !!session?.authProvider;
 
       if (hasSession) {
         const status = await network.api.checkDownloadStatus(metadata.dataCid);
+        if (signal.aborted) return;
         if (status === DownloadStatus.NotCached) {
           setCheckingStatus(false);
           startAsyncDownloadAndPoll();
@@ -279,10 +288,10 @@ export const ObjectDownloadModal = ({
         }
       }
     } catch {
-      // If status check fails, fall through to sync download
+      if (signal.aborted) return;
     }
 
-    // File is cached or user is anonymous — sync download
+    if (signal.aborted) return;
     setCheckingStatus(false);
     setIsDownloading(true);
     startSyncDownload();
