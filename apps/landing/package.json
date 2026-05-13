@@ -10,14 +10,14 @@
   },
   "dependencies": {
     "@auto-drive/ui": "workspace:*",
-    "@icons-pack/react-simple-icons": "13.8.0",
-    "@tailwindcss/postcss": "4.1.14",
-    "autoprefixer": "10.4.21",
+    "@icons-pack/react-simple-icons": "^13.7.0",
+    "@tailwindcss/postcss": "^4.1.12",
+    "autoprefixer": "^10.4.21",
     "next": "15.5.18",
-    "postcss": "8.5.14",
+    "postcss": "^8.5.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "tailwindcss": "4.1.14"
+    "tailwindcss": "^4.1.12"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^15.0.2",
