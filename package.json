@@ -50,7 +50,8 @@
     "h3": "^1.15.6",
     "socket.io-parser": "~4.2.6",
     "protobufjs": "^7.5.8",
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "axios": "^1.16.0"
   },
   "dependencies": {
     "@icons-pack/react-simple-icons": "^13.7.0",

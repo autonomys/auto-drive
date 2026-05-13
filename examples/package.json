@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@autonomys/auto-drive": "^1.2.0",
-    "axios": "^1.15.2",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
     "light-server": "^2.9.1",
