@@ -704,13 +704,17 @@ export const createApiService = ({
       throw new Error('No session');
     }
 
-    await fetch(`${downloadApiUrl}/downloads/async/${cid}`, {
+    const response = await fetch(`${downloadApiUrl}/downloads/async/${cid}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
         'X-Auth-Provider': session.authProvider,
       },
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create async download: ${response.statusText}`);
+    }
   },
   dismissAsyncDownload: async (id: string): Promise<void> => {
     const session = await getAuthSession();

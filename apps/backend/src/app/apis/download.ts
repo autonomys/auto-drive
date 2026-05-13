@@ -47,7 +47,7 @@ const createServer = async () => {
       }),
     )
   } else {
-    logger.warn('CORS is not configured - no allowed origins specified')
+    logger.warn('CORS is not configured - no allowed origins specified, blocking cross-origin requests')
   }
 
   app.use('/downloads', downloadController)

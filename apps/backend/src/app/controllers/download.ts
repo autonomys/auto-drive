@@ -21,6 +21,7 @@ import {
   handleInternalError,
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
+import { TimeoutError } from '../../shared/utils/timeout.js'
 
 const logger = createLogger('http:controllers:download')
 
@@ -205,11 +206,23 @@ downloadController.get(
         })
       }
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        logger.warn('Gateway timeout while retrieving cid=%s: %s', req.params.cid, error.message)
+        if (!res.headersSent) {
+          res.status(504).json({
+            error: 'File temporarily unavailable',
+            details: 'The storage gateway did not respond in time. The file may be archived and temporarily unreachable. Please try again later.',
+          })
+        }
+        return
+      }
       logger.error('Error retrieving data', error)
-      res.status(500).json({
-        error: 'Failed to retrieve data',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      })
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: 'Failed to retrieve data',
+          details: error instanceof Error ? error.message : 'Unknown error',
+        })
+      }
     }
   }),
 )

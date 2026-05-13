@@ -8,7 +8,8 @@ import { paymentManager } from '../../services/paymentManager/index.js'
 export const frontendErrorPublishedQueue = 'frontend-errors'
 
 export const processFrontendTask = createHandlerWithRetries(
-  ({ id, params }: Task) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  ({ id, params }: Task, _signal: AbortSignal) => {
     if (id === 'migrate-upload-nodes') {
       return UploadsUseCases.processMigration(params.uploadId)
     } else if (id === 'archive-objects') {
