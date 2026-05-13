@@ -260,11 +260,3 @@ export const putObjectHandler = async (req: Request, res: Response) => {
 
   sendXML(res, 'PutObjectResult', result.value)
 }
-
-export const deleteObjectHandler = async (_req: Request, res: Response) => {
-  sendXML(res.status(403), 'Error', {
-    Code: 'AccessDenied',
-    Message:
-      'Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.',
-  })
-}
