@@ -215,7 +215,7 @@ export const UploadingFolderModal = ({
                     id='password'
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className='mt-1 block w-full rounded-md border border-background-hover p-2 shadow-sm'
+                    className='mt-1 block w-full rounded-md border border-background-hover bg-background p-2 text-foreground shadow-sm'
                     placeholder='Password'
                   />
                   <div className='flex justify-center gap-2'>
