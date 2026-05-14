@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { pipeline } from 'stream'
+import { Readable, pipeline } from 'stream'
 import { createInflate } from 'zlib'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import {
@@ -181,27 +181,116 @@ downloadController.get(
       const sourceStream = await startDownload()
 
       if (actuallyDecompress) {
-        // Decompress zlib/deflate compressed content for media files
-        // Note: We decompress the full file and let the client handle seeking
-        pipeline(sourceStream, createInflate(), res, (err: Error | null) => {
-          if (err) {
-            if (res.headersSent) return
-            logger.error('Error streaming/decompressing data', err)
-            res.status(500).json({
-              error: 'Failed to stream data',
-              details: err.message,
-            })
+        // Decompress zlib/deflate compressed content.
+        // Some files have metadata claiming ZLIB compression while the stored
+        // data is actually uncompressed (upload-side metadata mismatch).
+        // We validate the ZLIB header on the first chunk BEFORE committing to
+        // the decompression pipeline to avoid a crash mid-stream.
+        const firstChunk = await new Promise<Buffer>((resolve, reject) => {
+          const onData = (chunk: Buffer) => {
+            sourceStream.pause()
+            sourceStream.removeListener('data', onData)
+            sourceStream.removeListener('error', onError)
+            sourceStream.removeListener('end', onEnd)
+            resolve(Buffer.from(chunk))
           }
+          const onError = (err: Error) => {
+            sourceStream.removeListener('data', onData)
+            sourceStream.removeListener('end', onEnd)
+            reject(err)
+          }
+          const onEnd = () => {
+            sourceStream.removeListener('data', onData)
+            sourceStream.removeListener('error', onError)
+            resolve(Buffer.alloc(0))
+          }
+          sourceStream.on('data', onData)
+          sourceStream.on('error', onError)
+          sourceStream.on('end', onEnd)
+          sourceStream.resume()
         })
+
+        // Validate ZLIB header (RFC 1950): CMF byte has method=8 (deflate)
+        // in low nibble, and (CMF * 256 + FLG) must be divisible by 31.
+        const isValidZlib =
+          firstChunk.length >= 2 &&
+          (firstChunk[0] & 0x0f) === 8 &&
+          (firstChunk[0] * 256 + firstChunk[1]) % 31 === 0
+
+        // Reassemble the stream: yield the first chunk we already read,
+        // then yield the remaining chunks from the source. Readable.from()
+        // handles backpressure correctly via the async generator protocol.
+        async function* prependChunk(
+          first: Buffer,
+          rest: typeof sourceStream,
+        ) {
+          if (first.length > 0) yield first
+          yield* rest
+        }
+
+        const combinedStream = Readable.from(
+          prependChunk(firstChunk, sourceStream),
+        )
+
+        if (isValidZlib) {
+          pipeline(
+            combinedStream,
+            createInflate(),
+            res,
+            (err: Error | null) => {
+              if (err) {
+                logger.error(
+                  'Error streaming/decompressing data for cid=%s',
+                  cid,
+                  err,
+                )
+                if (!res.headersSent) {
+                  res.status(500).json({
+                    error: 'Failed to stream data',
+                    details: err.message,
+                  })
+                } else {
+                  res.destroy()
+                }
+              }
+            },
+          )
+        } else {
+          logger.warn(
+            'Invalid ZLIB header for cid=%s — metadata claims compression ' +
+              'but stored data is not compressed. Serving raw data.',
+            cid,
+          )
+          pipeline(combinedStream, res, (err: Error | null) => {
+            if (err) {
+              logger.error(
+                'Error streaming raw fallback data for cid=%s',
+                cid,
+                err,
+              )
+              if (!res.headersSent) {
+                res.status(500).json({
+                  error: 'Failed to stream data',
+                  details: err.message,
+                })
+              } else {
+                res.destroy()
+              }
+            }
+          })
+        }
       } else {
         pipeline(sourceStream, res, (err: Error | null) => {
           if (err) {
-            if (res.headersSent) return
-            logger.error('Error streaming data', err)
-            res.status(500).json({
-              error: 'Failed to stream data',
-              details: err.message,
-            })
+            logger.error('Error streaming data for cid=%s', cid, err)
+            if (!res.headersSent) {
+              res.status(500).json({
+                error: 'Failed to stream data',
+                details: err.message,
+              })
+            } else {
+              res.destroy()
+            }
           }
         })
       }
