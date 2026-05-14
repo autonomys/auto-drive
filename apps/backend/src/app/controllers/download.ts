@@ -220,7 +220,7 @@ downloadController.get(
         // Reassemble the stream: yield the first chunk we already read,
         // then yield the remaining chunks from the source. Readable.from()
         // handles backpressure correctly via the async generator protocol.
-        async function* prependChunk(
+        const prependChunk = async function* (
           first: Buffer,
           rest: typeof sourceStream,
         ) {
