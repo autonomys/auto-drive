@@ -486,7 +486,7 @@ export const ObjectDownloadModal = ({
                 id='password'
                 value={password ?? ''}
                 onChange={(e) => setPassword(e.target.value)}
-                className='block w-full rounded-md border border-gray-300 p-2 shadow-sm'
+                className='block w-full rounded-md border border-gray-300 bg-background p-2 text-foreground shadow-sm'
                 placeholder='Password'
               />
               <Button
