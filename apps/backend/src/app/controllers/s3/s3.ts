@@ -144,7 +144,9 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
 
-  // ETag: MD5 for objects uploaded with this feature; CID for legacy objects.
+  // ETag: set to the MD5 for objects uploaded after this feature was introduced.
+  // Legacy objects (md5 = null in the DB) do not get an ETag header — the CID
+  // is always available in x-amz-meta-cid for Autonomys-aware clients.
   if (etag) res.set('ETag', etag)
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)
@@ -189,7 +191,9 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
 
-  // ETag: MD5 for objects uploaded with this feature; CID for legacy objects.
+  // ETag: set to the MD5 for objects uploaded after this feature was introduced.
+  // Legacy objects (md5 = null in the DB) do not get an ETag header — the CID
+  // is always available in x-amz-meta-cid for Autonomys-aware clients.
   if (etag) res.set('ETag', etag)
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)

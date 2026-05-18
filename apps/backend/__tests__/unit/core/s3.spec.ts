@@ -14,7 +14,12 @@ import { UserWithOrganization } from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
 import { ObjectNotFoundError } from '../../../src/errors/index.js'
 
-const MD5_REGEX = /^"[a-f0-9]{32}"$/
+/** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
+const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
+/** Composite multipart ETag: `"<32 hex chars>-<N>"` */
+const MULTIPART_ETAG_RE = /^"[a-f0-9]{32}-\d+"$/
+/** Multipart MD5 as stored in the DB (no outer quotes): `<32 hex chars>-<N>` */
+const MULTIPART_MD5_RE = /^[a-f0-9]{32}-\d+$/
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 describe('S3UseCases', () => {
@@ -187,7 +192,7 @@ describe('S3UseCases', () => {
       } as any)
 
       expect(result.isOk()).toBe(true)
-      expect(result._unsafeUnwrap().ETag).toMatch(MD5_REGEX)
+      expect(result._unsafeUnwrap().ETag).toMatch(MD5_ETAG_RE)
     })
   })
 
@@ -218,14 +223,14 @@ describe('S3UseCases', () => {
 
       expect(result.isOk()).toBe(true)
       expect(completeSpy).toHaveBeenCalledWith(mockUser, 'upload123')
-      // Composite ETag: "<md5>-2" format
-      expect(result._unsafeUnwrap().ETag).toMatch(/^"[a-f0-9]{32}-2"$/)
+      // Composite ETag: "<md5>-N" format
+      expect(result._unsafeUnwrap().ETag).toMatch(MULTIPART_ETAG_RE)
       expect(result._unsafeUnwrap().Cid).toBe('cid123')
       expect(mappingSpy).toHaveBeenCalledWith(
         'my-bucket',
         'file.txt',
         'cid123',
-        expect.stringMatching(/^[a-f0-9]{32}-2$/),
+        expect.stringMatching(MULTIPART_MD5_RE),
       )
     })
   })
@@ -259,7 +264,7 @@ describe('S3UseCases', () => {
       } as any)
 
       expect(result.isOk()).toBe(true)
-      expect(result._unsafeUnwrap().ETag).toMatch(MD5_REGEX)
+      expect(result._unsafeUnwrap().ETag).toMatch(MD5_ETAG_RE)
       expect(result._unsafeUnwrap().Cid).toBe('cid123')
     })
 
