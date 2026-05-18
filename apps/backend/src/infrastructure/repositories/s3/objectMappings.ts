@@ -15,6 +15,15 @@ export interface S3BucketInfo {
   creationDate: Date
 }
 
+/** A single object entry returned by ListObjectsV2. */
+export interface S3ObjectListing {
+  key: string
+  cid: string
+  /** Object size in bytes joined from the metadata table; 0 when not yet indexed. */
+  size: bigint
+  lastModified: Date
+}
+
 interface S3KeyMappingDB {
   bucket: S3KeyMapping['bucket']
   key: S3KeyMapping['key']
@@ -139,10 +148,57 @@ const listBuckets = async (): Promise<S3BucketInfo[]> => {
   }))
 }
 
+const listObjects = async (
+  bucket: string,
+  prefix: string,
+  continuationToken: string | null,
+): Promise<S3ObjectListing[]> => {
+  const db = await getDatabase()
+
+  // JOIN metadata to get totalSize.  The metadata JSON field stores bigint
+  // values as strings, so we cast with ::bigint then ::text for the driver.
+  const baseSQL = `
+    SELECT
+      om.key,
+      om.cid,
+      COALESCE((m.metadata->>'totalSize')::bigint, 0) AS size,
+      om.updated_at
+    FROM "S3".object_mappings om
+    LEFT JOIN metadata m ON m.head_cid = om.cid
+    WHERE om.bucket = $1
+      AND om.key LIKE $2
+  `
+
+  let text: string
+  let values: unknown[]
+  if (continuationToken) {
+    text = baseSQL + ' AND om.key > $3 ORDER BY om.key'
+    values = [bucket, `${prefix}%`, continuationToken]
+  } else {
+    text = baseSQL + ' ORDER BY om.key'
+    values = [bucket, `${prefix}%`]
+  }
+
+  const result = await db.query<{
+    key: string
+    cid: string
+    size: string // pg returns bigint as string
+    updated_at: Date
+  }>({ text, values })
+
+  return result.rows.map((row) => ({
+    key: row.key,
+    cid: row.cid,
+    size: BigInt(row.size),
+    lastModified: row.updated_at,
+  }))
+}
+
 export const s3ObjectMappingsRepository = {
   createMapping,
   findByKey,
   updateMapping,
   findByCid,
   listBuckets,
+  listObjects,
 }
