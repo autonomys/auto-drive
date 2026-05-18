@@ -251,7 +251,11 @@ export const uploadPartHandler = async (req: Request, res: Response) => {
     return
   }
 
-  sendXML(res, 'UploadPartResult', result.value)
+  // The AWS SDK reads the part ETag exclusively from the HTTP ETag header.
+  // Respond with the header only — no body — so Express's auto-ETag
+  // generation cannot overwrite our MD5 value with a body-derived hash.
+  res.set('ETag', result.value.ETag)
+  res.status(200).end()
 }
 
 export const completeMultipartUploadHandler = async (
@@ -279,8 +283,10 @@ export const completeMultipartUploadHandler = async (
     return
   }
 
-  res.set('x-amz-meta-cid', result.value.Cid)
-  sendXML(res, 'CompleteMultipartUploadResult', result.value)
+  // Strip Cid before serialising — it belongs in the header only, not the XML body.
+  const { Cid: completeCid, ...completeXmlBody } = result.value
+  res.set('x-amz-meta-cid', completeCid)
+  sendXML(res, 'CompleteMultipartUploadResult', completeXmlBody)
 }
 
 export const putObjectHandler = async (req: Request, res: Response) => {
@@ -303,8 +309,10 @@ export const putObjectHandler = async (req: Request, res: Response) => {
     return
   }
 
-  res.set('x-amz-meta-cid', result.value.Cid)
-  sendXML(res, 'PutObjectResult', result.value)
+  // Strip Cid before serialising — it belongs in the header only, not the XML body.
+  const { Cid: putCid, ...putXmlBody } = result.value
+  res.set('x-amz-meta-cid', putCid)
+  sendXML(res, 'PutObjectResult', putXmlBody)
 }
 
 export const deleteObjectHandler = async (_req: Request, res: Response) => {

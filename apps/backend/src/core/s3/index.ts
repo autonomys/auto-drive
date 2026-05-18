@@ -14,6 +14,23 @@ import {
   UploadPartCommandParams,
   UploadPartCommandResult,
 } from '@auto-drive/s3'
+
+// Local extensions to the shared DTOs — kept in the backend rather than
+// the shared package so the package doesn't carry Autonomys-specific fields.
+
+/** PutObject result extended with the Autonomys CID for the x-amz-meta-cid header. */
+type PutObjectResult = PutObjectCommandResult & { Cid: string }
+
+/** CompleteMultipartUpload result extended with the Autonomys CID. */
+type CompleteMultipartUploadResult = CompleteMultipartUploadCommandResult & {
+  Cid: string
+}
+
+/** CompleteMultipartUpload params extended with the per-part ETags needed to
+ *  compute the composite S3 multipart ETag. */
+type CompleteMultipartUploadParams = CompleteMultipartUploadCommandParams & {
+  Parts?: Array<{ PartNumber: number; ETag: string }>
+}
 import { UploadsUseCases } from '../uploads/uploads.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
@@ -71,13 +88,16 @@ const getObject = async (
     mapping.cid,
     { byteRange: params.Range },
   )
-  if (downloadResult.isErr()) return downloadResult
 
-  return ok({
-    ...downloadResult.value,
+  // Use .map() to attach cid/etag to the ok value and propagate any error
+  // unchanged. The error type from downloadObjectByAnonymous is wider than
+  // ObjectNotFoundError but handleError in the controller accepts any Error.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (downloadResult as any).map((dl: GetObjectCommandResult) => ({
+    ...dl,
     cid: mapping.cid,
-    // Objects uploaded before this feature have null md5; fall back to CID so
-    // they remain accessible (ETag will not be a valid MD5 in that case).
+    // Objects uploaded before this feature have null md5; fall back to null
+    // so the controller can omit the ETag header for legacy objects.
     etag: mapping.md5 ? formatETag(mapping.md5) : null,
   })
 }
@@ -126,10 +146,8 @@ const uploadPart = async (
 
 const completeMultipartUpload = async (
   user: UserWithOrganization,
-  params: CompleteMultipartUploadCommandParams,
-): Promise<
-  Result<CompleteMultipartUploadCommandResult, ObjectNotFoundError>
-> => {
+  params: CompleteMultipartUploadParams,
+): Promise<Result<CompleteMultipartUploadResult, ObjectNotFoundError>> => {
   const cid = await UploadsUseCases.completeUpload(user, params.UploadId)
 
   // Compute the composite multipart ETag from the per-part MD5s the client
@@ -169,7 +187,7 @@ const completeMultipartUpload = async (
 const putObject = async (
   user: UserWithOrganization,
   params: PutObjectCommandParams,
-): Promise<Result<PutObjectCommandResult, ObjectNotFoundError>> => {
+): Promise<Result<PutObjectResult, ObjectNotFoundError>> => {
   const name = params.Key.split('/').pop()!
 
   // Compute MD5 before upload so we have it ready for storage.
