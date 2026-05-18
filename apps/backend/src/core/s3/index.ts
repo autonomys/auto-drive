@@ -99,7 +99,7 @@ const getObject = async (
     // Objects uploaded before this feature have null md5; fall back to null
     // so the controller can omit the ETag header for legacy objects.
     etag: mapping.md5 ? formatETag(mapping.md5) : null,
-  })
+  }))
 }
 
 const createMultipartUpload = async (
