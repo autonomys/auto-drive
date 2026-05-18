@@ -85,17 +85,18 @@ const updateMapping = async (
   bucket: string,
   s3Key: string,
   newCid: string,
+  md5: string | null = null,
 ): Promise<S3KeyMapping> => {
   const db = await getDatabase()
 
   const result = await db.query<S3KeyMappingDB>({
     text: `
       UPDATE "S3".object_mappings
-      SET cid = $3, updated_at = NOW()
+      SET cid = $3, md5 = $4, updated_at = NOW()
       WHERE bucket = $1 AND "key" = $2
       RETURNING *
     `,
-    values: [bucket, s3Key, newCid],
+    values: [bucket, s3Key, newCid, md5],
   })
 
   if (result.rows.length === 0) {
