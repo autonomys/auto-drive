@@ -62,11 +62,17 @@ const getUploadOptions = (req: Request) => {
 /**
  * Extract part ETags from a CompleteMultipartUpload XML request body.
  *
- * The AWS SDK sends XML like:
+ * AWS SDK v3 for JavaScript serialises <ETag> BEFORE <PartNumber> inside
+ * each <Part> element:
+ *
  *   <CompleteMultipartUpload>
- *     <Part><PartNumber>1</PartNumber><ETag>"md5hex"</ETag></Part>
+ *     <Part><ETag>"md5hex"</ETag><PartNumber>1</PartNumber></Part>
  *     ...
  *   </CompleteMultipartUpload>
+ *
+ * Other clients (e.g. older SDKs, rclone) may use the opposite order.  To
+ * handle both, each <Part> block is extracted first and then the two fields
+ * are parsed independently from its content.
  *
  * Returns parts sorted by PartNumber (ascending) so the composite ETag is
  * computed in the correct order.
@@ -75,15 +81,21 @@ const parseMultipartParts = (
   body: Buffer,
 ): Array<{ PartNumber: number; ETag: string }> => {
   const xml = body.toString('utf-8')
-  const partRegex =
-    /<Part>.*?<PartNumber>(\d+)<\/PartNumber>.*?<ETag>([^<]+)<\/ETag>.*?<\/Part>/gs
+  // Extract each <Part>…</Part> block, then parse fields independently so
+  // that element order within the block doesn't matter.
+  const partBlockRegex = /<Part>([\s\S]*?)<\/Part>/g
   const parts: Array<{ PartNumber: number; ETag: string }> = []
-  let match: RegExpExecArray | null
-  while ((match = partRegex.exec(xml)) !== null) {
-    parts.push({
-      PartNumber: parseInt(match[1], 10),
-      ETag: match[2].trim(),
-    })
+  let block: RegExpExecArray | null
+  while ((block = partBlockRegex.exec(xml)) !== null) {
+    const content = block[1]
+    const partNumberMatch = content.match(/<PartNumber>(\d+)<\/PartNumber>/)
+    const etagMatch = content.match(/<ETag>([^<]+)<\/ETag>/)
+    if (partNumberMatch && etagMatch) {
+      parts.push({
+        PartNumber: parseInt(partNumberMatch[1], 10),
+        ETag: etagMatch[1].trim(),
+      })
+    }
   }
   return parts.sort((a, b) => a.PartNumber - b.PartNumber)
 }
@@ -309,10 +321,12 @@ export const putObjectHandler = async (req: Request, res: Response) => {
     return
   }
 
-  // Strip Cid before serialising — it belongs in the header only, not the XML body.
-  const { Cid: putCid, ...putXmlBody } = result.value
-  res.set('x-amz-meta-cid', putCid)
-  sendXML(res, 'PutObjectResult', putXmlBody)
+  // Standard S3 PutObject: ETag and custom metadata go in response headers;
+  // the body is empty.  The AWS SDK reads ETag exclusively from the header.
+  const { ETag, Cid } = result.value
+  res.set('ETag', ETag)
+  res.set('x-amz-meta-cid', Cid)
+  res.status(200).end()
 }
 
 export const deleteObjectHandler = async (_req: Request, res: Response) => {
