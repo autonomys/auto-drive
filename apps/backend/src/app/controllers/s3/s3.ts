@@ -91,9 +91,13 @@ const parseMultipartParts = (
     const partNumberMatch = content.match(/<PartNumber>(\d+)<\/PartNumber>/)
     const etagMatch = content.match(/<ETag>([^<]+)<\/ETag>/)
     if (partNumberMatch && etagMatch) {
+      // AWS SDK v3 XML-encodes the double-quotes around the ETag hex digest
+      // as &quot; (e.g. &quot;d41d…&quot;).  Decode before storing so that
+      // multipartETag can strip the quotes and read the raw hex correctly.
+      const etag = etagMatch[1].trim().replace(/&quot;/g, '"')
       parts.push({
         PartNumber: parseInt(partNumberMatch[1], 10),
-        ETag: etagMatch[1].trim(),
+        ETag: etag,
       })
     }
   }
