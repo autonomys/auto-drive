@@ -116,7 +116,6 @@ export const useFileTableState = create<FileTableStore>()((set, get) => {
         fetcher: null,
         isInitialized: false,
       });
-      resetParams();
     },
     initFromUrl: () => {
       if (get().isInitialized) return;
