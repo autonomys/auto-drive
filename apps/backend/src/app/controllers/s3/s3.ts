@@ -328,10 +328,8 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
 
   const prefix = (req.query.prefix as string) ?? ''
   const delimiter = (req.query.delimiter as string) ?? null
-  const maxKeys = Math.min(
-    parseInt((req.query['max-keys'] as string) ?? '1000', 10) || 1000,
-    1000,
-  )
+  const rawMaxKeys = parseInt((req.query['max-keys'] as string) ?? '1000', 10)
+  const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
   const continuationToken =
     (req.query['continuation-token'] as string) ?? null
 

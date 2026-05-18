@@ -98,9 +98,10 @@ export interface ListObjectsResult {
  * CommonPrefixes entries.  Pagination tracks the last raw DB key scanned so
  * that the continuation token restores the exact position on the next call.
  *
- * When maxKeys entries are accumulated and the last one was a CommonPrefix,
- * we advance past all remaining keys in that prefix group before setting the
- * continuation token — otherwise the prefix would reappear on the next page.
+ * When maxKeys entries are accumulated and the next entry would be a new
+ * CommonPrefix, we stop before adding it.  The continuation token is set to
+ * the last key already scanned, which falls before the new prefix group, so
+ * the next page re-processes that group from the beginning.
  */
 export const buildListResult = (
   sortedObjects: S3ObjectListing[],
@@ -132,14 +133,8 @@ export const buildListResult = (
       if (!commonPrefixSet.has(foldedPrefix)) {
         // Adding a new common prefix — check if we're already full.
         if (objects.length + commonPrefixSet.size >= maxKeys) {
-          // Advance past the entire prefix group so the continuation token
-          // falls after the last key in this group, not in the middle of it.
-          while (
-            scanIdx < sortedObjects.length &&
-            sortedObjects[scanIdx].key.startsWith(foldedPrefix)
-          ) {
-            scanIdx++
-          }
+          // Stop here; the continuation token will fall before this prefix
+          // group so the next page re-processes it from the start.
           break
         }
         commonPrefixSet.add(foldedPrefix)

@@ -169,14 +169,18 @@ const listObjects = async (
       AND om.key LIKE $2
   `
 
+  // Escape LIKE wildcards so a literal '%' or '_' in the prefix doesn't
+  // accidentally match unrelated keys.
+  const escapedPrefix = prefix.replace(/%/g, '\\%').replace(/_/g, '\\_')
+
   let text: string
   let values: unknown[]
   if (continuationToken) {
-    text = baseSQL + ' AND om.key > $3 ORDER BY om.key'
-    values = [bucket, `${prefix}%`, continuationToken]
+    text = baseSQL + " AND om.key > $3 ORDER BY om.key"
+    values = [bucket, `${escapedPrefix}%`, continuationToken]
   } else {
     text = baseSQL + ' ORDER BY om.key'
-    values = [bucket, `${prefix}%`]
+    values = [bucket, `${escapedPrefix}%`]
   }
 
   const result = await db.query<{
