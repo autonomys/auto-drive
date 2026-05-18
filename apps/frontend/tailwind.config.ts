@@ -5,6 +5,7 @@ const config: Config = {
   content: [
     './src/**/*.{js,ts,jsx,tsx,mdx}',
     '../../packages/ui/src/**/*.{js,ts,jsx,tsx}',
+    '../../node_modules/@autonomys/auto-design-system/dist/**/*.{js,mjs}',
   ],
   darkMode: 'class',
   theme: {
