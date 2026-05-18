@@ -151,15 +151,17 @@ const completeMultipartUpload = async (
   const cid = await UploadsUseCases.completeUpload(user, params.UploadId)
 
   // Compute the composite multipart ETag from the per-part MD5s the client
-  // sent back in the request. If no parts were provided (e.g. old clients),
-  // fall back to the CID so the response is still well-formed.
+  // sent back in the request. If no parts were provided (e.g. old/broken
+  // clients), fall back to the CID so the response is still well-formed.
   const partETags = params.Parts?.map((p) => p.ETag) ?? []
-  const etag =
-    partETags.length > 0 ? multipartETag(partETags) : `"${cid}"`
+  const hasValidParts = partETags.length > 0
+  const etag = hasValidParts ? multipartETag(partETags) : `"${cid}"`
 
-  // Extract the raw MD5 hex from the composite ETag for storage.
-  // For multipart we store the full composite string (without quotes) as md5.
-  const md5ForStorage = etag.replace(/"/g, '')
+  // Only persist an md5 when we have real per-part ETags to compute from.
+  // Storing null for the no-parts fallback keeps the md5 column's contract
+  // (valid composite hex or null) and prevents the CID from being mistaken
+  // for an MD5 on subsequent GET/HEAD requests.
+  const md5ForStorage = hasValidParts ? etag.replace(/"/g, '') : null
 
   const mapping = await s3ObjectMappingsRepository.createMapping(
     params.Bucket,
