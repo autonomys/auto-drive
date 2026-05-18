@@ -4,6 +4,8 @@ export interface S3KeyMapping {
   bucket: string
   key: string
   cid: string
+  /** MD5 hex digest of the object body, or null for objects uploaded before this feature. */
+  md5: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -17,6 +19,7 @@ interface S3KeyMappingDB {
   bucket: S3KeyMapping['bucket']
   key: S3KeyMapping['key']
   cid: S3KeyMapping['cid']
+  md5: S3KeyMapping['md5']
   created_at: S3KeyMapping['createdAt']
   updated_at: S3KeyMapping['updatedAt']
 }
@@ -30,6 +33,7 @@ const mapDBToDomain = (db: S3KeyMappingDB): S3KeyMapping => ({
   bucket: db.bucket,
   key: db.key,
   cid: db.cid,
+  md5: db.md5 ?? null,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 })
@@ -38,18 +42,19 @@ const createMapping = async (
   bucket: string,
   s3Key: string,
   cid: string,
+  md5: string | null = null,
 ): Promise<S3KeyMapping> => {
   const db = await getDatabase()
 
   const result = await db.query<S3KeyMappingDB>({
     text: `
       INSERT INTO "S3".object_mappings
-      (bucket, "key", cid)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (bucket, "key") DO UPDATE SET cid = $3, updated_at = NOW()
+      (bucket, "key", cid, md5)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (bucket, "key") DO UPDATE SET cid = $3, md5 = $4, updated_at = NOW()
       RETURNING *
     `,
-    values: [bucket, s3Key, cid],
+    values: [bucket, s3Key, cid, md5],
   })
 
   return result.rows.map(mapDBToDomain)[0]

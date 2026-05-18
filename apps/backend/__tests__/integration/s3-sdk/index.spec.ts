@@ -82,9 +82,8 @@ describe('AWS S3 - SDK', () => {
       Body,
     })
     const result = await s3Client.send(command)
-    expect(result).toMatchObject({
-      ETag: expect.any(String),
-    })
+    // ETag must be a quoted MD5 hex digest (standard S3 format)
+    expect(result.ETag).toMatch(/^"[a-f0-9]{32}"$/)
   })
 
   it('should download the object', async () => {
@@ -140,9 +139,8 @@ describe('AWS S3 - SDK', () => {
     })
 
     const partUploadResult = await s3Client.send(uploadPartCommand)
-    expect(partUploadResult).toMatchObject({
-      ETag: expect.any(String),
-    })
+    // Part ETag must be a quoted MD5
+    expect(partUploadResult.ETag).toMatch(/^"[a-f0-9]{32}"$/)
 
     const completeCommand = new CompleteMultipartUploadCommand({
       Bucket,
@@ -159,9 +157,8 @@ describe('AWS S3 - SDK', () => {
     })
 
     const completeResult = await s3Client.send(completeCommand)
-    expect(completeResult).toMatchObject({
-      ETag: expect.any(String),
-    })
+    // Single-part multipart ETag: "<md5>-1"
+    expect(completeResult.ETag).toMatch(/^"[a-f0-9]{32}-1"$/)
   })
 
   it('should be able to download the object', async () => {
@@ -262,12 +259,10 @@ describe('AWS S3 - SDK', () => {
       })
 
       const result = await s3Client.send(command)
-      expect(result).toMatchObject({
-        ETag: expect.any(String),
-      })
+      expect(result.ETag).toMatch(/^"[a-f0-9]{32}"$/)
     })
 
-    it('should be able to download the object with compression and encryption', async () => {
+    it('should return MD5 ETag and CID header on HeadObject', async () => {
       const command = new HeadObjectCommand({
         Bucket,
         Key: ThirdKey,
@@ -277,6 +272,10 @@ describe('AWS S3 - SDK', () => {
 
       expect(result.Metadata?.compression).toBe('ZLIB')
       expect(result.Metadata?.encryption).toBe('AES_256_GCM')
+      // ETag must be a quoted MD5, not a CID
+      expect(result.ETag).toMatch(/^"[a-f0-9]{32}"$/)
+      // CID must be present in the custom header
+      expect(result.Metadata?.cid).toBeDefined()
     })
   })
 })

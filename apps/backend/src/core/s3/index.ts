@@ -16,16 +16,47 @@ import {
 } from '@auto-drive/s3'
 import { UploadsUseCases } from '../uploads/uploads.js'
 import { UserWithOrganization } from '@auto-drive/models'
-import { v4 } from 'uuid'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { S3BucketInfo } from '../../infrastructure/repositories/s3/objectMappings.js'
+import { createHash } from 'crypto'
 
 const logger = createLogger('useCases:s3')
 
+/** Compute a quoted MD5 ETag in standard AWS S3 format: `"<hex>"`. */
+const md5Hex = (data: Buffer): string =>
+  createHash('md5').update(data).digest('hex')
+
+/**
+ * Compute the S3 composite ETag for a multipart upload.
+ *
+ * AWS format: MD5 of the binary concatenation of each part's raw MD5 bytes,
+ * followed by a hyphen and the part count. e.g. `"abc123...-3"`.
+ *
+ * Part ETags are expected in quoted hex format: `"d41d8cd98f00b204e9800998ecf8427e"`.
+ */
+const multipartETag = (partETags: string[]): string => {
+  const partMd5Buffers = partETags.map((tag) =>
+    Buffer.from(tag.replace(/"/g, ''), 'hex'),
+  )
+  const composite = md5Hex(Buffer.concat(partMd5Buffers))
+  return `"${composite}-${partETags.length}"`
+}
+
+/** Format a raw hex MD5 as a quoted S3 ETag: `"<hex>"`. */
+const formatETag = (hex: string): string => `"${hex}"`
+
+// Extended result type for internal use — includes the CID so the HTTP layer
+// can set the x-amz-meta-cid header without an extra DB lookup.
+type GetObjectUseCaseResult = GetObjectCommandResult & {
+  cid: string
+  /** null for objects uploaded before MD5 ETag support was introduced. */
+  etag: string | null
+}
+
 const getObject = async (
   params: GetObjectCommandParams,
-): Promise<Result<GetObjectCommandResult, ObjectNotFoundError>> => {
+): Promise<Result<GetObjectUseCaseResult, ObjectNotFoundError>> => {
   const mapping = await s3ObjectMappingsRepository.findByKey(
     params.Bucket,
     params.Key,
@@ -36,8 +67,18 @@ const getObject = async (
     )
   }
 
-  return await DownloadUseCase.downloadObjectByAnonymous(mapping.cid, {
-    byteRange: params.Range,
+  const downloadResult = await DownloadUseCase.downloadObjectByAnonymous(
+    mapping.cid,
+    { byteRange: params.Range },
+  )
+  if (downloadResult.isErr()) return downloadResult
+
+  return ok({
+    ...downloadResult.value,
+    cid: mapping.cid,
+    // Objects uploaded before this feature have null md5; fall back to CID so
+    // they remain accessible (ETag will not be a valid MD5 in that case).
+    etag: mapping.md5 ? formatETag(mapping.md5) : null,
   })
 }
 
@@ -66,10 +107,9 @@ const uploadPart = async (
   user: UserWithOrganization,
   params: UploadPartCommandParams,
 ): Promise<Result<UploadPartCommandResult, ObjectNotFoundError>> => {
-  // to-comment: AWS uses 1-indexed part numbers, but we use 0-indexed part numbers
+  // AWS uses 1-indexed part numbers; we use 0-indexed internally.
   const zeroIndexedPartNumber = params.PartNumber - 1
 
-  // To-do: support not sorted part uploads
   await UploadsUseCases.uploadChunk(
     user,
     params.UploadId,
@@ -77,8 +117,10 @@ const uploadPart = async (
     params.Body,
   )
 
+  // Return the MD5 of the part body as the ETag. The client echoes these back
+  // in CompleteMultipartUpload so we can compute the composite ETag.
   return ok({
-    ETag: v4(),
+    ETag: formatETag(md5Hex(params.Body)),
   })
 }
 
@@ -90,23 +132,37 @@ const completeMultipartUpload = async (
 > => {
   const cid = await UploadsUseCases.completeUpload(user, params.UploadId)
 
+  // Compute the composite multipart ETag from the per-part MD5s the client
+  // sent back in the request. If no parts were provided (e.g. old clients),
+  // fall back to the CID so the response is still well-formed.
+  const partETags = params.Parts?.map((p) => p.ETag) ?? []
+  const etag =
+    partETags.length > 0 ? multipartETag(partETags) : `"${cid}"`
+
+  // Extract the raw MD5 hex from the composite ETag for storage.
+  // For multipart we store the full composite string (without quotes) as md5.
+  const md5ForStorage = etag.replace(/"/g, '')
+
   const mapping = await s3ObjectMappingsRepository.createMapping(
     params.Bucket,
     params.Key,
     cid,
+    md5ForStorage,
   )
   logger.debug(
-    'Created mapping: bucket=(%s) key=(%s) -> cid=(%s)',
+    'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
     mapping.bucket,
     mapping.key,
     cid,
+    etag,
   )
 
   return ok({
     Location: objectDownloadPath(params.Bucket, params.Key),
     Bucket: params.Bucket,
     Key: params.Key,
-    ETag: cid,
+    ETag: etag,
+    Cid: cid,
   })
 }
 
@@ -115,6 +171,9 @@ const putObject = async (
   params: PutObjectCommandParams,
 ): Promise<Result<PutObjectCommandResult, ObjectNotFoundError>> => {
   const name = params.Key.split('/').pop()!
+
+  // Compute MD5 before upload so we have it ready for storage.
+  const md5 = md5Hex(params.Body)
 
   const upload = await UploadsUseCases.createFileUpload(
     user,
@@ -139,15 +198,17 @@ const putObject = async (
     params.Bucket,
     params.Key,
     cid,
+    md5,
   )
   logger.debug(
-    'Created mapping: bucket=(%s) key=(%s) -> cid=(%s)',
+    'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
     mapping.bucket,
     mapping.key,
     cid,
+    formatETag(md5),
   )
 
-  return ok({ ETag: cid })
+  return ok({ ETag: formatETag(md5), Cid: cid })
 }
 
 const listBuckets = async (): Promise<S3BucketInfo[]> => {

@@ -59,6 +59,35 @@ const getUploadOptions = (req: Request) => {
   return UploadOptions
 }
 
+/**
+ * Extract part ETags from a CompleteMultipartUpload XML request body.
+ *
+ * The AWS SDK sends XML like:
+ *   <CompleteMultipartUpload>
+ *     <Part><PartNumber>1</PartNumber><ETag>"md5hex"</ETag></Part>
+ *     ...
+ *   </CompleteMultipartUpload>
+ *
+ * Returns parts sorted by PartNumber (ascending) so the composite ETag is
+ * computed in the correct order.
+ */
+const parseMultipartParts = (
+  body: Buffer,
+): Array<{ PartNumber: number; ETag: string }> => {
+  const xml = body.toString('utf-8')
+  const partRegex =
+    /<Part>.*?<PartNumber>(\d+)<\/PartNumber>.*?<ETag>([^<]+)<\/ETag>.*?<\/Part>/gs
+  const parts: Array<{ PartNumber: number; ETag: string }> = []
+  let match: RegExpExecArray | null
+  while ((match = partRegex.exec(xml)) !== null) {
+    parts.push({
+      PartNumber: parseInt(match[1], 10),
+      ETag: match[2].trim(),
+    })
+  }
+  return parts.sort((a, b) => a.PartNumber - b.PartNumber)
+}
+
 export const listBucketsHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
@@ -94,12 +123,19 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     metadata,
     startDownload,
     byteRange: resultingByteRange,
+    cid,
+    etag,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
+
+  // ETag: MD5 for objects uploaded with this feature; CID for legacy objects.
+  if (etag) res.set('ETag', etag)
+  // Always expose the CID so clients that understand Autonomys can use it.
+  res.set('x-amz-meta-cid', cid)
 
   pipeline(await startDownload(), res, (err: Error | null) => {
     if (err) {
@@ -129,12 +165,22 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     handleError(downloadResult.error, res)
     return
   }
-  const { metadata, byteRange: resultingByteRange } = downloadResult.value
+  const {
+    metadata,
+    byteRange: resultingByteRange,
+    cid,
+    etag,
+  } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
+
+  // ETag: MD5 for objects uploaded with this feature; CID for legacy objects.
+  if (etag) res.set('ETag', etag)
+  // Always expose the CID so clients that understand Autonomys can use it.
+  res.set('x-amz-meta-cid', cid)
 
   res.sendStatus(204)
 }
@@ -216,10 +262,16 @@ export const completeMultipartUploadHandler = async (
   if (!user) return
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
+
+  // Parse the part list from the XML request body so we can compute the
+  // standard S3 composite ETag (MD5 of concatenated per-part MD5s + part count).
+  const parts = Buffer.isBuffer(req.body) ? parseMultipartParts(req.body) : []
+
   const result = await S3UseCases.completeMultipartUpload(user, {
     Bucket: bucket,
     Key: key,
     UploadId: req.query.uploadId as string,
+    Parts: parts,
   })
 
   if (result.isErr()) {
@@ -227,15 +279,8 @@ export const completeMultipartUploadHandler = async (
     return
   }
 
+  res.set('x-amz-meta-cid', result.value.Cid)
   sendXML(res, 'CompleteMultipartUploadResult', result.value)
-}
-
-export const deleteObjectHandler = async (_req: Request, res: Response) => {
-  sendXML(res.status(403), 'Error', {
-    Code: 'AccessDenied',
-    Message:
-      'Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.',
-  })
 }
 
 export const putObjectHandler = async (req: Request, res: Response) => {
@@ -258,5 +303,14 @@ export const putObjectHandler = async (req: Request, res: Response) => {
     return
   }
 
+  res.set('x-amz-meta-cid', result.value.Cid)
   sendXML(res, 'PutObjectResult', result.value)
+}
+
+export const deleteObjectHandler = async (_req: Request, res: Response) => {
+  sendXML(res.status(403), 'Error', {
+    Code: 'AccessDenied',
+    Message:
+      'Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.',
+  })
 }
