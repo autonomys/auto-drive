@@ -185,8 +185,9 @@ const listObjects = async (
     dbLimit,
   )
 
-  let { objects, commonPrefixes, isTruncated, nextContinuationToken } =
-    buildListResult(allMatching, prefix, delimiter, maxKeys)
+  const listResult = buildListResult(allMatching, prefix, delimiter, maxKeys)
+  const { objects, commonPrefixes } = listResult
+  let { isTruncated, nextContinuationToken } = listResult
 
   // If the DB returned a full batch (allMatching.length === dbLimit) there may
   // be rows beyond the LIMIT that buildListResult never saw.  This happens when
