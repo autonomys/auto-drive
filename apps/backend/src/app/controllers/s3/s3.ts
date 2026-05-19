@@ -323,8 +323,10 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  // The bucket is the first path segment; parseBucketAndKey handles this.
-  const { bucket } = parseBucketAndKey(req.params.key)
+  // For ListObjectsV2, req.params.key is purely a bucket name.  The AWS SDK
+  // appends a trailing slash when using bucketEndpoint:true, so we get either
+  // "my-bucket/" or "my-bucket" — take everything before the first '/'.
+  const bucket = req.params.key.split('/')[0]
 
   const prefix = (req.query.prefix as string) ?? ''
   const delimiter = (req.query.delimiter as string) ?? null

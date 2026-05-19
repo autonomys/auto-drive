@@ -185,8 +185,19 @@ const listObjects = async (
     dbLimit,
   )
 
-  const { objects, commonPrefixes, isTruncated, nextContinuationToken } =
+  let { objects, commonPrefixes, isTruncated, nextContinuationToken } =
     buildListResult(allMatching, prefix, delimiter, maxKeys)
+
+  // If the DB returned a full batch (allMatching.length === dbLimit) there may
+  // be rows beyond the LIMIT that buildListResult never saw.  This happens when
+  // every fetched row folds into CommonPrefixes and none break the maxKeys cap —
+  // buildListResult then sees scanIdx === sortedObjects.length and concludes
+  // isTruncated = false.  Override to be conservative: one extra empty page is
+  // harmless, but silently dropping data is not.
+  if (!isTruncated && allMatching.length === dbLimit) {
+    isTruncated = true
+    nextContinuationToken = allMatching[allMatching.length - 1].key
+  }
 
   return {
     name: bucket,
