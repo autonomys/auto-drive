@@ -152,6 +152,7 @@ const listObjects = async (
   bucket: string,
   prefix: string,
   continuationToken: string | null,
+  limit: number,
 ): Promise<S3ObjectListing[]> => {
   const db = await getDatabase()
 
@@ -176,11 +177,11 @@ const listObjects = async (
   let text: string
   let values: unknown[]
   if (continuationToken) {
-    text = baseSQL + " AND om.key > $3 ORDER BY om.key"
-    values = [bucket, `${escapedPrefix}%`, continuationToken]
+    text = baseSQL + ' AND om.key > $3 ORDER BY om.key LIMIT $4'
+    values = [bucket, `${escapedPrefix}%`, continuationToken, limit]
   } else {
-    text = baseSQL + ' ORDER BY om.key'
-    values = [bucket, `${escapedPrefix}%`]
+    text = baseSQL + ' ORDER BY om.key LIMIT $3'
+    values = [bucket, `${escapedPrefix}%`, limit]
   }
 
   const result = await db.query<{

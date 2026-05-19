@@ -169,10 +169,20 @@ const listObjects = async (
 ): Promise<ListObjectsResult> => {
   const { bucket, prefix, delimiter, maxKeys, continuationToken } = params
 
+  // Without a delimiter every DB row is a distinct logical entry, so we only
+  // need maxKeys + 1 rows (the extra row lets buildListResult detect
+  // truncation without fetching the entire table).  With a delimiter, multiple
+  // rows can fold into a single CommonPrefix, so we over-fetch by a factor of
+  // 10 to handle large prefix groups while still keeping memory use bounded.
+  const dbLimit = delimiter
+    ? Math.min(maxKeys * 10 + 100, 10_000)
+    : maxKeys + 1
+
   const allMatching = await s3ObjectMappingsRepository.listObjects(
     bucket,
     prefix,
     continuationToken,
+    dbLimit,
   )
 
   const { objects, commonPrefixes, isTruncated, nextContinuationToken } =
