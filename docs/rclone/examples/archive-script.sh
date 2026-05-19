@@ -46,14 +46,14 @@ if [ ! -d "$SOURCE_DIR" ]; then
     exit 1
 fi
 
+EXIT_CODE=0
 rclone copy \
     "$SOURCE_DIR" \
     "$REMOTE:$BUCKET/$DEST_PREFIX/" \
     --immutable \
     --transfers "$TRANSFERS" \
-    -v
+    -v || EXIT_CODE=$?
 
-EXIT_CODE=$?
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
 if [ $EXIT_CODE -eq 0 ]; then
