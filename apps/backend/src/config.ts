@@ -38,6 +38,10 @@ export const config = {
   reconciliation: {
     intervalMs: Number(env('RECONCILIATION_INTERVAL_MS', '300000')), // 5 minutes
   },
+  publishingRecovery: {
+    intervalMs: Number(env('PUBLISHING_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
+    maxObjectsPerCycle: Number(env('PUBLISHING_RECOVERY_MAX_PER_CYCLE', '5')),
+  },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),

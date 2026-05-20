@@ -1,6 +1,7 @@
 import { OnchainPublisher } from '../../services/upload/onchainPublisher/index.js'
 import { NodesUseCases } from '../../../core/objects/nodes.js'
 import { ReconciliationUseCases } from '../../../core/objects/reconciliation.js'
+import { PublishingRecoveryUseCases } from '../../../core/objects/publishingRecovery.js'
 import { UploadsUseCases } from '../../../core/uploads/uploads.js'
 import { Task } from '../tasks.js'
 import { createHandlerWithRetries } from '../utils.js'
@@ -25,6 +26,8 @@ export const processFrontendTask = createHandlerWithRetries(
       return paymentManager.watchTransaction(params.txHash)
     } else if (id === 'reconcile-archival') {
       return ReconciliationUseCases.processReconciliation()
+    } else if (id === 'recover-publishing') {
+      return PublishingRecoveryUseCases.processPublishingRecovery()
     } else {
       throw new Error(`Received task ${id} but no handler found.`)
     }
