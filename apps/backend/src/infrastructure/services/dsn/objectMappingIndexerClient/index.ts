@@ -5,10 +5,14 @@ import { createLogger } from '../../../drivers/logger.js'
 const logger = createLogger('dsn:objectMappingIndexerClient')
 
 const getHttpUrl = (url: string) => {
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  return url.replace(/^ws(s)?:\/\//, 'http$1://')
+  const httpUrl =
+    url.startsWith('http://') || url.startsWith('https://')
+      ? url
+      : url.replace(/^ws(s)?:\/\//, 'http$1://')
+  // The RPC server only accepts POST on the /ws path.
+  // Ensure the URL ends with /ws regardless of input format.
+  const normalized = httpUrl.replace(/\/+$/, '')
+  return normalized.endsWith('/ws') ? normalized : normalized + '/ws'
 }
 
 const httpClient = ObjectMappingIndexerRPCApi.createHttpClient(
@@ -52,7 +56,15 @@ const getObjectMappings = async (
         }
         consecutiveFailures = 0
       } catch (error) {
-        consecutiveFailures++
+        // "Object mapping not found" is an expected miss — the indexer
+        // simply doesn't have this hash. Only count genuine transport
+        // or server errors toward the circuit breaker.
+        const isNotFound =
+          error instanceof Error &&
+          error.message.includes('Object mapping not found')
+        if (!isNotFound) {
+          consecutiveFailures++
+        }
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
           logger.warn(
             'Aborting individual lookups after %d consecutive failures (%d/%d resolved so far). Last error: %s',

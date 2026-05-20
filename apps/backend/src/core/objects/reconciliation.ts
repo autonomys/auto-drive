@@ -13,8 +13,8 @@ const logger = createLogger('useCases:objects:reconciliation')
 
 const BATCH_SIZE = 500
 
-// Track consecutive zero-progress runs to detect permanently unresolvable
-// nodes (the indexer also missed them and can't provide their data).
+// Track consecutive zero-progress runs to detect potential connectivity
+// issues with the indexer or genuinely unresolvable nodes.
 let consecutiveZeroProgressRuns = 0
 const ZERO_PROGRESS_WARN_THRESHOLD = 3
 
@@ -165,9 +165,9 @@ const runReconciliationBatch = async (): Promise<void> => {
     consecutiveZeroProgressRuns++
     if (consecutiveZeroProgressRuns >= ZERO_PROGRESS_WARN_THRESHOLD) {
       logger.error(
-        'Reconciliation made no progress for %d consecutive runs. ' +
-          '%d unreconciled nodes may be permanently unresolvable ' +
-          '(indexer also missing their data). Consider indexer-side backfill.',
+        'Reconciliation made no progress for %d consecutive runs (%d unreconciled nodes). ' +
+          'Possible causes: indexer connectivity issue, transport misconfiguration, ' +
+          'or hashes genuinely missing from the indexer DB.',
         consecutiveZeroProgressRuns,
         unreconciledNodes.length,
       )
