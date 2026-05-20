@@ -20,7 +20,7 @@ All colors MUST be HSL.
     --auto-drive-primary: 234 50% 48%;
     --auto-drive-primary-foreground: 0 0% 100%;
     --auto-drive-secondary: 243 75% 59%;
-    --auto-drive-accent: 264 83% 70%;
+    --auto-drive-accent: 234 50% 48%;
 
     /* Background gradients */
     --gradient-main: linear-gradient(
