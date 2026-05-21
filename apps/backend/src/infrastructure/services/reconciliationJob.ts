@@ -1,37 +1,16 @@
 import { config } from '../../config.js'
 import { createLogger } from '../drivers/logger.js'
-import { Rabbit } from '../drivers/rabbit.js'
 import { EventRouter } from '../eventRouter/index.js'
 import { createTask } from '../eventRouter/tasks.js'
 import { safeCallback } from '../../shared/utils/safe.js'
+import { isTaskQueueBusy } from '../../shared/utils/queue.js'
 
 const logger = createLogger('ReconciliationJob')
 
-const TASK_MANAGER_QUEUE = 'task-manager'
-
 let reconciliationInterval: NodeJS.Timeout | null = null
 
-const isQueueBusy = async (): Promise<boolean> => {
-  try {
-    const pending = await Rabbit.getMessageCount(TASK_MANAGER_QUEUE)
-    if (pending > 0) {
-      logger.debug(
-        'Deferring reconciliation, %d tasks pending in queue',
-        pending,
-      )
-      return true
-    }
-  } catch (error) {
-    logger.warn(
-      'Failed to check queue depth, proceeding: %s',
-      error instanceof Error ? error.message : String(error),
-    )
-  }
-  return false
-}
-
 const enqueueReconciliation = async () => {
-  if (await isQueueBusy()) return
+  if (await isTaskQueueBusy('reconciliation')) return
 
   logger.debug('Enqueuing reconcile-archival task')
   EventRouter.publish(
