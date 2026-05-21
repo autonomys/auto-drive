@@ -20,6 +20,11 @@ import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { config } from '../../../src/config.js'
 import { AccountsUseCases } from '../../../src/core/index.js'
 
+/** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
+const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
+/** Composite multipart ETag: `"<32 hex chars>-<N>"` */
+const MULTIPART_ETAG_RE = /^"[a-f0-9]{32}-\d+"$/
+
 describe('AWS S3 - SDK', () => {
   let s3Client: S3Client
   const user = createMockUser()
@@ -82,9 +87,8 @@ describe('AWS S3 - SDK', () => {
       Body,
     })
     const result = await s3Client.send(command)
-    expect(result).toMatchObject({
-      ETag: expect.any(String),
-    })
+    // ETag must be a quoted MD5 hex digest (standard S3 format)
+    expect(result.ETag).toMatch(MD5_ETAG_RE)
   })
 
   it('should download the object', async () => {
@@ -140,9 +144,8 @@ describe('AWS S3 - SDK', () => {
     })
 
     const partUploadResult = await s3Client.send(uploadPartCommand)
-    expect(partUploadResult).toMatchObject({
-      ETag: expect.any(String),
-    })
+    // Part ETag must be a quoted MD5
+    expect(partUploadResult.ETag).toMatch(MD5_ETAG_RE)
 
     const completeCommand = new CompleteMultipartUploadCommand({
       Bucket,
@@ -159,9 +162,8 @@ describe('AWS S3 - SDK', () => {
     })
 
     const completeResult = await s3Client.send(completeCommand)
-    expect(completeResult).toMatchObject({
-      ETag: expect.any(String),
-    })
+    // Single-part multipart ETag: "<md5>-1"
+    expect(completeResult.ETag).toMatch(MULTIPART_ETAG_RE)
   })
 
   it('should be able to download the object', async () => {
@@ -262,12 +264,10 @@ describe('AWS S3 - SDK', () => {
       })
 
       const result = await s3Client.send(command)
-      expect(result).toMatchObject({
-        ETag: expect.any(String),
-      })
+      expect(result.ETag).toMatch(MD5_ETAG_RE)
     })
 
-    it('should be able to download the object with compression and encryption', async () => {
+    it('should return MD5 ETag and CID header on HeadObject', async () => {
       const command = new HeadObjectCommand({
         Bucket,
         Key: ThirdKey,
@@ -277,6 +277,10 @@ describe('AWS S3 - SDK', () => {
 
       expect(result.Metadata?.compression).toBe('ZLIB')
       expect(result.Metadata?.encryption).toBe('AES_256_GCM')
+      // ETag must be a quoted MD5, not a CID
+      expect(result.ETag).toMatch(MD5_ETAG_RE)
+      // CID must be present in the custom header
+      expect(result.Metadata?.cid).toBeDefined()
     })
   })
 })

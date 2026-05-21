@@ -10,6 +10,7 @@ import { pipeline } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { Request, Response } from 'express'
 import { sendXML } from './utils.js'
+import js2xmlparser from 'js2xmlparser'
 import { UploadOptions } from '@auto-drive/models'
 import {
   CompressionAlgorithm,
@@ -59,6 +60,51 @@ const getUploadOptions = (req: Request) => {
   return UploadOptions
 }
 
+/**
+ * Extract part ETags from a CompleteMultipartUpload XML request body.
+ *
+ * AWS SDK v3 for JavaScript serialises <ETag> BEFORE <PartNumber> inside
+ * each <Part> element:
+ *
+ *   <CompleteMultipartUpload>
+ *     <Part><ETag>"md5hex"</ETag><PartNumber>1</PartNumber></Part>
+ *     ...
+ *   </CompleteMultipartUpload>
+ *
+ * Other clients (e.g. older SDKs, rclone) may use the opposite order.  To
+ * handle both, each <Part> block is extracted first and then the two fields
+ * are parsed independently from its content.
+ *
+ * Returns parts sorted by PartNumber (ascending) so the composite ETag is
+ * computed in the correct order.
+ */
+const parseMultipartParts = (
+  body: Buffer,
+): Array<{ PartNumber: number; ETag: string }> => {
+  const xml = body.toString('utf-8')
+  // Extract each <Part>…</Part> block, then parse fields independently so
+  // that element order within the block doesn't matter.
+  const partBlockRegex = /<Part>([\s\S]*?)<\/Part>/g
+  const parts: Array<{ PartNumber: number; ETag: string }> = []
+  let block: RegExpExecArray | null
+  while ((block = partBlockRegex.exec(xml)) !== null) {
+    const content = block[1]
+    const partNumberMatch = content.match(/<PartNumber>(\d+)<\/PartNumber>/)
+    const etagMatch = content.match(/<ETag>([^<]+)<\/ETag>/)
+    if (partNumberMatch && etagMatch) {
+      // AWS SDK v3 XML-encodes the double-quotes around the ETag hex digest
+      // as &quot; (e.g. &quot;d41d…&quot;).  Decode before storing so that
+      // multipartETag can strip the quotes and read the raw hex correctly.
+      const etag = etagMatch[1].trim().replace(/&quot;/g, '"')
+      parts.push({
+        PartNumber: parseInt(partNumberMatch[1], 10),
+        ETag: etag,
+      })
+    }
+  }
+  return parts.sort((a, b) => a.PartNumber - b.PartNumber)
+}
+
 export const listBucketsHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
@@ -94,12 +140,21 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     metadata,
     startDownload,
     byteRange: resultingByteRange,
+    cid,
+    etag,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
+
+  // ETag: set to the MD5 for objects uploaded after this feature was introduced.
+  // Legacy objects (md5 = null in the DB) do not get an ETag header — the CID
+  // is always available in x-amz-meta-cid for Autonomys-aware clients.
+  if (etag) res.set('ETag', etag)
+  // Always expose the CID so clients that understand Autonomys can use it.
+  res.set('x-amz-meta-cid', cid)
 
   pipeline(await startDownload(), res, (err: Error | null) => {
     if (err) {
@@ -129,12 +184,24 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     handleError(downloadResult.error, res)
     return
   }
-  const { metadata, byteRange: resultingByteRange } = downloadResult.value
+  const {
+    metadata,
+    byteRange: resultingByteRange,
+    cid,
+    etag,
+  } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
+
+  // ETag: set to the MD5 for objects uploaded after this feature was introduced.
+  // Legacy objects (md5 = null in the DB) do not get an ETag header — the CID
+  // is always available in x-amz-meta-cid for Autonomys-aware clients.
+  if (etag) res.set('ETag', etag)
+  // Always expose the CID so clients that understand Autonomys can use it.
+  res.set('x-amz-meta-cid', cid)
 
   res.sendStatus(204)
 }
@@ -205,7 +272,11 @@ export const uploadPartHandler = async (req: Request, res: Response) => {
     return
   }
 
-  sendXML(res, 'UploadPartResult', result.value)
+  // The AWS SDK reads the part ETag exclusively from the HTTP ETag header.
+  // Respond with the header only — no body — so Express's auto-ETag
+  // generation cannot overwrite our MD5 value with a body-derived hash.
+  res.set('ETag', result.value.ETag)
+  res.status(200).end()
 }
 
 export const completeMultipartUploadHandler = async (
@@ -216,10 +287,16 @@ export const completeMultipartUploadHandler = async (
   if (!user) return
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
+
+  // Parse the part list from the XML request body so we can compute the
+  // standard S3 composite ETag (MD5 of concatenated per-part MD5s + part count).
+  const parts = Buffer.isBuffer(req.body) ? parseMultipartParts(req.body) : []
+
   const result = await S3UseCases.completeMultipartUpload(user, {
     Bucket: bucket,
     Key: key,
     UploadId: req.query.uploadId as string,
+    Parts: parts,
   })
 
   if (result.isErr()) {
@@ -227,15 +304,19 @@ export const completeMultipartUploadHandler = async (
     return
   }
 
-  sendXML(res, 'CompleteMultipartUploadResult', result.value)
-}
-
-export const deleteObjectHandler = async (_req: Request, res: Response) => {
-  sendXML(res.status(403), 'Error', {
-    Code: 'AccessDenied',
-    Message:
-      'Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.',
-  })
+  // Set ETag and CID headers explicitly and use res.end() rather than sendXML
+  // (which calls res.send()). res.send() triggers Express's auto-ETag generation
+  // which would overwrite our composite MD5 ETag with a body-derived hash.
+  const { Cid: completeCid, ETag: completeETag, ...completeXmlBody } = result.value
+  res.set('ETag', completeETag)
+  res.set('x-amz-meta-cid', completeCid)
+  res.setHeader('Content-Type', 'application/xml')
+  res.end(
+    js2xmlparser.parse('CompleteMultipartUploadResult', {
+      ETag: completeETag,
+      ...completeXmlBody,
+    }),
+  )
 }
 
 export const putObjectHandler = async (req: Request, res: Response) => {
@@ -258,5 +339,18 @@ export const putObjectHandler = async (req: Request, res: Response) => {
     return
   }
 
-  sendXML(res, 'PutObjectResult', result.value)
+  // Standard S3 PutObject: ETag and custom metadata go in response headers;
+  // the body is empty.  The AWS SDK reads ETag exclusively from the header.
+  const { ETag, Cid } = result.value
+  res.set('ETag', ETag)
+  res.set('x-amz-meta-cid', Cid)
+  res.status(200).end()
+}
+
+export const deleteObjectHandler = async (_req: Request, res: Response) => {
+  sendXML(res.status(403), 'Error', {
+    Code: 'AccessDenied',
+    Message:
+      'Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.',
+  })
 }
