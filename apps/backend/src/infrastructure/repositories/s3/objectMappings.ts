@@ -156,16 +156,23 @@ const listObjects = async (
 ): Promise<S3ObjectListing[]> => {
   const db = await getDatabase()
 
-  // JOIN metadata to get totalSize.  The metadata JSON field stores bigint
-  // values as strings, so we cast with ::bigint then ::text for the driver.
+  // LATERAL subquery picks at most one metadata row per object mapping.
+  // A plain LEFT JOIN on head_cid would fan out when the same CID appears
+  // as head_cid in multiple metadata rows (different root_cid values), which
+  // can happen when the same content is referenced by more than one root upload.
   const baseSQL = `
     SELECT
       om.key,
       om.cid,
-      COALESCE((m.metadata->>'totalSize')::bigint, 0) AS size,
+      COALESCE(m.total_size, 0) AS size,
       om.updated_at
     FROM "S3".object_mappings om
-    LEFT JOIN metadata m ON m.head_cid = om.cid
+    LEFT JOIN LATERAL (
+      SELECT (metadata->>'totalSize')::bigint AS total_size
+      FROM metadata
+      WHERE head_cid = om.cid
+      LIMIT 1
+    ) m ON true
     WHERE om.bucket = $1
       AND om.key LIKE $2
   `
