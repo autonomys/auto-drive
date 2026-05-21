@@ -19,11 +19,10 @@ let isRunning = false
  *   and re-publishes them via OnchainPublisher
  * - Limits throughput to avoid flooding the task queue
  *
- * This runs periodically via publishingRecoveryJob.ts. The interval
- * itself acts as the staleness threshold — objects that are still
- * being actively published in normal pipeline flow will have their
- * remaining batches in the task queue, so they won't appear as
- * "stuck" (all batches are in-flight or completed).
+ * Queue deferral (checking for pending pipeline tasks) is handled by
+ * the job scheduler (publishingRecoveryJob.ts), NOT here. This ensures
+ * that only timer-triggered runs defer, while task-triggered runs
+ * always execute.
  */
 const processPublishingRecovery = async (): Promise<void> => {
   if (isRunning) {
