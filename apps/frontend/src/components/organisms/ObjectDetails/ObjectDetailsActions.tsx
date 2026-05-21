@@ -108,7 +108,7 @@ export const ObjectDetailsActions = ({
       </Button>
       {isCached === false && (
         <Button
-          variant='lightAccent'
+          variant='primary'
           className={cn(
             'inline-flex items-center text-sm',
             (object.tags.includes(ObjectTag.Banned) || isBringingToCache) &&

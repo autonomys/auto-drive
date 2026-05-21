@@ -2,10 +2,11 @@ import { createLogger } from '../drivers/logger.js'
 import { Rabbit } from '../drivers/rabbit.js'
 import { EventRouter } from './index.js'
 import { Task, TaskSchema } from './tasks.js'
+import { withTimeout, TimeoutError } from '../../shared/utils/timeout.js'
 
 const logger = createLogger('eventRouter:utils')
 
-type Handler = (task: Task) => Promise<unknown>
+type Handler = (task: Task, signal: AbortSignal) => Promise<unknown>
 
 export const createHandlerWithRetries =
   (
@@ -13,7 +14,12 @@ export const createHandlerWithRetries =
     {
       errorPublishQueue = 'errors',
       errorRetries = 3,
-    }: { errorPublishQueue?: string | null; errorRetries?: number } = {},
+      taskTimeoutMs = 0,
+    }: {
+      errorPublishQueue?: string | null
+      errorRetries?: number
+      taskTimeoutMs?: number
+    } = {},
   ) =>
   async (obj: unknown) => {
     const parsingResult = TaskSchema.safeParse(obj)
@@ -22,9 +28,32 @@ export const createHandlerWithRetries =
       return
     }
 
+    const abortController = new AbortController()
+
     try {
-      await handler(parsingResult.data)
+      const handlerPromise = handler(parsingResult.data, abortController.signal)
+      if (taskTimeoutMs > 0) {
+        await withTimeout(
+          handlerPromise,
+          taskTimeoutMs,
+          `task:${parsingResult.data.id}`,
+          abortController,
+        )
+      } else {
+        await handlerPromise
+      }
     } catch (error) {
+      if (!abortController.signal.aborted) {
+        abortController.abort(error)
+      }
+      if (error instanceof TimeoutError) {
+        logger.warn(
+          'Task %s timed out after %dms (retriesLeft=%d)',
+          parsingResult.data.id,
+          taskTimeoutMs,
+          parsingResult.data.retriesLeft,
+        )
+      }
       if (parsingResult.data.retriesLeft > 0) {
         const newTask = {
           ...parsingResult.data,

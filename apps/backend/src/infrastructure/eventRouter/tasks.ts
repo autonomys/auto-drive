@@ -69,6 +69,11 @@ export const TaskSchema = z.discriminatedUnion('id', [
       cid: z.string(),
     }),
   }),
+  z.object({
+    id: z.literal('reconcile-archival'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({}),
+  }),
 ])
 
 export type MigrateUploadTask = z.infer<typeof TaskSchema>
@@ -129,6 +134,10 @@ type TaskCreateParams =
         cid: string
       }
     }
+  | {
+      id: 'reconcile-archival'
+      params: Record<string, never>
+    }
 
 export const createTask = (task: TaskCreateParams): Task => {
   switch (task.id) {
@@ -181,6 +190,12 @@ export const createTask = (task: TaskCreateParams): Task => {
         retriesLeft: MAX_RETRIES,
       }
     case 'populate-cache':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'reconcile-archival':
       return {
         id: task.id,
         params: task.params,

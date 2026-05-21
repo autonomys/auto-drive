@@ -5,6 +5,7 @@ const config: Config = {
   content: [
     './src/**/*.{js,ts,jsx,tsx,mdx}',
     '../../packages/ui/src/**/*.{js,ts,jsx,tsx}',
+    '../../node_modules/@autonomys/auto-design-system/dist/**/*.{js,mjs}',
   ],
   darkMode: 'class',
   theme: {
@@ -76,6 +77,10 @@ const config: Config = {
           primary: 'hsl(var(--auto-drive-primary))',
           secondary: 'hsl(var(--auto-drive-secondary))',
           accent: 'hsl(var(--auto-drive-accent))',
+        },
+        'auto-explorer': {
+          buttonLightFrom: 'hsl(var(--auto-drive-primary))',
+          buttonDarkFrom: 'hsl(var(--auto-drive-primary))',
         },
         success: {
           DEFAULT: 'hsl(var(--success))',

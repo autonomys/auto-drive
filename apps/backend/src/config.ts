@@ -35,9 +35,15 @@ export const config = {
     url: env('OBJECT_MAPPING_ARCHIVER_URL'),
     step: Number(env('OBJECT_MAPPING_ARCHIVER_STEP', '1000')),
   },
+  reconciliation: {
+    intervalMs: Number(env('RECONCILIATION_INTERVAL_MS', '300000')), // 5 minutes
+  },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),
+    fetchTimeoutMs: Number(
+      env('FILES_GATEWAY_FETCH_TIMEOUT_MS', '60000'),
+    ),
   },
   authService: {
     url: env('AUTH_SERVICE_URL', 'http://localhost:3030'),
@@ -117,6 +123,9 @@ export const config = {
     },
     forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
     taskManagerMaxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
+    downloadInactivityTimeoutMs: Number(
+      env('DOWNLOAD_INACTIVITY_TIMEOUT_MS', '300000'),
+    ),
   },
   featureFlags: {
     flags: {

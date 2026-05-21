@@ -419,7 +419,9 @@ const getNonArchivedObjects = async () => {
   return objects.map((e) => e.head_cid)
 }
 
-const populateCaches = async (cid: string) => {
+const populateCaches = async (cid: string, signal?: AbortSignal) => {
+  if (signal?.aborted) return
+
   try {
     const isReconstructable = await ObjectUseCases.isReconstructable(cid)
     if (!isReconstructable) {
@@ -430,13 +432,35 @@ const populateCaches = async (cid: string) => {
       return
     }
 
+    if (signal?.aborted) return
+
     const stream = await downloadService.download(cid)
+
+    if (signal) {
+      const onAbort = () => {
+        stream.destroy(new Error('Cache population aborted by task timeout'))
+      }
+      if (signal.aborted) {
+        stream.destroy(new Error('Cache population aborted by task timeout'))
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true })
+        stream.once('close', () =>
+          signal.removeEventListener('abort', onAbort),
+        )
+      }
+    }
 
     logger.debug('Downloaded object from DB after archival check (cid=%s)', cid)
 
-    // Wait until the entire stream has been consumed (and therefore cached)
     await consumeStream(stream)
   } catch (e) {
+    if (signal?.aborted) {
+      logger.warn(
+        'Cache population aborted for object (cid=%s)',
+        cid,
+      )
+      return
+    }
     logger.warn(
       e as Error,
       'Failed to download object from DB after archival check (cid=%s)',
@@ -446,8 +470,19 @@ const populateCaches = async (cid: string) => {
   }
 }
 
-const onObjectArchived = async (cid: string) => {
+const onObjectArchived = async (cid: string, signal?: AbortSignal) => {
+  if (signal?.aborted) return
+
   await metadataRepository.markAsArchived(cid)
+
+  if (signal?.aborted) {
+    logger.warn(
+      'Archival aborted after marking metadata, before stripping node data (cid=%s)',
+      cid,
+    )
+    return
+  }
+
   await nodesRepository.removeNodeDataByRootCid(cid)
 }
 
@@ -571,6 +606,36 @@ const checkObjectsArchivalStatus = async () => {
       )
     }),
   )
+}
+
+/**
+ * Like checkObjectsArchivalStatus but scoped to a specific set of head_cids.
+ * Uses a single aggregate query instead of N+1, making it safe for large
+ * batches during reconciliation.
+ */
+const checkArchivalStatusForObjects = async (
+  headCids: string[],
+): Promise<void> => {
+  if (headCids.length === 0) return
+
+  const fullyArchived =
+    await nodesRepository.getFullyArchivedHeadCids(headCids)
+
+  logger.info(
+    'Targeted archival check: %d/%d objects fully archived',
+    fullyArchived.length,
+    headCids.length,
+  )
+
+  for (const cid of fullyArchived) {
+    logger.debug('Publishing archival task for object (cid=%s)', cid)
+    EventRouter.publish(
+      createTask({
+        id: 'object-archived',
+        params: { cid },
+      }),
+    )
+  }
 }
 
 const addTag = async (cid: string, tag: string) => {
@@ -709,6 +774,7 @@ export const ObjectUseCases = {
   downloadPublishedObject,
   unpublishObject,
   checkObjectsArchivalStatus,
+  checkArchivalStatusForObjects,
   populateCaches,
   addTag,
   banObject,

@@ -339,7 +339,7 @@ export const UploadingFileModal = ({
                     id='password'
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className='mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm'
+                    className='mt-1 block w-full rounded-md border border-gray-300 bg-background p-2 text-foreground shadow-sm'
                     placeholder='Password'
                   />
                   <div className='flex justify-center gap-2'>

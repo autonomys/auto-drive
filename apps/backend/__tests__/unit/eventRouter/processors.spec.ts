@@ -156,7 +156,7 @@ describe('EventRouter Processors', () => {
 
       await processDownloadTask(task)
 
-      expect(asyncDownloadSpy).toHaveBeenCalledWith('download123')
+      expect(asyncDownloadSpy).toHaveBeenCalledWith('download123', expect.any(AbortSignal))
     })
 
     it('should handle object-archived task', async () => {
@@ -172,7 +172,7 @@ describe('EventRouter Processors', () => {
 
       await processDownloadTask(task)
 
-      expect(onObjectArchivedSpy).toHaveBeenCalledWith('cid123')
+      expect(onObjectArchivedSpy).toHaveBeenCalledWith('cid123', expect.any(AbortSignal))
     })
 
     it('should handle populate-cache task', async () => {
@@ -188,7 +188,7 @@ describe('EventRouter Processors', () => {
 
       await processDownloadTask(task)
 
-      expect(populateCachesSpy).toHaveBeenCalledWith('cid456')
+      expect(populateCachesSpy).toHaveBeenCalledWith('cid456', expect.any(AbortSignal))
     })
 
     it('should throw error for unknown download task', async () => {
