@@ -78,6 +78,10 @@ const config: Config = {
           secondary: 'hsl(var(--auto-drive-secondary))',
           accent: 'hsl(var(--auto-drive-accent))',
         },
+        'auto-explorer': {
+          buttonLightFrom: 'hsl(var(--auto-drive-primary))',
+          buttonDarkFrom: 'hsl(var(--auto-drive-primary))',
+        },
         success: {
           DEFAULT: 'hsl(var(--success))',
           foreground: 'hsl(var(--success-foreground))',
