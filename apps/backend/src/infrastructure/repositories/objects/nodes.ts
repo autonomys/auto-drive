@@ -415,11 +415,16 @@ const getFullyArchivedHeadCids = async (
 
 /**
  * Returns root_cids of objects that are partially published — some nodes
- * have block_published_on set but others do not. These are objects stuck
- * in the "Publishing" state due to failed batches.
+ * have block_published_on set but others do not — AND whose most recent
+ * published block is at least `stalenessThresholdBlocks` behind the
+ * chain head (approximated by the global MAX(block_published_on)).
+ *
+ * The staleness filter prevents false positives on objects that are
+ * still being actively published in the normal pipeline.
  */
 const getStuckPublishingRootCids = async (
   limit: number,
+  stalenessThresholdBlocks: number,
 ): Promise<string[]> => {
   const db = await getDatabase()
 
@@ -431,9 +436,12 @@ const getStuckPublishingRootCids = async (
         GROUP BY root_cid
         HAVING COUNT(block_published_on) > 0
            AND COUNT(block_published_on) < COUNT(*)
+           AND MAX(block_published_on) < (
+             SELECT MAX(block_published_on) FROM nodes
+           ) - $2
         LIMIT $1
       `,
-      values: [limit],
+      values: [limit, stalenessThresholdBlocks],
     })
     .then((e) => e.rows.map((r) => r.root_cid))
 }

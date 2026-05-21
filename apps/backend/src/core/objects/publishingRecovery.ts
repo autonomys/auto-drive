@@ -41,8 +41,10 @@ const processPublishingRecovery = async (): Promise<void> => {
 const runRecoveryBatch = async (): Promise<void> => {
   const maxPerCycle = config.publishingRecovery.maxObjectsPerCycle
 
-  const stuckRootCids =
-    await nodesRepository.getStuckPublishingRootCids(maxPerCycle)
+  const stuckRootCids = await nodesRepository.getStuckPublishingRootCids(
+    maxPerCycle,
+    config.publishingRecovery.stalenessThresholdBlocks,
+  )
 
   if (stuckRootCids.length === 0) {
     logger.debug('No stuck publishing objects found, skipping')
