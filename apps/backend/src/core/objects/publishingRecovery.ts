@@ -1,9 +1,12 @@
 import { nodesRepository } from '../../infrastructure/repositories/index.js'
-import { OnchainPublisher } from '../../infrastructure/services/upload/onchainPublisher/index.js'
+import { EventRouter } from '../../infrastructure/eventRouter/index.js'
+import { createTask } from '../../infrastructure/eventRouter/tasks.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { config } from '../../config.js'
 
 const logger = createLogger('useCases:objects:publishingRecovery')
+
+const PUBLISH_BATCH_SIZE = 50
 
 // Concurrency guard — if a recovery is already in flight, skip.
 let isRunning = false
@@ -16,7 +19,9 @@ let isRunning = false
  * - Detects objects where some nodes are published but others are not
  *   (partial publishing — indicates a batch failure)
  * - For each stuck object, fetches only the unpublished node CIDs
- *   and re-publishes them via OnchainPublisher
+ *   and enqueues them as batched publish-nodes tasks (same as the
+ *   normal upload pipeline) so each batch gets independent retries
+ *   and progress is preserved per-batch
  * - Limits throughput to avoid flooding the task queue
  *
  * Queue deferral (checking for pending pipeline tasks) is handled by
@@ -70,18 +75,20 @@ const runRecoveryBatch = async (): Promise<void> => {
         continue
       }
 
+      const batchCount = Math.ceil(unpublishedCids.length / PUBLISH_BATCH_SIZE)
       logger.info(
-        'Recovering %d unpublished nodes for object (rootCid=%s)',
+        'Enqueuing %d unpublished nodes in %d batches for object (rootCid=%s)',
         unpublishedCids.length,
+        batchCount,
         rootCid,
       )
 
-      await OnchainPublisher.publishNodes(unpublishedCids)
-
-      logger.info(
-        'Successfully recovered publishing for object (rootCid=%s)',
-        rootCid,
-      )
+      for (let i = 0; i < unpublishedCids.length; i += PUBLISH_BATCH_SIZE) {
+        const batch = unpublishedCids.slice(i, i + PUBLISH_BATCH_SIZE)
+        EventRouter.publish(
+          createTask({ id: 'publish-nodes', params: { nodes: batch } }),
+        )
+      }
     } catch (error) {
       logger.error(
         'Failed to recover publishing for object (rootCid=%s): %s',
