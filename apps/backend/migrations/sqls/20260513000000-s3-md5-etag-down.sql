@@ -1,0 +1,1 @@
+ALTER TABLE "S3".object_mappings DROP COLUMN IF EXISTS md5;
