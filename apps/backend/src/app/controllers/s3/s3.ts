@@ -10,6 +10,7 @@ import { pipeline } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { Request, Response } from 'express'
 import { sendXML } from './utils.js'
+import js2xmlparser from 'js2xmlparser'
 import { UploadOptions } from '@auto-drive/models'
 import {
   CompressionAlgorithm,
@@ -303,10 +304,19 @@ export const completeMultipartUploadHandler = async (
     return
   }
 
-  // Strip Cid before serialising — it belongs in the header only, not the XML body.
-  const { Cid: completeCid, ...completeXmlBody } = result.value
+  // Set ETag and CID headers explicitly and use res.end() rather than sendXML
+  // (which calls res.send()). res.send() triggers Express's auto-ETag generation
+  // which would overwrite our composite MD5 ETag with a body-derived hash.
+  const { Cid: completeCid, ETag: completeETag, ...completeXmlBody } = result.value
+  res.set('ETag', completeETag)
   res.set('x-amz-meta-cid', completeCid)
-  sendXML(res, 'CompleteMultipartUploadResult', completeXmlBody)
+  res.setHeader('Content-Type', 'application/xml')
+  res.end(
+    js2xmlparser.parse('CompleteMultipartUploadResult', {
+      ETag: completeETag,
+      ...completeXmlBody,
+    }),
+  )
 }
 
 export const putObjectHandler = async (req: Request, res: Response) => {
