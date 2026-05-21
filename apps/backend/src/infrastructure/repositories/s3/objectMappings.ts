@@ -170,9 +170,13 @@ const listObjects = async (
       AND om.key LIKE $2
   `
 
-  // Escape LIKE wildcards so a literal '%' or '_' in the prefix doesn't
-  // accidentally match unrelated keys.
-  const escapedPrefix = prefix.replace(/%/g, '\\%').replace(/_/g, '\\_')
+  // Escape LIKE special characters so literal occurrences in the prefix
+  // don't accidentally match unrelated keys. Backslash must be escaped first
+  // (before we introduce new backslashes for % and _).
+  const escapedPrefix = prefix
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
 
   let text: string
   let values: unknown[]
