@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListBucketsCommand,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -47,6 +48,10 @@ describe('AWS S3 - SDK', () => {
 
     s3Client = new S3Client({
       region: 'us-east-1',
+      // endpoint is required so that operations with no Bucket param (e.g.
+      // ListBuckets) have a base URL to target; bucketEndpoint:true then
+      // overrides the endpoint with the Bucket value for per-object operations.
+      endpoint: `${BASE_PATH}/s3`,
       credentials: {
         accessKeyId: 'e046e71c8dc3459c8da189e62418203a',
         secretAccessKey: '',
@@ -173,13 +178,68 @@ describe('AWS S3 - SDK', () => {
     )
   })
 
+  // Bucket-prefixed key: first segment becomes the bucket name
+  describe('Bucket-prefixed keys', () => {
+    const BucketedKey = 'my-archive/report.txt'
+    const BucketedBody = Buffer.from('Archived content')
+
+    it('should upload an object with a bucket-prefixed key', async () => {
+      const command = new PutObjectCommand({
+        Bucket,
+        Key: BucketedKey,
+        Body: BucketedBody,
+      })
+      const result = await s3Client.send(command)
+      expect(result).toMatchObject({ ETag: expect.any(String) })
+    })
+
+    it('should download a bucket-prefixed object', async () => {
+      const command = new GetObjectCommand({ Bucket, Key: BucketedKey })
+      const result = await s3Client.send(command)
+      expect(result.Body).toBeDefined()
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        BucketedBody,
+      )
+    }, 15_000)
+
+    it('should upload objects into a second bucket', async () => {
+      const command = new PutObjectCommand({
+        Bucket,
+        Key: 'another-bucket/file.txt',
+        Body: Buffer.from('Another bucket'),
+      })
+      const result = await s3Client.send(command)
+      expect(result).toMatchObject({ ETag: expect.any(String) })
+    })
+  })
+
+  describe('ListBuckets', () => {
+    it('should list all buckets', async () => {
+      const command = new ListBucketsCommand({})
+      const result = await s3Client.send(command)
+
+      expect(result.Buckets).toBeDefined()
+      expect(result.Buckets!.length).toBeGreaterThan(0)
+
+      const bucketNames = result.Buckets!.map((b) => b.Name)
+      // Flat keys land in 'default'; bucket-prefixed keys create named buckets
+      expect(bucketNames).toContain('default')
+      expect(bucketNames).toContain('my-archive')
+      expect(bucketNames).toContain('another-bucket')
+    })
+
+    it('each bucket should have a creation date', async () => {
+      const command = new ListBucketsCommand({})
+      const result = await s3Client.send(command)
+      for (const bucket of result.Buckets!) {
+        expect(bucket.CreationDate).toBeInstanceOf(Date)
+      }
+    })
+  })
+
   describe('DeleteObject', () => {
     it('should return 403 AccessDenied - storage is immutable', async () => {
-      const command = new DeleteObjectCommand({
-        Bucket,
-        Key,
-      })
-
+      const command = new DeleteObjectCommand({ Bucket, Key: 'test.txt' })
       await expect(s3Client.send(command)).rejects.toMatchObject({
         $metadata: { httpStatusCode: 403 },
         Code: 'AccessDenied',

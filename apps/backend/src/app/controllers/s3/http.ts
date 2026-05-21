@@ -8,6 +8,7 @@ import {
   deleteObjectHandler,
   getObjectHandler,
   headObjectHandler,
+  listBucketsHandler,
   putObjectHandler,
   uploadPartHandler,
 } from './s3.js'
@@ -28,6 +29,7 @@ const S3HandlerConfig: S3HandlerConfig = {
   UploadPart: uploadPartHandler,
   CompleteMultipartUpload: completeMultipartUploadHandler,
   DeleteObject: deleteObjectHandler,
+  ListBuckets: listBucketsHandler,
 }
 
 const getS3Method = (req: Request) => {
@@ -51,6 +53,14 @@ const getS3Method = (req: Request) => {
   }
   return s3Method
 }
+
+// ListBuckets: GET / with no key path
+s3Controller.get(
+  '/',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    return listBucketsHandler(req, res)
+  }),
+)
 
 s3Controller.use(
   '/:key(*)',

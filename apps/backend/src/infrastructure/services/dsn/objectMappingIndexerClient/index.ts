@@ -62,7 +62,9 @@ const getObjectMappings = async (
         const isNotFound =
           error instanceof Error &&
           error.message.includes('Object mapping not found')
-        if (!isNotFound) {
+        if (isNotFound) {
+          consecutiveFailures = 0
+        } else {
           consecutiveFailures++
         }
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {

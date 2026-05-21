@@ -16,9 +16,30 @@ import {
   EncryptionAlgorithm,
 } from '@autonomys/auto-dag-data'
 
-const Bucket = 'default'
-
 const logger = createLogger('s3:controllers')
+
+/**
+ * Parse the bucket name and object key from a raw S3 request path.
+ *
+ * The first path segment is the bucket name; everything after the first '/'
+ * is the key. Keys with no '/' are assigned to the 'default' bucket so that
+ * objects uploaded before bucket support was introduced remain accessible.
+ *
+ * Examples:
+ *   'my-archive/file.txt'     → { bucket: 'my-archive', key: 'file.txt' }
+ *   'my-archive/sub/file.txt' → { bucket: 'my-archive', key: 'sub/file.txt' }
+ *   'file.txt'                → { bucket: 'default',    key: 'file.txt' }
+ */
+const parseBucketAndKey = (rawKey: string): { bucket: string; key: string } => {
+  const slashIndex = rawKey.indexOf('/')
+  if (slashIndex === -1) {
+    return { bucket: 'default', key: rawKey }
+  }
+  return {
+    bucket: rawKey.slice(0, slashIndex),
+    key: rawKey.slice(slashIndex + 1),
+  }
+}
 
 const getUploadOptions = (req: Request) => {
   const {
@@ -38,16 +59,31 @@ const getUploadOptions = (req: Request) => {
   return UploadOptions
 }
 
+export const listBucketsHandler = async (req: Request, res: Response) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  const buckets = await S3UseCases.listBuckets()
+  sendXML(res, 'ListAllMyBucketsResult', {
+    Buckets: {
+      Bucket: buckets.map((b) => ({
+        Name: b.name,
+        CreationDate: b.creationDate.toISOString(),
+      })),
+    },
+  })
+}
+
 export const getObjectHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const { key } = req.params
+  const { bucket, key } = parseBucketAndKey(req.params.key)
   const byteRange = getByteRange(req)
   const downloadResult = await S3UseCases.getObject({
     Key: key,
     Range: byteRange,
-    Bucket,
+    Bucket: bucket,
   })
 
   if (downloadResult.isErr()) {
@@ -81,12 +117,12 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const { key } = req.params
+  const { bucket, key } = parseBucketAndKey(req.params.key)
   const byteRange = getByteRange(req)
   const downloadResult = await S3UseCases.getObject({
     Key: key,
     Range: byteRange,
-    Bucket,
+    Bucket: bucket,
   })
 
   if (downloadResult.isErr()) {
@@ -110,29 +146,29 @@ export const createMultipartUploadHandler = async (
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const UploadOptions = getUploadOptions(req)
+  const uploadOptions = getUploadOptions(req)
+  const { bucket, key } = parseBucketAndKey(req.params.key)
 
-  const { key } = req.params
-  const downloadResult = await S3UseCases.createMultipartUpload(user, {
-    Bucket,
+  const result = await S3UseCases.createMultipartUpload(user, {
+    Bucket: bucket,
     Key: key,
     ContentType: req.headers['content-type'],
-    UploadOptions,
+    UploadOptions: uploadOptions,
   })
 
-  if (downloadResult.isErr()) {
-    handleError(downloadResult.error, res)
+  if (result.isErr()) {
+    handleError(result.error, res)
     return
   }
 
-  sendXML(res, 'CreateMultipartUploadResult', downloadResult.value)
+  sendXML(res, 'CreateMultipartUploadResult', result.value)
 }
 
 export const uploadPartHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const { key } = req.params
+  const { bucket, key } = parseBucketAndKey(req.params.key)
   const { uploadId, partNumber } = req.query
 
   // Validate required parameters
@@ -156,20 +192,20 @@ export const uploadPartHandler = async (req: Request, res: Response) => {
 
   logger.info('Uploading part %s of %s', parsedPartNumber, uploadId)
 
-  const downloadResult = await S3UseCases.uploadPart(user, {
-    Bucket,
+  const result = await S3UseCases.uploadPart(user, {
+    Bucket: bucket,
     Key: key,
     UploadId: uploadId as string,
     PartNumber: parsedPartNumber,
     Body: req.body,
   })
 
-  if (downloadResult.isErr()) {
-    handleError(downloadResult.error, res)
+  if (result.isErr()) {
+    handleError(result.error, res)
     return
   }
 
-  sendXML(res, 'UploadPartResult', downloadResult.value)
+  sendXML(res, 'UploadPartResult', result.value)
 }
 
 export const completeMultipartUploadHandler = async (
@@ -179,19 +215,19 @@ export const completeMultipartUploadHandler = async (
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const { key } = req.params
-  const downloadResult = await S3UseCases.completeMultipartUpload(user, {
-    Bucket,
+  const { bucket, key } = parseBucketAndKey(req.params.key)
+  const result = await S3UseCases.completeMultipartUpload(user, {
+    Bucket: bucket,
     Key: key,
     UploadId: req.query.uploadId as string,
   })
 
-  if (downloadResult.isErr()) {
-    handleError(downloadResult.error, res)
+  if (result.isErr()) {
+    handleError(result.error, res)
     return
   }
 
-  sendXML(res, 'CompleteMultipartUploadResult', downloadResult.value)
+  sendXML(res, 'CompleteMultipartUploadResult', result.value)
 }
 
 export const deleteObjectHandler = async (_req: Request, res: Response) => {
@@ -206,21 +242,21 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const UploadOptions = getUploadOptions(req)
+  const uploadOptions = getUploadOptions(req)
+  const { bucket, key } = parseBucketAndKey(req.params.key)
 
-  const { key } = req.params
-  const downloadResult = await S3UseCases.putObject(user, {
-    Bucket,
+  const result = await S3UseCases.putObject(user, {
+    Bucket: bucket,
     Key: key,
     Body: req.body,
     ContentType: req.headers['content-type'],
-    UploadOptions,
+    UploadOptions: uploadOptions,
   })
 
-  if (downloadResult.isErr()) {
-    handleError(downloadResult.error, res)
+  if (result.isErr()) {
+    handleError(result.error, res)
     return
   }
 
-  sendXML(res, 'PutObjectResult', downloadResult.value)
+  sendXML(res, 'PutObjectResult', result.value)
 }
