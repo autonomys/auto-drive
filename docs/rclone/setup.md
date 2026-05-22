@@ -81,7 +81,7 @@ type = s3
 provider = Other
 access_key_id = YOUR_API_KEY_HERE
 secret_access_key = placeholder
-endpoint = https://mainnet.auto-drive.autonomys.xyz/s3
+endpoint = https://public.auto-drive.autonomys.xyz/s3
 no_check_bucket = true
 ```
 
@@ -97,7 +97,7 @@ rclone config
 4. Select `Other` as the provider
 5. Enter your API key as the `access_key_id`
 6. Enter `placeholder` (or any non-empty value) for `secret_access_key`
-7. Enter `https://mainnet.auto-drive.autonomys.xyz/s3` as the endpoint
+7. Enter `https://public.auto-drive.autonomys.xyz/s3` as the endpoint
 8. Accept defaults for all remaining options
 
 Then manually add `no_check_bucket = true` to the config section.
@@ -110,7 +110,7 @@ Then manually add `no_check_bucket = true` to the config section.
 | `provider` | `Other` | Generic S3-compatible mode - no provider-specific assumptions |
 | `access_key_id` | Your API key | Obtain from the Developers tab in the web UI |
 | `secret_access_key` | Any non-empty string | Required by rclone but ignored by Auto Drive |
-| `endpoint` | `https://mainnet.auto-drive.autonomys.xyz/s3` | Auto Drive S3 API base URL |
+| `endpoint` | `https://public.auto-drive.autonomys.xyz/s3` | Auto Drive S3 API base URL |
 | `no_check_bucket` | `true` | Skip bucket existence check - buckets are created implicitly on first write |
 
 ### Local development

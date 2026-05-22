@@ -126,7 +126,7 @@ ERROR : file.txt: Failed to copy: connection timed out
 
 **Solutions:**
 
-- Verify connectivity: `curl -I https://mainnet.auto-drive.autonomys.xyz/s3`
+- Verify connectivity: `curl -I https://public.auto-drive.autonomys.xyz/s3`
 - Increase timeout with `--timeout=60s` (default is 5 minutes)
 - Add retries: `--retries=5 --retries-sleep=10s`
 - Check the Autonomys Network status for any outages
@@ -183,7 +183,7 @@ rclone config show autodrive
 ### Test connectivity
 
 ```bash
-curl -I https://mainnet.auto-drive.autonomys.xyz/s3
+curl -I https://public.auto-drive.autonomys.xyz/s3
 ```
 
 ### List your buckets

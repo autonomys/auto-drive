@@ -224,7 +224,7 @@ jobs:
           provider = Other
           access_key_id = ${{ secrets.AUTO_DRIVE_API_KEY }}
           secret_access_key = placeholder
-          endpoint = https://mainnet.auto-drive.autonomys.xyz/s3
+          endpoint = https://public.auto-drive.autonomys.xyz/s3
           no_check_bucket = true
           EOF
 
@@ -253,7 +253,7 @@ archive-artifacts:
       provider = Other
       access_key_id = ${AUTO_DRIVE_API_KEY}
       secret_access_key = placeholder
-      endpoint = https://mainnet.auto-drive.autonomys.xyz/s3
+      endpoint = https://public.auto-drive.autonomys.xyz/s3
       no_check_bucket = true
       EOF
     - TIMESTAMP=$(date +%Y%m%d-%H%M%S)
