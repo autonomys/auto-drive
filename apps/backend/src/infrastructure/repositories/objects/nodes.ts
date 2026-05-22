@@ -436,9 +436,9 @@ const getStuckPublishingRootCids = async (
         GROUP BY root_cid
         HAVING COUNT(block_published_on) > 0
            AND COUNT(block_published_on) < COUNT(*)
-           AND MAX(block_published_on) < (
+           AND MAX(block_published_on) + $2 < (
              SELECT MAX(block_published_on) FROM nodes
-           ) - $2
+           )
         LIMIT $1
       `,
       values: [limit, stalenessThresholdBlocks],
