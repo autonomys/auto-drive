@@ -6,6 +6,7 @@ import { FC, useCallback, useState } from 'react';
 import { ObjectShareModal } from '@/components/molecules/ObjectShareModal';
 import { ObjectDeleteModal } from '@/components/molecules/ObjectDeleteModal';
 import { ObjectDownloadModal } from '@/components/molecules/ObjectDownloadModal';
+import { BulkObjectDownloadModal } from '@/components/molecules/BulkObjectDownloadModal';
 import { useUserStore } from 'globalStates/user';
 import { Table } from '@/components/molecules/Table';
 import {
@@ -53,6 +54,7 @@ export const FileTable: FC<{
   const [deleteCID, setDeleteCID] = useState<string | null>(null);
   const [reportCID, setReportCID] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [isBulkDownloadOpen, setIsBulkDownloadOpen] = useState(false);
 
   const objects = useFileTableState((v) => v.objects);
   const refetch = useFileTableState((v) => v.fetch);
@@ -87,6 +89,12 @@ export const FileTable: FC<{
       <ObjectShareModal cid={shareCID} closeModal={() => setShareCID(null)} />
       <ObjectDeleteModal cid={deleteCID} closeModal={onClose} />
       <ObjectDownloadModal cid={downloadingCID} onClose={onClose} />
+      <BulkObjectDownloadModal
+        cids={selectedFiles}
+        isOpen={isBulkDownloadOpen}
+        onClose={() => setIsBulkDownloadOpen(false)}
+        onComplete={() => setSelectedFiles([])}
+      />
       <ObjectRestoreModal cid={restoreCID} closeModal={onClose} />
       <ObjectReportModal cid={reportCID} closeModal={onClose} />
       <div className='-my-2 sm:-mx-6 lg:-mx-8'>
@@ -120,7 +128,11 @@ export const FileTable: FC<{
                 <span className='text-sm font-semibold'>
                   {selectedFiles.length} files selected
                 </span>
-                <Button className='text-xs' variant='lightAccent'>
+                <Button
+                  className='text-xs'
+                  variant='lightAccent'
+                  onClick={() => setIsBulkDownloadOpen(true)}
+                >
                   Download
                 </Button>
               </div>
