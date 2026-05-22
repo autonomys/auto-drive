@@ -35,7 +35,10 @@ import { UploadsUseCases } from '../uploads/uploads.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { S3BucketInfo } from '../../infrastructure/repositories/s3/objectMappings.js'
+import {
+  S3BucketInfo,
+  S3ObjectListing,
+} from '../../infrastructure/repositories/s3/objectMappings.js'
 import { createHash } from 'crypto'
 
 const logger = createLogger('useCases:s3')
@@ -62,6 +65,151 @@ const multipartETag = (partETags: string[]): string => {
 
 /** Format a raw hex MD5 as a quoted S3 ETag: `"<hex>"`. */
 const formatETag = (hex: string): string => `"${hex}"`
+
+// ── ListObjectsV2 ──────────────────────────────────────────────────────────
+
+export interface ListObjectsParams {
+  bucket: string
+  /** Key prefix to filter results (default: empty string = all keys). */
+  prefix: string
+  /** If set, fold keys at this character into CommonPrefixes (rclone uses '/'). */
+  delimiter: string | null
+  /** Maximum number of logical entries (objects + common prefixes) to return. */
+  maxKeys: number
+  /** Opaque token returned by a previous truncated response. */
+  continuationToken: string | null
+}
+
+export interface ListObjectsResult {
+  name: string
+  prefix: string
+  maxKeys: number
+  isTruncated: boolean
+  nextContinuationToken: string | null
+  objects: S3ObjectListing[]
+  commonPrefixes: string[]
+}
+
+/**
+ * Apply delimiter folding and maxKeys pagination to a sorted list of all
+ * matching objects fetched from the DB.
+ *
+ * Keys that contain `delimiter` after the prefix are folded into
+ * CommonPrefixes entries.  Pagination tracks the last raw DB key scanned so
+ * that the continuation token restores the exact position on the next call.
+ *
+ * When maxKeys entries are accumulated and the next entry would be a new
+ * CommonPrefix, we stop before adding it.  The continuation token is set to
+ * the last key already scanned, which falls before the new prefix group, so
+ * the next page re-processes that group from the beginning.
+ */
+export const buildListResult = (
+  sortedObjects: S3ObjectListing[],
+  prefix: string,
+  delimiter: string | null,
+  maxKeys: number,
+): Pick<
+  ListObjectsResult,
+  'objects' | 'commonPrefixes' | 'isTruncated' | 'nextContinuationToken'
+> => {
+  const objects: S3ObjectListing[] = []
+  const commonPrefixSet = new Set<string>()
+  let scanIdx = 0
+
+  while (scanIdx < sortedObjects.length) {
+    const { key } = sortedObjects[scanIdx]
+
+    // Check whether this key folds into a common prefix.
+    let foldedPrefix: string | null = null
+    if (delimiter) {
+      const afterPrefix = key.slice(prefix.length)
+      const delimIdx = afterPrefix.indexOf(delimiter)
+      if (delimIdx >= 0) {
+        foldedPrefix = prefix + afterPrefix.slice(0, delimIdx + 1)
+      }
+    }
+
+    if (foldedPrefix !== null) {
+      if (!commonPrefixSet.has(foldedPrefix)) {
+        // Adding a new common prefix — check if we're already full.
+        if (objects.length + commonPrefixSet.size >= maxKeys) {
+          // Stop here; the continuation token will fall before this prefix
+          // group so the next page re-processes it from the start.
+          break
+        }
+        commonPrefixSet.add(foldedPrefix)
+      }
+      scanIdx++
+      continue
+    }
+
+    // Regular object — check capacity before adding.
+    if (objects.length + commonPrefixSet.size >= maxKeys) {
+      break
+    }
+    objects.push(sortedObjects[scanIdx])
+    scanIdx++
+  }
+
+  const isTruncated = scanIdx < sortedObjects.length
+  const nextContinuationToken = isTruncated
+    ? sortedObjects[scanIdx - 1].key
+    : null
+
+  return {
+    objects,
+    commonPrefixes: [...commonPrefixSet].sort(),
+    isTruncated,
+    nextContinuationToken,
+  }
+}
+
+const listObjects = async (
+  params: ListObjectsParams,
+): Promise<ListObjectsResult> => {
+  const { bucket, prefix, delimiter, maxKeys, continuationToken } = params
+
+  // Without a delimiter every DB row is a distinct logical entry, so we only
+  // need maxKeys + 1 rows (the extra row lets buildListResult detect
+  // truncation without fetching the entire table).  With a delimiter, multiple
+  // rows can fold into a single CommonPrefix, so we over-fetch by a factor of
+  // 10 to handle large prefix groups while still keeping memory use bounded.
+  const dbLimit = delimiter
+    ? Math.min(maxKeys * 10 + 100, 10_000)
+    : maxKeys + 1
+
+  const allMatching = await s3ObjectMappingsRepository.listObjects(
+    bucket,
+    prefix,
+    continuationToken,
+    dbLimit,
+  )
+
+  const listResult = buildListResult(allMatching, prefix, delimiter, maxKeys)
+  const { objects, commonPrefixes } = listResult
+  let { isTruncated, nextContinuationToken } = listResult
+
+  // If the DB returned a full batch (allMatching.length === dbLimit) there may
+  // be rows beyond the LIMIT that buildListResult never saw.  This happens when
+  // every fetched row folds into CommonPrefixes and none break the maxKeys cap —
+  // buildListResult then sees scanIdx === sortedObjects.length and concludes
+  // isTruncated = false.  Override to be conservative: one extra empty page is
+  // harmless, but silently dropping data is not.
+  if (!isTruncated && allMatching.length === dbLimit) {
+    isTruncated = true
+    nextContinuationToken = allMatching[allMatching.length - 1].key
+  }
+
+  return {
+    name: bucket,
+    prefix,
+    maxKeys,
+    isTruncated,
+    nextContinuationToken,
+    objects,
+    commonPrefixes,
+  }
+}
 
 // Extended result type for internal use — includes the CID so the HTTP layer
 // can set the x-amz-meta-cid header without an extra DB lookup.
@@ -246,4 +394,5 @@ export const S3UseCases = {
   completeMultipartUpload,
   putObject,
   listBuckets,
+  listObjects,
 }

@@ -15,6 +15,15 @@ export interface S3BucketInfo {
   creationDate: Date
 }
 
+/** A single object entry returned by ListObjectsV2. */
+export interface S3ObjectListing {
+  key: string
+  cid: string
+  /** Object size in bytes joined from the metadata table; 0 when not yet indexed. */
+  size: bigint
+  lastModified: Date
+}
+
 interface S3KeyMappingDB {
   bucket: S3KeyMapping['bucket']
   key: S3KeyMapping['key']
@@ -139,10 +148,73 @@ const listBuckets = async (): Promise<S3BucketInfo[]> => {
   }))
 }
 
+const listObjects = async (
+  bucket: string,
+  prefix: string,
+  continuationToken: string | null,
+  limit: number,
+): Promise<S3ObjectListing[]> => {
+  const db = await getDatabase()
+
+  // LATERAL subquery picks at most one metadata row per object mapping.
+  // A plain LEFT JOIN on head_cid would fan out when the same CID appears
+  // as head_cid in multiple metadata rows (different root_cid values), which
+  // can happen when the same content is referenced by more than one root upload.
+  const baseSQL = `
+    SELECT
+      om.key,
+      om.cid,
+      COALESCE(m.total_size, 0) AS size,
+      om.updated_at
+    FROM "S3".object_mappings om
+    LEFT JOIN LATERAL (
+      SELECT (metadata->>'totalSize')::bigint AS total_size
+      FROM metadata
+      WHERE head_cid = om.cid
+      LIMIT 1
+    ) m ON true
+    WHERE om.bucket = $1
+      AND om.key LIKE $2
+  `
+
+  // Escape LIKE special characters so literal occurrences in the prefix
+  // don't accidentally match unrelated keys. Backslash must be escaped first
+  // (before we introduce new backslashes for % and _).
+  const escapedPrefix = prefix
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+
+  let text: string
+  let values: unknown[]
+  if (continuationToken) {
+    text = baseSQL + ' AND om.key > $3 ORDER BY om.key LIMIT $4'
+    values = [bucket, `${escapedPrefix}%`, continuationToken, limit]
+  } else {
+    text = baseSQL + ' ORDER BY om.key LIMIT $3'
+    values = [bucket, `${escapedPrefix}%`, limit]
+  }
+
+  const result = await db.query<{
+    key: string
+    cid: string
+    size: string // pg returns bigint as string
+    updated_at: Date
+  }>({ text, values })
+
+  return result.rows.map((row) => ({
+    key: row.key,
+    cid: row.cid,
+    size: BigInt(row.size),
+    lastModified: row.updated_at,
+  }))
+}
+
 export const s3ObjectMappingsRepository = {
   createMapping,
   findByKey,
   updateMapping,
   findByCid,
   listBuckets,
+  listObjects,
 }

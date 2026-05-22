@@ -319,6 +319,64 @@ export const completeMultipartUploadHandler = async (
   )
 }
 
+export const listObjectsV2Handler = async (req: Request, res: Response) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  // For ListObjectsV2, req.params.key is purely a bucket name.  The AWS SDK
+  // appends a trailing slash when using bucketEndpoint:true, so we get either
+  // "my-bucket/" or "my-bucket" — take everything before the first '/'.
+  const bucket = req.params.key.split('/')[0]
+
+  const prefix = (req.query.prefix as string) ?? ''
+  const delimiter = (req.query.delimiter as string) ?? null
+  const rawMaxKeys = parseInt((req.query['max-keys'] as string) ?? '1000', 10)
+  const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
+  const continuationToken =
+    (req.query['continuation-token'] as string) ?? null
+
+  const result = await S3UseCases.listObjects({
+    bucket,
+    prefix,
+    delimiter,
+    maxKeys,
+    continuationToken,
+  })
+
+  // Build the XML body.  js2xmlparser repeats a key for each array element,
+  // which is exactly the S3 format (multiple <Contents> / <CommonPrefixes>
+  // siblings at the root level).
+  const xmlBody: Record<string, unknown> = {
+    Name: result.name,
+    Prefix: result.prefix,
+    MaxKeys: result.maxKeys,
+    KeyCount: result.objects.length + result.commonPrefixes.length,
+    IsTruncated: result.isTruncated,
+  }
+
+  if (result.nextContinuationToken) {
+    xmlBody.NextContinuationToken = result.nextContinuationToken
+  }
+
+  if (result.objects.length > 0) {
+    xmlBody.Contents = result.objects.map((obj) => ({
+      Key: obj.key,
+      Size: obj.size.toString(),
+      LastModified: obj.lastModified.toISOString(),
+      // CID is used as the ETag on this branch (before MD5 support).
+      ETag: `"${obj.cid}"`,
+    }))
+  }
+
+  if (result.commonPrefixes.length > 0) {
+    xmlBody.CommonPrefixes = result.commonPrefixes.map((p) => ({
+      Prefix: p,
+    }))
+  }
+
+  sendXML(res, 'ListBucketResult', xmlBody)
+}
+
 export const putObjectHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
