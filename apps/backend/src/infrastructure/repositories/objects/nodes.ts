@@ -228,16 +228,6 @@ const getUploadedNodesByRootCid = async (rootCid: string) => {
     .then((e) => e.rows)
 }
 
-const getLastArchivedPieceNode = async () => {
-  const db = await getDatabase()
-
-  return db
-    .query<Node>({
-      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL ORDER BY piece_index DESC LIMIT 1',
-    })
-    .then((e) => e.rows.at(0))
-}
-
 const getUnreconciledNodes = async (limit: number) => {
   const db = await getDatabase()
 
@@ -273,6 +263,16 @@ const getUnreconciledNodesCount = async () => {
       `,
     })
     .then((e) => Number(e.rows[0].count))
+}
+
+const getLastArchivedPieceNode = async () => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL ORDER BY piece_index DESC LIMIT 1',
+    })
+    .then((e) => e.rows.at(0))
 }
 
 const getNodesCountWithoutDataByRootCid = async (rootCid: string) => {
@@ -413,6 +413,60 @@ const getFullyArchivedHeadCids = async (
     .then((e) => e.rows.map((r) => r.head_cid))
 }
 
+/**
+ * Returns root_cids of objects that are partially published — some nodes
+ * have block_published_on set but others do not — AND whose most recent
+ * published block is at least `stalenessThresholdBlocks` behind the
+ * chain head (approximated by the global MAX(block_published_on)).
+ *
+ * The staleness filter prevents false positives on objects that are
+ * still being actively published in the normal pipeline.
+ */
+const getStuckPublishingRootCids = async (
+  limit: number,
+  stalenessThresholdBlocks: number,
+): Promise<string[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ root_cid: string }>({
+      text: `
+        SELECT root_cid
+        FROM nodes
+        GROUP BY root_cid
+        HAVING COUNT(block_published_on) > 0
+           AND COUNT(block_published_on) < COUNT(*)
+           AND MAX(block_published_on) + $2 < (
+             SELECT MAX(block_published_on) FROM nodes
+           )
+        LIMIT $1
+      `,
+      values: [limit, stalenessThresholdBlocks],
+    })
+    .then((e) => e.rows.map((r) => r.root_cid))
+}
+
+/**
+ * Returns CIDs of unpublished nodes for a given root_cid.
+ */
+const getUnpublishedNodeCidsByRootCid = async (
+  rootCid: string,
+): Promise<string[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ cid: string }>({
+      text: `
+        SELECT cid
+        FROM nodes
+        WHERE root_cid = $1
+          AND block_published_on IS NULL
+      `,
+      values: [rootCid],
+    })
+    .then((e) => e.rows.map((r) => r.cid))
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -437,4 +491,6 @@ export const nodesRepository = {
   getUnreconciledNodes,
   getUnreconciledNodesCount,
   getFullyArchivedHeadCids,
+  getStuckPublishingRootCids,
+  getUnpublishedNodeCidsByRootCid,
 }

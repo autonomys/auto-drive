@@ -125,6 +125,12 @@ const subscribe = async (
   }
 }
 
+const getMessageCount = async (queue: string): Promise<number> => {
+  const channel = await getChannel()
+  const result = await channel.checkQueue(queue)
+  return result.messageCount
+}
+
 const close = async () => {
   const channel = await channelPromise
   channelPromise = null
@@ -142,5 +148,6 @@ export const Rabbit = {
   getChannel,
   publish,
   subscribe,
+  getMessageCount,
   close,
 }

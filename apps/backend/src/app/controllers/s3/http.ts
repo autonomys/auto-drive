@@ -9,6 +9,7 @@ import {
   getObjectHandler,
   headObjectHandler,
   listBucketsHandler,
+  listObjectsV2Handler,
   putObjectHandler,
   uploadPartHandler,
 } from './s3.js'
@@ -30,6 +31,7 @@ const S3HandlerConfig: S3HandlerConfig = {
   CompleteMultipartUpload: completeMultipartUploadHandler,
   DeleteObject: deleteObjectHandler,
   ListBuckets: listBucketsHandler,
+  ListObjectsV2: listObjectsV2Handler,
 }
 
 const getS3Method = (req: Request) => {
@@ -43,6 +45,9 @@ const getS3Method = (req: Request) => {
     }
     if ('uploadId' in req.query) {
       return 'CompleteMultipartUpload'
+    }
+    if (req.query['list-type'] === '2') {
+      return 'ListObjectsV2'
     }
     if (req.method === 'HEAD') {
       return 'HeadObject'

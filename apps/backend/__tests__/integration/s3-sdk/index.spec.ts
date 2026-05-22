@@ -6,6 +6,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   ListBucketsCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -236,6 +237,137 @@ describe('AWS S3 - SDK', () => {
       for (const bucket of result.Buckets!) {
         expect(bucket.CreationDate).toBeInstanceOf(Date)
       }
+    })
+  })
+
+  describe('ListObjectsV2', () => {
+    // With bucketEndpoint:true, use the full URL as Bucket so the SDK sends
+    // GET /list-test/?list-type=2 to our router.
+    const ListBucket = `${BASE_PATH}/s3/list-test`
+
+    beforeAll(async () => {
+      // Populate the 'list-test' bucket with a mix of flat and nested keys.
+      const uploads = [
+        { Key: 'list-test/a.txt', Body: Buffer.from('aaa') },
+        { Key: 'list-test/b.txt', Body: Buffer.from('bbb') },
+        { Key: 'list-test/subdir/c.txt', Body: Buffer.from('ccc') },
+        { Key: 'list-test/subdir/d.txt', Body: Buffer.from('ddd') },
+        { Key: 'list-test/other/e.txt', Body: Buffer.from('eee') },
+      ]
+      for (const u of uploads) {
+        await s3Client.send(new PutObjectCommand({ Bucket, ...u }))
+      }
+    })
+
+    it('should list all objects in a bucket', async () => {
+      const result = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: ListBucket }),
+      )
+      expect(result.KeyCount).toBe(5)
+      expect(result.IsTruncated).toBe(false)
+      const keys = result.Contents!.map((c) => c.Key)
+      expect(keys).toContain('a.txt')
+      expect(keys).toContain('b.txt')
+      expect(keys).toContain('subdir/c.txt')
+      expect(keys).toContain('subdir/d.txt')
+      expect(keys).toContain('other/e.txt')
+    })
+
+    it('should include Size and LastModified for each object', async () => {
+      const result = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: ListBucket }),
+      )
+      for (const obj of result.Contents!) {
+        expect(typeof obj.Size).toBe('number')
+        expect(obj.LastModified).toBeInstanceOf(Date)
+      }
+    })
+
+    it('should filter by prefix', async () => {
+      const result = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: ListBucket, Prefix: 'subdir/' }),
+      )
+      expect(result.KeyCount).toBe(2)
+      const keys = result.Contents!.map((c) => c.Key)
+      expect(keys).toEqual(['subdir/c.txt', 'subdir/d.txt'])
+    })
+
+    it('should fold keys at delimiter into CommonPrefixes', async () => {
+      const result = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: ListBucket, Delimiter: '/' }),
+      )
+      // 2 flat objects + 2 virtual subdirectories = 4 entries
+      expect(result.KeyCount).toBe(4)
+      expect(result.IsTruncated).toBe(false)
+
+      const keys = result.Contents!.map((c) => c.Key)
+      expect(keys).toEqual(['a.txt', 'b.txt'])
+
+      const prefixes = result.CommonPrefixes!.map((p) => p.Prefix)
+      expect(prefixes).toEqual(['other/', 'subdir/'])
+    })
+
+    it('should list a virtual subdirectory with prefix + delimiter', async () => {
+      const result = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: ListBucket,
+          Prefix: 'subdir/',
+          Delimiter: '/',
+        }),
+      )
+      expect(result.KeyCount).toBe(2)
+      const keys = result.Contents!.map((c) => c.Key)
+      expect(keys).toEqual(['subdir/c.txt', 'subdir/d.txt'])
+      expect(result.CommonPrefixes ?? []).toHaveLength(0)
+    })
+
+    it('should paginate with MaxKeys', async () => {
+      // First page: 2 entries
+      const page1 = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: ListBucket, MaxKeys: 2 }),
+      )
+      expect(page1.KeyCount).toBe(2)
+      expect(page1.IsTruncated).toBe(true)
+      expect(page1.NextContinuationToken).toBeDefined()
+
+      // Second page: next 2 entries
+      const page2 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: ListBucket,
+          MaxKeys: 2,
+          ContinuationToken: page1.NextContinuationToken,
+        }),
+      )
+      expect(page2.KeyCount).toBe(2)
+      expect(page2.IsTruncated).toBe(true)
+
+      // Third page: last 1 entry
+      const page3 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: ListBucket,
+          MaxKeys: 2,
+          ContinuationToken: page2.NextContinuationToken,
+        }),
+      )
+      expect(page3.KeyCount).toBe(1)
+      expect(page3.IsTruncated).toBe(false)
+
+      // All pages together account for all 5 objects with no duplicates
+      const allKeys = [
+        ...(page1.Contents ?? []),
+        ...(page2.Contents ?? []),
+        ...(page3.Contents ?? []),
+      ].map((c) => c.Key)
+      expect(new Set(allKeys).size).toBe(5)
+    })
+
+    it('should return empty result for prefix with no matches', async () => {
+      const result = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: ListBucket, Prefix: 'nonexistent/' }),
+      )
+      expect(result.KeyCount).toBe(0)
+      expect(result.Contents ?? []).toHaveLength(0)
+      expect(result.IsTruncated).toBe(false)
     })
   })
 

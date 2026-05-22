@@ -39,6 +39,11 @@ let isRunning = false
  * - If no progress was made or backlog is clear: returns without
  *   rescheduling. The periodic interval in the worker will enqueue
  *   the next run.
+ *
+ * Queue deferral (checking for pending pipeline tasks) is handled by
+ * the job scheduler (reconciliationJob.ts), NOT here. This ensures
+ * that only timer-triggered runs defer, while self-rescheduled
+ * fast-drain batches always execute immediately.
  */
 const processReconciliation = async (): Promise<void> => {
   if (isRunning) {
