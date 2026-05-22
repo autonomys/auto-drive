@@ -32,13 +32,18 @@
   if (config.featureFlags.flags.objectMappingArchiver.active) {
     objectMappingArchiver.start()
 
-    // Start periodic reconciliation to resolve stuck nodes.
-    // Requires task manager to be active (task-manager queue consumer).
+    // Start periodic jobs that require both the task manager queue consumer
+    // and the object mapping archiver to be active.
     if (config.featureFlags.flags.taskManager.active) {
       const { reconciliationJob } = await import(
         '../../infrastructure/services/reconciliationJob.js'
       )
       reconciliationJob.start()
+
+      const { publishingRecoveryJob } = await import(
+        '../../infrastructure/services/publishingRecoveryJob.js'
+      )
+      publishingRecoveryJob.start()
     }
 
     somethingActive = true
@@ -70,8 +75,7 @@
   const shutdown = async () => {
     logger.info('Shutting down frontend worker...')
     objectMappingArchiver.stop()
-    // reconciliationJob.stop() is safe even if never started (no-op),
-    // but we only import it when it was actually activated.
+    // Stop periodic recovery jobs (safe even if never started — stop() is a no-op)
     if (
       config.featureFlags.flags.objectMappingArchiver.active &&
       config.featureFlags.flags.taskManager.active
@@ -80,6 +84,11 @@
         '../../infrastructure/services/reconciliationJob.js'
       )
       reconciliationJob.stop()
+
+      const { publishingRecoveryJob } = await import(
+        '../../infrastructure/services/publishingRecoveryJob.js'
+      )
+      publishingRecoveryJob.stop()
     }
     paymentManager.stop()
     const { creditExpiryJob } = await import(

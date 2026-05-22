@@ -609,26 +609,34 @@ const checkObjectsArchivalStatus = async () => {
 }
 
 /**
- * Like checkObjectsArchivalStatus but scoped to a specific set of head_cids.
- * Uses a single aggregate query instead of N+1, making it safe for large
- * batches during reconciliation.
+ * Targeted archival status check for a specific set of head_cids.
+ * Uses a single SQL query instead of checking every non-archived object.
  */
 const checkArchivalStatusForObjects = async (
   headCids: string[],
 ): Promise<void> => {
   if (headCids.length === 0) return
 
-  const fullyArchived =
-    await nodesRepository.getFullyArchivedHeadCids(headCids)
-
-  logger.info(
-    'Targeted archival check: %d/%d objects fully archived',
-    fullyArchived.length,
+  logger.debug(
+    'Checking archival status for %d specific objects',
     headCids.length,
   )
 
-  for (const cid of fullyArchived) {
-    logger.debug('Publishing archival task for object (cid=%s)', cid)
+  const fullyArchivedHeadCids =
+    await nodesRepository.getFullyArchivedHeadCids(headCids)
+
+  if (fullyArchivedHeadCids.length === 0) {
+    logger.debug('No objects are fully archived yet')
+    return
+  }
+
+  logger.info(
+    'Found %d objects ready for archival out of %d checked',
+    fullyArchivedHeadCids.length,
+    headCids.length,
+  )
+
+  for (const cid of fullyArchivedHeadCids) {
     EventRouter.publish(
       createTask({
         id: 'object-archived',

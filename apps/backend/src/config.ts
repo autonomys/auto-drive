@@ -38,6 +38,15 @@ export const config = {
   reconciliation: {
     intervalMs: Number(env('RECONCILIATION_INTERVAL_MS', '300000')), // 5 minutes
   },
+  publishingRecovery: {
+    intervalMs: Number(env('PUBLISHING_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
+    maxObjectsPerCycle: Number(env('PUBLISHING_RECOVERY_MAX_PER_CYCLE', '5')),
+    // Only consider objects "stuck" if their most recent published block is
+    // this many blocks behind the chain head. At ~6s block time, 1000 blocks
+    // ≈ 1.7 hours — generous enough to not interfere with slow-but-active
+    // publishing, while catching genuinely stalled objects.
+    stalenessThresholdBlocks: Number(env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000')),
+  },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),

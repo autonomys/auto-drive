@@ -34,7 +34,7 @@ const submitTransaction = (
         )
         reject(new Error('Transaction timeout'))
       }
-    }, 60_000) // 3 minutes timeout
+    }, 60_000) // 1 minute timeout
 
     const onApiError = (error: Error) => {
       cleanup()
@@ -169,7 +169,15 @@ export const createTransactionManager = () => {
             })
             .then(async (result) => {
               if (!result.success) {
-                await accountManager.removeAccount(account.address)
+                try {
+                  await accountManager.removeAccount(account.address)
+                } catch (removeError) {
+                  logger.error(
+                    removeError as Error,
+                    'Failed to remove account %s after transaction failure',
+                    account.address,
+                  )
+                }
               }
 
               return result

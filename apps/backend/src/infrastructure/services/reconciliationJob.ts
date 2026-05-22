@@ -3,12 +3,15 @@ import { createLogger } from '../drivers/logger.js'
 import { EventRouter } from '../eventRouter/index.js'
 import { createTask } from '../eventRouter/tasks.js'
 import { safeCallback } from '../../shared/utils/safe.js'
+import { isTaskQueueBusy } from '../../shared/utils/queue.js'
 
 const logger = createLogger('ReconciliationJob')
 
 let reconciliationInterval: NodeJS.Timeout | null = null
 
-const enqueueReconciliation = () => {
+const enqueueReconciliation = async () => {
+  if (await isTaskQueueBusy('reconciliation')) return
+
   logger.debug('Enqueuing reconcile-archival task')
   EventRouter.publish(
     createTask({ id: 'reconcile-archival', params: {} }),
