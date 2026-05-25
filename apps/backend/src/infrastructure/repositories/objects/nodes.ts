@@ -176,11 +176,22 @@ const setNodeArchivingData = async ({
   })
 }
 
+/**
+ * Removes encoded_node data for all *published* nodes under a root_cid.
+ *
+ * Only nodes with `block_published_on IS NOT NULL` are stripped — their
+ * data is already immutably on-chain and the local copy is no longer
+ * needed.  Unpublished nodes retain their encoded_node so the publishing
+ * recovery job can still re-enqueue them.
+ */
 const removeNodeDataByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
 
   return db.query({
-    text: 'UPDATE nodes SET encoded_node = NULL WHERE root_cid = $1',
+    text: `UPDATE nodes
+           SET encoded_node = NULL
+           WHERE root_cid = $1
+             AND block_published_on IS NOT NULL`,
     values: [rootCid],
   })
 }
@@ -477,6 +488,38 @@ const getUnpublishedNodeCidsByRootCid = async (
     .then((e) => e.rows.map((r) => r.cid))
 }
 
+/**
+ * Returns root_cids that have nodes stuck in an unrecoverable state:
+ * `block_published_on IS NULL` (never published) AND `encoded_node IS NULL`
+ * (data already stripped, e.g. by a prior archival bug).
+ *
+ * These objects can never complete publishing from local state alone.
+ * The caller should surface them for operational attention.
+ */
+const getUnrecoverablePublishingRootCids = async (
+  limit: number,
+): Promise<{ root_cid: string; unrecoverable_count: number }[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ root_cid: string; unrecoverable_count: number }>({
+      text: `
+        SELECT root_cid,
+               COUNT(*) FILTER (
+                 WHERE block_published_on IS NULL AND encoded_node IS NULL
+               )::int AS unrecoverable_count
+        FROM nodes
+        GROUP BY root_cid
+        HAVING COUNT(*) FILTER (
+          WHERE block_published_on IS NULL AND encoded_node IS NULL
+        ) > 0
+        LIMIT $1
+      `,
+      values: [limit],
+    })
+    .then((e) => e.rows)
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -503,4 +546,5 @@ export const nodesRepository = {
   getFullyArchivedHeadCids,
   getStuckPublishingRootCids,
   getUnpublishedNodeCidsByRootCid,
+  getUnrecoverablePublishingRootCids,
 }
