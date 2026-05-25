@@ -23,11 +23,30 @@ const publishNodes = async (cids: string[]) => {
   const repeatedNodes = nodes.filter((node) => publishedCidSet.has(node.cid))
   await NodesUseCases.handleRepeatedNodes(repeatedNodes)
 
-  // Nodes that are not known as published anywhere should be sent for publishing
-  const publishingNodes = nodes.filter((node) => !publishedCidSet.has(node.cid))
+  // Nodes that are not known as published anywhere should be sent for publishing.
+  // Filter out nodes whose encoded_node has been removed (e.g. after archival) —
+  // these are un-publishable and must not reach the Buffer.from() call.
+  const publishingNodes = nodes.filter(
+    (node) => !publishedCidSet.has(node.cid) && node.encoded_node != null,
+  )
+
+  const skippedNullCount = nodes.filter(
+    (node) => !publishedCidSet.has(node.cid) && node.encoded_node == null,
+  ).length
+  if (skippedNullCount > 0) {
+    logger.warn(
+      'Skipped %d nodes with NULL encoded_node (archived before publishing)',
+      skippedNullCount,
+    )
+  }
+
+  if (publishingNodes.length === 0) {
+    logger.info('No publishable nodes remaining after filtering')
+    return
+  }
 
   const transactions = publishingNodes.map((node) => {
-    const buffer = Buffer.from(node.encoded_node, 'base64')
+    const buffer = Buffer.from(node.encoded_node!, 'base64')
 
     return {
       module: 'system',

@@ -421,6 +421,10 @@ const getFullyArchivedHeadCids = async (
  *
  * The staleness filter prevents false positives on objects that are
  * still being actively published in the normal pipeline.
+ *
+ * Objects where every unpublished node has `encoded_node IS NULL`
+ * (i.e. archived before publishing completed) are excluded — they
+ * are un-publishable and would only cause repeated failures.
  */
 const getStuckPublishingRootCids = async (
   limit: number,
@@ -436,6 +440,9 @@ const getStuckPublishingRootCids = async (
         GROUP BY root_cid
         HAVING COUNT(block_published_on) > 0
            AND COUNT(block_published_on) < COUNT(*)
+           AND COUNT(*) FILTER (
+             WHERE block_published_on IS NULL AND encoded_node IS NOT NULL
+           ) > 0
            AND MAX(block_published_on) + $2 < (
              SELECT MAX(block_published_on) FROM nodes
            )
@@ -448,6 +455,8 @@ const getStuckPublishingRootCids = async (
 
 /**
  * Returns CIDs of unpublished nodes for a given root_cid.
+ * Only returns nodes that still have encoded_node data — nodes whose
+ * data was removed (e.g. by archival) are un-publishable and excluded.
  */
 const getUnpublishedNodeCidsByRootCid = async (
   rootCid: string,
@@ -461,6 +470,7 @@ const getUnpublishedNodeCidsByRootCid = async (
         FROM nodes
         WHERE root_cid = $1
           AND block_published_on IS NULL
+          AND encoded_node IS NOT NULL
       `,
       values: [rootCid],
     })
