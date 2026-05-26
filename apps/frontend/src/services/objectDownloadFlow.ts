@@ -176,5 +176,6 @@ export const runObjectDownloadFlow = async ({
     skipDecryption,
     onProgress,
   });
+  assertNotAborted(signal);
   onPhaseChange?.('completed');
 };

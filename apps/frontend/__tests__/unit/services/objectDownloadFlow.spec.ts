@@ -213,6 +213,33 @@ describe('runObjectDownloadFlow', () => {
     expect(downloadService.fetchFile).not.toHaveBeenCalled();
   });
 
+  it('aborts after fetchFile completes if signal fired mid-download', async () => {
+    (getAuthSession as jest.Mock).mockResolvedValue(null);
+    const { api, downloadService } = createDependencies();
+
+    const controller = new AbortController();
+    downloadService.fetchFile.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve();
+    });
+
+    const onPhaseChange = jest.fn();
+
+    await expect(
+      runObjectDownloadFlow({
+        api: api as never,
+        downloadService,
+        metadata: metadata as never,
+        signal: controller.signal,
+        onPhaseChange,
+      }),
+    ).rejects.toThrow('Download aborted');
+
+    expect(downloadService.fetchFile).toHaveBeenCalledTimes(1);
+    expect(onPhaseChange).toHaveBeenCalledWith('downloading');
+    expect(onPhaseChange).not.toHaveBeenCalledWith('completed');
+  });
+
   it('tolerates a transient poll-cycle error and continues polling', async () => {
     (getAuthSession as jest.Mock).mockResolvedValue({
       accessToken: 'token',
