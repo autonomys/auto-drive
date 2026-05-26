@@ -365,13 +365,13 @@ export const BulkObjectDownloadModal = ({
         backgroundedCount += 1;
       }
 
-      for (const item of remainingPending) {
+      const backgroundPromises = remainingPending.map((item) => {
         const { password: itemPassword, skipDecryption } =
           resolveBulkEncryptionOptions(item, encryptionContext);
         const cid = item.information.metadata.dataCid;
         const fileName = item.information.metadata.name ?? undefined;
 
-        network.api
+        return network.api
           .createAsyncDownload(cid)
           .then(() => {
             addPendingAutoDownload({
@@ -380,21 +380,28 @@ export const BulkObjectDownloadModal = ({
               skipDecryption,
               fileName,
             });
+            return true as const;
           })
           .catch((err) => {
             console.warn(
               `[BulkObjectDownloadModal] failed to background ${cid}`,
               err,
             );
+            return false as const;
           });
-        backgroundedCount += 1;
-      }
+      });
 
-      if (backgroundedCount > 0) {
-        toast.success(
-          `${backgroundedCount} download${backgroundedCount === 1 ? '' : 's'} will continue in the background. Check Cached Downloads for progress.`,
-          { id: toastId, duration: 5000 },
-        );
+      if (backgroundedCount > 0 || backgroundPromises.length > 0) {
+        Promise.all(backgroundPromises).then((results) => {
+          const totalCount =
+            backgroundedCount + results.filter(Boolean).length;
+          if (totalCount > 0) {
+            toast.success(
+              `${totalCount} download${totalCount === 1 ? '' : 's'} will continue in the background. Check Cached Downloads for progress.`,
+              { id: toastId, duration: 5000 },
+            );
+          }
+        });
       }
     }
 
