@@ -282,6 +282,10 @@ export const BulkObjectDownloadModal = ({
           id: `${toastId}-${item.cid}`,
         });
       } catch (error) {
+        if (currentAsyncItemRef.current?.item.cid === item.cid) {
+          currentAsyncItemRef.current = null;
+        }
+
         if (error instanceof ObjectDownloadAbortedError) {
           break;
         }
