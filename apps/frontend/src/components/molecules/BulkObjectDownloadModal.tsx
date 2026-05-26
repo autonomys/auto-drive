@@ -338,64 +338,64 @@ export const BulkObjectDownloadModal = ({
   }, [pendingRetryStart, canStart, startQueue]);
 
   const closeModal = useCallback(() => {
-    // Continue what we can in the background:
-    //  - the item currently in `preparing` already has a server-side async
-    //    download record (createAsyncDownload ran during the preparing phase)
-    //  - items still `pending` were never started; register them now so the
-    //    UserAsyncDownloads poller will trigger their download when ready
-    const remainingPending = items
-      .filter(itemIsRunnable)
-      .filter(
-        (item) =>
-          !shouldSkipEncrypted(item, encryptionContext) &&
-          !shouldSkipInsecure(item, hasConfirmedInsecure),
-      );
+    // Only background remaining items when the queue was actually started.
+    // Without this guard, clicking Cancel before Start Download would
+    // spuriously kick off async downloads for every selected file.
+    if (isRunning) {
+      const remainingPending = items
+        .filter(itemIsRunnable)
+        .filter(
+          (item) =>
+            !shouldSkipEncrypted(item, encryptionContext) &&
+            !shouldSkipInsecure(item, hasConfirmedInsecure),
+        );
 
-    const currentAsync = currentAsyncItemRef.current;
-    let backgroundedCount = 0;
+      const currentAsync = currentAsyncItemRef.current;
+      let backgroundedCount = 0;
 
-    if (currentAsync?.item.information) {
-      addPendingAutoDownload({
-        cid: currentAsync.item.information.metadata.dataCid,
-        password: currentAsync.skipDecryption
-          ? undefined
-          : currentAsync.password,
-        skipDecryption: currentAsync.skipDecryption,
-        fileName: currentAsync.item.information.metadata.name ?? undefined,
-      });
-      backgroundedCount += 1;
-    }
-
-    for (const item of remainingPending) {
-      const { password: itemPassword, skipDecryption } =
-        resolveBulkEncryptionOptions(item, encryptionContext);
-      const cid = item.information.metadata.dataCid;
-      const fileName = item.information.metadata.name ?? undefined;
-
-      network.api
-        .createAsyncDownload(cid)
-        .then(() => {
-          addPendingAutoDownload({
-            cid,
-            password: skipDecryption ? undefined : itemPassword,
-            skipDecryption,
-            fileName,
-          });
-        })
-        .catch((err) => {
-          console.warn(
-            `[BulkObjectDownloadModal] failed to background ${cid}`,
-            err,
-          );
+      if (currentAsync?.item.information) {
+        addPendingAutoDownload({
+          cid: currentAsync.item.information.metadata.dataCid,
+          password: currentAsync.skipDecryption
+            ? undefined
+            : currentAsync.password,
+          skipDecryption: currentAsync.skipDecryption,
+          fileName: currentAsync.item.information.metadata.name ?? undefined,
         });
-      backgroundedCount += 1;
-    }
+        backgroundedCount += 1;
+      }
 
-    if (backgroundedCount > 0) {
-      toast.success(
-        `${backgroundedCount} download${backgroundedCount === 1 ? '' : 's'} will continue in the background. Check Cached Downloads for progress.`,
-        { id: toastId, duration: 5000 },
-      );
+      for (const item of remainingPending) {
+        const { password: itemPassword, skipDecryption } =
+          resolveBulkEncryptionOptions(item, encryptionContext);
+        const cid = item.information.metadata.dataCid;
+        const fileName = item.information.metadata.name ?? undefined;
+
+        network.api
+          .createAsyncDownload(cid)
+          .then(() => {
+            addPendingAutoDownload({
+              cid,
+              password: skipDecryption ? undefined : itemPassword,
+              skipDecryption,
+              fileName,
+            });
+          })
+          .catch((err) => {
+            console.warn(
+              `[BulkObjectDownloadModal] failed to background ${cid}`,
+              err,
+            );
+          });
+        backgroundedCount += 1;
+      }
+
+      if (backgroundedCount > 0) {
+        toast.success(
+          `${backgroundedCount} download${backgroundedCount === 1 ? '' : 's'} will continue in the background. Check Cached Downloads for progress.`,
+          { id: toastId, duration: 5000 },
+        );
+      }
     }
 
     abortRef.current?.abort();
@@ -408,6 +408,7 @@ export const BulkObjectDownloadModal = ({
     encryptionContext,
     hasConfirmedInsecure,
     isComplete,
+    isRunning,
     items,
     network.api,
     onClose,
