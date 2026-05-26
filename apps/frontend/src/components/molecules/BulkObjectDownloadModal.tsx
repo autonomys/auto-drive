@@ -13,7 +13,12 @@ import {
   useRef,
   useState,
 } from 'react';
-import { isBanned, isInsecure, ObjectStatus } from '@auto-drive/models';
+import {
+  isBanned,
+  isInsecure,
+  ObjectInformation,
+  ObjectStatus,
+} from '@auto-drive/models';
 import { Button } from '@auto-drive/ui';
 import toast from 'react-hot-toast';
 import { useNetwork } from 'contexts/network';
@@ -342,8 +347,12 @@ export const BulkObjectDownloadModal = ({
     // Without this guard, clicking Cancel before Start Download would
     // spuriously kick off async downloads for every selected file.
     if (isRunning) {
-      const remainingPending = items
-        .filter(itemIsRunnable)
+      const remainingNotStarted = items
+        .filter(
+          (item): item is BulkDownloadItem & { information: ObjectInformation } =>
+            (item.status === 'pending' || item.status === 'checking') &&
+            !!item.information,
+        )
         .filter(
           (item) =>
             !shouldSkipEncrypted(item, encryptionContext) &&
@@ -365,7 +374,7 @@ export const BulkObjectDownloadModal = ({
         backgroundedCount += 1;
       }
 
-      const backgroundPromises = remainingPending.map((item) => {
+      const backgroundPromises = remainingNotStarted.map((item) => {
         const { password: itemPassword, skipDecryption } =
           resolveBulkEncryptionOptions(item, encryptionContext);
         const cid = item.information.metadata.dataCid;
