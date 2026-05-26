@@ -370,22 +370,22 @@ describe('Nodes Repository', () => {
     expect(result?.piece_offset).toBe(100)
   })
 
-  it('should remove nodes by root CID', async () => {
+  it('should remove encoded_node only for published nodes by root CID', async () => {
     const rootCid = 'test-root-cid-remove'
     const nodes: Node[] = [
       {
-        cid: 'test-cid-remove-1',
+        cid: 'test-cid-remove-published',
         root_cid: rootCid,
         head_cid: 'test-head-cid-remove',
         type: 'file',
         encoded_node: 'test-encoded-node-remove-1',
         piece_index: null,
         piece_offset: null,
-        block_published_on: null,
+        block_published_on: 100,
         tx_published_on: null,
       },
       {
-        cid: 'test-cid-remove-2',
+        cid: 'test-cid-remove-unpublished',
         root_cid: rootCid,
         head_cid: 'test-head-cid-remove',
         type: 'file',
@@ -399,13 +399,16 @@ describe('Nodes Repository', () => {
 
     await nodesRepository.saveNodes(nodes)
     await nodesRepository.removeNodeDataByRootCid(rootCid)
-    const results = await nodesRepository.getNodesByRootCid(rootCid)
-    const fullNodes = await Promise.all(
-      results.map((r) => nodesRepository.getNode(r.cid)),
+
+    const publishedNode = await nodesRepository.getNode(
+      'test-cid-remove-published',
     )
-    fullNodes.forEach((n) => {
-      expect(n?.encoded_node).toBeNull()
-    })
+    expect(publishedNode?.encoded_node).toBeNull()
+
+    const unpublishedNode = await nodesRepository.getNode(
+      'test-cid-remove-unpublished',
+    )
+    expect(unpublishedNode?.encoded_node).toBe('test-encoded-node-remove-2')
   })
 
   it('should get nodes by CIDs', async () => {
