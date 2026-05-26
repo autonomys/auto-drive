@@ -405,6 +405,7 @@ export const BulkObjectDownloadModal = ({
           const totalCount =
             backgroundedCount + results.filter(Boolean).length;
           if (totalCount > 0) {
+            updateAsyncDownloads();
             toast.success(
               `${totalCount} download${totalCount === 1 ? '' : 's'} will continue in the background. Check Cached Downloads for progress.`,
               { id: toastId, duration: 5000 },
@@ -429,6 +430,7 @@ export const BulkObjectDownloadModal = ({
     network.api,
     onClose,
     onComplete,
+    updateAsyncDownloads,
   ]);
 
   const handleDialogClose = useCallback(() => {
