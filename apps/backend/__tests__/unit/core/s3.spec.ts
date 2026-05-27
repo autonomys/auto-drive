@@ -381,6 +381,7 @@ describe('S3UseCases', () => {
       cid: 'cid',
       size: 0n,
       lastModified: new Date(0),
+      md5: null,
     })
 
     it('advances continuation token past a folded CommonPrefix when the DB batch is exhausted inside one prefix group', async () => {
