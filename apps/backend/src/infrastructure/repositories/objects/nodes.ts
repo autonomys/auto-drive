@@ -223,7 +223,17 @@ const updateNodePublishedOn = async (
   const db = await getDatabase()
 
   return db.query({
-    text: 'UPDATE nodes SET block_published_on = $1, tx_published_on = $2 WHERE cid = $3',
+    text: `UPDATE nodes
+           SET block_published_on = $1,
+               tx_published_on = $2,
+               encoded_node = CASE
+                 WHEN EXISTS (
+                   SELECT 1 FROM metadata
+                   WHERE head_cid = nodes.head_cid AND is_archived = true
+                 ) THEN NULL
+                 ELSE encoded_node
+               END
+           WHERE cid = $3`,
     values: [blockPublishedOn, txPublishedOn, cid],
   })
 }
