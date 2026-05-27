@@ -369,4 +369,127 @@ describe('S3UseCases', () => {
       )
     })
   })
+
+  describe('listObjects', () => {
+    // dbLimit for delimiter listings is min(maxKeys * 10 + 100, 10_000), so
+    // maxKeys=2 yields dbLimit=120 — small enough to construct test data for.
+    const DELIMITER_DB_LIMIT = (maxKeys: number) =>
+      Math.min(maxKeys * 10 + 100, 10_000)
+
+    const makeListing = (key: string) => ({
+      key,
+      cid: 'cid',
+      size: 0n,
+      lastModified: new Date(0),
+    })
+
+    it('advances continuation token past a folded CommonPrefix when the DB batch is exhausted inside one prefix group', async () => {
+      // Regression test for Cursor Bugbot finding on PR #696 / #709.
+      //
+      // Scenario: maxKeys=2, delimiter='/', and a single virtual directory
+      // ('big/') contains more keys than fit in one DB batch.  Every fetched
+      // row folds into the same CommonPrefix, so the in-loop maxKeys cap is
+      // never hit and the loop exhausts the batch with isTruncated=false.
+      // The fallback branch must then set the continuation token to a value
+      // that sorts *after* every key in 'big/' — otherwise the next page
+      // re-scans the rest of that directory and emits 'big/' again.
+      const maxKeys = 2
+      const dbLimit = DELIMITER_DB_LIMIT(maxKeys)
+
+      // Fill the entire DB batch with keys that all fold into 'big/'.
+      const fullBatch = Array.from({ length: dbLimit }, (_, i) =>
+        makeListing(`big/${String(i).padStart(6, '0')}`),
+      )
+
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjects')
+        .mockResolvedValue(fullBatch as any)
+
+      const result = await S3UseCases.listObjects({
+        bucket: 'my-bucket',
+        prefix: '',
+        delimiter: '/',
+        maxKeys,
+        continuationToken: null,
+      })
+
+      expect(result.commonPrefixes).toEqual(['big/'])
+      expect(result.objects).toEqual([])
+      expect(result.isTruncated).toBe(true)
+      // Token must start with the folded prefix and sort strictly after every
+      // key inside it.  `￿` (U+FFFF) is the sentinel chosen for this purpose.
+      expect(result.nextContinuationToken).toBe('big/￿')
+      // Sanity: the token sorts after the last key we returned in the batch.
+      expect(
+        result.nextContinuationToken! > fullBatch[fullBatch.length - 1].key,
+      ).toBe(true)
+    })
+
+    it('uses the raw last key as the token when the last scanned key did not fold into a prefix', async () => {
+      // If the DB batch is full but the last key has no delimiter occurrence
+      // after the prefix, there's no CommonPrefix to skip past — fall back to
+      // the raw last key, which is the safe pre-fix behaviour.
+      const maxKeys = 2
+      const dbLimit = DELIMITER_DB_LIMIT(maxKeys)
+
+      // Pad the batch with folded entries, but make the LAST one a top-level
+      // key with no delimiter after the prefix.
+      const batch = [
+        ...Array.from({ length: dbLimit - 1 }, (_, i) =>
+          makeListing(`folder/${String(i).padStart(6, '0')}`),
+        ),
+        makeListing('zzz-top-level'),
+      ]
+
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjects')
+        .mockResolvedValue(batch as any)
+
+      const result = await S3UseCases.listObjects({
+        bucket: 'my-bucket',
+        prefix: '',
+        delimiter: '/',
+        maxKeys,
+        continuationToken: null,
+      })
+
+      expect(result.isTruncated).toBe(true)
+      // The last key doesn't fold into a CommonPrefix, so the token stays as
+      // the raw key — no sentinel needed.
+      expect(result.nextContinuationToken).toBe('zzz-top-level')
+    })
+
+    it('uses the raw last key as the token when no delimiter is set', async () => {
+      // Without a delimiter, the dbLimit is maxKeys + 1, and there are no
+      // CommonPrefixes to repeat — the safe fallback is just the last key.
+      const maxKeys = 2
+      const dbLimit = maxKeys + 1 // = 3
+
+      const batch = [
+        makeListing('a.txt'),
+        makeListing('b.txt'),
+        makeListing('c.txt'),
+      ]
+
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjects')
+        .mockResolvedValue(batch as any)
+
+      const result = await S3UseCases.listObjects({
+        bucket: 'my-bucket',
+        prefix: '',
+        delimiter: null,
+        maxKeys,
+        continuationToken: null,
+      })
+
+      // maxKeys=2 ⇒ first two keys returned, third triggers truncation in
+      // buildListResult (not the fallback), token = key just returned.
+      expect(result.objects.map((o) => o.key)).toEqual(['a.txt', 'b.txt'])
+      expect(result.isTruncated).toBe(true)
+      expect(result.nextContinuationToken).toBe('b.txt')
+      // dbLimit branch shouldn't have triggered, so no sentinel appended.
+      expect(batch.length).toBe(dbLimit)
+    })
+  })
 })
