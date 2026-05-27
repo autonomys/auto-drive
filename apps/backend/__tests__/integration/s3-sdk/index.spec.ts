@@ -415,4 +415,100 @@ describe('AWS S3 - SDK', () => {
       expect(result.Metadata?.cid).toBeDefined()
     })
   })
+
+  // Raw HTTP requests that mimic the AWS CLI / botocore, which (unlike the JS
+  // SDK used above) does NOT send the `x-id` query param for GetObject/
+  // PutObject and sends object bodies with no Content-Type header. These guard
+  // two regressions:
+  //   1. getS3Method must fall back to the HTTP method (GET->GetObject,
+  //      PUT->PutObject) when `x-id` is absent — otherwise dispatch returns
+  //      "Method not found".
+  //   2. The request body must be read as raw bytes regardless of Content-Type;
+  //      a missing Content-Type previously left req.body as {} and broke
+  //      uploads deep in the IPLD chunker.
+  describe('Raw HTTP requests (AWS CLI style: no x-id, no Content-Type)', () => {
+    const S3_BASE = `${BASE_PATH}/s3`
+    // handleS3Auth only needs an Authorization header containing
+    // `Credential=<alphanumeric>/`; AuthManager is mocked to return `user`.
+    const AUTH =
+      'AWS4-HMAC-SHA256 Credential=clitestkey/20200101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=deadbeef'
+
+    // Passing a Uint8Array/Buffer body to fetch leaves Content-Type unset,
+    // reproducing the AWS CLI's behaviour. No `x-id` query param is added.
+    const rawS3 = (method: string, path: string, body?: Uint8Array) =>
+      fetch(`${S3_BASE}${path}`, {
+        method,
+        headers: { Authorization: AUTH },
+        // Cast: TS 5.7 types Buffer/Uint8Array as Uint8Array<ArrayBufferLike>,
+        // which doesn't structurally match the DOM BodyInit union. A binary
+        // body still sends with no Content-Type, which is the point here.
+        body: body as unknown as BodyInit | undefined,
+      })
+
+    const CliBody = Buffer.from('hello from the aws cli')
+
+    it('PutObject without x-id/Content-Type stores the object', async () => {
+      const res = await rawS3('PUT', '/cli-test/hello.txt', CliBody)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('etag')).toMatch(MD5_ETAG_RE)
+    }, 15_000)
+
+    it('GetObject without x-id returns the exact bytes', async () => {
+      const res = await rawS3('GET', '/cli-test/hello.txt')
+      expect(res.status).toBe(200)
+      const got = Buffer.from(await res.arrayBuffer())
+      expect(got).toEqual(CliBody)
+    }, 15_000)
+
+    it('multipart upload via raw requests round-trips (the original 500)', async () => {
+      const key = '/cli-test/mpu.bin'
+      const part1 = Buffer.from('AAAAAAAAAAAAAAAA')
+      const part2 = Buffer.from('BBBBBBBBBBBBBBBB')
+
+      const create = await rawS3('POST', `${key}?uploads`)
+      expect(create.status).toBe(200)
+      const uploadId = (await create.text()).match(
+        /<UploadId>([^<]+)<\/UploadId>/,
+      )?.[1]
+      expect(uploadId).toBeDefined()
+
+      // Parts must be uploaded sequentially (the chunker enforces ordering).
+      const up1 = await rawS3(
+        'PUT',
+        `${key}?partNumber=1&uploadId=${uploadId}`,
+        part1,
+      )
+      expect(up1.status).toBe(200)
+      const etag1 = up1.headers.get('etag')!
+      expect(etag1).toMatch(MD5_ETAG_RE)
+
+      const up2 = await rawS3(
+        'PUT',
+        `${key}?partNumber=2&uploadId=${uploadId}`,
+        part2,
+      )
+      expect(up2.status).toBe(200)
+      const etag2 = up2.headers.get('etag')!
+
+      // The part list in the body is used only to compute the composite ETag.
+      const completeBody = Buffer.from(
+        '<CompleteMultipartUpload>' +
+          `<Part><ETag>${etag1}</ETag><PartNumber>1</PartNumber></Part>` +
+          `<Part><ETag>${etag2}</ETag><PartNumber>2</PartNumber></Part>` +
+          '</CompleteMultipartUpload>',
+      )
+      const complete = await rawS3(
+        'POST',
+        `${key}?uploadId=${uploadId}`,
+        completeBody,
+      )
+      expect(complete.status).toBe(200)
+      expect(complete.headers.get('etag')).toMatch(MULTIPART_ETAG_RE)
+
+      const get = await rawS3('GET', key)
+      expect(get.status).toBe(200)
+      const got = Buffer.from(await get.arrayBuffer())
+      expect(got).toEqual(Buffer.concat([part1, part2]))
+    }, 30_000)
+  })
 })
