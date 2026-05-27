@@ -46,6 +46,22 @@ const processPublishingRecovery = async (): Promise<void> => {
 const runRecoveryBatch = async (): Promise<void> => {
   const maxPerCycle = config.publishingRecovery.maxObjectsPerCycle
 
+  // Surface objects that are stuck in an unrecoverable state — they have
+  // unpublished nodes whose encoded_node was already stripped (e.g. by
+  // archival before publishing completed).  These cannot be recovered
+  // automatically and need operational attention.
+  const unrecoverable =
+    await nodesRepository.getUnrecoverablePublishingRootCids(maxPerCycle)
+  if (unrecoverable.length > 0) {
+    logger.warn(
+      'Found %d objects with unrecoverable unpublished nodes (data stripped before publishing): %s',
+      unrecoverable.length,
+      unrecoverable
+        .map((r) => `${r.root_cid} (${r.unrecoverable_count} nodes)`)
+        .join(', '),
+    )
+  }
+
   const stuckRootCids = await nodesRepository.getStuckPublishingRootCids(
     maxPerCycle,
     config.publishingRecovery.stalenessThresholdBlocks,
