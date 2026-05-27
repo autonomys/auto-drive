@@ -351,20 +351,21 @@ export const BulkObjectDownloadModal = ({
     // Without this guard, clicking Cancel before Start Download would
     // spuriously kick off async downloads for every selected file.
     if (isRunning) {
+      const currentAsync = currentAsyncItemRef.current;
+      let backgroundedCount = 0;
+
       const remainingNotStarted = items
         .filter(
           (item): item is BulkDownloadItem & { information: ObjectInformation } =>
             (item.status === 'pending' || item.status === 'checking') &&
-            !!item.information,
+            !!item.information &&
+            item.cid !== currentAsync?.item.cid,
         )
         .filter(
           (item) =>
             !shouldSkipEncrypted(item, encryptionContext) &&
             !shouldSkipInsecure(item, hasConfirmedInsecure),
         );
-
-      const currentAsync = currentAsyncItemRef.current;
-      let backgroundedCount = 0;
 
       if (currentAsync?.item.information) {
         addPendingAutoDownload({
