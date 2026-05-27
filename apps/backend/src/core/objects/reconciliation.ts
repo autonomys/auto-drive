@@ -13,8 +13,8 @@ const logger = createLogger('useCases:objects:reconciliation')
 
 const BATCH_SIZE = 500
 
-// Track consecutive zero-progress runs to detect permanently unresolvable
-// nodes (the indexer also missed them and can't provide their data).
+// Track consecutive zero-progress runs to detect potential connectivity
+// issues with the indexer or genuinely unresolvable nodes.
 let consecutiveZeroProgressRuns = 0
 const ZERO_PROGRESS_WARN_THRESHOLD = 3
 
@@ -39,6 +39,11 @@ let isRunning = false
  * - If no progress was made or backlog is clear: returns without
  *   rescheduling. The periodic interval in the worker will enqueue
  *   the next run.
+ *
+ * Queue deferral (checking for pending pipeline tasks) is handled by
+ * the job scheduler (reconciliationJob.ts), NOT here. This ensures
+ * that only timer-triggered runs defer, while self-rescheduled
+ * fast-drain batches always execute immediately.
  */
 const processReconciliation = async (): Promise<void> => {
   if (isRunning) {
@@ -165,9 +170,9 @@ const runReconciliationBatch = async (): Promise<void> => {
     consecutiveZeroProgressRuns++
     if (consecutiveZeroProgressRuns >= ZERO_PROGRESS_WARN_THRESHOLD) {
       logger.error(
-        'Reconciliation made no progress for %d consecutive runs. ' +
-          '%d unreconciled nodes may be permanently unresolvable ' +
-          '(indexer also missing their data). Consider indexer-side backfill.',
+        'Reconciliation made no progress for %d consecutive runs (%d unreconciled nodes). ' +
+          'Possible causes: indexer connectivity issue, transport misconfiguration, ' +
+          'or hashes genuinely missing from the indexer DB.',
         consecutiveZeroProgressRuns,
         unreconciledNodes.length,
       )

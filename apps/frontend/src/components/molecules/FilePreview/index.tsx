@@ -176,6 +176,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       loading={loading}
       file={file}
       error={error}
+      isAutoDrive
       decryptionError={decryptionError}
       isFilePreview={isFilePreview}
       textContent={textContent}

@@ -176,11 +176,22 @@ const setNodeArchivingData = async ({
   })
 }
 
+/**
+ * Removes encoded_node data for all *published* nodes under a root_cid.
+ *
+ * Only nodes with `block_published_on IS NOT NULL` are stripped — their
+ * data is already immutably on-chain and the local copy is no longer
+ * needed.  Unpublished nodes retain their encoded_node so the publishing
+ * recovery job can still re-enqueue them.
+ */
 const removeNodeDataByRootCid = async (rootCid: string) => {
   const db = await getDatabase()
 
   return db.query({
-    text: 'UPDATE nodes SET encoded_node = NULL WHERE root_cid = $1',
+    text: `UPDATE nodes
+           SET encoded_node = NULL
+           WHERE root_cid = $1
+             AND block_published_on IS NOT NULL`,
     values: [rootCid],
   })
 }
@@ -212,7 +223,17 @@ const updateNodePublishedOn = async (
   const db = await getDatabase()
 
   return db.query({
-    text: 'UPDATE nodes SET block_published_on = $1, tx_published_on = $2 WHERE cid = $3',
+    text: `UPDATE nodes
+           SET block_published_on = $1,
+               tx_published_on = $2,
+               encoded_node = CASE
+                 WHEN EXISTS (
+                   SELECT 1 FROM metadata
+                   WHERE head_cid = nodes.head_cid AND is_archived = true
+                 ) THEN NULL
+                 ELSE encoded_node
+               END
+           WHERE cid = $3`,
     values: [blockPublishedOn, txPublishedOn, cid],
   })
 }
@@ -226,16 +247,6 @@ const getUploadedNodesByRootCid = async (rootCid: string) => {
       values: [rootCid],
     })
     .then((e) => e.rows)
-}
-
-const getLastArchivedPieceNode = async () => {
-  const db = await getDatabase()
-
-  return db
-    .query<Node>({
-      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL ORDER BY piece_index DESC LIMIT 1',
-    })
-    .then((e) => e.rows.at(0))
 }
 
 const getUnreconciledNodes = async (limit: number) => {
@@ -273,6 +284,16 @@ const getUnreconciledNodesCount = async () => {
       `,
     })
     .then((e) => Number(e.rows[0].count))
+}
+
+const getLastArchivedPieceNode = async () => {
+  const db = await getDatabase()
+
+  return db
+    .query<Node>({
+      text: 'SELECT * FROM nodes WHERE piece_index IS NOT NULL AND piece_offset IS NOT NULL ORDER BY piece_index DESC LIMIT 1',
+    })
+    .then((e) => e.rows.at(0))
 }
 
 const getNodesCountWithoutDataByRootCid = async (rootCid: string) => {
@@ -413,6 +434,102 @@ const getFullyArchivedHeadCids = async (
     .then((e) => e.rows.map((r) => r.head_cid))
 }
 
+/**
+ * Returns root_cids of objects that are partially published — some nodes
+ * have block_published_on set but others do not — AND whose most recent
+ * published block is at least `stalenessThresholdBlocks` behind the
+ * chain head (approximated by the global MAX(block_published_on)).
+ *
+ * The staleness filter prevents false positives on objects that are
+ * still being actively published in the normal pipeline.
+ *
+ * Objects where every unpublished node has `encoded_node IS NULL`
+ * (i.e. archived before publishing completed) are excluded — they
+ * are un-publishable and would only cause repeated failures.
+ */
+const getStuckPublishingRootCids = async (
+  limit: number,
+  stalenessThresholdBlocks: number,
+): Promise<string[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ root_cid: string }>({
+      text: `
+        SELECT root_cid
+        FROM nodes
+        GROUP BY root_cid
+        HAVING COUNT(block_published_on) > 0
+           AND COUNT(block_published_on) < COUNT(*)
+           AND COUNT(*) FILTER (
+             WHERE block_published_on IS NULL AND encoded_node IS NOT NULL
+           ) > 0
+           AND MAX(block_published_on) + $2 < (
+             SELECT MAX(block_published_on) FROM nodes
+           )
+        LIMIT $1
+      `,
+      values: [limit, stalenessThresholdBlocks],
+    })
+    .then((e) => e.rows.map((r) => r.root_cid))
+}
+
+/**
+ * Returns CIDs of unpublished nodes for a given root_cid.
+ * Only returns nodes that still have encoded_node data — nodes whose
+ * data was removed (e.g. by archival) are un-publishable and excluded.
+ */
+const getUnpublishedNodeCidsByRootCid = async (
+  rootCid: string,
+): Promise<string[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ cid: string }>({
+      text: `
+        SELECT cid
+        FROM nodes
+        WHERE root_cid = $1
+          AND block_published_on IS NULL
+          AND encoded_node IS NOT NULL
+      `,
+      values: [rootCid],
+    })
+    .then((e) => e.rows.map((r) => r.cid))
+}
+
+/**
+ * Returns root_cids that have nodes stuck in an unrecoverable state:
+ * `block_published_on IS NULL` (never published) AND `encoded_node IS NULL`
+ * (data already stripped, e.g. by a prior archival bug).
+ *
+ * These objects can never complete publishing from local state alone.
+ * The caller should surface them for operational attention.
+ */
+const getUnrecoverablePublishingRootCids = async (
+  limit: number,
+): Promise<{ root_cid: string; unrecoverable_count: number }[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ root_cid: string; unrecoverable_count: number }>({
+      text: `
+        SELECT root_cid,
+               COUNT(*) FILTER (
+                 WHERE block_published_on IS NULL AND encoded_node IS NULL
+               )::int AS unrecoverable_count
+        FROM nodes
+        GROUP BY root_cid
+        HAVING COUNT(*) FILTER (
+          WHERE block_published_on IS NULL AND encoded_node IS NULL
+        ) > 0
+        LIMIT $1
+      `,
+      values: [limit],
+    })
+    .then((e) => e.rows)
+}
+
 export const nodesRepository = {
   getNode,
   getNodeCount,
@@ -437,4 +554,7 @@ export const nodesRepository = {
   getUnreconciledNodes,
   getUnreconciledNodesCount,
   getFullyArchivedHeadCids,
+  getStuckPublishingRootCids,
+  getUnpublishedNodeCidsByRootCid,
+  getUnrecoverablePublishingRootCids,
 }
