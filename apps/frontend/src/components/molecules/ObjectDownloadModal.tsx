@@ -24,13 +24,14 @@ import { mapObjectInformationFromQueryResult } from 'services/gql/utils';
 import { useNetwork } from 'contexts/network';
 import { DownloadProgressInfo } from 'services/download';
 import { formatBytes } from 'utils/number';
-import { AsyncDownloadStatus, DownloadStatus } from '@auto-drive/models';
-import { getAuthSession } from '@/utils/auth';
 import { useUserAsyncDownloadsStore } from '../organisms/UserAsyncDownloads/state';
+import {
+  ObjectDownloadAbortedError,
+  ObjectDownloadPhase,
+  runObjectDownloadFlow,
+} from 'services/objectDownloadFlow';
 
 const toastId = 'object-download-modal';
-const MAX_ASYNC_POLL_COUNT = 60;
-const ASYNC_POLL_INTERVAL_MS = 10_000;
 
 export const ObjectDownloadModal = ({
   cid,
@@ -51,8 +52,6 @@ export const ObjectDownloadModal = ({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<boolean>(false);
   const [asyncPreparing, setAsyncPreparing] = useState<boolean>(false);
-  const asyncPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollCancelledRef = useRef(false);
   const defaultPassword = useEncryptionStore((store) => store.password);
   const network = useNetwork();
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
@@ -61,8 +60,8 @@ export const ObjectDownloadModal = ({
   );
 
   const downloadInitiatedRef = useRef<string | null>(null);
-  const startSyncDownloadRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const downloadAbortRef = useRef<AbortController | null>(null);
+  const downloadPhaseRef = useRef<ObjectDownloadPhase | null>(null);
 
   const handleCloseWhileAsyncPreparing = useCallback(() => {
     if (!asyncPreparing || !metadata) return;
@@ -99,16 +98,12 @@ export const ObjectDownloadModal = ({
       setCheckingStatus(false);
       setAsyncPreparing(false);
       downloadInitiatedRef.current = null;
+      downloadPhaseRef.current = null;
     }
 
     return () => {
       downloadAbortRef.current?.abort();
       downloadAbortRef.current = null;
-      pollCancelledRef.current = true;
-      if (asyncPollRef.current) {
-        clearTimeout(asyncPollRef.current);
-        asyncPollRef.current = null;
-      }
     };
   }, [cid]);
 
@@ -137,19 +132,47 @@ export const ObjectDownloadModal = ({
     },
   });
 
-  const startSyncDownload = useCallback(async () => {
+  const onDownload = useCallback(async () => {
     if (!metadata) return;
-    const passwordToUse = skipDecryption ? undefined : password;
+
+    downloadAbortRef.current?.abort();
+    const abortController = new AbortController();
+    downloadAbortRef.current = abortController;
 
     setDownloadError(null);
     setDownloadProgress(null);
+    downloadPhaseRef.current = null;
 
     try {
-      await network.downloadService.fetchFile(metadata.dataCid, {
-        password: passwordToUse,
+      await runObjectDownloadFlow({
+        api: network.api,
+        downloadService: network.downloadService,
+        metadata,
+        password,
         skipDecryption,
+        signal: abortController.signal,
         onProgress: (progress) => {
           setDownloadProgress(progress);
+        },
+        onAsyncDownloadsRefresh: updateAsyncDownloads,
+        getAsyncDownloads: () =>
+          useUserAsyncDownloadsStore.getState().asyncDownloads,
+        onPhaseChange: (phase) => {
+          const previousPhase = downloadPhaseRef.current;
+          downloadPhaseRef.current = phase;
+
+          setCheckingStatus(phase === 'checking');
+          setAsyncPreparing(phase === 'preparing');
+          if (phase === 'downloading') {
+            setIsDownloading(true);
+          }
+
+          if (phase === 'downloading' && previousPhase === 'preparing') {
+            toast.success(
+              `${shortenString(metadata.name ?? 'File', 30)} is ready — downloading now`,
+              { id: toastId },
+            );
+          }
         },
       });
       await new Promise((resolve) => setTimeout(resolve, 250));
@@ -166,6 +189,8 @@ export const ObjectDownloadModal = ({
         setWrongPassword(true);
         setIsDownloading(false);
         downloadInitiatedRef.current = null;
+      } else if (e instanceof ObjectDownloadAbortedError) {
+        return;
       } else {
         console.error('Download failed:', e);
         const errorMessage =
@@ -175,127 +200,19 @@ export const ObjectDownloadModal = ({
         setDownloadError(errorMessage);
         toast.error(errorMessage, { id: toastId });
         setIsDownloading(false);
+        setAsyncPreparing(false);
+        setCheckingStatus(false);
       }
     }
-  }, [metadata, password, skipDecryption, network.downloadService, onClose]);
-
-  startSyncDownloadRef.current = startSyncDownload;
-
-  const startAsyncDownloadAndPoll = useCallback(async () => {
-    if (!metadata) return;
-
-    setIsDownloading(false);
-    setAsyncPreparing(true);
-    try {
-      await network.api.createAsyncDownload(metadata.dataCid);
-      updateAsyncDownloads();
-    } catch (e) {
-      console.error('Failed to create async download:', e);
-      // Fall back to sync download if async creation fails
-      setAsyncPreparing(false);
-      setIsDownloading(true);
-      startSyncDownloadRef.current();
-      return;
-    }
-
-    pollCancelledRef.current = false;
-    let pollCount = 0;
-    const schedulePoll = () => {
-      asyncPollRef.current = setTimeout(async () => {
-        if (pollCancelledRef.current) return;
-        pollCount++;
-        try {
-          const status = await network.api.checkDownloadStatus(
-            metadata.dataCid,
-          );
-          if (pollCancelledRef.current) return;
-          updateAsyncDownloads();
-          if (status === DownloadStatus.Cached) {
-            asyncPollRef.current = null;
-            setAsyncPreparing(false);
-            setIsDownloading(true);
-
-            toast.success(
-              `${shortenString(metadata.name ?? 'File', 30)} is ready — downloading now`,
-              { id: toastId },
-            );
-            startSyncDownloadRef.current();
-            return;
-          }
-
-          const asyncDownloads =
-            useUserAsyncDownloadsStore.getState().asyncDownloads;
-          const matchingDownload = asyncDownloads.find(
-            (d) => d.cid === metadata.dataCid,
-          );
-          if (
-            matchingDownload &&
-            (matchingDownload.status === AsyncDownloadStatus.Failed ||
-              matchingDownload.status === AsyncDownloadStatus.Dismissed)
-          ) {
-            asyncPollRef.current = null;
-            setAsyncPreparing(false);
-            const errorMsg =
-              matchingDownload.errorMessage ||
-              'Download failed on the server. Please try again.';
-            setDownloadError(errorMsg);
-            toast.error(errorMsg, { id: toastId });
-            return;
-          }
-
-          if (pollCount >= MAX_ASYNC_POLL_COUNT) {
-            asyncPollRef.current = null;
-            setAsyncPreparing(false);
-            const errorMsg =
-              'Download preparation timed out. Please try again later.';
-            setDownloadError(errorMsg);
-            toast.error(errorMsg, { id: toastId });
-            return;
-          }
-        } catch {
-          // Ignore transient poll errors
-        }
-        if (!pollCancelledRef.current) {
-          schedulePoll();
-        }
-      }, ASYNC_POLL_INTERVAL_MS);
-    };
-    schedulePoll();
-  }, [metadata, network.api, updateAsyncDownloads]);
-
-  const onDownload = useCallback(async () => {
-    if (!metadata || asyncPreparing) return;
-
-    downloadAbortRef.current?.abort();
-    const abortController = new AbortController();
-    downloadAbortRef.current = abortController;
-    const { signal } = abortController;
-
-    setCheckingStatus(true);
-
-    try {
-      const session = await getAuthSession().catch(() => null);
-      if (signal.aborted) return;
-      const hasSession = !!session?.accessToken && !!session?.authProvider;
-
-      if (hasSession) {
-        const status = await network.api.checkDownloadStatus(metadata.dataCid);
-        if (signal.aborted) return;
-        if (status === DownloadStatus.NotCached) {
-          setCheckingStatus(false);
-          startAsyncDownloadAndPoll();
-          return;
-        }
-      }
-    } catch {
-      if (signal.aborted) return;
-    }
-
-    if (signal.aborted) return;
-    setCheckingStatus(false);
-    setIsDownloading(true);
-    startSyncDownload();
-  }, [metadata, network.api, startSyncDownload, startAsyncDownloadAndPoll, asyncPreparing]);
+  }, [
+    metadata,
+    password,
+    skipDecryption,
+    network.api,
+    network.downloadService,
+    updateAsyncDownloads,
+    onClose,
+  ]);
 
   const passwordOrNotEncrypted =
     (metadata && !metadata.uploadOptions?.encryption?.algorithm) ||
@@ -559,7 +476,8 @@ export const ObjectDownloadModal = ({
   ]);
 
   // Show modal when there's a view to display OR when downloading/preparing
-  const shouldShowModal = !!cid && (!!view || isDownloading || asyncPreparing || checkingStatus);
+  const shouldShowModal =
+    !!cid && (!!view || isDownloading || asyncPreparing || checkingStatus);
 
   if (!shouldShowModal) return <></>;
 
@@ -600,7 +518,7 @@ export const ObjectDownloadModal = ({
               leaveFrom='opacity-100 scale-100'
               leaveTo='opacity-0 scale-95'
             >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-background bg-background-hover p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-background-hover p-6 text-left align-middle shadow-xl transition-all'>
                 {view ?? progressView}
               </DialogPanel>
             </TransitionChild>

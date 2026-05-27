@@ -197,7 +197,31 @@ const listObjects = async (
   // harmless, but silently dropping data is not.
   if (!isTruncated && allMatching.length === dbLimit) {
     isTruncated = true
-    nextContinuationToken = allMatching[allMatching.length - 1].key
+    const lastKey = allMatching[allMatching.length - 1].key
+
+    // If the last scanned key folded into a CommonPrefix, the naive choice
+    // `lastKey` would land *inside* a virtual directory we've already
+    // represented in commonPrefixes.  The next page's `key > token` query
+    // would then return the remaining keys in that directory, which would
+    // re-fold into — and re-emit — the same CommonPrefix entry.
+    //
+    // Advance the token past every key that could possibly fold into that
+    // prefix by appending a high-sort sentinel.  `￿` (encoded as
+    // 0xEF 0xBF 0xBF in UTF-8) sorts after every realistic S3 key character,
+    // so `key > token` skips the rest of the directory and resumes at the
+    // first key that falls outside it.
+    if (delimiter) {
+      const afterPrefix = lastKey.slice(prefix.length)
+      const delimIdx = afterPrefix.indexOf(delimiter)
+      if (delimIdx >= 0) {
+        const lastFoldedPrefix = prefix + afterPrefix.slice(0, delimIdx + 1)
+        nextContinuationToken = lastFoldedPrefix + '￿'
+      } else {
+        nextContinuationToken = lastKey
+      }
+    } else {
+      nextContinuationToken = lastKey
+    }
   }
 
   return {

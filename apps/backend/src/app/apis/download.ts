@@ -15,6 +15,26 @@ const createServer = async () => {
   logger.debug('Initializing download API server')
   const app = express()
 
+  if (config.express.corsAllowedOrigins) {
+    logger.debug(
+      'Configuring CORS with allowed origins: %j',
+      config.express.corsAllowedOrigins,
+    )
+    app.use(
+      cors({
+        origin: config.express.corsAllowedOrigins,
+      }),
+    )
+  } else {
+    logger.warn('CORS is not configured - no allowed origins specified, blocking cross-origin requests')
+  }
+
+  // The S3 controller handles its own raw body parsing (binary object
+  // payloads). It is mounted before the JSON/urlencoded parsers below so those
+  // never run for /s3 — otherwise body-parser would set req.body to {} and the
+  // raw object bytes would be lost.
+  app.use('/s3', s3Controller)
+
   app.use(
     express.json({
       limit: config.express.requestSizeLimit,
@@ -36,22 +56,7 @@ const createServer = async () => {
     config.express.requestSizeLimit,
   )
 
-  if (config.express.corsAllowedOrigins) {
-    logger.debug(
-      'Configuring CORS with allowed origins: %j',
-      config.express.corsAllowedOrigins,
-    )
-    app.use(
-      cors({
-        origin: config.express.corsAllowedOrigins,
-      }),
-    )
-  } else {
-    logger.warn('CORS is not configured - no allowed origins specified, blocking cross-origin requests')
-  }
-
   app.use('/downloads', downloadController)
-  app.use('/s3', s3Controller)
   app.use('/features', featuresController)
 
   logger.debug('Download controller mounted at /downloads')
