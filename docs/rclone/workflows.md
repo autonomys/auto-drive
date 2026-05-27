@@ -226,6 +226,7 @@ jobs:
           secret_access_key = placeholder
           endpoint = https://public.auto-drive.autonomys.xyz/s3
           no_check_bucket = true
+          list_version = 2
           EOF
 
       - name: Archive build artifacts
@@ -255,6 +256,7 @@ archive-artifacts:
       secret_access_key = placeholder
       endpoint = https://public.auto-drive.autonomys.xyz/s3
       no_check_bucket = true
+      list_version = 2
       EOF
     - TIMESTAMP=$(date +%Y%m%d-%H%M%S)
     - rclone copy ./dist/ autodrive:ci-builds/${CI_COMMIT_SHA}-${TIMESTAMP}/ --immutable -v

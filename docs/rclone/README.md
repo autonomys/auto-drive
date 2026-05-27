@@ -35,6 +35,7 @@ access_key_id = YOUR_API_KEY_HERE
 secret_access_key = placeholder
 endpoint = https://public.auto-drive.autonomys.xyz/s3
 no_check_bucket = true
+list_version = 2
 ```
 
 **4. Verify the connection**

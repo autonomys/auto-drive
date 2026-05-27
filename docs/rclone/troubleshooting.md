@@ -172,6 +172,34 @@ Also verify that `no_check_bucket = true` is set in your rclone config. Without 
 
 ---
 
+### Listing Fails with 500 Internal Server Error
+
+**What you see:**
+
+```
+ListObjects, ... StatusCode: 500, ... InternalServerError: Internal Server Error
+```
+
+(commands hang or fail on `rclone ls`, `rclone lsd`, `rclone check`, `rclone sync`)
+
+**Why it happens:** Auto Drive implements the **ListObjectsV2** API only. By default rclone's generic S3 backend (`provider = Other`) uses the older **ListObjectsV1** API, which Auto Drive does not handle.
+
+**Solution:** Set `list_version = 2` in your rclone config:
+
+```ini
+[autodrive]
+...
+list_version = 2
+```
+
+or on an existing remote:
+
+```bash
+rclone config update autodrive list_version 2
+```
+
+---
+
 ## Diagnostic Commands
 
 ### Check rclone configuration

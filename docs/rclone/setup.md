@@ -83,6 +83,7 @@ access_key_id = YOUR_API_KEY_HERE
 secret_access_key = placeholder
 endpoint = https://public.auto-drive.autonomys.xyz/s3
 no_check_bucket = true
+list_version = 2
 ```
 
 ### Option B: Use rclone config interactively
@@ -100,7 +101,7 @@ rclone config
 7. Enter `https://public.auto-drive.autonomys.xyz/s3` as the endpoint
 8. Accept defaults for all remaining options
 
-Then manually add `no_check_bucket = true` to the config section.
+Then manually add `no_check_bucket = true` and `list_version = 2` to the config section.
 
 ### Configuration notes
 
@@ -112,6 +113,7 @@ Then manually add `no_check_bucket = true` to the config section.
 | `secret_access_key` | Any non-empty string | Required by rclone but ignored by Auto Drive |
 | `endpoint` | `https://public.auto-drive.autonomys.xyz/s3` | Auto Drive S3 API base URL |
 | `no_check_bucket` | `true` | Skip bucket existence check - buckets are created implicitly on first write |
+| `list_version` | `2` | **Required.** Auto Drive implements the ListObjectsV2 API only; without this rclone defaults to the V1 listing API and listing fails |
 
 ### Local development
 

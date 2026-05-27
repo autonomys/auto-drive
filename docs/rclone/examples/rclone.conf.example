@@ -17,6 +17,9 @@ access_key_id = YOUR_API_KEY_HERE
 secret_access_key = placeholder
 endpoint = https://public.auto-drive.autonomys.xyz/s3
 no_check_bucket = true
+# Required: Auto Drive implements the ListObjectsV2 API only. Without this,
+# rclone defaults to the V1 listing API and directory listings fail.
+list_version = 2
 
 # For local development, use:
 # endpoint = http://localhost:3000/s3
