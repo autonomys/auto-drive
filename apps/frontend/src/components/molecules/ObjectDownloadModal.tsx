@@ -163,7 +163,9 @@ export const ObjectDownloadModal = ({
 
           setCheckingStatus(phase === 'checking');
           setAsyncPreparing(phase === 'preparing');
-          setIsDownloading(phase === 'downloading');
+          if (phase === 'downloading') {
+            setIsDownloading(true);
+          }
 
           if (phase === 'downloading' && previousPhase === 'preparing') {
             toast.success(
