@@ -14,8 +14,8 @@
     "url": "https://www.autonomys.net"
   },
   "dependencies": {
-    "@autonomys/auto-dag-data": "1.6.5",
-    "@autonomys/file-server": "1.6.5",
+    "@autonomys/auto-dag-data": "1.6.12",
+    "@autonomys/file-server": "1.6.12",
     "zod": "^3.24.2"
   },
   "devDependencies": {
