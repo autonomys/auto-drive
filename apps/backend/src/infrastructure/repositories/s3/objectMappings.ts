@@ -22,6 +22,8 @@ export interface S3ObjectListing {
   /** Object size in bytes joined from the metadata table; 0 when not yet indexed. */
   size: bigint
   lastModified: Date
+  /** MD5 stored at upload; null for objects uploaded before MD5 ETag support. */
+  md5: string | null
 }
 
 interface S3KeyMappingDB {
@@ -164,6 +166,7 @@ const listObjects = async (
     SELECT
       om.key,
       om.cid,
+      om.md5,
       COALESCE(m.total_size, 0) AS size,
       om.updated_at
     FROM "S3".object_mappings om
@@ -198,6 +201,7 @@ const listObjects = async (
   const result = await db.query<{
     key: string
     cid: string
+    md5: string | null
     size: string // pg returns bigint as string
     updated_at: Date
   }>({ text, values })
@@ -207,6 +211,7 @@ const listObjects = async (
     cid: row.cid,
     size: BigInt(row.size),
     lastModified: row.updated_at,
+    md5: row.md5 ?? null,
   }))
 }
 

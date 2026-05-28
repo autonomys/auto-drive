@@ -283,6 +283,24 @@ describe('AWS S3 - SDK', () => {
       }
     })
 
+    it('should return the MD5 ETag (not the CID), matching HeadObject', async () => {
+      // Regression: the listing previously returned the CID as the ETag, so
+      // checksum-verifying clients (rclone, AWS CLI) could not validate against
+      // a listing. Every listed ETag must be a quoted 32-hex MD5 (a CID would
+      // not match), and must equal the ETag HeadObject returns for that object.
+      const list = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: ListBucket }),
+      )
+      const entry = list.Contents!.find((c) => c.Key === 'a.txt')
+      expect(entry).toBeDefined()
+      expect(entry!.ETag).toMatch(MD5_ETAG_RE)
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: 'list-test/a.txt' }),
+      )
+      expect(entry!.ETag).toBe(head.ETag)
+    })
+
     it('should filter by prefix', async () => {
       const result = await s3Client.send(
         new ListObjectsV2Command({ Bucket: ListBucket, Prefix: 'subdir/' }),
