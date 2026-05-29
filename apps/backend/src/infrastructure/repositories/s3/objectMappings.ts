@@ -1,4 +1,7 @@
+import { S3ObjectListing } from '@autonomys/file-server'
 import { getDatabase } from '../../drivers/pg.js'
+
+export type { S3ObjectListing }
 
 export interface S3KeyMapping {
   bucket: string
@@ -13,17 +16,6 @@ export interface S3KeyMapping {
 export interface S3BucketInfo {
   name: string
   creationDate: Date
-}
-
-/** A single object entry returned by ListObjectsV2. */
-export interface S3ObjectListing {
-  key: string
-  cid: string
-  /** Object size in bytes joined from the metadata table; 0 when not yet indexed. */
-  size: bigint
-  lastModified: Date
-  /** MD5 stored at upload; null for objects uploaded before MD5 ETag support. */
-  md5: string | null
 }
 
 interface S3KeyMappingDB {
