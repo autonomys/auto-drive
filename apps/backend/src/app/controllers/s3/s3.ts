@@ -363,8 +363,10 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
       Key: obj.key,
       Size: obj.size.toString(),
       LastModified: obj.lastModified.toISOString(),
-      // CID is used as the ETag on this branch (before MD5 support).
-      ETag: `"${obj.cid}"`,
+      // Return the stored MD5 so clients (rclone, AWS CLI) can verify
+      // checksums from the listing, matching HeadObject. Legacy objects with
+      // no stored md5 fall back to the CID, which remains in x-amz-meta-cid.
+      ETag: obj.md5 ? `"${obj.md5}"` : `"${obj.cid}"`,
     }))
   }
 
