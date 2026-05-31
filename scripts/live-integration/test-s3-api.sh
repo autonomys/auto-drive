@@ -790,8 +790,16 @@ for k in "${TREE_PREFIX}/a.txt" "${TREE_PREFIX}/b.txt" "${TREE_PREFIX}/sub/c.txt
     || fail "ListObjectsV2 setup — could not seed ${k}"
 done
 
+# These assertions inspect a single ListObjectsV2 response, so all use
+# --no-paginate.  Without it the AWS CLI auto-paginates and botocore's
+# paginator returns only the aggregated result keys (Contents, CommonPrefixes)
+# — it drops the per-response fields KeyCount, Name, Prefix, MaxKeys,
+# IsTruncated, NextContinuationToken and EncodingType from the merged output,
+# which would make any assertion on those silently read a missing value.
+
 # Basic listing — the uploaded smoke object must appear in Contents
-if LIST=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" --prefix "smoke-" 2>&1); then
+if LIST=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" --prefix "smoke-" \
+    --no-paginate 2>&1); then
   if echo "$LIST" | jq -e --arg k "$OBJECT_KEY" \
       '.Contents[]?.Key | select(. == $k)' >/dev/null 2>&1; then
     ok "ListObjectsV2 — basic listing returns uploaded key"
@@ -805,7 +813,7 @@ fi
 
 # Prefix filter — only the tree keys should come back
 if LIST=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" \
-    --prefix "${TREE_PREFIX}/" 2>&1); then
+    --prefix "${TREE_PREFIX}/" --no-paginate 2>&1); then
   COUNT=$(echo "$LIST" | jq '[.Contents[]?.Key] | length' 2>/dev/null)
   if [[ "$COUNT" == "3" ]]; then
     ok "ListObjectsV2 — prefix filter returns 3 keys under ${TREE_PREFIX}/"
@@ -818,7 +826,7 @@ fi
 
 # Flat listing (no delimiter) — all 3 keys come back as Contents, no CommonPrefixes
 if LIST=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" \
-    --prefix "${TREE_PREFIX}/" 2>&1); then
+    --prefix "${TREE_PREFIX}/" --no-paginate 2>&1); then
   KEY_COUNT=$(echo "$LIST" | jq '[.Contents[]?.Key] | length')
   CP_COUNT=$(echo "$LIST" | jq '[.CommonPrefixes[]?.Prefix] | length')
   if [[ "$KEY_COUNT" == "3" && "$CP_COUNT" == "0" ]]; then
@@ -829,9 +837,11 @@ if LIST=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" \
   fi
 fi
 
-# Delimiter folding — sub/ should appear as a CommonPrefix, not a key
+# Delimiter folding — sub/ should appear as a CommonPrefix, not a key.
+# --no-paginate is required for the KeyCount assertion below (see comment at
+# the basic-listing call): the auto-paginated merge drops KeyCount.
 if LIST=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" \
-    --prefix "${TREE_PREFIX}/" --delimiter "/" 2>&1); then
+    --prefix "${TREE_PREFIX}/" --delimiter "/" --no-paginate 2>&1); then
   KEYS=$(echo "$LIST" | jq -r '[.Contents[]?.Key] | join(",")' 2>/dev/null)
   PREFIXES=$(echo "$LIST" | jq -r '[.CommonPrefixes[]?.Prefix] | join(",")' 2>/dev/null)
   if echo ",$PREFIXES," | grep -q ",${TREE_PREFIX}/sub/," \
@@ -1031,7 +1041,7 @@ fi
 section "PR 717 — ListObjectsV2 returns MD5 ETags"
 
 if LIST=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" \
-    --prefix "$OBJECT_KEY" 2>&1); then
+    --prefix "$OBJECT_KEY" --no-paginate 2>&1); then
   LIST_ETAG=$(echo "$LIST" | jq -r \
       --arg k "$OBJECT_KEY" \
       '.Contents[] | select(.Key == $k) | .ETag' | tr -d '"')
@@ -1053,7 +1063,8 @@ fi
 # For multipart objects, ListObjectsV2 ETag should match HeadObject ETag (the
 # composite "-N" form).  Verifies the listing path returns the right shape for
 # multipart-completed objects, not just single-PUT objects.
-if LIST=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" --prefix "$MPU_KEY" 2>&1) \
+if LIST=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" --prefix "$MPU_KEY" \
+    --no-paginate 2>&1) \
 && HEAD=$(S3 head-object --bucket "$TEST_BUCKET" --key "$MPU_KEY" 2>&1); then
   LIST_MPU_ETAG=$(echo "$LIST" | jq -r --arg k "$MPU_KEY" \
       '.Contents[] | select(.Key == $k) | .ETag' | tr -d '"')
