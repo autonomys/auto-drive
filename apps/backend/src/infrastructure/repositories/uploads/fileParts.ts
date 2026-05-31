@@ -8,12 +8,21 @@ interface FilePart {
   updated_at: Date
 }
 
+// UPSERT rather than plain INSERT so part retries succeed.  S3 allows a
+// client to re-upload the same PartNumber — typically after a transient
+// network failure between the part's bytes being stored and the per-part
+// ETag reaching the client — and the second call must replace the stored
+// bytes rather than 500 on the (upload_id, part_index) primary key.
 const addChunk = async (part: FilePart): Promise<FilePart> => {
   const db = await getDatabase()
 
   return db
     .query<FilePart>(
-      'INSERT INTO uploads.file_parts (upload_id, part_index, data) VALUES ($1, $2, $3) RETURNING *',
+      `INSERT INTO uploads.file_parts (upload_id, part_index, data)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (upload_id, part_index)
+       DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+       RETURNING *`,
       [part.upload_id, part.part_index, part.data],
     )
     .then((result) => result.rows[0])

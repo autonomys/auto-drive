@@ -251,6 +251,177 @@ describe('AWS S3 - SDK', () => {
       expect(body.length).toBe(ExpectedBody.length)
       expect(body).toEqual(ExpectedBody)
     }, 30_000)
+
+    // Regression for the Bugbot finding on #726: uploading PartNumbers 1 and 3
+    // with no part 2 must NOT successfully finalise.  Pre-fix the assembled
+    // metadata would report bytes for part 3 even though those bytes never
+    // entered the IPLD tree (the drain stopped at the gap and the size sum
+    // included part 3 regardless).
+    it('completion should refuse when there is a gap in the parts sequence', async () => {
+      const KeyGap = 'multipart-with-gap.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeyGap }),
+      )
+      const uploadId = create.UploadId!
+
+      const e1 = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: KeyGap,
+          UploadId: uploadId,
+          PartNumber: 1,
+          Body: PartA,
+        }),
+      )
+      // Skip PartNumber 2; upload PartNumber 3 directly.
+      const e3 = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: KeyGap,
+          UploadId: uploadId,
+          PartNumber: 3,
+          Body: PartC,
+        }),
+      )
+
+      // Both per-part requests succeed (parts are stored).  Completion is
+      // where the gap surfaces.
+      await expect(
+        s3Client.send(
+          new CompleteMultipartUploadCommand({
+            Bucket,
+            Key: KeyGap,
+            UploadId: uploadId,
+            MultipartUpload: {
+              Parts: [
+                { ETag: e1.ETag!, PartNumber: 1 },
+                { ETag: e3.ETag!, PartNumber: 3 },
+              ],
+            },
+          }),
+        ),
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 400 },
+      })
+    }, 30_000)
+
+    // Regression for the Bugbot finding on #726: pre-fix, addChunk used a
+    // bare INSERT which 500'd on the (upload_id, part_index) primary key when
+    // a client retried the same PartNumber (e.g. after a network failure
+    // mid-response).  S3 explicitly allows part retries.  Verify that
+    // re-uploading the same PartNumber succeeds and the final assembled body
+    // reflects the retried bytes.
+    it('should accept a part retry with the same PartNumber', async () => {
+      const KeyRetry = 'multipart-retry.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeyRetry }),
+      )
+      const uploadId = create.UploadId!
+
+      const upload = (body: Buffer) =>
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: KeyRetry,
+            UploadId: uploadId,
+            PartNumber: 1,
+            Body: body,
+          }),
+        )
+
+      // First attempt with PartA.
+      const firstAttempt = await upload(PartA)
+      expect(firstAttempt.ETag).toMatch(MD5_ETAG_RE)
+
+      // Retry the same PartNumber.  Pre-fix this 500'd on the PK violation;
+      // post-fix the UPSERT replaces the stored bytes.
+      const retry = await upload(PartA)
+      expect(retry.ETag).toMatch(MD5_ETAG_RE)
+      expect(retry.ETag).toBe(firstAttempt.ETag)
+
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: KeyRetry,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: [{ ETag: retry.ETag!, PartNumber: 1 }],
+          },
+        }),
+      )
+      expect(complete.ETag).toMatch(MULTIPART_ETAG_RE)
+
+      const downloaded = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: KeyRetry }),
+      )
+      const body = Buffer.from(
+        await downloaded.Body!.transformToByteArray(),
+      )
+      expect(body).toEqual(PartA)
+    }, 30_000)
+
+    // Regression for the Bugbot finding on #726: concurrent UploadPart calls
+    // for the same upload_id used to race on last_processed_part_index — two
+    // drains could both grab the same `next` index and call processChunk
+    // twice, silently double-counting bytes into the IPLD tree.  Stress the
+    // lock by firing all three uploadParts in parallel and asserting the
+    // assembled body is exactly A‖B‖C.  The test is non-deterministic by
+    // nature (Promise.all is unlikely to truly synchronise on the I/O
+    // boundary), but a regression that removed the lock would fail this
+    // stochastically over enough runs.
+    it('concurrent uploadParts should still assemble correctly', async () => {
+      const KeyConc = 'multipart-concurrent.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeyConc }),
+      )
+      const uploadId = create.UploadId!
+
+      const upPart = (partNumber: number, body: Buffer) =>
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: KeyConc,
+            UploadId: uploadId,
+            PartNumber: partNumber,
+            Body: body,
+          }),
+        )
+
+      // Fire all three in parallel.
+      const [e1, e2, e3] = await Promise.all([
+        upPart(1, PartA),
+        upPart(2, PartB),
+        upPart(3, PartC),
+      ])
+      expect(e1.ETag).toMatch(MD5_ETAG_RE)
+      expect(e2.ETag).toMatch(MD5_ETAG_RE)
+      expect(e3.ETag).toMatch(MD5_ETAG_RE)
+
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: KeyConc,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: [
+              { ETag: e1.ETag!, PartNumber: 1 },
+              { ETag: e2.ETag!, PartNumber: 2 },
+              { ETag: e3.ETag!, PartNumber: 3 },
+            ],
+          },
+        }),
+      )
+      expect(complete.ETag).toMatch(MULTIPART_ETAG_RE)
+
+      const downloaded = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: KeyConc }),
+      )
+      const body = Buffer.from(
+        await downloaded.Body!.transformToByteArray(),
+      )
+      expect(body.length).toBe(ExpectedBody.length)
+      expect(body).toEqual(ExpectedBody)
+    }, 30_000)
   })
 
   // Bucket-prefixed key: first segment becomes the bucket name

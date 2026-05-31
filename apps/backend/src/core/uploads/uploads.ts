@@ -24,7 +24,7 @@ import { config } from '../../config.js'
 import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
 import { BlockstoreUseCases } from './blockstore.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { ObjectNotFoundError } from '../../errors/index.js'
+import { BadRequestError, ObjectNotFoundError } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 
 const logger = createLogger('useCases:uploads:uploads')
@@ -156,6 +156,40 @@ const createFileInFolder = async (
   return file
 }
 
+// Per-upload in-process serialisation for the drain.  Concurrent UploadPart
+// requests for the same upload_id must not interleave their reads and updates
+// of last_processed_part_index — without this lock, two drains can both read
+// the same `next` index, both find the same chunk in file_parts, and both
+// call processChunk → silent double-processing of the same bytes into the
+// IPLD tree.
+//
+// This is in-process only; multi-process deployments would still race across
+// processes.  A PostgreSQL advisory lock would be the cross-process fix, but
+// requires routing every drain step through a single connection — out of
+// scope for this PR.  In practice the express server is currently one
+// instance per region, so in-process serialisation removes the realistic
+// race.
+const drainLocks = new Map<string, Promise<unknown>>()
+
+const withDrainLock = async <T>(
+  uploadId: string,
+  fn: () => Promise<T>,
+): Promise<T> => {
+  // Chain after any in-flight drain.  Swallow the previous drain's error so
+  // a failure on one caller does not poison subsequent waiters; each caller
+  // still observes its own fn's outcome.
+  const previous = drainLocks.get(uploadId) ?? Promise.resolve()
+  const current = previous.catch(() => undefined).then(fn)
+  drainLocks.set(uploadId, current)
+  try {
+    return await current
+  } finally {
+    if (drainLocks.get(uploadId) === current) {
+      drainLocks.delete(uploadId)
+    }
+  }
+}
+
 // Drain any chunks that are persisted in uploads.file_parts and now form a
 // contiguous run starting at last_processed_part_index + 1.  Used both by
 // uploadChunk after persisting a new chunk and by completeUpload as a final
@@ -170,25 +204,50 @@ const createFileInFolder = async (
 // S3 multipart explicitly allows parts to arrive in any order; the previous
 // implementation rejected non-monotonic arrivals at the processing layer
 // and silently produced a corrupted assembled object (see #725).
-const drainContiguousPendingChunks = async (uploadId: string): Promise<void> => {
-  while (true) {
-    const info =
-      await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
+const drainContiguousPendingChunks = (uploadId: string): Promise<void> =>
+  withDrainLock(uploadId, async () => {
+    while (true) {
+      const info =
+        await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
+          uploadId,
+        )
+      if (!info) {
+        throw new Error('File processing info not found')
+      }
+      const next =
+        info.last_processed_part_index == null
+          ? 0
+          : info.last_processed_part_index + 1
+      const part = await filePartsRepository.getChunkByUploadIdAndPartIndex(
         uploadId,
+        next,
       )
-    if (!info) {
-      throw new Error('File processing info not found')
+      if (!part) break
+      await UploadFileProcessingUseCase.processChunk(uploadId, part.data, next)
     }
-    const next =
-      info.last_processed_part_index == null
-        ? 0
-        : info.last_processed_part_index + 1
-    const part = await filePartsRepository.getChunkByUploadIdAndPartIndex(
-      uploadId,
-      next,
+  })
+
+// Refuse to finalise when the stored parts have gaps — i.e. file_parts rows
+// exist with part_index beyond the last_processed_part_index after the drain.
+// S3 requires the parts list in CompleteMultipartUpload to be contiguous
+// starting at PartNumber 1; a gap means the client either lied about which
+// parts they uploaded or a part is genuinely missing.  Without this check
+// the size returned by getUploadFilePartsSize would include bytes that never
+// entered the IPLD tree, and the assembled object's metadata would be
+// internally inconsistent.
+const assertNoUnprocessedParts = async (uploadId: string): Promise<void> => {
+  const info =
+    await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(uploadId)
+  const lastProcessed = info?.last_processed_part_index ?? -1
+  const parts = await filePartsRepository.getChunksByUploadId(uploadId)
+  const unprocessed = parts
+    .filter((p) => p.part_index > lastProcessed)
+    .map((p) => p.part_index)
+    .sort((a, b) => a - b)
+  if (unprocessed.length > 0) {
+    throw new BadRequestError(
+      `Cannot complete upload: parts stored but not processed (gap in sequence) at part_index=[${unprocessed.join(',')}]`,
     )
-    if (!part) break
-    await UploadFileProcessingUseCase.processChunk(uploadId, part.data, next)
   }
 }
 
@@ -254,6 +313,11 @@ const completeUpload = async (
   // step entirely; their finalisation runs through processFolderUpload.
   if (upload.type === UploadType.FILE) {
     await drainContiguousPendingChunks(uploadId)
+    // After the drain, every stored part must have been processed.  Any
+    // remaining gap means the parts list is incomplete — refuse to finalise
+    // rather than emit a CID for an object whose stored byte total includes
+    // bytes that are absent from the IPLD tree.
+    await assertNoUnprocessedParts(uploadId)
   }
 
   const cid = await UploadFileProcessingUseCase.completeUploadProcessing(upload)
