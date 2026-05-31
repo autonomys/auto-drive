@@ -207,7 +207,8 @@ const withDrainLock = async <T>(
 // implementation rejected non-monotonic arrivals at the processing layer
 // and silently produced a corrupted assembled object (see #725).
 const drainLoop = async (uploadId: string): Promise<void> => {
-  while (true) {
+  let hasMore = true
+  while (hasMore) {
     const info =
       await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
         uploadId,
@@ -223,8 +224,11 @@ const drainLoop = async (uploadId: string): Promise<void> => {
       uploadId,
       next,
     )
-    if (!part) break
-    await UploadFileProcessingUseCase.processChunk(uploadId, part.data, next)
+    if (!part) {
+      hasMore = false
+    } else {
+      await UploadFileProcessingUseCase.processChunk(uploadId, part.data, next)
+    }
   }
 }
 
