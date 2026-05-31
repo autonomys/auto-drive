@@ -432,6 +432,17 @@ describe('AWS S3 - SDK', () => {
       // CID must be present in the custom header
       expect(result.Metadata?.cid).toBeDefined()
     })
+
+    // HeadObject must return 200 with the headers GET would send. A prior
+    // 204 stripped Content-Length/Content-Type; Last-Modified was never set.
+    it('should return ContentLength, ContentType and LastModified on HeadObject', async () => {
+      // `Key`/`Body` is a plain (uncompressed, unencrypted) object.
+      const result = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+
+      expect(result.ContentLength).toBe(Body.length)
+      expect(result.LastModified).toBeInstanceOf(Date)
+      expect(result.ContentType).toBeTruthy()
+    })
   })
 
   // Raw HTTP requests that mimic the AWS CLI / botocore, which (unlike the JS
