@@ -399,10 +399,6 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
-  // Regression for #723: ObjectNotFoundError used to extend Error rather than
-  // HttpError, so missing-key responses collapsed to 500 via handleError's
-  // InternalError fallback.  Pin the 404 contract on both surfaces so a
-  // future refactor cannot silently regress.
   describe('Missing keys', () => {
     const MissingKey = 'this-key-was-never-uploaded-' + Date.now() + '.txt'
 
