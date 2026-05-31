@@ -181,16 +181,12 @@ describe('AWS S3 - SDK', () => {
     )
   })
 
-  // Regression for #725: S3 multipart explicitly allows parts to arrive in any
-  // order (parallel uploads, retries, etc.) — PartNumber identifies position,
-  // not arrival order.  Pre-fix, the processing layer rejected non-sequential
-  // arrivals and the assembled object only contained whichever contiguous
-  // prefix of parts happened to arrive in order.
+  // S3 allows parts to arrive in any order; PartNumber identifies position,
+  // not arrival order.
   describe('Out-of-order multipart upload', () => {
     const OutOfOrderKey = 'multipart-out-of-order.bin'
     const PART_SIZE = 16 * 1024
-    // Distinct, deterministic per-part content so misordered assembly is
-    // detectable byte-for-byte.
+    // Distinct content per part so misordered assembly is detectable.
     const PartA = Buffer.alloc(PART_SIZE, 'A')
     const PartB = Buffer.alloc(PART_SIZE, 'B')
     const PartC = Buffer.alloc(PART_SIZE, 'C')
@@ -252,11 +248,8 @@ describe('AWS S3 - SDK', () => {
       expect(body).toEqual(ExpectedBody)
     }, 30_000)
 
-    // Regression for the Bugbot finding on #726: uploading PartNumbers 1 and 3
-    // with no part 2 must NOT successfully finalise.  Pre-fix the assembled
-    // metadata would report bytes for part 3 even though those bytes never
-    // entered the IPLD tree (the drain stopped at the gap and the size sum
-    // included part 3 regardless).
+    // A gap (parts 1 and 3, no 2) must not finalise: part 3's bytes are
+    // counted in the size but never reach the IPLD tree.
     it('completion should refuse when there is a gap in the parts sequence', async () => {
       const KeyGap = 'multipart-with-gap.bin'
       const create = await s3Client.send(
@@ -305,12 +298,7 @@ describe('AWS S3 - SDK', () => {
       })
     }, 30_000)
 
-    // Regression for the Bugbot finding on #726: pre-fix, addChunk used a
-    // bare INSERT which 500'd on the (upload_id, part_index) primary key when
-    // a client retried the same PartNumber (e.g. after a network failure
-    // mid-response).  S3 explicitly allows part retries.  Verify that
-    // re-uploading the same PartNumber succeeds and the final assembled body
-    // reflects the retried bytes.
+    // S3 allows re-uploading a PartNumber; an identical retry must succeed.
     it('should accept a part retry with the same PartNumber', async () => {
       const KeyRetry = 'multipart-retry.bin'
       const create = await s3Client.send(
@@ -329,12 +317,9 @@ describe('AWS S3 - SDK', () => {
           }),
         )
 
-      // First attempt with PartA.
       const firstAttempt = await upload(PartA)
       expect(firstAttempt.ETag).toMatch(MD5_ETAG_RE)
 
-      // Retry the same PartNumber.  Pre-fix this 500'd on the PK violation;
-      // post-fix the UPSERT replaces the stored bytes.
       const retry = await upload(PartA)
       expect(retry.ETag).toMatch(MD5_ETAG_RE)
       expect(retry.ETag).toBe(firstAttempt.ETag)
@@ -360,12 +345,8 @@ describe('AWS S3 - SDK', () => {
       expect(body).toEqual(PartA)
     }, 30_000)
 
-    // A retry that changes the bytes of an *already-processed* part cannot be
-    // honoured by the streaming model — the part is already baked into the
-    // IPLD tree.  Silently accepting it would leave the assembled CID (old
-    // bytes) inconsistent with the size and composite ETag (new bytes).
-    // Reject it with a 400 rather than corrupt.  (An identical retry, covered
-    // above, is a harmless no-op.)
+    // A processed part is already in the IPLD tree and cannot be replaced, so a
+    // retry with different bytes is rejected rather than left inconsistent.
     it('should reject a divergent retry of an already-processed part', async () => {
       const KeyDiverge = 'multipart-divergent-retry.bin'
       const create = await s3Client.send(
@@ -401,13 +382,8 @@ describe('AWS S3 - SDK', () => {
       })
     }, 30_000)
 
-    // Regression for the second Bugbot finding on #726 ("stale part guard
-    // races drain"): two concurrent uploads of the SAME part_index used to
-    // both read a pre-processing cursor, both bypass the divergent-content
-    // guard, then race the store against the drain.  With the guard + store +
-    // drain now serialised under withDrainLock, concurrent identical uploads
-    // of the same part must converge to a single processed chunk and a
-    // correct assembled body (order-independent, so deterministic to assert).
+    // Concurrent uploads of the same part_index must converge to a single
+    // processed chunk. Identical bytes keep the assertion deterministic.
     it('concurrent identical uploads of the same part should not corrupt', async () => {
       const KeySameIdx = 'multipart-same-index-concurrent.bin'
       const create = await s3Client.send(
@@ -426,9 +402,6 @@ describe('AWS S3 - SDK', () => {
           }),
         )
 
-      // Fire the same part twice concurrently.  Both must succeed (identical
-      // bytes — the loser of the lock race sees an already-processed part and
-      // no-ops) and neither may double-process.
       const [r1, r2] = await Promise.all([upPart1(), upPart1()])
       expect(r1.ETag).toMatch(MD5_ETAG_RE)
       expect(r2.ETag).toMatch(MD5_ETAG_RE)
@@ -451,15 +424,9 @@ describe('AWS S3 - SDK', () => {
       expect(body).toEqual(PartA)
     }, 30_000)
 
-    // Regression for the Bugbot finding on #726: concurrent UploadPart calls
-    // for the same upload_id used to race on last_processed_part_index — two
-    // drains could both grab the same `next` index and call processChunk
-    // twice, silently double-counting bytes into the IPLD tree.  Stress the
-    // lock by firing all three uploadParts in parallel and asserting the
-    // assembled body is exactly A‖B‖C.  The test is non-deterministic by
-    // nature (Promise.all is unlikely to truly synchronise on the I/O
-    // boundary), but a regression that removed the lock would fail this
-    // stochastically over enough runs.
+    // Distinct parts uploaded in parallel must still assemble in PartNumber
+    // order. Best-effort: timing-dependent, so it catches a missing lock only
+    // stochastically.
     it('concurrent uploadParts should still assemble correctly', async () => {
       const KeyConc = 'multipart-concurrent.bin'
       const create = await s3Client.send(
@@ -478,7 +445,6 @@ describe('AWS S3 - SDK', () => {
           }),
         )
 
-      // Fire all three in parallel.
       const [e1, e2, e3] = await Promise.all([
         upPart(1, PartA),
         upPart(2, PartB),

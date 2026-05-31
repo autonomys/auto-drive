@@ -8,11 +8,8 @@ interface FilePart {
   updated_at: Date
 }
 
-// UPSERT rather than plain INSERT so part retries succeed.  S3 allows a
-// client to re-upload the same PartNumber — typically after a transient
-// network failure between the part's bytes being stored and the per-part
-// ETag reaching the client — and the second call must replace the stored
-// bytes rather than 500 on the (upload_id, part_index) primary key.
+// UPSERT, not INSERT: re-uploading the same PartNumber must replace the stored
+// bytes rather than fail on the (upload_id, part_index) primary key.
 const addChunk = async (part: FilePart): Promise<FilePart> => {
   const db = await getDatabase()
 
@@ -52,10 +49,8 @@ const getChunkByUploadIdAndPartIndex = async (
     .then((result) => result.rows[0])
 }
 
-// Return the part_index values strictly greater than `index` for an upload,
-// WITHOUT loading the (potentially multi-GB) data column.  Used to detect a
-// gap in the processed sequence at completion time; loading full part bodies
-// just to read their indices would be an OOM risk on large uploads.
+// Returns part_index values above `index`, without selecting the data column
+// (which can be multi-GB per part).
 const getPartIndicesGreaterThan = async (
   uploadId: string,
   index: number,
