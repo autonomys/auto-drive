@@ -190,10 +190,12 @@ const withDrainLock = async <T>(
   }
 }
 
-// Drain any chunks that are persisted in uploads.file_parts and now form a
-// contiguous run starting at last_processed_part_index + 1.  Used both by
-// uploadChunk after persisting a new chunk and by completeUpload as a final
-// safety net before finalising the IPLD tree.
+// Process the chunks persisted in uploads.file_parts that now form a
+// contiguous run starting at last_processed_part_index + 1.
+//
+// THE CALLER MUST HOLD withDrainLock(uploadId).  This function reads and
+// advances the shared last_processed_part_index cursor; running two copies
+// concurrently for the same upload would double-process or skip chunks.
 //
 // For an in-order client the loop processes exactly the chunk just stored
 // and exits immediately — the streaming-during-upload optimisation is
@@ -204,28 +206,27 @@ const withDrainLock = async <T>(
 // S3 multipart explicitly allows parts to arrive in any order; the previous
 // implementation rejected non-monotonic arrivals at the processing layer
 // and silently produced a corrupted assembled object (see #725).
-const drainContiguousPendingChunks = (uploadId: string): Promise<void> =>
-  withDrainLock(uploadId, async () => {
-    while (true) {
-      const info =
-        await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
-          uploadId,
-        )
-      if (!info) {
-        throw new Error('File processing info not found')
-      }
-      const next =
-        info.last_processed_part_index == null
-          ? 0
-          : info.last_processed_part_index + 1
-      const part = await filePartsRepository.getChunkByUploadIdAndPartIndex(
+const drainLoop = async (uploadId: string): Promise<void> => {
+  while (true) {
+    const info =
+      await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
         uploadId,
-        next,
       )
-      if (!part) break
-      await UploadFileProcessingUseCase.processChunk(uploadId, part.data, next)
+    if (!info) {
+      throw new Error('File processing info not found')
     }
-  })
+    const next =
+      info.last_processed_part_index == null
+        ? 0
+        : info.last_processed_part_index + 1
+    const part = await filePartsRepository.getChunkByUploadIdAndPartIndex(
+      uploadId,
+      next,
+    )
+    if (!part) break
+    await UploadFileProcessingUseCase.processChunk(uploadId, part.data, next)
+  }
+}
 
 // Refuse to finalise when the stored parts have gaps — i.e. file_parts rows
 // exist with part_index beyond the last_processed_part_index after the drain.
@@ -235,6 +236,9 @@ const drainContiguousPendingChunks = (uploadId: string): Promise<void> =>
 // the size returned by getUploadFilePartsSize would include bytes that never
 // entered the IPLD tree, and the assembled object's metadata would be
 // internally inconsistent.
+//
+// THE CALLER MUST HOLD withDrainLock(uploadId) so the cursor it reads is
+// stable against a concurrent drain.
 const assertNoUnprocessedParts = async (uploadId: string): Promise<void> => {
   const info =
     await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(uploadId)
@@ -270,48 +274,64 @@ const uploadChunk = async (
   }
   await checkPermissions(upload, user)
 
-  // A part that has already been processed into the IPLD tree cannot be
-  // mutated: the streaming model has no way to splice replacement bytes back
-  // into an already-built tree.  S3 does allow re-uploading a PartNumber, but
-  // in practice clients only do so to recover from delivery uncertainty —
-  // the bytes are identical.  Accept an identical re-upload as a harmless
-  // no-op; reject a *divergent* re-upload rather than silently leaving the
-  // stored object inconsistent with the per-part ETag the client computed
-  // (the assembled CID would reflect the original bytes, the size and
-  // composite ETag the new bytes).
-  const info =
-    await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(uploadId)
-  const lastProcessed = info?.last_processed_part_index ?? -1
-  if (index <= lastProcessed) {
-    const existing = await filePartsRepository.getChunkByUploadIdAndPartIndex(
-      uploadId,
-      index,
-    )
-    if (existing && Buffer.compare(existing.data, chunkData) !== 0) {
-      throw new BadRequestError(
-        `Cannot replace already-processed part ${index} with different content`,
+  // The processed-cursor read, the divergent-content guard, the store, and the
+  // drain must be atomic per upload.  Without serialisation, two concurrent
+  // UploadPart requests for the same part_index could both read a
+  // pre-processing cursor, both pass the guard, then race the store against
+  // the drain — leaving file_parts and the IPLD tree disagreeing (Bugbot,
+  // #726).  withDrainLock serialises all uploadChunk work for the same
+  // upload_id within this process.
+  //
+  // Cost: parts of the *same* upload no longer store in parallel.  IPLD
+  // processing is inherently serial per upload anyway (the tree is built in
+  // part order), so the impact is bounded by the per-part INSERT latency
+  // added to the already-serial critical section.  Distinct uploads
+  // (different upload_id) remain fully parallel.  This serialisation is
+  // in-process only — see the withDrainLock comment for the multi-process
+  // caveat.
+  await withDrainLock(uploadId, async () => {
+    const info =
+      await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
+        uploadId,
       )
+    const lastProcessed = info?.last_processed_part_index ?? -1
+
+    // A part already processed into the IPLD tree is immutable: the streaming
+    // model cannot splice replacement bytes into a built tree.  S3 allows
+    // re-uploading a PartNumber, but clients only do so to recover from
+    // delivery uncertainty — the bytes are identical.  Accept an identical
+    // re-upload as a harmless no-op; reject a *divergent* re-upload rather
+    // than silently leaving the stored object inconsistent with the per-part
+    // ETag the client computed (the assembled CID would reflect the original
+    // bytes, the size and composite ETag the new bytes).
+    if (index <= lastProcessed) {
+      const existing = await filePartsRepository.getChunkByUploadIdAndPartIndex(
+        uploadId,
+        index,
+      )
+      if (existing && Buffer.compare(existing.data, chunkData) !== 0) {
+        throw new BadRequestError(
+          `Cannot replace already-processed part ${index} with different content`,
+        )
+      }
+      // Identical retry of an already-processed part — nothing to store or
+      // process; the per-part ETag is recomputed from the body by the caller.
+      return
     }
-    // Identical retry of an already-processed part — nothing to store or
-    // process; the per-part ETag is recomputed from the body by the caller.
-    return
-  }
 
-  // Persist the raw chunk first.  The (upload_id, part_index) primary key
-  // means each chunk lands at its declared position regardless of arrival
-  // order, which is what S3 multipart requires.
-  await filePartsRepository.addChunk({
-    upload_id: uploadId,
-    part_index: index,
-    data: chunkData,
-    created_at: new Date(),
-    updated_at: new Date(),
+    // Persist at the declared position.  The (upload_id, part_index) primary
+    // key means each chunk lands at its position regardless of arrival order,
+    // which is what S3 multipart requires.  Then process every chunk that now
+    // forms a contiguous run from the next expected index.
+    await filePartsRepository.addChunk({
+      upload_id: uploadId,
+      part_index: index,
+      data: chunkData,
+      created_at: new Date(),
+      updated_at: new Date(),
+    })
+    await drainLoop(uploadId)
   })
-
-  // Then process every chunk that now forms a contiguous run from the next
-  // expected index.  For in-order arrivals this processes the chunk we just
-  // stored; for out-of-order arrivals it catches up later.
-  await drainContiguousPendingChunks(uploadId)
 }
 
 const completeUpload = async (
@@ -331,20 +351,28 @@ const completeUpload = async (
   await checkPermissions(upload, user)
 
   // Safety net for FILE uploads: process any chunks that were stored but
-  // not yet processed.  For a healthy in-order upload this is a no-op
-  // (uploadChunk drains synchronously after each store).  For uploads where
-  // the final contiguous run is only complete at the moment of
-  // CompleteMultipartUpload — typically because some part arrived just
-  // before completion — this catches them up before finalising the IPLD
-  // tree.  Folder uploads have no file_processing_info row and skip this
-  // step entirely; their finalisation runs through processFolderUpload.
+  // not yet processed, then verify there is no gap.  For a healthy in-order
+  // upload the drain is a no-op (uploadChunk drains synchronously after each
+  // store).  For uploads where the final contiguous run is only complete at
+  // the moment of CompleteMultipartUpload — typically because some part
+  // arrived just before completion — this catches them up before finalising
+  // the IPLD tree.  Folder uploads have no file_processing_info row and skip
+  // this step entirely; their finalisation runs through processFolderUpload.
+  //
+  // Drain and gap-check run under one drain lock so a concurrent uploadChunk
+  // cannot advance the cursor or insert a part between them.  drainLoop and
+  // assertNoUnprocessedParts are lockless helpers; calling them inside the
+  // lock here is correct (and calling the lock-acquiring path would
+  // deadlock — withDrainLock is not reentrant).
   if (upload.type === UploadType.FILE) {
-    await drainContiguousPendingChunks(uploadId)
-    // After the drain, every stored part must have been processed.  Any
-    // remaining gap means the parts list is incomplete — refuse to finalise
-    // rather than emit a CID for an object whose stored byte total includes
-    // bytes that are absent from the IPLD tree.
-    await assertNoUnprocessedParts(uploadId)
+    await withDrainLock(uploadId, async () => {
+      await drainLoop(uploadId)
+      // After the drain, every stored part must have been processed.  Any
+      // remaining gap means the parts list is incomplete — refuse to finalise
+      // rather than emit a CID for an object whose stored byte total includes
+      // bytes that are absent from the IPLD tree.
+      await assertNoUnprocessedParts(uploadId)
+    })
   }
 
   const cid = await UploadFileProcessingUseCase.completeUploadProcessing(upload)

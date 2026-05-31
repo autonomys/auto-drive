@@ -401,6 +401,56 @@ describe('AWS S3 - SDK', () => {
       })
     }, 30_000)
 
+    // Regression for the second Bugbot finding on #726 ("stale part guard
+    // races drain"): two concurrent uploads of the SAME part_index used to
+    // both read a pre-processing cursor, both bypass the divergent-content
+    // guard, then race the store against the drain.  With the guard + store +
+    // drain now serialised under withDrainLock, concurrent identical uploads
+    // of the same part must converge to a single processed chunk and a
+    // correct assembled body (order-independent, so deterministic to assert).
+    it('concurrent identical uploads of the same part should not corrupt', async () => {
+      const KeySameIdx = 'multipart-same-index-concurrent.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeySameIdx }),
+      )
+      const uploadId = create.UploadId!
+
+      const upPart1 = () =>
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: KeySameIdx,
+            UploadId: uploadId,
+            PartNumber: 1,
+            Body: PartA,
+          }),
+        )
+
+      // Fire the same part twice concurrently.  Both must succeed (identical
+      // bytes — the loser of the lock race sees an already-processed part and
+      // no-ops) and neither may double-process.
+      const [r1, r2] = await Promise.all([upPart1(), upPart1()])
+      expect(r1.ETag).toMatch(MD5_ETAG_RE)
+      expect(r2.ETag).toMatch(MD5_ETAG_RE)
+      expect(r1.ETag).toBe(r2.ETag)
+
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: KeySameIdx,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: [{ ETag: r1.ETag!, PartNumber: 1 }] },
+        }),
+      )
+      expect(complete.ETag).toMatch(MULTIPART_ETAG_RE)
+
+      const downloaded = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: KeySameIdx }),
+      )
+      const body = Buffer.from(await downloaded.Body!.transformToByteArray())
+      expect(body).toEqual(PartA)
+    }, 30_000)
+
     // Regression for the Bugbot finding on #726: concurrent UploadPart calls
     // for the same upload_id used to race on last_processed_part_index — two
     // drains could both grab the same `next` index and call processChunk
