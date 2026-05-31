@@ -156,6 +156,42 @@ const createFileInFolder = async (
   return file
 }
 
+// Drain any chunks that are persisted in uploads.file_parts and now form a
+// contiguous run starting at last_processed_part_index + 1.  Used both by
+// uploadChunk after persisting a new chunk and by completeUpload as a final
+// safety net before finalising the IPLD tree.
+//
+// For an in-order client the loop processes exactly the chunk just stored
+// and exits immediately — the streaming-during-upload optimisation is
+// preserved.  For an out-of-order client it is a no-op until the next
+// expected chunk arrives, at which point it catches up by processing every
+// already-stored chunk that now follows in sequence.
+//
+// S3 multipart explicitly allows parts to arrive in any order; the previous
+// implementation rejected non-monotonic arrivals at the processing layer
+// and silently produced a corrupted assembled object (see #725).
+const drainContiguousPendingChunks = async (uploadId: string): Promise<void> => {
+  while (true) {
+    const info =
+      await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
+        uploadId,
+      )
+    if (!info) {
+      throw new Error('File processing info not found')
+    }
+    const next =
+      info.last_processed_part_index == null
+        ? 0
+        : info.last_processed_part_index + 1
+    const part = await filePartsRepository.getChunkByUploadIdAndPartIndex(
+      uploadId,
+      next,
+    )
+    if (!part) break
+    await UploadFileProcessingUseCase.processChunk(uploadId, part.data, next)
+  }
+}
+
 const uploadChunk = async (
   user: UserWithOrganization,
   uploadId: string,
@@ -175,8 +211,9 @@ const uploadChunk = async (
   }
   await checkPermissions(upload, user)
 
-  await UploadFileProcessingUseCase.processChunk(uploadId, chunkData, index)
-
+  // Persist the raw chunk first.  The (upload_id, part_index) primary key
+  // means each chunk lands at its declared position regardless of arrival
+  // order, which is what S3 multipart requires.
   await filePartsRepository.addChunk({
     upload_id: uploadId,
     part_index: index,
@@ -184,6 +221,11 @@ const uploadChunk = async (
     created_at: new Date(),
     updated_at: new Date(),
   })
+
+  // Then process every chunk that now forms a contiguous run from the next
+  // expected index.  For in-order arrivals this processes the chunk we just
+  // stored; for out-of-order arrivals it catches up later.
+  await drainContiguousPendingChunks(uploadId)
 }
 
 const completeUpload = async (
@@ -201,6 +243,18 @@ const completeUpload = async (
     throw new Error('Upload not found')
   }
   await checkPermissions(upload, user)
+
+  // Safety net for FILE uploads: process any chunks that were stored but
+  // not yet processed.  For a healthy in-order upload this is a no-op
+  // (uploadChunk drains synchronously after each store).  For uploads where
+  // the final contiguous run is only complete at the moment of
+  // CompleteMultipartUpload — typically because some part arrived just
+  // before completion — this catches them up before finalising the IPLD
+  // tree.  Folder uploads have no file_processing_info row and skip this
+  // step entirely; their finalisation runs through processFolderUpload.
+  if (upload.type === UploadType.FILE) {
+    await drainContiguousPendingChunks(uploadId)
+  }
 
   const cid = await UploadFileProcessingUseCase.completeUploadProcessing(upload)
 

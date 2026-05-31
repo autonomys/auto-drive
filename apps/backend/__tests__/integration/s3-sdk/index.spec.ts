@@ -181,6 +181,78 @@ describe('AWS S3 - SDK', () => {
     )
   })
 
+  // Regression for #725: S3 multipart explicitly allows parts to arrive in any
+  // order (parallel uploads, retries, etc.) — PartNumber identifies position,
+  // not arrival order.  Pre-fix, the processing layer rejected non-sequential
+  // arrivals and the assembled object only contained whichever contiguous
+  // prefix of parts happened to arrive in order.
+  describe('Out-of-order multipart upload', () => {
+    const OutOfOrderKey = 'multipart-out-of-order.bin'
+    const PART_SIZE = 16 * 1024
+    // Distinct, deterministic per-part content so misordered assembly is
+    // detectable byte-for-byte.
+    const PartA = Buffer.alloc(PART_SIZE, 'A')
+    const PartB = Buffer.alloc(PART_SIZE, 'B')
+    const PartC = Buffer.alloc(PART_SIZE, 'C')
+    const ExpectedBody = Buffer.concat([PartA, PartB, PartC])
+
+    it('uploaded as [2,1,3] and completed as [3,1,2] should assemble to A‖B‖C', async () => {
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: OutOfOrderKey }),
+      )
+      const uploadId = create.UploadId!
+
+      // Upload parts in non-monotonic arrival order: 2, then 1, then 3.
+      const upPart = (partNumber: number, body: Buffer) =>
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: OutOfOrderKey,
+            UploadId: uploadId,
+            PartNumber: partNumber,
+            Body: body,
+          }),
+        )
+      const e2 = await upPart(2, PartB)
+      const e1 = await upPart(1, PartA)
+      const e3 = await upPart(3, PartC)
+
+      expect(e1.ETag).toMatch(MD5_ETAG_RE)
+      expect(e2.ETag).toMatch(MD5_ETAG_RE)
+      expect(e3.ETag).toMatch(MD5_ETAG_RE)
+
+      // Complete with parts listed in yet another order (3, 1, 2).  The
+      // server must sort by PartNumber regardless of either arrival order
+      // or completion-list order.
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: OutOfOrderKey,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: [
+              { ETag: e3.ETag!, PartNumber: 3 },
+              { ETag: e1.ETag!, PartNumber: 1 },
+              { ETag: e2.ETag!, PartNumber: 2 },
+            ],
+          },
+        }),
+      )
+      expect(complete.ETag).toMatch(MULTIPART_ETAG_RE)
+
+      // Download and verify the assembled body is A‖B‖C in PartNumber
+      // order, not arrival or completion-list order.
+      const downloaded = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: OutOfOrderKey }),
+      )
+      const body = Buffer.from(
+        await downloaded.Body!.transformToByteArray(),
+      )
+      expect(body.length).toBe(ExpectedBody.length)
+      expect(body).toEqual(ExpectedBody)
+    }, 30_000)
+  })
+
   // Bucket-prefixed key: first segment becomes the bucket name
   describe('Bucket-prefixed keys', () => {
     const BucketedKey = 'my-archive/report.txt'
