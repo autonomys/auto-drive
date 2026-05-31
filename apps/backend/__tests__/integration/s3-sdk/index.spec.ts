@@ -360,6 +360,47 @@ describe('AWS S3 - SDK', () => {
       expect(body).toEqual(PartA)
     }, 30_000)
 
+    // A retry that changes the bytes of an *already-processed* part cannot be
+    // honoured by the streaming model — the part is already baked into the
+    // IPLD tree.  Silently accepting it would leave the assembled CID (old
+    // bytes) inconsistent with the size and composite ETag (new bytes).
+    // Reject it with a 400 rather than corrupt.  (An identical retry, covered
+    // above, is a harmless no-op.)
+    it('should reject a divergent retry of an already-processed part', async () => {
+      const KeyDiverge = 'multipart-divergent-retry.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeyDiverge }),
+      )
+      const uploadId = create.UploadId!
+
+      // PartNumber 1 arrives in order and is processed immediately.
+      const first = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: KeyDiverge,
+          UploadId: uploadId,
+          PartNumber: 1,
+          Body: PartA,
+        }),
+      )
+      expect(first.ETag).toMatch(MD5_ETAG_RE)
+
+      // Re-upload PartNumber 1 with *different* bytes — must be rejected.
+      await expect(
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: KeyDiverge,
+            UploadId: uploadId,
+            PartNumber: 1,
+            Body: PartB,
+          }),
+        ),
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 400 },
+      })
+    }, 30_000)
+
     // Regression for the Bugbot finding on #726: concurrent UploadPart calls
     // for the same upload_id used to race on last_processed_part_index — two
     // drains could both grab the same `next` index and call processChunk

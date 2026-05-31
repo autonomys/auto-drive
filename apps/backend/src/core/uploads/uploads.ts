@@ -239,11 +239,11 @@ const assertNoUnprocessedParts = async (uploadId: string): Promise<void> => {
   const info =
     await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(uploadId)
   const lastProcessed = info?.last_processed_part_index ?? -1
-  const parts = await filePartsRepository.getChunksByUploadId(uploadId)
-  const unprocessed = parts
-    .filter((p) => p.part_index > lastProcessed)
-    .map((p) => p.part_index)
-    .sort((a, b) => a - b)
+  // Index-only query — never loads the part data column (parts can be multi-GB).
+  const unprocessed = await filePartsRepository.getPartIndicesGreaterThan(
+    uploadId,
+    lastProcessed,
+  )
   if (unprocessed.length > 0) {
     throw new BadRequestError(
       `Cannot complete upload: parts stored but not processed (gap in sequence) at part_index=[${unprocessed.join(',')}]`,
@@ -269,6 +269,33 @@ const uploadChunk = async (
     throw new Error('Upload not found')
   }
   await checkPermissions(upload, user)
+
+  // A part that has already been processed into the IPLD tree cannot be
+  // mutated: the streaming model has no way to splice replacement bytes back
+  // into an already-built tree.  S3 does allow re-uploading a PartNumber, but
+  // in practice clients only do so to recover from delivery uncertainty —
+  // the bytes are identical.  Accept an identical re-upload as a harmless
+  // no-op; reject a *divergent* re-upload rather than silently leaving the
+  // stored object inconsistent with the per-part ETag the client computed
+  // (the assembled CID would reflect the original bytes, the size and
+  // composite ETag the new bytes).
+  const info =
+    await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(uploadId)
+  const lastProcessed = info?.last_processed_part_index ?? -1
+  if (index <= lastProcessed) {
+    const existing = await filePartsRepository.getChunkByUploadIdAndPartIndex(
+      uploadId,
+      index,
+    )
+    if (existing && Buffer.compare(existing.data, chunkData) !== 0) {
+      throw new BadRequestError(
+        `Cannot replace already-processed part ${index} with different content`,
+      )
+    }
+    // Identical retry of an already-processed part — nothing to store or
+    // process; the per-part ETag is recomputed from the body by the caller.
+    return
+  }
 
   // Persist the raw chunk first.  The (upload_id, part_index) primary key
   // means each chunk lands at its declared position regardless of arrival

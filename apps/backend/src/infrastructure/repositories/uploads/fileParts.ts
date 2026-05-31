@@ -52,6 +52,26 @@ const getChunkByUploadIdAndPartIndex = async (
     .then((result) => result.rows[0])
 }
 
+// Return the part_index values strictly greater than `index` for an upload,
+// WITHOUT loading the (potentially multi-GB) data column.  Used to detect a
+// gap in the processed sequence at completion time; loading full part bodies
+// just to read their indices would be an OOM risk on large uploads.
+const getPartIndicesGreaterThan = async (
+  uploadId: string,
+  index: number,
+): Promise<number[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ part_index: number }>(
+      `SELECT part_index FROM uploads.file_parts
+       WHERE upload_id = $1 AND part_index > $2
+       ORDER BY part_index`,
+      [uploadId, index],
+    )
+    .then((result) => result.rows.map((r) => r.part_index))
+}
+
 const getUploadFilePartsSize = async (
   uploadId: string,
 ): Promise<bigint | null> => {
@@ -79,6 +99,7 @@ export const filePartsRepository = {
   addChunk,
   getChunksByUploadId,
   getChunkByUploadIdAndPartIndex,
+  getPartIndicesGreaterThan,
   getUploadFilePartsSize,
   deleteChunksByUploadId,
 }
