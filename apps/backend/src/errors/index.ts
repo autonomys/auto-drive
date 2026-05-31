@@ -19,9 +19,13 @@ export abstract class HttpError extends Error {
   }
 }
 
-export class ObjectNotFoundError extends Error {
+// 404 Not Found — the requested object/account/intent/etc. does not exist.
+// Extends HttpError so the universal `handleError` mapper produces a real
+// 404 response rather than collapsing to InternalError → 500 (see #723).
+export class ObjectNotFoundError extends HttpError {
+  static readonly statusCode = 404
   constructor(message: string) {
-    super(message)
+    super(ObjectNotFoundError.statusCode, message)
     this.name = 'ObjectNotFoundError'
   }
 }

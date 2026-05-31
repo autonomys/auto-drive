@@ -399,6 +399,28 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  // Regression for #723: ObjectNotFoundError used to extend Error rather than
+  // HttpError, so missing-key responses collapsed to 500 via handleError's
+  // InternalError fallback.  Pin the 404 contract on both surfaces so a
+  // future refactor cannot silently regress.
+  describe('Missing keys', () => {
+    const MissingKey = 'this-key-was-never-uploaded-' + Date.now() + '.txt'
+
+    it('GetObject on a missing key should return 404', async () => {
+      const command = new GetObjectCommand({ Bucket, Key: MissingKey })
+      await expect(s3Client.send(command)).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+      })
+    })
+
+    it('HeadObject on a missing key should return 404', async () => {
+      const command = new HeadObjectCommand({ Bucket, Key: MissingKey })
+      await expect(s3Client.send(command)).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+      })
+    })
+  })
+
   describe('Metadata handled correctly', () => {
     const ThirdKey = 'test3.txt'
 
