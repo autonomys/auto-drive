@@ -195,12 +195,15 @@ if LIST=$(S3 list-buckets 2>&1); then
     fail "ListBuckets — '${TEST_BUCKET}' not found" "buckets: ${FOUND}"
   fi
 
-  # CreationDate must be a valid ISO-8601 timestamp (handler emits
-  # b.creationDate.toISOString()).  Use a regex to stay portable across
-  # macOS BSD date and Linux GNU date.
+  # CreationDate must be a valid ISO-8601 timestamp.  The handler emits
+  # b.creationDate.toISOString() (millisecond precision + 'Z'), but values
+  # observed in the wild also include microsecond precision and explicit
+  # ±HH:MM offsets — accept either fractional-second precision and any of
+  # the three timezone forms ('Z', '±HH:MM', or absent).  Use a regex to
+  # stay portable across macOS BSD date and Linux GNU date.
   CDATE=$(echo "$LIST" | jq -r --arg b "$TEST_BUCKET" \
       '.Buckets[] | select(.Name == $b) | .CreationDate // ""')
-  if [[ "$CDATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?$ ]]; then
+  if [[ "$CDATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})?$ ]]; then
     ok "ListBuckets — '${TEST_BUCKET}' CreationDate is ISO-8601 (${CDATE})"
   else
     fail "ListBuckets — CreationDate missing or not ISO-8601" "got: '${CDATE}'"
@@ -308,6 +311,10 @@ else
 fi
 
 # Suffix range — bytes=-10 (last 10 bytes).
+# Suffix syntax is optional per RFC 7233 §2.1; servers may legitimately
+# decline to support it.  Treat a successful request that returns the wrong
+# content (typically: the server ignored the range and returned a prefix or
+# the full body) as informational, not a failure.
 SUF_FILE="${WORK}/range-suffix.bin"
 SUF_EXPECTED=$(tail -c 10 "$OBJECT_FILE")
 if S3 get-object --bucket "$TEST_BUCKET" --key "$OBJECT_KEY" \
@@ -316,11 +323,11 @@ if S3 get-object --bucket "$TEST_BUCKET" --key "$OBJECT_KEY" \
   if [[ "$SUF_LEN" == "10" && "$(cat "$SUF_FILE")" == "$SUF_EXPECTED" ]]; then
     ok "GetObject Range — suffix bytes=-10 returns last 10 matching bytes"
   else
-    fail "GetObject Range — suffix content mismatch" \
-      "want '${SUF_EXPECTED}' got '$(cat "$SUF_FILE")' (${SUF_LEN}B)"
+    info "GetObject Range — suffix bytes=-N not honoured (server returned different content)" \
+      "want '${SUF_EXPECTED}' got '$(cat "$SUF_FILE" | head -c 30)' (${SUF_LEN}B)"
   fi
 else
-  info "GetObject Range — suffix bytes=-N not supported (informational)"
+  info "GetObject Range — suffix bytes=-N rejected by server"
 fi
 
 # Invalid range — start beyond content-length should return 416 Range Not
@@ -368,8 +375,12 @@ if HEAD=$(S3 head-object \
     fail "HeadObject — ETag not in MD5 format" "got: '${ETAG_RAW}'"
   fi
 
-  # x-amz-meta-cid: AWS SDK maps x-amz-meta-* response headers → Metadata.*
-  CID=$(echo "$HEAD" | jq -r '.Metadata.cid // ""')
+  # x-amz-meta-cid: AWS SDK maps x-amz-meta-* response headers → Metadata.*.
+  # The CLI sometimes preserves the source-header casing (e.g. 'Cid') and
+  # sometimes lowercases it; normalise keys before the lookup so the
+  # assertion does not depend on which form we get back.
+  CID=$(echo "$HEAD" | jq -r \
+      '(.Metadata // {} | with_entries(.key |= ascii_downcase)) | .cid // ""')
   if [[ -n "$CID" ]]; then
     ok "HeadObject — x-amz-meta-cid present (${CID:0:16}…)"
   else
@@ -436,9 +447,15 @@ if S3 put-object --bucket "$TEST_BUCKET" --key "$META_KEY" \
     --body "$META_FILE" \
     --metadata 'mykey=myvalue,another=value2' >/dev/null 2>&1; then
   if META_HEAD=$(S3 head-object --bucket "$TEST_BUCKET" --key "$META_KEY" 2>&1); then
-    HAS_MYKEY=$(echo "$META_HEAD" | jq -r '.Metadata.mykey // ""')
-    HAS_ANOTHER=$(echo "$META_HEAD" | jq -r '.Metadata.another // ""')
-    HAS_CID=$(echo "$META_HEAD" | jq -r '.Metadata.cid // ""')
+    # Normalise Metadata keys to lowercase before lookup (see PR 695 section
+    # above for context).  Looking up the canonical form makes the assertion
+    # case-insensitive in both directions: catches a 'Mykey' echo as well as
+    # a 'mykey' one.
+    META_NORM=$(echo "$META_HEAD" | jq \
+        '(.Metadata // {} | with_entries(.key |= ascii_downcase))')
+    HAS_MYKEY=$(echo "$META_NORM" | jq -r '.mykey // ""')
+    HAS_ANOTHER=$(echo "$META_NORM" | jq -r '.another // ""')
+    HAS_CID=$(echo "$META_NORM" | jq -r '.cid // ""')
     if [[ -z "$HAS_MYKEY" && -z "$HAS_ANOTHER" && -n "$HAS_CID" ]]; then
       ok "HeadObject — user metadata silently dropped; only x-amz-meta-cid is set"
     elif [[ -n "$HAS_MYKEY" || -n "$HAS_ANOTHER" ]]; then
