@@ -415,8 +415,6 @@ export const deleteObjectHandler = async (_req: Request, res: Response) => {
   })
 }
 
-// Reject operations the backend does not implement. Routed here explicitly so
-// they cannot reach a write handler for a similarly-shaped request.
 export const notImplementedHandler = async (_req: Request, res: Response) => {
   sendXML(res.status(501), 'Error', {
     Code: 'NotImplemented',

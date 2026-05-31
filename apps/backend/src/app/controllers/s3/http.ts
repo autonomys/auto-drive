@@ -32,10 +32,7 @@ const S3HandlerConfig: S3HandlerConfig = {
   DeleteObject: deleteObjectHandler,
   ListBuckets: listBucketsHandler,
   ListObjectsV2: listObjectsV2Handler,
-  // Recognised but unimplemented. Routed explicitly to a 501 so a request is
-  // never mistaken for a similarly-shaped supported one — e.g. GET ?uploadId
-  // (ListParts) must not reach CompleteMultipartUpload and finalise the
-  // upload.
+  // Recognised but unimplemented — mapped to 501, never to a write handler.
   CopyObject: notImplementedHandler,
   ListParts: notImplementedHandler,
   ListMultipartUploads: notImplementedHandler,
@@ -43,10 +40,8 @@ const S3HandlerConfig: S3HandlerConfig = {
   PostObject: notImplementedHandler,
 }
 
-// Resolve the S3 operation from the HTTP method first, then disambiguate by
-// query params / headers. Method-first matters: GET ?uploadId (ListParts) and
-// POST ?uploadId (CompleteMultipartUpload) share a query param but are
-// different operations, and only the latter is a write.
+// Match on method first: the same query param (?uploadId, ?uploads) selects a
+// different operation per verb.
 const getS3Method = (req: Request): string => {
   const q = req.query
   const isCopy = req.headers['x-amz-copy-source'] != null
@@ -75,12 +70,10 @@ const getS3Method = (req: Request): string => {
   }
 }
 
-// ListBuckets: GET / with no key path.  Bucket-level sub-resource requests
-// also land here when the bucket is the endpoint (e.g. ListMultipartUploads is
-// GET /?uploads); route those to 501 rather than returning the bucket list.
 s3Controller.get(
   '/',
   asyncSafeHandler(async (req: Request, res: Response) => {
+    // ?uploads at the bucket root is ListMultipartUploads, not ListBuckets.
     if ('uploads' in req.query) {
       return notImplementedHandler(req, res)
     }
@@ -104,7 +97,6 @@ s3Controller.use(
 
     const handler = S3HandlerConfig[s3Method as keyof typeof S3HandlerConfig]
     if (!handler) {
-      // Unrecognised verb/shape — reject as unimplemented rather than 500.
       logger.warn('Unsupported S3 request: %s %s', req.method, req.originalUrl)
       return notImplementedHandler(req, res)
     }
