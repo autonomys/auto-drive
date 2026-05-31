@@ -1,12 +1,16 @@
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
+  AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
+  CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListBucketsCommand,
+  ListMultipartUploadsCommand,
   ListObjectsV2Command,
+  ListPartsCommand,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -414,6 +418,69 @@ describe('AWS S3 - SDK', () => {
       await expect(s3Client.send(command)).rejects.toMatchObject({
         $metadata: { httpStatusCode: 404 },
       })
+    })
+  })
+
+  // Unsupported operations must be rejected with 501, not misrouted to a
+  // handler for a similarly-shaped request. The two reads (ListParts,
+  // ListMultipartUploads) and AbortMultipartUpload previously reached the
+  // multipart write handlers; CopyObject reached PutObject.
+  describe('Unsupported operations return 501 NotImplemented', () => {
+    it('CopyObject is rejected and creates no object', async () => {
+      const CopyKey = 'copy-dest.txt'
+      await expect(
+        s3Client.send(
+          new CopyObjectCommand({
+            Bucket,
+            Key: CopyKey,
+            CopySource: `${Bucket}/${Key}`,
+          }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
+
+      // The misroute used to PutObject an empty body at the destination.
+      // Assert only that the object does not exist (HEAD rejects); the exact
+      // missing-key status is fixed separately (404 vs 500).
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: CopyKey })),
+      ).rejects.toThrow()
+    })
+
+    it('ListParts is rejected (must not finalise the upload)', async () => {
+      // A real, in-progress upload so a misroute would actually complete it.
+      const created = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: 'listparts-probe.bin' }),
+      )
+      await expect(
+        s3Client.send(
+          new ListPartsCommand({
+            Bucket,
+            Key: 'listparts-probe.bin',
+            UploadId: created.UploadId!,
+          }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
+    })
+
+    it('ListMultipartUploads is rejected', async () => {
+      await expect(
+        s3Client.send(new ListMultipartUploadsCommand({ Bucket })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
+    })
+
+    it('AbortMultipartUpload is rejected (must not finalise the upload)', async () => {
+      const created = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: 'abort-probe.bin' }),
+      )
+      await expect(
+        s3Client.send(
+          new AbortMultipartUploadCommand({
+            Bucket,
+            Key: 'abort-probe.bin',
+            UploadId: created.UploadId!,
+          }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
     })
   })
 

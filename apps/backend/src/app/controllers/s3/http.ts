@@ -1,6 +1,5 @@
 import { raw, Router, Request, Response } from 'express'
 import { asyncSafeHandler } from '../../../shared/utils/express.js'
-import { handleError } from '../../../errors/index.js'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import {
   completeMultipartUploadHandler,
@@ -10,6 +9,7 @@ import {
   headObjectHandler,
   listBucketsHandler,
   listObjectsV2Handler,
+  notImplementedHandler,
   putObjectHandler,
   uploadPartHandler,
 } from './s3.js'
@@ -32,47 +32,58 @@ const S3HandlerConfig: S3HandlerConfig = {
   DeleteObject: deleteObjectHandler,
   ListBuckets: listBucketsHandler,
   ListObjectsV2: listObjectsV2Handler,
+  // Recognised but unimplemented. Routed explicitly to a 501 so a request is
+  // never mistaken for a similarly-shaped supported one — e.g. GET ?uploadId
+  // (ListParts) must not reach CompleteMultipartUpload and finalise the
+  // upload.
+  CopyObject: notImplementedHandler,
+  ListParts: notImplementedHandler,
+  ListMultipartUploads: notImplementedHandler,
+  AbortMultipartUpload: notImplementedHandler,
+  PostObject: notImplementedHandler,
 }
 
-const getS3Method = (req: Request) => {
-  const { 'x-id': s3Method } = req.query
-  if (!s3Method) {
-    if ('uploads' in req.query) {
-      return 'CreateMultipartUpload'
-    }
-    if ('uploadId' in req.query && 'partNumber' in req.query) {
-      return 'UploadPart'
-    }
-    if ('uploadId' in req.query) {
-      return 'CompleteMultipartUpload'
-    }
-    if (req.query['list-type'] === '2') {
-      return 'ListObjectsV2'
-    }
-    if (req.method === 'HEAD') {
-      return 'HeadObject'
-    }
-    if (req.method === 'DELETE') {
-      return 'DeleteObject'
-    }
-    // Method-based fallbacks for clients that do not send the `x-id` query
-    // param (e.g. the AWS CLI / botocore). These must come after the more
-    // specific query-param checks above so multipart PUTs (uploadId +
-    // partNumber) and ListObjectsV2 GETs (list-type=2) are not misrouted.
-    if (req.method === 'GET') {
+// Resolve the S3 operation from the HTTP method first, then disambiguate by
+// query params / headers. Method-first matters: GET ?uploadId (ListParts) and
+// POST ?uploadId (CompleteMultipartUpload) share a query param but are
+// different operations, and only the latter is a write.
+const getS3Method = (req: Request): string => {
+  const q = req.query
+  const isCopy = req.headers['x-amz-copy-source'] != null
+
+  switch (req.method) {
+    case 'GET':
+      if ('uploadId' in q) return 'ListParts'
+      if ('uploads' in q) return 'ListMultipartUploads'
+      if (q['list-type'] === '2') return 'ListObjectsV2'
       return 'GetObject'
-    }
-    if (req.method === 'PUT') {
+    case 'HEAD':
+      return 'HeadObject'
+    case 'PUT':
+      if ('uploadId' in q && 'partNumber' in q) return 'UploadPart'
+      if (isCopy) return 'CopyObject'
       return 'PutObject'
-    }
+    case 'POST':
+      if ('uploads' in q) return 'CreateMultipartUpload'
+      if ('uploadId' in q) return 'CompleteMultipartUpload'
+      return 'PostObject'
+    case 'DELETE':
+      if ('uploadId' in q) return 'AbortMultipartUpload'
+      return 'DeleteObject'
+    default:
+      return 'Unknown'
   }
-  return s3Method
 }
 
-// ListBuckets: GET / with no key path
+// ListBuckets: GET / with no key path.  Bucket-level sub-resource requests
+// also land here when the bucket is the endpoint (e.g. ListMultipartUploads is
+// GET /?uploads); route those to 501 rather than returning the bucket list.
 s3Controller.get(
   '/',
   asyncSafeHandler(async (req: Request, res: Response) => {
+    if ('uploads' in req.query) {
+      return notImplementedHandler(req, res)
+    }
     return listBucketsHandler(req, res)
   }),
 )
@@ -93,8 +104,9 @@ s3Controller.use(
 
     const handler = S3HandlerConfig[s3Method as keyof typeof S3HandlerConfig]
     if (!handler) {
-      logger.error('Method not found')
-      return handleError(new Error('Method not found'), res)
+      // Unrecognised verb/shape — reject as unimplemented rather than 500.
+      logger.warn('Unsupported S3 request: %s %s', req.method, req.originalUrl)
+      return notImplementedHandler(req, res)
     }
 
     return handler(req, res)
