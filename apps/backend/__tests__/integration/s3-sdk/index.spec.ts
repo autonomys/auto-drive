@@ -399,6 +399,24 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  describe('Missing keys', () => {
+    const MissingKey = 'this-key-was-never-uploaded-' + Date.now() + '.txt'
+
+    it('GetObject on a missing key should return 404', async () => {
+      const command = new GetObjectCommand({ Bucket, Key: MissingKey })
+      await expect(s3Client.send(command)).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+      })
+    })
+
+    it('HeadObject on a missing key should return 404', async () => {
+      const command = new HeadObjectCommand({ Bucket, Key: MissingKey })
+      await expect(s3Client.send(command)).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+      })
+    })
+  })
+
   describe('Metadata handled correctly', () => {
     const ThirdKey = 'test3.txt'
 

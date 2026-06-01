@@ -19,9 +19,11 @@ export abstract class HttpError extends Error {
   }
 }
 
-export class ObjectNotFoundError extends Error {
+// Must extend HttpError (not Error) so handleError maps it to 404, not 500.
+export class ObjectNotFoundError extends HttpError {
+  static readonly statusCode = 404
   constructor(message: string) {
-    super(message)
+    super(ObjectNotFoundError.statusCode, message)
     this.name = 'ObjectNotFoundError'
   }
 }

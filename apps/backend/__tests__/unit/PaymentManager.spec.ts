@@ -11,6 +11,7 @@ import { paymentManager } from '../../src/infrastructure/services/paymentManager
 import { IntentsUseCases } from '../../src/core/users/intents.js'
 import { ok, err } from 'neverthrow'
 import { config } from '../../src/config.js'
+import { ObjectNotFoundError } from '../../src/errors/index.js'
 
 describe('PaymentManager', () => {
   beforeEach(() => {
@@ -144,7 +145,7 @@ describe('PaymentManager', () => {
 
       jest
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
-        .mockResolvedValue(err(new Error('Intent error')))
+        .mockResolvedValue(err(new ObjectNotFoundError('Intent error')))
 
       // Should not throw, error should be logged
       await expect(
@@ -204,7 +205,9 @@ describe('PaymentManager', () => {
       const markIntentSpy = jest
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValueOnce(ok({} as any))
-        .mockResolvedValueOnce(err(new Error('Second intent error')))
+        .mockResolvedValueOnce(
+          err(new ObjectNotFoundError('Second intent error')),
+        )
 
       await paymentManager.watchTransaction(txHash)
 
