@@ -262,9 +262,9 @@ rclone rmdir autodrive:my-archive/empty-folder/
 rclone cleanup autodrive:
 ```
 
-**What you see:** Error or no-op.
+**What you see:** `501 NotImplemented`.
 
-**Why:** Objects cannot be deleted. There is nothing to clean up.
+**Why:** Cleanup lists and aborts incomplete multipart uploads. Auto Drive implements neither `ListMultipartUploads` nor `AbortMultipartUpload`, so both return 501.
 
 ### mkdir
 
@@ -297,9 +297,10 @@ rclone mkdir autodrive:new-bucket
 | `sync` | ⚠️ Partial | Upload-only; deletions skipped/error; use `copy` instead |
 | `move` | ⚠️ Partial | Upload works; source delete may fail |
 | `mount` (read-write) | ⚠️ Partial | New files work; delete/rename fail |
+| server-side copy | ❌ Not implemented | `CopyObject` returns 501; rclone falls back to download + re-upload |
 | `about` | ❌ Not implemented | No quota/usage API |
 | `delete` | ❌ Unsupported by design | Returns 403 - storage is permanent |
 | `purge` | ❌ Unsupported by design | Returns 403 - storage is permanent |
 | `rmdir` / `rmdirs` | ❌ Unsupported by design | No deletion |
 | `mkdir` | ❌ Not implemented | Buckets are created implicitly on first write |
-| `cleanup` | ❌ Unsupported by design | Nothing to clean up |
+| `cleanup` | ❌ Not implemented | Returns 501; multipart-upload APIs not implemented |

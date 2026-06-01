@@ -172,17 +172,17 @@ Also verify that `no_check_bucket = true` is set in your rclone config. Without 
 
 ---
 
-### Listing Fails with 500 Internal Server Error
+### Listing Fails (404 NoSuchKey, or 500 on older deployments)
 
 **What you see:**
 
 ```
-ListObjects, ... StatusCode: 500, ... InternalServerError: Internal Server Error
+ListObjects, ... StatusCode: 404, ... NoSuchKey: The specified key does not exist
 ```
 
-(commands hang or fail on `rclone ls`, `rclone lsd`, `rclone check`, `rclone sync`)
+(commands fail on `rclone ls`, `rclone lsd`, `rclone check`, `rclone sync`. Older Auto Drive deployments returned `StatusCode: 500, InternalServerError` for the same cause.)
 
-**Why it happens:** Auto Drive implements the **ListObjectsV2** API only. By default rclone's generic S3 backend (`provider = Other`) uses the older **ListObjectsV1** API, which Auto Drive does not handle.
+**Why it happens:** Auto Drive implements the **ListObjectsV2** API only. By default rclone's generic S3 backend (`provider = Other`) uses the older **ListObjectsV1** API; Auto Drive does not recognise it and falls through to a per-object lookup, which then reports the key as missing.
 
 **Solution:** Set `list_version = 2` in your rclone config:
 
