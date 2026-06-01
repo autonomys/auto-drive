@@ -421,10 +421,7 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
-  // Unsupported operations must be rejected with 501, not misrouted to a
-  // handler for a similarly-shaped request. The two reads (ListParts,
-  // ListMultipartUploads) and AbortMultipartUpload previously reached the
-  // multipart write handlers; CopyObject reached PutObject.
+  // Unsupported operations must return 501, never reach a write handler.
   describe('Unsupported operations return 501 NotImplemented', () => {
     it('CopyObject is rejected and creates no object', async () => {
       const CopyKey = 'copy-dest.txt'
