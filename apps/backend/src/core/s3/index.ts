@@ -14,6 +14,15 @@ import {
   UploadPartCommandParams,
   UploadPartCommandResult,
 } from '@auto-drive/s3'
+import {
+  computeListObjectsDbLimit,
+  finalizeListObjects,
+  formatETag,
+  ListObjectsParams,
+  ListObjectsResult,
+  md5Hex,
+  multipartETag,
+} from '@autonomys/file-server'
 
 // Local extensions to the shared DTOs — kept in the backend rather than
 // the shared package so the package doesn't carry Autonomys-specific fields.
@@ -35,204 +44,21 @@ import { UploadsUseCases } from '../uploads/uploads.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import {
-  S3BucketInfo,
-  S3ObjectListing,
-} from '../../infrastructure/repositories/s3/objectMappings.js'
-import { createHash } from 'crypto'
+import { S3BucketInfo } from '../../infrastructure/repositories/s3/objectMappings.js'
 
 const logger = createLogger('useCases:s3')
-
-/** Compute a quoted MD5 ETag in standard AWS S3 format: `"<hex>"`. */
-const md5Hex = (data: Buffer): string =>
-  createHash('md5').update(data).digest('hex')
-
-/**
- * Compute the S3 composite ETag for a multipart upload.
- *
- * AWS format: MD5 of the binary concatenation of each part's raw MD5 bytes,
- * followed by a hyphen and the part count. e.g. `"abc123...-3"`.
- *
- * Part ETags are expected in quoted hex format: `"d41d8cd98f00b204e9800998ecf8427e"`.
- */
-const multipartETag = (partETags: string[]): string => {
-  const partMd5Buffers = partETags.map((tag) =>
-    Buffer.from(tag.replace(/"/g, ''), 'hex'),
-  )
-  const composite = md5Hex(Buffer.concat(partMd5Buffers))
-  return `"${composite}-${partETags.length}"`
-}
-
-/** Format a raw hex MD5 as a quoted S3 ETag: `"<hex>"`. */
-const formatETag = (hex: string): string => `"${hex}"`
-
-// ── ListObjectsV2 ──────────────────────────────────────────────────────────
-
-export interface ListObjectsParams {
-  bucket: string
-  /** Key prefix to filter results (default: empty string = all keys). */
-  prefix: string
-  /** If set, fold keys at this character into CommonPrefixes (rclone uses '/'). */
-  delimiter: string | null
-  /** Maximum number of logical entries (objects + common prefixes) to return. */
-  maxKeys: number
-  /** Opaque token returned by a previous truncated response. */
-  continuationToken: string | null
-}
-
-export interface ListObjectsResult {
-  name: string
-  prefix: string
-  maxKeys: number
-  isTruncated: boolean
-  nextContinuationToken: string | null
-  objects: S3ObjectListing[]
-  commonPrefixes: string[]
-}
-
-/**
- * Apply delimiter folding and maxKeys pagination to a sorted list of all
- * matching objects fetched from the DB.
- *
- * Keys that contain `delimiter` after the prefix are folded into
- * CommonPrefixes entries.  Pagination tracks the last raw DB key scanned so
- * that the continuation token restores the exact position on the next call.
- *
- * When maxKeys entries are accumulated and the next entry would be a new
- * CommonPrefix, we stop before adding it.  The continuation token is set to
- * the last key already scanned, which falls before the new prefix group, so
- * the next page re-processes that group from the beginning.
- */
-export const buildListResult = (
-  sortedObjects: S3ObjectListing[],
-  prefix: string,
-  delimiter: string | null,
-  maxKeys: number,
-): Pick<
-  ListObjectsResult,
-  'objects' | 'commonPrefixes' | 'isTruncated' | 'nextContinuationToken'
-> => {
-  const objects: S3ObjectListing[] = []
-  const commonPrefixSet = new Set<string>()
-  let scanIdx = 0
-
-  while (scanIdx < sortedObjects.length) {
-    const { key } = sortedObjects[scanIdx]
-
-    // Check whether this key folds into a common prefix.
-    let foldedPrefix: string | null = null
-    if (delimiter) {
-      const afterPrefix = key.slice(prefix.length)
-      const delimIdx = afterPrefix.indexOf(delimiter)
-      if (delimIdx >= 0) {
-        foldedPrefix = prefix + afterPrefix.slice(0, delimIdx + 1)
-      }
-    }
-
-    if (foldedPrefix !== null) {
-      if (!commonPrefixSet.has(foldedPrefix)) {
-        // Adding a new common prefix — check if we're already full.
-        if (objects.length + commonPrefixSet.size >= maxKeys) {
-          // Stop here; the continuation token will fall before this prefix
-          // group so the next page re-processes it from the start.
-          break
-        }
-        commonPrefixSet.add(foldedPrefix)
-      }
-      scanIdx++
-      continue
-    }
-
-    // Regular object — check capacity before adding.
-    if (objects.length + commonPrefixSet.size >= maxKeys) {
-      break
-    }
-    objects.push(sortedObjects[scanIdx])
-    scanIdx++
-  }
-
-  const isTruncated = scanIdx < sortedObjects.length
-  const nextContinuationToken = isTruncated
-    ? sortedObjects[scanIdx - 1].key
-    : null
-
-  return {
-    objects,
-    commonPrefixes: [...commonPrefixSet].sort(),
-    isTruncated,
-    nextContinuationToken,
-  }
-}
 
 const listObjects = async (
   params: ListObjectsParams,
 ): Promise<ListObjectsResult> => {
-  const { bucket, prefix, delimiter, maxKeys, continuationToken } = params
-
-  // Without a delimiter every DB row is a distinct logical entry, so we only
-  // need maxKeys + 1 rows (the extra row lets buildListResult detect
-  // truncation without fetching the entire table).  With a delimiter, multiple
-  // rows can fold into a single CommonPrefix, so we over-fetch by a factor of
-  // 10 to handle large prefix groups while still keeping memory use bounded.
-  const dbLimit = delimiter
-    ? Math.min(maxKeys * 10 + 100, 10_000)
-    : maxKeys + 1
-
+  const dbLimit = computeListObjectsDbLimit(params.maxKeys, params.delimiter)
   const allMatching = await s3ObjectMappingsRepository.listObjects(
-    bucket,
-    prefix,
-    continuationToken,
+    params.bucket,
+    params.prefix,
+    params.continuationToken,
     dbLimit,
   )
-
-  const listResult = buildListResult(allMatching, prefix, delimiter, maxKeys)
-  const { objects, commonPrefixes } = listResult
-  let { isTruncated, nextContinuationToken } = listResult
-
-  // If the DB returned a full batch (allMatching.length === dbLimit) there may
-  // be rows beyond the LIMIT that buildListResult never saw.  This happens when
-  // every fetched row folds into CommonPrefixes and none break the maxKeys cap —
-  // buildListResult then sees scanIdx === sortedObjects.length and concludes
-  // isTruncated = false.  Override to be conservative: one extra empty page is
-  // harmless, but silently dropping data is not.
-  if (!isTruncated && allMatching.length === dbLimit) {
-    isTruncated = true
-    const lastKey = allMatching[allMatching.length - 1].key
-
-    // If the last scanned key folded into a CommonPrefix, the naive choice
-    // `lastKey` would land *inside* a virtual directory we've already
-    // represented in commonPrefixes.  The next page's `key > token` query
-    // would then return the remaining keys in that directory, which would
-    // re-fold into — and re-emit — the same CommonPrefix entry.
-    //
-    // Advance the token past every key that could possibly fold into that
-    // prefix by appending a high-sort sentinel.  `￿` (encoded as
-    // 0xEF 0xBF 0xBF in UTF-8) sorts after every realistic S3 key character,
-    // so `key > token` skips the rest of the directory and resumes at the
-    // first key that falls outside it.
-    if (delimiter) {
-      const afterPrefix = lastKey.slice(prefix.length)
-      const delimIdx = afterPrefix.indexOf(delimiter)
-      if (delimIdx >= 0) {
-        const lastFoldedPrefix = prefix + afterPrefix.slice(0, delimIdx + 1)
-        nextContinuationToken = lastFoldedPrefix + '￿'
-      } else {
-        nextContinuationToken = lastKey
-      }
-    } else {
-      nextContinuationToken = lastKey
-    }
-  }
-
-  return {
-    name: bucket,
-    prefix,
-    maxKeys,
-    isTruncated,
-    nextContinuationToken,
-    objects,
-    commonPrefixes,
-  }
+  return finalizeListObjects(params, allMatching, dbLimit)
 }
 
 // Extended result type for internal use — includes the CID so the HTTP layer
@@ -241,6 +67,8 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
   cid: string
   /** null for objects uploaded before MD5 ETag support was introduced. */
   etag: string | null
+  /** Mapping's last-write time, surfaced as the S3 Last-Modified header. */
+  lastModified: Date
 }
 
 const getObject = async (
@@ -271,6 +99,7 @@ const getObject = async (
     // Objects uploaded before this feature have null md5; fall back to null
     // so the controller can omit the ETag header for legacy objects.
     etag: mapping.md5 ? formatETag(mapping.md5) : null,
+    lastModified: mapping.updatedAt,
   }))
 }
 

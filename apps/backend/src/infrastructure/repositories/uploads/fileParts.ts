@@ -8,12 +8,18 @@ interface FilePart {
   updated_at: Date
 }
 
+// UPSERT, not INSERT: re-uploading the same PartNumber must replace the stored
+// bytes rather than fail on the (upload_id, part_index) primary key.
 const addChunk = async (part: FilePart): Promise<FilePart> => {
   const db = await getDatabase()
 
   return db
     .query<FilePart>(
-      'INSERT INTO uploads.file_parts (upload_id, part_index, data) VALUES ($1, $2, $3) RETURNING *',
+      `INSERT INTO uploads.file_parts (upload_id, part_index, data)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (upload_id, part_index)
+       DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+       RETURNING *`,
       [part.upload_id, part.part_index, part.data],
     )
     .then((result) => result.rows[0])
@@ -43,6 +49,24 @@ const getChunkByUploadIdAndPartIndex = async (
     .then((result) => result.rows[0])
 }
 
+// Returns part_index values above `index`, without selecting the data column
+// (which can be multi-GB per part).
+const getPartIndicesGreaterThan = async (
+  uploadId: string,
+  index: number,
+): Promise<number[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ part_index: number }>(
+      `SELECT part_index FROM uploads.file_parts
+       WHERE upload_id = $1 AND part_index > $2
+       ORDER BY part_index`,
+      [uploadId, index],
+    )
+    .then((result) => result.rows.map((r) => r.part_index))
+}
+
 const getUploadFilePartsSize = async (
   uploadId: string,
 ): Promise<bigint | null> => {
@@ -70,6 +94,7 @@ export const filePartsRepository = {
   addChunk,
   getChunksByUploadId,
   getChunkByUploadIdAndPartIndex,
+  getPartIndicesGreaterThan,
   getUploadFilePartsSize,
   deleteChunksByUploadId,
 }

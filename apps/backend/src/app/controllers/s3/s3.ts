@@ -142,6 +142,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     byteRange: resultingByteRange,
     cid,
     etag,
+    lastModified,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
@@ -155,6 +156,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   if (etag) res.set('ETag', etag)
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)
+  res.set('Last-Modified', lastModified.toUTCString())
 
   pipeline(await startDownload(), res, (err: Error | null) => {
     if (err) {
@@ -189,6 +191,7 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     byteRange: resultingByteRange,
     cid,
     etag,
+    lastModified,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
@@ -202,8 +205,12 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   if (etag) res.set('ETag', etag)
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)
+  res.set('Last-Modified', lastModified.toUTCString())
 
-  res.sendStatus(204)
+  // 200, not 204: HeadObject returns the headers GET would send (Content-Length,
+  // Content-Type, …) with an empty body. A 204 is defined as bodiless, so Node
+  // strips those content headers.
+  res.status(200).end()
 }
 
 export const createMultipartUploadHandler = async (
@@ -363,8 +370,10 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
       Key: obj.key,
       Size: obj.size.toString(),
       LastModified: obj.lastModified.toISOString(),
-      // CID is used as the ETag on this branch (before MD5 support).
-      ETag: `"${obj.cid}"`,
+      // Return the stored MD5 so clients (rclone, AWS CLI) can verify
+      // checksums from the listing, matching HeadObject. Legacy objects with
+      // no stored md5 fall back to the CID, which remains in x-amz-meta-cid.
+      ETag: obj.md5 ? `"${obj.md5}"` : `"${obj.cid}"`,
     }))
   }
 
@@ -410,5 +419,12 @@ export const deleteObjectHandler = async (_req: Request, res: Response) => {
     Code: 'AccessDenied',
     Message:
       'Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.',
+  })
+}
+
+export const notImplementedHandler = async (_req: Request, res: Response) => {
+  sendXML(res.status(501), 'Error', {
+    Code: 'NotImplemented',
+    Message: 'This S3 operation is not supported by Auto Drive.',
   })
 }
