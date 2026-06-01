@@ -421,3 +421,10 @@ export const deleteObjectHandler = async (_req: Request, res: Response) => {
       'Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.',
   })
 }
+
+export const notImplementedHandler = async (_req: Request, res: Response) => {
+  sendXML(res.status(501), 'Error', {
+    Code: 'NotImplemented',
+    Message: 'This S3 operation is not supported by Auto Drive.',
+  })
+}
