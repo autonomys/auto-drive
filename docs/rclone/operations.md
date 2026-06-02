@@ -254,7 +254,7 @@ rclone rmdir autodrive:my-archive/empty-folder/
 
 **What you see:** Error - folder deletion is not supported.
 
-**Why:** The S3 layer does not implement DeleteObject.
+**Why:** Cannot remove a directory and all its contents from permanent storage.
 
 ### cleanup
 
