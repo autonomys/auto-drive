@@ -46,8 +46,10 @@ const submitTransaction = (
     // hash lookup is in flight.
     let confirmationChecking = false
 
+    let timeoutHandle: ReturnType<typeof setTimeout>
+
     const cleanup = () => {
-      clearTimeout(timeout)
+      clearTimeout(timeoutHandle)
       // Remove the API error listener to prevent accumulation
       api.off('error', onApiError)
       if (extrinsicUnsub) {
@@ -72,18 +74,28 @@ const submitTransaction = (
       reject(error)
     }
 
-    const timeout = setTimeout(() => {
-      // A timeout is transient (congestion / not yet confirmed), not an account
-      // fault. Resolve as a failure with a distinct status so the caller can
-      // resync the account's nonce rather than evicting it from the pool.
-      logger.error(`Transaction timed out. Tx hash: ${txHash}`)
-      resolveOnce({
-        success: false,
-        txHash,
-        status: 'Timeout',
-        error: 'Transaction confirmation timeout',
-      })
-    }, config.chain.transactionTimeoutMs)
+    // (Re)start the timeout clock. The inclusion phase and the confirmation
+    // phase each get their own full `transactionTimeoutMs` budget: the clock is
+    // armed at submission and re-armed once the transaction reaches a block, so
+    // a transaction that is merely included late (mempool congestion) is not
+    // marked Timeout while it is on-chain and still accumulating confirmations.
+    const armTimeout = () => {
+      clearTimeout(timeoutHandle)
+      timeoutHandle = setTimeout(() => {
+        // A timeout is transient (congestion / not yet confirmed), not an
+        // account fault. Resolve as a failure with a distinct status so the
+        // caller can resync the account's nonce rather than evict it.
+        logger.error(`Transaction timed out. Tx hash: ${txHash}`)
+        resolveOnce({
+          success: false,
+          txHash,
+          status: 'Timeout',
+          error: 'Transaction confirmation timeout',
+        })
+      }, config.chain.transactionTimeoutMs)
+    }
+
+    armTimeout()
 
     const onApiError = (error: Error) => {
       rejectOnce(error)
@@ -199,6 +211,10 @@ const submitTransaction = (
           if (status.isInBlock) {
             if (confirmationStarted) return
             confirmationStarted = true
+
+            // Inclusion reached: give the confirmation phase its own full
+            // timeout budget, independent of however long inclusion took.
+            armTimeout()
 
             if (dispatchError) {
               let errorMessage
