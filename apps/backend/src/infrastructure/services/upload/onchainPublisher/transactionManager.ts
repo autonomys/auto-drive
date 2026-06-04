@@ -99,6 +99,12 @@ const submitTransaction = (
       inclusionHash: string,
       inclusionNumber: number,
     ) => {
+      // The promise may already have settled (e.g. the timeout fired) while the
+      // preceding getBlock lookup was in flight. If so, cleanup() has already
+      // run, so subscribing here would leak a subscription that nothing tears
+      // down. Bail out instead.
+      if (isResolved) return
+
       const targetNumber = inclusionNumber + config.chain.confirmationDepth
       logger.info(
         'Tx %s in block %d (%s) — awaiting %d confirmations',
@@ -109,7 +115,7 @@ const submitTransaction = (
       )
 
       try {
-        headsUnsub = await api.rpc.chain.subscribeNewHeads(async (header) => {
+        const unsub = await api.rpc.chain.subscribeNewHeads(async (header) => {
           if (isResolved || confirmationChecking) return
           if (header.number.toNumber() < targetNumber) return
 
@@ -158,8 +164,24 @@ const submitTransaction = (
             confirmationChecking = false
           }
         })
+
+        headsUnsub = unsub
+        // The promise may have settled during the subscribe await; if so,
+        // cleanup() already ran without this handle, so tear it down now.
+        if (isResolved) {
+          unsub()
+          headsUnsub = undefined
+        }
       } catch (error) {
-        onApiError(error as Error)
+        // Failing to subscribe happens after inclusion (the nonce was already
+        // consumed on-chain), so this is transient — resolve with a status that
+        // resyncs the account rather than evicting it from the pool.
+        resolveOnce({
+          success: false,
+          txHash,
+          status: 'ConfirmationError',
+          error: (error as Error).message,
+        })
       }
     }
 
@@ -205,9 +227,16 @@ const submitTransaction = (
                 block.header.number.toNumber(),
               )
             } catch (error) {
-              // Route lookup/subscription errors through rejectOnce so the
-              // promise settles instead of hanging until the overall timeout.
-              rejectOnce(error as Error)
+              // The transaction is already in a block (nonce consumed on-chain),
+              // so a failed lookup here is transient: settle with a status that
+              // resyncs the account instead of evicting it, and let the node
+              // re-enter publishing rather than hang until the overall timeout.
+              resolveOnce({
+                success: false,
+                txHash,
+                status: 'ConfirmationError',
+                error: (error as Error).message,
+              })
             }
           } else if (status.isInvalid) {
             resolveOnce({
@@ -296,7 +325,8 @@ export const createTransactionManager = () => {
                 const isTransient =
                   result.status === 'Reorged' ||
                   result.status === 'Timeout' ||
-                  result.status === 'Usurped'
+                  result.status === 'Usurped' ||
+                  result.status === 'ConfirmationError'
                 try {
                   if (isTransient) {
                     await accountManager.resyncAccount(account.address)
