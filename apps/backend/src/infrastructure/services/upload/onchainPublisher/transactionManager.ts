@@ -73,8 +73,16 @@ const submitTransaction = (
     }
 
     const timeout = setTimeout(() => {
+      // A timeout is transient (congestion / not yet confirmed), not an account
+      // fault. Resolve as a failure with a distinct status so the caller can
+      // resync the account's nonce rather than evicting it from the pool.
       logger.error(`Transaction timed out. Tx hash: ${txHash}`)
-      rejectOnce(new Error('Transaction timeout'))
+      resolveOnce({
+        success: false,
+        txHash,
+        status: 'Timeout',
+        error: 'Transaction confirmation timeout',
+      })
     }, config.chain.transactionTimeoutMs)
 
     const onApiError = (error: Error) => {
@@ -137,6 +145,15 @@ const submitTransaction = (
                 error: 'Inclusion block reorged out before confirmation',
               })
             }
+          } catch (error) {
+            // A transient RPC failure during the canonical-hash lookup must not
+            // surface as an unhandled rejection. Log and let the next head
+            // re-trigger the check; the overall timeout is the backstop.
+            logger.warn(
+              error as Error,
+              'Confirmation check failed for tx %s; retrying on next head',
+              txHash,
+            )
           } finally {
             confirmationChecking = false
           }
@@ -200,7 +217,15 @@ const submitTransaction = (
               error: 'Transaction invalid',
             })
           } else if (status.isUsurped) {
-            rejectOnce(new Error(`Transaction ${status.type}`))
+            // Usurped = replaced by another transaction at the same nonce.
+            // Transient and not an account fault; resolve as a failure with a
+            // distinct status so the caller resyncs rather than evicts.
+            resolveOnce({
+              success: false,
+              txHash,
+              status: 'Usurped',
+              error: 'Transaction usurped',
+            })
           }
         },
       )
@@ -263,11 +288,17 @@ export const createTransactionManager = () => {
             })
             .then(async (result) => {
               if (!result.success) {
+                // Transient outcomes (reorg, timeout, usurped) are chain/timing
+                // events, not account faults: keep the account and just resync
+                // its nonce, which the un-included transaction left ahead of
+                // on-chain state. Evicting accounts on these would drain the
+                // signer pool during the very congestion/reorgs we must survive.
+                const isTransient =
+                  result.status === 'Reorged' ||
+                  result.status === 'Timeout' ||
+                  result.status === 'Usurped'
                 try {
-                  if (result.status === 'Reorged') {
-                    // A reorg is a chain event, not an account fault. Keep the
-                    // account in the pool and just resync its nonce, which the
-                    // dropped transaction left ahead of on-chain state.
+                  if (isTransient) {
                     await accountManager.resyncAccount(account.address)
                   } else {
                     await accountManager.removeAccount(account.address)
