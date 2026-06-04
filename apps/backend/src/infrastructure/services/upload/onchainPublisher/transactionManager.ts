@@ -317,21 +317,20 @@ export const createTransactionManager = () => {
             })
             .then(async (result) => {
               if (!result.success) {
-                // Transient outcomes (reorg, timeout, usurped) are chain/timing
-                // events, not account faults: keep the account and just resync
-                // its nonce, which the un-included transaction left ahead of
-                // on-chain state. Evicting accounts on these would drain the
-                // signer pool during the very congestion/reorgs we must survive.
-                const isTransient =
-                  result.status === 'Reorged' ||
-                  result.status === 'Timeout' ||
-                  result.status === 'Usurped' ||
-                  result.status === 'ConfirmationError'
+                // Only a genuinely Invalid transaction implicates the signing
+                // account itself (unusable key / insufficient balance), so it is
+                // the sole case that evicts the account from the pool. Every
+                // other failure — reorg, timeout, usurped, RPC/subscription/API
+                // blips, submission errors — is a chain or infrastructure event:
+                // resync the nonce and keep the account, so a transient incident
+                // can't drain the signer pool during the congestion/reorgs this
+                // change exists to survive.
+                const isAccountFault = result.status === 'Invalid'
                 try {
-                  if (isTransient) {
-                    await accountManager.resyncAccount(account.address)
-                  } else {
+                  if (isAccountFault) {
                     await accountManager.removeAccount(account.address)
+                  } else {
+                    await accountManager.resyncAccount(account.address)
                   }
                 } catch (recoveryError) {
                   logger.error(

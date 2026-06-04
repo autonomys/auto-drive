@@ -13,6 +13,15 @@ const ONE_MiB = 1024 ** 2
 const ONE_HUNDRED_MiB = ONE_MiB * 100
 const FIVE_GiB = 1024 ** 3 * 5
 
+// Parse a positive-integer env var, falling back to `fallback` for missing,
+// non-numeric (NaN), or out-of-range (< 1) values. Avoids the `Math.max(1, NaN)
+// === NaN` trap, which would otherwise leave confirmation logic comparing
+// against NaN and never completing.
+const positiveIntEnv = (name: string, fallback: number): number => {
+  const parsed = Number(env(name, String(fallback)))
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : fallback
+}
+
 export const config = {
   postgres: {
     url: env('DATABASE_URL'),
@@ -31,18 +40,16 @@ export const config = {
     // can still be dropped by a chain reorg. The largest observed reorg is ~12
     // blocks; 25 (~2.5 min at 6s/block) leaves comfortable headroom. Recording
     // publication before this depth is what produced the phantom nodes in #706.
-    // Clamped to >= 1 so a misconfiguration can never query the chain head.
-    confirmationDepth: Math.max(
-      1,
-      Number(env('CHAIN_CONFIRMATION_DEPTH', '25')),
-    ),
+    // Falls back to 25 for missing/invalid values so confirmation logic never
+    // compares against NaN (which would never complete) or queries the head.
+    confirmationDepth: positiveIntEnv('CHAIN_CONFIRMATION_DEPTH', 25),
     // Upper bound for how long a single transaction may wait to be confirmed.
     // The budget must cover BOTH time-to-inclusion (which can be several blocks
     // under mempool/nonce-queue congestion) AND confirmationDepth blocks on top
     // of it. At 25 blocks * ~6s the confirmation phase alone is ~150s; the
     // 5-minute default leaves room for inclusion latency. Raise this if you
     // increase confirmationDepth or run under sustained heavy load.
-    transactionTimeoutMs: Number(env('CHAIN_TRANSACTION_TIMEOUT_MS', '300000')),
+    transactionTimeoutMs: positiveIntEnv('CHAIN_TRANSACTION_TIMEOUT_MS', 300000),
   },
   memoryDownloadCache: {
     maxCacheSize: Number(
