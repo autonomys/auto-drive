@@ -180,9 +180,18 @@ const submitTransaction = (
               return
             }
 
-            const inclusionHash = status.asInBlock.toString()
-            const { block } = await api.rpc.chain.getBlock(inclusionHash)
-            await awaitConfirmation(inclusionHash, block.header.number.toNumber())
+            try {
+              const inclusionHash = status.asInBlock.toString()
+              const { block } = await api.rpc.chain.getBlock(inclusionHash)
+              await awaitConfirmation(
+                inclusionHash,
+                block.header.number.toNumber(),
+              )
+            } catch (error) {
+              // Route lookup/subscription errors through rejectOnce so the
+              // promise settles instead of hanging until the overall timeout.
+              rejectOnce(error as Error)
+            }
           } else if (status.isInvalid) {
             resolveOnce({
               success: false,
@@ -255,11 +264,18 @@ export const createTransactionManager = () => {
             .then(async (result) => {
               if (!result.success) {
                 try {
-                  await accountManager.removeAccount(account.address)
-                } catch (removeError) {
+                  if (result.status === 'Reorged') {
+                    // A reorg is a chain event, not an account fault. Keep the
+                    // account in the pool and just resync its nonce, which the
+                    // dropped transaction left ahead of on-chain state.
+                    await accountManager.resyncAccount(account.address)
+                  } else {
+                    await accountManager.removeAccount(account.address)
+                  }
+                } catch (recoveryError) {
                   logger.error(
-                    removeError as Error,
-                    'Failed to remove account %s after transaction failure',
+                    recoveryError as Error,
+                    'Failed to recover account %s after transaction failure',
                     account.address,
                   )
                 }
