@@ -25,6 +25,17 @@ export const config = {
   chain: {
     endpoint: env('RPC_ENDPOINT', 'ws://localhost:9944'),
     privateKeysPath: env('PRIVATE_KEYS_PATH', '//Alice'),
+    // Number of additional blocks that must build on top of a transaction's
+    // inclusion block before we treat it as durably published. Autonomys uses
+    // Nakamoto-style (probabilistic) consensus, so an `isInBlock` transaction
+    // can still be dropped by a chain reorg. The largest observed reorg is ~12
+    // blocks; 25 (~2.5 min at 6s/block) leaves comfortable headroom. Recording
+    // publication before this depth is what produced the phantom nodes in #706.
+    confirmationDepth: Number(env('CHAIN_CONFIRMATION_DEPTH', '25')),
+    // Upper bound for how long a single transaction may wait to reach
+    // `confirmationDepth`. Must exceed confirmationDepth * blockTime with
+    // margin: at 25 blocks * ~6s that is ~150s, so the default is 5 minutes.
+    transactionTimeoutMs: Number(env('CHAIN_TRANSACTION_TIMEOUT_MS', '300000')),
   },
   memoryDownloadCache: {
     maxCacheSize: Number(

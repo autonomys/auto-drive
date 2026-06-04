@@ -14,6 +14,20 @@ import { config } from '../../../../config.js'
 
 const logger = createLogger('upload:transactionManager')
 
+/**
+ * Submits a transaction and resolves only once it is durably published.
+ *
+ * Autonomys uses Nakamoto-style (probabilistic) consensus, so a transaction
+ * that reaches `isInBlock` can still be dropped by a chain reorg. Recording
+ * such a transaction as published produced the "phantom nodes" in issue #706.
+ *
+ * To avoid that, once a transaction is included we wait until
+ * `config.chain.confirmationDepth` further blocks have been built on top of it
+ * and then verify the inclusion block is still canonical (its hash at that
+ * height is unchanged). Only then do we resolve `success: true`. If the block
+ * was reorged out, we resolve `success: false` so the node re-enters the
+ * publishing pipeline instead of being silently lost.
+ */
 const submitTransaction = (
   api: ApiPromise,
   keyPair: KeyringPair,
@@ -21,36 +35,116 @@ const submitTransaction = (
   nonce: number,
 ): Promise<TransactionResult> => {
   return new Promise((resolve, reject) => {
-    let unsubscribe: (() => void) | undefined
+    const txHash = transaction.hash.toString()
+    let extrinsicUnsub: (() => void) | undefined
+    let headsUnsub: (() => void) | undefined
     let isResolved = false
-
-    const timeout = setTimeout(() => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
-      if (!isResolved) {
-        logger.error(
-          `Transaction timed out. Tx hash: ${transaction.hash.toString()}`,
-        )
-        reject(new Error('Transaction timeout'))
-      }
-    }, 60_000) // 1 minute timeout
-
-    const onApiError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
+    // Guards against handling block inclusion more than once (the extrinsic
+    // subscription stays open and keeps emitting later statuses).
+    let confirmationStarted = false
+    // Guards against re-entrant confirmation checks while the async canonical
+    // hash lookup is in flight.
+    let confirmationChecking = false
 
     const cleanup = () => {
       clearTimeout(timeout)
       // Remove the API error listener to prevent accumulation
       api.off('error', onApiError)
-      if (unsubscribe) {
-        unsubscribe()
+      if (extrinsicUnsub) {
+        extrinsicUnsub()
+      }
+      if (headsUnsub) {
+        headsUnsub()
       }
     }
 
+    const resolveOnce = (result: TransactionResult) => {
+      if (isResolved) return
+      isResolved = true
+      cleanup()
+      resolve(result)
+    }
+
+    const rejectOnce = (error: Error) => {
+      if (isResolved) return
+      isResolved = true
+      cleanup()
+      reject(error)
+    }
+
+    const timeout = setTimeout(() => {
+      logger.error(`Transaction timed out. Tx hash: ${txHash}`)
+      rejectOnce(new Error('Transaction timeout'))
+    }, config.chain.transactionTimeoutMs)
+
+    const onApiError = (error: Error) => {
+      rejectOnce(error)
+    }
+
     api.once('error', onApiError)
+
+    /**
+     * Waits until `confirmationDepth` blocks build on the inclusion block, then
+     * confirms it is still canonical before resolving.
+     */
+    const awaitConfirmation = async (
+      inclusionHash: string,
+      inclusionNumber: number,
+    ) => {
+      const targetNumber = inclusionNumber + config.chain.confirmationDepth
+      logger.info(
+        'Tx %s in block %d (%s) — awaiting %d confirmations',
+        txHash,
+        inclusionNumber,
+        inclusionHash,
+        config.chain.confirmationDepth,
+      )
+
+      try {
+        headsUnsub = await api.rpc.chain.subscribeNewHeads(async (header) => {
+          if (isResolved || confirmationChecking) return
+          if (header.number.toNumber() < targetNumber) return
+
+          confirmationChecking = true
+          try {
+            // The block is now buried deep enough. Verify the inclusion block
+            // is still the canonical block at its height — if a reorg replaced
+            // it, our transaction is no longer on-chain.
+            const canonicalHash = (
+              await api.rpc.chain.getBlockHash(inclusionNumber)
+            ).toString()
+
+            if (canonicalHash === inclusionHash) {
+              resolveOnce({
+                success: true,
+                txHash,
+                blockHash: inclusionHash,
+                blockNumber: inclusionNumber,
+                status: 'InBlock',
+              })
+            } else {
+              logger.warn(
+                'Tx %s reorged out: inclusion block %d (%s) replaced by %s',
+                txHash,
+                inclusionNumber,
+                inclusionHash,
+                canonicalHash,
+              )
+              resolveOnce({
+                success: false,
+                txHash,
+                status: 'Reorged',
+                error: 'Inclusion block reorged out before confirmation',
+              })
+            }
+          } finally {
+            confirmationChecking = false
+          }
+        })
+      } catch (error) {
+        onApiError(error as Error)
+      }
+    }
 
     transaction
       .signAndSend(
@@ -61,15 +155,11 @@ const submitTransaction = (
         async (result: SubmittableResultValue) => {
           const { status, dispatchError } = result
 
-          logger.debug(
-            'Current status: %s, Tx hash: %s',
-            status.type,
-            transaction.hash.toString(),
-          )
+          logger.debug('Current status: %s, Tx hash: %s', status.type, txHash)
 
-          if (status.isInBlock || status.isFinalized) {
-            cleanup()
-            isResolved = true
+          if (status.isInBlock) {
+            if (confirmationStarted) return
+            confirmationStarted = true
 
             if (dispatchError) {
               let errorMessage
@@ -81,46 +171,41 @@ const submitTransaction = (
               } else {
                 errorMessage = dispatchError.toString()
               }
-              resolve({
+              resolveOnce({
                 success: false,
-                txHash: transaction.hash.toString(),
+                txHash,
                 status: status.type,
                 error: errorMessage,
               })
-            } else {
-              logger.info('In block: %s', status.asInBlock.toString())
-              const blockHash = status.asInBlock.toString()
-              const { block } = await api.rpc.chain.getBlock(blockHash)
-              resolve({
-                success: true,
-                txHash: transaction.hash.toString(),
-                blockHash: status.asInBlock.toString(),
-                blockNumber: block.header.number.toNumber(),
-                status: status.type,
-              })
+              return
             }
+
+            const inclusionHash = status.asInBlock.toString()
+            const { block } = await api.rpc.chain.getBlock(inclusionHash)
+            await awaitConfirmation(inclusionHash, block.header.number.toNumber())
           } else if (status.isInvalid) {
-            cleanup()
-            resolve({
+            resolveOnce({
               success: false,
-              txHash: transaction.hash.toString(),
+              txHash,
               status: 'Invalid',
               error: 'Transaction invalid',
             })
           } else if (status.isUsurped) {
-            cleanup()
-            isResolved = true
-            reject(new Error(`Transaction ${status.type}`))
+            rejectOnce(new Error(`Transaction ${status.type}`))
           }
         },
       )
       .then((unsub) => {
-        unsubscribe = unsub
+        extrinsicUnsub = unsub
+        // If we already resolved before signAndSend handed us the unsub
+        // handle, tear it down immediately to avoid a leaked subscription.
+        if (isResolved) {
+          unsub()
+        }
       })
       .catch((error) => {
         logger.error(error as Error, 'Error submitting transaction')
-        cleanup()
-        reject(error)
+        rejectOnce(error)
       })
   })
 }
