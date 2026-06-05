@@ -32,6 +32,15 @@ export const chunkArray = <T>(array: T[], size: number): T[][] => {
 export const optionalBoolEnvironmentVariable = (key: string) =>
   process.env[key] === 'true'
 
+// Parse a positive-integer env var, falling back to `fallback` for missing,
+// non-numeric (NaN), or out-of-range (< 1) values. Avoids the
+// `Math.max(1, NaN) === NaN` trap, which would otherwise leave numeric config
+// (e.g. confirmation depth) comparing against NaN and never completing.
+export const positiveIntEnv = (key: string, fallback: number): number => {
+  const parsed = Number(env(key, String(fallback)))
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : fallback
+}
+
 export const consumeStream = async (stream: Readable) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for await (const _ of stream) {

@@ -1,7 +1,11 @@
 import 'dotenv/config'
 import { FeatureFlag } from './core/featureFlags/index.js'
 import { AccountModel } from '@auto-drive/models'
-import { optionalBoolEnvironmentVariable, env } from './shared/utils/misc.js'
+import {
+  optionalBoolEnvironmentVariable,
+  env,
+  positiveIntEnv,
+} from './shared/utils/misc.js'
 import { getAddress } from 'viem'
 
 const DEFAULT_MEMORY_CACHE_MAX_SIZE = BigInt(1024 ** 3) // 1GB
@@ -25,6 +29,22 @@ export const config = {
   chain: {
     endpoint: env('RPC_ENDPOINT', 'ws://localhost:9944'),
     privateKeysPath: env('PRIVATE_KEYS_PATH', '//Alice'),
+    // Number of additional blocks that must build on top of a transaction's
+    // inclusion block before we treat it as durably published. Autonomys uses
+    // Nakamoto-style (probabilistic) consensus, so an `isInBlock` transaction
+    // can still be dropped by a chain reorg. The largest observed reorg is ~12
+    // blocks; 25 (~2.5 min at 6s/block) leaves comfortable headroom. Recording
+    // publication before this depth is what produced the phantom nodes in #706.
+    // Falls back to 25 for missing/invalid values so confirmation logic never
+    // compares against NaN (which would never complete) or queries the head.
+    confirmationDepth: positiveIntEnv('CHAIN_CONFIRMATION_DEPTH', 25),
+    // Upper bound for how long a single transaction may wait to be confirmed.
+    // The budget must cover BOTH time-to-inclusion (which can be several blocks
+    // under mempool/nonce-queue congestion) AND confirmationDepth blocks on top
+    // of it. At 25 blocks * ~6s the confirmation phase alone is ~150s; the
+    // 5-minute default leaves room for inclusion latency. Raise this if you
+    // increase confirmationDepth or run under sustained heavy load.
+    transactionTimeoutMs: positiveIntEnv('CHAIN_TRANSACTION_TIMEOUT_MS', 300000),
   },
   memoryDownloadCache: {
     maxCacheSize: Number(
