@@ -53,6 +53,13 @@ const submitTransaction = (
     let inclusionNumber: number | undefined
     // Ensures only a single new-heads subscription is opened across (re)inclusions.
     let headsSubscribed = false
+    // Monotonic counter incremented synchronously on every `isInBlock` event, in
+    // the order `signAndSend` delivers them. The `isInBlock` handler is async and
+    // is invoked without being awaited, so concurrent `getBlock` lookups for
+    // different inclusion blocks can resolve out of order. This sequence lets a
+    // resolving lookup detect that a newer inclusion event has since arrived and
+    // skip overwriting the (newer) confirmation target with a stale one.
+    let inclusionSeq = 0
     // Guards against re-entrant confirmation checks while the async canonical
     // hash lookup is in flight.
     let confirmationChecking = false
@@ -258,12 +265,24 @@ const submitTransaction = (
               return
             }
 
+            // Claim this event's place in the inclusion order synchronously,
+            // before the async getBlock lookup, so ordering reflects the order
+            // `signAndSend` delivered the events rather than the order their
+            // lookups happen to resolve.
+            const mySeq = ++inclusionSeq
+
             try {
               // Re-target confirmation at the latest inclusion block. If a reorg
               // re-included the extrinsic elsewhere, this points the canonical
               // check at the new block instead of the retracted one.
               const newInclusionHash = status.asInBlock.toString()
               const { block } = await api.rpc.chain.getBlock(newInclusionHash)
+              // A newer `isInBlock` event arrived while this lookup was in
+              // flight. Its target is more recent, so don't let this stale
+              // lookup clobber it (lookups can resolve out of order).
+              if (mySeq !== inclusionSeq) {
+                return
+              }
               inclusionHash = newInclusionHash
               inclusionNumber = block.header.number.toNumber()
               logger.info(
@@ -275,6 +294,12 @@ const submitTransaction = (
               )
               await ensureConfirmationWatch()
             } catch (error) {
+              // A newer inclusion event superseded this one while its lookup was
+              // in flight; let that newer event drive confirmation rather than
+              // failing the whole transaction on this stale lookup's error.
+              if (mySeq !== inclusionSeq) {
+                return
+              }
               // The transaction is already in a block (nonce consumed on-chain),
               // so a failed lookup here is transient: settle with a status that
               // resyncs the account instead of evicting it, and let the node
