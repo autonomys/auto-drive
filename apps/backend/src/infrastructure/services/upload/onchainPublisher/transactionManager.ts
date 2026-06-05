@@ -9,6 +9,11 @@ import { createConnection } from '../../../drivers/substrate.js'
 import { Transaction, TransactionResult } from '@auto-drive/models'
 import { createLogger } from '../../../drivers/logger.js'
 import { createAccountManager } from './accounts.js'
+import {
+  hasReachedConfirmationDepth,
+  isAccountFault,
+  isStillCanonical,
+} from './confirmation.js'
 import pLimit from 'p-limit'
 import { config } from '../../../../config.js'
 
@@ -117,7 +122,6 @@ const submitTransaction = (
       // down. Bail out instead.
       if (isResolved) return
 
-      const targetNumber = inclusionNumber + config.chain.confirmationDepth
       logger.info(
         'Tx %s in block %d (%s) — awaiting %d confirmations',
         txHash,
@@ -129,7 +133,14 @@ const submitTransaction = (
       try {
         const unsub = await api.rpc.chain.subscribeNewHeads(async (header) => {
           if (isResolved || confirmationChecking) return
-          if (header.number.toNumber() < targetNumber) return
+          if (
+            !hasReachedConfirmationDepth(
+              header.number.toNumber(),
+              inclusionNumber,
+              config.chain.confirmationDepth,
+            )
+          )
+            return
 
           confirmationChecking = true
           try {
@@ -140,7 +151,7 @@ const submitTransaction = (
               await api.rpc.chain.getBlockHash(inclusionNumber)
             ).toString()
 
-            if (canonicalHash === inclusionHash) {
+            if (isStillCanonical(canonicalHash, inclusionHash)) {
               resolveOnce({
                 success: true,
                 txHash,
@@ -341,9 +352,8 @@ export const createTransactionManager = () => {
                 // resync the nonce and keep the account, so a transient incident
                 // can't drain the signer pool during the congestion/reorgs this
                 // change exists to survive.
-                const isAccountFault = result.status === 'Invalid'
                 try {
-                  if (isAccountFault) {
+                  if (isAccountFault(result.status)) {
                     await accountManager.removeAccount(account.address)
                   } else {
                     await accountManager.resyncAccount(account.address)

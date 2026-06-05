@@ -1,7 +1,11 @@
 import 'dotenv/config'
 import { FeatureFlag } from './core/featureFlags/index.js'
 import { AccountModel } from '@auto-drive/models'
-import { optionalBoolEnvironmentVariable, env } from './shared/utils/misc.js'
+import {
+  optionalBoolEnvironmentVariable,
+  env,
+  positiveIntEnv,
+} from './shared/utils/misc.js'
 import { getAddress } from 'viem'
 
 const DEFAULT_MEMORY_CACHE_MAX_SIZE = BigInt(1024 ** 3) // 1GB
@@ -12,15 +16,6 @@ const DEFAULT_CACHE_TTL = 0 // No TTL
 const ONE_MiB = 1024 ** 2
 const ONE_HUNDRED_MiB = ONE_MiB * 100
 const FIVE_GiB = 1024 ** 3 * 5
-
-// Parse a positive-integer env var, falling back to `fallback` for missing,
-// non-numeric (NaN), or out-of-range (< 1) values. Avoids the `Math.max(1, NaN)
-// === NaN` trap, which would otherwise leave confirmation logic comparing
-// against NaN and never completing.
-const positiveIntEnv = (name: string, fallback: number): number => {
-  const parsed = Number(env(name, String(fallback)))
-  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : fallback
-}
 
 export const config = {
   postgres: {
