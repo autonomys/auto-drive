@@ -44,9 +44,15 @@ const submitTransaction = (
     let extrinsicUnsub: (() => void) | undefined
     let headsUnsub: (() => void) | undefined
     let isResolved = false
-    // Guards against handling block inclusion more than once (the extrinsic
-    // subscription stays open and keeps emitting later statuses).
-    let confirmationStarted = false
+    // The block the transaction is currently included in. A reorg can retract
+    // the first inclusion block and re-include the extrinsic in a different
+    // block, which surfaces as a fresh `isInBlock` event — so this is updated on
+    // every inclusion, and confirmation is always evaluated against the latest
+    // block rather than a stale one.
+    let inclusionHash: string | undefined
+    let inclusionNumber: number | undefined
+    // Ensures only a single new-heads subscription is opened across (re)inclusions.
+    let headsSubscribed = false
     // Guards against re-entrant confirmation checks while the async canonical
     // hash lookup is in flight.
     let confirmationChecking = false
@@ -109,34 +115,32 @@ const submitTransaction = (
     api.once('error', onApiError)
 
     /**
-     * Waits until `confirmationDepth` blocks build on the inclusion block, then
-     * confirms it is still canonical before resolving.
+     * Opens a single new-heads subscription (idempotent across re-inclusions)
+     * that, once `confirmationDepth` blocks have built on the *current*
+     * inclusion block, verifies that block is still canonical before resolving.
+     * The inclusion target is read live, so a reorg that re-includes the
+     * extrinsic in a new block is followed rather than mistaken for a drop.
      */
-    const awaitConfirmation = async (
-      inclusionHash: string,
-      inclusionNumber: number,
-    ) => {
+    const ensureConfirmationWatch = async () => {
       // The promise may already have settled (e.g. the timeout fired) while the
       // preceding getBlock lookup was in flight. If so, cleanup() has already
       // run, so subscribing here would leak a subscription that nothing tears
       // down. Bail out instead.
-      if (isResolved) return
-
-      logger.info(
-        'Tx %s in block %d (%s) — awaiting %d confirmations',
-        txHash,
-        inclusionNumber,
-        inclusionHash,
-        config.chain.confirmationDepth,
-      )
+      if (isResolved || headsSubscribed) return
+      headsSubscribed = true
 
       try {
         const unsub = await api.rpc.chain.subscribeNewHeads(async (header) => {
           if (isResolved || confirmationChecking) return
+          // Snapshot the current inclusion target; it can change under us if a
+          // reorg re-includes the extrinsic in a new block mid-flight.
+          const targetHash = inclusionHash
+          const targetNumber = inclusionNumber
+          if (targetHash === undefined || targetNumber === undefined) return
           if (
             !hasReachedConfirmationDepth(
               header.number.toNumber(),
-              inclusionNumber,
+              targetNumber,
               config.chain.confirmationDepth,
             )
           )
@@ -148,23 +152,33 @@ const submitTransaction = (
             // is still the canonical block at its height — if a reorg replaced
             // it, our transaction is no longer on-chain.
             const canonicalHash = (
-              await api.rpc.chain.getBlockHash(inclusionNumber)
+              await api.rpc.chain.getBlockHash(targetNumber)
             ).toString()
 
-            if (isStillCanonical(canonicalHash, inclusionHash)) {
+            // If the inclusion target changed during the async lookup (the
+            // extrinsic was re-included elsewhere), defer to the next head
+            // rather than judging against a stale target.
+            if (
+              inclusionHash !== targetHash ||
+              inclusionNumber !== targetNumber
+            ) {
+              return
+            }
+
+            if (isStillCanonical(canonicalHash, targetHash)) {
               resolveOnce({
                 success: true,
                 txHash,
-                blockHash: inclusionHash,
-                blockNumber: inclusionNumber,
+                blockHash: targetHash,
+                blockNumber: targetNumber,
                 status: 'InBlock',
               })
             } else {
               logger.warn(
                 'Tx %s reorged out: inclusion block %d (%s) replaced by %s',
                 txHash,
-                inclusionNumber,
-                inclusionHash,
+                targetNumber,
+                targetHash,
                 canonicalHash,
               )
               resolveOnce({
@@ -220,11 +234,9 @@ const submitTransaction = (
           logger.debug('Current status: %s, Tx hash: %s', status.type, txHash)
 
           if (status.isInBlock) {
-            if (confirmationStarted) return
-            confirmationStarted = true
-
-            // Inclusion reached: give the confirmation phase its own full
-            // timeout budget, independent of however long inclusion took.
+            // Inclusion reached (possibly a re-inclusion after a reorg): give
+            // the confirmation phase its own full timeout budget, independent of
+            // however long inclusion took.
             armTimeout()
 
             if (dispatchError) {
@@ -247,12 +259,21 @@ const submitTransaction = (
             }
 
             try {
-              const inclusionHash = status.asInBlock.toString()
-              const { block } = await api.rpc.chain.getBlock(inclusionHash)
-              await awaitConfirmation(
+              // Re-target confirmation at the latest inclusion block. If a reorg
+              // re-included the extrinsic elsewhere, this points the canonical
+              // check at the new block instead of the retracted one.
+              const newInclusionHash = status.asInBlock.toString()
+              const { block } = await api.rpc.chain.getBlock(newInclusionHash)
+              inclusionHash = newInclusionHash
+              inclusionNumber = block.header.number.toNumber()
+              logger.info(
+                'Tx %s in block %d (%s) — awaiting %d confirmations',
+                txHash,
+                inclusionNumber,
                 inclusionHash,
-                block.header.number.toNumber(),
+                config.chain.confirmationDepth,
               )
+              await ensureConfirmationWatch()
             } catch (error) {
               // The transaction is already in a block (nonce consumed on-chain),
               // so a failed lookup here is transient: settle with a status that
