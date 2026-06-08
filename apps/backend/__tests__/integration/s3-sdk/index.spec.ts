@@ -1,12 +1,16 @@
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
+  AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
+  CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListBucketsCommand,
+  ListMultipartUploadsCommand,
   ListObjectsV2Command,
+  ListPartsCommand,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -179,6 +183,306 @@ describe('AWS S3 - SDK', () => {
     expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
       SecondBody,
     )
+  })
+
+  // S3 allows parts to arrive in any order; PartNumber identifies position,
+  // not arrival order.
+  describe('Out-of-order multipart upload', () => {
+    const OutOfOrderKey = 'multipart-out-of-order.bin'
+    const PART_SIZE = 16 * 1024
+    // Distinct content per part so misordered assembly is detectable.
+    const PartA = Buffer.alloc(PART_SIZE, 'A')
+    const PartB = Buffer.alloc(PART_SIZE, 'B')
+    const PartC = Buffer.alloc(PART_SIZE, 'C')
+    const ExpectedBody = Buffer.concat([PartA, PartB, PartC])
+
+    it('uploaded as [2,1,3] and completed as [3,1,2] should assemble to A‖B‖C', async () => {
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: OutOfOrderKey }),
+      )
+      const uploadId = create.UploadId!
+
+      // Upload parts in non-monotonic arrival order: 2, then 1, then 3.
+      const upPart = (partNumber: number, body: Buffer) =>
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: OutOfOrderKey,
+            UploadId: uploadId,
+            PartNumber: partNumber,
+            Body: body,
+          }),
+        )
+      const e2 = await upPart(2, PartB)
+      const e1 = await upPart(1, PartA)
+      const e3 = await upPart(3, PartC)
+
+      expect(e1.ETag).toMatch(MD5_ETAG_RE)
+      expect(e2.ETag).toMatch(MD5_ETAG_RE)
+      expect(e3.ETag).toMatch(MD5_ETAG_RE)
+
+      // Complete with parts listed in yet another order (3, 1, 2).  The
+      // server must sort by PartNumber regardless of either arrival order
+      // or completion-list order.
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: OutOfOrderKey,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: [
+              { ETag: e3.ETag!, PartNumber: 3 },
+              { ETag: e1.ETag!, PartNumber: 1 },
+              { ETag: e2.ETag!, PartNumber: 2 },
+            ],
+          },
+        }),
+      )
+      expect(complete.ETag).toMatch(MULTIPART_ETAG_RE)
+
+      // Download and verify the assembled body is A‖B‖C in PartNumber
+      // order, not arrival or completion-list order.
+      const downloaded = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: OutOfOrderKey }),
+      )
+      const body = Buffer.from(
+        await downloaded.Body!.transformToByteArray(),
+      )
+      expect(body.length).toBe(ExpectedBody.length)
+      expect(body).toEqual(ExpectedBody)
+    }, 30_000)
+
+    // A gap (parts 1 and 3, no 2) must not finalise: part 3's bytes are
+    // counted in the size but never reach the IPLD tree.
+    it('completion should refuse when there is a gap in the parts sequence', async () => {
+      const KeyGap = 'multipart-with-gap.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeyGap }),
+      )
+      const uploadId = create.UploadId!
+
+      const e1 = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: KeyGap,
+          UploadId: uploadId,
+          PartNumber: 1,
+          Body: PartA,
+        }),
+      )
+      // Skip PartNumber 2; upload PartNumber 3 directly.
+      const e3 = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: KeyGap,
+          UploadId: uploadId,
+          PartNumber: 3,
+          Body: PartC,
+        }),
+      )
+
+      // Both per-part requests succeed (parts are stored).  Completion is
+      // where the gap surfaces.
+      await expect(
+        s3Client.send(
+          new CompleteMultipartUploadCommand({
+            Bucket,
+            Key: KeyGap,
+            UploadId: uploadId,
+            MultipartUpload: {
+              Parts: [
+                { ETag: e1.ETag!, PartNumber: 1 },
+                { ETag: e3.ETag!, PartNumber: 3 },
+              ],
+            },
+          }),
+        ),
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 400 },
+      })
+    }, 30_000)
+
+    // S3 allows re-uploading a PartNumber; an identical retry must succeed.
+    it('should accept a part retry with the same PartNumber', async () => {
+      const KeyRetry = 'multipart-retry.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeyRetry }),
+      )
+      const uploadId = create.UploadId!
+
+      const upload = (body: Buffer) =>
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: KeyRetry,
+            UploadId: uploadId,
+            PartNumber: 1,
+            Body: body,
+          }),
+        )
+
+      const firstAttempt = await upload(PartA)
+      expect(firstAttempt.ETag).toMatch(MD5_ETAG_RE)
+
+      const retry = await upload(PartA)
+      expect(retry.ETag).toMatch(MD5_ETAG_RE)
+      expect(retry.ETag).toBe(firstAttempt.ETag)
+
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: KeyRetry,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: [{ ETag: retry.ETag!, PartNumber: 1 }],
+          },
+        }),
+      )
+      expect(complete.ETag).toMatch(MULTIPART_ETAG_RE)
+
+      const downloaded = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: KeyRetry }),
+      )
+      const body = Buffer.from(
+        await downloaded.Body!.transformToByteArray(),
+      )
+      expect(body).toEqual(PartA)
+    }, 30_000)
+
+    // A processed part is already in the IPLD tree and cannot be replaced, so a
+    // retry with different bytes is rejected rather than left inconsistent.
+    it('should reject a divergent retry of an already-processed part', async () => {
+      const KeyDiverge = 'multipart-divergent-retry.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeyDiverge }),
+      )
+      const uploadId = create.UploadId!
+
+      // PartNumber 1 arrives in order and is processed immediately.
+      const first = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: KeyDiverge,
+          UploadId: uploadId,
+          PartNumber: 1,
+          Body: PartA,
+        }),
+      )
+      expect(first.ETag).toMatch(MD5_ETAG_RE)
+
+      // Re-upload PartNumber 1 with *different* bytes — must be rejected.
+      await expect(
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: KeyDiverge,
+            UploadId: uploadId,
+            PartNumber: 1,
+            Body: PartB,
+          }),
+        ),
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 400 },
+      })
+    }, 30_000)
+
+    // Concurrent uploads of the same part_index must converge to a single
+    // processed chunk. Identical bytes keep the assertion deterministic.
+    it('concurrent identical uploads of the same part should not corrupt', async () => {
+      const KeySameIdx = 'multipart-same-index-concurrent.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeySameIdx }),
+      )
+      const uploadId = create.UploadId!
+
+      const upPart1 = () =>
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: KeySameIdx,
+            UploadId: uploadId,
+            PartNumber: 1,
+            Body: PartA,
+          }),
+        )
+
+      const [r1, r2] = await Promise.all([upPart1(), upPart1()])
+      expect(r1.ETag).toMatch(MD5_ETAG_RE)
+      expect(r2.ETag).toMatch(MD5_ETAG_RE)
+      expect(r1.ETag).toBe(r2.ETag)
+
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: KeySameIdx,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: [{ ETag: r1.ETag!, PartNumber: 1 }] },
+        }),
+      )
+      expect(complete.ETag).toMatch(MULTIPART_ETAG_RE)
+
+      const downloaded = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: KeySameIdx }),
+      )
+      const body = Buffer.from(await downloaded.Body!.transformToByteArray())
+      expect(body).toEqual(PartA)
+    }, 30_000)
+
+    // Distinct parts uploaded in parallel must still assemble in PartNumber
+    // order. Best-effort: timing-dependent, so it catches a missing lock only
+    // stochastically.
+    it('concurrent uploadParts should still assemble correctly', async () => {
+      const KeyConc = 'multipart-concurrent.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: KeyConc }),
+      )
+      const uploadId = create.UploadId!
+
+      const upPart = (partNumber: number, body: Buffer) =>
+        s3Client.send(
+          new UploadPartCommand({
+            Bucket,
+            Key: KeyConc,
+            UploadId: uploadId,
+            PartNumber: partNumber,
+            Body: body,
+          }),
+        )
+
+      const [e1, e2, e3] = await Promise.all([
+        upPart(1, PartA),
+        upPart(2, PartB),
+        upPart(3, PartC),
+      ])
+      expect(e1.ETag).toMatch(MD5_ETAG_RE)
+      expect(e2.ETag).toMatch(MD5_ETAG_RE)
+      expect(e3.ETag).toMatch(MD5_ETAG_RE)
+
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: KeyConc,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: [
+              { ETag: e1.ETag!, PartNumber: 1 },
+              { ETag: e2.ETag!, PartNumber: 2 },
+              { ETag: e3.ETag!, PartNumber: 3 },
+            ],
+          },
+        }),
+      )
+      expect(complete.ETag).toMatch(MULTIPART_ETAG_RE)
+
+      const downloaded = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: KeyConc }),
+      )
+      const body = Buffer.from(
+        await downloaded.Body!.transformToByteArray(),
+      )
+      expect(body.length).toBe(ExpectedBody.length)
+      expect(body).toEqual(ExpectedBody)
+    }, 30_000)
   })
 
   // Bucket-prefixed key: first segment becomes the bucket name
@@ -399,6 +703,84 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  describe('Missing keys', () => {
+    const MissingKey = 'this-key-was-never-uploaded-' + Date.now() + '.txt'
+
+    it('GetObject on a missing key should return 404', async () => {
+      const command = new GetObjectCommand({ Bucket, Key: MissingKey })
+      await expect(s3Client.send(command)).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+      })
+    })
+
+    it('HeadObject on a missing key should return 404', async () => {
+      const command = new HeadObjectCommand({ Bucket, Key: MissingKey })
+      await expect(s3Client.send(command)).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+      })
+    })
+  })
+
+  // Unsupported operations must return 501, never reach a write handler.
+  describe('Unsupported operations return 501 NotImplemented', () => {
+    it('CopyObject is rejected and creates no object', async () => {
+      const CopyKey = 'copy-dest.txt'
+      await expect(
+        s3Client.send(
+          new CopyObjectCommand({
+            Bucket,
+            Key: CopyKey,
+            CopySource: `${Bucket}/${Key}`,
+          }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
+
+      // The misroute used to PutObject an empty body at the destination.
+      // Assert only that the object does not exist (HEAD rejects); the exact
+      // missing-key status is fixed separately (404 vs 500).
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: CopyKey })),
+      ).rejects.toThrow()
+    })
+
+    it('ListParts is rejected (must not finalise the upload)', async () => {
+      // A real, in-progress upload so a misroute would actually complete it.
+      const created = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: 'listparts-probe.bin' }),
+      )
+      await expect(
+        s3Client.send(
+          new ListPartsCommand({
+            Bucket,
+            Key: 'listparts-probe.bin',
+            UploadId: created.UploadId!,
+          }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
+    })
+
+    it('ListMultipartUploads is rejected', async () => {
+      await expect(
+        s3Client.send(new ListMultipartUploadsCommand({ Bucket })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
+    })
+
+    it('AbortMultipartUpload is rejected (must not finalise the upload)', async () => {
+      const created = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: 'abort-probe.bin' }),
+      )
+      await expect(
+        s3Client.send(
+          new AbortMultipartUploadCommand({
+            Bucket,
+            Key: 'abort-probe.bin',
+            UploadId: created.UploadId!,
+          }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
+    })
+  })
+
   describe('Metadata handled correctly', () => {
     const ThirdKey = 'test3.txt'
 
@@ -431,6 +813,17 @@ describe('AWS S3 - SDK', () => {
       expect(result.ETag).toMatch(MD5_ETAG_RE)
       // CID must be present in the custom header
       expect(result.Metadata?.cid).toBeDefined()
+    })
+
+    // HeadObject must return 200 with the headers GET would send. A prior
+    // 204 stripped Content-Length/Content-Type; Last-Modified was never set.
+    it('should return ContentLength, ContentType and LastModified on HeadObject', async () => {
+      // `Key`/`Body` is a plain (uncompressed, unencrypted) object.
+      const result = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+
+      expect(result.ContentLength).toBe(Body.length)
+      expect(result.LastModified).toBeInstanceOf(Date)
+      expect(result.ContentType).toBeTruthy()
     })
   })
 

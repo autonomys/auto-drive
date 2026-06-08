@@ -67,6 +67,8 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
   cid: string
   /** null for objects uploaded before MD5 ETag support was introduced. */
   etag: string | null
+  /** Mapping's last-write time, surfaced as the S3 Last-Modified header. */
+  lastModified: Date
 }
 
 const getObject = async (
@@ -97,6 +99,7 @@ const getObject = async (
     // Objects uploaded before this feature have null md5; fall back to null
     // so the controller can omit the ETag header for legacy objects.
     etag: mapping.md5 ? formatETag(mapping.md5) : null,
+    lastModified: mapping.updatedAt,
   }))
 }
 
