@@ -14,12 +14,72 @@ import {
   NetworkId as AutoDriveNetworkId,
 } from '@auto-drive/ui';
 import { sanitizeHTML } from '../../../utils/sanitizeHTML';
+import { Api } from '../../../services/api';
 const PREVIEW_FETCH_TIMEOUT_MS = 15_000;
 
-const MAX_PREVIEW_SIZE = BigInt(100 * 1024 * 1024); // 100 MB
+const MAX_PREVIEW_SIZE = BigInt(100 * 1024 * 1024); // 100 MB (preview cap)
+
+// Collect a download stream into a single contiguous byte array, bailing out
+// promptly if the preview request has been superseded/aborted.
+const collectStream = async (
+  iterable: AsyncIterable<Buffer>,
+  signal: AbortSignal,
+): Promise<ArrayBuffer> => {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of iterable) {
+    if (signal.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    chunks.push(new Uint8Array(chunk));
+  }
+  const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const c of chunks) {
+    combined.set(c, offset);
+    offset += c.length;
+  }
+  return combined.buffer as ArrayBuffer;
+};
+
+// fflate throws FlateError (e.g. "invalid zlib data") when a file is flagged as
+// compressed but its stored bytes are actually raw/uncompressed.
+const isDecompressionError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  const name = error instanceof Error ? error.name : '';
+  return (
+    message.includes('invalid zlib') ||
+    message.includes('invalid deflate') ||
+    message.includes('invalid block') ||
+    name === 'FlateError'
+  );
+};
+
+// Compressed (non-encrypted) files can't be previewed from the public gateway:
+// it serves them with `Content-Encoding: deflate`, which the browser fails to
+// decode. Stream them through the backend download API (raw bytes via
+// ignoreEncoding=true) and decompress client-side instead. Falls back to the
+// raw bytes when the stored data isn't actually compressed despite metadata.
+const fetchDecompressedBytes = async (
+  api: Api,
+  cid: string,
+  signal: AbortSignal,
+): Promise<ArrayBuffer> => {
+  try {
+    return await collectStream(await api.downloadObject(cid), signal);
+  } catch (error) {
+    if (signal.aborted || !isDecompressionError(error)) {
+      throw error;
+    }
+    return collectStream(
+      await api.downloadObject(cid, { skipDecryption: true }),
+      signal,
+    );
+  }
+};
 
 export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
-  const { network } = useNetwork();
+  const { network, api } = useNetwork();
   const [isFilePreview, setIsFilePreview] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +105,17 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
 
   const gatewayUrl = EXTERNAL_ROUTES.gatewayObjectDownload(metadata.dataCid);
 
+  const isEncrypted = !!metadata.uploadOptions?.encryption;
+  const isCompressed = !!metadata.uploadOptions?.compression;
+
+  // The public gateway serves compressed (non-encrypted) files with
+  // `Content-Encoding: deflate`. Browsers fail to decode that response
+  // (broken <img>/ERR_CONTENT_DECODING_FAILED), so we must not hand the raw
+  // gateway URL to the previewer for those files — it would render the broken
+  // response instead of the decompressed blob we build below. The "View on
+  // gateway" link is hidden along with it since it is broken in-browser too.
+  const previewGatewayUrl = isCompressed && !isEncrypted ? null : gatewayUrl;
+
   const isPreviewable = useMemo(() => {
     if (metadata.type !== 'file') return false;
     if (metadata.totalSize > MAX_PREVIEW_SIZE) return false;
@@ -64,15 +135,17 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       }
 
       // If file is encrypted and no password provided, don't fetch
-      if (metadata.uploadOptions?.encryption && !password && !isDecrypted) {
+      if (isEncrypted && !password && !isDecrypted) {
         setIsFilePreview(false);
         setLoading(false);
         return;
       }
 
-      // For non-encrypted files that can be displayed directly,
-      // use gateway URL directly (no fetch needed)
-      if (!metadata.uploadOptions?.encryption && canDisplayDirectly(metadata)) {
+      // For non-encrypted, uncompressed files that can be displayed directly,
+      // use the gateway URL directly (no fetch needed). Compressed files are
+      // excluded here: the gateway returns them with `Content-Encoding: deflate`,
+      // which browsers cannot decode, so they take the decompress path below.
+      if (!isEncrypted && !isCompressed && canDisplayDirectly(metadata)) {
         setIsFilePreview(true);
         setFile(null);
         setLoading(false);
@@ -84,7 +157,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      // Abort the preview fetch if the gateway doesn't respond quickly.
+      // Abort the preview fetch if retrieval doesn't complete quickly.
       // Non-cached archived files can take 20+ minutes to reconstruct
       // from DSN — showing a loading spinner that long is worse than
       // showing no preview at all.
@@ -97,6 +170,36 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       setLoading(true);
 
       try {
+        // Compressed (non-encrypted) files can't be previewed via the gateway
+        // URL: the gateway sets `Content-Encoding: deflate` and the browser
+        // fails to decode it. Retrieve + decompress the bytes via the backend
+        // download API, then build a blob for the previewer.
+        if (!isEncrypted && isCompressed) {
+          const bytes = await fetchDecompressedBytes(
+            api,
+            metadata.dataCid,
+            controller.signal,
+          );
+          clearTimeout(timeoutId);
+          if (abortControllerRef.current !== controller) {
+            return;
+          }
+
+          const blob = await processFileData({
+            dataArrayBuffer: bytes,
+            name: metadata.name ?? '',
+            rawData: '',
+            uploadOptions: metadata.uploadOptions ?? {},
+            isEncrypted: false,
+          });
+          setFile(blob);
+          if (needsContentParsing(metadata)) {
+            safeSetTextContent(await blob.text());
+          }
+          setLoading(false);
+          return;
+        }
+
         const response = await fetch(gatewayUrl, {
           signal: controller.signal,
         });
@@ -142,11 +245,14 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         setLoading(false);
       } catch (error) {
         clearTimeout(timeoutId);
+        // A newer fetchFile call has superseded this one — don't touch state.
+        // This must run regardless of the error type: aborting a superseded
+        // request can surface as a decompression/network error rather than an
+        // AbortError, because the underlying download is not itself cancelable.
+        if (abortControllerRef.current !== controller) {
+          return;
+        }
         if (error instanceof DOMException && error.name === 'AbortError') {
-          if (abortControllerRef.current !== controller) {
-            // A newer fetchFile call replaced us — don't touch state.
-            return;
-          }
           // Our own timeout fired — hide the preview.
           setIsFilePreview(false);
           setLoading(false);
@@ -159,7 +265,16 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         setLoading(false);
       }
     },
-    [metadata, isDecrypted, isPreviewable, gatewayUrl, safeSetTextContent],
+    [
+      metadata,
+      isDecrypted,
+      isPreviewable,
+      isEncrypted,
+      isCompressed,
+      gatewayUrl,
+      api,
+      safeSetTextContent,
+    ],
   );
 
   useEffect(() => {
@@ -180,7 +295,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       decryptionError={decryptionError}
       isFilePreview={isFilePreview}
       textContent={textContent}
-      gatewayUrl={gatewayUrl}
+      gatewayUrl={previewGatewayUrl}
       handleDecrypt={fetchFile}
     />
   );
