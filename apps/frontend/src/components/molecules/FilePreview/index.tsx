@@ -171,12 +171,30 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
           uploadOptions: metadata.uploadOptions ?? {},
           isEncrypted: false,
         });
+        // Re-check after every await: a file switch (which resets the ref) or a
+        // newer fetch can land while `processFileData`/`blob.text()` are pending.
+        // Without re-checking, a late success would commit this (now stale) blob
+        // under the newly selected file's metadata.
+        if (abortControllerRef.current !== controller) {
+          return;
+        }
+
+        // Read parsed text before committing anything, so the post-await guard
+        // covers it too and we never commit a half-updated preview.
+        let parsedText: string | null = null;
+        if (needsContentParsing(metadata)) {
+          parsedText = await blob.text();
+          if (abortControllerRef.current !== controller) {
+            return;
+          }
+        }
+
         setFile(blob);
         if (isEncrypted) {
           setIsDecrypted(true);
         }
-        if (needsContentParsing(metadata)) {
-          safeSetTextContent(await blob.text());
+        if (parsedText !== null) {
+          safeSetTextContent(parsedText);
         }
         setLoading(false);
       } catch (error) {
