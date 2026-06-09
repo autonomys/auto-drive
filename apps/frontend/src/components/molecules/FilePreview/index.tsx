@@ -42,6 +42,14 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   if (previewedCidRef.current !== metadata.dataCid) {
     previewedCidRef.current = metadata.dataCid;
     abortControllerRef.current?.abort();
+    // Drop the ref to the aborted controller. The superseded guards in
+    // `fetchFile` compare controller identity, so a lingering ref would make the
+    // abandoned request still look "current": its late AbortError would clear
+    // `isFilePreview`/`loading` for the new file, and a late success could
+    // commit the previous file's blob under the new metadata. This matters most
+    // when the new file takes an early-return path (fast-path render,
+    // not-previewable, encrypted-without-password) that never reassigns the ref.
+    abortControllerRef.current = null;
     setIsFilePreview(false);
     setLoading(true);
     setError(null);
