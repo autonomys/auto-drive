@@ -250,6 +250,26 @@ describe('loadPlaintextBytes', () => {
     ).rejects.toThrow('Aborted');
   });
 
+  it('aborts when the signal fires after the final chunk but before return', async () => {
+    const controller = new AbortController();
+    // The abort lands once the stream has fully drained — after the last chunk
+    // is yielded but before collectStream assembles/returns the buffer. The
+    // loop-top guard never sees it, so only a post-loop re-check throws.
+    const api = {
+      downloadObject: jest.fn().mockResolvedValue(
+        (async function* () {
+          yield Buffer.from(PNG_MAGIC);
+          controller.abort();
+        })(),
+      ),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    await expect(
+      loadPlaintextBytes(api, metadataOf(), undefined, controller.signal),
+    ).rejects.toThrow('Aborted');
+  });
+
   it('wraps a failing decrypt step in a DecryptionError', async () => {
     const api = apiWithRawBytes(new Uint8Array([0xaa, 0xbb]));
     // Web Crypto surfaces wrong-password / corrupt-ciphertext as a throw while

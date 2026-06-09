@@ -30,6 +30,12 @@ export const collectStream = async (
     }
     chunks.push(new Uint8Array(chunk));
   }
+  // Re-check after the stream drains: an abort that lands between the final
+  // chunk and the return would otherwise slip through, letting the caller
+  // commit data the preview meant to cancel.
+  if (signal.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
   const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
   const combined = new Uint8Array(totalLength);
   let offset = 0;
