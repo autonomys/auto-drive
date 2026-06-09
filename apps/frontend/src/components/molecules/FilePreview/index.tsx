@@ -30,6 +30,27 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   const [textContent, setTextContent] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Reset all preview state when the previewed object changes. The component is
+  // reused (not remounted) when navigating between files, so without this a
+  // stale decrypted blob — and a stale `isDecrypted` flag — would carry over to
+  // the next file. In particular `isDecrypted` left as `true` makes the
+  // no-password branch of `fetchFile` bail out early and render the previous
+  // file's decrypted content under the new file's metadata. Done during render
+  // (the React "adjust state on prop change" pattern) so the reset is visible to
+  // the `fetchFile` invocation triggered by the same metadata change.
+  const previewedCidRef = useRef(metadata.dataCid);
+  if (previewedCidRef.current !== metadata.dataCid) {
+    previewedCidRef.current = metadata.dataCid;
+    abortControllerRef.current?.abort();
+    setIsFilePreview(false);
+    setLoading(true);
+    setError(null);
+    setDecryptionError(null);
+    setIsDecrypted(false);
+    setFile(null);
+    setTextContent(null);
+  }
+
   const safeSetTextContent = useCallback((text: string) => {
     setTextContent(sanitizeHTML(text));
   }, []);
