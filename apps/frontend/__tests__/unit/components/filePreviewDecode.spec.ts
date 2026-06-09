@@ -117,6 +117,9 @@ describe('loadPlaintextBytes', () => {
 
     expect(api.downloadObject).toHaveBeenCalledWith(TEST_CID, {
       skipDecryption: true,
+      // The abort signal is forwarded so a preview timeout / superseded request
+      // tears down the in-flight HTTP request rather than hanging on it.
+      signal: notAborted,
     });
     expect(Array.from(result)).toEqual(Array.from(PNG_MAGIC));
     expect(mockDecryptFile).not.toHaveBeenCalled();

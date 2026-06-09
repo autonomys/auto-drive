@@ -78,7 +78,14 @@ export const loadPlaintextBytes = async (
 ): Promise<Uint8Array> => {
   let bytes: Uint8Array = new Uint8Array(
     await collectStream(
-      await api.downloadObject(metadata.dataCid, { skipDecryption: true }),
+      // Pass `signal` so an abort (preview timeout / superseded request) tears
+      // down the in-flight HTTP request immediately, instead of leaving it to
+      // hang until the gateway responds — at which point `collectStream` would
+      // only notice the abort after the download had already completed.
+      await api.downloadObject(metadata.dataCid, {
+        skipDecryption: true,
+        signal,
+      }),
       signal,
     ),
   );
