@@ -32,6 +32,7 @@ import zlib from 'node:zlib';
 import {
   looksLikeZlib,
   loadPlaintextBytes,
+  DecryptionError,
 } from '../../../src/components/molecules/FilePreview/decode';
 
 // ---------------------------------------------------------------------------
@@ -155,7 +156,7 @@ describe('loadPlaintextBytes', () => {
     expect(Array.from(result)).toEqual(Array.from(PNG_MAGIC));
   });
 
-  it('encrypted without a password throws before any download work', async () => {
+  it('encrypted without a password throws a DecryptionError before any download work', async () => {
     const api = apiWithRawBytes(PNG_MAGIC);
 
     await expect(
@@ -166,6 +167,14 @@ describe('loadPlaintextBytes', () => {
         notAborted,
       ),
     ).rejects.toThrow('Password is required to decrypt the file');
+    await expect(
+      loadPlaintextBytes(
+        api,
+        metadataOf({ encryption: { algorithm: 'AES_256_GCM' } }),
+        undefined,
+        notAborted,
+      ),
+    ).rejects.toBeInstanceOf(DecryptionError);
   });
 
   it('encrypted + compressed → decrypts, then inflates when decrypted bytes are zlib', async () => {
@@ -236,5 +245,72 @@ describe('loadPlaintextBytes', () => {
     await expect(
       loadPlaintextBytes(api, metadataOf(), undefined, aborted),
     ).rejects.toThrow('Aborted');
+  });
+
+  it('wraps a failing decrypt step in a DecryptionError', async () => {
+    const api = apiWithRawBytes(new Uint8Array([0xaa, 0xbb]));
+    // Web Crypto surfaces wrong-password / corrupt-ciphertext as a throw while
+    // the transform stream is consumed.
+    mockDecryptFile.mockReturnValue(
+      (async function* () {
+        throw new Error('unable to authenticate data');
+        // eslint-disable-next-line no-unreachable
+        yield Buffer.from([]);
+      })(),
+    );
+
+    const promise = loadPlaintextBytes(
+      api,
+      metadataOf({ encryption: { algorithm: 'AES_256_GCM' } }),
+      'wrong-password',
+      notAborted,
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(DecryptionError);
+    await expect(promise).rejects.toThrow(
+      'Invalid password or decryption failed',
+    );
+  });
+
+  it('does NOT mask a download/network failure on an encrypted file as a DecryptionError', async () => {
+    const networkError = new Error('Failed to fetch file: 404 Not Found');
+    const api = {
+      downloadObject: jest.fn().mockRejectedValue(networkError),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    const promise = loadPlaintextBytes(
+      api,
+      metadataOf({ encryption: { algorithm: 'AES_256_GCM' } }),
+      'secret',
+      notAborted,
+    );
+
+    await expect(promise).rejects.toBe(networkError);
+    await expect(promise).rejects.not.toBeInstanceOf(DecryptionError);
+    // The decrypt step is never reached when the download itself fails.
+    expect(mockDecryptFile).not.toHaveBeenCalled();
+  });
+
+  it('propagates an abort during the decrypt step as an AbortError, not a DecryptionError', async () => {
+    const controller = new AbortController();
+    const api = apiWithRawBytes(new Uint8Array([0xaa, 0xbb]));
+    // The decrypt stream observes an abort mid-flight.
+    mockDecryptFile.mockReturnValue(
+      (async function* () {
+        controller.abort();
+        yield Buffer.from([0x01]);
+      })(),
+    );
+
+    const promise = loadPlaintextBytes(
+      api,
+      metadataOf({ encryption: { algorithm: 'AES_256_GCM' } }),
+      'secret',
+      controller.signal,
+    );
+
+    await expect(promise).rejects.toThrow('Aborted');
+    await expect(promise).rejects.not.toBeInstanceOf(DecryptionError);
   });
 });

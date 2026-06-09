@@ -13,7 +13,7 @@ import {
   NetworkId as AutoDriveNetworkId,
 } from '@auto-drive/ui';
 import { sanitizeHTML } from '../../../utils/sanitizeHTML';
-import { loadPlaintextBytes } from './decode';
+import { loadPlaintextBytes, DecryptionError } from './decode';
 
 const PREVIEW_FETCH_TIMEOUT_MS = 15_000;
 
@@ -186,10 +186,13 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
           setLoading(false);
           return;
         }
-        // Encrypted files surface a dedicated message + inline password retry,
-        // since the most likely failure here is a wrong password.
-        if (isEncrypted) {
-          setDecryptionError('Invalid password or decryption failed');
+        // Only a genuine decryption failure (missing/wrong password, corrupt
+        // ciphertext) gets the dedicated message + inline password retry. Other
+        // failures on an encrypted file — network errors, 404s, download
+        // limits, post-decrypt decompression failures — must surface as a real
+        // error rather than blaming the password the user already got right.
+        if (error instanceof DecryptionError) {
+          setDecryptionError(error.message);
           setLoading(false);
           return;
         }

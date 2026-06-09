@@ -1,6 +1,22 @@
 import type { OffchainMetadata } from '@autonomys/auto-dag-data';
 import type { Api } from '../../../services/api';
 
+// Marks a failure that originated specifically from the client-side decryption
+// step (missing password, wrong password, corrupt ciphertext / failed auth
+// tag). Callers use this to distinguish a genuine password problem from
+// unrelated failures in the same pipeline — download/network errors, 404s,
+// download-limit responses, timeouts, or post-decrypt decompression failures —
+// which must NOT be reported to the user as "invalid password".
+export class DecryptionError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = 'DecryptionError';
+    if (options?.cause !== undefined) {
+      this.cause = options.cause;
+    }
+  }
+}
+
 // Collect a download stream into a single contiguous byte array, bailing out
 // promptly if the preview request has been superseded/aborted.
 export const collectStream = async (
@@ -71,15 +87,26 @@ export const loadPlaintextBytes = async (
   const encryption = metadata.uploadOptions?.encryption;
   if (encryption) {
     if (!password) {
-      throw new Error('Password is required to decrypt the file');
+      throw new DecryptionError('Password is required to decrypt the file');
     }
     const { decryptFile } = await import('@autonomys/auto-dag-data');
-    bytes = await runStreamTransform(
-      bytes,
-      (input) =>
-        decryptFile(input, password, { algorithm: encryption.algorithm }),
-      signal,
-    );
+    try {
+      bytes = await runStreamTransform(
+        bytes,
+        (input) =>
+          decryptFile(input, password, { algorithm: encryption.algorithm }),
+        signal,
+      );
+    } catch (err) {
+      // Don't swallow aborts (timeout / superseded preview) as a password
+      // failure — only genuine decrypt failures become DecryptionError.
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw err;
+      }
+      throw new DecryptionError('Invalid password or decryption failed', {
+        cause: err,
+      });
+    }
   }
 
   // Inflate only when the (now-decrypted) bytes actually carry a zlib header —
