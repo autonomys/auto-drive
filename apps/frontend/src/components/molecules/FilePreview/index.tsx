@@ -5,7 +5,6 @@ import {
   canDisplayDirectly,
   needsContentParsing,
   processFileData,
-  decryptFileData,
 } from '@autonomys/auto-dag-data';
 import { useNetwork } from '../../../contexts/network';
 import { NetworkId as AutoUtilsNetworkId } from '@autonomys/auto-utils';
@@ -14,12 +13,14 @@ import {
   NetworkId as AutoDriveNetworkId,
 } from '@auto-drive/ui';
 import { sanitizeHTML } from '../../../utils/sanitizeHTML';
+import { loadPlaintextBytes, DecryptionError } from './decode';
+
 const PREVIEW_FETCH_TIMEOUT_MS = 15_000;
 
-const MAX_PREVIEW_SIZE = BigInt(100 * 1024 * 1024); // 100 MB
+const MAX_PREVIEW_SIZE = BigInt(100 * 1024 * 1024); // 100 MB (preview cap)
 
 export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
-  const { network } = useNetwork();
+  const { network, api } = useNetwork();
   const [isFilePreview, setIsFilePreview] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +29,35 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   const [file, setFile] = useState<Blob | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Reset all preview state when the previewed object changes. The component is
+  // reused (not remounted) when navigating between files, so without this a
+  // stale decrypted blob — and a stale `isDecrypted` flag — would carry over to
+  // the next file. In particular `isDecrypted` left as `true` makes the
+  // no-password branch of `fetchFile` bail out early and render the previous
+  // file's decrypted content under the new file's metadata. Done during render
+  // (the React "adjust state on prop change" pattern) so the reset is visible to
+  // the `fetchFile` invocation triggered by the same metadata change.
+  const previewedCidRef = useRef(metadata.dataCid);
+  if (previewedCidRef.current !== metadata.dataCid) {
+    previewedCidRef.current = metadata.dataCid;
+    abortControllerRef.current?.abort();
+    // Drop the ref to the aborted controller. The superseded guards in
+    // `fetchFile` compare controller identity, so a lingering ref would make the
+    // abandoned request still look "current": its late AbortError would clear
+    // `isFilePreview`/`loading` for the new file, and a late success could
+    // commit the previous file's blob under the new metadata. This matters most
+    // when the new file takes an early-return path (fast-path render,
+    // not-previewable, encrypted-without-password) that never reassigns the ref.
+    abortControllerRef.current = null;
+    setIsFilePreview(false);
+    setLoading(true);
+    setError(null);
+    setDecryptionError(null);
+    setIsDecrypted(false);
+    setFile(null);
+    setTextContent(null);
+  }
 
   const safeSetTextContent = useCallback((text: string) => {
     setTextContent(sanitizeHTML(text));
@@ -44,6 +74,17 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
   }, [network]);
 
   const gatewayUrl = EXTERNAL_ROUTES.gatewayObjectDownload(metadata.dataCid);
+
+  const isEncrypted = !!metadata.uploadOptions?.encryption;
+  const isCompressed = !!metadata.uploadOptions?.compression;
+
+  // The public gateway serves compressed (non-encrypted) files with
+  // `Content-Encoding: deflate`. Browsers fail to decode that response
+  // (broken <img>/ERR_CONTENT_DECODING_FAILED), so we must not hand the raw
+  // gateway URL to the previewer for those files — it would render the broken
+  // response instead of the decompressed blob we build below. The "View on
+  // gateway" link is hidden along with it since it is broken in-browser too.
+  const previewGatewayUrl = isCompressed && !isEncrypted ? null : gatewayUrl;
 
   const isPreviewable = useMemo(() => {
     if (metadata.type !== 'file') return false;
@@ -63,16 +104,26 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         return;
       }
 
-      // If file is encrypted and no password provided, don't fetch
-      if (metadata.uploadOptions?.encryption && !password && !isDecrypted) {
+      // Encrypted files need a password before we can fetch + decrypt.
+      if (isEncrypted && !password) {
+        // Already decrypted: a state update (e.g. setIsDecrypted(true)) re-ran
+        // this effect with no password. Keep the existing decrypted preview
+        // rather than re-fetching, which would throw for lack of a password
+        // and surface a bogus "invalid password" error over a working preview.
+        if (isDecrypted) {
+          return;
+        }
+        // No password yet — show the password prompt instead of a preview.
         setIsFilePreview(false);
         setLoading(false);
         return;
       }
 
-      // For non-encrypted files that can be displayed directly,
-      // use gateway URL directly (no fetch needed)
-      if (!metadata.uploadOptions?.encryption && canDisplayDirectly(metadata)) {
+      // Fast path: plain, directly-renderable media. Let the browser stream it
+      // straight from the gateway URL (native range support, nothing buffered
+      // into JS memory). Safe because uncompressed files carry no
+      // `Content-Encoding`, so the gateway cannot mislabel the body.
+      if (!isEncrypted && !isCompressed && canDisplayDirectly(metadata)) {
         setIsFilePreview(true);
         setFile(null);
         setLoading(false);
@@ -84,7 +135,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      // Abort the preview fetch if the gateway doesn't respond quickly.
+      // Abort the preview fetch if retrieval doesn't complete quickly.
       // Non-cached archived files can take 20+ minutes to reconstruct
       // from DSN — showing a loading spinner that long is worse than
       // showing no preview at all.
@@ -97,58 +148,77 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       setLoading(true);
 
       try {
-        const response = await fetch(gatewayUrl, {
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          clearTimeout(timeoutId);
-          throw new Error(
-            `Failed to fetch file: ${response.status} ${response.statusText}`,
-          );
-        }
-        const blob = await response.blob();
+        // Everything that can't be rendered straight from a URL (compressed,
+        // encrypted, or text we need to read into memory) goes through one
+        // defensive path: fetch the raw stored bytes once and decode them
+        // client-side, independent of the gateway's wire encoding.
+        const bytes = await loadPlaintextBytes(
+          api,
+          metadata,
+          password,
+          controller.signal,
+        );
         clearTimeout(timeoutId);
-        setFile(blob);
-        // For text-based files, also read the content
-        if (needsContentParsing(metadata)) {
-          const text = await blob.text();
-          safeSetTextContent(text);
+        // A newer fetchFile call has superseded this one — don't touch state.
+        if (abortControllerRef.current !== controller) {
+          return;
         }
-        // Handle decryption if needed
-        if (metadata.uploadOptions?.encryption && password) {
-          try {
-            const encryptedFileData = {
-              dataArrayBuffer: await blob.arrayBuffer(),
-              name: metadata.name ?? '',
-              rawData: '',
-              uploadOptions: metadata.uploadOptions,
-              isEncrypted: true,
-            };
-            const decryptedFileData = await decryptFileData(
-              password,
-              encryptedFileData,
-            );
-            const decryptedBlob = await processFileData(decryptedFileData);
-            setFile(decryptedBlob);
-            setIsDecrypted(true);
-            setLoading(false);
-            return;
-          } catch {
-            setDecryptionError('Invalid password or decryption failed');
-            setLoading(false);
+
+        const blob = await processFileData({
+          dataArrayBuffer: bytes.buffer as ArrayBuffer,
+          name: metadata.name ?? '',
+          rawData: '',
+          uploadOptions: metadata.uploadOptions ?? {},
+          isEncrypted: false,
+        });
+        // Re-check after every await: a file switch (which resets the ref) or a
+        // newer fetch can land while `processFileData`/`blob.text()` are pending.
+        // Without re-checking, a late success would commit this (now stale) blob
+        // under the newly selected file's metadata.
+        if (abortControllerRef.current !== controller) {
+          return;
+        }
+
+        // Read parsed text before committing anything, so the post-await guard
+        // covers it too and we never commit a half-updated preview.
+        let parsedText: string | null = null;
+        if (needsContentParsing(metadata)) {
+          parsedText = await blob.text();
+          if (abortControllerRef.current !== controller) {
             return;
           }
+        }
+
+        setFile(blob);
+        if (isEncrypted) {
+          setIsDecrypted(true);
+        }
+        if (parsedText !== null) {
+          safeSetTextContent(parsedText);
         }
         setLoading(false);
       } catch (error) {
         clearTimeout(timeoutId);
+        // A newer fetchFile call has superseded this one — don't touch state.
+        // This must run regardless of the error type: aborting a superseded
+        // request can surface as a decode/network error rather than an
+        // AbortError, because the underlying download is not itself cancelable.
+        if (abortControllerRef.current !== controller) {
+          return;
+        }
         if (error instanceof DOMException && error.name === 'AbortError') {
-          if (abortControllerRef.current !== controller) {
-            // A newer fetchFile call replaced us — don't touch state.
-            return;
-          }
           // Our own timeout fired — hide the preview.
           setIsFilePreview(false);
+          setLoading(false);
+          return;
+        }
+        // Only a genuine decryption failure (missing/wrong password, corrupt
+        // ciphertext) gets the dedicated message + inline password retry. Other
+        // failures on an encrypted file — network errors, 404s, download
+        // limits, post-decrypt decompression failures — must surface as a real
+        // error rather than blaming the password the user already got right.
+        if (error instanceof DecryptionError) {
+          setDecryptionError(error.message);
           setLoading(false);
           return;
         }
@@ -159,7 +229,15 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
         setLoading(false);
       }
     },
-    [metadata, isDecrypted, isPreviewable, gatewayUrl, safeSetTextContent],
+    [
+      metadata,
+      isDecrypted,
+      isPreviewable,
+      isEncrypted,
+      isCompressed,
+      api,
+      safeSetTextContent,
+    ],
   );
 
   useEffect(() => {
@@ -180,7 +258,7 @@ export const FilePreview = ({ metadata }: { metadata: OffchainMetadata }) => {
       decryptionError={decryptionError}
       isFilePreview={isFilePreview}
       textContent={textContent}
-      gatewayUrl={gatewayUrl}
+      gatewayUrl={previewGatewayUrl}
       handleDecrypt={fetchFile}
     />
   );

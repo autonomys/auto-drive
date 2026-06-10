@@ -425,9 +425,10 @@ export const createApiService = ({
       password?: string;
       skipDecryption?: boolean;
       authMode?: 'auto' | 'anonymous' | 'session';
+      signal?: AbortSignal;
     },
   ): Promise<AsyncIterable<Buffer>> => {
-    const { password, skipDecryption, authMode = 'auto' } = options ?? {};
+    const { password, skipDecryption, authMode = 'auto', signal } = options ?? {};
     const session = await getAuthSession().catch(() => null);
 
     if (
@@ -461,7 +462,7 @@ export const createApiService = ({
     if (!skipDecryption) {
       const metadataRes = await api.sendAPIRequest(
         `/objects/${cid}/metadata`,
-        { method: 'GET' },
+        { method: 'GET', signal },
       );
       if (!metadataRes.ok) {
         throw new Error('Failed to retrieve file metadata');
@@ -471,7 +472,7 @@ export const createApiService = ({
 
     const response = await api.sendDownloadRequest(
       `/downloads/${cid}?ignoreEncoding=true`,
-      { method: 'GET' },
+      { method: 'GET', signal },
     );
     if (!response.ok) {
       let errorMsg: string;
