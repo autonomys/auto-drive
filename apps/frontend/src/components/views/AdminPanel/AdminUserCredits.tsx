@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNetwork } from '../../../contexts/network';
 import { formatBytes } from '../../../utils/number';
@@ -16,6 +16,7 @@ import { getBatchStatus, STATUS_CLASSES, STATUS_LABEL } from '../../../utils/cre
 import type { AdminUserCreditBatch } from '../../../services/api';
 import Link from 'next/link';
 import { shannonsToAi3 } from '@autonomys/auto-utils';
+import { RefundTxHashModal } from './RefundTxHashModal';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,7 +47,12 @@ export const AdminUserCredits = ({
 }) => {
   const { api, network } = useNetwork();
   const queryClient = useQueryClient();
-  const [refundingId, setRefundingId] = useState<string | null>(null);
+
+  // Ids of the batches the admin has ticked for a combined refund.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Batches currently being confirmed in the tx-hash modal (null = closed).
+  const [refundTarget, setRefundTarget] = useState<string[] | null>(null);
+  const [refundError, setRefundError] = useState<string | null>(null);
 
   const queryKey = ['adminUserCreditBatches', userPublicId];
 
@@ -56,29 +62,68 @@ export const AdminUserCredits = ({
     staleTime: 30_000,
   });
 
+  // A batch can be selected for refund as long as it has not been refunded
+  // yet. Several unused batches of the same account can be ticked and
+  // processed together with a single on-chain transaction hash.
+  const refundableIds = useMemo(
+    () => new Set(batches.filter((b) => b.refundedAt === null).map((b) => b.id)),
+    [batches],
+  );
+
+  const selectedRefundableIds = useMemo(
+    () => [...selectedIds].filter((id) => refundableIds.has(id)),
+    [selectedIds, refundableIds],
+  );
+
+  const allSelected =
+    refundableIds.size > 0 && selectedRefundableIds.length === refundableIds.size;
+
+  const toggleSelected = (batchId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(batchId)) {
+        next.delete(batchId);
+      } else {
+        next.add(batchId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? new Set() : new Set(refundableIds));
+  };
+
   const { mutate: refund, isPending: isRefunding } = useMutation<
-    void,
+    unknown,
     Error,
-    string
+    { batchIds: string[]; refundTxHash: string }
   >({
-    mutationFn: async (batchId: string) => {
-      setRefundingId(batchId);
-      return api.refundCreditBatch(batchId);
-    },
-    onSettled: () => {
-      setRefundingId(null);
-    },
+    mutationFn: ({ batchIds, refundTxHash }) =>
+      api.refundCreditBatches(batchIds, refundTxHash),
     onSuccess: () => {
+      setRefundTarget(null);
+      setRefundError(null);
+      setSelectedIds(new Set());
       void queryClient.invalidateQueries({ queryKey });
+      void queryClient.invalidateQueries({ queryKey: ['adminCreditBatches'] });
+    },
+    onError: (error) => {
+      setRefundError(error.message);
     },
   });
+
+  const openRefundModal = (batchIds: string[]) => {
+    setRefundError(null);
+    setRefundTarget(batchIds);
+  };
 
   return (
     <div className='space-y-6 p-6'>
       {/* Header */}
       <div className='flex items-center gap-3'>
         <Link
-          href={ROUTES.admin(network.id)}
+          href={ROUTES.adminCredits(network.id)}
           className='text-muted-foreground hover:text-foreground'
         >
           <ArrowLeft className='h-5 w-5' />
@@ -137,6 +182,34 @@ export const AdminUserCredits = ({
         </div>
       )}
 
+      {/* Combined refund action bar */}
+      {selectedRefundableIds.length > 0 && (
+        <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-700 dark:bg-amber-900/20'>
+          <p className='text-sm text-amber-800 dark:text-amber-300'>
+            {selectedRefundableIds.length}{' '}
+            {selectedRefundableIds.length === 1 ? 'batch' : 'batches'} selected
+            — one transaction hash will be recorded on all of them.
+          </p>
+          <div className='flex items-center gap-2'>
+            <Button
+              variant='outline'
+              onClick={() => setSelectedIds(new Set())}
+              className='text-xs'
+            >
+              Clear
+            </Button>
+            <Button
+              variant='primary'
+              onClick={() => openRefundModal(selectedRefundableIds)}
+              className='flex items-center gap-1 text-xs'
+            >
+              <AlertTriangle className='h-3 w-3' />
+              Mark {selectedRefundableIds.length} Refunded
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Batches table */}
       {batches.length === 0 && !isLoading ? (
         <p className='text-sm text-muted-foreground'>
@@ -147,6 +220,15 @@ export const AdminUserCredits = ({
           <table className='w-full text-sm'>
             <thead>
               <tr className='border-b border-border bg-muted/50 text-left text-xs text-muted-foreground'>
+                <th className='px-4 py-3 font-medium'>
+                  <input
+                    type='checkbox'
+                    aria-label='Select all refundable batches'
+                    checked={allSelected}
+                    disabled={refundableIds.size === 0}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 <th className='px-4 py-3 font-medium'>Date</th>
                 <th className='px-4 py-3 font-medium'>Status</th>
                 <th className='px-4 py-3 font-medium'>Expires</th>
@@ -164,12 +246,24 @@ export const AdminUserCredits = ({
                 const original = Number(BigInt(batch.uploadBytesOriginal));
                 const remaining = Number(BigInt(batch.uploadBytesRemaining));
                 const consumed = original - remaining;
+                const isRefundable = batch.refundedAt === null;
 
                 return (
                   <tr
                     key={batch.id}
                     className='border-b border-border last:border-0 hover:bg-muted/30'
                   >
+                    {/* Selection */}
+                    <td className='px-4 py-3'>
+                      <input
+                        type='checkbox'
+                        aria-label='Select batch for refund'
+                        checked={selectedIds.has(batch.id)}
+                        disabled={!isRefundable}
+                        onChange={() => toggleSelected(batch.id)}
+                      />
+                    </td>
+
                     {/* Date */}
                     <td className='px-4 py-3 text-xs'>
                       {formatDate(batch.purchasedAt)}
@@ -235,23 +329,30 @@ export const AdminUserCredits = ({
                       )}
                     </td>
 
-                    {/* Refund action */}
+                    {/* Refund action / record */}
                     <td className='px-4 py-3'>
                       {batch.refundedAt !== null ? (
-                        <span className='text-xs text-muted-foreground'>
-                          {formatDate(batch.refundedAt)}
-                        </span>
+                        <div className='flex flex-col gap-0.5 text-xs text-muted-foreground'>
+                          <span>{formatDate(batch.refundedAt)}</span>
+                          {batch.refundTxHash && (
+                            <span
+                              className='font-mono'
+                              title={batch.refundTxHash}
+                            >
+                              {batch.refundTxHash.slice(0, 10)}…
+                              {batch.refundTxHash.slice(-6)}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <Button
                           variant='outline'
-                          disabled={isRefunding && refundingId === batch.id}
-                          onClick={() => refund(batch.id)}
+                          disabled={isRefunding}
+                          onClick={() => openRefundModal([batch.id])}
                           className='flex items-center gap-1 text-xs'
                         >
                           <AlertTriangle className='h-3 w-3 text-orange-500' />
-                          {isRefunding && refundingId === batch.id
-                            ? 'Marking…'
-                            : 'Mark Refunded'}
+                          Mark Refunded
                         </Button>
                       )}
                     </td>
@@ -261,6 +362,24 @@ export const AdminUserCredits = ({
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Refund confirmation modal — the transaction hash is mandatory. */}
+      {refundTarget !== null && (
+        <RefundTxHashModal
+          batchCount={refundTarget.length}
+          isSubmitting={isRefunding}
+          errorMessage={refundError}
+          onConfirm={(refundTxHash) =>
+            refund({ batchIds: refundTarget, refundTxHash })
+          }
+          onClose={() => {
+            if (!isRefunding) {
+              setRefundTarget(null);
+              setRefundError(null);
+            }
+          }}
+        />
       )}
     </div>
   );

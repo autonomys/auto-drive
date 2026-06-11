@@ -24,6 +24,7 @@ type DBPurchasedCredit = {
   expires_at: Date
   expired: boolean
   refunded_at: Date | null
+  refund_tx_hash: string | null
   created_at: Date
   updated_at: Date
 }
@@ -40,6 +41,7 @@ const mapRow = (row: DBPurchasedCredit): PurchasedCredit => ({
   expiresAt: row.expires_at,
   expired: row.expired,
   refundedAt: row.refunded_at,
+  refundTxHash: row.refund_tx_hash,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 })
@@ -555,13 +557,15 @@ const createPurchasedCreditWithCapCheck = async (
 // ---------------------------------------------------------------------------
 // markAsRefunded
 // Admin action: zero out remaining bytes for a single purchased_credits row
-// and mark it as refunded.  Called after an admin has processed an
-// out-of-band refund (e.g. manual AI3 transfer back to the user's wallet).
+// and mark it as refunded, recording the on-chain transaction hash of the
+// AI3 refund transfer.  Called after an admin has processed an out-of-band
+// refund (manual AI3 transfer back to the user's wallet).
 // Returns the updated row so the caller can echo it back to the client.
 // ---------------------------------------------------------------------------
 
 const markAsRefunded = async (
   id: string,
+  refundTxHash: string,
 ): Promise<{ found: boolean; row: PurchasedCredit | null }> => {
   const db = await getDatabase()
   const result = await db.query<DBPurchasedCredit>(
@@ -569,11 +573,12 @@ const markAsRefunded = async (
      SET upload_bytes_remaining   = 0,
          download_bytes_remaining = 0,
          refunded_at              = NOW(),
+         refund_tx_hash           = $2,
          updated_at               = NOW()
      WHERE id = $1
        AND refunded_at IS NULL
      RETURNING *`,
-    [id],
+    [id, refundTxHash],
   )
 
   if (result.rows[0]) {
@@ -585,6 +590,98 @@ const markAsRefunded = async (
     [id],
   )
   return { found: exists.rows.length > 0, row: null }
+}
+
+// ---------------------------------------------------------------------------
+// markManyAsRefunded
+// Admin action: batch variant of markAsRefunded. Marks every given batch as
+// refunded in a single transaction, recording the same on-chain refund
+// transaction hash on each row (one AI3 transfer can cover several batches).
+// All-or-nothing on existence: if any id does not exist the transaction is
+// rolled back and missingIds is returned so the caller can 404 precisely.
+// All batches must belong to the SAME account — one on-chain AI3 transfer
+// goes to a single wallet, so a combined refund spanning several accounts
+// is always a mistake. If the ids span multiple accounts the transaction is
+// rolled back and accountIds lists the offenders so the caller can 400.
+// Rows that are already refunded are skipped (idempotent), mirroring the
+// single-row behaviour.
+// ---------------------------------------------------------------------------
+
+export type BatchRefundResult = {
+  missingIds: string[]
+  /** Distinct account ids covered by the requested batches. */
+  accountIds: string[]
+  refundedRows: PurchasedCredit[]
+  alreadyRefundedIds: string[]
+}
+
+const markManyAsRefunded = async (
+  ids: string[],
+  refundTxHash: string,
+): Promise<BatchRefundResult> => {
+  const db = await getDatabase()
+  const client = await db.connect()
+
+  try {
+    await client.query('BEGIN')
+
+    const existing = await client.query<{
+      id: string
+      account_id: string
+      refunded_at: Date | null
+    }>(
+      `SELECT id, account_id, refunded_at
+       FROM purchased_credits
+       WHERE id = ANY($1::uuid[])
+       FOR UPDATE`,
+      [ids],
+    )
+
+    const existingIds = new Set(existing.rows.map((r) => r.id))
+    const missingIds = ids.filter((id) => !existingIds.has(id))
+    const accountIds = [...new Set(existing.rows.map((r) => r.account_id))]
+
+    if (missingIds.length > 0) {
+      await client.query('ROLLBACK')
+      return { missingIds, accountIds, refundedRows: [], alreadyRefundedIds: [] }
+    }
+
+    if (accountIds.length > 1) {
+      await client.query('ROLLBACK')
+      return { missingIds: [], accountIds, refundedRows: [], alreadyRefundedIds: [] }
+    }
+
+    const alreadyRefundedIds = existing.rows
+      .filter((r) => r.refunded_at !== null)
+      .map((r) => r.id)
+
+    const updated = await client.query<DBPurchasedCredit>(
+      `UPDATE purchased_credits
+       SET upload_bytes_remaining   = 0,
+           download_bytes_remaining = 0,
+           refunded_at              = NOW(),
+           refund_tx_hash           = $2,
+           updated_at               = NOW()
+       WHERE id = ANY($1::uuid[])
+         AND refunded_at IS NULL
+       RETURNING *`,
+      [ids, refundTxHash],
+    )
+
+    await client.query('COMMIT')
+    return {
+      missingIds: [],
+      accountIds,
+      refundedRows: updated.rows.map(mapRow),
+      alreadyRefundedIds,
+    }
+  } catch (error) {
+    await client.query('ROLLBACK')
+    logger.error(error, 'markManyAsRefunded: transaction failed, rolled back')
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -684,5 +781,6 @@ export const purchasedCreditsRepository = {
   getByAccountId,
   getAllWithUserPublicId,
   markAsRefunded,
+  markManyAsRefunded,
   getByUserPublicId,
 }

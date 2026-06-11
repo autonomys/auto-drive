@@ -2,7 +2,11 @@ import { jest } from '@jest/globals'
 import { CreditsUseCases } from '../../../src/core/users/credits.js'
 import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
-import { ForbiddenError } from '../../../src/errors/index.js'
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../../src/errors/index.js'
 import {
   type Account,
   type PurchasedCredit,
@@ -66,6 +70,7 @@ const makeCreditRow = (
   expiresAt: FUTURE_EXPIRY,
   expired: false,
   refundedAt: null,
+  refundTxHash: null,
   createdAt: now,
   updatedAt: now,
   ...overrides,
@@ -367,6 +372,275 @@ describe('CreditsUseCases', () => {
       expect(
         purchasedCreditsRepository.getExpiringCreditsAggregate,
       ).toHaveBeenCalledWith(30)
+    })
+  })
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // refundBatch
+  // ──────────────────────────────────────────────────────────────────────────
+
+  const VALID_TX_HASH = `0x${'a'.repeat(64)}`
+
+  describe('refundBatch', () => {
+    it('returns 403 ForbiddenError for non-admin user', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markAsRefunded')
+        .mockResolvedValue({ found: true, row: makeCreditRow() })
+
+      const result = await CreditsUseCases.refundBatch(
+        nonAdminUser,
+        'credit-1',
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 BadRequestError when no tx hash is provided', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markAsRefunded')
+        .mockResolvedValue({ found: true, row: makeCreditRow() })
+
+      for (const missing of [undefined, null, '', '   ']) {
+        const result = await CreditsUseCases.refundBatch(
+          adminUser,
+          'credit-1',
+          missing,
+        )
+
+        expect(result.isErr()).toBe(true)
+        expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+      }
+
+      // The batch must never be marked as refunded without a tx hash.
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 BadRequestError for malformed tx hashes', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markAsRefunded')
+        .mockResolvedValue({ found: true, row: makeCreditRow() })
+
+      const malformed = [
+        'not-a-hash',
+        '0x1234', // too short
+        `0x${'a'.repeat(63)}`, // 63 hex chars
+        `0x${'a'.repeat(65)}`, // 65 hex chars
+        `0x${'g'.repeat(64)}`, // non-hex characters
+        `${'a'.repeat(64)}`, // missing 0x prefix
+        12345, // not a string
+      ]
+
+      for (const hash of malformed) {
+        const result = await CreditsUseCases.refundBatch(
+          adminUser,
+          'credit-1',
+          hash,
+        )
+
+        expect(result.isErr()).toBe(true)
+        expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+      }
+
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('marks the batch as refunded with the trimmed tx hash', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markAsRefunded')
+        .mockResolvedValue({
+          found: true,
+          row: makeCreditRow({
+            refundedAt: now,
+            refundTxHash: VALID_TX_HASH,
+          }),
+        })
+
+      const result = await CreditsUseCases.refundBatch(
+        adminUser,
+        'credit-1',
+        `  ${VALID_TX_HASH}  `,
+      )
+
+      expect(result.isOk()).toBe(true)
+      expect(markSpy).toHaveBeenCalledWith('credit-1', VALID_TX_HASH)
+    })
+
+    it('returns 404 NotFoundError when the batch does not exist', async () => {
+      jest
+        .spyOn(purchasedCreditsRepository, 'markAsRefunded')
+        .mockResolvedValue({ found: false, row: null })
+
+      const result = await CreditsUseCases.refundBatch(
+        adminUser,
+        'missing-id',
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(NotFoundError)
+    })
+
+    it('is a no-op returning ok() when the batch is already refunded', async () => {
+      jest
+        .spyOn(purchasedCreditsRepository, 'markAsRefunded')
+        .mockResolvedValue({ found: true, row: null })
+
+      const result = await CreditsUseCases.refundBatch(
+        adminUser,
+        'credit-1',
+        VALID_TX_HASH,
+      )
+
+      expect(result.isOk()).toBe(true)
+    })
+  })
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // refundBatches
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('refundBatches', () => {
+    it('returns 403 ForbiddenError for non-admin user', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-id'],
+          refundedRows: [makeCreditRow()],
+          alreadyRefundedIds: [],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        nonAdminUser,
+        ['credit-1'],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 BadRequestError for an empty or invalid batchIds payload', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-id'],
+          refundedRows: [],
+          alreadyRefundedIds: [],
+        })
+
+      for (const invalid of [undefined, null, [], ['credit-1', ''], 'credit-1', [42]]) {
+        const result = await CreditsUseCases.refundBatches(
+          adminUser,
+          invalid,
+          VALID_TX_HASH,
+        )
+
+        expect(result.isErr()).toBe(true)
+        expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+      }
+
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 BadRequestError when no tx hash is provided and updates nothing', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-id'],
+          refundedRows: [],
+          alreadyRefundedIds: [],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        ['credit-1', 'credit-2'],
+        undefined,
+      )
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 BadRequestError when batches span multiple accounts', async () => {
+      jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-a', 'account-b'],
+          refundedRows: [],
+          alreadyRefundedIds: [],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        ['credit-1', 'credit-2'],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(BadRequestError)
+      expect(error.message).toContain('same account')
+    })
+
+    it('returns 404 NotFoundError listing missing ids', async () => {
+      jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: ['missing-1'],
+          accountIds: ['account-id'],
+          refundedRows: [],
+          alreadyRefundedIds: [],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        ['credit-1', 'missing-1'],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(NotFoundError)
+      expect(error.message).toContain('missing-1')
+    })
+
+    it('refunds several batches with one tx hash and de-duplicates ids', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-id'],
+          refundedRows: [
+            makeCreditRow({ id: 'credit-1', refundedAt: now }),
+            makeCreditRow({ id: 'credit-2', refundedAt: now }),
+          ],
+          alreadyRefundedIds: ['credit-3'],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        ['credit-1', 'credit-2', 'credit-2', 'credit-3'],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isOk()).toBe(true)
+      expect(result._unsafeUnwrap()).toEqual({
+        refundedCount: 2,
+        alreadyRefundedCount: 1,
+      })
+      expect(markSpy).toHaveBeenCalledWith(
+        ['credit-1', 'credit-2', 'credit-3'],
+        VALID_TX_HASH,
+      )
     })
   })
 })
