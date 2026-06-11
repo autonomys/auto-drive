@@ -599,17 +599,20 @@ const markAsRefunded = async (
 // transaction hash on each row (one AI3 transfer can cover several batches).
 // All-or-nothing on existence: if any id does not exist the transaction is
 // rolled back and missingIds is returned so the caller can 404 precisely.
-// All batches must belong to the SAME account — one on-chain AI3 transfer
-// goes to a single wallet, so a combined refund spanning several accounts
-// is always a mistake. If the ids span multiple accounts the transaction is
-// rolled back and accountIds lists the offenders so the caller can 400.
-// Rows that are already refunded are skipped (idempotent), mirroring the
-// single-row behaviour.
+// All batches that are actually going to be refunded must belong to the
+// SAME account — one on-chain AI3 transfer goes to a single wallet, so a
+// combined refund spanning several accounts is always a mistake. Rows that
+// are already refunded are skipped (idempotent, mirroring the single-row
+// behaviour) and keep their original tx hash, so they are excluded from the
+// account check — a retry where everything is already refunded succeeds
+// regardless of accounts. If the still-pending rows span multiple accounts
+// the transaction is rolled back and accountIds lists the offenders so the
+// caller can 400.
 // ---------------------------------------------------------------------------
 
 export type BatchRefundResult = {
   missingIds: string[]
-  /** Distinct account ids covered by the requested batches. */
+  /** Distinct account ids across the batches still pending refund. */
   accountIds: string[]
   refundedRows: PurchasedCredit[]
   alreadyRefundedIds: string[]
@@ -643,7 +646,12 @@ const markManyAsRefunded = async (
 
     const existingIds = new Set(existing.rows.map((r) => r.id))
     const missingIds = ids.filter((id) => !existingIds.has(id))
-    const accountIds = [...new Set(existing.rows.map((r) => r.account_id))]
+
+    // Only rows still pending a refund are updated (and get the tx hash);
+    // already-refunded rows are idempotent no-ops, so the single-account
+    // constraint applies to the pending rows alone.
+    const pendingRows = existing.rows.filter((r) => r.refunded_at === null)
+    const accountIds = [...new Set(pendingRows.map((r) => r.account_id))]
 
     if (missingIds.length > 0) {
       await client.query('ROLLBACK')

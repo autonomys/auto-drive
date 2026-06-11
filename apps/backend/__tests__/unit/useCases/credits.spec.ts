@@ -591,6 +591,33 @@ describe('CreditsUseCases', () => {
       expect(error.message).toContain('same account')
     })
 
+    it('succeeds idempotently when every batch is already refunded', async () => {
+      // Already-refunded rows are excluded from the single-account check
+      // (they keep their original tx hash), so a retry where everything is
+      // already refunded returns ok — even across accounts (accountIds only
+      // reflects rows still pending refund, here none).
+      jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: [],
+          refundedRows: [],
+          alreadyRefundedIds: ['credit-1', 'credit-2'],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        ['credit-1', 'credit-2'],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isOk()).toBe(true)
+      expect(result._unsafeUnwrap()).toEqual({
+        refundedCount: 0,
+        alreadyRefundedCount: 2,
+      })
+    })
+
     it('returns 404 NotFoundError listing missing ids', async () => {
       jest
         .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')

@@ -268,11 +268,13 @@ const refundBatch = async (
 // operation, recording the same on-chain refund transaction hash on each
 // (one AI3 transfer can cover multiple batches of the same account).
 // All-or-nothing: if any batch id does not exist nothing is updated and a
-// 404 listing the missing ids is returned. All batches must belong to the
-// same account — a combined refund spanning several accounts is rejected
-// with 400 and nothing is updated, since one on-chain transfer can only go
-// to a single wallet. Already-refunded batches are skipped (idempotent),
-// mirroring refundBatch.
+// 404 listing the missing ids is returned. All batches still pending a
+// refund must belong to the same account — a combined refund spanning
+// several accounts is rejected with 400 and nothing is updated, since one
+// on-chain transfer can only go to a single wallet. Already-refunded
+// batches are skipped (idempotent, mirroring refundBatch) and are excluded
+// from the account check, so retries succeed even if the already-refunded
+// rows belong to different accounts.
 // Returns 403 for non-admin callers, 400 if the transaction hash is missing
 // or malformed, or if no batch ids are provided.
 // ---------------------------------------------------------------------------
