@@ -133,17 +133,23 @@ const OverCapPanel = ({
 };
 
 // ---------------------------------------------------------------------------
-// Per-user batch group
-// Batches are grouped by account and rendered as a single collapsed summary
-// line (batch count, purchased / remaining / expired storage). The admin can
-// toggle each account open to see the full batch list, and immediately spot
-// accounts with refundable (expired, unused, not-yet-refunded) batches to
-// process together on the per-user refund screen.
+// Per-account batch group
+// Batches are grouped by accountId — credits belong to the shared
+// organization account, and several users of the same organization can each
+// purchase credits for it. Grouping by user would split one account into
+// multiple summary lines with incorrect totals.
+// Each group renders as a single collapsed summary line (batch count,
+// purchased / remaining / expired storage). The admin can toggle each
+// account open to see the full batch list (with the purchasing user per
+// row) and spot accounts with refundable (expired, unused, not-yet-refunded)
+// batches to process together on the per-user refund screen.
 // ---------------------------------------------------------------------------
 
-type UserBatchGroup = {
-  userPublicId: string;
+type AccountBatchGroup = {
+  accountId: string;
   batches: AdminCreditBatch[];
+  /** Distinct publicIds of the users who purchased for this account. */
+  userPublicIds: string[];
   refundableCount: number;
   refundedCount: number;
   /** Σ upload_bytes_original across all batches. */
@@ -154,36 +160,37 @@ type UserBatchGroup = {
   totalExpiredUnused: number;
 };
 
-const groupBatchesByUser = (
+const groupBatchesByAccount = (
   batches: AdminCreditBatch[],
-): UserBatchGroup[] => {
+): AccountBatchGroup[] => {
   const groups = new Map<string, AdminCreditBatch[]>();
   for (const batch of batches) {
-    const existing = groups.get(batch.userPublicId);
+    const existing = groups.get(batch.accountId);
     if (existing) {
       existing.push(batch);
     } else {
-      groups.set(batch.userPublicId, [batch]);
+      groups.set(batch.accountId, [batch]);
     }
   }
 
-  return [...groups.entries()].map(([userPublicId, userBatches]) => ({
-    userPublicId,
-    batches: userBatches,
-    refundableCount: userBatches.filter(
+  return [...groups.entries()].map(([accountId, accountBatches]) => ({
+    accountId,
+    batches: accountBatches,
+    userPublicIds: [...new Set(accountBatches.map((b) => b.userPublicId))],
+    refundableCount: accountBatches.filter(
       (b) => b.expired && b.refundedAt === null,
     ).length,
-    refundedCount: userBatches.filter((b) => b.refundedAt !== null).length,
-    totalPurchased: userBatches.reduce(
+    refundedCount: accountBatches.filter((b) => b.refundedAt !== null).length,
+    totalPurchased: accountBatches.reduce(
       (s, b) => s + Number(BigInt(b.uploadBytesOriginal)),
       0,
     ),
-    totalRemaining: userBatches.reduce(
+    totalRemaining: accountBatches.reduce(
       (s, b) =>
         s + (b.expired ? 0 : Number(BigInt(b.uploadBytesRemaining))),
       0,
     ),
-    totalExpiredUnused: userBatches.reduce(
+    totalExpiredUnused: accountBatches.reduce(
       (s, b) =>
         s + (b.expired ? Number(BigInt(b.uploadBytesRemaining)) : 0),
       0,
@@ -191,13 +198,13 @@ const groupBatchesByUser = (
   }));
 };
 
-const UserBatchGroupSection = ({
+const AccountBatchGroupSection = ({
   group,
   networkId,
   isExpanded,
   onToggle,
 }: {
-  group: UserBatchGroup;
+  group: AccountBatchGroup;
   networkId: NetworkId;
   isExpanded: boolean;
   onToggle: () => void;
@@ -226,16 +233,18 @@ const UserBatchGroupSection = ({
           )}
         </button>
         <Link
-          href={ROUTES.adminUserCredits(networkId, group.userPublicId)}
+          href={ROUTES.adminOrganization(networkId, group.accountId)}
           className='font-mono text-xs text-blue-500 hover:underline'
-          title={group.userPublicId}
+          title={`Account ${group.accountId} — uploads and downloads`}
         >
-          {group.userPublicId.slice(0, 20)}…
+          {group.accountId.slice(0, 20)}…
         </Link>
         <span className='text-xs text-muted-foreground'>
           {group.batches.length}{' '}
-          {group.batches.length === 1 ? 'batch' : 'batches'} ·{' '}
-          {formatBytes(group.totalPurchased, 1)} purchased ·{' '}
+          {group.batches.length === 1 ? 'batch' : 'batches'}
+          {group.userPublicIds.length > 1 &&
+            ` (${group.userPublicIds.length} users)`}{' '}
+          · {formatBytes(group.totalPurchased, 1)} purchased ·{' '}
           {formatBytes(group.totalRemaining, 1)} remaining ·{' '}
           <span
             className={group.totalExpiredUnused > 0 ? 'text-red-500' : ''}
@@ -251,19 +260,18 @@ const UserBatchGroupSection = ({
         )}
       </div>
       <div className='flex items-center gap-3'>
-        <Link
-          href={ROUTES.adminOrganization(networkId, group.batches[0].accountId)}
-          className='text-xs text-blue-500 hover:underline'
-          title={`View account ${group.batches[0].accountId} — uploads and downloads`}
-        >
-          Account →
-        </Link>
-        <Link
-          href={ROUTES.adminUserCredits(networkId, group.userPublicId)}
-          className='text-xs text-blue-500 hover:underline'
-        >
-          {group.refundableCount > 0 ? 'Process refunds →' : 'View details →'}
-        </Link>
+        {group.userPublicIds.length === 1 ? (
+          <Link
+            href={ROUTES.adminUserCredits(networkId, group.userPublicIds[0])}
+            className='text-xs text-blue-500 hover:underline'
+          >
+            {group.refundableCount > 0 ? 'Process refunds →' : 'View details →'}
+          </Link>
+        ) : (
+          <span className='text-xs text-muted-foreground'>
+            Expand to pick a user
+          </span>
+        )}
       </div>
     </div>
 
@@ -273,6 +281,7 @@ const UserBatchGroupSection = ({
       <table className='w-full text-sm'>
         <thead>
           <tr className='border-b border-border text-left text-xs text-muted-foreground'>
+            <th className='px-4 py-2 font-medium'>User</th>
             <th className='px-4 py-2 font-medium'>Status</th>
             <th className='px-4 py-2 font-medium'>Purchased</th>
             <th className='px-4 py-2 font-medium'>Original</th>
@@ -297,6 +306,18 @@ const UserBatchGroupSection = ({
                 key={batch.id}
                 className='border-b border-border last:border-0'
               >
+                <td className='px-4 py-2 font-mono text-xs'>
+                  <Link
+                    href={ROUTES.adminUserCredits(
+                      networkId,
+                      batch.userPublicId,
+                    )}
+                    className='text-blue-500 hover:underline'
+                    title={batch.userPublicId}
+                  >
+                    {batch.userPublicId.slice(0, 12)}…
+                  </Link>
+                </td>
                 <td className='px-4 py-2'>
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}
@@ -374,17 +395,17 @@ export const AdminCredits = () => {
 
   // Accounts whose full batch list is currently expanded. Collapsed by
   // default so the screen shows one summary line per account.
-  const [expandedUserIds, setExpandedUserIds] = useState<Set<string>>(
+  const [expandedAccountIds, setExpandedAccountIds] = useState<Set<string>>(
     new Set(),
   );
 
-  const toggleExpanded = (userPublicId: string) => {
-    setExpandedUserIds((prev) => {
+  const toggleExpanded = (accountId: string) => {
+    setExpandedAccountIds((prev) => {
       const next = new Set(prev);
-      if (next.has(userPublicId)) {
-        next.delete(userPublicId);
+      if (next.has(accountId)) {
+        next.delete(accountId);
       } else {
-        next.add(userPublicId);
+        next.add(accountId);
       }
       return next;
     });
@@ -425,7 +446,7 @@ export const AdminCredits = () => {
     },
   });
 
-  const groups = useMemo(() => groupBatchesByUser(batches), [batches]);
+  const groups = useMemo(() => groupBatchesByAccount(batches), [batches]);
   const awaitingRefund = useMemo(
     () => groups.reduce((s, g) => s + g.refundableCount, 0),
     [groups],
@@ -512,15 +533,15 @@ export const AdminCredits = () => {
             <button
               type='button'
               onClick={() =>
-                setExpandedUserIds(
-                  expandedUserIds.size === groups.length
+                setExpandedAccountIds(
+                  expandedAccountIds.size === groups.length
                     ? new Set()
-                    : new Set(groups.map((g) => g.userPublicId)),
+                    : new Set(groups.map((g) => g.accountId)),
                 )
               }
               className='ml-auto text-xs text-blue-500 hover:underline'
             >
-              {expandedUserIds.size === groups.length
+              {expandedAccountIds.size === groups.length
                 ? 'Collapse all'
                 : 'Expand all'}
             </button>
@@ -535,12 +556,12 @@ export const AdminCredits = () => {
         ) : (
           <div className='space-y-3'>
             {groups.map((group) => (
-              <UserBatchGroupSection
-                key={group.userPublicId}
+              <AccountBatchGroupSection
+                key={group.accountId}
                 group={group}
                 networkId={network.id}
-                isExpanded={expandedUserIds.has(group.userPublicId)}
-                onToggle={() => toggleExpanded(group.userPublicId)}
+                isExpanded={expandedAccountIds.has(group.accountId)}
+                onToggle={() => toggleExpanded(group.accountId)}
               />
             ))}
           </div>
