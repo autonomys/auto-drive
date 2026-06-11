@@ -10,6 +10,7 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { Button, ROUTES } from '@auto-drive/ui';
 import { getBatchStatus, STATUS_CLASSES, STATUS_LABEL } from '../../../utils/credits';
@@ -61,6 +62,10 @@ export const AdminUserCredits = ({
     queryFn: () => api.getUserCreditBatches(userPublicId),
     staleTime: 30_000,
   });
+
+  // All batches on this page belong to the same account; its id links to the
+  // existing account (organization) page with the uploads/downloads history.
+  const accountId = batches[0]?.accountId ?? null;
 
   // A batch can be selected for refund as long as it has not been refunded
   // yet. Several unused batches of the same account can be ticked and
@@ -136,6 +141,16 @@ export const AdminUserCredits = ({
           >
             {userPublicId}
           </p>
+          {accountId && (
+            <Link
+              href={ROUTES.adminOrganization(network.id, accountId)}
+              className='mt-1 inline-flex items-center gap-1 font-mono text-xs text-blue-500 hover:underline'
+              title={`View account ${accountId} — uploads and downloads`}
+            >
+              Account: {accountId}
+              <ExternalLink className='h-3 w-3' />
+            </Link>
+          )}
         </div>
         {isLoading && (
           <RefreshCw className='ml-auto h-4 w-4 animate-spin text-muted-foreground' />

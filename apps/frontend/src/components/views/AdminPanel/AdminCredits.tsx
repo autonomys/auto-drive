@@ -250,12 +250,21 @@ const UserBatchGroupSection = ({
           </span>
         )}
       </div>
-      <Link
-        href={ROUTES.adminUserCredits(networkId, group.userPublicId)}
-        className='text-xs text-blue-500 hover:underline'
-      >
-        {group.refundableCount > 0 ? 'Process refunds →' : 'View details →'}
-      </Link>
+      <div className='flex items-center gap-3'>
+        <Link
+          href={ROUTES.adminOrganization(networkId, group.batches[0].accountId)}
+          className='text-xs text-blue-500 hover:underline'
+          title={`View account ${group.batches[0].accountId} — uploads and downloads`}
+        >
+          Account →
+        </Link>
+        <Link
+          href={ROUTES.adminUserCredits(networkId, group.userPublicId)}
+          className='text-xs text-blue-500 hover:underline'
+        >
+          {group.refundableCount > 0 ? 'Process refunds →' : 'View details →'}
+        </Link>
+      </div>
     </div>
 
     {/* Batch rows — hidden until the admin expands the account. */}
