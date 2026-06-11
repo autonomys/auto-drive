@@ -6,7 +6,7 @@ node_modules/
 # Compiled output
 dist/
 build/
-**/.yarn/install-state.gz
+.yarn/install-state.gz
 
 # Logs
 *.log
