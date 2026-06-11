@@ -625,6 +625,9 @@ const markManyAsRefunded = async (
   try {
     await client.query('BEGIN')
 
+    // ORDER BY id makes the row locks acquire in a deterministic order so
+    // two overlapping combined-refund transactions cannot deadlock by
+    // locking the same rows in opposite orders.
     const existing = await client.query<{
       id: string
       account_id: string
@@ -633,6 +636,7 @@ const markManyAsRefunded = async (
       `SELECT id, account_id, refunded_at
        FROM purchased_credits
        WHERE id = ANY($1::uuid[])
+       ORDER BY id
        FOR UPDATE`,
       [ids],
     )
