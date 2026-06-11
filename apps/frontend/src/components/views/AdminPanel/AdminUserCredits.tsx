@@ -63,13 +63,22 @@ export const AdminUserCredits = ({
     staleTime: 30_000,
   });
 
-  // All batches on this page belong to the same account; its id links to the
-  // existing account (organization) page with the uploads/downloads history.
-  const accountId = batches[0]?.accountId ?? null;
+  // Batches are loaded by userPublicId, so they can span more than one
+  // account when the user purchased credits under different org accounts
+  // over time. Each distinct account links to the existing account
+  // (organization) page with the uploads/downloads history.
+  const accountIds = useMemo(
+    () => [...new Set(batches.map((b) => b.accountId))],
+    [batches],
+  );
+  const hasMultipleAccounts = accountIds.length > 1;
 
   // A batch can be selected for refund as long as it has not been refunded
-  // yet. Several unused batches of the same account can be ticked and
-  // processed together with a single on-chain transaction hash.
+  // yet. Several unused batches of the SAME account can be ticked and
+  // processed together with a single on-chain transaction hash — the
+  // backend rejects combined refunds that span accounts, so the first
+  // selected batch anchors the account and batches of other accounts are
+  // disabled until the selection is cleared.
   const refundableIds = useMemo(
     () => new Set(batches.filter((b) => b.refundedAt === null).map((b) => b.id)),
     [batches],
@@ -80,8 +89,38 @@ export const AdminUserCredits = ({
     [selectedIds, refundableIds],
   );
 
+  // Account of the current selection (all selected batches share it).
+  const selectedAccountId = useMemo(() => {
+    const firstSelected = batches.find((b) => selectedIds.has(b.id));
+    return firstSelected?.accountId ?? null;
+  }, [batches, selectedIds]);
+
+  const isSelectable = (batch: AdminUserCreditBatch): boolean =>
+    batch.refundedAt === null &&
+    (selectedAccountId === null || batch.accountId === selectedAccountId);
+
+  // Select-all targets a single account: the selection's account, or — when
+  // nothing is selected — the first account that has refundable batches.
+  const selectAllAccountId = useMemo(() => {
+    if (selectedAccountId) return selectedAccountId;
+    return (
+      batches.find((b) => refundableIds.has(b.id))?.accountId ?? null
+    );
+  }, [selectedAccountId, batches, refundableIds]);
+
+  const selectAllTargetIds = useMemo(
+    () =>
+      batches
+        .filter(
+          (b) => refundableIds.has(b.id) && b.accountId === selectAllAccountId,
+        )
+        .map((b) => b.id),
+    [batches, refundableIds, selectAllAccountId],
+  );
+
   const allSelected =
-    refundableIds.size > 0 && selectedRefundableIds.length === refundableIds.size;
+    selectAllTargetIds.length > 0 &&
+    selectAllTargetIds.every((id) => selectedIds.has(id));
 
   const toggleSelected = (batchId: string) => {
     setSelectedIds((prev) => {
@@ -96,7 +135,7 @@ export const AdminUserCredits = ({
   };
 
   const toggleSelectAll = () => {
-    setSelectedIds(allSelected ? new Set() : new Set(refundableIds));
+    setSelectedIds(allSelected ? new Set() : new Set(selectAllTargetIds));
   };
 
   const { mutate: refund, isPending: isRefunding } = useMutation<
@@ -141,16 +180,17 @@ export const AdminUserCredits = ({
           >
             {userPublicId}
           </p>
-          {accountId && (
+          {accountIds.map((accountId) => (
             <Link
+              key={accountId}
               href={ROUTES.adminOrganization(network.id, accountId)}
-              className='mt-1 inline-flex items-center gap-1 font-mono text-xs text-blue-500 hover:underline'
+              className='mt-1 flex w-fit items-center gap-1 font-mono text-xs text-blue-500 hover:underline'
               title={`View account ${accountId} — uploads and downloads`}
             >
               Account: {accountId}
               <ExternalLink className='h-3 w-3' />
             </Link>
-          )}
+          ))}
         </div>
         {isLoading && (
           <RefreshCw className='ml-auto h-4 w-4 animate-spin text-muted-foreground' />
@@ -203,6 +243,12 @@ export const AdminUserCredits = ({
           <p className='text-sm text-amber-800 dark:text-amber-300'>
             {selectedRefundableIds.length}{' '}
             {selectedRefundableIds.length === 1 ? 'batch' : 'batches'} selected
+            {hasMultipleAccounts && selectedAccountId && (
+              <span className='font-mono'>
+                {' '}
+                (account {selectedAccountId.slice(0, 8)}…)
+              </span>
+            )}{' '}
             — one transaction hash will be recorded on all of them.
           </p>
           <div className='flex items-center gap-2'>
@@ -238,12 +284,20 @@ export const AdminUserCredits = ({
                 <th className='px-4 py-3 font-medium'>
                   <input
                     type='checkbox'
-                    aria-label='Select all refundable batches'
+                    aria-label='Select all refundable batches of the account'
+                    title={
+                      hasMultipleAccounts && selectAllAccountId
+                        ? `Selects refundable batches of account ${selectAllAccountId} only — combined refunds cannot span accounts`
+                        : undefined
+                    }
                     checked={allSelected}
-                    disabled={refundableIds.size === 0}
+                    disabled={selectAllTargetIds.length === 0}
                     onChange={toggleSelectAll}
                   />
                 </th>
+                {hasMultipleAccounts && (
+                  <th className='px-4 py-3 font-medium'>Account</th>
+                )}
                 <th className='px-4 py-3 font-medium'>Date</th>
                 <th className='px-4 py-3 font-medium'>Status</th>
                 <th className='px-4 py-3 font-medium'>Expires</th>
@@ -262,6 +316,8 @@ export const AdminUserCredits = ({
                 const remaining = Number(BigInt(batch.uploadBytesRemaining));
                 const consumed = original - remaining;
                 const isRefundable = batch.refundedAt === null;
+                const isOtherAccount =
+                  isRefundable && !isSelectable(batch);
 
                 return (
                   <tr
@@ -273,11 +329,32 @@ export const AdminUserCredits = ({
                       <input
                         type='checkbox'
                         aria-label='Select batch for refund'
+                        title={
+                          isOtherAccount
+                            ? 'Belongs to a different account than the current selection — combined refunds cannot span accounts'
+                            : undefined
+                        }
                         checked={selectedIds.has(batch.id)}
-                        disabled={!isRefundable}
+                        disabled={!isSelectable(batch)}
                         onChange={() => toggleSelected(batch.id)}
                       />
                     </td>
+
+                    {/* Account (only when batches span several accounts) */}
+                    {hasMultipleAccounts && (
+                      <td className='px-4 py-3 font-mono text-xs'>
+                        <Link
+                          href={ROUTES.adminOrganization(
+                            network.id,
+                            batch.accountId,
+                          )}
+                          className='text-blue-500 hover:underline'
+                          title={batch.accountId}
+                        >
+                          {batch.accountId.slice(0, 8)}…
+                        </Link>
+                      </td>
+                    )}
 
                     {/* Date */}
                     <td className='px-4 py-3 text-xs'>
