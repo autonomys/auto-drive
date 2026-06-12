@@ -133,22 +133,28 @@ const OverCapPanel = ({
 };
 
 // ---------------------------------------------------------------------------
-// Per-account batch group
-// Batches are grouped by accountId — credits belong to the shared
-// organization account, and several users of the same organization can each
-// purchase credits for it. Grouping by user would split one account into
-// multiple summary lines with incorrect totals.
+// Per-purchasing-wallet batch group
+// Batches are grouped by `batch.accountId`, the org-level storage account
+// referred to as the "purchasing wallet" in the admin UI — credits belong
+// to the shared organization account, and several users of the same
+// organization can each purchase credits for it. Grouping by user would
+// split one purchasing wallet into multiple summary lines with incorrect
+// totals; grouping by the paying EVM address would be wrong too, since it
+// varies per batch and the combined-refund constraint is per purchasing
+// wallet, not per address.
 // Each group renders as a single collapsed summary line (batch count,
 // purchased / remaining / expired storage). The admin can toggle each
-// account open to see the full batch list (with the purchasing user per
-// row) and spot accounts with refundable (expired, unused, not-yet-refunded)
-// batches to process together on the per-user refund screen.
+// purchasing wallet open to see the full batch list (with the purchasing
+// user per row) and spot wallets with refundable (expired, unused,
+// not-yet-refunded) batches to process together on the per-user refund
+// screen.
 // ---------------------------------------------------------------------------
 
-type AccountBatchGroup = {
-  accountId: string;
+type PurchasingWalletBatchGroup = {
+  /** batch.accountId — the org-level storage account. */
+  purchasingWalletId: string;
   batches: AdminCreditBatch[];
-  /** Distinct publicIds of the users who purchased for this account. */
+  /** Distinct publicIds of the users who purchased for this wallet. */
   userPublicIds: string[];
   refundableCount: number;
   refundedCount: number;
@@ -160,9 +166,9 @@ type AccountBatchGroup = {
   totalExpiredUnused: number;
 };
 
-const groupBatchesByAccount = (
+const groupBatchesByPurchasingWallet = (
   batches: AdminCreditBatch[],
-): AccountBatchGroup[] => {
+): PurchasingWalletBatchGroup[] => {
   const groups = new Map<string, AdminCreditBatch[]>();
   for (const batch of batches) {
     const existing = groups.get(batch.accountId);
@@ -173,24 +179,24 @@ const groupBatchesByAccount = (
     }
   }
 
-  return [...groups.entries()].map(([accountId, accountBatches]) => ({
-    accountId,
-    batches: accountBatches,
-    userPublicIds: [...new Set(accountBatches.map((b) => b.userPublicId))],
-    refundableCount: accountBatches.filter(
+  return [...groups.entries()].map(([purchasingWalletId, walletBatches]) => ({
+    purchasingWalletId,
+    batches: walletBatches,
+    userPublicIds: [...new Set(walletBatches.map((b) => b.userPublicId))],
+    refundableCount: walletBatches.filter(
       (b) => b.expired && b.refundedAt === null,
     ).length,
-    refundedCount: accountBatches.filter((b) => b.refundedAt !== null).length,
-    totalPurchased: accountBatches.reduce(
+    refundedCount: walletBatches.filter((b) => b.refundedAt !== null).length,
+    totalPurchased: walletBatches.reduce(
       (s, b) => s + Number(BigInt(b.uploadBytesOriginal)),
       0,
     ),
-    totalRemaining: accountBatches.reduce(
+    totalRemaining: walletBatches.reduce(
       (s, b) =>
         s + (b.expired ? 0 : Number(BigInt(b.uploadBytesRemaining))),
       0,
     ),
-    totalExpiredUnused: accountBatches.reduce(
+    totalExpiredUnused: walletBatches.reduce(
       (s, b) =>
         s + (b.expired ? Number(BigInt(b.uploadBytesRemaining)) : 0),
       0,
@@ -198,19 +204,19 @@ const groupBatchesByAccount = (
   }));
 };
 
-const AccountBatchGroupSection = ({
+const PurchasingWalletBatchGroupSection = ({
   group,
   networkId,
   isExpanded,
   onToggle,
 }: {
-  group: AccountBatchGroup;
+  group: PurchasingWalletBatchGroup;
   networkId: NetworkId;
   isExpanded: boolean;
   onToggle: () => void;
 }) => (
   <div className='rounded-lg border border-border'>
-    {/* Single-line account summary — click the chevron to expand the list. */}
+    {/* Single-line purchasing wallet summary — chevron expands the list. */}
     <div
       className={`flex flex-wrap items-center justify-between gap-2 bg-muted/50 px-4 py-3 ${
         isExpanded ? 'border-b border-border' : ''
@@ -222,7 +228,9 @@ const AccountBatchGroupSection = ({
           onClick={onToggle}
           aria-expanded={isExpanded}
           aria-label={
-            isExpanded ? 'Hide batches for account' : 'Show batches for account'
+            isExpanded
+              ? 'Hide batches for purchasing wallet'
+              : 'Show batches for purchasing wallet'
           }
           className='text-muted-foreground hover:text-foreground'
         >
@@ -233,11 +241,11 @@ const AccountBatchGroupSection = ({
           )}
         </button>
         <Link
-          href={ROUTES.adminOrganization(networkId, group.accountId)}
+          href={ROUTES.adminOrganization(networkId, group.purchasingWalletId)}
           className='font-mono text-xs text-blue-500 hover:underline'
-          title={`Account ${group.accountId} — uploads and downloads`}
+          title={`Purchasing wallet ${group.purchasingWalletId} — uploads and downloads`}
         >
-          {group.accountId.slice(0, 20)}…
+          {group.purchasingWalletId.slice(0, 20)}…
         </Link>
         <span className='text-xs text-muted-foreground'>
           {group.batches.length}{' '}
@@ -275,7 +283,7 @@ const AccountBatchGroupSection = ({
       </div>
     </div>
 
-    {/* Batch rows — hidden until the admin expands the account. */}
+    {/* Batch rows — hidden until the admin expands the purchasing wallet. */}
     {isExpanded && (
     <div className='overflow-x-auto'>
       <table className='w-full text-sm'>
@@ -393,19 +401,19 @@ export const AdminCredits = () => {
   const { api, network } = useNetwork();
   const queryClient = useQueryClient();
 
-  // Accounts whose full batch list is currently expanded. Collapsed by
-  // default so the screen shows one summary line per account.
-  const [expandedAccountIds, setExpandedAccountIds] = useState<Set<string>>(
+  // Purchasing wallets whose full batch list is currently expanded.
+  // Collapsed by default so the screen shows one summary line per wallet.
+  const [expandedWalletIds, setExpandedWalletIds] = useState<Set<string>>(
     new Set(),
   );
 
-  const toggleExpanded = (accountId: string) => {
-    setExpandedAccountIds((prev) => {
+  const toggleExpanded = (purchasingWalletId: string) => {
+    setExpandedWalletIds((prev) => {
       const next = new Set(prev);
-      if (next.has(accountId)) {
-        next.delete(accountId);
+      if (next.has(purchasingWalletId)) {
+        next.delete(purchasingWalletId);
       } else {
-        next.add(accountId);
+        next.add(purchasingWalletId);
       }
       return next;
     });
@@ -446,7 +454,10 @@ export const AdminCredits = () => {
     },
   });
 
-  const groups = useMemo(() => groupBatchesByAccount(batches), [batches]);
+  const groups = useMemo(
+    () => groupBatchesByPurchasingWallet(batches),
+    [batches],
+  );
   const awaitingRefund = useMemo(
     () => groups.reduce((s, g) => s + g.refundableCount, 0),
     [groups],
@@ -467,7 +478,7 @@ export const AdminCredits = () => {
         <div>
           <h1 className='text-2xl font-bold'>Purchased Credits</h1>
           <p className='mt-0.5 text-xs text-muted-foreground'>
-            All credit batches across all users, grouped by account.
+            All credit batches across all users, grouped by purchasing wallet.
           </p>
         </div>
         {isLoading && (
@@ -533,15 +544,15 @@ export const AdminCredits = () => {
             <button
               type='button'
               onClick={() =>
-                setExpandedAccountIds(
-                  expandedAccountIds.size === groups.length
+                setExpandedWalletIds(
+                  expandedWalletIds.size === groups.length
                     ? new Set()
-                    : new Set(groups.map((g) => g.accountId)),
+                    : new Set(groups.map((g) => g.purchasingWalletId)),
                 )
               }
               className='ml-auto text-xs text-blue-500 hover:underline'
             >
-              {expandedAccountIds.size === groups.length
+              {expandedWalletIds.size === groups.length
                 ? 'Collapse all'
                 : 'Expand all'}
             </button>
@@ -556,12 +567,12 @@ export const AdminCredits = () => {
         ) : (
           <div className='space-y-3'>
             {groups.map((group) => (
-              <AccountBatchGroupSection
-                key={group.accountId}
+              <PurchasingWalletBatchGroupSection
+                key={group.purchasingWalletId}
                 group={group}
                 networkId={network.id}
-                isExpanded={expandedAccountIds.has(group.accountId)}
-                onToggle={() => toggleExpanded(group.accountId)}
+                isExpanded={expandedWalletIds.has(group.purchasingWalletId)}
+                onToggle={() => toggleExpanded(group.purchasingWalletId)}
               />
             ))}
           </div>
