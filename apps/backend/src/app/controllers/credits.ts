@@ -151,6 +151,7 @@ creditsController.get(
       result.value.map((batch) => ({
         ...serializeCredit(batch),
         userPublicId: batch.userPublicId,
+        fromAddress: batch.fromAddress ?? null,
       })),
     )
   }),
@@ -202,7 +203,9 @@ creditsController.get(
 // Admin-only: marks several credit batches as refunded in one atomic
 // operation. Body: { batchIds: string[], refundTxHash: string }.
 // The refund transaction hash is mandatory — the same hash is recorded on
-// every batch (one on-chain AI3 transfer can cover multiple batches).
+// every batch (one on-chain AI3 transfer can cover multiple batches of the
+// same account paid from the same purchasing wallet; spanning accounts or
+// paying wallets is rejected with 400).
 // All-or-nothing: if any id is unknown nothing is updated (404).
 // Already-refunded batches are skipped (idempotent).
 // Returns 403 for non-admin callers, 400 for missing/malformed input.

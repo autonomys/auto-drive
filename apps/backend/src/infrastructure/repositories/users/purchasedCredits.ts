@@ -617,20 +617,26 @@ const markAsRefunded = async (
 // All-or-nothing on existence: if any id does not exist the transaction is
 // rolled back and missingIds is returned so the caller can 404 precisely.
 // All batches that are actually going to be refunded must belong to the
-// SAME account — one on-chain AI3 transfer goes to a single wallet, so a
-// combined refund spanning several accounts is always a mistake. Rows that
-// are already refunded are skipped (idempotent, mirroring the single-row
-// behaviour) and keep their original tx hash, so they are excluded from the
-// account check — a retry where everything is already refunded succeeds
-// regardless of accounts. If the still-pending rows span multiple accounts
-// the transaction is rolled back and accountIds lists the offenders so the
-// caller can 400.
+// SAME account AND have been paid from the SAME purchasing wallet (the
+// intent's from_address) — one on-chain AI3 refund transfer goes back to a
+// single wallet, so a combined refund spanning accounts or paying wallets
+// is always a mistake. Rows that are already refunded are skipped
+// (idempotent, mirroring the single-row behaviour) and keep their original
+// tx hash, so they are excluded from both checks — a retry where everything
+// is already refunded succeeds regardless. If the still-pending rows span
+// multiple accounts or wallets the transaction is rolled back and
+// accountIds / walletAddresses list the offenders so the caller can 400.
+// Batches whose intent has no from_address recorded (legacy rows) are
+// grouped under null: they can be combined with each other but not with
+// batches paid from a known wallet.
 // ---------------------------------------------------------------------------
 
 export type BatchRefundResult = {
   missingIds: string[]
   /** Distinct account ids across the batches still pending refund. */
   accountIds: string[]
+  /** Distinct paying wallets (intents.from_address) across pending rows. */
+  walletAddresses: (string | null)[]
   refundedRows: PurchasedCredit[]
   alreadyRefundedIds: string[]
 }
@@ -646,6 +652,7 @@ const markManyAsRefunded = async (
     return {
       missingIds: malformedIds,
       accountIds: [],
+      walletAddresses: [],
       refundedRows: [],
       alreadyRefundedIds: [],
     }
@@ -659,17 +666,20 @@ const markManyAsRefunded = async (
 
     // ORDER BY id makes the row locks acquire in a deterministic order so
     // two overlapping combined-refund transactions cannot deadlock by
-    // locking the same rows in opposite orders.
+    // locking the same rows in opposite orders. FOR UPDATE OF pc locks only
+    // the purchased_credits rows, not the joined intents.
     const existing = await client.query<{
       id: string
       account_id: string
       refunded_at: Date | null
+      from_address: string | null
     }>(
-      `SELECT id, account_id, refunded_at
-       FROM purchased_credits
-       WHERE id = ANY($1::uuid[])
-       ORDER BY id
-       FOR UPDATE`,
+      `SELECT pc.id, pc.account_id, pc.refunded_at, i.from_address
+       FROM purchased_credits pc
+       JOIN intents i ON i.id = pc.intent_id
+       WHERE pc.id = ANY($1::uuid[])
+       ORDER BY pc.id
+       FOR UPDATE OF pc`,
       [ids],
     )
 
@@ -677,19 +687,34 @@ const markManyAsRefunded = async (
     const missingIds = ids.filter((id) => !existingIds.has(id))
 
     // Only rows still pending a refund are updated (and get the tx hash);
-    // already-refunded rows are idempotent no-ops, so the single-account
-    // constraint applies to the pending rows alone.
+    // already-refunded rows are idempotent no-ops, so the single-account /
+    // single-wallet constraints apply to the pending rows alone.
     const pendingRows = existing.rows.filter((r) => r.refunded_at === null)
     const accountIds = [...new Set(pendingRows.map((r) => r.account_id))]
+    const walletAddresses = [
+      ...new Set(pendingRows.map((r) => r.from_address)),
+    ]
 
     if (missingIds.length > 0) {
       await client.query('ROLLBACK')
-      return { missingIds, accountIds, refundedRows: [], alreadyRefundedIds: [] }
+      return {
+        missingIds,
+        accountIds,
+        walletAddresses,
+        refundedRows: [],
+        alreadyRefundedIds: [],
+      }
     }
 
-    if (accountIds.length > 1) {
+    if (accountIds.length > 1 || walletAddresses.length > 1) {
       await client.query('ROLLBACK')
-      return { missingIds: [], accountIds, refundedRows: [], alreadyRefundedIds: [] }
+      return {
+        missingIds: [],
+        accountIds,
+        walletAddresses,
+        refundedRows: [],
+        alreadyRefundedIds: [],
+      }
     }
 
     const alreadyRefundedIds = existing.rows
@@ -713,6 +738,7 @@ const markManyAsRefunded = async (
     return {
       missingIds: [],
       accountIds,
+      walletAddresses,
       refundedRows: updated.rows.map(mapRow),
       alreadyRefundedIds,
     }
@@ -788,12 +814,16 @@ const getByUserPublicId = async (
 
 export type AdminCreditBatchRow = PurchasedCredit & {
   userPublicId: string
+  /** EVM wallet that paid for the batch (intents.from_address), if known. */
+  fromAddress: string | null
 }
 
 const getAllWithUserPublicId = async (): Promise<AdminCreditBatchRow[]> => {
   const db = await getDatabase()
-  const result = await db.query<DBPurchasedCredit & { user_public_id: string }>(
-    `SELECT pc.*, i.user_public_id
+  const result = await db.query<
+    DBPurchasedCredit & { user_public_id: string; from_address: string | null }
+  >(
+    `SELECT pc.*, i.user_public_id, i.from_address
      FROM purchased_credits pc
      JOIN intents i ON i.id = pc.intent_id
      ORDER BY pc.purchased_at DESC`,
@@ -801,6 +831,7 @@ const getAllWithUserPublicId = async (): Promise<AdminCreditBatchRow[]> => {
   return result.rows.map((row) => ({
     ...mapRow(row),
     userPublicId: row.user_public_id,
+    fromAddress: row.from_address ?? null,
   }))
 }
 

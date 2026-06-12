@@ -537,6 +537,7 @@ describe('CreditsUseCases', () => {
         .mockResolvedValue({
           missingIds: [],
           accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1'],
           refundedRows: [makeCreditRow()],
           alreadyRefundedIds: [],
         })
@@ -558,6 +559,7 @@ describe('CreditsUseCases', () => {
         .mockResolvedValue({
           missingIds: [],
           accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1'],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -582,6 +584,7 @@ describe('CreditsUseCases', () => {
         .mockResolvedValue({
           missingIds: [],
           accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1'],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -605,6 +608,7 @@ describe('CreditsUseCases', () => {
         .mockResolvedValue({
           missingIds: [],
           accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1'],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -626,6 +630,7 @@ describe('CreditsUseCases', () => {
         .mockResolvedValue({
           missingIds: [],
           accountIds: ['account-a', 'account-b'],
+          walletAddresses: ['0xwallet-1'],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -642,6 +647,54 @@ describe('CreditsUseCases', () => {
       expect(error.message).toContain('same account')
     })
 
+    it('returns 400 BadRequestError when batches were paid from different wallets', async () => {
+      // Same account, but the batches were purchased from two different EVM
+      // wallets — one refund transfer can only go back to one wallet.
+      jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1', '0xwallet-2'],
+          refundedRows: [],
+          alreadyRefundedIds: [],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        [BATCH_1, BATCH_2],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(BadRequestError)
+      expect(error.message).toContain('same purchasing wallet')
+    })
+
+    it('returns 400 BadRequestError when wallets differ by known vs unknown', async () => {
+      // A batch with no recorded from_address (legacy intent) cannot be
+      // combined with a batch paid from a known wallet.
+      jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1', null],
+          refundedRows: [],
+          alreadyRefundedIds: [],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        [BATCH_1, BATCH_2],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+    })
+
     it('succeeds idempotently when every batch is already refunded', async () => {
       // Already-refunded rows are excluded from the single-account check
       // (they keep their original tx hash), so a retry where everything is
@@ -652,6 +705,7 @@ describe('CreditsUseCases', () => {
         .mockResolvedValue({
           missingIds: [],
           accountIds: [],
+          walletAddresses: [],
           refundedRows: [],
           alreadyRefundedIds: [BATCH_1, BATCH_2],
         })
@@ -675,6 +729,7 @@ describe('CreditsUseCases', () => {
         .mockResolvedValue({
           missingIds: [MISSING_ID],
           accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1'],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -697,6 +752,7 @@ describe('CreditsUseCases', () => {
         .mockResolvedValue({
           missingIds: [],
           accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1'],
           refundedRows: [
             makeCreditRow({ id: BATCH_1, refundedAt: now }),
             makeCreditRow({ id: BATCH_2, refundedAt: now }),

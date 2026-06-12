@@ -55,6 +55,8 @@ export type AdminCreditBatch = ExpiringCreditBatch & {
   refundedAt: string | null;
   /** On-chain tx hash of the AI3 refund transfer, or null if not refunded. */
   refundTxHash: string | null;
+  /** EVM purchasing wallet that paid for the batch, if known. */
+  fromAddress: string | null;
 };
 
 // Wire-format of GET /credits/economics (admin)

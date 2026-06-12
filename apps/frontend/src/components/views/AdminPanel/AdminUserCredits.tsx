@@ -37,6 +37,16 @@ const formatAI3Paid = (paymentAmount: string | null): string => {
   }
 };
 
+/**
+ * A combined refund is one on-chain transfer back to one wallet, so it can
+ * only cover batches of the SAME account paid from the SAME purchasing
+ * wallet (enforced by the backend). Batches are grouped by this composite
+ * key; batches without a recorded wallet (legacy intents) only group with
+ * each other.
+ */
+const refundGroupKey = (batch: AdminUserCreditBatch): string =>
+  `${batch.accountId}::${batch.fromAddress ?? 'unknown-wallet'}`;
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -63,27 +73,26 @@ export const AdminUserCredits = ({
     staleTime: 30_000,
   });
 
-  // Terminology: a "purchasing wallet" here groups batches by
-  // `batch.accountId` — the org-level storage account (backend `accounts`
-  // table) that credits, uploads and downloads are recorded against, and the
-  // unit a combined refund must stay within. Batches are loaded by
-  // userPublicId, so they can span more than one purchasing wallet when the
-  // user purchased credits under different org accounts over time. Each
-  // distinct one links to the existing account (organization) page with the
-  // uploads/downloads history. The EVM address that paid is a separate
-  // per-batch field (`fromAddress`, shown in the "EVM Wallet" column).
-  const purchasingWalletIds = useMemo(
+  // Terminology: the "account" is the org-level storage account (backend
+  // `accounts` table, batch.accountId) that credits, uploads and downloads
+  // are recorded against; the "purchasing wallet" is the EVM address that
+  // paid for the batch (intent's fromAddress). Batches are loaded by
+  // userPublicId, so they can span more than one account, and within one
+  // account they can have been paid from different purchasing wallets.
+  // Each distinct account links to the existing account (organization) page
+  // with the uploads/downloads history.
+  const accountIds = useMemo(
     () => [...new Set(batches.map((b) => b.accountId))],
     [batches],
   );
-  const hasMultiplePurchasingWallets = purchasingWalletIds.length > 1;
+  const hasMultipleAccounts = accountIds.length > 1;
 
-  // A batch can be selected for refund as long as it has not been refunded
-  // yet. Several unused batches of the SAME purchasing wallet can be ticked
-  // and processed together with a single on-chain transaction hash — the
-  // backend rejects combined refunds that span purchasing wallets, so the
-  // first selected batch anchors the wallet and batches of other wallets
-  // are disabled until the selection is cleared.
+  const refundGroupKeys = useMemo(
+    () => [...new Set(batches.map(refundGroupKey))],
+    [batches],
+  );
+  const hasMultipleRefundGroups = refundGroupKeys.length > 1;
+
   const refundableIds = useMemo(
     () => new Set(batches.filter((b) => b.refundedAt === null).map((b) => b.id)),
     [batches],
@@ -94,36 +103,36 @@ export const AdminUserCredits = ({
     [selectedIds, refundableIds],
   );
 
-  // Purchasing wallet of the current selection (all selected batches share it).
-  const selectedPurchasingWalletId = useMemo(() => {
-    const firstSelected = batches.find((b) => selectedIds.has(b.id));
-    return firstSelected?.accountId ?? null;
-  }, [batches, selectedIds]);
+  // (account, purchasing wallet) anchor of the current selection — all
+  // selected batches share it.
+  const selectedBatch = useMemo(
+    () => batches.find((b) => selectedIds.has(b.id)) ?? null,
+    [batches, selectedIds],
+  );
+  const selectedGroupKey = selectedBatch ? refundGroupKey(selectedBatch) : null;
 
   const isSelectable = (batch: AdminUserCreditBatch): boolean =>
     batch.refundedAt === null &&
-    (selectedPurchasingWalletId === null ||
-      batch.accountId === selectedPurchasingWalletId);
+    (selectedGroupKey === null || refundGroupKey(batch) === selectedGroupKey);
 
-  // Select-all targets a single purchasing wallet: the selection's wallet,
-  // or — when nothing is selected — the first one with refundable batches.
-  const selectAllPurchasingWalletId = useMemo(() => {
-    if (selectedPurchasingWalletId) return selectedPurchasingWalletId;
-    return (
-      batches.find((b) => refundableIds.has(b.id))?.accountId ?? null
-    );
-  }, [selectedPurchasingWalletId, batches, refundableIds]);
+  // Select-all targets a single (account, purchasing wallet) group: the
+  // selection's group, or — when nothing is selected — the first group with
+  // refundable batches.
+  const selectAllGroupKey = useMemo(() => {
+    if (selectedGroupKey) return selectedGroupKey;
+    const firstRefundable = batches.find((b) => refundableIds.has(b.id));
+    return firstRefundable ? refundGroupKey(firstRefundable) : null;
+  }, [selectedGroupKey, batches, refundableIds]);
 
   const selectAllTargetIds = useMemo(
     () =>
       batches
         .filter(
           (b) =>
-            refundableIds.has(b.id) &&
-            b.accountId === selectAllPurchasingWalletId,
+            refundableIds.has(b.id) && refundGroupKey(b) === selectAllGroupKey,
         )
         .map((b) => b.id),
-    [batches, refundableIds, selectAllPurchasingWalletId],
+    [batches, refundableIds, selectAllGroupKey],
   );
 
   const allSelected =
@@ -210,14 +219,14 @@ export const AdminUserCredits = ({
           >
             {userPublicId}
           </p>
-          {purchasingWalletIds.map((walletId) => (
+          {accountIds.map((accountId) => (
             <Link
-              key={walletId}
-              href={ROUTES.adminOrganization(network.id, walletId)}
+              key={accountId}
+              href={ROUTES.adminOrganization(network.id, accountId)}
               className='mt-1 flex w-fit items-center gap-1 font-mono text-xs text-blue-500 hover:underline'
-              title={`View purchasing wallet ${walletId} — uploads and downloads`}
+              title={`View account ${accountId} — uploads and downloads`}
             >
-              Purchasing wallet: {walletId}
+              Account: {accountId}
               <ExternalLink className='h-3 w-3' />
             </Link>
           ))}
@@ -273,10 +282,14 @@ export const AdminUserCredits = ({
           <p className='text-sm text-amber-800 dark:text-amber-300'>
             {selectedRefundableIds.length}{' '}
             {selectedRefundableIds.length === 1 ? 'batch' : 'batches'} selected
-            {hasMultiplePurchasingWallets && selectedPurchasingWalletId && (
+            {hasMultipleRefundGroups && selectedBatch && (
               <span className='font-mono'>
                 {' '}
-                (purchasing wallet {selectedPurchasingWalletId.slice(0, 8)}…)
+                (account {selectedBatch.accountId.slice(0, 8)}…, wallet{' '}
+                {selectedBatch.fromAddress
+                  ? `${selectedBatch.fromAddress.slice(0, 8)}…`
+                  : 'unknown'}
+                )
               </span>
             )}{' '}
             — one transaction hash will be recorded on all of them.
@@ -314,10 +327,10 @@ export const AdminUserCredits = ({
                 <th className='px-4 py-3 font-medium'>
                   <input
                     type='checkbox'
-                    aria-label='Select all refundable batches of the purchasing wallet'
+                    aria-label='Select all refundable batches of the same account and purchasing wallet'
                     title={
-                      hasMultiplePurchasingWallets && selectAllPurchasingWalletId
-                        ? `Selects refundable batches of purchasing wallet ${selectAllPurchasingWalletId} only — combined refunds cannot span purchasing wallets`
+                      hasMultipleRefundGroups
+                        ? 'Selects refundable batches of one account/purchasing-wallet pair only — combined refunds cannot span accounts or paying wallets'
                         : undefined
                     }
                     checked={allSelected}
@@ -325,8 +338,8 @@ export const AdminUserCredits = ({
                     onChange={toggleSelectAll}
                   />
                 </th>
-                {hasMultiplePurchasingWallets && (
-                  <th className='px-4 py-3 font-medium'>Purchasing Wallet</th>
+                {hasMultipleAccounts && (
+                  <th className='px-4 py-3 font-medium'>Account</th>
                 )}
                 <th className='px-4 py-3 font-medium'>Date</th>
                 <th className='px-4 py-3 font-medium'>Status</th>
@@ -335,7 +348,7 @@ export const AdminUserCredits = ({
                 <th className='px-4 py-3 font-medium'>Consumed</th>
                 <th className='px-4 py-3 font-medium'>Remaining</th>
                 <th className='px-4 py-3 font-medium'>AI3 Paid</th>
-                <th className='px-4 py-3 font-medium'>EVM Wallet</th>
+                <th className='px-4 py-3 font-medium'>Purchasing Wallet</th>
                 <th className='px-4 py-3 font-medium'>Refund</th>
               </tr>
             </thead>
@@ -346,7 +359,7 @@ export const AdminUserCredits = ({
                 const remaining = Number(BigInt(batch.uploadBytesRemaining));
                 const consumed = original - remaining;
                 const isRefundable = batch.refundedAt === null;
-                const isOtherPurchasingWallet =
+                const isOtherRefundGroup =
                   isRefundable && !isSelectable(batch);
 
                 return (
@@ -360,8 +373,8 @@ export const AdminUserCredits = ({
                         type='checkbox'
                         aria-label='Select batch for refund'
                         title={
-                          isOtherPurchasingWallet
-                            ? 'Belongs to a different purchasing wallet than the current selection — combined refunds cannot span purchasing wallets'
+                          isOtherRefundGroup
+                            ? 'Belongs to a different account or purchasing wallet than the current selection — combined refunds cannot span accounts or paying wallets'
                             : undefined
                         }
                         checked={selectedIds.has(batch.id)}
@@ -370,8 +383,8 @@ export const AdminUserCredits = ({
                       />
                     </td>
 
-                    {/* Purchasing wallet (only when batches span several) */}
-                    {hasMultiplePurchasingWallets && (
+                    {/* Account (only when batches span several accounts) */}
+                    {hasMultipleAccounts && (
                       <td className='px-4 py-3 font-mono text-xs'>
                         <Link
                           href={ROUTES.adminOrganization(

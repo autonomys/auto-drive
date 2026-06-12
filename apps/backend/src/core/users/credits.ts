@@ -279,12 +279,13 @@ const refundBatch = async (
 // (one AI3 transfer can cover multiple batches of the same account).
 // All-or-nothing: if any batch id does not exist nothing is updated and a
 // 404 listing the missing ids is returned. All batches still pending a
-// refund must belong to the same account — a combined refund spanning
-// several accounts is rejected with 400 and nothing is updated, since one
-// on-chain transfer can only go to a single wallet. Already-refunded
-// batches are skipped (idempotent, mirroring refundBatch) and are excluded
-// from the account check, so retries succeed even if the already-refunded
-// rows belong to different accounts.
+// refund must belong to the same account AND have been paid from the same
+// purchasing wallet (the intent's from_address) — one on-chain refund
+// transfer goes back to a single wallet, so a combined refund spanning
+// accounts or paying wallets is rejected with 400 and nothing is updated.
+// Already-refunded batches are skipped (idempotent, mirroring refundBatch)
+// and are excluded from both checks, so retries succeed even if the
+// already-refunded rows belong to different accounts or wallets.
 // Returns 403 for non-admin callers, 400 if the transaction hash is missing
 // or malformed, or if no batch ids are provided.
 // ---------------------------------------------------------------------------
@@ -348,6 +349,14 @@ const refundBatches = async (
     return err(
       new BadRequestError(
         'All batches in a combined refund must belong to the same account',
+      ),
+    )
+  }
+
+  if (result.walletAddresses.length > 1) {
+    return err(
+      new BadRequestError(
+        'All batches in a combined refund must have been paid from the same purchasing wallet',
       ),
     )
   }
