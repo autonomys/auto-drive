@@ -63,9 +63,15 @@ export const AdminUserCredits = ({
     staleTime: 30_000,
   });
 
+  // Terminology: an "account" here is the org-level STORAGE account
+  // (backend `accounts` table) that credits, uploads and downloads are
+  // recorded against — not the EVM wallet that paid. The purchasing wallet
+  // is a separate concept, exposed per batch as `fromAddress` and shown in
+  // the "Purchasing Wallet" column: one storage account can be funded from many
+  // wallets, and one wallet can fund batches on different accounts.
   // Batches are loaded by userPublicId, so they can span more than one
-  // account when the user purchased credits under different org accounts
-  // over time. Each distinct account links to the existing account
+  // storage account when the user purchased credits under different org
+  // accounts over time. Each distinct account links to the existing account
   // (organization) page with the uploads/downloads history.
   const accountIds = useMemo(
     () => [...new Set(batches.map((b) => b.accountId))],
@@ -207,9 +213,9 @@ export const AdminUserCredits = ({
               key={accountId}
               href={ROUTES.adminOrganization(network.id, accountId)}
               className='mt-1 flex w-fit items-center gap-1 font-mono text-xs text-blue-500 hover:underline'
-              title={`View account ${accountId} — uploads and downloads`}
+              title={`View storage account ${accountId} — uploads and downloads`}
             >
-              Account: {accountId}
+              Storage account: {accountId}
               <ExternalLink className='h-3 w-3' />
             </Link>
           ))}
@@ -327,7 +333,7 @@ export const AdminUserCredits = ({
                 <th className='px-4 py-3 font-medium'>Consumed</th>
                 <th className='px-4 py-3 font-medium'>Remaining</th>
                 <th className='px-4 py-3 font-medium'>AI3 Paid</th>
-                <th className='px-4 py-3 font-medium'>EVM Wallet</th>
+                <th className='px-4 py-3 font-medium'>Purchasing Wallet</th>
                 <th className='px-4 py-3 font-medium'>Refund</th>
               </tr>
             </thead>
