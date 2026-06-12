@@ -162,6 +162,28 @@ export const AdminUserCredits = ({
     setRefundTarget(batchIds);
   };
 
+  // Informational pro-rated refund suggestion for the modal: unused bytes ×
+  // the shannons/byte rate locked at purchase, summed over the target
+  // batches. The actual AI3 transfer happens out-of-band and the amount is
+  // not enforced by the system.
+  const suggestedRefundAi3 = useMemo(() => {
+    if (!refundTarget) return null;
+    try {
+      const totalShannons = refundTarget.reduce((sum, id) => {
+        const batch = batches.find((b) => b.id === id);
+        if (!batch || batch.refundedAt !== null) return sum;
+        return (
+          sum +
+          BigInt(batch.uploadBytesRemaining) * BigInt(batch.shannonsPerByte)
+        );
+      }, BigInt(0));
+      if (totalShannons === BigInt(0)) return null;
+      return `${shannonsToAi3(totalShannons, { trimTrailingZeros: true })} AI3`;
+    } catch {
+      return null;
+    }
+  }, [refundTarget, batches]);
+
   return (
     <div className='space-y-6 p-6'>
       {/* Header */}
@@ -460,6 +482,7 @@ export const AdminUserCredits = ({
       {refundTarget !== null && (
         <RefundTxHashModal
           batchCount={refundTarget.length}
+          suggestedRefundAi3={suggestedRefundAi3}
           isSubmitting={isRefunding}
           errorMessage={refundError}
           onConfirm={(refundTxHash) =>

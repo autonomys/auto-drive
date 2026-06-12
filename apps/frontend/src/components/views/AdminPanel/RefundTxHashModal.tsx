@@ -20,12 +20,19 @@ export const REFUND_TX_HASH_REGEX = /^0x[0-9a-fA-F]{64}$/;
  */
 export const RefundTxHashModal = ({
   batchCount,
+  suggestedRefundAi3,
   isSubmitting,
   errorMessage,
   onConfirm,
   onClose,
 }: {
   batchCount: number;
+  /**
+   * Informational pro-rated refund suggestion (unused bytes × locked
+   * price), pre-formatted as an AI3 amount. The system does not enforce
+   * the transferred amount — the transfer happens out-of-band.
+   */
+  suggestedRefundAi3?: string | null;
   isSubmitting: boolean;
   errorMessage: string | null;
   onConfirm: (refundTxHash: string) => void;
@@ -78,8 +85,21 @@ export const RefundTxHashModal = ({
           Enter the transaction hash of the on-chain AI3 refund transfer.
           {batchCount > 1 &&
             ' The same hash will be recorded on every selected batch.'}{' '}
-          A refund cannot be recorded without it.
+          A refund cannot be recorded without it. Marking as refunded voids
+          the entire remaining balance of the selected{' '}
+          {batchCount === 1 ? 'batch' : 'batches'}.
         </p>
+
+        {suggestedRefundAi3 && (
+          <p className='mb-4 rounded border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
+            Suggested pro-rated refund:{' '}
+            <span className='font-mono font-medium text-foreground'>
+              {suggestedRefundAi3}
+            </span>{' '}
+            (unused storage × locked purchase price). Informational only —
+            the transferred amount is not verified.
+          </p>
+        )}
 
         <label htmlFor='refundTxHash' className='mb-1 block text-sm'>
           Refund transaction hash
