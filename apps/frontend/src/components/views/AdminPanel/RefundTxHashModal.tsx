@@ -3,13 +3,9 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@auto-drive/ui';
 import { AlertTriangle, X } from 'lucide-react';
-
-/**
- * Strict EVM transaction hash format: 0x followed by 64 hex characters.
- * Mirrors the backend validation — the backend rejects anything else and
- * the batch is NOT marked as refunded.
- */
-export const REFUND_TX_HASH_REGEX = /^0x[0-9a-fA-F]{64}$/;
+// Same regex the backend validates with — the backend rejects anything else
+// and the batch is NOT marked as refunded.
+import { EVM_TX_HASH_REGEX } from '@auto-drive/models';
 
 /**
  * Modal that collects the mandatory on-chain refund transaction hash before
@@ -40,7 +36,7 @@ export const RefundTxHashModal = ({
 }) => {
   const [txHash, setTxHash] = useState('');
   const trimmed = txHash.trim();
-  const isValid = REFUND_TX_HASH_REGEX.test(trimmed);
+  const isValid = EVM_TX_HASH_REGEX.test(trimmed);
   const showFormatHint = trimmed.length > 0 && !isValid;
 
   // Close on Escape (unless a submission is in flight).

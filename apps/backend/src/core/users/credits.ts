@@ -1,4 +1,10 @@
-import { PurchasedCredit, User, UserRole, UserWithOrganization } from '@auto-drive/models'
+import {
+  EVM_TX_HASH_REGEX,
+  PurchasedCredit,
+  User,
+  UserRole,
+  UserWithOrganization,
+} from '@auto-drive/models'
 import {
   AdminCreditBatchRow,
   AdminUserCreditBatchRow,
@@ -187,10 +193,9 @@ const getUserBatches = async (
 // ---------------------------------------------------------------------------
 // Refund transaction hash validation
 // Every refund must record the on-chain transaction hash of the AI3 transfer
-// the admin executed. Strict EVM format: 0x followed by 64 hex characters.
+// the admin executed. Strict EVM format (EVM_TX_HASH_REGEX from
+// @auto-drive/models, shared with the frontend refund modal).
 // ---------------------------------------------------------------------------
-
-const REFUND_TX_HASH_REGEX = /^0x[0-9a-fA-F]{64}$/
 
 // purchased_credits.id is a UUID column. Validating ids here returns a clean
 // 400 instead of letting Postgres fail the `::uuid` cast (which would
@@ -209,7 +214,7 @@ const validateRefundTxHash = (
     )
   }
   const trimmed = refundTxHash.trim()
-  if (!REFUND_TX_HASH_REGEX.test(trimmed)) {
+  if (!EVM_TX_HASH_REGEX.test(trimmed)) {
     return err(
       new BadRequestError(
         'Invalid refund transaction hash: expected 0x followed by 64 hex characters',
