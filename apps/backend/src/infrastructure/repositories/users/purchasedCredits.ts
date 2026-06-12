@@ -555,18 +555,35 @@ const createPurchasedCreditWithCapCheck = async (
 }
 
 // ---------------------------------------------------------------------------
+// UUID guard
+// purchased_credits.id is a UUID column; comparing it against a malformed
+// string (or casting one via ::uuid[]) makes Postgres throw, which would
+// surface as a 500. The use cases already reject non-UUID ids with 400, but
+// the repository treats them as "not found" as well so no caller can
+// trigger a cast error.
+// ---------------------------------------------------------------------------
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// ---------------------------------------------------------------------------
 // markAsRefunded
 // Admin action: zero out remaining bytes for a single purchased_credits row
 // and mark it as refunded, recording the on-chain transaction hash of the
 // AI3 refund transfer.  Called after an admin has processed an out-of-band
 // refund (manual AI3 transfer back to the user's wallet).
 // Returns the updated row so the caller can echo it back to the client.
+// Malformed (non-UUID) ids are reported as not found.
 // ---------------------------------------------------------------------------
 
 const markAsRefunded = async (
   id: string,
   refundTxHash: string,
 ): Promise<{ found: boolean; row: PurchasedCredit | null }> => {
+  if (!UUID_REGEX.test(id)) {
+    return { found: false, row: null }
+  }
+
   const db = await getDatabase()
   const result = await db.query<DBPurchasedCredit>(
     `UPDATE purchased_credits
@@ -622,6 +639,18 @@ const markManyAsRefunded = async (
   ids: string[],
   refundTxHash: string,
 ): Promise<BatchRefundResult> => {
+  // Malformed ids can never match a row; report them as missing instead of
+  // letting the ::uuid[] cast throw (which would surface as a 500).
+  const malformedIds = ids.filter((id) => !UUID_REGEX.test(id))
+  if (malformedIds.length > 0) {
+    return {
+      missingIds: malformedIds,
+      accountIds: [],
+      refundedRows: [],
+      alreadyRefundedIds: [],
+    }
+  }
+
   const db = await getDatabase()
   const client = await db.connect()
 
