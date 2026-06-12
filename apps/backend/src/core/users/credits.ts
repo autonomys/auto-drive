@@ -192,6 +192,12 @@ const getUserBatches = async (
 
 const REFUND_TX_HASH_REGEX = /^0x[0-9a-fA-F]{64}$/
 
+// purchased_credits.id is a UUID column. Validating ids here returns a clean
+// 400 instead of letting Postgres fail the `::uuid` cast (which would
+// surface as a 500). Any UUID version is accepted.
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const validateRefundTxHash = (
   refundTxHash: unknown,
 ): Result<string, BadRequestError> => {
@@ -231,6 +237,10 @@ const refundBatch = async (
 ): Promise<Result<void, ForbiddenError | NotFoundError | BadRequestError>> => {
   if (executor.role !== UserRole.Admin) {
     return err(new ForbiddenError('Admin access required'))
+  }
+
+  if (!UUID_REGEX.test(batchId)) {
+    return err(new BadRequestError('Invalid batch id: expected a UUID'))
   }
 
   const txHashResult = validateRefundTxHash(refundTxHash)
@@ -306,6 +316,15 @@ const refundBatches = async (
   }
 
   const uniqueIds = [...new Set(batchIds.map((id) => id.trim()))]
+
+  const invalidIds = uniqueIds.filter((id) => !UUID_REGEX.test(id))
+  if (invalidIds.length > 0) {
+    return err(
+      new BadRequestError(
+        `Invalid batch ids (expected UUIDs): ${invalidIds.join(', ')}`,
+      ),
+    )
+  }
 
   const txHashResult = validateRefundTxHash(refundTxHash)
   if (txHashResult.isErr()) {

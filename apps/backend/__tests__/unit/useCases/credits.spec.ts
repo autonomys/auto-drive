@@ -381,6 +381,13 @@ describe('CreditsUseCases', () => {
 
   const VALID_TX_HASH = `0x${'a'.repeat(64)}`
 
+  // purchased_credits ids are UUIDs; the use cases reject anything else
+  // with 400 before reaching the repository.
+  const BATCH_1 = '11111111-1111-4111-8111-111111111111'
+  const BATCH_2 = '22222222-2222-4222-8222-222222222222'
+  const BATCH_3 = '33333333-3333-4333-8333-333333333333'
+  const MISSING_ID = '99999999-9999-4999-8999-999999999999'
+
   describe('refundBatch', () => {
     it('returns 403 ForbiddenError for non-admin user', async () => {
       const markSpy = jest
@@ -389,7 +396,7 @@ describe('CreditsUseCases', () => {
 
       const result = await CreditsUseCases.refundBatch(
         nonAdminUser,
-        'credit-1',
+        BATCH_1,
         VALID_TX_HASH,
       )
 
@@ -406,7 +413,7 @@ describe('CreditsUseCases', () => {
       for (const missing of [undefined, null, '', '   ']) {
         const result = await CreditsUseCases.refundBatch(
           adminUser,
-          'credit-1',
+          BATCH_1,
           missing,
         )
 
@@ -436,7 +443,7 @@ describe('CreditsUseCases', () => {
       for (const hash of malformed) {
         const result = await CreditsUseCases.refundBatch(
           adminUser,
-          'credit-1',
+          BATCH_1,
           hash,
         )
 
@@ -444,6 +451,27 @@ describe('CreditsUseCases', () => {
         expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
       }
 
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 BadRequestError for a non-UUID batch id', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markAsRefunded')
+        .mockResolvedValue({ found: true, row: makeCreditRow() })
+
+      for (const invalid of ['credit-1', 'not-a-uuid', '11111111', '']) {
+        const result = await CreditsUseCases.refundBatch(
+          adminUser,
+          invalid,
+          VALID_TX_HASH,
+        )
+
+        expect(result.isErr()).toBe(true)
+        expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+      }
+
+      // Must never reach the repository, where a non-UUID id would fail the
+      // Postgres uuid cast and surface as a 500.
       expect(markSpy).not.toHaveBeenCalled()
     })
 
@@ -460,12 +488,12 @@ describe('CreditsUseCases', () => {
 
       const result = await CreditsUseCases.refundBatch(
         adminUser,
-        'credit-1',
+        BATCH_1,
         `  ${VALID_TX_HASH}  `,
       )
 
       expect(result.isOk()).toBe(true)
-      expect(markSpy).toHaveBeenCalledWith('credit-1', VALID_TX_HASH)
+      expect(markSpy).toHaveBeenCalledWith(BATCH_1, VALID_TX_HASH)
     })
 
     it('returns 404 NotFoundError when the batch does not exist', async () => {
@@ -475,7 +503,7 @@ describe('CreditsUseCases', () => {
 
       const result = await CreditsUseCases.refundBatch(
         adminUser,
-        'missing-id',
+        MISSING_ID,
         VALID_TX_HASH,
       )
 
@@ -490,7 +518,7 @@ describe('CreditsUseCases', () => {
 
       const result = await CreditsUseCases.refundBatch(
         adminUser,
-        'credit-1',
+        BATCH_1,
         VALID_TX_HASH,
       )
 
@@ -515,7 +543,7 @@ describe('CreditsUseCases', () => {
 
       const result = await CreditsUseCases.refundBatches(
         nonAdminUser,
-        ['credit-1'],
+        [BATCH_1],
         VALID_TX_HASH,
       )
 
@@ -534,7 +562,7 @@ describe('CreditsUseCases', () => {
           alreadyRefundedIds: [],
         })
 
-      for (const invalid of [undefined, null, [], ['credit-1', ''], 'credit-1', [42]]) {
+      for (const invalid of [undefined, null, [], [BATCH_1, ''], BATCH_1, [42]]) {
         const result = await CreditsUseCases.refundBatches(
           adminUser,
           invalid,
@@ -545,6 +573,29 @@ describe('CreditsUseCases', () => {
         expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
       }
 
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 BadRequestError listing non-UUID batch ids', async () => {
+      const markSpy = jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-id'],
+          refundedRows: [],
+          alreadyRefundedIds: [],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        [BATCH_1, 'not-a-uuid'],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(BadRequestError)
+      expect(error.message).toContain('not-a-uuid')
       expect(markSpy).not.toHaveBeenCalled()
     })
 
@@ -560,7 +611,7 @@ describe('CreditsUseCases', () => {
 
       const result = await CreditsUseCases.refundBatches(
         adminUser,
-        ['credit-1', 'credit-2'],
+        [BATCH_1, BATCH_2],
         undefined,
       )
 
@@ -581,7 +632,7 @@ describe('CreditsUseCases', () => {
 
       const result = await CreditsUseCases.refundBatches(
         adminUser,
-        ['credit-1', 'credit-2'],
+        [BATCH_1, BATCH_2],
         VALID_TX_HASH,
       )
 
@@ -602,12 +653,12 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: [],
           refundedRows: [],
-          alreadyRefundedIds: ['credit-1', 'credit-2'],
+          alreadyRefundedIds: [BATCH_1, BATCH_2],
         })
 
       const result = await CreditsUseCases.refundBatches(
         adminUser,
-        ['credit-1', 'credit-2'],
+        [BATCH_1, BATCH_2],
         VALID_TX_HASH,
       )
 
@@ -622,7 +673,7 @@ describe('CreditsUseCases', () => {
       jest
         .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
         .mockResolvedValue({
-          missingIds: ['missing-1'],
+          missingIds: [MISSING_ID],
           accountIds: ['account-id'],
           refundedRows: [],
           alreadyRefundedIds: [],
@@ -630,14 +681,14 @@ describe('CreditsUseCases', () => {
 
       const result = await CreditsUseCases.refundBatches(
         adminUser,
-        ['credit-1', 'missing-1'],
+        [BATCH_1, MISSING_ID],
         VALID_TX_HASH,
       )
 
       expect(result.isErr()).toBe(true)
       const error = result._unsafeUnwrapErr()
       expect(error).toBeInstanceOf(NotFoundError)
-      expect(error.message).toContain('missing-1')
+      expect(error.message).toContain(MISSING_ID)
     })
 
     it('refunds several batches with one tx hash and de-duplicates ids', async () => {
@@ -647,15 +698,15 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-id'],
           refundedRows: [
-            makeCreditRow({ id: 'credit-1', refundedAt: now }),
-            makeCreditRow({ id: 'credit-2', refundedAt: now }),
+            makeCreditRow({ id: BATCH_1, refundedAt: now }),
+            makeCreditRow({ id: BATCH_2, refundedAt: now }),
           ],
-          alreadyRefundedIds: ['credit-3'],
+          alreadyRefundedIds: [BATCH_3],
         })
 
       const result = await CreditsUseCases.refundBatches(
         adminUser,
-        ['credit-1', 'credit-2', 'credit-2', 'credit-3'],
+        [BATCH_1, BATCH_2, BATCH_2, BATCH_3],
         VALID_TX_HASH,
       )
 
@@ -665,7 +716,7 @@ describe('CreditsUseCases', () => {
         alreadyRefundedCount: 1,
       })
       expect(markSpy).toHaveBeenCalledWith(
-        ['credit-1', 'credit-2', 'credit-3'],
+        [BATCH_1, BATCH_2, BATCH_3],
         VALID_TX_HASH,
       )
     })
