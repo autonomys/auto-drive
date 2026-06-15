@@ -19,6 +19,14 @@ export const PurchasedCreditSchema = z.object({
    * Set by POST /credits/batches/:id/refund, which also zeros remaining bytes.
    */
   refundedAt: z.date().nullable(),
+  /**
+   * On-chain transaction hash of the AI3 refund transfer. Mandatory when
+   * marking a batch as refunded — the refund endpoints reject requests
+   * without it. Batches refunded together in one on-chain transaction share
+   * the same hash. Null only on rows refunded before this field existed,
+   * or rows never refunded.
+   */
+  refundTxHash: z.string().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

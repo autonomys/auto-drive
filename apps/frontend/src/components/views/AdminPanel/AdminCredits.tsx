@@ -1,12 +1,25 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNetwork } from '../../../contexts/network';
 import { formatBytes } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
-import { RefreshCw, AlertTriangle, RotateCcw } from 'lucide-react';
+import {
+  ArrowLeft,
+  RefreshCw,
+  AlertTriangle,
+  RotateCcw,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { Button, ROUTES, type NetworkId } from '@auto-drive/ui';
-import { getBatchStatus, STATUS_CLASSES, STATUS_LABEL } from '../../../utils/credits';
+import {
+  getBatchStatus,
+  STATUS_CLASSES,
+  STATUS_LABEL,
+} from '../../../utils/credits';
 import type {
   AdminCreditBatch,
   CreditEconomicsResponse,
@@ -120,40 +133,182 @@ const OverCapPanel = ({
 };
 
 // ---------------------------------------------------------------------------
-// All credit batches table
+// Per-account batch group
+// Top-level grouping is by `batch.accountId` — the org-level storage
+// account that credits belong to; several users of the same organization
+// can each purchase credits for it, so grouping by user would split one
+// account into multiple summary lines with incorrect totals.
+// Within an account, batches can have been paid from different purchasing
+// wallets (the intent's fromAddress). Refunds are batched per
+// (account, purchasing wallet) pair — one refund transfer goes back to one
+// wallet — so the expanded list is sorted by purchasing wallet and shows it
+// per row; the actual refund selection happens on the per-user screen,
+// which enforces the same pairing.
+// Each group renders as a single collapsed summary line (batch count,
+// users / wallets involved, purchased / remaining / expired storage).
 // ---------------------------------------------------------------------------
 
-const AllBatchesTable = ({
-  batches,
-  networkId,
-}: {
+type AccountBatchGroup = {
+  /** batch.accountId — the org-level storage account. */
+  accountId: string;
   batches: AdminCreditBatch[];
-  networkId: NetworkId;
-}) => {
-  if (batches.length === 0) {
-    return (
-      <p className='text-sm text-muted-foreground'>
-        No credit batches have been purchased yet.
-      </p>
-    );
+  /** Distinct publicIds of the users who purchased for this account. */
+  userPublicIds: string[];
+  /** Distinct purchasing wallets (fromAddress) across the batches. */
+  walletCount: number;
+  refundableCount: number;
+  refundedCount: number;
+  /** Σ upload_bytes_original across all batches. */
+  totalPurchased: number;
+  /** Σ upload_bytes_remaining across non-expired batches (still usable). */
+  totalRemaining: number;
+  /** Σ upload_bytes_remaining across expired batches (forfeited unused). */
+  totalExpiredUnused: number;
+};
+
+const groupBatchesByAccount = (
+  batches: AdminCreditBatch[],
+): AccountBatchGroup[] => {
+  const groups = new Map<string, AdminCreditBatch[]>();
+  for (const batch of batches) {
+    const existing = groups.get(batch.accountId);
+    if (existing) {
+      existing.push(batch);
+    } else {
+      groups.set(batch.accountId, [batch]);
+    }
   }
 
-  return (
+  return [...groups.entries()].map(([accountId, accountBatches]) => ({
+    accountId,
+    // Sort by purchasing wallet so batches that can be refunded together
+    // (same account + same wallet) are adjacent, newest first within each.
+    batches: [...accountBatches].sort(
+      (a, b) =>
+        (a.fromAddress ?? '').localeCompare(b.fromAddress ?? '') ||
+        new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime(),
+    ),
+    userPublicIds: [...new Set(accountBatches.map((b) => b.userPublicId))],
+    walletCount: new Set(accountBatches.map((b) => b.fromAddress ?? '—')).size,
+    refundableCount: accountBatches.filter(
+      (b) => b.expired && b.refundedAt === null,
+    ).length,
+    refundedCount: accountBatches.filter((b) => b.refundedAt !== null).length,
+    totalPurchased: accountBatches.reduce(
+      (s, b) => s + Number(BigInt(b.uploadBytesOriginal)),
+      0,
+    ),
+    totalRemaining: accountBatches.reduce(
+      (s, b) =>
+        s + (b.expired ? 0 : Number(BigInt(b.uploadBytesRemaining))),
+      0,
+    ),
+    totalExpiredUnused: accountBatches.reduce(
+      (s, b) =>
+        s + (b.expired ? Number(BigInt(b.uploadBytesRemaining)) : 0),
+      0,
+    ),
+  }));
+};
+
+const AccountBatchGroupSection = ({
+  group,
+  networkId,
+  isExpanded,
+  onToggle,
+}: {
+  group: AccountBatchGroup;
+  networkId: NetworkId;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) => (
+  <div className='rounded-lg border border-border'>
+    {/* Single-line purchasing wallet summary — chevron expands the list. */}
+    <div
+      className={`flex flex-wrap items-center justify-between gap-2 bg-muted/50 px-4 py-3 ${
+        isExpanded ? 'border-b border-border' : ''
+      }`}
+    >
+      <div className='flex flex-wrap items-center gap-3'>
+        <button
+          type='button'
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-label={
+            isExpanded ? 'Hide batches for account' : 'Show batches for account'
+          }
+          className='text-muted-foreground hover:text-foreground'
+        >
+          {isExpanded ? (
+            <ChevronDown className='h-4 w-4' />
+          ) : (
+            <ChevronRight className='h-4 w-4' />
+          )}
+        </button>
+        <Link
+          href={ROUTES.adminOrganization(networkId, group.accountId)}
+          className='font-mono text-xs text-blue-500 hover:underline'
+          title={`Account ${group.accountId} — uploads and downloads`}
+        >
+          {group.accountId.slice(0, 20)}…
+        </Link>
+        <span className='text-xs text-muted-foreground'>
+          {group.batches.length}{' '}
+          {group.batches.length === 1 ? 'batch' : 'batches'}
+          {group.userPublicIds.length > 1 &&
+            ` (${group.userPublicIds.length} users)`}
+          {group.walletCount > 1 && ` (${group.walletCount} wallets)`}{' '}
+          · {formatBytes(group.totalPurchased, 1)} purchased ·{' '}
+          {formatBytes(group.totalRemaining, 1)} remaining ·{' '}
+          <span
+            className={group.totalExpiredUnused > 0 ? 'text-red-500' : ''}
+          >
+            {formatBytes(group.totalExpiredUnused, 1)} expired
+          </span>
+        </span>
+        {group.refundableCount > 0 && (
+          <span className='inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'>
+            <AlertTriangle className='h-3 w-3' />
+            {group.refundableCount} awaiting refund
+          </span>
+        )}
+      </div>
+      <div className='flex items-center gap-3'>
+        {group.userPublicIds.length === 1 ? (
+          <Link
+            href={ROUTES.adminUserCredits(networkId, group.userPublicIds[0])}
+            className='text-xs text-blue-500 hover:underline'
+          >
+            {group.refundableCount > 0 ? 'Process refunds →' : 'View details →'}
+          </Link>
+        ) : (
+          <span className='text-xs text-muted-foreground'>
+            Expand to pick a user
+          </span>
+        )}
+      </div>
+    </div>
+
+    {/* Batch rows — hidden until the admin expands the account. Sorted by
+        purchasing wallet so refundable-together batches are adjacent. */}
+    {isExpanded && (
     <div className='overflow-x-auto'>
       <table className='w-full text-sm'>
         <thead>
           <tr className='border-b border-border text-left text-xs text-muted-foreground'>
-            <th className='pb-2 pr-4 font-medium'>User</th>
-            <th className='pb-2 pr-4 font-medium'>Status</th>
-            <th className='pb-2 pr-4 font-medium'>Purchased</th>
-            <th className='pb-2 pr-4 font-medium'>Original</th>
-            <th className='pb-2 pr-4 font-medium'>Remaining</th>
-            <th className='pb-2 pr-4 font-medium'>Used %</th>
-            <th className='pb-2 font-medium'>Expires</th>
+            <th className='px-4 py-2 font-medium'>User</th>
+            <th className='px-4 py-2 font-medium'>Purchasing Wallet</th>
+            <th className='px-4 py-2 font-medium'>Status</th>
+            <th className='px-4 py-2 font-medium'>Purchased</th>
+            <th className='px-4 py-2 font-medium'>Original</th>
+            <th className='px-4 py-2 font-medium'>Remaining</th>
+            <th className='px-4 py-2 font-medium'>Used %</th>
+            <th className='px-4 py-2 font-medium'>Expires</th>
+            <th className='px-4 py-2 font-medium'>Refund</th>
           </tr>
         </thead>
         <tbody>
-          {batches.map((batch) => {
+          {group.batches.map((batch) => {
             const status = getBatchStatus(batch);
             const original = Number(BigInt(batch.uploadBytesOriginal));
             const remaining = Number(BigInt(batch.uploadBytesRemaining));
@@ -167,32 +322,45 @@ const AllBatchesTable = ({
                 key={batch.id}
                 className='border-b border-border last:border-0'
               >
-                <td className='py-2 pr-4 font-mono text-xs'>
+                <td className='px-4 py-2 font-mono text-xs'>
                   <Link
-                    href={ROUTES.adminUserCredits(networkId, batch.userPublicId)}
+                    href={ROUTES.adminUserCredits(
+                      networkId,
+                      batch.userPublicId,
+                    )}
                     className='text-blue-500 hover:underline'
                     title={batch.userPublicId}
                   >
-                    {batch.userPublicId.slice(0, 14)}…
+                    {batch.userPublicId.slice(0, 12)}…
                   </Link>
                 </td>
-                <td className='py-2 pr-4'>
+                <td className='px-4 py-2 font-mono text-xs'>
+                  {batch.fromAddress ? (
+                    <span title={batch.fromAddress}>
+                      {batch.fromAddress.slice(0, 8)}…
+                      {batch.fromAddress.slice(-6)}
+                    </span>
+                  ) : (
+                    <span className='text-muted-foreground'>—</span>
+                  )}
+                </td>
+                <td className='px-4 py-2'>
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}
                   >
                     {STATUS_LABEL[status]}
                   </span>
                 </td>
-                <td className='py-2 pr-4 text-xs'>
+                <td className='px-4 py-2 text-xs'>
                   {formatDate(batch.purchasedAt)}
                 </td>
-                <td className='py-2 pr-4 text-xs'>
+                <td className='px-4 py-2 text-xs'>
                   {formatBytes(original, 1)}
                 </td>
-                <td className='py-2 pr-4 text-xs'>
+                <td className='px-4 py-2 text-xs'>
                   {formatBytes(remaining, 1)}
                 </td>
-                <td className='py-2 pr-4'>
+                <td className='px-4 py-2'>
                   <div className='flex items-center gap-2'>
                     <div className='h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700'>
                       <div
@@ -205,7 +373,7 @@ const AllBatchesTable = ({
                     </span>
                   </div>
                 </td>
-                <td className='py-2 text-xs'>
+                <td className='px-4 py-2 text-xs'>
                   {batch.expired ? (
                     <span className='text-red-500'>
                       Expired {formatDate(batch.expiresAt)}
@@ -214,22 +382,60 @@ const AllBatchesTable = ({
                     formatDate(batch.expiresAt)
                   )}
                 </td>
+                <td className='px-4 py-2 text-xs'>
+                  {batch.refundedAt !== null ? (
+                    <span
+                      className='inline-flex items-center gap-1 text-muted-foreground'
+                      title={batch.refundTxHash ?? undefined}
+                    >
+                      <CheckCircle2 className='h-3 w-3 text-green-500' />
+                      {formatDate(batch.refundedAt)}
+                      {batch.refundTxHash && (
+                        <span className='font-mono'>
+                          · {batch.refundTxHash.slice(0, 10)}…
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className='text-muted-foreground'>—</span>
+                  )}
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
     </div>
-  );
-};
+    )}
+  </div>
+);
 
 // ---------------------------------------------------------------------------
-// Main component
+// Main component — dedicated admin screen for all purchased credits.
+// Rendered at /{chainId}/drive/admin/credits.
 // ---------------------------------------------------------------------------
 
 export const AdminCredits = () => {
   const { api, network } = useNetwork();
   const queryClient = useQueryClient();
+
+  // Accounts whose full batch list is currently expanded. Collapsed by
+  // default so the screen shows one summary line per account.
+  const [expandedAccountIds, setExpandedAccountIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const toggleExpanded = (accountId: string) => {
+    setExpandedAccountIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(accountId)) {
+        next.delete(accountId);
+      } else {
+        next.add(accountId);
+      }
+      return next;
+    });
+  };
 
   const { data: economics, isLoading: economicsLoading } =
     useQuery<CreditEconomicsResponse>({
@@ -266,14 +472,36 @@ export const AdminCredits = () => {
     },
   });
 
+  const groups = useMemo(
+    () => groupBatchesByAccount(batches),
+    [batches],
+  );
+  const awaitingRefund = useMemo(
+    () => groups.reduce((s, g) => s + g.refundableCount, 0),
+    [groups],
+  );
+
   const isLoading = economicsLoading || batchesLoading || overCapLoading;
 
   return (
-    <div className='space-y-8'>
-      <div className='flex items-center gap-2'>
-        <h2 className='text-xl font-semibold'>Purchased Credits</h2>
+    <div className='space-y-8 p-6'>
+      {/* Header */}
+      <div className='flex items-center gap-3'>
+        <Link
+          href={ROUTES.admin(network.id)}
+          className='text-muted-foreground hover:text-foreground'
+        >
+          <ArrowLeft className='h-5 w-5' />
+        </Link>
+        <div>
+          <h1 className='text-2xl font-bold'>Purchased Credits</h1>
+          <p className='mt-0.5 text-xs text-muted-foreground'>
+            All credit batches across all users, grouped by account. Refunds
+            are processed per account and purchasing wallet.
+          </p>
+        </div>
         {isLoading && (
-          <RefreshCw className='h-4 w-4 animate-spin text-muted-foreground' />
+          <RefreshCw className='ml-auto h-4 w-4 animate-spin text-muted-foreground' />
         )}
       </div>
 
@@ -319,12 +547,55 @@ export const AdminCredits = () => {
         />
       </div>
 
-      {/* All batches table */}
+      {/* All batches grouped by user */}
       <div>
-        <h3 className='mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wide'>
-          All Purchase Batches ({batches.length})
-        </h3>
-        <AllBatchesTable batches={batches} networkId={network.id} />
+        <div className='mb-3 flex items-center gap-2'>
+          <h3 className='text-sm font-medium text-muted-foreground uppercase tracking-wide'>
+            All Purchase Batches ({batches.length})
+          </h3>
+          {awaitingRefund > 0 && (
+            <span className='inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'>
+              <AlertTriangle className='h-3 w-3' />
+              {awaitingRefund} expired awaiting refund
+            </span>
+          )}
+          {groups.length > 0 && (
+            <button
+              type='button'
+              onClick={() =>
+                setExpandedAccountIds(
+                  expandedAccountIds.size === groups.length
+                    ? new Set()
+                    : new Set(groups.map((g) => g.accountId)),
+                )
+              }
+              className='ml-auto text-xs text-blue-500 hover:underline'
+            >
+              {expandedAccountIds.size === groups.length
+                ? 'Collapse all'
+                : 'Expand all'}
+            </button>
+          )}
+        </div>
+        {groups.length === 0 ? (
+          !batchesLoading && (
+            <p className='text-sm text-muted-foreground'>
+              No credit batches have been purchased yet.
+            </p>
+          )
+        ) : (
+          <div className='space-y-3'>
+            {groups.map((group) => (
+              <AccountBatchGroupSection
+                key={group.accountId}
+                group={group}
+                networkId={network.id}
+                isExpanded={expandedAccountIds.has(group.accountId)}
+                onToggle={() => toggleExpanded(group.accountId)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

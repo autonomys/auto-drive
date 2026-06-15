@@ -151,6 +151,7 @@ creditsController.get(
       result.value.map((batch) => ({
         ...serializeCredit(batch),
         userPublicId: batch.userPublicId,
+        fromAddress: batch.fromAddress ?? null,
       })),
     )
   }),
@@ -198,9 +199,55 @@ creditsController.get(
 )
 
 // ---------------------------------------------------------------------------
+// POST /credits/batches/refund
+// Admin-only: marks several credit batches as refunded in one atomic
+// operation. Body: { batchIds: string[], refundTxHash: string }.
+// The refund transaction hash is mandatory — the same hash is recorded on
+// every batch (one on-chain AI3 transfer can cover multiple batches of the
+// same account paid from the same purchasing wallet; spanning accounts or
+// paying wallets is rejected with 400).
+// All-or-nothing: if any id is unknown nothing is updated (404).
+// Already-refunded batches are skipped (idempotent).
+// Returns 403 for non-admin callers, 400 for missing/malformed input.
+//
+// NOTE: registered BEFORE POST /credits/batches/:id/refund so the literal
+// path segment "refund" is not captured as an :id parameter.
+// ---------------------------------------------------------------------------
+
+creditsController.post(
+  '/batches/refund',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const { batchIds, refundTxHash } = req.body ?? {}
+
+    const result = await handleInternalErrorResult(
+      CreditsUseCases.refundBatches(user, batchIds, refundTxHash),
+      'Failed to refund credit batches',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json({
+      ok: true,
+      refundedCount: result.value.refundedCount,
+      alreadyRefundedCount: result.value.alreadyRefundedCount,
+    })
+  }),
+)
+
+// ---------------------------------------------------------------------------
 // POST /credits/batches/:id/refund
 // Admin-only: marks a credit batch as refunded (zeros remaining bytes,
-// sets refunded = true). Idempotent — safe to call multiple times.
+// sets refunded_at, records the mandatory refund transaction hash).
+// Body: { refundTxHash: string } — required; requests without a valid
+// 0x-prefixed 64-hex-char hash are rejected with 400 and the batch is NOT
+// marked as refunded. Idempotent — safe to call multiple times.
 // Returns 403 for non-admin callers, 404 if the batch is not found.
 // ---------------------------------------------------------------------------
 
@@ -213,9 +260,10 @@ creditsController.post(
     }
 
     const { id } = req.params
+    const { refundTxHash } = req.body ?? {}
 
     const result = await handleInternalErrorResult(
-      CreditsUseCases.refundBatch(user, id),
+      CreditsUseCases.refundBatch(user, id, refundTxHash),
       'Failed to refund credit batch',
     )
     if (result.isErr()) {
