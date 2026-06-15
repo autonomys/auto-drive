@@ -1,4 +1,10 @@
-import { PurchasedCredit, User, UserRole, UserWithOrganization } from '@auto-drive/models'
+import {
+  EVM_TX_HASH_REGEX,
+  PurchasedCredit,
+  User,
+  UserRole,
+  UserWithOrganization,
+} from '@auto-drive/models'
 import {
   AdminCreditBatchRow,
   AdminUserCreditBatchRow,
@@ -6,7 +12,11 @@ import {
 } from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { AccountsUseCases } from './accounts.js'
 import { config } from '../../config.js'
-import { ForbiddenError, NotFoundError } from '../../errors/index.js'
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 import { hasGoogleAuth } from '../featureFlags/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
@@ -181,22 +191,72 @@ const getUserBatches = async (
 }
 
 // ---------------------------------------------------------------------------
+// Refund transaction hash validation
+// Every refund must record the on-chain transaction hash of the AI3 transfer
+// the admin executed. Strict EVM format (EVM_TX_HASH_REGEX from
+// @auto-drive/models, shared with the frontend refund modal).
+// ---------------------------------------------------------------------------
+
+// purchased_credits.id is a UUID column. Validating ids here returns a clean
+// 400 instead of letting Postgres fail the `::uuid` cast (which would
+// surface as a 500). Any UUID version is accepted.
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const validateRefundTxHash = (
+  refundTxHash: unknown,
+): Result<string, BadRequestError> => {
+  if (typeof refundTxHash !== 'string' || refundTxHash.trim() === '') {
+    return err(
+      new BadRequestError(
+        'A refund transaction hash is required to mark a batch as refunded',
+      ),
+    )
+  }
+  const trimmed = refundTxHash.trim()
+  if (!EVM_TX_HASH_REGEX.test(trimmed)) {
+    return err(
+      new BadRequestError(
+        'Invalid refund transaction hash: expected 0x followed by 64 hex characters',
+      ),
+    )
+  }
+  return ok(trimmed)
+}
+
+// ---------------------------------------------------------------------------
 // refundBatch
 // Admin-only: zeros the remaining bytes for a specific credit batch and marks
-// it as refunded. Idempotent — calling it on an already-refunded row is a
-// no-op that still returns ok() so the UI can safely retry on network errors.
-// Returns 403 for non-admin callers, 404 if the batch does not exist.
+// it as refunded, recording the mandatory on-chain refund transaction hash.
+// Idempotent — calling it on an already-refunded row is a no-op that still
+// returns ok() so the UI can safely retry on network errors (the original
+// refund_tx_hash is preserved).
+// Returns 403 for non-admin callers, 404 if the batch does not exist,
+// 400 if the transaction hash is missing or malformed.
 // ---------------------------------------------------------------------------
 
 const refundBatch = async (
   executor: User,
   batchId: string,
-): Promise<Result<void, ForbiddenError | NotFoundError>> => {
+  refundTxHash: unknown,
+): Promise<Result<void, ForbiddenError | NotFoundError | BadRequestError>> => {
   if (executor.role !== UserRole.Admin) {
     return err(new ForbiddenError('Admin access required'))
   }
 
-  const { found, row } = await purchasedCreditsRepository.markAsRefunded(batchId)
+  if (!UUID_REGEX.test(batchId)) {
+    return err(new BadRequestError('Invalid batch id: expected a UUID'))
+  }
+
+  const txHashResult = validateRefundTxHash(refundTxHash)
+  if (txHashResult.isErr()) {
+    return err(txHashResult.error)
+  }
+
+  const { found, row } = await purchasedCreditsRepository.markAsRefunded(
+    batchId,
+    txHashResult.value,
+  )
   if (!found) {
     return err(new NotFoundError('Credit batch not found'))
   }
@@ -204,6 +264,7 @@ const refundBatch = async (
   if (row) {
     logger.info('Admin marked credit batch as refunded', {
       batchId,
+      refundTxHash: txHashResult.value,
       adminPublicId: executor.publicId,
     })
   } else {
@@ -216,6 +277,109 @@ const refundBatch = async (
   return ok(undefined)
 }
 
+// ---------------------------------------------------------------------------
+// refundBatches
+// Admin-only: marks several credit batches as refunded in one atomic
+// operation, recording the same on-chain refund transaction hash on each
+// (one AI3 transfer can cover multiple batches of the same account).
+// All-or-nothing: if any batch id does not exist nothing is updated and a
+// 404 listing the missing ids is returned. All batches still pending a
+// refund must belong to the same account AND have been paid from the same
+// purchasing wallet (the intent's from_address) — one on-chain refund
+// transfer goes back to a single wallet, so a combined refund spanning
+// accounts or paying wallets is rejected with 400 and nothing is updated.
+// Already-refunded batches are skipped (idempotent, mirroring refundBatch)
+// and are excluded from both checks, so retries succeed even if the
+// already-refunded rows belong to different accounts or wallets.
+// Returns 403 for non-admin callers, 400 if the transaction hash is missing
+// or malformed, or if no batch ids are provided.
+// ---------------------------------------------------------------------------
+
+export type RefundBatchesSummary = {
+  refundedCount: number
+  alreadyRefundedCount: number
+}
+
+const refundBatches = async (
+  executor: User,
+  batchIds: unknown,
+  refundTxHash: unknown,
+): Promise<
+  Result<RefundBatchesSummary, ForbiddenError | NotFoundError | BadRequestError>
+> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('Admin access required'))
+  }
+
+  if (
+    !Array.isArray(batchIds) ||
+    batchIds.length === 0 ||
+    !batchIds.every((id) => typeof id === 'string' && id.trim() !== '')
+  ) {
+    return err(
+      new BadRequestError('batchIds must be a non-empty array of batch ids'),
+    )
+  }
+
+  const uniqueIds = [...new Set(batchIds.map((id) => id.trim()))]
+
+  const invalidIds = uniqueIds.filter((id) => !UUID_REGEX.test(id))
+  if (invalidIds.length > 0) {
+    return err(
+      new BadRequestError(
+        `Invalid batch ids (expected UUIDs): ${invalidIds.join(', ')}`,
+      ),
+    )
+  }
+
+  const txHashResult = validateRefundTxHash(refundTxHash)
+  if (txHashResult.isErr()) {
+    return err(txHashResult.error)
+  }
+
+  const result = await purchasedCreditsRepository.markManyAsRefunded(
+    uniqueIds,
+    txHashResult.value,
+  )
+
+  if (result.missingIds.length > 0) {
+    return err(
+      new NotFoundError(
+        `Credit batches not found: ${result.missingIds.join(', ')}`,
+      ),
+    )
+  }
+
+  if (result.accountIds.length > 1) {
+    return err(
+      new BadRequestError(
+        'All batches in a combined refund must belong to the same account',
+      ),
+    )
+  }
+
+  if (result.walletAddresses.length > 1) {
+    return err(
+      new BadRequestError(
+        'All batches in a combined refund must have been paid from the same purchasing wallet',
+      ),
+    )
+  }
+
+  logger.info('Admin marked credit batches as refunded', {
+    batchIds: uniqueIds,
+    refundedCount: result.refundedRows.length,
+    alreadyRefundedCount: result.alreadyRefundedIds.length,
+    refundTxHash: txHashResult.value,
+    adminPublicId: executor.publicId,
+  })
+
+  return ok({
+    refundedCount: result.refundedRows.length,
+    alreadyRefundedCount: result.alreadyRefundedIds.length,
+  })
+}
+
 export const CreditsUseCases = {
   getSummary,
   getBatches,
@@ -224,4 +388,5 @@ export const CreditsUseCases = {
   getAllBatches,
   getUserBatches,
   refundBatch,
+  refundBatches,
 }

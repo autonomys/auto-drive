@@ -48,9 +48,15 @@ export type ExpiringCreditBatch = {
 };
 
 // Wire-format of rows from GET /credits/batches/all (admin endpoint).
-// Extends ExpiringCreditBatch with the owner's userPublicId.
+// Extends ExpiringCreditBatch with the owner's userPublicId and refund state.
 export type AdminCreditBatch = ExpiringCreditBatch & {
   userPublicId: string;
+  /** ISO timestamp of the refund action, or null if not yet refunded. */
+  refundedAt: string | null;
+  /** On-chain tx hash of the AI3 refund transfer, or null if not refunded. */
+  refundTxHash: string | null;
+  /** EVM purchasing wallet that paid for the batch, if known. */
+  fromAddress: string | null;
 };
 
 // Wire-format of GET /credits/economics (admin)
@@ -82,6 +88,8 @@ export type AdminUserCreditBatch = ExpiringCreditBatch & {
   fromAddress: string | null;
   /** ISO timestamp of the refund action, or null if not yet refunded. */
   refundedAt: string | null;
+  /** On-chain tx hash of the AI3 refund transfer, or null if not refunded. */
+  refundTxHash: string | null;
 };
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
@@ -1229,9 +1237,14 @@ export const createApiService = ({
   // -------------------------------------------------------------------------
   // Admin: mark a credit batch as refunded
   // POST /credits/batches/:id/refund
+  // The on-chain refund transaction hash is mandatory — the backend rejects
+  // requests without it and the batch is NOT marked as refunded.
   // -------------------------------------------------------------------------
 
-  refundCreditBatch: async (batchId: string): Promise<void> => {
+  refundCreditBatch: async (
+    batchId: string,
+    refundTxHash: string,
+  ): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -1244,12 +1257,62 @@ export const createApiService = ({
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
           'X-Auth-Provider': session.authProvider,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ refundTxHash }),
       },
     );
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      const message = await response
+        .json()
+        .then((body) => body?.error as string | undefined)
+        .catch(() => undefined);
+      throw new Error(
+        message ?? `Network response was not ok: ${response.statusText}`,
+      );
     }
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: mark several credit batches as refunded in one atomic operation
+  // POST /credits/batches/refund
+  // The same on-chain refund transaction hash is recorded on every batch
+  // (one AI3 transfer can cover multiple batches of the same account).
+  // -------------------------------------------------------------------------
+
+  refundCreditBatches: async (
+    batchIds: string[],
+    refundTxHash: string,
+  ): Promise<{ refundedCount: number; alreadyRefundedCount: number }> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/batches/refund`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ batchIds, refundTxHash }),
+    });
+
+    if (!response.ok) {
+      const message = await response
+        .json()
+        .then((body) => body?.error as string | undefined)
+        .catch(() => undefined);
+      throw new Error(
+        message ?? `Network response was not ok: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<{
+      refundedCount: number;
+      alreadyRefundedCount: number;
+    }>;
   },
 });
