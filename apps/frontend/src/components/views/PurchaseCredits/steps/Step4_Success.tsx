@@ -39,7 +39,7 @@ export const PurchaseStep4Success = ({
                 <InfoRow
                   className='items-center font-bold'
                   label='Storage Added'
-                  value={<span>{sizeMB} MB</span>}
+                  value={<span>{formatBytes(sizeMB * 1024 * 1024, 2)}</span>}
                 />
                 <InfoRow
                   label='AI3 Paid'
@@ -76,7 +76,7 @@ export const PurchaseStep4Success = ({
                   label='Credits Added'
                   value={
                     <span className='font-bold text-primary'>
-                      {Number(context.sizeMB)} MB
+                      {formatBytes(sizeMB * 1024 * 1024, 2)}
                     </span>
                   }
                 />
