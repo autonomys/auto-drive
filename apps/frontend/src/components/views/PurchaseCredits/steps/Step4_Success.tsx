@@ -7,7 +7,7 @@ import { usePrices } from '../../../../hooks/usePrices';
 import { shortenString } from '../../../../utils/misc';
 import { CopiableText } from '../../../atoms/CopiableText';
 import { useUserStore } from '../../../../globalStates/user';
-import { formatBytes } from '../../../../utils/number';
+import { formatStorageSize } from '../../../../utils/number';
 
 export const PurchaseStep4Success = ({
   context,
@@ -39,7 +39,7 @@ export const PurchaseStep4Success = ({
                 <InfoRow
                   className='items-center font-bold'
                   label='Storage Added'
-                  value={<span>{sizeMB} MB</span>}
+                  value={<span>{formatStorageSize(sizeMB * 1024 * 1024, 2)}</span>}
                 />
                 <InfoRow
                   label='AI3 Paid'
@@ -76,7 +76,7 @@ export const PurchaseStep4Success = ({
                   label='Credits Added'
                   value={
                     <span className='font-bold text-primary'>
-                      {Number(context.sizeMB)} MB
+                      {formatStorageSize(sizeMB * 1024 * 1024, 2)}
                     </span>
                   }
                 />
@@ -85,7 +85,7 @@ export const PurchaseStep4Success = ({
                     label='New Purchased Credits Total'
                     value={
                       <span className='font-bold text-primary'>
-                        {formatBytes(newPurchasedBalance, 2)}
+                        {formatStorageSize(newPurchasedBalance, 2)}
                       </span>
                     }
                   />
