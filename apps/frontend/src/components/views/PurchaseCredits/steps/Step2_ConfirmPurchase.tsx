@@ -8,7 +8,7 @@ import { Zap, AlertTriangle, Info } from 'lucide-react';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
 import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
-import { formatBytes } from '../../../../utils/number';
+import { formatStorageSize } from '../../../../utils/number';
 import { useUserStore } from '../../../../globalStates/user';
 import {
   UNITS,
@@ -56,11 +56,11 @@ export const PurchaseStep2ConnectWallet = ({
     const id = String(context.packageId ?? 'custom');
     switch (id) {
       case 'starter':
-        return { title: 'Starter', sizeMB: 10 };
+        return { title: 'Starter', sizeMB: 100 };
       case 'pro':
-        return { title: 'Professional Package', sizeMB: 100 };
+        return { title: 'Professional Package', sizeMB: 1024 };
       case 'ent':
-        return { title: 'Enterprise', sizeMB: 1024 };
+        return { title: 'Enterprise', sizeMB: 102400 };
       default:
         return { title: 'Custom Amount', sizeMB: (context.sizeMB as number) ?? 0 };
     }
@@ -183,7 +183,7 @@ export const PurchaseStep2ConnectWallet = ({
                 </div>
                 <div className='text-right'>
                   <div className='text-xl font-bold'>
-                    {formatBytes(effectiveMib * 1024 * 1024, 2)}
+                    {formatStorageSize(effectiveMib * 1024 * 1024, 2)}
                   </div>
                   <div className='text-xs text-muted-foreground'>Storage</div>
                 </div>
@@ -233,8 +233,8 @@ export const PurchaseStep2ConnectWallet = ({
                           That means:
                         </p>
                         <ul className='mt-1.5 space-y-0.5 text-gray-200'>
-                          <li>1 GB&nbsp;=&nbsp;1,024 MiB&nbsp;<span className='text-gray-400'>(not 1,000 MB)</span></li>
-                          <li>1 TB&nbsp;=&nbsp;1,024 GiB&nbsp;<span className='text-gray-400'>(not 1,000 GB)</span></li>
+                          <li>1 GB&nbsp;=&nbsp;1,024 MB</li>
+                          <li>1 TB&nbsp;=&nbsp;1,024 GB</li>
                         </ul>
                       </div>
                     </div>
@@ -247,7 +247,7 @@ export const PurchaseStep2ConnectWallet = ({
                       <span>
                         Exceeds your remaining cap.{' '}
                         Maximum you can purchase:{' '}
-                        <strong>{formatBytes(maxPurchasableMib * 1024 * 1024, 2)}</strong>
+                        <strong>{formatStorageSize(maxPurchasableMib * 1024 * 1024, 2)}</strong>
                       </span>
                     </div>
                   )}
@@ -264,7 +264,7 @@ export const PurchaseStep2ConnectWallet = ({
               {/* Price breakdown (read-only) */}
               <InfoRow
                 label='Storage Amount'
-                value={<span>{formatBytes(effectiveMib * 1024 * 1024, 2)}</span>}
+                value={<span>{formatStorageSize(effectiveMib * 1024 * 1024, 2)}</span>}
               />
               <InfoRow
                 label='AI3 Token Amount'
@@ -303,15 +303,15 @@ export const PurchaseStep2ConnectWallet = ({
               <InfoRow
                 label='Current Purchased Credits'
                 className='rounded-md bg-gray-100 p-4 dark:bg-gray-800'
-                value={<span>{formatBytes(currentPurchasedBytes, 2)}</span>}
+                value={<span>{formatStorageSize(currentPurchasedBytes, 2)}</span>}
               />
               <InfoRow
                 label='After Purchase'
                 value={
                   <span className='font-semibold'>
                     {effectiveMib > 0
-                      ? formatBytes(afterPurchaseBytes, 2)
-                      : formatBytes(currentPurchasedBytes, 2)}
+                      ? formatStorageSize(afterPurchaseBytes, 2)
+                      : formatStorageSize(currentPurchasedBytes, 2)}
                   </span>
                 }
                 className='rounded-md bg-primary/20 p-4'
