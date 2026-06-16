@@ -56,11 +56,11 @@ export const PurchaseStep2ConnectWallet = ({
     const id = String(context.packageId ?? 'custom');
     switch (id) {
       case 'starter':
-        return { title: 'Starter', sizeMB: 10 };
+        return { title: 'Starter', sizeMB: 100 };
       case 'pro':
-        return { title: 'Professional Package', sizeMB: 100 };
+        return { title: 'Professional Package', sizeMB: 1024 };
       case 'ent':
-        return { title: 'Enterprise', sizeMB: 1024 };
+        return { title: 'Enterprise', sizeMB: 102400 };
       default:
         return { title: 'Custom Amount', sizeMB: (context.sizeMB as number) ?? 0 };
     }
