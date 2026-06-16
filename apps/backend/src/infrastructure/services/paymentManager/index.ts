@@ -10,7 +10,7 @@ import {
 } from 'viem'
 import { config } from '../../../config.js'
 import { createLogger } from '../../drivers/logger.js'
-import { depositEventAbi } from './event-abi.js'
+import { intentPaymentReceivedAbi } from '@auto-drive/models'
 import { IntentsUseCases } from '../../../core/users/intents.js'
 import { safeCallback } from '../../../shared/utils/safe.js'
 
@@ -38,8 +38,8 @@ const watchTransaction = async (txHash: string) => {
   // Filter logs to only include the deposit event
   const logs = paymentManager
     ._parseEventLogs({
-      abi: depositEventAbi,
-      eventName: depositEventAbi[0].name,
+      abi: intentPaymentReceivedAbi,
+      eventName: intentPaymentReceivedAbi[0].name,
       logs: receipt.logs,
     })
     // Filter logs to only include logs from the payment manager contract
@@ -180,9 +180,9 @@ const start = () => {
     config.paymentManager.checkInterval,
   )
   unwatchContractEvent = viemClient.watchContractEvent({
-    abi: depositEventAbi,
+    abi: intentPaymentReceivedAbi,
     address: config.paymentManager.contractAddress,
-    eventName: depositEventAbi[0].name,
+    eventName: intentPaymentReceivedAbi[0].name,
     onLogs: paymentManager._onLogs,
   })
 }
