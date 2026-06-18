@@ -9,7 +9,7 @@ import {
 import { pipeline } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { Request, Response } from 'express'
-import { sendXML } from './utils.js'
+import { encodeS3Key, planListingEncoding, sendXML } from './utils.js'
 import js2xmlparser from 'js2xmlparser'
 import { UploadOptions } from '@auto-drive/models'
 import {
@@ -341,6 +341,7 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
   const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
   const continuationToken =
     (req.query['continuation-token'] as string) ?? null
+  const encodingType = (req.query['encoding-type'] as string) ?? null
 
   const result = await S3UseCases.listObjects({
     bucket,
@@ -350,15 +351,41 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
     continuationToken,
   })
 
+  // Keys may contain characters XML cannot represent; encoding-type=url is the
+  // S3 mechanism for returning them. Without opt-in, reject with 400 rather
+  // than throwing a 500 in the serializer.
+  const plan = planListingEncoding(
+    [...result.objects.map((o) => o.key), ...result.commonPrefixes],
+    encodingType,
+  )
+
+  if (plan === 'reject') {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message:
+        'This listing contains keys with characters that require URL encoding. Retry the request with encoding-type=url.',
+      ArgumentName: 'encoding-type',
+      Resource: `/${bucket}/`,
+    })
+    return
+  }
+
+  const encode = plan === 'encode' ? encodeS3Key : (value: string) => value
+
   // Build the XML body.  js2xmlparser repeats a key for each array element,
   // which is exactly the S3 format (multiple <Contents> / <CommonPrefixes>
   // siblings at the root level).
   const xmlBody: Record<string, unknown> = {
     Name: result.name,
-    Prefix: result.prefix,
+    Prefix: encode(result.prefix),
     MaxKeys: result.maxKeys,
     KeyCount: result.objects.length + result.commonPrefixes.length,
     IsTruncated: result.isTruncated,
+  }
+
+  // Echo the encoding back so clients know to url-decode the keys below.
+  if (plan === 'encode') {
+    xmlBody.EncodingType = 'url'
   }
 
   if (result.nextContinuationToken) {
@@ -367,7 +394,7 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
 
   if (result.objects.length > 0) {
     xmlBody.Contents = result.objects.map((obj) => ({
-      Key: obj.key,
+      Key: encode(obj.key),
       Size: obj.size.toString(),
       LastModified: obj.lastModified.toISOString(),
       // Return the stored MD5 so clients (rclone, AWS CLI) can verify
@@ -379,7 +406,7 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
 
   if (result.commonPrefixes.length > 0) {
     xmlBody.CommonPrefixes = result.commonPrefixes.map((p) => ({
-      Prefix: p,
+      Prefix: encode(p),
     }))
   }
 
