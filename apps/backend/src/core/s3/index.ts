@@ -240,6 +240,11 @@ const objectDownloadPath = (bucket: string, key: string) => {
   return `/s3/${bucket}/${key}`
 }
 
+const objectExists = async (bucket: string, key: string): Promise<boolean> => {
+  const mapping = await s3ObjectMappingsRepository.findByKey(bucket, key)
+  return mapping !== null
+}
+
 export const S3UseCases = {
   getObject,
   createMultipartUpload,
@@ -248,4 +253,5 @@ export const S3UseCases = {
   putObject,
   listBuckets,
   listObjects,
+  objectExists,
 }
