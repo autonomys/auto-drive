@@ -61,6 +61,37 @@ const getUploadOptions = (req: Request) => {
   return UploadOptions
 }
 
+/**
+ * Build the absolute, host-aware object URL for the CompleteMultipartUpload
+ * `Location` response field — per the S3 spec, the URL of the newly created
+ * object as seen from the endpoint the client used.
+ *
+ * The backend mounts the S3 API at `/s3`, but the public-facing endpoint
+ * differs per vhost (the dedicated `s3.` subdomain serves it at the root; the
+ * legacy host serves it under `/s3`) and nginx rewrites both onto `/s3` before
+ * the request reaches here. So the URL is reconstructed from the forwarding
+ * headers nginx sets rather than from the request's own (rewritten) path:
+ *   - X-Forwarded-Proto — scheme at the edge (nginx terminates TLS and proxies
+ *     over http, so req.protocol alone would always read 'http').
+ *   - Host — the public hostname (forwarded via `proxy_set_header Host`).
+ *   - X-Forwarded-Prefix — the public path prefix the S3 API is exposed under:
+ *     '/s3' on the legacy host, root on the subdomain. nginx drops
+ *     empty-valued headers, so the subdomain sends '/', normalized here to ''.
+ * With no forwarding headers (requests straight to Express, e.g. tests), this
+ * falls back to req.protocol, the Host header, and the '/s3' mount.
+ */
+const buildObjectLocation = (
+  req: Request,
+  bucket: string,
+  key: string,
+): string => {
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol
+  const host = req.headers.host ?? ''
+  const rawPrefix = (req.headers['x-forwarded-prefix'] as string) ?? '/s3'
+  const prefix = rawPrefix === '/' ? '' : rawPrefix.replace(/\/+$/, '')
+  return `${proto}://${host}${prefix}/${bucket}/${key}`
+}
+
 /** Thrown when a CompleteMultipartUpload body is not valid per the S3 spec. */
 export class MalformedMultipartError extends Error {}
 
@@ -416,12 +447,16 @@ export const completeMultipartUploadHandler = async (
   // (which calls res.send()). res.send() triggers Express's auto-ETag generation
   // which would overwrite our composite MD5 ETag with a body-derived hash.
   const { Cid: completeCid, ETag: completeETag, ...completeXmlBody } = result.value
+  // Location is built here (not in the use case) because it depends on the
+  // public endpoint the request arrived on — see buildObjectLocation.
+  const Location = buildObjectLocation(req, bucket, key)
   res.set('ETag', completeETag)
   res.set('x-amz-meta-cid', completeCid)
   res.setHeader('Content-Type', 'application/xml')
   res.end(
     js2xmlparser.parse('CompleteMultipartUploadResult', {
       ETag: completeETag,
+      Location,
       ...completeXmlBody,
     }),
   )
