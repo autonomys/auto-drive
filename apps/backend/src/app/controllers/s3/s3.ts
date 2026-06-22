@@ -11,6 +11,7 @@ import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { Request, Response } from 'express'
 import { sendXML } from './utils.js'
 import js2xmlparser from 'js2xmlparser'
+import { XMLParser } from 'fast-xml-parser'
 import { UploadOptions } from '@auto-drive/models'
 import {
   CompressionAlgorithm,
@@ -60,48 +61,64 @@ const getUploadOptions = (req: Request) => {
   return UploadOptions
 }
 
-/**
- * Extract part ETags from a CompleteMultipartUpload XML request body.
- *
- * AWS SDK v3 for JavaScript serialises <ETag> BEFORE <PartNumber> inside
- * each <Part> element:
- *
- *   <CompleteMultipartUpload>
- *     <Part><ETag>"md5hex"</ETag><PartNumber>1</PartNumber></Part>
- *     ...
- *   </CompleteMultipartUpload>
- *
- * Other clients (e.g. older SDKs, rclone) may use the opposite order.  To
- * handle both, each <Part> block is extracted first and then the two fields
- * are parsed independently from its content.
- *
- * Returns parts sorted by PartNumber (ascending) so the composite ETag is
- * computed in the correct order.
- */
-const parseMultipartParts = (
+/** Thrown when a CompleteMultipartUpload body is not valid per the S3 spec. */
+export class MalformedMultipartError extends Error {}
+
+// processEntities (on by default) decodes the &#34; that aws-sdk-go-v2 (rclone)
+// uses for the ETag quotes — the crux of the fix; boto3 emits literal quotes
+// and both land on `"<hex>"`. removeNSPrefix handles <s3:Part>; parseTagValue
+// off keeps ETags as strings.
+const multipartXmlParser = new XMLParser({
+  ignoreAttributes: true,
+  removeNSPrefix: true,
+  parseTagValue: false,
+  trimValues: true,
+})
+
+// Extract the part list from a CompleteMultipartUpload body. A real parser
+// (not a regex) so namespaces, ordering, and entity encoding work across
+// clients. Each <Part> needs an integer PartNumber (>= 1) and a non-empty
+// ETag, else throws MalformedMultipartError so the caller can return 400
+// MalformedXML. Returns parts sorted by PartNumber.
+export const parseMultipartParts = (
   body: Buffer,
 ): Array<{ PartNumber: number; ETag: string }> => {
-  const xml = body.toString('utf-8')
-  // Extract each <Part>…</Part> block, then parse fields independently so
-  // that element order within the block doesn't matter.
-  const partBlockRegex = /<Part>([\s\S]*?)<\/Part>/g
-  const parts: Array<{ PartNumber: number; ETag: string }> = []
-  let block: RegExpExecArray | null
-  while ((block = partBlockRegex.exec(xml)) !== null) {
-    const content = block[1]
-    const partNumberMatch = content.match(/<PartNumber>(\d+)<\/PartNumber>/)
-    const etagMatch = content.match(/<ETag>([^<]+)<\/ETag>/)
-    if (partNumberMatch && etagMatch) {
-      // AWS SDK v3 XML-encodes the double-quotes around the ETag hex digest
-      // as &quot; (e.g. &quot;d41d…&quot;).  Decode before storing so that
-      // multipartETag can strip the quotes and read the raw hex correctly.
-      const etag = etagMatch[1].trim().replace(/&quot;/g, '"')
-      parts.push({
-        PartNumber: parseInt(partNumberMatch[1], 10),
-        ETag: etag,
-      })
-    }
+  let parsed: unknown
+  try {
+    parsed = multipartXmlParser.parse(body.toString('utf-8'))
+  } catch {
+    throw new MalformedMultipartError('Malformed CompleteMultipartUpload XML')
   }
+
+  const root = (parsed as Record<string, unknown> | undefined)
+    ?.CompleteMultipartUpload as Record<string, unknown> | undefined
+  if (root == null || typeof root !== 'object') {
+    throw new MalformedMultipartError(
+      'Missing CompleteMultipartUpload root element',
+    )
+  }
+
+  // <Part> is a single object for one part and an array for many.
+  const rawPart = root.Part
+  const rawParts =
+    rawPart == null ? [] : Array.isArray(rawPart) ? rawPart : [rawPart]
+  if (rawParts.length === 0) {
+    throw new MalformedMultipartError('CompleteMultipartUpload has no parts')
+  }
+
+  const parts = rawParts.map((part) => {
+    const record = part as Record<string, unknown>
+    const partNumber = Number(record?.PartNumber)
+    const etag = record?.ETag
+    if (!Number.isInteger(partNumber) || partNumber < 1) {
+      throw new MalformedMultipartError('Part is missing a valid PartNumber')
+    }
+    if (typeof etag !== 'string' || etag.trim() === '') {
+      throw new MalformedMultipartError('Part is missing a non-empty ETag')
+    }
+    return { PartNumber: partNumber, ETag: etag.trim() }
+  })
+
   return parts.sort((a, b) => a.PartNumber - b.PartNumber)
 }
 
@@ -367,7 +384,21 @@ export const completeMultipartUploadHandler = async (
 
   // Parse the part list from the XML request body so we can compute the
   // standard S3 composite ETag (MD5 of concatenated per-part MD5s + part count).
-  const parts = Buffer.isBuffer(req.body) ? parseMultipartParts(req.body) : []
+  // A body that can't be parsed into valid parts is a client error, not a
+  // reason to silently store a wrong ETag — reject it with 400 MalformedXML.
+  let parts: Array<{ PartNumber: number; ETag: string }>
+  try {
+    parts = parseMultipartParts(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0))
+  } catch (error) {
+    if (error instanceof MalformedMultipartError) {
+      sendXML(res.status(400), 'Error', {
+        Code: 'MalformedXML',
+        Message: error.message,
+      })
+      return
+    }
+    throw error
+  }
 
   const result = await S3UseCases.completeMultipartUpload(user, {
     Bucket: bucket,
