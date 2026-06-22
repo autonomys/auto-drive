@@ -6,6 +6,9 @@ import {
   createMultipartUploadHandler,
   deleteObjectHandler,
   getObjectHandler,
+  getObjectLegalHoldHandler,
+  getObjectLockConfigurationHandler,
+  getObjectRetentionHandler,
   headObjectHandler,
   listBucketsHandler,
   listObjectsV2Handler,
@@ -32,17 +35,25 @@ const S3HandlerConfig: S3HandlerConfig = {
   DeleteObject: deleteObjectHandler,
   ListBuckets: listBucketsHandler,
   ListObjectsV2: listObjectsV2Handler,
+  // Object Lock — read-only declarative contract (Auto Drive is immutable).
+  GetObjectLockConfiguration: getObjectLockConfigurationHandler,
+  GetObjectRetention: getObjectRetentionHandler,
+  GetObjectLegalHold: getObjectLegalHoldHandler,
   // Recognised but unimplemented — mapped to 501, never to a write handler.
   CopyObject: notImplementedHandler,
   ListParts: notImplementedHandler,
   ListMultipartUploads: notImplementedHandler,
   AbortMultipartUpload: notImplementedHandler,
   PostObject: notImplementedHandler,
+  // Object Lock is intrinsic and cannot be configured by clients — 501.
+  PutObjectLockConfiguration: notImplementedHandler,
+  PutObjectRetention: notImplementedHandler,
+  PutObjectLegalHold: notImplementedHandler,
 }
 
 // Match on method first: the same query param (?uploadId, ?uploads) selects a
 // different operation per verb.
-const getS3Method = (req: Request): string => {
+export const getS3Method = (req: Request): string => {
   const q = req.query
   const isCopy = req.headers['x-amz-copy-source'] != null
 
@@ -50,12 +61,18 @@ const getS3Method = (req: Request): string => {
     case 'GET':
       if ('uploadId' in q) return 'ListParts'
       if ('uploads' in q) return 'ListMultipartUploads'
+      if ('object-lock' in q) return 'GetObjectLockConfiguration'
+      if ('retention' in q) return 'GetObjectRetention'
+      if ('legal-hold' in q) return 'GetObjectLegalHold'
       if (q['list-type'] === '2') return 'ListObjectsV2'
       return 'GetObject'
     case 'HEAD':
       return 'HeadObject'
     case 'PUT':
       if ('uploadId' in q && 'partNumber' in q) return 'UploadPart'
+      if ('object-lock' in q) return 'PutObjectLockConfiguration'
+      if ('retention' in q) return 'PutObjectRetention'
+      if ('legal-hold' in q) return 'PutObjectLegalHold'
       if (isCopy) return 'CopyObject'
       return 'PutObject'
     case 'POST':

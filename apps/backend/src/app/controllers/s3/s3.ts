@@ -213,6 +213,76 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   res.status(200).end()
 }
 
+// ── Object Lock ───────────────────────────────────────────────────────────
+// Auto Drive storage is immutable (WORM) by construction, so we expose a fixed
+// COMPLIANCE-mode lock contract with a far-future retention. The contract is
+// intrinsic and cannot be configured by clients, so the PutObjectLock* / Put*
+// Retention / Put*LegalHold counterparts stay 501 (wired in http.ts).
+
+// "Forever" sentinel for RetainUntilDate. S3 has no infinity value, so use the
+// max representable date: year 9999 is the ceiling for SQL DATETIME and Python
+// datetime.max, so anything larger would overflow common clients (e.g. boto3).
+const OBJECT_LOCK_RETAIN_UNTIL = '9999-12-31T23:59:59Z'
+
+export const objectLockConfigurationBody = () => ({
+  ObjectLockEnabled: 'Enabled',
+  Rule: { DefaultRetention: { Mode: 'COMPLIANCE', Years: 100 } },
+})
+
+export const objectRetentionBody = () => ({
+  Mode: 'COMPLIANCE',
+  RetainUntilDate: OBJECT_LOCK_RETAIN_UNTIL,
+})
+
+export const objectLegalHoldBody = () => ({ Status: 'ON' })
+
+export const getObjectLockConfigurationHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+  sendXML(res, 'ObjectLockConfiguration', objectLockConfigurationBody())
+}
+
+// The retention and legal-hold contracts are object-level, so reject a key
+// that doesn't exist with NoSuchKey rather than asserting a lock over nothing.
+const sendNoSuchKey = (res: Response, key: string) => {
+  sendXML(res.status(404), 'Error', {
+    Code: 'NoSuchKey',
+    Message: 'The specified key does not exist.',
+    Key: key,
+  })
+}
+
+export const getObjectRetentionHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+  const { bucket, key } = parseBucketAndKey(req.params.key)
+  if (!(await S3UseCases.objectExists(bucket, key))) {
+    sendNoSuchKey(res, key)
+    return
+  }
+  sendXML(res, 'Retention', objectRetentionBody())
+}
+
+export const getObjectLegalHoldHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+  const { bucket, key } = parseBucketAndKey(req.params.key)
+  if (!(await S3UseCases.objectExists(bucket, key))) {
+    sendNoSuchKey(res, key)
+    return
+  }
+  sendXML(res, 'LegalHold', objectLegalHoldBody())
+}
+
 export const createMultipartUploadHandler = async (
   req: Request,
   res: Response,
