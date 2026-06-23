@@ -33,7 +33,7 @@ type = s3
 provider = Other
 access_key_id = YOUR_API_KEY_HERE
 secret_access_key = placeholder
-endpoint = https://public.auto-drive.autonomys.xyz/s3
+endpoint = https://s3.auto-drive.autonomys.xyz
 no_check_bucket = true
 list_version = 2
 ```
