@@ -30,8 +30,17 @@ import {
 /** PutObject result extended with the Autonomys CID for the x-amz-meta-cid header. */
 type PutObjectResult = PutObjectCommandResult & { Cid: string }
 
-/** CompleteMultipartUpload result extended with the Autonomys CID. */
-type CompleteMultipartUploadResult = CompleteMultipartUploadCommandResult & {
+/** CompleteMultipartUpload result extended with the Autonomys CID.
+ *
+ *  `Location` is intentionally omitted here. Per the S3 spec it is the absolute
+ *  URL of the new object, which depends on the public endpoint the client used
+ *  (the dedicated S3 subdomain vs. the legacy /s3 path). That is request/host
+ *  state the HTTP layer owns, so it is built in `completeMultipartUploadHandler`
+ *  and this use case stays host-agnostic. */
+type CompleteMultipartUploadResult = Omit<
+  CompleteMultipartUploadCommandResult,
+  'Location'
+> & {
   Cid: string
 }
 
@@ -179,7 +188,6 @@ const completeMultipartUpload = async (
   )
 
   return ok({
-    Location: objectDownloadPath(params.Bucket, params.Key),
     Bucket: params.Bucket,
     Key: params.Key,
     ETag: etag,
@@ -236,8 +244,9 @@ const listBuckets = async (): Promise<S3BucketInfo[]> => {
   return s3ObjectMappingsRepository.listBuckets()
 }
 
-const objectDownloadPath = (bucket: string, key: string) => {
-  return `/s3/${bucket}/${key}`
+const objectExists = async (bucket: string, key: string): Promise<boolean> => {
+  const mapping = await s3ObjectMappingsRepository.findByKey(bucket, key)
+  return mapping !== null
 }
 
 export const S3UseCases = {
@@ -248,4 +257,5 @@ export const S3UseCases = {
   putObject,
   listBuckets,
   listObjects,
+  objectExists,
 }

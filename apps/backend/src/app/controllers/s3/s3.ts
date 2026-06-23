@@ -9,8 +9,9 @@ import {
 import { pipeline } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { Request, Response } from 'express'
-import { sendXML } from './utils.js'
+import { encodeS3Key, planListingEncoding, sendXML } from './utils.js'
 import js2xmlparser from 'js2xmlparser'
+import { XMLParser } from 'fast-xml-parser'
 import { UploadOptions } from '@auto-drive/models'
 import {
   CompressionAlgorithm,
@@ -61,47 +62,94 @@ const getUploadOptions = (req: Request) => {
 }
 
 /**
- * Extract part ETags from a CompleteMultipartUpload XML request body.
+ * Build the absolute, host-aware object URL for the CompleteMultipartUpload
+ * `Location` response field — per the S3 spec, the URL of the newly created
+ * object as seen from the endpoint the client used.
  *
- * AWS SDK v3 for JavaScript serialises <ETag> BEFORE <PartNumber> inside
- * each <Part> element:
- *
- *   <CompleteMultipartUpload>
- *     <Part><ETag>"md5hex"</ETag><PartNumber>1</PartNumber></Part>
- *     ...
- *   </CompleteMultipartUpload>
- *
- * Other clients (e.g. older SDKs, rclone) may use the opposite order.  To
- * handle both, each <Part> block is extracted first and then the two fields
- * are parsed independently from its content.
- *
- * Returns parts sorted by PartNumber (ascending) so the composite ETag is
- * computed in the correct order.
+ * The backend mounts the S3 API at `/s3`, but the public-facing endpoint
+ * differs per vhost (the dedicated `s3.` subdomain serves it at the root; the
+ * legacy host serves it under `/s3`) and nginx rewrites both onto `/s3` before
+ * the request reaches here. So the URL is reconstructed from the forwarding
+ * headers nginx sets rather than from the request's own (rewritten) path:
+ *   - X-Forwarded-Proto — scheme at the edge (nginx terminates TLS and proxies
+ *     over http, so req.protocol alone would always read 'http').
+ *   - Host — the public hostname (forwarded via `proxy_set_header Host`).
+ *   - X-Forwarded-Prefix — the public path prefix the S3 API is exposed under:
+ *     '/s3' on the legacy host, root on the subdomain. nginx drops
+ *     empty-valued headers, so the subdomain sends '/', normalized here to ''.
+ * With no forwarding headers (requests straight to Express, e.g. tests), this
+ * falls back to req.protocol, the Host header, and the '/s3' mount.
  */
-const parseMultipartParts = (
+const buildObjectLocation = (
+  req: Request,
+  bucket: string,
+  key: string,
+): string => {
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol
+  const host = req.headers.host ?? ''
+  const rawPrefix = (req.headers['x-forwarded-prefix'] as string) ?? '/s3'
+  const prefix = rawPrefix === '/' ? '' : rawPrefix.replace(/\/+$/, '')
+  return `${proto}://${host}${prefix}/${bucket}/${key}`
+}
+
+/** Thrown when a CompleteMultipartUpload body is not valid per the S3 spec. */
+export class MalformedMultipartError extends Error {}
+
+// processEntities (on by default) decodes the &#34; that aws-sdk-go-v2 (rclone)
+// uses for the ETag quotes — the crux of the fix; boto3 emits literal quotes
+// and both land on `"<hex>"`. removeNSPrefix handles <s3:Part>; parseTagValue
+// off keeps ETags as strings.
+const multipartXmlParser = new XMLParser({
+  ignoreAttributes: true,
+  removeNSPrefix: true,
+  parseTagValue: false,
+  trimValues: true,
+})
+
+// Extract the part list from a CompleteMultipartUpload body. A real parser
+// (not a regex) so namespaces, ordering, and entity encoding work across
+// clients. Each <Part> needs an integer PartNumber (>= 1) and a non-empty
+// ETag, else throws MalformedMultipartError so the caller can return 400
+// MalformedXML. Returns parts sorted by PartNumber.
+export const parseMultipartParts = (
   body: Buffer,
 ): Array<{ PartNumber: number; ETag: string }> => {
-  const xml = body.toString('utf-8')
-  // Extract each <Part>…</Part> block, then parse fields independently so
-  // that element order within the block doesn't matter.
-  const partBlockRegex = /<Part>([\s\S]*?)<\/Part>/g
-  const parts: Array<{ PartNumber: number; ETag: string }> = []
-  let block: RegExpExecArray | null
-  while ((block = partBlockRegex.exec(xml)) !== null) {
-    const content = block[1]
-    const partNumberMatch = content.match(/<PartNumber>(\d+)<\/PartNumber>/)
-    const etagMatch = content.match(/<ETag>([^<]+)<\/ETag>/)
-    if (partNumberMatch && etagMatch) {
-      // AWS SDK v3 XML-encodes the double-quotes around the ETag hex digest
-      // as &quot; (e.g. &quot;d41d…&quot;).  Decode before storing so that
-      // multipartETag can strip the quotes and read the raw hex correctly.
-      const etag = etagMatch[1].trim().replace(/&quot;/g, '"')
-      parts.push({
-        PartNumber: parseInt(partNumberMatch[1], 10),
-        ETag: etag,
-      })
-    }
+  let parsed: unknown
+  try {
+    parsed = multipartXmlParser.parse(body.toString('utf-8'))
+  } catch {
+    throw new MalformedMultipartError('Malformed CompleteMultipartUpload XML')
   }
+
+  const root = (parsed as Record<string, unknown> | undefined)
+    ?.CompleteMultipartUpload as Record<string, unknown> | undefined
+  if (root == null || typeof root !== 'object') {
+    throw new MalformedMultipartError(
+      'Missing CompleteMultipartUpload root element',
+    )
+  }
+
+  // <Part> is a single object for one part and an array for many.
+  const rawPart = root.Part
+  const rawParts =
+    rawPart == null ? [] : Array.isArray(rawPart) ? rawPart : [rawPart]
+  if (rawParts.length === 0) {
+    throw new MalformedMultipartError('CompleteMultipartUpload has no parts')
+  }
+
+  const parts = rawParts.map((part) => {
+    const record = part as Record<string, unknown>
+    const partNumber = Number(record?.PartNumber)
+    const etag = record?.ETag
+    if (!Number.isInteger(partNumber) || partNumber < 1) {
+      throw new MalformedMultipartError('Part is missing a valid PartNumber')
+    }
+    if (typeof etag !== 'string' || etag.trim() === '') {
+      throw new MalformedMultipartError('Part is missing a non-empty ETag')
+    }
+    return { PartNumber: partNumber, ETag: etag.trim() }
+  })
+
   return parts.sort((a, b) => a.PartNumber - b.PartNumber)
 }
 
@@ -213,6 +261,76 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   res.status(200).end()
 }
 
+// ── Object Lock ───────────────────────────────────────────────────────────
+// Auto Drive storage is immutable (WORM) by construction, so we expose a fixed
+// COMPLIANCE-mode lock contract with a far-future retention. The contract is
+// intrinsic and cannot be configured by clients, so the PutObjectLock* / Put*
+// Retention / Put*LegalHold counterparts stay 501 (wired in http.ts).
+
+// "Forever" sentinel for RetainUntilDate. S3 has no infinity value, so use the
+// max representable date: year 9999 is the ceiling for SQL DATETIME and Python
+// datetime.max, so anything larger would overflow common clients (e.g. boto3).
+const OBJECT_LOCK_RETAIN_UNTIL = '9999-12-31T23:59:59Z'
+
+export const objectLockConfigurationBody = () => ({
+  ObjectLockEnabled: 'Enabled',
+  Rule: { DefaultRetention: { Mode: 'COMPLIANCE', Years: 100 } },
+})
+
+export const objectRetentionBody = () => ({
+  Mode: 'COMPLIANCE',
+  RetainUntilDate: OBJECT_LOCK_RETAIN_UNTIL,
+})
+
+export const objectLegalHoldBody = () => ({ Status: 'ON' })
+
+export const getObjectLockConfigurationHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+  sendXML(res, 'ObjectLockConfiguration', objectLockConfigurationBody())
+}
+
+// The retention and legal-hold contracts are object-level, so reject a key
+// that doesn't exist with NoSuchKey rather than asserting a lock over nothing.
+const sendNoSuchKey = (res: Response, key: string) => {
+  sendXML(res.status(404), 'Error', {
+    Code: 'NoSuchKey',
+    Message: 'The specified key does not exist.',
+    Key: key,
+  })
+}
+
+export const getObjectRetentionHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+  const { bucket, key } = parseBucketAndKey(req.params.key)
+  if (!(await S3UseCases.objectExists(bucket, key))) {
+    sendNoSuchKey(res, key)
+    return
+  }
+  sendXML(res, 'Retention', objectRetentionBody())
+}
+
+export const getObjectLegalHoldHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+  const { bucket, key } = parseBucketAndKey(req.params.key)
+  if (!(await S3UseCases.objectExists(bucket, key))) {
+    sendNoSuchKey(res, key)
+    return
+  }
+  sendXML(res, 'LegalHold', objectLegalHoldBody())
+}
+
 export const createMultipartUploadHandler = async (
   req: Request,
   res: Response,
@@ -297,7 +415,21 @@ export const completeMultipartUploadHandler = async (
 
   // Parse the part list from the XML request body so we can compute the
   // standard S3 composite ETag (MD5 of concatenated per-part MD5s + part count).
-  const parts = Buffer.isBuffer(req.body) ? parseMultipartParts(req.body) : []
+  // A body that can't be parsed into valid parts is a client error, not a
+  // reason to silently store a wrong ETag — reject it with 400 MalformedXML.
+  let parts: Array<{ PartNumber: number; ETag: string }>
+  try {
+    parts = parseMultipartParts(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0))
+  } catch (error) {
+    if (error instanceof MalformedMultipartError) {
+      sendXML(res.status(400), 'Error', {
+        Code: 'MalformedXML',
+        Message: error.message,
+      })
+      return
+    }
+    throw error
+  }
 
   const result = await S3UseCases.completeMultipartUpload(user, {
     Bucket: bucket,
@@ -315,12 +447,16 @@ export const completeMultipartUploadHandler = async (
   // (which calls res.send()). res.send() triggers Express's auto-ETag generation
   // which would overwrite our composite MD5 ETag with a body-derived hash.
   const { Cid: completeCid, ETag: completeETag, ...completeXmlBody } = result.value
+  // Location is built here (not in the use case) because it depends on the
+  // public endpoint the request arrived on — see buildObjectLocation.
+  const Location = buildObjectLocation(req, bucket, key)
   res.set('ETag', completeETag)
   res.set('x-amz-meta-cid', completeCid)
   res.setHeader('Content-Type', 'application/xml')
   res.end(
     js2xmlparser.parse('CompleteMultipartUploadResult', {
       ETag: completeETag,
+      Location,
       ...completeXmlBody,
     }),
   )
@@ -341,6 +477,7 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
   const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
   const continuationToken =
     (req.query['continuation-token'] as string) ?? null
+  const encodingType = (req.query['encoding-type'] as string) ?? null
 
   const result = await S3UseCases.listObjects({
     bucket,
@@ -350,15 +487,41 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
     continuationToken,
   })
 
+  // Keys may contain characters XML cannot represent; encoding-type=url is the
+  // S3 mechanism for returning them. Without opt-in, reject with 400 rather
+  // than throwing a 500 in the serializer.
+  const plan = planListingEncoding(
+    [...result.objects.map((o) => o.key), ...result.commonPrefixes],
+    encodingType,
+  )
+
+  if (plan === 'reject') {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message:
+        'This listing contains keys with characters that require URL encoding. Retry the request with encoding-type=url.',
+      ArgumentName: 'encoding-type',
+      Resource: `/${bucket}/`,
+    })
+    return
+  }
+
+  const encode = plan === 'encode' ? encodeS3Key : (value: string) => value
+
   // Build the XML body.  js2xmlparser repeats a key for each array element,
   // which is exactly the S3 format (multiple <Contents> / <CommonPrefixes>
   // siblings at the root level).
   const xmlBody: Record<string, unknown> = {
     Name: result.name,
-    Prefix: result.prefix,
+    Prefix: encode(result.prefix),
     MaxKeys: result.maxKeys,
     KeyCount: result.objects.length + result.commonPrefixes.length,
     IsTruncated: result.isTruncated,
+  }
+
+  // Echo the encoding back so clients know to url-decode the keys below.
+  if (plan === 'encode') {
+    xmlBody.EncodingType = 'url'
   }
 
   if (result.nextContinuationToken) {
@@ -367,7 +530,7 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
 
   if (result.objects.length > 0) {
     xmlBody.Contents = result.objects.map((obj) => ({
-      Key: obj.key,
+      Key: encode(obj.key),
       Size: obj.size.toString(),
       LastModified: obj.lastModified.toISOString(),
       // Return the stored MD5 so clients (rclone, AWS CLI) can verify
@@ -379,7 +542,7 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
 
   if (result.commonPrefixes.length > 0) {
     xmlBody.CommonPrefixes = result.commonPrefixes.map((p) => ({
-      Prefix: p,
+      Prefix: encode(p),
     }))
   }
 

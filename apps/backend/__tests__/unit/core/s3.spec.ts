@@ -493,4 +493,29 @@ describe('S3UseCases', () => {
       expect(batch.length).toBe(dbLimit)
     })
   })
+
+  describe('objectExists', () => {
+    it('returns false when no mapping exists', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(null)
+
+      expect(await S3UseCases.objectExists('my-bucket', 'missing.txt')).toBe(
+        false,
+      )
+    })
+
+    it('returns true when a mapping exists', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue({
+          bucket: 'my-bucket',
+          key: 'file.txt',
+          cid: 'cid123',
+          md5: null,
+        } as any)
+
+      expect(await S3UseCases.objectExists('my-bucket', 'file.txt')).toBe(true)
+    })
+  })
 })
