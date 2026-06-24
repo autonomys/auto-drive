@@ -14,6 +14,12 @@ import { useLogIn } from '../../../hooks/useAuth';
 interface GoogleAuthGateProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Where to return after Google OAuth completes. Pass the purchase route so
+   * the user resumes the buy-credits flow instead of being dropped on the
+   * default drive view.
+   */
+  callbackUrl?: string;
 }
 
 /**
@@ -23,7 +29,11 @@ interface GoogleAuthGateProps {
  * sign-in / sign-up prompt rather than letting them proceed into a flow that
  * would ultimately be rejected.
  */
-export const GoogleAuthGate = ({ isOpen, onClose }: GoogleAuthGateProps) => {
+export const GoogleAuthGate = ({
+  isOpen,
+  onClose,
+  callbackUrl,
+}: GoogleAuthGateProps) => {
   const { signIn } = useLogIn();
 
   return (
@@ -67,7 +77,7 @@ export const GoogleAuthGate = ({ isOpen, onClose }: GoogleAuthGateProps) => {
                   <Button
                     variant='primary'
                     className='h-12 w-full justify-center space-x-3 font-semibold'
-                    onClick={() => signIn('google')}
+                    onClick={() => signIn('google', { callbackUrl })}
                   >
                     <svg className='h-5 w-5' viewBox='0 0 24 24'>
                       <path

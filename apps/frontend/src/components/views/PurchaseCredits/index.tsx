@@ -1,11 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { SessionContext } from 'next-auth/react';
+import { ROUTES } from '@auto-drive/ui';
+import { useNetwork } from '../../../contexts/network';
 import { PurchaseStep1SelectPackage } from './steps/Step1_SelectPackage';
 import { PurchaseStep2ConnectWallet } from './steps/Step2_ConfirmPurchase';
 import { PurchaseStep3TransferTokens } from './steps/Step3_TransferTokens';
 import { PurchaseStep4Success } from './steps/Step4_Success';
+import { GoogleAuthGate } from './GoogleAuthGate';
 import { StepDefinition } from './molecules/Stepper';
 
 export type PurchaseStep = 1 | 2 | 3 | 4 | 5;
@@ -16,6 +20,28 @@ export const PurchaseCredits = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const { network } = useNetwork();
+
+  // Purchasing requires a Google-verified account. The screen is open to
+  // everyone so packages are discoverable, but only Google users may advance
+  // past package selection. We gate here (not in Step 1) so the rule also
+  // covers deep-links to later steps via ?step=.
+  const session = useContext(SessionContext);
+  const isGoogleAuthed = session?.data?.underlyingProvider === 'google';
+  // Wait for the session to resolve before enforcing — otherwise a Google user
+  // refreshing on a later step would be bounced to step 1 during loading.
+  const authResolved =
+    session?.status === 'authenticated' ||
+    session?.status === 'unauthenticated';
+
+  const [authGateOpen, setAuthGateOpen] = useState(false);
+  const [pendingPackageId, setPendingPackageId] = useState<string | null>(null);
+
+  // Return the user to the purchase flow (with their package preselected) after
+  // Google OAuth, rather than the default drive view.
+  const authGateCallbackUrl = pendingPackageId
+    ? `${ROUTES.purchase(network.id)}?step=2&packageId=${pendingPackageId}`
+    : ROUTES.purchase(network.id);
 
   const navigateWithParams = useCallback(
     (changes: Record<string, unknown>) => {
@@ -63,6 +89,13 @@ export const PurchaseCredits = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams?.toString()]);
 
+  // Enforce the Google gate at render: non-Google users (once auth resolves)
+  // can never see beyond package selection, regardless of how `currentStep`
+  // was reached (deep-link, ?step=, back/forward). The gate modal handles the
+  // actual sign-in prompt when they try to advance.
+  const effectiveStep: PurchaseStep =
+    authResolved && !isGoogleAuthed && currentStep > 1 ? 1 : currentStep;
+
   const onBack = useCallback(() => {
     const newStep = Math.max(1, currentStep - 1);
     setCurrentStep(newStep as PurchaseStep);
@@ -77,6 +110,15 @@ export const PurchaseCredits = () => {
         component: (
           <PurchaseStep1SelectPackage
             onNext={(data) => {
+              // Selecting a package is the "point of action" — non-Google
+              // users are prompted to sign in instead of advancing.
+              if (!isGoogleAuthed) {
+                setPendingPackageId(
+                  typeof data.packageId === 'string' ? data.packageId : null,
+                );
+                setAuthGateOpen(true);
+                return;
+              }
               setContext((prev) => ({ ...prev, ...data }));
               setCurrentStep(2);
               navigateWithParams({ ...data, step: 2 });
@@ -131,12 +173,17 @@ export const PurchaseCredits = () => {
     // Intentionally exclude navigateWithParams from deps to avoid re-render loop
     // as it's a stable function over the lifetime of the component.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [context],
+    [context, isGoogleAuthed],
   );
 
   return (
     <div className='flex flex-col gap-4'>
-      {steps.find((s) => s.id === currentStep)?.component}
+      <GoogleAuthGate
+        isOpen={authGateOpen}
+        onClose={() => setAuthGateOpen(false)}
+        callbackUrl={authGateCallbackUrl}
+      />
+      {steps.find((s) => s.id === effectiveStep)?.component}
     </div>
   );
 };
