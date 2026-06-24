@@ -1,7 +1,10 @@
 'use client';
 
 import { Button, Card, cn } from '@auto-drive/ui';
+import { useContext, useState } from 'react';
+import { SessionContext } from 'next-auth/react';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
+import { GoogleAuthGate } from '../GoogleAuthGate';
 import { usePrices } from '../../../../hooks/usePrices';
 import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 import { useUserStore } from '../../../../globalStates/user';
@@ -65,6 +68,22 @@ export const PurchaseStep1SelectPackage = ({
 
   const { MINIMUM_CONFIRMATIONS } = usePaymentIntent();
 
+  // Purchasing requires a Google-verified account. The screen itself is open to
+  // everyone (so packages are discoverable), but selecting one prompts a Google
+  // sign-in for logged-out and non-Google users.
+  const session = useContext(SessionContext);
+  const isGoogleAuthed = session?.data?.underlyingProvider === 'google';
+  const [authGateOpen, setAuthGateOpen] = useState(false);
+
+  const handleSelect = (packageId: string, disabled: boolean) => {
+    if (disabled) return;
+    if (!isGoogleAuthed) {
+      setAuthGateOpen(true);
+      return;
+    }
+    onNext({ packageId });
+  };
+
   const creditSummary = useUserStore((s) => s.creditSummary);
 
   // Number of days credits are valid — sourced from CREDIT_EXPIRY_DAYS env-var
@@ -104,6 +123,10 @@ export const PurchaseStep1SelectPackage = ({
 
   return (
     <div className='grid grid-cols-1 gap-6 xl:grid-cols-4'>
+      <GoogleAuthGate
+        isOpen={authGateOpen}
+        onClose={() => setAuthGateOpen(false)}
+      />
       <div className='xl:col-span-4'>
         <CreditCurrentPrice />
 
@@ -140,9 +163,7 @@ export const PurchaseStep1SelectPackage = ({
                           : 'hover:ring-2 hover:ring-primary'
                       }`
                 }`}
-                onClick={() => {
-                  if (!disabled) onNext({ packageId: p.id });
-                }}
+                onClick={() => handleSelect(p.id, disabled)}
               >
                 <div className='flex h-full flex-col gap-3 p-5'>
                   <div className='flex items-center justify-between'>
