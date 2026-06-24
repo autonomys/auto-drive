@@ -135,13 +135,16 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             creditHistoryHref={creditHistoryHref}
           />
         )}
-        {isLoggedIn && account ? (
-          hasBuyCreditsFeature ? (
-            <BuyMoreCreditsButton />
-          ) : (
-            <AskForCreditsButton />
-          )
-        ) : (
+        {/* The buy-credits CTA is shown to everyone — the purchase screen is
+            open to all users and prompts a Google sign-in when required. */}
+        <BuyMoreCreditsButton />
+        {/* Non-Google accounts can't purchase directly, so keep the existing
+            "request credits" form available to them. */}
+        {isLoggedIn && account && !hasBuyCreditsFeature && (
+          <AskForCreditsButton />
+        )}
+        {/* Logged-out visitors keep a clear login entry point. */}
+        {!isLoggedIn && (
           <Button
             variant='outline'
             size='sm'
