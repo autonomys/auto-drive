@@ -112,6 +112,9 @@ export const PurchaseCredits = () => {
       setCurrentStep(2);
       navigateWithParams({ ...pendingSelection, step: 2 });
       setPendingSelection(null);
+      // Close the gate in case it was opened earlier and the session has since
+      // become Google-authenticated (e.g. signed in from another tab).
+      setAuthGateOpen(false);
     } else {
       // Resolved non-Google → prompt sign-in. Keep pendingSelection so the
       // gate's callbackUrl retains the chosen package.
@@ -199,7 +202,13 @@ export const PurchaseCredits = () => {
     <div className='flex flex-col gap-4'>
       <GoogleAuthGate
         isOpen={authGateOpen}
-        onClose={() => setAuthGateOpen(false)}
+        onClose={() => {
+          // Dismissing the prompt discards the pending selection too —
+          // otherwise a later switch to a Google session would auto-advance
+          // the wizard as if the user had confirmed.
+          setAuthGateOpen(false);
+          setPendingSelection(null);
+        }}
         callbackUrl={authGateCallbackUrl}
       />
       {steps.find((s) => s.id === effectiveStep)?.component}
