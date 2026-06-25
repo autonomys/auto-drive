@@ -35,12 +35,17 @@ export const PurchaseCredits = () => {
     session?.status === 'unauthenticated';
 
   const [authGateOpen, setAuthGateOpen] = useState(false);
-  const [pendingPackageId, setPendingPackageId] = useState<string | null>(null);
+  // The package the user picked, awaiting an auth decision. Stored as a fresh
+  // object per click so re-picking the same package still re-triggers the
+  // handler effect below.
+  const [pendingSelection, setPendingSelection] = useState<{
+    packageId?: string;
+  } | null>(null);
 
   // Return the user to the purchase flow (with their package preselected) after
   // Google OAuth, rather than the default drive view.
-  const authGateCallbackUrl = pendingPackageId
-    ? `${ROUTES.purchase(network.id)}?step=2&packageId=${pendingPackageId}`
+  const authGateCallbackUrl = pendingSelection?.packageId
+    ? `${ROUTES.purchase(network.id)}?step=2&packageId=${pendingSelection.packageId}`
     : ROUTES.purchase(network.id);
 
   const navigateWithParams = useCallback(
@@ -96,6 +101,24 @@ export const PurchaseCredits = () => {
   const effectiveStep: PurchaseStep =
     authResolved && !isGoogleAuthed && currentStep > 1 ? 1 : currentStep;
 
+  // Act on a pending package selection, but only once the session has resolved.
+  // Deferring keeps this consistent with `effectiveStep`: a still-loading
+  // session is never treated as non-Google, so Google users don't get the
+  // sign-in gate during the brief load window after SessionEnsurer renders.
+  useEffect(() => {
+    if (!pendingSelection || !authResolved) return;
+    if (isGoogleAuthed) {
+      setContext((prev) => ({ ...prev, ...pendingSelection }));
+      setCurrentStep(2);
+      navigateWithParams({ ...pendingSelection, step: 2 });
+      setPendingSelection(null);
+    } else {
+      // Resolved non-Google → prompt sign-in. Keep pendingSelection so the
+      // gate's callbackUrl retains the chosen package.
+      setAuthGateOpen(true);
+    }
+  }, [pendingSelection, authResolved, isGoogleAuthed, navigateWithParams]);
+
   const onBack = useCallback(() => {
     const newStep = Math.max(1, currentStep - 1);
     setCurrentStep(newStep as PurchaseStep);
@@ -110,18 +133,14 @@ export const PurchaseCredits = () => {
         component: (
           <PurchaseStep1SelectPackage
             onNext={(data) => {
-              // Selecting a package is the "point of action" — non-Google
-              // users are prompted to sign in instead of advancing.
-              if (!isGoogleAuthed) {
-                setPendingPackageId(
-                  typeof data.packageId === 'string' ? data.packageId : null,
-                );
-                setAuthGateOpen(true);
-                return;
-              }
-              setContext((prev) => ({ ...prev, ...data }));
-              setCurrentStep(2);
-              navigateWithParams({ ...data, step: 2 });
+              // Record the selection; the handler effect advances (Google) or
+              // opens the sign-in gate (non-Google) once the session resolves.
+              setPendingSelection({
+                packageId:
+                  typeof data.packageId === 'string'
+                    ? data.packageId
+                    : undefined,
+              });
             }}
             context={context}
           />
@@ -173,7 +192,7 @@ export const PurchaseCredits = () => {
     // Intentionally exclude navigateWithParams from deps to avoid re-render loop
     // as it's a stable function over the lifetime of the component.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [context, isGoogleAuthed],
+    [context],
   );
 
   return (
