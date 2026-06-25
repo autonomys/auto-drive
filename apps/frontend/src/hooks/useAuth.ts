@@ -9,8 +9,13 @@ import { useUserStore } from '@/globalStates/user';
 
 export type AuthProvider = 'google' | 'discord' | 'web3-wallet' | 'github';
 
+interface SignInOptions {
+  /** Where to land after OAuth completes. Defaults to the default drive view. */
+  callbackUrl?: string;
+}
+
 interface UseAuth {
-  signIn: (provider: AuthProvider) => void;
+  signIn: (provider: AuthProvider, options?: SignInOptions) => void;
 }
 
 export const useLogIn = (): UseAuth => {
@@ -20,13 +25,13 @@ export const useLogIn = (): UseAuth => {
   const [isClicked, setIsClicked] = useState<AuthProvider>();
 
   const signIn = useCallback(
-    (provider: AuthProvider) => {
+    (provider: AuthProvider, options?: SignInOptions) => {
       setIsClicked(provider);
       if (provider === 'web3-wallet') {
         if (openConnectModal) openConnectModal();
       } else {
         nextAuthSignIn(provider, {
-          callbackUrl: `/${defaultNetworkId}/drive`,
+          callbackUrl: options?.callbackUrl ?? `/${defaultNetworkId}/drive`,
         });
       }
     },

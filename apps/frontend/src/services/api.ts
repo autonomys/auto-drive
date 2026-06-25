@@ -818,17 +818,18 @@ export const createApiService = ({
     return response.json() as Promise<ExpiringCreditBatch[]>;
   },
   getCreditPrice: async (): Promise<{ price: number; pricePerGB: number }> => {
+    // GET /intents/price is a public endpoint (registered before the auth /
+    // feature-flag middleware). Attach auth headers when a session exists, but
+    // don't require one — this lets the purchase screen show live pricing to
+    // logged-out and non-Google visitors too.
     const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
+    const headers: Record<string, string> = {};
+    if (session?.authProvider && session.accessToken) {
+      headers['X-Auth-Provider'] = session.authProvider;
+      headers['Authorization'] = `Bearer ${session.accessToken}`;
     }
 
-    const response = await fetch(`${apiBaseUrl}/intents/price`, {
-      headers: {
-        'X-Auth-Provider': session.authProvider,
-        Authorization: `Bearer ${session.accessToken}`,
-      },
-    });
+    const response = await fetch(`${apiBaseUrl}/intents/price`, { headers });
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
