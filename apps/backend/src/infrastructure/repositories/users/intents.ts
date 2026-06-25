@@ -1,5 +1,5 @@
 import { getDatabase } from '../../drivers/pg.js'
-import { Intent, IntentStatus } from '@auto-drive/models'
+import { Intent, IntentStatus, PaymentMethod } from '@auto-drive/models'
 
 type DBIntent = {
   id: string
@@ -10,6 +10,12 @@ type DBIntent = {
   shannons_per_byte: string
   expires_at: Date | null
   from_address: string | null
+  // NOT NULL in the DB (defaults to 'ai3_native'), so always present.
+  payment_method: PaymentMethod
+  // Token-payment columns: populated for USDC_ETH intents, NULL for AI3_NATIVE.
+  token_amount: string | null
+  quoted_token_amount: string | null
+  usd_rate_at_creation: string | null
 }
 
 const mapRows = (rows: DBIntent[]): Intent[] => {
@@ -24,6 +30,16 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
     shannonsPerByte: BigInt(row.shannons_per_byte).valueOf(),
     expiresAt: row.expires_at ?? undefined,
     fromAddress: row.from_address ?? undefined,
+    paymentMethod: row.payment_method,
+    tokenAmount: row.token_amount
+      ? BigInt(row.token_amount).valueOf()
+      : undefined,
+    quotedTokenAmount: row.quoted_token_amount
+      ? BigInt(row.quoted_token_amount).valueOf()
+      : undefined,
+    usdRateAtCreation: row.usd_rate_at_creation
+      ? BigInt(row.usd_rate_at_creation).valueOf()
+      : undefined,
   }))
 }
 
@@ -40,8 +56,10 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
     `INSERT INTO intents
-       (id, user_public_id, status, tx_hash, payment_amount, shannons_per_byte, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (id, user_public_id, status, tx_hash, payment_amount, shannons_per_byte,
+        expires_at, payment_method, token_amount, quoted_token_amount,
+        usd_rate_at_creation)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       intent.id,
@@ -51,6 +69,12 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
       intent.paymentAmount?.toString() ?? null,
       intent.shannonsPerByte,
       intent.expiresAt ?? null,
+      // payment_method is NOT NULL; default to native AI3 when unset (the USDC
+      // creation flow sets it explicitly).
+      intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
+      intent.tokenAmount?.toString() ?? null,
+      intent.quotedTokenAmount?.toString() ?? null,
+      intent.usdRateAtCreation?.toString() ?? null,
     ],
   )
   return mapRows(result.rows)[0]
@@ -62,8 +86,9 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
     `UPDATE intents
      SET status = $1, user_public_id = $2, tx_hash = $3,
          payment_amount = $4, shannons_per_byte = $5, expires_at = $6,
-         from_address = $7
-     WHERE id = $8
+         from_address = $7, payment_method = $8, token_amount = $9,
+         quoted_token_amount = $10, usd_rate_at_creation = $11
+     WHERE id = $12
      RETURNING *`,
     [
       intent.status,
@@ -73,6 +98,12 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
       intent.shannonsPerByte,
       intent.expiresAt ?? null,
       intent.fromAddress ?? null,
+      // Callers load the intent (getById → mapRows) and spread it before
+      // updating, so these round-trip unchanged unless explicitly overridden.
+      intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
+      intent.tokenAmount?.toString() ?? null,
+      intent.quotedTokenAmount?.toString() ?? null,
+      intent.usdRateAtCreation?.toString() ?? null,
       intent.id,
     ],
   )
