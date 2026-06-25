@@ -4,6 +4,8 @@ import {
   AsyncDownloadsUseCases,
   DownloadUseCase,
 } from '../../../src/core/downloads/index.js'
+import { S3UseCases } from '../../../src/core/s3/index.js'
+import { s3ObjectMappingsRepository } from '../../../src/infrastructure/repositories/index.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   createMockUser,
@@ -13,6 +15,20 @@ import {
 import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
 import { ObjectNotFoundError } from '../../../src/errors/index.js'
+
+const S3_BUCKET = 'removal-bucket'
+const S3_KEY = 'dir/removed.txt'
+
+const listS3Keys = async (): Promise<string[]> => {
+  const result = await S3UseCases.listObjects({
+    bucket: S3_BUCKET,
+    prefix: '',
+    delimiter: null,
+    maxKeys: 1000,
+    continuationToken: null,
+  })
+  return result.objects.map((o) => o.key)
+}
 
 /**
  * Verifies the end-to-end behaviour of removing ("Remove" in the UI) a file:
@@ -37,6 +53,15 @@ describe('Object removal', () => {
     await dbMigration.up()
     owner = createMockUser()
     fileCid = await uploadFile(owner, 'test.txt', 'test', 'text/plain')
+    // Expose the same file over the S3 API so we can prove the S3 surface
+    // (list + get) honours removal/restore in lockstep with the file, without
+    // adding a second object that would perturb the global/owner listings.
+    await s3ObjectMappingsRepository.createMapping(
+      S3_BUCKET,
+      S3_KEY,
+      fileCid,
+      null,
+    )
   })
 
   afterAll(async () => {
@@ -93,6 +118,15 @@ describe('Object removal', () => {
       const result = await AsyncDownloadsUseCases.createDownload(owner, fileCid)
       expect(result.isOk()).toBe(true)
       queuedDownloadId = result._unsafeUnwrap().id
+    })
+
+    it('is listed and retrievable over the S3 API (rclone/aws-cli)', async () => {
+      expect(await listS3Keys()).toContain(S3_KEY)
+      const getResult = await S3UseCases.getObject({
+        Bucket: S3_BUCKET,
+        Key: S3_KEY,
+      })
+      expect(getResult.isOk()).toBe(true)
     })
   })
 
@@ -175,6 +209,16 @@ describe('Object removal', () => {
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
+
+    it('is hidden from S3 listing and not retrievable over S3', async () => {
+      expect(await listS3Keys()).not.toContain(S3_KEY)
+      const getResult = await S3UseCases.getObject({
+        Bucket: S3_BUCKET,
+        Key: S3_KEY,
+      })
+      expect(getResult.isErr()).toBe(true)
+      expect(getResult._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+    })
   })
 
   describe('after the owner restores it', () => {
@@ -225,6 +269,15 @@ describe('Object removal', () => {
       expect(byOwner.isOk()).toBe(true)
       expect(byOther.isOk()).toBe(true)
       expect(byAnonymous.isOk()).toBe(true)
+    })
+
+    it('is listed and retrievable over the S3 API again', async () => {
+      expect(await listS3Keys()).toContain(S3_KEY)
+      const getResult = await S3UseCases.getObject({
+        Bucket: S3_BUCKET,
+        Key: S3_KEY,
+      })
+      expect(getResult.isOk()).toBe(true)
     })
   })
 })
