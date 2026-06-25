@@ -367,6 +367,21 @@ const restoreObject = async (
   return ok()
 }
 
+/**
+ * An object is considered deleted (removed by its owner) once it has at least
+ * one admin/owner ownership but none of them are still active — i.e. every
+ * owner has moved it to their Trash. Shared (non-admin) viewers removing the
+ * object from their own view does not delete it globally; restoring it by the
+ * owner reverses this. A cid with no admin ownership at all (e.g. an internal
+ * child node) is never treated as deleted, so legitimate access is unaffected.
+ */
+const isObjectDeleted = async (cid: string): Promise<boolean> => {
+  const { totalAdmins, activeAdmins } =
+    await ownershipRepository.getAdminOwnershipState(cid)
+
+  return totalAdmins > 0 && activeAdmins === 0
+}
+
 const isArchived = async (cid: string) => {
   const metadata = await metadataRepository.getMetadata(cid)
   if (!metadata) {
@@ -727,6 +742,14 @@ const authorizeDownload = async (
     return err(new ObjectNotFoundError('Object not found'))
   }
 
+  // Objects removed by their owner must not be downloadable by anyone (the
+  // owner can still restore them from Trash). Treat them as not found so we
+  // don't leak their existence.
+  if (await ObjectUseCases.isObjectDeleted(cid)) {
+    logger.info('Download blocked for deleted object (cid=%s)', cid)
+    return err(new ObjectNotFoundError('Object not found'))
+  }
+
   if (metadata.tags?.includes(ObjectTag.Banned)) {
     return err(new IllegalContentError('Object is banned'))
   }
@@ -773,6 +796,7 @@ export const ObjectUseCases = {
   getMarkedAsDeletedRoots,
   markAsDeleted,
   restoreObject,
+  isObjectDeleted,
   getObjectSummaryByCID,
   isArchived,
   hasAllNodesArchived,

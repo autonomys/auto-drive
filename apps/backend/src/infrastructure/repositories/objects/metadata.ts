@@ -51,7 +51,12 @@ const searchMetadataByCID = async (
 
   return db
     .query<MetadataEntry>({
-      text: 'SELECT metadata.* FROM metadata join object_ownership on metadata.head_cid = object_ownership.cid WHERE metadata.head_cid LIKE $1 LIMIT $2',
+      text: `SELECT DISTINCT metadata.* FROM metadata
+        JOIN object_ownership ON metadata.head_cid = object_ownership.cid
+        WHERE metadata.head_cid LIKE $1
+        AND object_ownership.is_admin IS TRUE
+        AND object_ownership.marked_as_deleted IS NULL
+        LIMIT $2`,
       values: [`%${cid}%`, limit],
     })
     .then((entries) => entries.rows)
@@ -111,8 +116,12 @@ const searchMetadataByName = async (query: string, limit: number) => {
 
   return db
     .query<MetadataEntry>({
-      // eslint-disable-next-line quotes
-      text: `SELECT * FROM metadata WHERE metadata->>'name' ILIKE $1 LIMIT $2`,
+      text: `SELECT DISTINCT m.* FROM metadata m
+        JOIN object_ownership oo ON m.head_cid = oo.cid
+        WHERE m.metadata->>'name' ILIKE $1
+        AND oo.is_admin IS TRUE
+        AND oo.marked_as_deleted IS NULL
+        LIMIT $2`,
       values: [`%${query}%`, limit],
     })
     .then((entries) => entries.rows)
@@ -151,8 +160,9 @@ const getRootObjects = async (
       )
       SELECT root_objects.head_cid, COUNT(*) OVER() AS total_count
       FROM root_objects
-      INNER JOIN object_ownership oo ON root_objects.head_cid = oo.cid 
-      WHERE oo.marked_as_deleted IS NULL 
+      INNER JOIN object_ownership oo ON root_objects.head_cid = oo.cid
+      WHERE oo.is_admin IS TRUE
+      AND oo.marked_as_deleted IS NULL
       GROUP BY root_objects.head_cid
       LIMIT $1 OFFSET $2`,
       values: [limit, offset],

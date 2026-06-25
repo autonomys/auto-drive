@@ -81,6 +81,35 @@ const getAdmins = async (cid: string): Promise<Ownership[]> => {
   return result.rows
 }
 
+/**
+ * Returns how many admin (owner) ownerships exist for a cid and how many of
+ * them are still active (not marked as deleted). Used to decide whether an
+ * object has been removed by its owner — see ObjectUseCases.isObjectDeleted.
+ */
+const getAdminOwnershipState = async (
+  cid: string,
+): Promise<{ totalAdmins: number; activeAdmins: number }> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{
+    total_admins: number
+    active_admins: number
+  }>({
+    text: `SELECT
+        COUNT(*) FILTER (WHERE is_admin = true)::int AS total_admins,
+        COUNT(*) FILTER (WHERE is_admin = true AND marked_as_deleted IS NULL)::int AS active_admins
+      FROM object_ownership
+      WHERE cid = $1`,
+    values: [cid],
+  })
+
+  const row = result.rows[0]
+  return {
+    totalAdmins: Number(row?.total_admins ?? 0),
+    activeAdmins: Number(row?.active_admins ?? 0),
+  }
+}
+
 export const ownershipRepository = {
   setUserAsOwner,
   setUserAsAdmin,
@@ -88,4 +117,5 @@ export const ownershipRepository = {
   getOwnerships,
   getDeletedOwnerships,
   getAdmins,
+  getAdminOwnershipState,
 }
