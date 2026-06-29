@@ -15,6 +15,7 @@ import {
 import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
 import { ObjectNotFoundError } from '../../../src/errors/index.js'
+import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 
 const S3_BUCKET = 'removal-bucket'
 const S3_KEY = 'dir/removed.txt'
@@ -38,6 +39,10 @@ const listS3Keys = async (): Promise<string[]> => {
  */
 describe('Object removal', () => {
   let owner: UserWithOrganization
+  // A user the owner shared the file with. Their (non-admin) share row stays
+  // active after the owner removes the file globally, so it guards against the
+  // share listing leaking objects the owner has trashed.
+  let sharedWith: UserWithOrganization
   let fileCid: string
   // An async download queued while the object was still available — used to
   // prove the worker refuses to serve it once the owner removes it.
@@ -52,6 +57,7 @@ describe('Object removal', () => {
     jest.spyOn(ObjectUseCases, 'syncingIsObjectBanned').mockResolvedValue(false)
     await dbMigration.up()
     owner = createMockUser()
+    sharedWith = createMockUser()
     fileCid = await uploadFile(owner, 'test.txt', 'test', 'text/plain')
     // Expose the same file over the S3 API so we can prove the S3 surface
     // (list + get) honours removal/restore in lockstep with the file, without
@@ -62,6 +68,14 @@ describe('Object removal', () => {
       fileCid,
       null,
     )
+    // Share the file with another user so the share-listing surface is covered.
+    jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(sharedWith)
+    const shareResult = await ObjectUseCases.shareObject(
+      owner,
+      fileCid,
+      sharedWith.publicId!,
+    )
+    expect(shareResult.isOk()).toBe(true)
   })
 
   afterAll(async () => {
@@ -127,6 +141,11 @@ describe('Object removal', () => {
         Key: S3_KEY,
       })
       expect(getResult.isOk()).toBe(true)
+    })
+
+    it('is listed under the share recipient files', async () => {
+      const shared = await ObjectUseCases.getSharedRoots(sharedWith)
+      expect(shared.rows).toMatchObject([{ headCid: fileCid }])
     })
   })
 
@@ -219,6 +238,11 @@ describe('Object removal', () => {
       expect(getResult.isErr()).toBe(true)
       expect(getResult._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
+
+    it('no longer appears under the share recipient files', async () => {
+      const shared = await ObjectUseCases.getSharedRoots(sharedWith)
+      expect(shared.rows).toMatchObject([])
+    })
   })
 
   describe('after the owner restores it', () => {
@@ -278,6 +302,11 @@ describe('Object removal', () => {
         Key: S3_KEY,
       })
       expect(getResult.isOk()).toBe(true)
+    })
+
+    it('is listed under the share recipient files again', async () => {
+      const shared = await ObjectUseCases.getSharedRoots(sharedWith)
+      expect(shared.rows).toMatchObject([{ headCid: fileCid }])
     })
   })
 })

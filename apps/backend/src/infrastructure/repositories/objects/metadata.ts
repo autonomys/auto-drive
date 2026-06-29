@@ -222,6 +222,16 @@ const getSharedRootObjectsByUser = async (
           AND oo.oauth_user_id = $2 
           AND oo.is_admin IS FALSE 
           AND oo.marked_as_deleted IS NULL 
+          -- Hide shares whose owner has removed the object globally. The
+          -- recipient's own (non-admin) row stays active, so we must also
+          -- require a still-active admin owner, mirroring the GetSharedFiles
+          -- GraphQL filter and ObjectUseCases.isObjectDeleted.
+          AND EXISTS (
+            SELECT 1 FROM object_ownership admin_oo
+            WHERE admin_oo.cid = m.root_cid
+              AND admin_oo.is_admin IS TRUE
+              AND admin_oo.marked_as_deleted IS NULL
+          )
         LIMIT $3 OFFSET $4`,
       values: [provider, userId, limit, offset],
     })
