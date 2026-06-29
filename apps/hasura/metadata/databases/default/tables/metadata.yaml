@@ -25,7 +25,22 @@ select_permissions:
         - tags
         - created_at
         - updated_at
-      filter: {}
+      # Hide objects an owner has removed (moved to Trash) so they can't be
+      # discovered anonymously by CID/name, matching the REST 404 behaviour and
+      # ObjectUseCases.isObjectDeleted: an object is removed once it has an admin
+      # owner but none that is still active. Objects with no admin ownership at
+      # all (internal/child nodes) are kept visible.
+      filter:
+        _or:
+          - _not:
+              object_ownership:
+                is_admin:
+                  _eq: true
+          - object_ownership:
+              is_admin:
+                _eq: true
+              marked_as_deleted:
+                _is_null: true
       allow_aggregations: true
     comment: ""
 object_relationships:

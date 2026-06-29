@@ -21,7 +21,14 @@ select_permissions:
         - cid
         - is_admin
         - marked_as_deleted
-      filter: {}
+      # Anonymous clients may reference is_admin / marked_as_deleted to filter
+      # public listings, but must never be able to read or enumerate ownership
+      # rows that an owner has trashed. Restricting visible rows to the active
+      # (non-deleted) ones makes any direct query for deleted rows return empty
+      # and forces the marked_as_deleted column to always read as null.
+      filter:
+        marked_as_deleted:
+          _is_null: true
       allow_aggregations: true
     comment: ""
 object_relationships:
