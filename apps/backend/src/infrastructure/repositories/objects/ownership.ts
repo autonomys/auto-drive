@@ -82,9 +82,23 @@ const getAdmins = async (cid: string): Promise<Ownership[]> => {
 }
 
 /**
- * Returns how many admin (owner) ownerships exist for a cid and how many of
- * them are still active (not marked as deleted). Used to decide whether an
- * object has been removed by its owner — see ObjectUseCases.isObjectDeleted.
+ * Returns how many admin (owner) ownerships exist for the root object(s) that
+ * contain a cid and how many of them are still active (not marked as deleted).
+ * Used to decide whether an object has been removed by its owner — see
+ * ObjectUseCases.isObjectDeleted.
+ *
+ * Ownership/removal is tracked at the root-upload level: a folder root and a
+ * standalone file each get an admin row keyed by their own cid, and removal
+ * only marks that root row as deleted. Child files of a folder still carry
+ * their own (vestigial) active admin rows from finalization, so we must NOT
+ * inspect the requested cid's own ownership directly — that would keep a
+ * trashed folder's children downloadable. Instead we resolve the cid to the
+ * root object(s) referencing it (metadata.head_cid -> metadata.root_cid) and
+ * evaluate admin ownership of those roots. A cid that no admin-owned root
+ * references (e.g. an internal child node) yields zero admins and is never
+ * treated as deleted, so legitimate access is unaffected. Deduplicated content
+ * shared across several roots stays available as long as one such root remains
+ * active.
  */
 const getAdminOwnershipState = async (
   cid: string,
@@ -96,10 +110,12 @@ const getAdminOwnershipState = async (
     active_admins: number
   }>({
     text: `SELECT
-        COUNT(*) FILTER (WHERE is_admin = true)::int AS total_admins,
-        COUNT(*) FILTER (WHERE is_admin = true AND marked_as_deleted IS NULL)::int AS active_admins
-      FROM object_ownership
-      WHERE cid = $1`,
+        COUNT(*) FILTER (WHERE oo.is_admin = true)::int AS total_admins,
+        COUNT(*) FILTER (WHERE oo.is_admin = true AND oo.marked_as_deleted IS NULL)::int AS active_admins
+      FROM object_ownership oo
+      WHERE oo.cid IN (
+        SELECT root_cid FROM metadata WHERE head_cid = $1
+      )`,
     values: [cid],
   })
 

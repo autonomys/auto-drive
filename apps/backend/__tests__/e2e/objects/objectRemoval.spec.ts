@@ -5,14 +5,17 @@ import {
   DownloadUseCase,
 } from '../../../src/core/downloads/index.js'
 import { S3UseCases } from '../../../src/core/s3/index.js'
-import { s3ObjectMappingsRepository } from '../../../src/infrastructure/repositories/index.js'
+import {
+  ownershipRepository,
+  s3ObjectMappingsRepository,
+} from '../../../src/infrastructure/repositories/index.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   createMockUser,
   mockRabbitPublish,
   unmockMethods,
 } from '../../utils/mocks.js'
-import { uploadFile } from '../../utils/uploads.js'
+import { uploadFile, uploadFolder } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
 import { ObjectNotFoundError } from '../../../src/errors/index.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
@@ -307,6 +310,135 @@ describe('Object removal', () => {
     it('is listed under the share recipient files again', async () => {
       const shared = await ObjectUseCases.getSharedRoots(sharedWith)
       expect(shared.rows).toMatchObject([{ headCid: fileCid }])
+    })
+  })
+})
+
+/**
+ * Removal is tracked per root upload, but every child file of a folder also
+ * gets its own active admin ownership row during finalization. Removing the
+ * folder only marks the folder root as deleted, so a naive deleted-check that
+ * inspects a child CID's own ownership would keep the child downloadable. These
+ * tests pin the behaviour that children of a removed folder become undownloadable
+ * (and reappear on restore), driven entirely through the folder root CID.
+ */
+describe('Folder removal hides child files', () => {
+  let owner: UserWithOrganization
+  let folderCid: string
+  let childCids: Record<string, string>
+
+  const childCidList = () => Object.values(childCids)
+
+  beforeAll(async () => {
+    mockRabbitPublish()
+    jest.spyOn(ObjectUseCases, 'syncingIsObjectBanned').mockResolvedValue(false)
+    await dbMigration.up()
+    owner = createMockUser()
+    const result = await uploadFolder(owner, 'folder', [
+      { name: 'a.txt', content: 'alpha', mimeType: 'text/plain' },
+      { name: 'b.txt', content: 'beta', mimeType: 'text/plain' },
+    ])
+    folderCid = result.folderCid
+    childCids = result.childCids
+  })
+
+  afterAll(async () => {
+    unmockMethods()
+    await dbMigration.down()
+  })
+
+  it('grants each child its own active admin ownership (precondition)', async () => {
+    for (const childCid of childCidList()) {
+      const { totalAdmins, activeAdmins } =
+        await ownershipRepository.getAdminOwnershipState(childCid)
+      // sanity: the child is reachable via an active root before removal
+      expect(totalAdmins).toBeGreaterThan(0)
+      expect(activeAdmins).toBeGreaterThan(0)
+    }
+  })
+
+  it('children are downloadable while the folder is available', async () => {
+    expect(await ObjectUseCases.isObjectDeleted(folderCid)).toBe(false)
+    for (const childCid of childCidList()) {
+      expect(await ObjectUseCases.isObjectDeleted(childCid)).toBe(false)
+      const auth = await ObjectUseCases.authorizeDownload(childCid)
+      expect(auth.isOk()).toBe(true)
+      const download = await DownloadUseCase.downloadObjectByAnonymous(childCid)
+      expect(download.isOk()).toBe(true)
+    }
+  })
+
+  describe('after the owner removes the folder', () => {
+    beforeAll(async () => {
+      const result = await ObjectUseCases.markAsDeleted(owner, folderCid)
+      expect(result.isOk()).toBe(true)
+    })
+
+    it('flags both the folder and every child as deleted', async () => {
+      expect(await ObjectUseCases.isObjectDeleted(folderCid)).toBe(true)
+      for (const childCid of childCidList()) {
+        expect(await ObjectUseCases.isObjectDeleted(childCid)).toBe(true)
+      }
+    })
+
+    it('blocks download authorization for every child', async () => {
+      for (const childCid of childCidList()) {
+        const auth = await ObjectUseCases.authorizeDownload(childCid)
+        expect(auth.isErr()).toBe(true)
+        expect(auth._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      }
+    })
+
+    it('refuses to serve any child to anyone (owner / anonymous)', async () => {
+      for (const childCid of childCidList()) {
+        const byOwner = await DownloadUseCase.downloadObjectByUser(
+          owner,
+          childCid,
+        )
+        const byAnonymous =
+          await DownloadUseCase.downloadObjectByAnonymous(childCid)
+        expect(byOwner.isErr()).toBe(true)
+        expect(byOwner._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+        expect(byAnonymous.isErr()).toBe(true)
+        expect(byAnonymous._unsafeUnwrapErr()).toBeInstanceOf(
+          ObjectNotFoundError,
+        )
+      }
+    })
+
+    it('refuses to queue an async download for a child', async () => {
+      for (const childCid of childCidList()) {
+        const result = await AsyncDownloadsUseCases.createDownload(
+          owner,
+          childCid,
+        )
+        expect(result.isErr()).toBe(true)
+        expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      }
+    })
+  })
+
+  describe('after the owner restores the folder', () => {
+    beforeAll(async () => {
+      const result = await ObjectUseCases.restoreObject(owner, folderCid)
+      expect(result.isOk()).toBe(true)
+    })
+
+    it('clears the deleted flag for the folder and every child', async () => {
+      expect(await ObjectUseCases.isObjectDeleted(folderCid)).toBe(false)
+      for (const childCid of childCidList()) {
+        expect(await ObjectUseCases.isObjectDeleted(childCid)).toBe(false)
+      }
+    })
+
+    it('makes every child downloadable again', async () => {
+      for (const childCid of childCidList()) {
+        const auth = await ObjectUseCases.authorizeDownload(childCid)
+        expect(auth.isOk()).toBe(true)
+        const download =
+          await DownloadUseCase.downloadObjectByAnonymous(childCid)
+        expect(download.isOk()).toBe(true)
+      }
     })
   })
 })

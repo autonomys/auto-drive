@@ -368,12 +368,20 @@ const restoreObject = async (
 }
 
 /**
- * An object is considered deleted (removed by its owner) once it has at least
- * one admin/owner ownership but none of them are still active — i.e. every
- * owner has moved it to their Trash. Shared (non-admin) viewers removing the
- * object from their own view does not delete it globally; restoring it by the
- * owner reverses this. A cid with no admin ownership at all (e.g. an internal
- * child node) is never treated as deleted, so legitimate access is unaffected.
+ * An object is considered deleted (removed by its owner) once the root
+ * object(s) containing it have at least one admin/owner ownership but none
+ * that is still active — i.e. every owner has moved it to their Trash.
+ *
+ * Removal is tracked per root upload: removing a folder only marks the folder
+ * root's ownership as deleted, while each child file keeps its own active admin
+ * row from upload finalization. We therefore resolve the cid to its root
+ * object(s) (see getAdminOwnershipState) instead of inspecting the cid's own
+ * ownership, so children of a trashed folder are correctly reported as deleted.
+ *
+ * Shared (non-admin) viewers removing the object from their own view does not
+ * delete it globally; restoring it by the owner reverses this. A cid that no
+ * admin-owned root references (e.g. an internal child node) is never treated as
+ * deleted, so legitimate access is unaffected.
  */
 const isObjectDeleted = async (cid: string): Promise<boolean> => {
   const { totalAdmins, activeAdmins } =
