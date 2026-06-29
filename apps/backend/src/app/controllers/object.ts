@@ -223,6 +223,14 @@ objectController.get(
       return
     }
 
+    // A removed object must not be discoverable by its CID.
+    if (await ObjectUseCases.isObjectDeleted(cid)) {
+      res.status(404).json({
+        error: `Object with cid=${cid} not found`,
+      })
+      return
+    }
+
     res.json(statusResult.value)
   }),
 )
