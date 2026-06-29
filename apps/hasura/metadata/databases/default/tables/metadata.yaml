@@ -30,17 +30,25 @@ select_permissions:
       # ObjectUseCases.isObjectDeleted: an object is removed once it has an admin
       # owner but none that is still active. Objects with no admin ownership at
       # all (internal/child nodes) are kept visible.
+      #
+      # Removal is tracked on the root upload's ownership row, so we evaluate the
+      # ROOT's ownership (root_metadata follows root_cid -> head_cid) rather than
+      # the row's own object_ownership. A folder child keeps a vestigial active
+      # admin row keyed by its own cid, so checking object_ownership directly
+      # would wrongly keep a removed folder's children discoverable.
       filter:
         _or:
           - _not:
+              root_metadata:
+                object_ownership:
+                  is_admin:
+                    _eq: true
+          - root_metadata:
               object_ownership:
                 is_admin:
                   _eq: true
-          - object_ownership:
-              is_admin:
-                _eq: true
-              marked_as_deleted:
-                _is_null: true
+                marked_as_deleted:
+                  _is_null: true
       allow_aggregations: true
     comment: ""
 object_relationships:

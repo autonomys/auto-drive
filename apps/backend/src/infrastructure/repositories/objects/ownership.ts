@@ -126,6 +126,38 @@ const getAdminOwnershipState = async (
   }
 }
 
+/**
+ * Builds a SQL boolean expression that is TRUE when the object identified by
+ * `headCidExpr` is NOT removed by its owner, matching the semantics of
+ * ObjectUseCases.isObjectDeleted / getAdminOwnershipState.
+ *
+ * Removal is tracked per root upload: a folder root (and a standalone file)
+ * each get an admin ownership row keyed by their own cid, and removal only
+ * marks that root row as deleted. Child files of a folder keep their own
+ * (vestigial) active admin rows from finalization, so checking the object's
+ * OWN cid ownership would wrongly keep a trashed folder's children visible.
+ * Instead we resolve the head_cid to the root object(s) referencing it
+ * (metadata.head_cid -> metadata.root_cid) and evaluate admin ownership of
+ * those roots:
+ *   - no admin ownership on any root  -> visible (bool_or over empty -> NULL,
+ *     COALESCE to TRUE), e.g. internal/legacy nodes;
+ *   - at least one root with an active admin owner -> visible;
+ *   - admin owners exist but all are trashed -> hidden (removed).
+ *
+ * `headCidExpr` MUST be a trusted SQL column expression (e.g. 'metadata.head_cid'
+ * or 'om.cid'), never user-provided input.
+ */
+const notRemovedByOwnerSQL = (headCidExpr: string): string => `COALESCE((
+    SELECT bool_or(active_oo.marked_as_deleted IS NULL)
+    FROM object_ownership active_oo
+    WHERE active_oo.is_admin IS TRUE
+      AND active_oo.cid IN (
+        SELECT root_owner_meta.root_cid
+        FROM metadata root_owner_meta
+        WHERE root_owner_meta.head_cid = ${headCidExpr}
+      )
+  ), TRUE)`
+
 export const ownershipRepository = {
   setUserAsOwner,
   setUserAsAdmin,
@@ -134,4 +166,8 @@ export const ownershipRepository = {
   getDeletedOwnerships,
   getAdmins,
   getAdminOwnershipState,
+}
+
+export const ownershipSQL = {
+  notRemovedByOwnerSQL,
 }

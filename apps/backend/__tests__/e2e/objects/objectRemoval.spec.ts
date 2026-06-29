@@ -23,9 +23,11 @@ import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 const S3_BUCKET = 'removal-bucket'
 const S3_KEY = 'dir/removed.txt'
 
-const listS3Keys = async (): Promise<string[]> => {
+const FOLDER_S3_BUCKET = 'folder-removal-bucket'
+
+const listS3Keys = async (bucket: string = S3_BUCKET): Promise<string[]> => {
   const result = await S3UseCases.listObjects({
-    bucket: S3_BUCKET,
+    bucket,
     prefix: '',
     delimiter: null,
     maxKeys: 1000,
@@ -326,6 +328,9 @@ describe('Folder removal hides child files', () => {
   let owner: UserWithOrganization
   let folderCid: string
   let childCids: Record<string, string>
+  // S3 key -> child CID, so we can assert each child's S3 surface tracks the
+  // folder's removal/restore even though removal only touches the folder root.
+  let childKeys: Record<string, string>
 
   const childCidList = () => Object.values(childCids)
 
@@ -340,12 +345,29 @@ describe('Folder removal hides child files', () => {
     ])
     folderCid = result.folderCid
     childCids = result.childCids
+
+    // Expose each child file over the S3 API so we can prove S3 list gating
+    // resolves a child mapping to its (removed) folder root, not the child's
+    // own vestigial active admin ownership.
+    childKeys = {}
+    for (const [name, cid] of Object.entries(childCids)) {
+      const key = `folder/${name}`
+      childKeys[key] = cid
+      await s3ObjectMappingsRepository.createMapping(
+        FOLDER_S3_BUCKET,
+        key,
+        cid,
+        null,
+      )
+    }
   })
 
   afterAll(async () => {
     unmockMethods()
     await dbMigration.down()
   })
+
+  const childKeyList = () => Object.keys(childKeys)
 
   it('grants each child its own active admin ownership (precondition)', async () => {
     for (const childCid of childCidList()) {
@@ -365,6 +387,22 @@ describe('Folder removal hides child files', () => {
       expect(auth.isOk()).toBe(true)
       const download = await DownloadUseCase.downloadObjectByAnonymous(childCid)
       expect(download.isOk()).toBe(true)
+    }
+  })
+
+  it('children are discoverable by CID via global search while available', async () => {
+    for (const childCid of childCidList()) {
+      const search = await ObjectUseCases.searchByCIDOrName(childCid, 5, {
+        scope: 'global',
+      })
+      expect(search).toMatchObject([{ cid: childCid }])
+    }
+  })
+
+  it('children are listed over the S3 API while available', async () => {
+    const keys = await listS3Keys(FOLDER_S3_BUCKET)
+    for (const key of childKeyList()) {
+      expect(keys).toContain(key)
     }
   })
 
@@ -416,6 +454,26 @@ describe('Folder removal hides child files', () => {
         expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
       }
     })
+
+    it('hides every child from global CID and name search', async () => {
+      for (const [name, childCid] of Object.entries(childCids)) {
+        const byCid = await ObjectUseCases.searchByCIDOrName(childCid, 5, {
+          scope: 'global',
+        })
+        const byName = await ObjectUseCases.searchMetadataByName(name, 5, {
+          scope: 'global',
+        })
+        expect(byCid).toMatchObject([])
+        expect(byName).toMatchObject([])
+      }
+    })
+
+    it('hides every child from the S3 listing', async () => {
+      const keys = await listS3Keys(FOLDER_S3_BUCKET)
+      for (const key of childKeyList()) {
+        expect(keys).not.toContain(key)
+      }
+    })
   })
 
   describe('after the owner restores the folder', () => {
@@ -438,6 +496,22 @@ describe('Folder removal hides child files', () => {
         const download =
           await DownloadUseCase.downloadObjectByAnonymous(childCid)
         expect(download.isOk()).toBe(true)
+      }
+    })
+
+    it('makes every child discoverable by CID via global search again', async () => {
+      for (const childCid of childCidList()) {
+        const search = await ObjectUseCases.searchByCIDOrName(childCid, 5, {
+          scope: 'global',
+        })
+        expect(search).toMatchObject([{ cid: childCid }])
+      }
+    })
+
+    it('lists every child over the S3 API again', async () => {
+      const keys = await listS3Keys(FOLDER_S3_BUCKET)
+      for (const key of childKeyList()) {
+        expect(keys).toContain(key)
       }
     })
   })

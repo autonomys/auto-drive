@@ -1,5 +1,6 @@
 import { S3ObjectListing } from '@autonomys/file-server'
 import { getDatabase } from '../../drivers/pg.js'
+import { ownershipSQL } from '../objects/ownership.js'
 
 export type { S3ObjectListing }
 
@@ -155,10 +156,10 @@ const listObjects = async (
   // as head_cid in multiple metadata rows (different root_cid values), which
   // can happen when the same content is referenced by more than one root upload.
   // Hide objects whose owner has removed them (moved to Trash), mirroring
-  // ObjectUseCases.isObjectDeleted: an object is removed once it has an admin
-  // owner but none that is still active. bool_or returns NULL when the object
-  // has no admin ownership at all (e.g. legacy mappings), so COALESCE(..., TRUE)
-  // keeps it visible in that case — same as the download/lookup gating.
+  // ObjectUseCases.isObjectDeleted: removal is tracked on the root upload's
+  // ownership row, so the mapping's cid is resolved to its root before the
+  // admin-ownership check. This keeps a removed folder's child objects hidden
+  // even though they keep vestigial active admin rows from upload finalization.
   const baseSQL = `
     SELECT
       om.key,
@@ -175,12 +176,7 @@ const listObjects = async (
     ) m ON true
     WHERE om.bucket = $1
       AND om.key LIKE $2
-      AND COALESCE((
-        SELECT bool_or(oo.marked_as_deleted IS NULL)
-        FROM object_ownership oo
-        WHERE oo.cid = om.cid
-          AND oo.is_admin IS TRUE
-      ), TRUE)
+      AND ${ownershipSQL.notRemovedByOwnerSQL('om.cid')}
   `
 
   // Escape LIKE special characters so literal occurrences in the prefix

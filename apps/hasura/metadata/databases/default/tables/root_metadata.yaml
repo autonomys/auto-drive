@@ -29,19 +29,24 @@ select_permissions:
       # Mirror the metadata table: never expose roots an owner has removed
       # (moved to Trash) to anonymous clients, so trashed objects stay out of
       # the global explorer/search even via direct GraphQL.
+      #
+      # Removal is tracked on the root upload's ownership row, so we evaluate the
+      # ROOT's own ownership via the object_ownership relationship (root_cid ->
+      # cid). The inner_metadata relationship spans every metadata row sharing
+      # the root_cid (root + children), and folder children keep vestigial active
+      # admin rows, so filtering through inner_metadata.object_ownership would
+      # wrongly keep a removed folder visible in the global explorer/search.
       filter:
         _or:
           - _not:
-              inner_metadata:
-                object_ownership:
-                  is_admin:
-                    _eq: true
-          - inner_metadata:
               object_ownership:
                 is_admin:
                   _eq: true
-                marked_as_deleted:
-                  _is_null: true
+          - object_ownership:
+              is_admin:
+                _eq: true
+              marked_as_deleted:
+                _is_null: true
       allow_aggregations: true
     comment: ""
 object_relationships:
@@ -53,4 +58,14 @@ object_relationships:
         insertion_order: null
         remote_table:
           name: metadata
+          schema: public
+array_relationships:
+  - name: object_ownership
+    using:
+      manual_configuration:
+        column_mapping:
+          root_cid: cid
+        insertion_order: null
+        remote_table:
+          name: object_ownership
           schema: public

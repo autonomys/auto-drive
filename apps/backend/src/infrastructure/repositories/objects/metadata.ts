@@ -2,6 +2,7 @@ import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import { PaginatedResult } from '@auto-drive/models'
 import { stringify } from '../../../shared/utils/misc.js'
+import { ownershipSQL } from './ownership.js'
 
 export interface MetadataEntry {
   root_cid: string
@@ -51,11 +52,14 @@ const searchMetadataByCID = async (
 
   return db
     .query<MetadataEntry>({
+      // Hide objects an owner has removed (moved to Trash). Removal is tracked
+      // on the root upload's ownership row, so we must resolve each match to its
+      // root before checking admin ownership — otherwise children of a removed
+      // folder (which keep vestigial active admin rows) would still surface.
+      // Mirrors ObjectUseCases.isObjectDeleted.
       text: `SELECT DISTINCT metadata.* FROM metadata
-        JOIN object_ownership ON metadata.head_cid = object_ownership.cid
         WHERE metadata.head_cid LIKE $1
-        AND object_ownership.is_admin IS TRUE
-        AND object_ownership.marked_as_deleted IS NULL
+        AND ${ownershipSQL.notRemovedByOwnerSQL('metadata.head_cid')}
         LIMIT $2`,
       values: [`%${cid}%`, limit],
     })
@@ -116,11 +120,11 @@ const searchMetadataByName = async (query: string, limit: number) => {
 
   return db
     .query<MetadataEntry>({
+      // See searchMetadataByCID: resolve each match to its root before applying
+      // the removal filter so children of a removed folder stay hidden.
       text: `SELECT DISTINCT m.* FROM metadata m
-        JOIN object_ownership oo ON m.head_cid = oo.cid
         WHERE m.metadata->>'name' ILIKE $1
-        AND oo.is_admin IS TRUE
-        AND oo.marked_as_deleted IS NULL
+        AND ${ownershipSQL.notRemovedByOwnerSQL('m.head_cid')}
         LIMIT $2`,
       values: [`%${query}%`, limit],
     })
