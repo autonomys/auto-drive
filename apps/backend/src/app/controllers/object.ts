@@ -168,7 +168,7 @@ objectController.get(
     }
 
     const summary = summaryResult.value
-    if (!summary) {
+    if (!summary || (await ObjectUseCases.isObjectDeleted(cid))) {
       res.status(404).json({
         error: 'Metadata not found',
       })
@@ -194,6 +194,14 @@ objectController.get(
       return
     }
 
+    // A removed object must not be discoverable by its CID.
+    if (await ObjectUseCases.isObjectDeleted(cid)) {
+      res.status(404).json({
+        error: `Object with cid=${cid} not found`,
+      })
+      return
+    }
+
     const metadata = metadataResult.value
 
     res.json(metadata)
@@ -212,6 +220,14 @@ objectController.get(
 
     if (statusResult.isErr()) {
       handleError(statusResult.error, res)
+      return
+    }
+
+    // A removed object must not be discoverable by its CID.
+    if (await ObjectUseCases.isObjectDeleted(cid)) {
+      res.status(404).json({
+        error: `Object with cid=${cid} not found`,
+      })
       return
     }
 
@@ -315,7 +331,7 @@ objectController.get(
     }
 
     const objectInformation = objectResult.value
-    if (!objectInformation) {
+    if (!objectInformation || (await ObjectUseCases.isObjectDeleted(cid))) {
       res.status(404).json({
         error: 'Object not found',
       })

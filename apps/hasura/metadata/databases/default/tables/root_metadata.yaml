@@ -13,7 +13,32 @@ select_permissions:
         - tags
         - created_at
         - updated_at
-      filter: {}
+      # Mirror the anonymous removal filter so authenticated users can't discover
+      # roots an owner has removed (moved to Trash) via a raw GraphQL query; the
+      # per-document filters only protect the UI. As with the anonymous role we
+      # evaluate the ROOT's own ownership via the object_ownership relationship
+      # (root_cid -> cid), not inner_metadata, so a removed folder (whose children
+      # keep vestigial active admin rows) stays hidden.
+      #
+      # The third branch additionally keeps a user's OWN roots visible regardless
+      # of removal state so their Trash view keeps working — the only difference
+      # from the anonymous role.
+      filter:
+        _or:
+          - _not:
+              object_ownership:
+                is_admin:
+                  _eq: true
+          - object_ownership:
+              is_admin:
+                _eq: true
+              marked_as_deleted:
+                _is_null: true
+          - object_ownership:
+              oauth_provider:
+                _eq: X-Hasura-Oauth-Provider
+              oauth_user_id:
+                _eq: X-Hasura-Oauth-User-Id
       allow_aggregations: true
     comment: ""
   - role: anonymous
@@ -26,7 +51,27 @@ select_permissions:
         - tags
         - created_at
         - updated_at
-      filter: {}
+      # Mirror the metadata table: never expose roots an owner has removed
+      # (moved to Trash) to anonymous clients, so trashed objects stay out of
+      # the global explorer/search even via direct GraphQL.
+      #
+      # Removal is tracked on the root upload's ownership row, so we evaluate the
+      # ROOT's own ownership via the object_ownership relationship (root_cid ->
+      # cid). The inner_metadata relationship spans every metadata row sharing
+      # the root_cid (root + children), and folder children keep vestigial active
+      # admin rows, so filtering through inner_metadata.object_ownership would
+      # wrongly keep a removed folder visible in the global explorer/search.
+      filter:
+        _or:
+          - _not:
+              object_ownership:
+                is_admin:
+                  _eq: true
+          - object_ownership:
+              is_admin:
+                _eq: true
+              marked_as_deleted:
+                _is_null: true
       allow_aggregations: true
     comment: ""
 object_relationships:
@@ -38,4 +83,14 @@ object_relationships:
         insertion_order: null
         remote_table:
           name: metadata
+          schema: public
+array_relationships:
+  - name: object_ownership
+    using:
+      manual_configuration:
+        column_mapping:
+          root_cid: cid
+        insertion_order: null
+        remote_table:
+          name: object_ownership
           schema: public

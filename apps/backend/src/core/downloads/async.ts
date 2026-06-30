@@ -25,6 +25,11 @@ const createDownload = async (
   }
   const metadata = result.value
 
+  // Don't let anyone queue a download for an object removed by its owner.
+  if (await ObjectUseCases.isObjectDeleted(cid)) {
+    return err(new ObjectNotFoundError(`Object with cid=${cid} not found`))
+  }
+
   const download = await asyncDownloadsRepository.createDownload(
     v4(),
     user.oauthProvider,
@@ -138,6 +143,14 @@ const asyncDownload = async (
   const metadata = await ObjectUseCases.getMetadata(download.cid)
   if (metadata.isErr()) {
     return err(metadata.error)
+  }
+
+  // The object may have been removed by its owner after the download was
+  // queued — stop here so removed objects are never served.
+  if (await ObjectUseCases.isObjectDeleted(download.cid)) {
+    return err(
+      new ObjectNotFoundError(`Object with cid=${download.cid} not found`),
+    )
   }
 
   logger.info('Starting async download id=%s cid=%s', downloadId, download.cid)

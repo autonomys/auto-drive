@@ -8,16 +8,26 @@ query GetSharedFiles(
 ) {
   metadata_roots(
     where: {
-      inner_metadata: {
-        object_ownership: {
-          _and: {
-            oauth_user_id: { _eq: $oauthUserId }
-            oauth_provider: { _eq: $oauthProvider }
-            marked_as_deleted: { _is_null: true }
-            is_admin: { _eq: false }
+      _and: [
+        {
+          inner_metadata: {
+            object_ownership: {
+              _and: {
+                oauth_user_id: { _eq: $oauthUserId }
+                oauth_provider: { _eq: $oauthProvider }
+                marked_as_deleted: { _is_null: true }
+                is_admin: { _eq: false }
+              }
+            }
           }
         }
-      }
+        {
+          object_ownership: {
+            is_admin: { _eq: true }
+            marked_as_deleted: { _is_null: true }
+          }
+        }
+      ]
     }
     limit: $limit
     offset: $offset
@@ -61,16 +71,26 @@ query GetSharedFiles(
   metadata_roots_aggregate(
     limit: $aggregateLimit
     where: {
-      inner_metadata: {
-        object_ownership: {
-          _and: {
-            oauth_user_id: { _eq: $oauthUserId }
-            oauth_provider: { _eq: $oauthProvider }
-            marked_as_deleted: { _is_null: true }
-            is_admin: { _eq: false }
+      _and: [
+        {
+          inner_metadata: {
+            object_ownership: {
+              _and: {
+                oauth_user_id: { _eq: $oauthUserId }
+                oauth_provider: { _eq: $oauthProvider }
+                marked_as_deleted: { _is_null: true }
+                is_admin: { _eq: false }
+              }
+            }
           }
         }
-      }
+        {
+          object_ownership: {
+            is_admin: { _eq: true }
+            marked_as_deleted: { _is_null: true }
+          }
+        }
+      ]
     }
   ) {
     aggregate {

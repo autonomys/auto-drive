@@ -252,6 +252,13 @@ describe('Metadata Repository', () => {
       name: 'very-specific-name-for-search',
     }
 
+    // Global name search only returns objects with an active admin owner, so
+    // an orphaned metadata row is intentionally hidden. Give it an owner.
+    await ownershipRepository.setUserAsAdmin(
+      headCid,
+      'test-provider',
+      'test-user-id',
+    )
     await metadataRepository.setMetadata(rootCid, headCid, metadata)
 
     const results = await metadataRepository.searchMetadataByName(
