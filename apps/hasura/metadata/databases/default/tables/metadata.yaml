@@ -12,7 +12,36 @@ select_permissions:
         - tags
         - created_at
         - updated_at
-      filter: {}
+      # Mirror the anonymous removal filter so authenticated users can't discover
+      # another owner's trashed objects by CID/name via a raw GraphQL query (the
+      # per-document filters only protect the UI). As with the anonymous role,
+      # removal is tracked on the root upload's ownership row, so we evaluate the
+      # ROOT's ownership (root_metadata follows root_cid -> head_cid) rather than
+      # the row's own object_ownership; a folder child keeps a vestigial active
+      # admin row so checking object_ownership directly would leak it.
+      #
+      # The third branch additionally keeps a user's OWN objects visible
+      # regardless of removal state, so their Trash view and own-file detail
+      # pages keep working — this is the only difference from the anonymous role.
+      filter:
+        _or:
+          - _not:
+              root_metadata:
+                object_ownership:
+                  is_admin:
+                    _eq: true
+          - root_metadata:
+              object_ownership:
+                is_admin:
+                  _eq: true
+                marked_as_deleted:
+                  _is_null: true
+          - root_metadata:
+              object_ownership:
+                oauth_provider:
+                  _eq: X-Hasura-Oauth-Provider
+                oauth_user_id:
+                  _eq: X-Hasura-Oauth-User-Id
       allow_aggregations: true
     comment: ""
   - role: anonymous

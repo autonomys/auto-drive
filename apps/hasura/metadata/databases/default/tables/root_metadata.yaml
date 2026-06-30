@@ -13,7 +13,32 @@ select_permissions:
         - tags
         - created_at
         - updated_at
-      filter: {}
+      # Mirror the anonymous removal filter so authenticated users can't discover
+      # roots an owner has removed (moved to Trash) via a raw GraphQL query; the
+      # per-document filters only protect the UI. As with the anonymous role we
+      # evaluate the ROOT's own ownership via the object_ownership relationship
+      # (root_cid -> cid), not inner_metadata, so a removed folder (whose children
+      # keep vestigial active admin rows) stays hidden.
+      #
+      # The third branch additionally keeps a user's OWN roots visible regardless
+      # of removal state so their Trash view keeps working — the only difference
+      # from the anonymous role.
+      filter:
+        _or:
+          - _not:
+              object_ownership:
+                is_admin:
+                  _eq: true
+          - object_ownership:
+              is_admin:
+                _eq: true
+              marked_as_deleted:
+                _is_null: true
+          - object_ownership:
+              oauth_provider:
+                _eq: X-Hasura-Oauth-Provider
+              oauth_user_id:
+                _eq: X-Hasura-Oauth-User-Id
       allow_aggregations: true
     comment: ""
   - role: anonymous
