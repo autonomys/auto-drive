@@ -7,7 +7,20 @@ query GetGlobalFiles(
 ) {
   metadata_roots(
     where: {
-      _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]
+      _and: [
+        { _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }] }
+        {
+          _or: [
+            { _not: { object_ownership: { is_admin: { _eq: true } } } }
+            {
+              object_ownership: {
+                is_admin: { _eq: true }
+                marked_as_deleted: { _is_null: true }
+              }
+            }
+          ]
+        }
+      ]
     }
     limit: $limit
     offset: $offset
@@ -46,7 +59,20 @@ query GetGlobalFiles(
   metadata_roots_aggregate(
     limit: $aggregateLimit
     where: {
-      _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }]
+      _and: [
+        { _or: [{ head_cid: { _ilike: $search } }, { name: { _ilike: $search } }] }
+        {
+          _or: [
+            { _not: { object_ownership: { is_admin: { _eq: true } } } }
+            {
+              object_ownership: {
+                is_admin: { _eq: true }
+                marked_as_deleted: { _is_null: true }
+              }
+            }
+          ]
+        }
+      ]
     }
   ) {
     aggregate {

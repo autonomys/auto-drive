@@ -1,5 +1,6 @@
 import { S3ObjectListing } from '@autonomys/file-server'
 import { getDatabase } from '../../drivers/pg.js'
+import { ownershipSQL } from '../objects/ownership.js'
 
 export type { S3ObjectListing }
 
@@ -154,6 +155,11 @@ const listObjects = async (
   // A plain LEFT JOIN on head_cid would fan out when the same CID appears
   // as head_cid in multiple metadata rows (different root_cid values), which
   // can happen when the same content is referenced by more than one root upload.
+  // Hide objects whose owner has removed them (moved to Trash), mirroring
+  // ObjectUseCases.isObjectDeleted: removal is tracked on the root upload's
+  // ownership row, so the mapping's cid is resolved to its root before the
+  // admin-ownership check. This keeps a removed folder's child objects hidden
+  // even though they keep vestigial active admin rows from upload finalization.
   const baseSQL = `
     SELECT
       om.key,
@@ -170,6 +176,7 @@ const listObjects = async (
     ) m ON true
     WHERE om.bucket = $1
       AND om.key LIKE $2
+      AND ${ownershipSQL.notRemovedByOwnerSQL('om.cid')}
   `
 
   // Escape LIKE special characters so literal occurrences in the prefix

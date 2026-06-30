@@ -3618,7 +3618,7 @@ export type MyUndismissedAsyncDownloadsQueryResult = Apollo.QueryResult<MyUndism
 export const GetGlobalFilesDocument = gql`
     query GetGlobalFiles($aggregateLimit: Int!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String) {
   metadata_roots(
-    where: {_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {_or: [{_not: {object_ownership: {is_admin: {_eq: true}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}]}
     limit: $limit
     offset: $offset
     order_by: $orderBy
@@ -3651,7 +3651,7 @@ export const GetGlobalFilesDocument = gql`
   }
   metadata_roots_aggregate(
     limit: $aggregateLimit
-    where: {_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {_or: [{_not: {object_ownership: {is_admin: {_eq: true}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}]}
   ) {
     aggregate {
       count
@@ -3699,7 +3699,7 @@ export type GetGlobalFilesQueryResult = Apollo.QueryResult<GetGlobalFilesQuery, 
 export const GetSharedFilesDocument = gql`
     query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $aggregateLimit: Int!) {
   metadata_roots(
-    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}
+    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}
     limit: $limit
     offset: $offset
     order_by: $orderBy
@@ -3737,7 +3737,7 @@ export const GetSharedFilesDocument = gql`
   }
   metadata_roots_aggregate(
     limit: $aggregateLimit
-    where: {inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}
+    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}
   ) {
     aggregate {
       count
@@ -3964,7 +3964,7 @@ export type GetMyFilesQueryResult = Apollo.QueryResult<GetMyFilesQuery, GetMyFil
 export const GetMetadataByHeadCidDocument = gql`
     query GetMetadataByHeadCID($headCid: String!) {
   metadata(
-    where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}, {_or: [{_not: {root_metadata: {object_ownership: {is_admin: {_eq: true}}}}}, {root_metadata: {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}]}]}
   ) {
     head_cid
     tags
@@ -4038,7 +4038,7 @@ export type GetMetadataByHeadCidQueryResult = Apollo.QueryResult<GetMetadataByHe
 export const GetMetadataByHeadCidWithOwnershipDocument = gql`
     query GetMetadataByHeadCIDWithOwnership($headCid: String!) {
   metadata(
-    where: {_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}, {_or: [{_not: {root_metadata: {object_ownership: {is_admin: {_eq: true}}}}}, {root_metadata: {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}]}]}
   ) {
     head_cid
     tags
@@ -4118,7 +4118,7 @@ export const SearchGlobalMetadataByCidOrNameDocument = gql`
     query SearchGlobalMetadataByCIDOrName($search: String!, $limit: Int!) {
   metadata(
     distinct_on: root_cid
-    where: {_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {_or: [{_not: {root_metadata: {object_ownership: {is_admin: {_eq: true}}}}}, {root_metadata: {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}]}]}
     limit: $limit
   ) {
     type: metadata(path: "type")

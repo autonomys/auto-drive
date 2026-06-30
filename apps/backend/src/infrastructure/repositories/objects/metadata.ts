@@ -2,6 +2,7 @@ import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import { PaginatedResult } from '@auto-drive/models'
 import { stringify } from '../../../shared/utils/misc.js'
+import { ownershipSQL } from './ownership.js'
 
 export interface MetadataEntry {
   root_cid: string
@@ -51,7 +52,15 @@ const searchMetadataByCID = async (
 
   return db
     .query<MetadataEntry>({
-      text: 'SELECT metadata.* FROM metadata join object_ownership on metadata.head_cid = object_ownership.cid WHERE metadata.head_cid LIKE $1 LIMIT $2',
+      // Hide objects an owner has removed (moved to Trash). Removal is tracked
+      // on the root upload's ownership row, so we must resolve each match to its
+      // root before checking admin ownership — otherwise children of a removed
+      // folder (which keep vestigial active admin rows) would still surface.
+      // Mirrors ObjectUseCases.isObjectDeleted.
+      text: `SELECT DISTINCT metadata.* FROM metadata
+        WHERE metadata.head_cid LIKE $1
+        AND ${ownershipSQL.notRemovedByOwnerSQL('metadata.head_cid')}
+        LIMIT $2`,
       values: [`%${cid}%`, limit],
     })
     .then((entries) => entries.rows)
@@ -111,8 +120,12 @@ const searchMetadataByName = async (query: string, limit: number) => {
 
   return db
     .query<MetadataEntry>({
-      // eslint-disable-next-line quotes
-      text: `SELECT * FROM metadata WHERE metadata->>'name' ILIKE $1 LIMIT $2`,
+      // See searchMetadataByCID: resolve each match to its root before applying
+      // the removal filter so children of a removed folder stay hidden.
+      text: `SELECT DISTINCT m.* FROM metadata m
+        WHERE m.metadata->>'name' ILIKE $1
+        AND ${ownershipSQL.notRemovedByOwnerSQL('m.head_cid')}
+        LIMIT $2`,
       values: [`%${query}%`, limit],
     })
     .then((entries) => entries.rows)
@@ -151,8 +164,9 @@ const getRootObjects = async (
       )
       SELECT root_objects.head_cid, COUNT(*) OVER() AS total_count
       FROM root_objects
-      INNER JOIN object_ownership oo ON root_objects.head_cid = oo.cid 
-      WHERE oo.marked_as_deleted IS NULL 
+      INNER JOIN object_ownership oo ON root_objects.head_cid = oo.cid
+      WHERE oo.is_admin IS TRUE
+      AND oo.marked_as_deleted IS NULL
       GROUP BY root_objects.head_cid
       LIMIT $1 OFFSET $2`,
       values: [limit, offset],
@@ -212,6 +226,16 @@ const getSharedRootObjectsByUser = async (
           AND oo.oauth_user_id = $2 
           AND oo.is_admin IS FALSE 
           AND oo.marked_as_deleted IS NULL 
+          -- Hide shares whose owner has removed the object globally. The
+          -- recipient's own (non-admin) row stays active, so we must also
+          -- require a still-active admin owner, mirroring the GetSharedFiles
+          -- GraphQL filter and ObjectUseCases.isObjectDeleted.
+          AND EXISTS (
+            SELECT 1 FROM object_ownership admin_oo
+            WHERE admin_oo.cid = m.root_cid
+              AND admin_oo.is_admin IS TRUE
+              AND admin_oo.marked_as_deleted IS NULL
+          )
         LIMIT $3 OFFSET $4`,
       values: [provider, userId, limit, offset],
     })

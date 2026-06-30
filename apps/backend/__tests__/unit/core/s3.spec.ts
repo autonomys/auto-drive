@@ -10,6 +10,7 @@ import { S3UseCases } from '../../../src/core/s3/index.js'
 import { s3ObjectMappingsRepository } from '../../../src/infrastructure/repositories/index.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
+import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
 import { ObjectNotFoundError } from '../../../src/errors/index.js'
@@ -491,6 +492,50 @@ describe('S3UseCases', () => {
       expect(result.nextContinuationToken).toBe('b.txt')
       // dbLimit branch shouldn't have triggered, so no sentinel appended.
       expect(batch.length).toBe(dbLimit)
+    })
+  })
+
+  describe('objectExists', () => {
+    it('returns false when no mapping exists', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(null)
+
+      expect(await S3UseCases.objectExists('my-bucket', 'missing.txt')).toBe(
+        false,
+      )
+    })
+
+    it('returns true when a mapping exists and the object is not deleted', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue({
+          bucket: 'my-bucket',
+          key: 'file.txt',
+          cid: 'cid123',
+          md5: null,
+        } as any)
+      jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(false)
+
+      expect(await S3UseCases.objectExists('my-bucket', 'file.txt')).toBe(true)
+    })
+
+    // A trashed object keeps its mapping row but is hidden from GET/list, so
+    // object-lock endpoints must report it as not found too.
+    it('returns false when the mapping exists but the object was removed by its owner', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue({
+          bucket: 'my-bucket',
+          key: 'trashed.txt',
+          cid: 'cid123',
+          md5: null,
+        } as any)
+      jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(true)
+
+      expect(await S3UseCases.objectExists('my-bucket', 'trashed.txt')).toBe(
+        false,
+      )
     })
   })
 })

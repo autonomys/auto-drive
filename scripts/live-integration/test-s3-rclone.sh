@@ -54,7 +54,7 @@
 #   AUTO_DRIVE_API_KEY=<api_key> ./scripts/live-integration/test-s3-rclone.sh
 #
 # Optional overrides:
-#   AUTO_DRIVE_ENDPOINT   default: https://public.auto-drive.autonomys.xyz/s3
+#   AUTO_DRIVE_ENDPOINT   default: https://s3.auto-drive.autonomys.xyz
 #   TEST_BUCKET           default: s3-smoke-test
 #   RCLONE_REMOTE         default: autodrive
 
@@ -88,7 +88,7 @@ md5_of() {
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-ENDPOINT="${AUTO_DRIVE_ENDPOINT:-https://public.auto-drive.autonomys.xyz/s3}"
+ENDPOINT="${AUTO_DRIVE_ENDPOINT:-https://s3.auto-drive.autonomys.xyz}"
 API_KEY="${AUTO_DRIVE_API_KEY:-}"
 TEST_BUCKET="${TEST_BUCKET:-s3-smoke-test}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-autodrive}"
