@@ -1,5 +1,6 @@
 import { s3ObjectMappingsRepository } from '../../infrastructure/repositories/index.js'
 import { DownloadUseCase } from '../downloads/index.js'
+import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
 import { ObjectNotFoundError } from '../../errors/index.js'
 import {
@@ -246,7 +247,16 @@ const listBuckets = async (): Promise<S3BucketInfo[]> => {
 
 const objectExists = async (bucket: string, key: string): Promise<boolean> => {
   const mapping = await s3ObjectMappingsRepository.findByKey(bucket, key)
-  return mapping !== null
+  if (!mapping) {
+    return false
+  }
+
+  // The mapping row persists after an owner removes an object (moved to Trash),
+  // but GET and ListObjects treat such objects as not found via isObjectDeleted
+  // / notRemovedByOwnerSQL. Mirror that here so object-lock endpoints
+  // (GetObjectRetention / GetObjectLegalHold) don't leak retention or
+  // legal-hold metadata for keys that are otherwise reported as not found.
+  return !(await ObjectUseCases.isObjectDeleted(mapping.cid))
 }
 
 export const S3UseCases = {
