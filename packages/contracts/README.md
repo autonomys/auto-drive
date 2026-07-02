@@ -144,9 +144,10 @@
 ### Errors
 
 - `InvalidAmount(uint256 amount)` — zero (or zero received) amount.
-- `InvalidToken(address token)` — zero token address at construction.
+- `InvalidToken(address token)` — zero or non-contract token address at construction.
 - `InvalidRecipient(address recipient)` — zero sweep recipient.
 - `InsufficientBalance(uint256 balance, uint256 amount)` — sweep exceeds balance.
+- `RenounceOwnershipDisabled()` — `renounceOwnership` is disabled (see below).
 
 ### Functions
 
@@ -162,9 +163,14 @@
 - `pause() external onlyOwner` / `unpause() external onlyOwner`
   - Halts/resumes `payIntentWithToken`.
 
+- `renounceOwnership() public view override onlyOwner`
+  - Always reverts with `RenounceOwnershipDisabled`. Renouncing ownership would permanently strand any tokens held by the contract, since sweeps are owner-gated.
+
 ### Security Considerations
 
 - `SafeERC20` for all token transfers (does not assume a bool return); `ReentrancyGuard` on the pay and sweep paths.
+- The constructor rejects a token address with no deployed code, catching typos and wrong-chain addresses at deploy time.
+- `renounceOwnership` is disabled so the contract can never end up ownerless with stranded funds.
 - No `minimumBalance`: that exists only for Auto-EVM's existential deposit and is meaningless for an ERC20 balance on Ethereum.
 - Sweeps are `onlyOwner` (unlike the native receiver's permissionless sweep) because the destination is arbitrary — use a multisig owner in production.
 - Permit2 / EIP-2612 (collapsing approve + pay into one signature) is intentionally deferred to a later iteration.
@@ -178,12 +184,12 @@
 
 ### Deploy
 
-Uses `script/DeployAutoDriveUSDCReceiver.s.sol`. Required env: `PRIVATE_KEY`, `USDC_TOKEN_ADDRESS`; optional `OWNER` (defaults to deployer — use a multisig in production).
+Uses `script/DeployAutoDriveUSDCReceiver.s.sol`. Required env: `PRIVATE_KEY`; optional `USDC_TOKEN_ADDRESS` (defaults to [Circle's canonical USDC](https://developers.circle.com/stablecoins/usdc-contract-addresses) on mainnet/Sepolia; required on other chains) and `OWNER` (defaults to deployer — use a multisig in production). The script verifies the token address has code on the target chain before deploying.
 
 ```bash
-# Ethereum mainnet USDC: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
-# Sepolia: point at your test USDC token
-PRIVATE_KEY=0x... USDC_TOKEN_ADDRESS=0x... OWNER=0x... \
+# Defaults: Ethereum mainnet 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+#           Sepolia          0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+PRIVATE_KEY=0x... OWNER=0x... \
   forge script script/DeployAutoDriveUSDCReceiver.s.sol \
   --rpc-url "$ETH_RPC_URL" --broadcast --verify
 ```

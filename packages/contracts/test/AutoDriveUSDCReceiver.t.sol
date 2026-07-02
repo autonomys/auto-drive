@@ -47,6 +47,18 @@ contract AutoDriveUSDCReceiverTest is Test {
         new AutoDriveUSDCReceiver(owner, IERC20(address(0)));
     }
 
+    function testConstructorRevertsOnNonContractToken() public {
+        // An EOA (no code) must be rejected as the token.
+        address eoa = address(0x1234);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AutoDriveUSDCReceiver.InvalidToken.selector,
+                eoa
+            )
+        );
+        new AutoDriveUSDCReceiver(owner, IERC20(eoa));
+    }
+
     function testTokenIsImmutable() public view {
         assertEq(address(receiver.token()), address(usdc));
     }
@@ -295,5 +307,24 @@ contract AutoDriveUSDCReceiverTest is Test {
         receiver.acceptOwnership();
         assertEq(receiver.owner(), newOwner);
         assertEq(receiver.pendingOwner(), address(0));
+    }
+
+    function testRenounceOwnershipDisabled() public {
+        vm.expectRevert(
+            AutoDriveUSDCReceiver.RenounceOwnershipDisabled.selector
+        );
+        receiver.renounceOwnership();
+        assertEq(receiver.owner(), owner);
+    }
+
+    function testRenounceOwnershipOnlyOwner() public {
+        vm.prank(stranger);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                stranger
+            )
+        );
+        receiver.renounceOwnership();
     }
 }

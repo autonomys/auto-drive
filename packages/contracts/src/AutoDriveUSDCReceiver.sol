@@ -17,8 +17,11 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  * @dev Differs from the native receiver in three deliberate ways:
  *      - Accepts a single, immutable ERC20 token (redeploy for a different
  *        token/chain) rather than native value.
- *      - Emits the `payer` in the event instead of relying on the tx sender,
- *        because ERC20 payments can be relayed by a third party.
+ *      - Emits the `payer` in the event instead of relying on the tx origin,
+ *        because ERC20 payments can be relayed by a third party. The payer is
+ *        the account whose token allowance funds the payment — i.e. the
+ *        account that should receive any refund — never an intermediary that
+ *        merely initiated the transaction.
  *      - Sweeps are owner-gated to a caller-specified recipient (not a fixed
  *        treasury), so funds can later be routed to a swapper contract. There is
  *        no `minimumBalance` — that exists only for Auto-EVM's existential
@@ -42,9 +45,10 @@ contract AutoDriveUSDCReceiver is Ownable2Step, ReentrancyGuard, Pausable {
     error InvalidToken(address token);
     error InvalidRecipient(address recipient);
     error InsufficientBalance(uint256 balance, uint256 amount);
+    error RenounceOwnershipDisabled();
 
     constructor(address initialOwner, IERC20 token_) Ownable(initialOwner) {
-        if (address(token_) == address(0)) {
+        if (address(token_) == address(0) || address(token_).code.length == 0) {
             revert InvalidToken(address(token_));
         }
         token = token_;
@@ -132,5 +136,13 @@ contract AutoDriveUSDCReceiver is Ownable2Step, ReentrancyGuard, Pausable {
 
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    /**
+     * @notice Disabled. Renouncing ownership would permanently strand any
+     *         tokens held by the contract (sweeps are owner-gated).
+     */
+    function renounceOwnership() public view override onlyOwner {
+        revert RenounceOwnershipDisabled();
     }
 }
