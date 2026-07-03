@@ -67,8 +67,11 @@ export interface BatchStatusFields {
 }
 
 export const getBatchStatus = (batch: BatchStatusFields): BatchStatus => {
-  if (batch.expired) return 'expired';
+  // Depleted wins over expired: a fully used-up batch forfeited nothing, so
+  // it must never surface as "Expired" (which implies a refund is owed),
+  // even if a stale expired flag is set on the row.
   if (BigInt(batch.uploadBytesRemaining) === BigInt(0)) return 'depleted';
+  if (batch.expired) return 'expired';
   const days = daysUntilExpiry(new Date(batch.expiresAt));
   if (days !== null && days <= 30) return 'expiring';
   return 'active';

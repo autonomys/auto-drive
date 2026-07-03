@@ -216,8 +216,12 @@ describe('getBatchStatus', () => {
     expect(getBatchStatus(makeBatch({ expiresAt: '2026-07-02T00:00:00Z' }))).toBe('active')
   })
 
-  it('prioritises "expired" over "depleted"', () => {
-    expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '0' }))).toBe('expired')
+  it('prioritises "depleted" over "expired" (fully used batches owe no refund)', () => {
+    expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '0' }))).toBe('depleted')
+  })
+
+  it('returns "expired" when the batch is expired with bytes remaining', () => {
+    expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '1048576' }))).toBe('expired')
   })
 
   it('prioritises "depleted" over "expiring"', () => {

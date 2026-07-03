@@ -318,9 +318,13 @@ const getExpiringCreditsByAccountId = async (
 
 // ---------------------------------------------------------------------------
 // markExpiredCredits
-// Called by the credit expiry background job (to be added in a later PR).
-// Atomically marks all rows whose expires_at has passed and returns a summary
-// of bytes forfeited for logging and metrics.
+// Called by the credit expiry background job.
+// Atomically marks rows whose expires_at has passed AND that still have
+// remaining bytes, returning a summary of bytes forfeited for logging and
+// metrics. Fully depleted rows (0 upload + 0 download remaining) are never
+// marked expired: nothing was forfeited, the batch was simply used up, and
+// flagging it as expired would incorrectly surface it to admins as awaiting
+// a refund.
 // ---------------------------------------------------------------------------
 
 export type ExpiredCreditsSummary = {
@@ -341,6 +345,7 @@ const markExpiredCredits = async (): Promise<ExpiredCreditsSummary> => {
        SET expired = TRUE, updated_at = NOW()
        WHERE expired = FALSE
          AND expires_at <= NOW()
+         AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)
        RETURNING upload_bytes_remaining, download_bytes_remaining
      )
      SELECT
