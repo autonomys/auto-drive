@@ -63,14 +63,21 @@ export type BatchStatus = 'active' | 'expiring' | 'depleted' | 'expired';
 export interface BatchStatusFields {
   expired: boolean;
   uploadBytesRemaining: string;
+  downloadBytesRemaining: string;
   expiresAt: string;
 }
 
 export const getBatchStatus = (batch: BatchStatusFields): BatchStatus => {
+  // Depleted = 0 upload AND 0 download remaining — the same full-depletion
+  // definition as isBatchRefundable and the backend expiry/refund guards.
   // Depleted wins over expired: a fully used-up batch forfeited nothing, so
   // it must never surface as "Expired" (which implies a refund is owed),
   // even if a stale expired flag is set on the row.
-  if (BigInt(batch.uploadBytesRemaining) === BigInt(0)) return 'depleted';
+  if (
+    BigInt(batch.uploadBytesRemaining) + BigInt(batch.downloadBytesRemaining) ===
+    BigInt(0)
+  )
+    return 'depleted';
   if (batch.expired) return 'expired';
   const days = daysUntilExpiry(new Date(batch.expiresAt));
   if (days !== null && days <= 30) return 'expiring';
