@@ -524,6 +524,25 @@ describe('CreditsUseCases', () => {
 
       expect(result.isOk()).toBe(true)
     })
+
+    it('returns 400 BadRequestError when the batch is fully depleted', async () => {
+      // Fully depleted (0 bytes remaining) and never refunded — nothing was
+      // forfeited, so no refund is owed and the API must reject it.
+      jest
+        .spyOn(purchasedCreditsRepository, 'markAsRefunded')
+        .mockResolvedValue({ found: true, row: null, notRefundable: true })
+
+      const result = await CreditsUseCases.refundBatch(
+        adminUser,
+        BATCH_1,
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(BadRequestError)
+      expect(error.message).toContain('depleted')
+    })
   })
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -721,6 +740,33 @@ describe('CreditsUseCases', () => {
         refundedCount: 0,
         alreadyRefundedCount: 2,
       })
+    })
+
+    it('returns 400 BadRequestError listing fully depleted batch ids', async () => {
+      // A combined refund including a fully depleted batch is rejected
+      // all-or-nothing — no refund is owed on a used-up batch.
+      jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1'],
+          refundedRows: [],
+          alreadyRefundedIds: [],
+          nonRefundableIds: [BATCH_2],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        [BATCH_1, BATCH_2],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(BadRequestError)
+      expect(error.message).toContain('depleted')
+      expect(error.message).toContain(BATCH_2)
     })
 
     it('returns 404 NotFoundError listing missing ids', async () => {

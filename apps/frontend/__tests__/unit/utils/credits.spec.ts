@@ -1,4 +1,4 @@
-import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus } from '../../../src/utils/credits'
+import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, isBatchRefundable } from '../../../src/utils/credits'
 
 // ---------------------------------------------------------------------------
 // isMibOverCap (shared helper used by both package and custom-amount flows)
@@ -226,5 +226,40 @@ describe('getBatchStatus', () => {
 
   it('prioritises "depleted" over "expiring"', () => {
     expect(getBatchStatus(makeBatch({ uploadBytesRemaining: '0', expiresAt: '2026-06-10T00:00:00Z' }))).toBe('depleted')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// isBatchRefundable
+// ---------------------------------------------------------------------------
+
+describe('isBatchRefundable', () => {
+  const makeBatch = (
+    overrides: Partial<{
+      refundedAt: string | null
+      uploadBytesRemaining: string
+      downloadBytesRemaining: string
+    }> = {},
+  ) => ({
+    refundedAt: null,
+    uploadBytesRemaining: '1048576',
+    downloadBytesRemaining: '0',
+    ...overrides,
+  })
+
+  it('returns true for a non-refunded batch with upload bytes remaining', () => {
+    expect(isBatchRefundable(makeBatch())).toBe(true)
+  })
+
+  it('returns true when only download bytes remain', () => {
+    expect(isBatchRefundable(makeBatch({ uploadBytesRemaining: '0', downloadBytesRemaining: '512' }))).toBe(true)
+  })
+
+  it('returns false when the batch is already refunded', () => {
+    expect(isBatchRefundable(makeBatch({ refundedAt: '2026-06-01T00:00:00Z' }))).toBe(false)
+  })
+
+  it('returns false for a fully depleted batch — no refund is owed', () => {
+    expect(isBatchRefundable(makeBatch({ uploadBytesRemaining: '0', downloadBytesRemaining: '0' }))).toBe(false)
   })
 })

@@ -77,6 +77,29 @@ export const getBatchStatus = (batch: BatchStatusFields): BatchStatus => {
   return 'active';
 };
 
+// ---------------------------------------------------------------------------
+// Refundability — shared by AdminCredits and AdminUserCredits so the two
+// admin views cannot drift.
+// ---------------------------------------------------------------------------
+
+export interface RefundableFields {
+  /** ISO timestamp of the refund action, or null if not yet refunded. */
+  refundedAt: string | null;
+  uploadBytesRemaining: string;
+  downloadBytesRemaining: string;
+}
+
+/**
+ * A batch is refundable when it has not been refunded yet AND still has
+ * unused bytes. Fully depleted batches (0 upload + 0 download remaining)
+ * forfeited nothing, so no refund is ever owed on them — they must not be
+ * offered for refund even if a stale `expired` flag is set on the row.
+ */
+export const isBatchRefundable = (batch: RefundableFields): boolean =>
+  batch.refundedAt === null &&
+  BigInt(batch.uploadBytesRemaining) + BigInt(batch.downloadBytesRemaining) >
+    BigInt(0);
+
 export const STATUS_CLASSES: Record<BatchStatus, string> = {
   active:
     'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',

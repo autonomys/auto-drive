@@ -17,6 +17,7 @@ import {
 import { Button, ROUTES, type NetworkId } from '@auto-drive/ui';
 import {
   getBatchStatus,
+  isBatchRefundable,
   STATUS_CLASSES,
   STATUS_LABEL,
 } from '../../../utils/credits';
@@ -190,15 +191,12 @@ const groupBatchesByAccount = (
     ),
     userPublicIds: [...new Set(accountBatches.map((b) => b.userPublicId))],
     walletCount: new Set(accountBatches.map((b) => b.fromAddress ?? '—')).size,
-    // Awaiting refund = expired with unused bytes left. Fully depleted
-    // batches (0 remaining) forfeited nothing, so no refund is owed —
-    // require remaining > 0 as defence in depth against stale expired flags.
+    // Awaiting refund = expired AND refundable (not yet refunded, unused
+    // bytes left). Fully depleted batches forfeited nothing, so no refund
+    // is owed — isBatchRefundable excludes them as defence in depth
+    // against stale expired flags.
     refundableCount: accountBatches.filter(
-      (b) =>
-        b.expired &&
-        b.refundedAt === null &&
-        BigInt(b.uploadBytesRemaining) + BigInt(b.downloadBytesRemaining) >
-          BigInt(0),
+      (b) => b.expired && isBatchRefundable(b),
     ).length,
     refundedCount: accountBatches.filter((b) => b.refundedAt !== null).length,
     totalPurchased: accountBatches.reduce(

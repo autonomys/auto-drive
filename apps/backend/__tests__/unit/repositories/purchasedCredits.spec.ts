@@ -120,4 +120,91 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
     expect(summary.expiredCount).toBe(0)
     expect(await getExpiredFlag(id)).toBe(false)
   })
+
+  // ---------------------------------------------------------------------
+  // Refund guard: fully depleted rows must not be markable as refunded —
+  // nothing was forfeited, so no refund is owed on them.
+  // ---------------------------------------------------------------------
+
+  const TX_HASH = `0x${'a'.repeat(64)}`
+
+  describe('markAsRefunded', () => {
+    it('rejects a fully depleted row as notRefundable', async () => {
+      const id = await createBatch({
+        intentId: 'refund-depleted',
+        uploadOriginal: 1000n,
+        uploadRemaining: 0n,
+        expiresAt: pastDate,
+      })
+
+      const result = await purchasedCreditsRepository.markAsRefunded(
+        id,
+        TX_HASH,
+      )
+
+      expect(result.found).toBe(true)
+      expect(result.row).toBeNull()
+      expect(result.notRefundable).toBe(true)
+    })
+
+    it('refunds a row with remaining bytes and stays idempotent on retry', async () => {
+      const id = await createBatch({
+        intentId: 'refund-unused',
+        uploadOriginal: 1000n,
+        uploadRemaining: 400n,
+        expiresAt: pastDate,
+      })
+
+      const first = await purchasedCreditsRepository.markAsRefunded(
+        id,
+        TX_HASH,
+      )
+      expect(first.found).toBe(true)
+      expect(first.row).not.toBeNull()
+      expect(first.row?.uploadBytesRemaining).toBe(0n)
+      expect(first.row?.refundTxHash).toBe(TX_HASH)
+
+      // Retry: remaining is now 0 because of the refund itself — must be an
+      // already-refunded no-op, NOT notRefundable.
+      const retry = await purchasedCreditsRepository.markAsRefunded(
+        id,
+        TX_HASH,
+      )
+      expect(retry.found).toBe(true)
+      expect(retry.row).toBeNull()
+      expect(retry.notRefundable).toBeUndefined()
+    })
+  })
+
+  describe('markManyAsRefunded', () => {
+    it('rejects the whole combined refund when any batch is fully depleted', async () => {
+      const refundableId = await createBatch({
+        intentId: 'combined-unused',
+        uploadOriginal: 1000n,
+        uploadRemaining: 500n,
+        expiresAt: pastDate,
+      })
+      const depletedId = await createBatch({
+        intentId: 'combined-depleted',
+        uploadOriginal: 1000n,
+        uploadRemaining: 0n,
+        expiresAt: pastDate,
+      })
+
+      const result = await purchasedCreditsRepository.markManyAsRefunded(
+        [refundableId, depletedId],
+        TX_HASH,
+      )
+
+      expect(result.nonRefundableIds).toEqual([depletedId])
+      expect(result.refundedRows).toHaveLength(0)
+      // All-or-nothing: the refundable row must not have been updated.
+      const db = await getDatabase()
+      const check = await db.query<{ refunded_at: Date | null }>(
+        'SELECT refunded_at FROM purchased_credits WHERE id = $1',
+        [refundableId],
+      )
+      expect(check.rows[0].refunded_at).toBeNull()
+    })
+  })
 })
