@@ -63,21 +63,18 @@ export type BatchStatus = 'active' | 'expiring' | 'depleted' | 'expired';
 export interface BatchStatusFields {
   expired: boolean;
   uploadBytesRemaining: string;
-  downloadBytesRemaining: string;
   expiresAt: string;
 }
 
 export const getBatchStatus = (batch: BatchStatusFields): BatchStatus => {
-  // Depleted = 0 upload AND 0 download remaining — the same full-depletion
-  // definition as isBatchRefundable and the backend expiry/refund guards.
+  // Depleted = 0 upload bytes remaining. Download bytes are deliberately
+  // ignored — they are not allocated, consumed or enforced anywhere in the
+  // app, so upload is the only balance that matters. Same definition as
+  // isBatchRefundable and the backend expiry/refund guards.
   // Depleted wins over expired: a fully used-up batch forfeited nothing, so
   // it must never surface as "Expired" (which implies a refund is owed),
   // even if a stale expired flag is set on the row.
-  if (
-    BigInt(batch.uploadBytesRemaining) + BigInt(batch.downloadBytesRemaining) ===
-    BigInt(0)
-  )
-    return 'depleted';
+  if (BigInt(batch.uploadBytesRemaining) === BigInt(0)) return 'depleted';
   if (batch.expired) return 'expired';
   const days = daysUntilExpiry(new Date(batch.expiresAt));
   if (days !== null && days <= 30) return 'expiring';
@@ -93,19 +90,18 @@ export interface RefundableFields {
   /** ISO timestamp of the refund action, or null if not yet refunded. */
   refundedAt: string | null;
   uploadBytesRemaining: string;
-  downloadBytesRemaining: string;
 }
 
 /**
  * A batch is refundable when it has not been refunded yet AND still has
- * unused bytes. Fully depleted batches (0 upload + 0 download remaining)
+ * unused upload bytes. Depleted batches (0 upload bytes remaining)
  * forfeited nothing, so no refund is ever owed on them — they must not be
  * offered for refund even if a stale `expired` flag is set on the row.
+ * Download bytes are deliberately ignored — they are not allocated,
+ * consumed or enforced anywhere in the app.
  */
 export const isBatchRefundable = (batch: RefundableFields): boolean =>
-  batch.refundedAt === null &&
-  BigInt(batch.uploadBytesRemaining) + BigInt(batch.downloadBytesRemaining) >
-    BigInt(0);
+  batch.refundedAt === null && BigInt(batch.uploadBytesRemaining) > BigInt(0);
 
 export const STATUS_CLASSES: Record<BatchStatus, string> = {
   active:

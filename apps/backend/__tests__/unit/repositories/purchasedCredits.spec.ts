@@ -122,8 +122,8 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
   })
 
   // ---------------------------------------------------------------------
-  // Refund guard: fully depleted rows must not be markable as refunded —
-  // nothing was forfeited, so no refund is owed on them.
+  // Refund guard: depleted rows (0 upload bytes remaining) must not be
+  // markable as refunded — nothing was forfeited, so no refund is owed.
   // ---------------------------------------------------------------------
 
   const TX_HASH = `0x${'a'.repeat(64)}`

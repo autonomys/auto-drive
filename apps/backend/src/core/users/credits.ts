@@ -233,7 +233,7 @@ const validateRefundTxHash = (
 // refund_tx_hash is preserved).
 // Returns 403 for non-admin callers, 404 if the batch does not exist,
 // 400 if the transaction hash is missing or malformed, or if the batch is
-// fully depleted (0 bytes remaining — nothing forfeited, no refund owed).
+// depleted (0 upload bytes remaining — nothing forfeited, no refund owed).
 // ---------------------------------------------------------------------------
 
 const refundBatch = async (
@@ -261,11 +261,11 @@ const refundBatch = async (
   }
 
   if (notRefundable) {
-    // Fully depleted (0 bytes remaining) and never refunded — nothing was
+    // Depleted (0 upload bytes remaining) and never refunded — nothing was
     // forfeited, so no refund is owed and recording one would be a mistake.
     return err(
       new BadRequestError(
-        'Credit batch is fully depleted — no unused bytes remain, so no refund is owed',
+        'Credit batch is fully depleted — no unused upload bytes remain, so no refund is owed',
       ),
     )
   }
@@ -301,8 +301,8 @@ const refundBatch = async (
 // and are excluded from both checks, so retries succeed even if the
 // already-refunded rows belong to different accounts or wallets.
 // Returns 403 for non-admin callers, 400 if the transaction hash is missing
-// or malformed, if no batch ids are provided, or if any batch is fully
-// depleted (0 bytes remaining — no refund is owed on it).
+// or malformed, if no batch ids are provided, or if any batch is depleted
+// (0 upload bytes remaining — no refund is owed on it).
 // ---------------------------------------------------------------------------
 
 export type RefundBatchesSummary = {
@@ -361,8 +361,8 @@ const refundBatches = async (
   }
 
   if (result.nonRefundableIds && result.nonRefundableIds.length > 0) {
-    // Fully depleted batches owe no refund; reject the whole combined
-    // refund (all-or-nothing, mirroring the missing-ids handling).
+    // Depleted batches (0 upload bytes remaining) owe no refund; reject the
+    // whole combined refund (all-or-nothing, mirroring missing-ids handling).
     return err(
       new BadRequestError(
         `Credit batches are fully depleted and owe no refund: ${result.nonRefundableIds.join(', ')}`,

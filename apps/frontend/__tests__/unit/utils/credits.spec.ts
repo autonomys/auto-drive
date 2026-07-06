@@ -188,10 +188,9 @@ describe('getBatchStatus', () => {
     jest.useRealTimers()
   })
 
-  const makeBatch = (overrides: Partial<{ expired: boolean; uploadBytesRemaining: string; downloadBytesRemaining: string; expiresAt: string }> = {}) => ({
+  const makeBatch = (overrides: Partial<{ expired: boolean; uploadBytesRemaining: string; expiresAt: string }> = {}) => ({
     expired: false,
     uploadBytesRemaining: '1048576',
-    downloadBytesRemaining: '0',
     expiresAt: '2026-12-01T00:00:00Z',
     ...overrides,
   })
@@ -200,16 +199,8 @@ describe('getBatchStatus', () => {
     expect(getBatchStatus(makeBatch({ expired: true }))).toBe('expired')
   })
 
-  it('returns "depleted" when both upload and download remaining are zero', () => {
+  it('returns "depleted" when uploadBytesRemaining is zero', () => {
     expect(getBatchStatus(makeBatch({ uploadBytesRemaining: '0' }))).toBe('depleted')
-  })
-
-  it('is NOT depleted while download bytes remain — matches isBatchRefundable', () => {
-    expect(getBatchStatus(makeBatch({ uploadBytesRemaining: '0', downloadBytesRemaining: '512' }))).toBe('active')
-  })
-
-  it('an expired batch with only download bytes left is "expired", not "depleted"', () => {
-    expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '0', downloadBytesRemaining: '512' }))).toBe('expired')
   })
 
   it('returns "expiring" when the batch expires within 30 days', () => {
@@ -247,12 +238,10 @@ describe('isBatchRefundable', () => {
     overrides: Partial<{
       refundedAt: string | null
       uploadBytesRemaining: string
-      downloadBytesRemaining: string
     }> = {},
   ) => ({
     refundedAt: null,
     uploadBytesRemaining: '1048576',
-    downloadBytesRemaining: '0',
     ...overrides,
   })
 
@@ -260,15 +249,11 @@ describe('isBatchRefundable', () => {
     expect(isBatchRefundable(makeBatch())).toBe(true)
   })
 
-  it('returns true when only download bytes remain', () => {
-    expect(isBatchRefundable(makeBatch({ uploadBytesRemaining: '0', downloadBytesRemaining: '512' }))).toBe(true)
-  })
-
   it('returns false when the batch is already refunded', () => {
     expect(isBatchRefundable(makeBatch({ refundedAt: '2026-06-01T00:00:00Z' }))).toBe(false)
   })
 
-  it('returns false for a fully depleted batch — no refund is owed', () => {
-    expect(isBatchRefundable(makeBatch({ uploadBytesRemaining: '0', downloadBytesRemaining: '0' }))).toBe(false)
+  it('returns false for a depleted batch (0 upload bytes) — no refund is owed', () => {
+    expect(isBatchRefundable(makeBatch({ uploadBytesRemaining: '0' }))).toBe(false)
   })
 })

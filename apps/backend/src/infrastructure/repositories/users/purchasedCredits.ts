@@ -320,11 +320,12 @@ const getExpiringCreditsByAccountId = async (
 // markExpiredCredits
 // Called by the credit expiry background job.
 // Atomically marks rows whose expires_at has passed AND that still have
-// remaining bytes, returning a summary of bytes forfeited for logging and
-// metrics. Fully depleted rows (0 upload + 0 download remaining) are never
-// marked expired: nothing was forfeited, the batch was simply used up, and
-// flagging it as expired would incorrectly surface it to admins as awaiting
-// a refund.
+// remaining upload bytes, returning a summary of bytes forfeited for logging
+// and metrics. Depleted rows (0 upload bytes remaining) are never marked
+// expired: nothing was forfeited, the batch was simply used up, and flagging
+// it as expired would incorrectly surface it to admins as awaiting a refund.
+// Download bytes are deliberately ignored — they are not allocated, consumed
+// or enforced anywhere in the app.
 // ---------------------------------------------------------------------------
 
 export type ExpiredCreditsSummary = {
@@ -345,7 +346,7 @@ const markExpiredCredits = async (): Promise<ExpiredCreditsSummary> => {
        SET expired = TRUE, updated_at = NOW()
        WHERE expired = FALSE
          AND expires_at <= NOW()
-         AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)
+         AND upload_bytes_remaining > 0
        RETURNING upload_bytes_remaining, download_bytes_remaining
      )
      SELECT
@@ -577,10 +578,11 @@ const UUID_REGEX =
 // and mark it as refunded, recording the on-chain transaction hash of the
 // AI3 refund transfer.  Called after an admin has processed an out-of-band
 // refund (manual AI3 transfer back to the user's wallet).
-// Fully depleted rows (0 upload + 0 download remaining, never refunded)
-// are rejected with notRefundable — nothing was forfeited, so no refund is
-// owed on them. This mirrors the UI guard so the API cannot be used to
-// record a refund on a used-up batch.
+// Depleted rows (0 upload bytes remaining, never refunded) are rejected
+// with notRefundable — nothing was forfeited, so no refund is owed on them.
+// This mirrors the UI guard so the API cannot be used to record a refund on
+// a used-up batch. Download bytes are deliberately ignored — they are not
+// allocated, consumed or enforced anywhere in the app.
 // Returns the updated row so the caller can echo it back to the client.
 // Malformed (non-UUID) ids are reported as not found.
 // ---------------------------------------------------------------------------
@@ -591,7 +593,7 @@ const markAsRefunded = async (
 ): Promise<{
   found: boolean
   row: PurchasedCredit | null
-  /** True when the row exists, is not refunded, but has no remaining bytes. */
+  /** True when the row exists, is not refunded, but has 0 upload bytes left. */
   notRefundable?: boolean
 }> => {
   if (!UUID_REGEX.test(id)) {
@@ -608,7 +610,7 @@ const markAsRefunded = async (
          updated_at               = NOW()
      WHERE id = $1
        AND refunded_at IS NULL
-       AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)
+       AND upload_bytes_remaining > 0
      RETURNING *`,
     [id, refundTxHash],
   )
@@ -665,10 +667,10 @@ export type BatchRefundResult = {
   refundedRows: PurchasedCredit[]
   alreadyRefundedIds: string[]
   /**
-   * Ids of rows that are not refunded but fully depleted (0 upload +
-   * 0 download remaining) — no refund is owed on them, so their presence
-   * rejects the whole combined refund. Optional for backwards compatibility
-   * with existing callers/mocks; absent means none.
+   * Ids of rows that are not refunded but depleted (0 upload bytes
+   * remaining) — no refund is owed on them, so their presence rejects the
+   * whole combined refund. Optional for backwards compatibility with
+   * existing callers/mocks; absent means none.
    */
   nonRefundableIds?: string[]
 }
@@ -705,11 +707,10 @@ const markManyAsRefunded = async (
       account_id: string
       refunded_at: Date | null
       upload_bytes_remaining: string
-      download_bytes_remaining: string
       from_address: string | null
     }>(
       `SELECT pc.id, pc.account_id, pc.refunded_at,
-              pc.upload_bytes_remaining, pc.download_bytes_remaining,
+              pc.upload_bytes_remaining,
               i.from_address
        FROM purchased_credits pc
        JOIN intents i ON i.id = pc.intent_id
@@ -731,16 +732,11 @@ const markManyAsRefunded = async (
       ...new Set(pendingRows.map((r) => r.from_address)),
     ]
 
-    // Pending rows with no remaining bytes are fully depleted — nothing was
-    // forfeited, so no refund is owed on them. Their presence rejects the
-    // whole combined refund (all-or-nothing, like missing ids).
+    // Pending rows with no remaining upload bytes are depleted — nothing
+    // was forfeited, so no refund is owed on them. Their presence rejects
+    // the whole combined refund (all-or-nothing, like missing ids).
     const nonRefundableIds = pendingRows
-      .filter(
-        (r) =>
-          BigInt(r.upload_bytes_remaining) +
-            BigInt(r.download_bytes_remaining) ===
-          BigInt(0),
-      )
+      .filter((r) => BigInt(r.upload_bytes_remaining) === BigInt(0))
       .map((r) => r.id)
 
     if (missingIds.length > 0) {

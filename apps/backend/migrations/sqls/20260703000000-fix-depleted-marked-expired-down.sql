@@ -8,5 +8,4 @@ SET expired    = TRUE,
 WHERE expired = FALSE
   AND expires_at <= NOW()
   AND upload_bytes_remaining = 0
-  AND download_bytes_remaining = 0
   AND refunded_at IS NULL;
