@@ -68,7 +68,7 @@ export const ProfileDropdown: React.FC = () => {
           </div>
           <div className='py-1'>
             <button
-              onClick={logOut}
+              onClick={() => logOut()}
               className='flex w-full items-center gap-2 px-4 py-2 text-left text-base text-red-600 hover:bg-background-hover dark:text-red-500'
             >
               Logout

@@ -71,7 +71,7 @@ export const Profile = () => {
             <Button
               variant='lightDanger'
               className='flex items-center gap-2 text-sm'
-              onClick={logOut}
+              onClick={() => logOut()}
             >
               Log out
               <LogOut className='h-4 w-4' />
