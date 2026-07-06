@@ -76,19 +76,36 @@ export const useLogOut = () => {
   const queryClient = useQueryClient();
 
   const logOut = useCallback(
-    (options?: SignOutOptions) => {
+    async (options?: SignOutOptions) => {
       clearSessionCache();
       clearUser();
       // The default encryption password is persisted to localStorage and
       // pre-fills upload/download modals — clear it so it doesn't leak to
       // whoever uses this browser next.
       clearPassword();
-      // Drop every cached query (account/features/creditSummary/expiring
-      // batches, etc.) — otherwise the persisted (localStorage) cache keeps
-      // serving the previous account's data to `enabled: !!session` queries
-      // after sign-out, since disabling a query doesn't clear its cached data.
-      queryClient.clear();
-      nextAuthSignOut(options);
+
+      const callbackUrl = options?.callbackUrl ?? window.location.href;
+      let redirectUrl = callbackUrl;
+      try {
+        // Invalidate the session server-side (and sync next-auth's client
+        // state) BEFORE wiping the query cache. Doing this in the other
+        // order leaves the session valid while the cache is cleared, so any
+        // mounted `enabled: !!session?.data` query can immediately refetch
+        // and repopulate the very cache we're clearing.
+        const result = await nextAuthSignOut({ callbackUrl, redirect: false });
+        redirectUrl = result?.url ?? callbackUrl;
+      } finally {
+        // Drop every cached query (account/features/creditSummary/expiring
+        // batches, etc.) — otherwise the persisted (localStorage) cache keeps
+        // serving the previous account's data to `enabled: !!session` queries
+        // after sign-out, since disabling a query doesn't clear its cached data.
+        queryClient.clear();
+      }
+
+      window.location.href = redirectUrl;
+      // If the url contains a hash, the browser won't reload the page on its
+      // own — mirror next-auth's own redirect:true behavior and force it.
+      if (redirectUrl.includes('#')) window.location.reload();
     },
     [clearUser, clearPassword, queryClient],
   );
