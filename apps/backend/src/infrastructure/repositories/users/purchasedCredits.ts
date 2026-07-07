@@ -318,9 +318,14 @@ const getExpiringCreditsByAccountId = async (
 
 // ---------------------------------------------------------------------------
 // markExpiredCredits
-// Called by the credit expiry background job (to be added in a later PR).
-// Atomically marks all rows whose expires_at has passed and returns a summary
-// of bytes forfeited for logging and metrics.
+// Called by the credit expiry background job.
+// Atomically marks rows whose expires_at has passed AND that still have
+// remaining upload bytes, returning a summary of bytes forfeited for logging
+// and metrics. Depleted rows (0 upload bytes remaining) are never marked
+// expired: nothing was forfeited, the batch was simply used up, and flagging
+// it as expired would incorrectly surface it to admins as awaiting a refund.
+// Download bytes are deliberately ignored — they are not allocated, consumed
+// or enforced anywhere in the app.
 // ---------------------------------------------------------------------------
 
 export type ExpiredCreditsSummary = {
@@ -341,6 +346,7 @@ const markExpiredCredits = async (): Promise<ExpiredCreditsSummary> => {
        SET expired = TRUE, updated_at = NOW()
        WHERE expired = FALSE
          AND expires_at <= NOW()
+         AND upload_bytes_remaining > 0
        RETURNING upload_bytes_remaining, download_bytes_remaining
      )
      SELECT
@@ -572,6 +578,11 @@ const UUID_REGEX =
 // and mark it as refunded, recording the on-chain transaction hash of the
 // AI3 refund transfer.  Called after an admin has processed an out-of-band
 // refund (manual AI3 transfer back to the user's wallet).
+// Depleted rows (0 upload bytes remaining, never refunded) are rejected
+// with notRefundable — nothing was forfeited, so no refund is owed on them.
+// This mirrors the UI guard so the API cannot be used to record a refund on
+// a used-up batch. Download bytes are deliberately ignored — they are not
+// allocated, consumed or enforced anywhere in the app.
 // Returns the updated row so the caller can echo it back to the client.
 // Malformed (non-UUID) ids are reported as not found.
 // ---------------------------------------------------------------------------
@@ -579,7 +590,12 @@ const UUID_REGEX =
 const markAsRefunded = async (
   id: string,
   refundTxHash: string,
-): Promise<{ found: boolean; row: PurchasedCredit | null }> => {
+): Promise<{
+  found: boolean
+  row: PurchasedCredit | null
+  /** True when the row exists, is not refunded, but has 0 upload bytes left. */
+  notRefundable?: boolean
+}> => {
   if (!UUID_REGEX.test(id)) {
     return { found: false, row: null }
   }
@@ -594,6 +610,7 @@ const markAsRefunded = async (
          updated_at               = NOW()
      WHERE id = $1
        AND refunded_at IS NULL
+       AND upload_bytes_remaining > 0
      RETURNING *`,
     [id, refundTxHash],
   )
@@ -602,11 +619,21 @@ const markAsRefunded = async (
     return { found: true, row: mapRow(result.rows[0]) }
   }
 
-  const exists = await db.query<{ id: string }>(
-    'SELECT id FROM purchased_credits WHERE id = $1',
-    [id],
-  )
-  return { found: exists.rows.length > 0, row: null }
+  const existing = await db.query<{
+    id: string
+    refunded_at: Date | null
+  }>('SELECT id, refunded_at FROM purchased_credits WHERE id = $1', [id])
+
+  if (existing.rows.length === 0) {
+    return { found: false, row: null }
+  }
+
+  // Already refunded → idempotent no-op. Not refunded but skipped by the
+  // UPDATE → fully depleted, no refund owed.
+  if (existing.rows[0].refunded_at !== null) {
+    return { found: true, row: null }
+  }
+  return { found: true, row: null, notRefundable: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -639,6 +666,13 @@ export type BatchRefundResult = {
   walletAddresses: (string | null)[]
   refundedRows: PurchasedCredit[]
   alreadyRefundedIds: string[]
+  /**
+   * Ids of rows that are not refunded but depleted (0 upload bytes
+   * remaining) — no refund is owed on them, so their presence rejects the
+   * whole combined refund. Optional for backwards compatibility with
+   * existing callers/mocks; absent means none.
+   */
+  nonRefundableIds?: string[]
 }
 
 const markManyAsRefunded = async (
@@ -672,9 +706,12 @@ const markManyAsRefunded = async (
       id: string
       account_id: string
       refunded_at: Date | null
+      upload_bytes_remaining: string
       from_address: string | null
     }>(
-      `SELECT pc.id, pc.account_id, pc.refunded_at, i.from_address
+      `SELECT pc.id, pc.account_id, pc.refunded_at,
+              pc.upload_bytes_remaining,
+              i.from_address
        FROM purchased_credits pc
        JOIN intents i ON i.id = pc.intent_id
        WHERE pc.id = ANY($1::uuid[])
@@ -695,6 +732,13 @@ const markManyAsRefunded = async (
       ...new Set(pendingRows.map((r) => r.from_address)),
     ]
 
+    // Pending rows with no remaining upload bytes are depleted — nothing
+    // was forfeited, so no refund is owed on them. Their presence rejects
+    // the whole combined refund (all-or-nothing, like missing ids).
+    const nonRefundableIds = pendingRows
+      .filter((r) => BigInt(r.upload_bytes_remaining) === BigInt(0))
+      .map((r) => r.id)
+
     if (missingIds.length > 0) {
       await client.query('ROLLBACK')
       return {
@@ -703,6 +747,19 @@ const markManyAsRefunded = async (
         walletAddresses,
         refundedRows: [],
         alreadyRefundedIds: [],
+        nonRefundableIds,
+      }
+    }
+
+    if (nonRefundableIds.length > 0) {
+      await client.query('ROLLBACK')
+      return {
+        missingIds: [],
+        accountIds,
+        walletAddresses,
+        refundedRows: [],
+        alreadyRefundedIds: [],
+        nonRefundableIds,
       }
     }
 
@@ -714,6 +771,7 @@ const markManyAsRefunded = async (
         walletAddresses,
         refundedRows: [],
         alreadyRefundedIds: [],
+        nonRefundableIds: [],
       }
     }
 
@@ -741,6 +799,7 @@ const markManyAsRefunded = async (
       walletAddresses,
       refundedRows: updated.rows.map(mapRow),
       alreadyRefundedIds,
+      nonRefundableIds: [],
     }
   } catch (error) {
     await client.query('ROLLBACK')

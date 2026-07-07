@@ -232,7 +232,8 @@ const validateRefundTxHash = (
 // returns ok() so the UI can safely retry on network errors (the original
 // refund_tx_hash is preserved).
 // Returns 403 for non-admin callers, 404 if the batch does not exist,
-// 400 if the transaction hash is missing or malformed.
+// 400 if the transaction hash is missing or malformed, or if the batch is
+// depleted (0 upload bytes remaining — nothing forfeited, no refund owed).
 // ---------------------------------------------------------------------------
 
 const refundBatch = async (
@@ -253,12 +254,20 @@ const refundBatch = async (
     return err(txHashResult.error)
   }
 
-  const { found, row } = await purchasedCreditsRepository.markAsRefunded(
-    batchId,
-    txHashResult.value,
-  )
+  const { found, row, notRefundable } =
+    await purchasedCreditsRepository.markAsRefunded(batchId, txHashResult.value)
   if (!found) {
     return err(new NotFoundError('Credit batch not found'))
+  }
+
+  if (notRefundable) {
+    // Depleted (0 upload bytes remaining) and never refunded — nothing was
+    // forfeited, so no refund is owed and recording one would be a mistake.
+    return err(
+      new BadRequestError(
+        'Credit batch is fully depleted — no unused upload bytes remain, so no refund is owed',
+      ),
+    )
   }
 
   if (row) {
@@ -292,7 +301,8 @@ const refundBatch = async (
 // and are excluded from both checks, so retries succeed even if the
 // already-refunded rows belong to different accounts or wallets.
 // Returns 403 for non-admin callers, 400 if the transaction hash is missing
-// or malformed, or if no batch ids are provided.
+// or malformed, if no batch ids are provided, or if any batch is depleted
+// (0 upload bytes remaining — no refund is owed on it).
 // ---------------------------------------------------------------------------
 
 export type RefundBatchesSummary = {
@@ -346,6 +356,16 @@ const refundBatches = async (
     return err(
       new NotFoundError(
         `Credit batches not found: ${result.missingIds.join(', ')}`,
+      ),
+    )
+  }
+
+  if (result.nonRefundableIds && result.nonRefundableIds.length > 0) {
+    // Depleted batches (0 upload bytes remaining) owe no refund; reject the
+    // whole combined refund (all-or-nothing, mirroring missing-ids handling).
+    return err(
+      new BadRequestError(
+        `Credit batches are fully depleted and owe no refund: ${result.nonRefundableIds.join(', ')}`,
       ),
     )
   }

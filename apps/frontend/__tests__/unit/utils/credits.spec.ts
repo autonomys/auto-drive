@@ -1,4 +1,4 @@
-import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus } from '../../../src/utils/credits'
+import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, isBatchRefundable } from '../../../src/utils/credits'
 
 // ---------------------------------------------------------------------------
 // isMibOverCap (shared helper used by both package and custom-amount flows)
@@ -216,11 +216,44 @@ describe('getBatchStatus', () => {
     expect(getBatchStatus(makeBatch({ expiresAt: '2026-07-02T00:00:00Z' }))).toBe('active')
   })
 
-  it('prioritises "expired" over "depleted"', () => {
-    expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '0' }))).toBe('expired')
+  it('prioritises "depleted" over "expired" (fully used batches owe no refund)', () => {
+    expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '0' }))).toBe('depleted')
+  })
+
+  it('returns "expired" when the batch is expired with bytes remaining', () => {
+    expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '1048576' }))).toBe('expired')
   })
 
   it('prioritises "depleted" over "expiring"', () => {
     expect(getBatchStatus(makeBatch({ uploadBytesRemaining: '0', expiresAt: '2026-06-10T00:00:00Z' }))).toBe('depleted')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// isBatchRefundable
+// ---------------------------------------------------------------------------
+
+describe('isBatchRefundable', () => {
+  const makeBatch = (
+    overrides: Partial<{
+      refundedAt: string | null
+      uploadBytesRemaining: string
+    }> = {},
+  ) => ({
+    refundedAt: null,
+    uploadBytesRemaining: '1048576',
+    ...overrides,
+  })
+
+  it('returns true for a non-refunded batch with upload bytes remaining', () => {
+    expect(isBatchRefundable(makeBatch())).toBe(true)
+  })
+
+  it('returns false when the batch is already refunded', () => {
+    expect(isBatchRefundable(makeBatch({ refundedAt: '2026-06-01T00:00:00Z' }))).toBe(false)
+  })
+
+  it('returns false for a depleted batch (0 upload bytes) — no refund is owed', () => {
+    expect(isBatchRefundable(makeBatch({ uploadBytesRemaining: '0' }))).toBe(false)
   })
 })

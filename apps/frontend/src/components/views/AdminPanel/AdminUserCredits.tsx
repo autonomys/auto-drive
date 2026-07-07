@@ -13,7 +13,12 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Button, ROUTES } from '@auto-drive/ui';
-import { getBatchStatus, STATUS_CLASSES, STATUS_LABEL } from '../../../utils/credits';
+import {
+  getBatchStatus,
+  isBatchRefundable,
+  STATUS_CLASSES,
+  STATUS_LABEL,
+} from '../../../utils/credits';
 import type { AdminUserCreditBatch } from '../../../services/api';
 import Link from 'next/link';
 import { shannonsToAi3 } from '@autonomys/auto-utils';
@@ -93,8 +98,11 @@ export const AdminUserCredits = ({
   );
   const hasMultipleRefundGroups = refundGroupKeys.length > 1;
 
+  // Refundable = not yet refunded AND unused bytes remaining (shared
+  // isBatchRefundable helper). Fully depleted batches owe no refund and are
+  // excluded from selection, select-all and the per-row refund button.
   const refundableIds = useMemo(
-    () => new Set(batches.filter((b) => b.refundedAt === null).map((b) => b.id)),
+    () => new Set(batches.filter(isBatchRefundable).map((b) => b.id)),
     [batches],
   );
 
@@ -112,7 +120,7 @@ export const AdminUserCredits = ({
   const selectedGroupKey = selectedBatch ? refundGroupKey(selectedBatch) : null;
 
   const isSelectable = (batch: AdminUserCreditBatch): boolean =>
-    batch.refundedAt === null &&
+    isBatchRefundable(batch) &&
     (selectedGroupKey === null || refundGroupKey(batch) === selectedGroupKey);
 
   // Select-all targets a single (account, purchasing wallet) group: the
@@ -358,7 +366,7 @@ export const AdminUserCredits = ({
                 const original = Number(BigInt(batch.uploadBytesOriginal));
                 const remaining = Number(BigInt(batch.uploadBytesRemaining));
                 const consumed = original - remaining;
-                const isRefundable = batch.refundedAt === null;
+                const isRefundable = isBatchRefundable(batch);
                 const isOtherRefundGroup =
                   isRefundable && !isSelectable(batch);
 
@@ -479,7 +487,7 @@ export const AdminUserCredits = ({
                             </span>
                           )}
                         </div>
-                      ) : (
+                      ) : isRefundable ? (
                         <Button
                           variant='outline'
                           disabled={isRefunding}
@@ -489,6 +497,15 @@ export const AdminUserCredits = ({
                           <AlertTriangle className='h-3 w-3 text-orange-500' />
                           Mark Refunded
                         </Button>
+                      ) : (
+                        // Fully depleted and never refunded — nothing was
+                        // forfeited, so no refund action is offered.
+                        <span
+                          className='text-xs text-muted-foreground'
+                          title='Fully depleted — no unused bytes, no refund owed'
+                        >
+                          —
+                        </span>
                       )}
                     </td>
                   </tr>
