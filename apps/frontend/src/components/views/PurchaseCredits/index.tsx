@@ -96,10 +96,18 @@ export const PurchaseCredits = () => {
 
   // Enforce the Google gate at render: non-Google users (once auth resolves)
   // can never see beyond package selection, regardless of how `currentStep`
-  // was reached (deep-link, ?step=, back/forward). The gate modal handles the
-  // actual sign-in prompt when they try to advance.
+  // was reached (deep-link, ?step=, back/forward, or a sign-out reload that
+  // preserves `?step=` in the URL). The gate modal handles the actual
+  // sign-in prompt when they try to advance.
   const effectiveStep: PurchaseStep =
     authResolved && !isGoogleAuthed && currentStep > 1 ? 1 : currentStep;
+
+  // Fail closed while the session is still resolving: never render a step
+  // past package selection until we know whether the user is Google-authed.
+  // Without this, a step > 1 reached via URL (deep-link or a sign-out reload
+  // that keeps `?step=2` in the address bar) would briefly render unguarded,
+  // since `effectiveStep` above falls back to the raw `currentStep` pre-resolve.
+  const isVerifyingAuthForStep = !authResolved && currentStep > 1;
 
   // Act on a pending package selection, but only once the session has resolved.
   // Deferring keeps this consistent with `effectiveStep`: a still-loading
@@ -211,7 +219,11 @@ export const PurchaseCredits = () => {
         }}
         callbackUrl={authGateCallbackUrl}
       />
-      {steps.find((s) => s.id === effectiveStep)?.component}
+      {isVerifyingAuthForStep ? (
+        <div>Loading...</div>
+      ) : (
+        steps.find((s) => s.id === effectiveStep)?.component
+      )}
     </div>
   );
 };

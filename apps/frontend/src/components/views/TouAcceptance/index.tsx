@@ -3,10 +3,10 @@
 import { useCallback, useState } from 'react';
 import { Button, Checkbox } from '@headlessui/react';
 import { CheckIcon } from 'lucide-react';
-import { signOut } from 'next-auth/react';
 import { AutonomysSymbol } from '@auto-drive/ui';
 import { TouStatus } from '@auto-drive/models';
 import { useNetwork } from '../../../contexts/network';
+import { useLogOut } from '../../../hooks/useAuth';
 
 export const TouAcceptanceInterstitial = ({
   touStatus,
@@ -18,6 +18,7 @@ export const TouAcceptanceInterstitial = ({
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const { api } = useNetwork();
+  const { logOut } = useLogOut();
 
   const handleAccept = useCallback(async () => {
     setLoading(true);
@@ -32,8 +33,8 @@ export const TouAcceptanceInterstitial = ({
   }, [api, onAccepted]);
 
   const handleDecline = useCallback(() => {
-    signOut({ callbackUrl: '/' });
-  }, []);
+    logOut({ callbackUrl: '/' });
+  }, [logOut]);
 
   return (
     <div className='flex h-screen w-screen flex-col items-center justify-center bg-background'>
