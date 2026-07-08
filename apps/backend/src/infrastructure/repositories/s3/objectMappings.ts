@@ -129,13 +129,34 @@ const softDeleteMapping = async (
 }
 
 /**
- * Clear the soft-delete flag on every mapping pointing at a cid. Called when the
+ * Clear the soft-delete flag on mappings pointing at a cid. Called when the
  * underlying object is restored from the web-app Trash so that S3 keys hidden by
  * a DeleteObject reappear too — the reverse of deleteObject's propagation to the
  * Trash, keeping the S3 namespace and the UI in sync ("unified with UI Trash").
+ *
+ * When `since` is given, only keys soft-deleted at/after that instant are
+ * restored. deleteObject stamps the object's Trash time (ownership) BEFORE it
+ * hides the mapping, so the triggering key's deleted_at is >= the Trash time,
+ * while keys the owner had individually deleted earlier stay hidden — restore
+ * brings back what this trash removed, not every alias that ever pointed here.
  */
-const restoreMappingsByCid = async (cid: string): Promise<void> => {
+const restoreMappingsByCid = async (
+  cid: string,
+  since: Date | null = null,
+): Promise<void> => {
   const db = await getDatabase()
+
+  if (since) {
+    await db.query({
+      text: `
+        UPDATE "S3".object_mappings
+        SET deleted_at = NULL, updated_at = NOW()
+        WHERE cid = $1 AND deleted_at IS NOT NULL AND deleted_at >= $2
+      `,
+      values: [cid, since],
+    })
+    return
+  }
 
   await db.query({
     text: `
@@ -210,12 +231,17 @@ const findByCid = async (cid: string): Promise<S3KeyMapping[]> => {
 const listBuckets = async (): Promise<S3BucketInfo[]> => {
   const db = await getDatabase()
 
+  // Only surface buckets that still have at least one visible object, mirroring
+  // the ListObjectsV2 visibility rules: exclude soft-deleted mappings and
+  // objects the owner has removed. A fully-purged bucket disappears.
   const result = await db.query<S3BucketInfoDB>({
     text: `
-      SELECT bucket, MIN(created_at) AS created_at
-      FROM "S3".object_mappings
-      GROUP BY bucket
-      ORDER BY bucket
+      SELECT om.bucket AS bucket, MIN(om.created_at) AS created_at
+      FROM "S3".object_mappings om
+      WHERE om.deleted_at IS NULL
+        AND ${ownershipSQL.notRemovedByOwnerSQL('om.cid')}
+      GROUP BY om.bucket
+      ORDER BY om.bucket
     `,
   })
 
@@ -223,6 +249,45 @@ const listBuckets = async (): Promise<S3BucketInfo[]> => {
     name: row.bucket,
     creationDate: row.created_at,
   }))
+}
+
+// ── Multipart upload mtime staging ────────────────────────────────────────
+// rclone sends x-amz-meta-mtime on CreateMultipartUpload but not on Complete,
+// and the mapping is only created at completion — so the mtime is stashed by
+// upload id here and read back in completeMultipartUpload.
+
+const setMultipartMtime = async (
+  uploadId: string,
+  mtime: string,
+): Promise<void> => {
+  const db = await getDatabase()
+  await db.query({
+    text: `
+      INSERT INTO "S3".multipart_upload_meta (upload_id, mtime)
+      VALUES ($1, $2)
+      ON CONFLICT (upload_id) DO UPDATE SET mtime = $2
+    `,
+    values: [uploadId, mtime],
+  })
+}
+
+const getMultipartMtime = async (
+  uploadId: string,
+): Promise<string | null> => {
+  const db = await getDatabase()
+  const result = await db.query<{ mtime: string }>({
+    text: 'SELECT mtime FROM "S3".multipart_upload_meta WHERE upload_id = $1',
+    values: [uploadId],
+  })
+  return result.rows[0]?.mtime ?? null
+}
+
+const deleteMultipartMtime = async (uploadId: string): Promise<void> => {
+  const db = await getDatabase()
+  await db.query({
+    text: 'DELETE FROM "S3".multipart_upload_meta WHERE upload_id = $1',
+    values: [uploadId],
+  })
 }
 
 const listObjects = async (
@@ -303,6 +368,9 @@ export const s3ObjectMappingsRepository = {
   softDeleteMapping,
   restoreMappingsByCid,
   countActiveMappingsByCid,
+  setMultipartMtime,
+  getMultipartMtime,
+  deleteMultipartMtime,
   updateMapping,
   findByCid,
   listBuckets,

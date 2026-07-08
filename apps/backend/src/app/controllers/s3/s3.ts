@@ -305,27 +305,16 @@ export const headObjectHandler = async (req: Request, res: Response) => {
 }
 
 // ── Object Lock ───────────────────────────────────────────────────────────
-// Auto Drive storage is immutable (WORM) by construction, so we expose a fixed
-// COMPLIANCE-mode lock contract with a far-future retention. The contract is
-// intrinsic and cannot be configured by clients, so the PutObjectLock* / Put*
-// Retention / Put*LegalHold counterparts stay 501 (wired in http.ts).
+// Object Lock is NOT enforced. The S3 namespace is mutable — DeleteObject
+// (soft-delete), overwrite, and rename all succeed — so advertising a
+// COMPLIANCE/WORM lock would be a false promise a client could rely on. (The
+// underlying DSN data is permanent, but that is a storage property, not an S3
+// object-lock guarantee.) These read endpoints therefore report "no Object Lock
+// configured", exactly as a bucket/object without Object Lock does. The
+// PutObjectLock* / Put*Retention / Put*LegalHold counterparts stay 501.
 
-// "Forever" sentinel for RetainUntilDate. S3 has no infinity value, so use the
-// max representable date: year 9999 is the ceiling for SQL DATETIME and Python
-// datetime.max, so anything larger would overflow common clients (e.g. boto3).
-const OBJECT_LOCK_RETAIN_UNTIL = '9999-12-31T23:59:59Z'
-
-export const objectLockConfigurationBody = () => ({
-  ObjectLockEnabled: 'Enabled',
-  Rule: { DefaultRetention: { Mode: 'COMPLIANCE', Years: 100 } },
-})
-
-export const objectRetentionBody = () => ({
-  Mode: 'COMPLIANCE',
-  RetainUntilDate: OBJECT_LOCK_RETAIN_UNTIL,
-})
-
-export const objectLegalHoldBody = () => ({ Status: 'ON' })
+/** Legal hold is never on (Object Lock is not enforced). */
+export const objectLegalHoldBody = () => ({ Status: 'OFF' })
 
 export const getObjectLockConfigurationHandler = async (
   req: Request,
@@ -333,11 +322,15 @@ export const getObjectLockConfigurationHandler = async (
 ) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
-  sendXML(res, 'ObjectLockConfiguration', objectLockConfigurationBody())
+  // No bucket-level Object Lock configuration exists.
+  sendXML(res.status(404), 'Error', {
+    Code: 'ObjectLockConfigurationNotFoundError',
+    Message: 'Object Lock configuration does not exist for this bucket',
+  })
 }
 
-// The retention and legal-hold contracts are object-level, so reject a key
-// that doesn't exist with NoSuchKey rather than asserting a lock over nothing.
+// Reject a key that doesn't exist with NoSuchKey rather than reporting lock
+// state for a nonexistent object.
 const sendNoSuchKey = (res: Response, key: string) => {
   sendXML(res.status(404), 'Error', {
     Code: 'NoSuchKey',
@@ -357,7 +350,11 @@ export const getObjectRetentionHandler = async (
     sendNoSuchKey(res, key)
     return
   }
-  sendXML(res, 'Retention', objectRetentionBody())
+  // The object exists but carries no retention (Object Lock is not enforced).
+  sendXML(res.status(404), 'Error', {
+    Code: 'NoSuchObjectLockConfiguration',
+    Message: 'The specified object does not have a Retention configuration',
+  })
 }
 
 export const getObjectLegalHoldHandler = async (
@@ -389,6 +386,7 @@ export const createMultipartUploadHandler = async (
     Key: key,
     ContentType: req.headers['content-type'],
     UploadOptions: uploadOptions,
+    Mtime: getMtime(req),
   })
 
   if (result.isErr()) {
@@ -652,7 +650,7 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
     return
   }
 
-  const result = await S3UseCases.copyObject({
+  const result = await S3UseCases.copyObject(user, {
     SourceBucket: source.bucket,
     SourceKey: source.key,
     Bucket: bucket,

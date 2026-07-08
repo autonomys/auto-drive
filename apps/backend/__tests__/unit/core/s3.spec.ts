@@ -7,10 +7,14 @@ import {
   afterEach,
 } from '@jest/globals'
 import { S3UseCases } from '../../../src/core/s3/index.js'
-import { s3ObjectMappingsRepository } from '../../../src/infrastructure/repositories/index.js'
+import {
+  ownershipRepository,
+  s3ObjectMappingsRepository,
+} from '../../../src/infrastructure/repositories/index.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
+import { OwnershipUseCases } from '../../../src/core/objects/ownership.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
 import { ObjectNotFoundError, ForbiddenError } from '../../../src/errors/index.js'
@@ -29,6 +33,18 @@ describe('S3UseCases', () => {
     publicId: 'pub1',
     organizationId: 'org1',
     walletAddress: '0xuser',
+    oauthProvider: 'google',
+    oauthUserId: 'user1',
+  } as any
+
+  // An ownership row for mockUser (the S3 uploader), used to satisfy
+  // deleteObject's owner gate.
+  const ownerRow = {
+    cid: 'cid123',
+    oauth_provider: 'google',
+    oauth_user_id: 'user1',
+    is_admin: true,
+    marked_as_deleted: null,
   } as any
 
   beforeEach(() => {
@@ -166,6 +182,10 @@ describe('S3UseCases', () => {
       const createSpy = jest
         .spyOn(UploadsUseCases, 'createFileUpload')
         .mockResolvedValue({ id: 'upload123' } as any)
+      const mtimeSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'setMultipartMtime',
+      )
 
       const result = await S3UseCases.createMultipartUpload(mockUser, {
         Bucket: 'bucket',
@@ -175,6 +195,25 @@ describe('S3UseCases', () => {
 
       expect(result.isOk()).toBe(true)
       expect(createSpy).toHaveBeenCalled()
+      // No mtime supplied → nothing stashed.
+      expect(mtimeSpy).not.toHaveBeenCalled()
+    })
+
+    it('stashes the client mtime by upload id when provided', async () => {
+      jest
+        .spyOn(UploadsUseCases, 'createFileUpload')
+        .mockResolvedValue({ id: 'upload123' } as any)
+      const mtimeSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'setMultipartMtime')
+        .mockResolvedValue(undefined)
+
+      await S3UseCases.createMultipartUpload(mockUser, {
+        Bucket: 'bucket',
+        Key: 'file.txt',
+        Mtime: '1620000000.5',
+      } as any)
+
+      expect(mtimeSpy).toHaveBeenCalledWith('upload123', '1620000000.5')
     })
   })
 
@@ -211,6 +250,13 @@ describe('S3UseCases', () => {
           cid: 'cid123',
           md5: null,
         } as any)
+      // mtime stashed at CreateMultipartUpload; persisted then cleared here.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'getMultipartMtime')
+        .mockResolvedValue('1620000000.5')
+      const clearMtimeSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'deleteMultipartMtime')
+        .mockResolvedValue(undefined)
 
       const result = await S3UseCases.completeMultipartUpload(mockUser, {
         Bucket: 'my-bucket',
@@ -227,12 +273,15 @@ describe('S3UseCases', () => {
       // Composite ETag: "<md5>-N" format
       expect(result._unsafeUnwrap().ETag).toMatch(MULTIPART_ETAG_RE)
       expect(result._unsafeUnwrap().Cid).toBe('cid123')
+      // 5th arg is the stashed mtime; the staging row is then cleared.
       expect(mappingSpy).toHaveBeenCalledWith(
         'my-bucket',
         'file.txt',
         'cid123',
         expect.stringMatching(MULTIPART_MD5_RE),
+        '1620000000.5',
       )
+      expect(clearMtimeSpy).toHaveBeenCalledWith('upload123')
     })
   })
 
@@ -542,16 +591,30 @@ describe('S3UseCases', () => {
   })
 
   describe('deleteObject', () => {
-    it('soft-deletes the mapping and trashes the object when it was the last reference', async () => {
-      const softDeleteSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123' })
+    const activeMapping = {
+      bucket: 'my-bucket',
+      key: 'file.txt',
+      cid: 'cid123',
+      md5: null,
+      mtime: null,
+    } as any
+
+    it('trashes the object then hides the mapping when it was the last reference', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(activeMapping)
+      jest
+        .spyOn(ownershipRepository, 'getOwnerships')
+        .mockResolvedValue([ownerRow])
       jest
         .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(0)
+        .mockResolvedValue(1)
       const markSpy = jest
         .spyOn(ObjectUseCases, 'markAsDeleted')
         .mockResolvedValue(ok(undefined))
+      const softDeleteSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
+        .mockResolvedValue({ cid: 'cid123' })
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -560,21 +623,27 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
-      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'file.txt')
-      // Last active mapping gone → propagate to the web-app Trash.
+      // Last active mapping → propagate to Trash, then hide the key.
       expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
+      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'file.txt')
     })
 
     it('does not trash the object when another S3 key still references it', async () => {
       jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123' })
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue({ ...activeMapping, key: 'copy.txt' })
+      jest
+        .spyOn(ownershipRepository, 'getOwnerships')
+        .mockResolvedValue([ownerRow])
       jest
         .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(1)
+        .mockResolvedValue(2)
       const markSpy = jest
         .spyOn(ObjectUseCases, 'markAsDeleted')
         .mockResolvedValue(ok(undefined))
+      const softDeleteSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
+        .mockResolvedValue({ cid: 'cid123' })
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -583,20 +652,18 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
-      // A sibling key (e.g. after a move/copy) keeps the content live.
+      // A sibling key (e.g. the move source) keeps the content live.
       expect(markSpy).not.toHaveBeenCalled()
+      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'copy.txt')
     })
 
-    it('is a no-op when the key was absent or already deleted', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue(null)
-      const countSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(0)
-      const markSpy = jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(ok(undefined))
+    it('is a no-op when the key is absent or already deleted', async () => {
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
+      const ownSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
+      const softDeleteSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'softDeleteMapping',
+      )
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -605,20 +672,25 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
-      expect(countSpy).not.toHaveBeenCalled()
-      expect(markSpy).not.toHaveBeenCalled()
+      expect(ownSpy).not.toHaveBeenCalled()
+      expect(softDeleteSpy).not.toHaveBeenCalled()
     })
 
-    it('still succeeds when moving the object to Trash fails', async () => {
+    it('does not hide the key when the caller does not own the content', async () => {
       jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123' })
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(activeMapping)
+      // Owned by someone else.
       jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(0)
-      jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(err(new ForbiddenError('not an owner')))
+        .spyOn(ownershipRepository, 'getOwnerships')
+        .mockResolvedValue([
+          { ...ownerRow, oauth_user_id: 'someone-else' },
+        ])
+      const softDeleteSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'softDeleteMapping',
+      )
+      const markSpy = jest.spyOn(ObjectUseCases, 'markAsDeleted')
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -626,9 +698,39 @@ describe('S3UseCases', () => {
         'file.txt',
       )
 
-      // The mapping is already hidden; a Trash-propagation failure must not
-      // fail the S3 DeleteObject.
+      // Idempotent success, but the non-owner cannot hide the key.
       expect(result.isOk()).toBe(true)
+      expect(softDeleteSpy).not.toHaveBeenCalled()
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('still succeeds when moving the object to Trash fails', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(activeMapping)
+      jest
+        .spyOn(ownershipRepository, 'getOwnerships')
+        .mockResolvedValue([ownerRow])
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
+        .mockResolvedValue(1)
+      jest
+        .spyOn(ObjectUseCases, 'markAsDeleted')
+        .mockResolvedValue(err(new ForbiddenError('not an owner')))
+      const softDeleteSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
+        .mockResolvedValue({ cid: 'cid123' })
+
+      const result = await S3UseCases.deleteObject(
+        mockUser,
+        'my-bucket',
+        'file.txt',
+      )
+
+      // The key is still hidden; a Trash-propagation failure must not fail the
+      // S3 DeleteObject.
+      expect(result.isOk()).toBe(true)
+      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'file.txt')
     })
   })
 
@@ -643,15 +745,28 @@ describe('S3UseCases', () => {
       updatedAt: new Date(0),
     }
 
-    it('remaps the destination to the source cid (no data transfer)', async () => {
+    beforeEach(() => {
+      // Happy-path defaults: source is readable, ownership grant is a no-op.
+      jest
+        .spyOn(ObjectUseCases, 'authorizeDownload')
+        .mockResolvedValue(ok(undefined))
+      jest
+        .spyOn(OwnershipUseCases, 'setUserAsAdmin')
+        .mockResolvedValue(undefined)
+    })
+
+    it('remaps the destination to the source cid and grants the copier ownership', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(source as any)
       const createSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
         .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
+      const ownSpy = jest
+        .spyOn(OwnershipUseCases, 'setUserAsAdmin')
+        .mockResolvedValue(undefined)
 
-      const result = await S3UseCases.copyObject({
+      const result = await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
         SourceKey: 'a.txt',
         Bucket: 'dst',
@@ -669,6 +784,8 @@ describe('S3UseCases', () => {
         source.md5,
         null,
       )
+      // The copy is the copier's object.
+      expect(ownSpy).toHaveBeenCalledWith(mockUser, 'srccid')
     })
 
     it('returns a not-found error when the source is missing (NoSuchKey)', async () => {
@@ -676,7 +793,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(null)
 
-      const result = await S3UseCases.copyObject({
+      const result = await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
         SourceKey: 'missing.txt',
         Bucket: 'dst',
@@ -687,6 +804,31 @@ describe('S3UseCases', () => {
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
 
+    it('refuses to copy a source that is not downloadable (removed/banned)', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(source as any)
+      jest
+        .spyOn(ObjectUseCases, 'authorizeDownload')
+        .mockResolvedValue(err(new ObjectNotFoundError('Object not found')))
+      const createSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'createMapping',
+      )
+
+      const result = await S3UseCases.copyObject(mockUser, {
+        SourceBucket: 'src',
+        SourceKey: 'a.txt',
+        Bucket: 'dst',
+        Key: 'b.txt',
+      })
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      // No destination mapping is created for an unreadable source.
+      expect(createSpy).not.toHaveBeenCalled()
+    })
+
     it('inherits the source mtime when no override is provided', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
@@ -695,7 +837,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
         .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
 
-      await S3UseCases.copyObject({
+      await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
         SourceKey: 'a.txt',
         Bucket: 'dst',
@@ -719,7 +861,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
         .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
 
-      await S3UseCases.copyObject({
+      await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
         SourceKey: 'a.txt',
         Bucket: 'dst',
@@ -744,7 +886,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
         .mockResolvedValue({ ...source, md5: null, updatedAt: new Date() } as any)
 
-      const result = await S3UseCases.copyObject({
+      const result = await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
         SourceKey: 'a.txt',
         Bucket: 'dst',
@@ -756,10 +898,13 @@ describe('S3UseCases', () => {
   })
 
   describe('abortMultipartUpload', () => {
-    it('delegates to UploadsUseCases.abortUpload', async () => {
+    it('delegates to UploadsUseCases.abortUpload and clears the stashed mtime', async () => {
       const abortSpy = jest
         .spyOn(UploadsUseCases, 'abortUpload')
         .mockResolvedValue(ok(undefined))
+      const clearMtimeSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'deleteMultipartMtime')
+        .mockResolvedValue(undefined)
 
       const result = await S3UseCases.abortMultipartUpload(
         mockUser,
@@ -768,17 +913,24 @@ describe('S3UseCases', () => {
 
       expect(result.isOk()).toBe(true)
       expect(abortSpy).toHaveBeenCalledWith(mockUser, 'upload123')
+      expect(clearMtimeSpy).toHaveBeenCalledWith('upload123')
     })
 
-    it('propagates a not-found error for an unknown upload id', async () => {
+    it('propagates a not-found error for an unknown upload id (no mtime clear)', async () => {
       jest
         .spyOn(UploadsUseCases, 'abortUpload')
         .mockResolvedValue(err(new ObjectNotFoundError('Upload not found')))
+      const clearMtimeSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'deleteMultipartMtime',
+      )
 
       const result = await S3UseCases.abortMultipartUpload(mockUser, 'nope')
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      // A failed abort must not drop another upload's stashed mtime.
+      expect(clearMtimeSpy).not.toHaveBeenCalled()
     })
 
     it('propagates a forbidden error when the caller does not own the upload', async () => {

@@ -362,10 +362,15 @@ const restoreObject = async (
     return err(new ForbiddenError('User is not an owner of this object'))
   }
 
+  // The trash time for this owner — S3 keys hidden at/after it are the ones this
+  // trash removed, so only those are un-hidden on restore (see
+  // restoreMappingsByCid); keys deleted individually earlier stay hidden.
+  const trashedAt = isUserOwner.marked_as_deleted
+
   await OwnershipUseCases.restoreObject(executor, cid)
-  // Un-hide any S3 keys that were soft-deleted for this object so restoring from
-  // Trash brings the object back to its S3 name too (no-op when there are none).
-  await s3ObjectMappingsRepository.restoreMappingsByCid(cid)
+  // Un-hide the S3 keys this trash removed so restoring brings the object back to
+  // its S3 name too (no-op when there are none).
+  await s3ObjectMappingsRepository.restoreMappingsByCid(cid, trashedAt)
   logger.info('Object restored successfully (cid=%s)', cid)
 
   return ok()
