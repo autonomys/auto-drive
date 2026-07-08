@@ -6,7 +6,8 @@
 # Verifies that rclone (a common third-party S3 client) interoperates
 # correctly with our endpoint.  Exercises the code paths rclone hits in
 # normal use: ListObjectsV2, single-PUT, multipart-PUT, GET, DeleteObject
-# rejection, and MD5 checksum verification.
+# (soft-delete), server-side CopyObject, move, purge, and MD5 checksum
+# verification.
 #
 # Companion to test-s3-api.sh, which tests the API surface directly via
 # the AWS CLI.  Split out so this script can evolve independently as new
@@ -31,17 +32,21 @@
 #     rclone copyto      — multipart PUT (6 MiB, 5 MiB chunks)
 #     rclone copy        — recursive directory upload
 #     rclone rcat        — pipe-in upload from stdin
-#   Immutability (must reject)
+#   Mutate (soft-delete: the S3 key is hidden, the DSN content is never erased)
 #     rclone deletefile  — single-file delete
 #     rclone delete      — filter-based delete
 #     rclone purge       — recursive prefix delete
-#     rclone moveto      — copy + delete
+#     rclone copyto      — server-side copy (content-addressed remap)
+#     rclone moveto      — server-side copy + delete-source
 #
-# Data hygiene: storage on Auto Drive is immutable and content-addressed.  All
-# upload content is deterministic (no timestamps or randomness in bodies), so
-# repeat runs hash to identical CIDs and consume no new DSN storage after the
-# first run.  The 6 MiB multipart fixture is the smallest content that can
-# produce >1 chunk under rclone's 5 MiB client-side minimum.
+# Data hygiene: the underlying content on Auto Drive is permanent and
+# content-addressed — a "delete" only hides the S3 key (soft-delete), it never
+# erases the bytes from the DSN.  All upload content is deterministic (no
+# timestamps or randomness in bodies), so repeat runs hash to identical CIDs and
+# consume no new DSN storage after the first run.  Delete/move tests use
+# per-run-unique keys so a soft-deleted key from a prior run doesn't mask a
+# failure.  The 6 MiB multipart fixture is the smallest content that can produce
+# >1 chunk under rclone's 5 MiB client-side minimum.
 #
 # Prerequisites:
 #   aws     AWS CLI v2          https://aws.amazon.com/cli/  (for seed PUT)
@@ -236,18 +241,23 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# rclone deletefile — DeleteObject is rejected
+# rclone deletefile — DeleteObject soft-deletes (key hidden; DSN content kept)
 # ─────────────────────────────────────────────────────────────────────────────
 
-section "rclone deletefile"
+section "rclone deletefile — soft-delete"
 
 DEL_OUT=$(rclone deletefile \
     "${RCLONE_REMOTE}:${TEST_BUCKET}/${RC_SMALL_KEY}" 2>&1) \
   && DEL_EXIT=0 || DEL_EXIT=$?
-if [[ $DEL_EXIT -ne 0 ]]; then
-  ok "rclone deletefile — correctly rejected (storage is immutable)"
+if [[ $DEL_EXIT -eq 0 ]]; then
+  # After a soft-delete the key must no longer be listable/gettable.
+  if [[ -z "$(rclone ls "${RCLONE_REMOTE}:${TEST_BUCKET}/${RC_SMALL_KEY}" 2>/dev/null)" ]]; then
+    ok "rclone deletefile — deleted; key no longer listed"
+  else
+    fail "rclone deletefile — succeeded but key still listed"
+  fi
 else
-  fail "rclone deletefile — expected failure but command succeeded" "$DEL_OUT"
+  fail "rclone deletefile — delete failed" "$DEL_OUT"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -526,67 +536,55 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Immutability rejection probes — every operation that requires DeleteObject
-# must fail.  These are negative tests, companion to the existing deletefile
-# rejection above.
+# Mutating operations — delete / purge / move all soft-delete under the hood and
+# must SUCCEED.  Companion to the deletefile soft-delete test above.
 # ─────────────────────────────────────────────────────────────────────────────
 
-section "Immutability — delete / purge / moveto rejection"
+section "rclone delete / purge / moveto"
 
-# rclone delete — non-recursive single-file delete (uses --include filter)
-RDEL_OUT=$(rclone delete --include "${RC_SMALL_KEY}" \
+# rclone delete — filter-based delete of a dedicated, freshly uploaded key.
+RDEL_KEY="rclone-del-filter-${TS}.txt"
+printf 'rclone filter-delete fixture' | rclone rcat \
+    "${RCLONE_REMOTE}:${TEST_BUCKET}/${RDEL_KEY}" 2>/dev/null
+RDEL_OUT=$(rclone delete --include "${RDEL_KEY}" \
     "${RCLONE_REMOTE}:${TEST_BUCKET}" 2>&1) \
   && RDEL_EXIT=0 || RDEL_EXIT=$?
-if [[ $RDEL_EXIT -ne 0 ]] \
-   || echo "$RDEL_OUT" | grep -qi "failed\|denied\|forbidden\|403"; then
-  ok "rclone delete — rejected"
+if [[ $RDEL_EXIT -eq 0 ]] \
+   && [[ -z "$(rclone ls "${RCLONE_REMOTE}:${TEST_BUCKET}/${RDEL_KEY}" 2>/dev/null)" ]]; then
+  ok "rclone delete — filtered delete removed the key"
 else
-  # `rclone delete` can exit 0 if it deletes zero files; verify the file is
-  # still there as a fallback signal.
-  STILL_THERE=$(rclone ls "${RCLONE_REMOTE}:${TEST_BUCKET}/${RC_SMALL_KEY}" 2>/dev/null)
-  if [[ -n "$STILL_THERE" ]]; then
-    ok "rclone delete — exited 0 but file still present (delete had no effect)"
-  else
-    fail "rclone delete — file appears to have been deleted" "$RDEL_OUT"
-  fi
+  fail "rclone delete — key still present after delete" "$RDEL_OUT"
 fi
 
-# rclone purge — recursive delete of a prefix.  Should fail outright.
+# rclone purge — recursive delete of the tree prefix uploaded earlier.  Runs
+# after all the listing tests, so emptying the prefix here is safe.
 RPURGE_OUT=$(rclone purge \
     "${RCLONE_REMOTE}:${TEST_BUCKET}/${RC_TREE_PREFIX}" 2>&1) \
   && RPURGE_EXIT=0 || RPURGE_EXIT=$?
-if [[ $RPURGE_EXIT -ne 0 ]]; then
-  ok "rclone purge — correctly rejected"
+REMAINING=$(rclone ls "${RCLONE_REMOTE}:${TEST_BUCKET}/${RC_TREE_PREFIX}" 2>/dev/null \
+            | wc -l | tr -d ' ')
+if [[ $RPURGE_EXIT -eq 0 ]] && [[ "$REMAINING" == "0" ]]; then
+  ok "rclone purge — prefix emptied (0 keys remain)"
 else
-  # If purge somehow exited 0, the tree should still be intact.
-  REMAINING=$(rclone ls "${RCLONE_REMOTE}:${TEST_BUCKET}/${RC_TREE_PREFIX}" 2>/dev/null \
-              | wc -l | tr -d ' ')
-  if [[ "$REMAINING" == "3" ]]; then
-    ok "rclone purge — exited 0 but tree intact (purge had no effect)"
-  else
-    fail "rclone purge — tree was modified" \
-      "remaining=${REMAINING} (expected 3)  output: ${RPURGE_OUT}"
-  fi
+  fail "rclone purge — prefix not empty after purge" \
+    "exit=${RPURGE_EXIT} remaining=${REMAINING} (expected 0)  output: ${RPURGE_OUT}"
 fi
 
-# rclone moveto — copy + delete.  Either step is enough to fail the move:
-#   - we have no CopyObject (server-side copy), so rclone falls back to
-#     download-then-upload-then-delete; the delete then 403s
-#   - or rclone refuses to start a move when the source can't be deleted
+# rclone moveto — server-side copy + delete-source.  The source must be gone and
+# the destination present; deleting the source must NOT hide the destination
+# (both point at the same content-addressed CID).
 RMOVE_DST="${SEED_KEY}.moved-${TS}"
 RMOVE_OUT=$(rclone moveto \
     "${RCLONE_REMOTE}:${TEST_BUCKET}/${SEED_KEY}" \
     "${RCLONE_REMOTE}:${TEST_BUCKET}/${RMOVE_DST}" 2>&1) \
   && RMOVE_EXIT=0 || RMOVE_EXIT=$?
 SRC_STILL_THERE=$(rclone ls "${RCLONE_REMOTE}:${TEST_BUCKET}/${SEED_KEY}" 2>/dev/null)
-if [[ -n "$SRC_STILL_THERE" ]]; then
-  if [[ $RMOVE_EXIT -ne 0 ]]; then
-    ok "rclone moveto — rejected; source still present"
-  else
-    ok "rclone moveto — exited 0 but source still present (delete refused)"
-  fi
+DST_PRESENT=$(rclone ls "${RCLONE_REMOTE}:${TEST_BUCKET}/${RMOVE_DST}" 2>/dev/null)
+if [[ $RMOVE_EXIT -eq 0 ]] && [[ -z "$SRC_STILL_THERE" ]] && [[ -n "$DST_PRESENT" ]]; then
+  ok "rclone moveto — source moved to destination"
 else
-  fail "rclone moveto — source was deleted (immutability violated)" "$RMOVE_OUT"
+  fail "rclone moveto — move did not complete cleanly" \
+    "exit=${RMOVE_EXIT} src_present=$([[ -n "$SRC_STILL_THERE" ]] && echo yes || echo no) dst_present=$([[ -n "$DST_PRESENT" ]] && echo yes || echo no)  output: ${RMOVE_OUT}"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

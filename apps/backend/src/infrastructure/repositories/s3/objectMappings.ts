@@ -10,6 +10,12 @@ export interface S3KeyMapping {
   cid: string
   /** MD5 hex digest of the object body, or null for objects uploaded before this feature. */
   md5: string | null
+  /**
+   * Client-supplied modification time (rclone sends it as the x-amz-meta-mtime
+   * header, a float unix-seconds string). Stored verbatim so it round-trips with
+   * full precision; null means the object has no client mtime.
+   */
+  mtime: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -24,6 +30,7 @@ interface S3KeyMappingDB {
   key: S3KeyMapping['key']
   cid: S3KeyMapping['cid']
   md5: S3KeyMapping['md5']
+  mtime: S3KeyMapping['mtime']
   created_at: S3KeyMapping['createdAt']
   updated_at: S3KeyMapping['updatedAt']
 }
@@ -38,6 +45,7 @@ const mapDBToDomain = (db: S3KeyMappingDB): S3KeyMapping => ({
   key: db.key,
   cid: db.cid,
   md5: db.md5 ?? null,
+  mtime: db.mtime ?? null,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 })
@@ -47,18 +55,23 @@ const createMapping = async (
   s3Key: string,
   cid: string,
   md5: string | null = null,
+  mtime: string | null = null,
 ): Promise<S3KeyMapping> => {
   const db = await getDatabase()
 
+  // ON CONFLICT resets deleted_at to NULL so a PutObject to a previously
+  // soft-deleted key resurrects it — matching S3's "PUT after DELETE re-creates
+  // the object" semantics (and TestObjectUpdate, which overwrites in place).
   const result = await db.query<S3KeyMappingDB>({
     text: `
       INSERT INTO "S3".object_mappings
-      (bucket, "key", cid, md5)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (bucket, "key") DO UPDATE SET cid = $3, md5 = $4, updated_at = NOW()
+      (bucket, "key", cid, md5, mtime)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (bucket, "key") DO UPDATE
+        SET cid = $3, md5 = $4, mtime = $5, deleted_at = NULL, updated_at = NOW()
       RETURNING *
     `,
-    values: [bucket, s3Key, cid, md5],
+    values: [bucket, s3Key, cid, md5, mtime],
   })
 
   return result.rows.map(mapDBToDomain)[0]
@@ -70,10 +83,13 @@ const findByKey = async (
 ): Promise<S3KeyMapping | null> => {
   const db = await getDatabase()
 
+  // Soft-deleted mappings read as "not found": GET / HEAD / CopyObject source
+  // lookups and objectExists all go through findByKey, so a deleted key returns
+  // 404 / NoSuchKey everywhere without a per-caller filter.
   const result = await db.query<S3KeyMappingDB>({
     text: `
       SELECT * FROM "S3".object_mappings
-      WHERE bucket = $1 AND "key" = $2
+      WHERE bucket = $1 AND "key" = $2 AND deleted_at IS NULL
     `,
     values: [bucket, s3Key],
   })
@@ -83,6 +99,72 @@ const findByKey = async (
   }
 
   return result.rows.map(mapDBToDomain)[0]
+}
+
+/**
+ * Soft-delete a single (bucket, key) mapping (S3 DeleteObject). Sets deleted_at
+ * so the key is hidden from every read path; the underlying content is never
+ * removed from the DSN. Idempotent: deleting an already-deleted or non-existent
+ * key is a no-op (S3 DeleteObject succeeds regardless). Returns the cid of the
+ * row it just soft-deleted, or null if there was no active row — the caller uses
+ * this to decide whether to also move the underlying object to the UI Trash.
+ */
+const softDeleteMapping = async (
+  bucket: string,
+  s3Key: string,
+): Promise<{ cid: string } | null> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ cid: string }>({
+    text: `
+      UPDATE "S3".object_mappings
+      SET deleted_at = NOW(), updated_at = NOW()
+      WHERE bucket = $1 AND "key" = $2 AND deleted_at IS NULL
+      RETURNING cid
+    `,
+    values: [bucket, s3Key],
+  })
+
+  return result.rows[0] ?? null
+}
+
+/**
+ * Clear the soft-delete flag on every mapping pointing at a cid. Called when the
+ * underlying object is restored from the web-app Trash so that S3 keys hidden by
+ * a DeleteObject reappear too — the reverse of deleteObject's propagation to the
+ * Trash, keeping the S3 namespace and the UI in sync ("unified with UI Trash").
+ */
+const restoreMappingsByCid = async (cid: string): Promise<void> => {
+  const db = await getDatabase()
+
+  await db.query({
+    text: `
+      UPDATE "S3".object_mappings
+      SET deleted_at = NULL, updated_at = NOW()
+      WHERE cid = $1 AND deleted_at IS NOT NULL
+    `,
+    values: [cid],
+  })
+}
+
+/**
+ * Count active (non-soft-deleted) mappings pointing at a cid. Used after a
+ * DeleteObject to decide whether any S3 key still references the content before
+ * propagating the removal to the web-app Trash.
+ */
+const countActiveMappingsByCid = async (cid: string): Promise<number> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ count: string }>({
+    text: `
+      SELECT COUNT(*)::text AS count
+      FROM "S3".object_mappings
+      WHERE cid = $1 AND deleted_at IS NULL
+    `,
+    values: [cid],
+  })
+
+  return Number(result.rows[0]?.count ?? 0)
 }
 
 const updateMapping = async (
@@ -176,6 +258,7 @@ const listObjects = async (
     ) m ON true
     WHERE om.bucket = $1
       AND om.key LIKE $2
+      AND om.deleted_at IS NULL
       AND ${ownershipSQL.notRemovedByOwnerSQL('om.cid')}
   `
 
@@ -217,6 +300,9 @@ const listObjects = async (
 export const s3ObjectMappingsRepository = {
   createMapping,
   findByKey,
+  softDeleteMapping,
+  restoreMappingsByCid,
+  countActiveMappingsByCid,
   updateMapping,
   findByCid,
   listBuckets,

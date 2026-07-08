@@ -62,6 +62,43 @@ const getUploadOptions = (req: Request) => {
 }
 
 /**
+ * The modification time a client associates with an object, sent as the
+ * x-amz-meta-mtime header (rclone uses a float unix-seconds string). Stored and
+ * echoed back verbatim so the value round-trips with full precision.
+ */
+const getMtime = (req: Request): string | null => {
+  const mtime = req.headers['x-amz-meta-mtime']
+  return typeof mtime === 'string' ? mtime : null
+}
+
+/**
+ * Parse the source object of a CopyObject request from its x-amz-copy-source
+ * header. The value is "/{bucket}/{key}" (the leading slash is optional), with
+ * each path segment URL-encoded and an optional "?versionId=..." suffix — Auto
+ * Drive has no object versioning, so any versionId is dropped. Returns null when
+ * the header is missing or malformed.
+ */
+const parseCopySource = (
+  req: Request,
+): { bucket: string; key: string } | null => {
+  const raw = req.headers['x-amz-copy-source']
+  if (typeof raw !== 'string' || raw.length === 0) return null
+
+  // Drop any ?versionId= suffix, strip a leading slash, then URL-decode.
+  const withoutVersion = raw.split('?')[0].replace(/^\//, '')
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(withoutVersion)
+  } catch {
+    // Malformed percent-encoding — treat as no valid source.
+    return null
+  }
+  if (decoded.length === 0) return null
+
+  return parseBucketAndKey(decoded)
+}
+
+/**
  * Build the absolute, host-aware object URL for the CompleteMultipartUpload
  * `Location` response field — per the S3 spec, the URL of the newly created
  * object as seen from the endpoint the client used.
@@ -191,6 +228,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     cid,
     etag,
     lastModified,
+    mtime,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
@@ -205,6 +243,8 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)
   res.set('Last-Modified', lastModified.toUTCString())
+  // Echo the client mtime so tools (e.g. rclone) read back what they wrote.
+  if (mtime) res.set('x-amz-meta-mtime', mtime)
 
   pipeline(await startDownload(), res, (err: Error | null) => {
     if (err) {
@@ -240,6 +280,7 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     cid,
     etag,
     lastModified,
+    mtime,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
@@ -254,6 +295,8 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)
   res.set('Last-Modified', lastModified.toUTCString())
+  // Echo the client mtime so tools (e.g. rclone) read back what they wrote.
+  if (mtime) res.set('x-amz-meta-mtime', mtime)
 
   // 200, not 204: HeadObject returns the headers GET would send (Content-Length,
   // Content-Type, …) with an empty body. A 204 is defined as bodiless, so Node
@@ -562,6 +605,7 @@ export const putObjectHandler = async (req: Request, res: Response) => {
     Body: req.body,
     ContentType: req.headers['content-type'],
     UploadOptions: uploadOptions,
+    Mtime: getMtime(req),
   })
 
   if (result.isErr()) {
@@ -577,12 +621,96 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   res.status(200).end()
 }
 
-export const deleteObjectHandler = async (_req: Request, res: Response) => {
-  sendXML(res.status(403), 'Error', {
-    Code: 'AccessDenied',
-    Message:
-      'Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.',
+export const deleteObjectHandler = async (req: Request, res: Response) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  const { bucket, key } = parseBucketAndKey(req.params.key)
+
+  // Soft-delete: the (bucket, key) mapping is hidden and, if it was the last S3
+  // reference to the content, the object is moved to the owner's web-app Trash.
+  // The underlying bytes are never removed from the Autonomys DSN.
+  await S3UseCases.deleteObject(user, bucket, key)
+
+  // S3 DeleteObject responds 204 No Content with an empty body, whether or not
+  // the key existed (delete is idempotent).
+  res.status(204).end()
+}
+
+export const copyObjectHandler = async (req: Request, res: Response) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  const { bucket, key } = parseBucketAndKey(req.params.key)
+  const source = parseCopySource(req)
+  if (!source) {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message: 'The x-amz-copy-source header is missing or malformed.',
+      ArgumentName: 'x-amz-copy-source',
+    })
+    return
+  }
+
+  const result = await S3UseCases.copyObject({
+    SourceBucket: source.bucket,
+    SourceKey: source.key,
+    Bucket: bucket,
+    Key: key,
+    // An x-amz-meta-mtime on the copy request (metadata REPLACE — how rclone's
+    // SetModTime works) overrides the source mtime; its absence means undefined,
+    // which the use case reads as "inherit the source mtime".
+    Mtime: getMtime(req) ?? undefined,
   })
+
+  if (result.isErr()) {
+    // Missing copy source → NoSuchKey, per S3.
+    sendNoSuchKey(res, source.key)
+    return
+  }
+
+  const { ETag, Cid, LastModified } = result.value
+  res.set('x-amz-meta-cid', Cid)
+  res.set('ETag', ETag)
+  // The CopyObjectResult body carries ETag + LastModified. rclone re-HEADs the
+  // destination afterward, so these are informational, but the XML must be
+  // well-formed for the AWS SDK's response parser.
+  sendXML(res, 'CopyObjectResult', {
+    ETag,
+    LastModified: LastModified.toISOString(),
+  })
+}
+
+export const abortMultipartUploadHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  const uploadId = req.query.uploadId as string
+  if (!uploadId) {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message: 'The uploadId query parameter is required.',
+      ArgumentName: 'uploadId',
+    })
+    return
+  }
+
+  const result = await S3UseCases.abortMultipartUpload(user, uploadId)
+  if (result.isErr()) {
+    // Unknown upload id → NoSuchUpload.
+    sendXML(res.status(404), 'Error', {
+      Code: 'NoSuchUpload',
+      Message: 'The specified multipart upload does not exist.',
+      UploadId: uploadId,
+    })
+    return
+  }
+
+  // S3 AbortMultipartUpload responds 204 No Content.
+  res.status(204).end()
 }
 
 export const notImplementedHandler = async (_req: Request, res: Response) => {

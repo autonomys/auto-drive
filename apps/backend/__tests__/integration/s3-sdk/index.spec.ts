@@ -693,13 +693,257 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
-  describe('DeleteObject', () => {
-    it('should return 403 AccessDenied - storage is immutable', async () => {
-      const command = new DeleteObjectCommand({ Bucket, Key: 'test.txt' })
-      await expect(s3Client.send(command)).rejects.toMatchObject({
-        $metadata: { httpStatusCode: 403 },
-        Code: 'AccessDenied',
-      })
+  // DeleteObject soft-deletes the (bucket, key) mapping: the S3 name is hidden
+  // but the underlying content is never removed from the DSN. This is what makes
+  // rclone delete/move/sync work while preserving permanence.
+  describe('DeleteObject (soft delete)', () => {
+    const DelListBucket = `${BASE_PATH}/s3/del-test`
+
+    it('returns 204 and the object is then hidden from GET, HEAD and listings', async () => {
+      const Del = 'del-test/gone.txt'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Del, Body: Buffer.from('bye') }),
+      )
+      // Present before deletion.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: Del })),
+      ).resolves.toBeDefined()
+
+      const del = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: Del }),
+      )
+      expect(del.$metadata.httpStatusCode).toBe(204)
+
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: Del })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: Del })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+
+      const list = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: DelListBucket }),
+      )
+      expect((list.Contents ?? []).some((o) => o.Key === 'gone.txt')).toBe(false)
+    })
+
+    it('deleting a missing key succeeds (idempotent)', async () => {
+      const del = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: 'del-test/never-existed.txt' }),
+      )
+      expect(del.$metadata.httpStatusCode).toBe(204)
+    })
+
+    it('re-uploading a deleted key resurrects it with the new content', async () => {
+      const Res = 'del-test/resurrect.txt'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Res, Body: Buffer.from('v1') }),
+      )
+      await s3Client.send(new DeleteObjectCommand({ Bucket, Key: Res }))
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: Res })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+
+      // PUT to the same key after DELETE re-creates the object.
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Res, Body: Buffer.from('v2') }),
+      )
+      const got = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: Res }),
+      )
+      expect(Buffer.from(await got.Body!.transformToByteArray()).toString()).toBe(
+        'v2',
+      )
+    })
+  })
+
+  // Server-side copy is a content-addressed remap (destination key -> same CID),
+  // so it needs no data transfer. rclone implements Move as Copy + Delete, so
+  // these two together give move/rename.
+  describe('CopyObject and Move', () => {
+    it('server-side copies an object to a new key', async () => {
+      const Src = 'copy-test/src.txt'
+      const Dst = 'copy-test/dst.txt'
+      const Content = Buffer.from('copy me')
+      const put = await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Src, Body: Content }),
+      )
+
+      const copy = await s3Client.send(
+        new CopyObjectCommand({ Bucket, Key: Dst, CopySource: Src }),
+      )
+      expect(copy.$metadata.httpStatusCode).toBe(200)
+
+      // Destination is readable and byte-identical to the source.
+      const got = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(Buffer.from(await got.Body!.transformToByteArray())).toEqual(
+        Content,
+      )
+      // Same content => same MD5 ETag as the source.
+      expect(got.ETag).toBe(put.ETag)
+      // Source is untouched.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: Src })),
+      ).resolves.toBeDefined()
+    })
+
+    it('move (copy + delete source) leaves only the destination', async () => {
+      const Src = 'copy-test/move-src.txt'
+      const Dst = 'copy-test/move-dst.txt'
+      const Content = Buffer.from('move me')
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Src, Body: Content }),
+      )
+
+      // rclone move = server-side copy then delete-source.
+      await s3Client.send(
+        new CopyObjectCommand({ Bucket, Key: Dst, CopySource: Src }),
+      )
+      await s3Client.send(new DeleteObjectCommand({ Bucket, Key: Src }))
+
+      // Source gone, destination intact — deleting the source did NOT hide the
+      // destination even though both point at the same CID.
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: Src })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+      const got = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(Buffer.from(await got.Body!.transformToByteArray())).toEqual(
+        Content,
+      )
+    })
+
+    it('returns 404 NoSuchKey when the copy source does not exist', async () => {
+      await expect(
+        s3Client.send(
+          new CopyObjectCommand({
+            Bucket,
+            Key: 'copy-test/dst2.txt',
+            CopySource: 'copy-test/does-not-exist.txt',
+          }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+    })
+  })
+
+  describe('AbortMultipartUpload', () => {
+    it('aborts an in-progress upload; completing it afterwards fails', async () => {
+      const AbortKey = 'abort-me.bin'
+      const created = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: AbortKey }),
+      )
+      const UploadId = created.UploadId!
+
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: AbortKey,
+          UploadId,
+          PartNumber: 1,
+          Body: Buffer.alloc(16 * 1024, 'x'),
+        }),
+      )
+
+      const abort = await s3Client.send(
+        new AbortMultipartUploadCommand({ Bucket, Key: AbortKey, UploadId }),
+      )
+      expect(abort.$metadata.httpStatusCode).toBe(204)
+
+      // The aborted upload no longer exists — completing it must fail.
+      await expect(
+        s3Client.send(
+          new CompleteMultipartUploadCommand({
+            Bucket,
+            Key: AbortKey,
+            UploadId,
+            MultipartUpload: {
+              Parts: [{ ETag: part.ETag!, PartNumber: 1 }],
+            },
+          }),
+        ),
+      ).rejects.toThrow()
+
+      // And the object was never created.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: AbortKey })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+    })
+  })
+
+  // rclone stores the source file's modification time in x-amz-meta-mtime (a
+  // float unix-seconds string) and reads it back via HEAD; SetModTime is a
+  // server-side copy of the object onto itself with metadata REPLACE.
+  describe('Modification time (x-amz-meta-mtime)', () => {
+    it('round-trips the mtime metadata through PutObject and HeadObject', async () => {
+      const MtimeKey = 'mtime-test/file.txt'
+      const Mtime = '1620000000.123456789'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: MtimeKey,
+          Body: Buffer.from('with mtime'),
+          Metadata: { mtime: Mtime },
+        }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: MtimeKey }),
+      )
+      // Echoed back verbatim, full precision preserved.
+      expect(head.Metadata?.mtime).toBe(Mtime)
+    })
+
+    it('updates the mtime via a metadata-REPLACE copy onto the same key (SetModTime)', async () => {
+      const Key2 = 'mtime-test/setmodtime.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Key2,
+          Body: Buffer.from('set mod time'),
+          Metadata: { mtime: '1000000000.5' },
+        }),
+      )
+
+      const NewMtime = '1699999999.987654321'
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket,
+          Key: Key2,
+          CopySource: Key2,
+          MetadataDirective: 'REPLACE',
+          Metadata: { mtime: NewMtime },
+        }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: Key2 }),
+      )
+      expect(head.Metadata?.mtime).toBe(NewMtime)
+    })
+
+    it('a plain server-side copy inherits the source mtime', async () => {
+      const Src = 'mtime-test/inherit-src.txt'
+      const Dst = 'mtime-test/inherit-dst.txt'
+      const Mtime = '1500000000.25'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Src,
+          Body: Buffer.from('inherit'),
+          Metadata: { mtime: Mtime },
+        }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({ Bucket, Key: Dst, CopySource: Src }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(head.Metadata?.mtime).toBe(Mtime)
     })
   })
 
@@ -721,28 +965,8 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
-  // Unsupported operations must return 501, never reach a write handler.
+  // These remain unimplemented and must return 501, never reach a write handler.
   describe('Unsupported operations return 501 NotImplemented', () => {
-    it('CopyObject is rejected and creates no object', async () => {
-      const CopyKey = 'copy-dest.txt'
-      await expect(
-        s3Client.send(
-          new CopyObjectCommand({
-            Bucket,
-            Key: CopyKey,
-            CopySource: `${Bucket}/${Key}`,
-          }),
-        ),
-      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
-
-      // The misroute used to PutObject an empty body at the destination.
-      // Assert only that the object does not exist (HEAD rejects); the exact
-      // missing-key status is fixed separately (404 vs 500).
-      await expect(
-        s3Client.send(new HeadObjectCommand({ Bucket, Key: CopyKey })),
-      ).rejects.toThrow()
-    })
-
     it('ListParts is rejected (must not finalise the upload)', async () => {
       // A real, in-progress upload so a misroute would actually complete it.
       const created = await s3Client.send(
@@ -762,21 +986,6 @@ describe('AWS S3 - SDK', () => {
     it('ListMultipartUploads is rejected', async () => {
       await expect(
         s3Client.send(new ListMultipartUploadsCommand({ Bucket })),
-      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
-    })
-
-    it('AbortMultipartUpload is rejected (must not finalise the upload)', async () => {
-      const created = await s3Client.send(
-        new CreateMultipartUploadCommand({ Bucket, Key: 'abort-probe.bin' }),
-      )
-      await expect(
-        s3Client.send(
-          new AbortMultipartUploadCommand({
-            Bucket,
-            Key: 'abort-probe.bin',
-            UploadId: created.UploadId!,
-          }),
-        ),
       ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
     })
   })

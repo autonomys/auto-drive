@@ -501,6 +501,30 @@ const scheduleCachePopulation = async (cid: string): Promise<void> => {
   EventRouter.publish(tasks)
 }
 
+/**
+ * Abort an in-progress upload (S3 AbortMultipartUpload / rclone CleanUp),
+ * discarding its buffered parts and blockstore/processing artifacts before it is
+ * finalized into an object. Permission-checked against the requesting user.
+ * Returns ObjectNotFoundError when the upload id is unknown (NoSuchUpload).
+ */
+const abortUpload = async (
+  user: UserWithOrganization,
+  uploadId: string,
+): Promise<Result<void, ObjectNotFoundError>> => {
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
+  if (!upload) {
+    return err(new ObjectNotFoundError('Upload not found'))
+  }
+  await checkPermissions(upload, user)
+
+  // removeUploadArtifacts deletes the blockstore entries, the upload rows keyed
+  // by this root_upload_id (a standalone file upload is its own root), the
+  // buffered file parts, and the file-processing-info row.
+  await removeUploadArtifacts(uploadId)
+  logger.info('Aborted multipart upload (uploadId=%s)', uploadId)
+  return ok()
+}
+
 const processMigration = async (uploadId: string): Promise<void> => {
   logger.debug('processMigration invoked (uploadId=%s)', uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
@@ -523,6 +547,7 @@ export const UploadsUseCases = {
   createFileInFolder,
   uploadChunk,
   completeUpload,
+  abortUpload,
   getFileFromFolderUpload,
   getPendingMigrations,
   processMigration,

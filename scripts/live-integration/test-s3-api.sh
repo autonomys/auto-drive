@@ -7,7 +7,8 @@
 # against staging or production, not in CI.
 #
 # Direct API coverage (via AWS CLI):
-#   PR 683  DeleteObject returns 403 AccessDenied (storage is immutable)
+#   DeleteObject soft-deletes (key hidden; DSN content never erased)
+#   CopyObject — server-side, content-addressed remap
 #   PR 684  Bucket support — first path segment of S3 key is the bucket name
 #   PR 695  MD5 ETags — PutObject, HeadObject, x-amz-meta-cid, multipart
 #   PR 696  ListObjectsV2 — basic listing, prefix filter, delimiter folding
@@ -31,10 +32,13 @@
 #   - Special-character keys — space + unicode round-trip
 #   - AbortMultipartUpload — informational probe
 #   - Unsupported operations probes — HeadBucket, GetBucketLocation,
-#                                     CopyObject, DeleteObjects, ListParts,
+#                                     DeleteObjects (bulk), ListParts,
 #                                     ListMultipartUploads
 #
-# Data hygiene: storage on Auto Drive is immutable and content-addressed.
+# Data hygiene: the underlying content on Auto Drive is permanent and
+# content-addressed — a DeleteObject only hides the S3 key (soft-delete), never
+# erasing the bytes from the DSN.  Delete tests use a dedicated key so they don't
+# hide the primary fixture the later listing/copy tests depend on.
 # All upload content is deterministic (no timestamps or randomness in bodies),
 # so repeat runs hash to identical CIDs and consume no new DSN storage.
 # Multipart parts are sized to the minimum that exercises the code path —
@@ -547,23 +551,30 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PR 683 — DeleteObject returns 403
+# DeleteObject — soft-deletes the key (content stays permanently on the DSN)
 # ─────────────────────────────────────────────────────────────────────────────
 
-section "PR 683 — DeleteObject returns 403 AccessDenied"
+section "DeleteObject — soft-delete"
+
+# A dedicated key so we don't hide OBJECT_KEY, which later listing/copy tests
+# still rely on.
+DEL_KEY="smoke-del-${TS}.txt"
+S3 put-object --bucket "$TEST_BUCKET" --key "$DEL_KEY" \
+    --body "$OBJECT_FILE" --content-type "text/plain" >/dev/null 2>&1
 
 DELETE_OUT=$(S3 delete-object \
     --bucket "$TEST_BUCKET" \
-    --key "$OBJECT_KEY" 2>&1) && DELETE_EXIT=0 || DELETE_EXIT=$?
+    --key "$DEL_KEY" 2>&1) && DELETE_EXIT=0 || DELETE_EXIT=$?
 
-if [[ $DELETE_EXIT -ne 0 ]]; then
-  if echo "$DELETE_OUT" | grep -qi "AccessDenied\|403"; then
-    ok "DeleteObject — returns 403 AccessDenied"
+if [[ $DELETE_EXIT -eq 0 ]]; then
+  # After a soft-delete the key must read as absent (HeadObject 404).
+  if S3 head-object --bucket "$TEST_BUCKET" --key "$DEL_KEY" >/dev/null 2>&1; then
+    fail "DeleteObject — succeeded but key still accessible" "$DEL_KEY"
   else
-    fail "DeleteObject — expected 403, got a different error" "$DELETE_OUT"
+    ok "DeleteObject — soft-deleted; key no longer accessible"
   fi
 else
-  fail "DeleteObject — expected 403 but request succeeded" "$DELETE_OUT"
+  fail "DeleteObject — delete request failed" "$DELETE_OUT"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1116,6 +1127,29 @@ for sk in "${SPECIAL_KEYS[@]}"; do
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CopyObject — server-side copy (content-addressed remap; no data transfer)
+# ─────────────────────────────────────────────────────────────────────────────
+
+section "CopyObject — server-side copy"
+
+COPY_KEY="smoke-copy-${TS}.txt"
+if S3 copy-object --bucket "$TEST_BUCKET" \
+    --copy-source "${TEST_BUCKET}/${OBJECT_KEY}" \
+    --key "$COPY_KEY" >/dev/null 2>&1; then
+  # The destination must be independently readable with the same content/ETag.
+  COPY_HEAD=$(S3 head-object --bucket "$TEST_BUCKET" --key "$COPY_KEY" 2>&1)
+  COPY_ETAG=$(echo "$COPY_HEAD" | jq -r '.ETag // ""' | tr -d '"')
+  if [[ "$COPY_ETAG" == "$EXPECTED_MD5" ]]; then
+    ok "CopyObject — destination has the source's content (ETag matches)"
+  else
+    fail "CopyObject — destination ETag mismatch" \
+      "want ${EXPECTED_MD5}, got ${COPY_ETAG}"
+  fi
+else
+  fail "CopyObject — copy request failed"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Unsupported operations — informational probes
 #
 # These S3 methods are not in the backend's S3HandlerConfig
@@ -1149,12 +1183,6 @@ probe_unsupported "HeadBucket" \
 probe_unsupported "GetBucketLocation" \
   aws --endpoint-url "$ENDPOINT" --output json s3api \
   get-bucket-location --bucket "$TEST_BUCKET"
-
-probe_unsupported "CopyObject" \
-  aws --endpoint-url "$ENDPOINT" --output json s3api \
-  copy-object --bucket "$TEST_BUCKET" \
-  --copy-source "${TEST_BUCKET}/${OBJECT_KEY}" \
-  --key "smoke-copy-${TS}.txt"
 
 probe_unsupported "DeleteObjects (bulk)" \
   aws --endpoint-url "$ENDPOINT" --output json s3api \

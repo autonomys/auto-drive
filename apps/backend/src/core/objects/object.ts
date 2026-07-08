@@ -17,6 +17,7 @@ import {
   metadataRepository,
   nodesRepository,
   ownershipRepository,
+  s3ObjectMappingsRepository,
 } from '../../infrastructure/repositories/index.js'
 import { OwnershipUseCases } from './ownership.js'
 import { UploadStatusUseCases } from './uploadStatus.js'
@@ -362,6 +363,9 @@ const restoreObject = async (
   }
 
   await OwnershipUseCases.restoreObject(executor, cid)
+  // Un-hide any S3 keys that were soft-deleted for this object so restoring from
+  // Trash brings the object back to its S3 name too (no-op when there are none).
+  await s3ObjectMappingsRepository.restoreMappingsByCid(cid)
   logger.info('Object restored successfully (cid=%s)', cid)
 
   return ok()

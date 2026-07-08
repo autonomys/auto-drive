@@ -50,6 +50,31 @@ type CompleteMultipartUploadResult = Omit<
 type CompleteMultipartUploadParams = CompleteMultipartUploadCommandParams & {
   Parts?: Array<{ PartNumber: number; ETag: string }>
 }
+
+/** PutObject params extended with the client modification time (x-amz-meta-mtime).
+ *  Kept local rather than in the shared DTO — mtime is an rclone/tooling
+ *  convention, not part of the standard S3 PutObject contract. */
+type PutObjectParams = PutObjectCommandParams & { Mtime?: string | null }
+
+/** CopyObject params. Source is resolved from the x-amz-copy-source header in
+ *  the HTTP layer; Mtime carries an x-amz-meta-mtime when the client replaces
+ *  metadata (rclone's SetModTime copies an object onto itself with a new mtime). */
+type CopyObjectParams = {
+  SourceBucket: string
+  SourceKey: string
+  Bucket: string
+  Key: string
+  /** When set, overrides the source mtime on the destination (metadata REPLACE). */
+  Mtime?: string | null
+}
+
+/** CopyObject result: the standard fields the <CopyObjectResult> body needs,
+ *  plus the Autonomys CID for the x-amz-meta-cid header. */
+type CopyObjectResult = {
+  ETag: string
+  LastModified: Date
+  Cid: string
+}
 import { UploadsUseCases } from '../uploads/uploads.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
@@ -79,6 +104,11 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
   etag: string | null
   /** Mapping's last-write time, surfaced as the S3 Last-Modified header. */
   lastModified: Date
+  /**
+   * Client-supplied modification time (x-amz-meta-mtime), echoed back verbatim
+   * so tools like rclone read the same value they wrote. null when unset.
+   */
+  mtime: string | null
 }
 
 const getObject = async (
@@ -110,6 +140,7 @@ const getObject = async (
     // so the controller can omit the ETag header for legacy objects.
     etag: mapping.md5 ? formatETag(mapping.md5) : null,
     lastModified: mapping.updatedAt,
+    mtime: mapping.mtime,
   }))
 }
 
@@ -198,7 +229,7 @@ const completeMultipartUpload = async (
 
 const putObject = async (
   user: UserWithOrganization,
-  params: PutObjectCommandParams,
+  params: PutObjectParams,
 ): Promise<Result<PutObjectResult, ObjectNotFoundError>> => {
   const name = params.Key.split('/').pop()!
 
@@ -229,6 +260,7 @@ const putObject = async (
     params.Key,
     cid,
     md5,
+    params.Mtime ?? null,
   )
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
@@ -239,6 +271,116 @@ const putObject = async (
   )
 
   return ok({ ETag: formatETag(md5), Cid: cid })
+}
+
+/**
+ * S3 DeleteObject — soft-delete the (bucket, key) mapping. The content is never
+ * removed from the Autonomys DSN; only the S3 name is hidden. Always resolves to
+ * success (S3 returns 204 whether or not the key existed).
+ *
+ * Because a server-side copy/move only remaps `key -> same cid`, deletion is
+ * tracked at the mapping level so that `move = copy + delete-source` keeps the
+ * destination live. On top of that, when the deleted key was the LAST active S3
+ * mapping for its content, the object is also moved to the owner's web-app Trash
+ * (ObjectUseCases.markAsDeleted) so an rclone delete is reflected in the UI and
+ * stays recoverable there — the "unified with UI Trash" behaviour.
+ */
+const deleteObject = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<Result<void, never>> => {
+  const deleted = await s3ObjectMappingsRepository.softDeleteMapping(
+    bucket,
+    key,
+  )
+
+  // No active mapping was removed (key absent or already deleted): nothing more
+  // to do — DeleteObject is idempotent.
+  if (!deleted) {
+    return ok()
+  }
+
+  // If no other S3 key still references this content, propagate the removal to
+  // the web-app Trash. markAsDeleted is owner-gated and no-ops for a
+  // non-owner/unknown cid, so this is safe to call unconditionally here.
+  const remaining = await s3ObjectMappingsRepository.countActiveMappingsByCid(
+    deleted.cid,
+  )
+  if (remaining === 0) {
+    const result = await ObjectUseCases.markAsDeleted(user, deleted.cid)
+    if (result.isErr()) {
+      // The mapping is already hidden; a failure to also trash the underlying
+      // object (e.g. the caller isn't its owner) must not fail the delete.
+      logger.warn(
+        'Soft-deleted S3 mapping but could not move object to Trash (cid=%s): %s',
+        deleted.cid,
+        result.error.message,
+      )
+    }
+  }
+
+  logger.debug('Soft-deleted S3 mapping: bucket=(%s) key=(%s)', bucket, key)
+  return ok()
+}
+
+/**
+ * S3 CopyObject — copy source (bucket, key) to a destination key. In
+ * content-addressed storage this is a cheap remap: the destination mapping
+ * points at the source's cid, with no data transfer. This is what makes rclone
+ * server-side copy and move work (rclone implements Move as Copy + Remove).
+ *
+ * mtime: with the default COPY metadata directive the destination inherits the
+ * source mtime; when the client sends an x-amz-meta-mtime (metadata REPLACE, as
+ * rclone's SetModTime does by copying an object onto itself) that value wins.
+ */
+const copyObject = async (
+  params: CopyObjectParams,
+): Promise<Result<CopyObjectResult, ObjectNotFoundError>> => {
+  const source = await s3ObjectMappingsRepository.findByKey(
+    params.SourceBucket,
+    params.SourceKey,
+  )
+  if (!source) {
+    return err(
+      new ObjectNotFoundError(
+        `Object ${params.SourceBucket}/${params.SourceKey} not found`,
+      ),
+    )
+  }
+
+  const mtime = params.Mtime !== undefined ? params.Mtime : source.mtime
+
+  const mapping = await s3ObjectMappingsRepository.createMapping(
+    params.Bucket,
+    params.Key,
+    source.cid,
+    source.md5,
+    mtime,
+  )
+
+  logger.debug(
+    'Copied S3 mapping: %s/%s -> %s/%s (cid=%s)',
+    params.SourceBucket,
+    params.SourceKey,
+    params.Bucket,
+    params.Key,
+    source.cid,
+  )
+
+  return ok({
+    // Mirror GET/HEAD: MD5 ETag when known, else the CID for legacy objects.
+    ETag: source.md5 ? formatETag(source.md5) : `"${source.cid}"`,
+    LastModified: mapping.updatedAt,
+    Cid: source.cid,
+  })
+}
+
+const abortMultipartUpload = async (
+  user: UserWithOrganization,
+  uploadId: string,
+): Promise<Result<void, ObjectNotFoundError>> => {
+  return UploadsUseCases.abortUpload(user, uploadId)
 }
 
 const listBuckets = async (): Promise<S3BucketInfo[]> => {
@@ -265,6 +407,9 @@ export const S3UseCases = {
   uploadPart,
   completeMultipartUpload,
   putObject,
+  deleteObject,
+  copyObject,
+  abortMultipartUpload,
   listBuckets,
   listObjects,
   objectExists,

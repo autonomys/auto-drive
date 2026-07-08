@@ -2,7 +2,9 @@ import { raw, Router, Request, Response } from 'express'
 import { asyncSafeHandler } from '../../../shared/utils/express.js'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import {
+  abortMultipartUploadHandler,
   completeMultipartUploadHandler,
+  copyObjectHandler,
   createMultipartUploadHandler,
   deleteObjectHandler,
   getObjectHandler,
@@ -33,17 +35,18 @@ const S3HandlerConfig: S3HandlerConfig = {
   UploadPart: uploadPartHandler,
   CompleteMultipartUpload: completeMultipartUploadHandler,
   DeleteObject: deleteObjectHandler,
+  CopyObject: copyObjectHandler,
+  AbortMultipartUpload: abortMultipartUploadHandler,
   ListBuckets: listBucketsHandler,
   ListObjectsV2: listObjectsV2Handler,
-  // Object Lock — read-only declarative contract (Auto Drive is immutable).
+  // Object Lock — read-only declarative contract. The underlying DSN data is
+  // permanent even though the S3 namespace supports soft-delete/rename.
   GetObjectLockConfiguration: getObjectLockConfigurationHandler,
   GetObjectRetention: getObjectRetentionHandler,
   GetObjectLegalHold: getObjectLegalHoldHandler,
   // Recognised but unimplemented — mapped to 501, never to a write handler.
-  CopyObject: notImplementedHandler,
   ListParts: notImplementedHandler,
   ListMultipartUploads: notImplementedHandler,
-  AbortMultipartUpload: notImplementedHandler,
   PostObject: notImplementedHandler,
   // Object Lock is intrinsic and cannot be configured by clients — 501.
   PutObjectLockConfiguration: notImplementedHandler,
