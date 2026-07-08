@@ -635,9 +635,12 @@ describe('S3UseCases', () => {
       jest
         .spyOn(ownershipRepository, 'getOwnerships')
         .mockResolvedValue([ownerRow])
+      // Before-hide count = 2 (this + sibling); after-hide re-check = 1 (sibling
+      // still active), so the race guard does not trash.
       jest
         .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(2)
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(1)
       const markSpy = jest
         .spyOn(ObjectUseCases, 'markAsDeleted')
         .mockResolvedValue(ok(undefined))
@@ -655,6 +658,35 @@ describe('S3UseCases', () => {
       // A sibling key (e.g. the move source) keeps the content live.
       expect(markSpy).not.toHaveBeenCalled()
       expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'copy.txt')
+    })
+
+    it('trashes via the race guard when a concurrent delete removed the sibling', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue({ ...activeMapping, key: 'k2.txt' })
+      jest
+        .spyOn(ownershipRepository, 'getOwnerships')
+        .mockResolvedValue([ownerRow])
+      // Before-hide count = 2 (a concurrent delete's key still looked active),
+      // but the after-hide re-check sees 0 → this delete emptied the content and
+      // must trash the object.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(0)
+      const markSpy = jest
+        .spyOn(ObjectUseCases, 'markAsDeleted')
+        .mockResolvedValue(ok(undefined))
+      const softDeleteSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
+        .mockResolvedValue({ cid: 'cid123' })
+
+      const result = await S3UseCases.deleteObject(mockUser, 'my-bucket', 'k2.txt')
+
+      expect(result.isOk()).toBe(true)
+      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'k2.txt')
+      // Race guard caught the emptied content and moved it to Trash.
+      expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
     })
 
     it('is a no-op when the key is absent or already deleted', async () => {
@@ -680,7 +712,7 @@ describe('S3UseCases', () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(activeMapping)
-      // Owned by someone else.
+      // Owned (admin) by someone else.
       jest
         .spyOn(ownershipRepository, 'getOwnerships')
         .mockResolvedValue([
@@ -699,6 +731,32 @@ describe('S3UseCases', () => {
       )
 
       // Idempotent success, but the non-owner cannot hide the key.
+      expect(result.isOk()).toBe(true)
+      expect(softDeleteSpy).not.toHaveBeenCalled()
+      expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('does not hide the key for a shared (non-admin) recipient', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(activeMapping)
+      // The caller is an active owner, but a VIEWER (share recipient), not the
+      // admin owner — they must not be able to hide the key for everyone.
+      jest
+        .spyOn(ownershipRepository, 'getOwnerships')
+        .mockResolvedValue([{ ...ownerRow, is_admin: false }])
+      const softDeleteSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'softDeleteMapping',
+      )
+      const markSpy = jest.spyOn(ObjectUseCases, 'markAsDeleted')
+
+      const result = await S3UseCases.deleteObject(
+        mockUser,
+        'my-bucket',
+        'file.txt',
+      )
+
       expect(result.isOk()).toBe(true)
       expect(softDeleteSpy).not.toHaveBeenCalled()
       expect(markSpy).not.toHaveBeenCalled()

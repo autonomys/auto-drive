@@ -323,19 +323,21 @@ const deleteObject = async (
     return ok()
   }
 
-  // Ownership gate: the S3 namespace is shared across API keys, so only an owner
-  // of the underlying content may hide one of its keys. A non-owner delete is a
-  // no-op (still reported as success for idempotency) rather than letting one
-  // tenant hide another's object.
+  // Ownership gate: the S3 namespace is shared across API keys, so only an
+  // ADMIN owner (the uploader) may hide a key. Shared recipients are stored as
+  // non-admin owners and must not be able to hide a key for everyone. A caller
+  // without active admin ownership is a no-op (still reported as success for
+  // idempotency) rather than letting a sharee or other tenant hide the object.
   const owners = await ownershipRepository.getOwnerships(mapping.cid)
-  const isOwner = owners.some(
+  const isAdminOwner = owners.some(
     (o) =>
+      o.is_admin &&
       o.oauth_provider === user.oauthProvider &&
       o.oauth_user_id === user.oauthUserId,
   )
-  if (!isOwner) {
+  if (!isAdminOwner) {
     logger.warn(
-      'Ignoring DeleteObject from non-owner (bucket=%s key=%s cid=%s user=%s)',
+      'Ignoring DeleteObject from non-admin-owner (bucket=%s key=%s cid=%s user=%s)',
       bucket,
       key,
       mapping.cid,
@@ -344,20 +346,11 @@ const deleteObject = async (
     return ok()
   }
 
-  // Is this the last S3 key still referencing the content? countActive includes
-  // this (still-active) mapping, so <= 1 means it's the last one.
-  const activeCount = await s3ObjectMappingsRepository.countActiveMappingsByCid(
-    mapping.cid,
-  )
-  if (activeCount <= 1) {
-    // Last reference → move the whole object to the web-app Trash. Do this
-    // BEFORE hiding the mapping so ownership.marked_as_deleted is stamped ahead
-    // of the mapping's deleted_at; restore-from-Trash then un-hides this key
-    // (deleted_at >= trash time) but not earlier, individually-deleted aliases.
+  const trashObject = async () => {
     const result = await ObjectUseCases.markAsDeleted(user, mapping.cid)
     if (result.isErr()) {
-      // The mapping will still be hidden below; failure to also trash the object
-      // must not fail the delete.
+      // The mapping is (or will be) hidden regardless; failure to also trash the
+      // object must not fail the delete.
       logger.warn(
         'Could not move object to Trash on delete (cid=%s): %s',
         mapping.cid,
@@ -366,7 +359,37 @@ const deleteObject = async (
     }
   }
 
+  // Is this the last active S3 key for the content? countActive includes this
+  // still-active mapping, so <= 1 means it's the last one.
+  const activeBefore = await s3ObjectMappingsRepository.countActiveMappingsByCid(
+    mapping.cid,
+  )
+  const isLastKey = activeBefore <= 1
+
+  if (isLastKey) {
+    // Move the object to the web-app Trash BEFORE hiding the mapping, so its
+    // deleted_at is stamped at/after the object's Trash time — restore then
+    // un-hides this key but not earlier, individually-deleted aliases.
+    await trashObject()
+  }
+
   await s3ObjectMappingsRepository.softDeleteMapping(bucket, key)
+
+  if (!isLastKey) {
+    // Race guard: between the count above and this hide, a concurrent
+    // DeleteObject may have removed the sibling last key. Re-check now that ours
+    // is hidden; if no active mapping remains, this delete is the one that
+    // emptied the content and must move it to Trash — otherwise two concurrent
+    // last-key deletes could both skip it and leave the object active in the UI
+    // with no visible S3 keys. (If both reach here, markAsDeleted is effectively
+    // idempotent: the second is a harmless no-op.)
+    const activeAfter =
+      await s3ObjectMappingsRepository.countActiveMappingsByCid(mapping.cid)
+    if (activeAfter === 0) {
+      await trashObject()
+    }
+  }
+
   logger.debug('Soft-deleted S3 mapping: bucket=(%s) key=(%s)', bucket, key)
   return ok()
 }
