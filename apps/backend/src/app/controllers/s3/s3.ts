@@ -31,6 +31,12 @@ const logger = createLogger('s3:controllers')
  *   'my-archive/file.txt'     → { bucket: 'my-archive', key: 'file.txt' }
  *   'my-archive/sub/file.txt' → { bucket: 'my-archive', key: 'sub/file.txt' }
  *   'file.txt'                → { bucket: 'default',    key: 'file.txt' }
+ *
+ * A bare, slash-less path therefore has no dedicated bucket-operation meaning —
+ * it is always an object in the 'default' bucket. Bucket-level endpoints
+ * (CreateBucket / DeleteBucket / HeadBucket) are intentionally unimplemented for
+ * this reason; see the decision note in http.ts. S3 clients must set
+ * `no_check_bucket = true` so they never emit those calls.
  */
 const parseBucketAndKey = (rawKey: string): { bucket: string; key: string } => {
   const slashIndex = rawKey.indexOf('/')

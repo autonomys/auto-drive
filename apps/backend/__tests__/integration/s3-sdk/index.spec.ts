@@ -520,6 +520,54 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  // ── Decision lock: bucket-level ops fold into default-bucket object ops ─────
+  // A true S3 CreateBucket/DeleteBucket/HeadBucket targets a bare `/{bucket}`
+  // with no object key. Because the first path segment is folded into the
+  // bucket name (parseBucketAndKey), such a request is indistinguishable from a
+  // flat, default-bucket object op — the semantics the bucket-support migration
+  // and legacy flat keys rely on. Bucket endpoints are therefore left
+  // unimplemented, and clients must set `no_check_bucket = true` (see
+  // docs/rclone) so they never emit CreateBucket/HeadBucket. These tests lock
+  // that decision: a bare, slash-less PUT/HEAD/DELETE is handled as a
+  // default-bucket object op, so adopting a "no-slash = bucket op" rule later is
+  // a conscious, test-breaking change rather than a silent regression.
+  describe('Bucket-level ops fold into default-bucket object ops', () => {
+    const S3_BASE = `${BASE_PATH}/s3`
+    // Mirrors the raw-HTTP auth pattern above: handleS3Auth only needs a
+    // `Credential=<alphanumeric>/` and AuthManager is mocked to return `user`.
+    const AUTH =
+      'AWS4-HMAC-SHA256 Credential=buckettestkey/20200101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=deadbeef'
+    const raw = (method: string, path: string, body?: Uint8Array) =>
+      fetch(`${S3_BASE}${path}`, {
+        method,
+        headers: { Authorization: AUTH },
+        body: body as unknown as BodyInit | undefined,
+      })
+
+    it('PUT of a bare, slash-less name stores a default-bucket object (not CreateBucket)', async () => {
+      const body = Buffer.from('looks like a bucket, stored as an object')
+      const put = await raw('PUT', '/looks-like-a-bucket', body)
+      expect(put.status).toBe(200)
+      expect(put.headers.get('etag')).toMatch(MD5_ETAG_RE)
+
+      // Retrievable as the object 'looks-like-a-bucket' in the default bucket —
+      // proof the PUT was an object write, not a no-op bucket creation.
+      const get = await raw('GET', '/looks-like-a-bucket')
+      expect(get.status).toBe(200)
+      expect(Buffer.from(await get.arrayBuffer())).toEqual(body)
+    }, 15_000)
+
+    it('HEAD of a bare, slash-less name is HeadObject (404 when absent), not HeadBucket', async () => {
+      const res = await raw('HEAD', '/never-created-bucket-name')
+      expect(res.status).toBe(404)
+    }, 15_000)
+
+    it('DELETE of a bare, slash-less name is DeleteObject (403 immutable), not DeleteBucket', async () => {
+      const res = await raw('DELETE', '/looks-like-a-bucket')
+      expect(res.status).toBe(403)
+    }, 15_000)
+  })
+
   describe('ListBuckets', () => {
     it('should list all buckets', async () => {
       const command = new ListBucketsCommand({})

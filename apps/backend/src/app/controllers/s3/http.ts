@@ -25,6 +25,24 @@ type S3HandlerConfig = {
   [key: string]: (req: Request, res: Response) => Promise<void>
 }
 
+// ── Bucket-level operations are intentionally NOT implemented ────────────────
+// A true S3 CreateBucket / DeleteBucket / HeadBucket targets a bare `/{bucket}`
+// with no object key (PUT / DELETE / HEAD). This API folds the first path
+// segment into the bucket name (see parseBucketAndKey in s3.ts), so a bare,
+// slash-less path is indistinguishable from a flat, default-bucket object
+// operation — the exact semantics the bucket-support migration and every
+// legacy flat key depend on. Distinguishing the two would require a "no-slash
+// path = bucket op" routing rule that reinterprets every legacy flat-key
+// PUT/DELETE/HEAD (and would force existing objects under a `default/` prefix),
+// so bucket endpoints are deliberately left out to keep object semantics intact.
+//
+// The practical consequence: S3 clients must set `no_check_bucket = true`
+// (documented for rclone in docs/rclone) so they never emit CreateBucket or
+// HeadBucket — buckets are created implicitly on the first object write. A bare
+// PUT/DELETE/HEAD is therefore dispatched below as an ordinary object op:
+//   PUT  → PutObject       HEAD → HeadObject
+//   DELETE → DeleteObject (403, storage is immutable)
+// There is deliberately no CreateBucket / DeleteBucket / HeadBucket entry.
 const S3HandlerConfig: S3HandlerConfig = {
   GetObject: getObjectHandler,
   HeadObject: headObjectHandler,
