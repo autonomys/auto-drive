@@ -47,6 +47,9 @@ const S3HandlerConfig: S3HandlerConfig = {
   // Recognised but unimplemented — mapped to 501, never to a write handler.
   ListParts: notImplementedHandler,
   ListMultipartUploads: notImplementedHandler,
+  // Server-side part copy (large-object CopyObject): 501 so it fails cleanly
+  // instead of being misrouted to UploadPart and corrupting the object.
+  UploadPartCopy: notImplementedHandler,
   PostObject: notImplementedHandler,
   // Object Lock is intrinsic and cannot be configured by clients — 501.
   PutObjectLockConfiguration: notImplementedHandler,
@@ -72,7 +75,14 @@ export const getS3Method = (req: Request): string => {
     case 'HEAD':
       return 'HeadObject'
     case 'PUT':
-      if ('uploadId' in q && 'partNumber' in q) return 'UploadPart'
+      if ('uploadId' in q && 'partNumber' in q) {
+        // UploadPartCopy (a part sourced from x-amz-copy-source) is unsupported;
+        // route it to 501 rather than UploadPart, whose handler would read an
+        // empty body and silently corrupt the object. Only rclone server-side
+        // copies of very large files (>= --s3-copy-cutoff, ~4.66 GiB) hit this.
+        if (isCopy) return 'UploadPartCopy'
+        return 'UploadPart'
+      }
       if ('object-lock' in q) return 'PutObjectLockConfiguration'
       if ('retention' in q) return 'PutObjectRetention'
       if ('legal-hold' in q) return 'PutObjectLegalHold'

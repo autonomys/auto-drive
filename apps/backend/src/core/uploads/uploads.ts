@@ -24,7 +24,11 @@ import { config } from '../../config.js'
 import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
 import { BlockstoreUseCases } from './blockstore.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { BadRequestError, ObjectNotFoundError } from '../../errors/index.js'
+import {
+  BadRequestError,
+  ForbiddenError,
+  ObjectNotFoundError,
+} from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 
 const logger = createLogger('useCases:uploads:uploads')
@@ -510,12 +514,21 @@ const scheduleCachePopulation = async (cid: string): Promise<void> => {
 const abortUpload = async (
   user: UserWithOrganization,
   uploadId: string,
-): Promise<Result<void, ObjectNotFoundError>> => {
+): Promise<Result<void, ObjectNotFoundError | ForbiddenError>> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
     return err(new ObjectNotFoundError('Upload not found'))
   }
-  await checkPermissions(upload, user)
+  // Ownership check returned (not thrown) so a cross-user abort surfaces as a
+  // typed 403, not a 500 from checkPermissions' plain throw.
+  if (
+    upload.oauth_provider !== user.oauthProvider ||
+    upload.oauth_user_id !== user.oauthUserId
+  ) {
+    return err(
+      new ForbiddenError('User does not have permission to abort this upload'),
+    )
+  }
 
   // removeUploadArtifacts deletes the blockstore entries, the upload rows keyed
   // by this root_upload_id (a standalone file upload is its own root), the

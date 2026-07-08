@@ -1,5 +1,5 @@
 import { S3UseCases } from '../../../core/s3/index.js'
-import { handleError } from '../../../errors/index.js'
+import { handleError, ForbiddenError } from '../../../errors/index.js'
 import { handleS3Auth } from '../../../infrastructure/services/auth/s3.js'
 import {
   getByteRange,
@@ -700,6 +700,14 @@ export const abortMultipartUploadHandler = async (
 
   const result = await S3UseCases.abortMultipartUpload(user, uploadId)
   if (result.isErr()) {
+    if (result.error instanceof ForbiddenError) {
+      sendXML(res.status(403), 'Error', {
+        Code: 'AccessDenied',
+        Message: 'You do not have permission to abort this multipart upload.',
+        UploadId: uploadId,
+      })
+      return
+    }
     // Unknown upload id → NoSuchUpload.
     sendXML(res.status(404), 'Error', {
       Code: 'NoSuchUpload',

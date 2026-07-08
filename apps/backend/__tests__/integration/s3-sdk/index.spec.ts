@@ -14,6 +14,7 @@ import {
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
+  UploadPartCopyCommand,
 } from '@aws-sdk/client-s3'
 import {
   createMockUser,
@@ -986,6 +987,26 @@ describe('AWS S3 - SDK', () => {
     it('ListMultipartUploads is rejected', async () => {
       await expect(
         s3Client.send(new ListMultipartUploadsCommand({ Bucket })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
+    })
+
+    // UploadPartCopy (a multipart part sourced from another object, used by
+    // rclone's server-side copy of very large files) must 501, NOT be misrouted
+    // to UploadPart — which would read an empty body and corrupt the object.
+    it('UploadPartCopy is rejected with 501 (not misrouted to UploadPart)', async () => {
+      const created = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: 'uploadpartcopy.bin' }),
+      )
+      await expect(
+        s3Client.send(
+          new UploadPartCopyCommand({
+            Bucket,
+            Key: 'uploadpartcopy.bin',
+            UploadId: created.UploadId!,
+            PartNumber: 1,
+            CopySource: `${Key}`,
+          }),
+        ),
       ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
     })
   })

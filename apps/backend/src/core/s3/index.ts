@@ -2,7 +2,7 @@ import { s3ObjectMappingsRepository } from '../../infrastructure/repositories/in
 import { DownloadUseCase } from '../downloads/index.js'
 import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
-import { ObjectNotFoundError } from '../../errors/index.js'
+import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
 import {
   CompleteMultipartUploadCommandParams,
   CompleteMultipartUploadCommandResult,
@@ -379,7 +379,7 @@ const copyObject = async (
 const abortMultipartUpload = async (
   user: UserWithOrganization,
   uploadId: string,
-): Promise<Result<void, ObjectNotFoundError>> => {
+): Promise<Result<void, ObjectNotFoundError | ForbiddenError>> => {
   return UploadsUseCases.abortUpload(user, uploadId)
 }
 

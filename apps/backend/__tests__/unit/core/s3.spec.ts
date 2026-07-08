@@ -780,5 +780,17 @@ describe('S3UseCases', () => {
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
+
+    it('propagates a forbidden error when the caller does not own the upload', async () => {
+      jest
+        .spyOn(UploadsUseCases, 'abortUpload')
+        .mockResolvedValue(err(new ForbiddenError('not your upload')))
+
+      const result = await S3UseCases.abortMultipartUpload(mockUser, 'other')
+
+      // The controller maps ForbiddenError → 403 AccessDenied (not 500).
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    })
   })
 })
