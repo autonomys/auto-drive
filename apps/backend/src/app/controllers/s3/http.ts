@@ -36,9 +36,9 @@ type S3HandlerConfig = {
 // PUT/DELETE/HEAD (and would force existing objects under a `default/` prefix),
 // so bucket endpoints are deliberately left out to keep object semantics intact.
 //
-// The practical consequence: S3 clients must set `no_check_bucket = true`
-// (documented for rclone in docs/rclone) so they never emit CreateBucket or
-// HeadBucket — buckets are created implicitly on the first object write. A bare
+// The practical consequence: S3 clients must set `no_check_bucket = true` so
+// they never emit CreateBucket or HeadBucket — buckets are created implicitly
+// on the first object write. A bare
 // PUT/DELETE/HEAD is therefore dispatched below as an ordinary object op:
 //   PUT  → PutObject       HEAD → HeadObject
 //   DELETE → DeleteObject (403, storage is immutable)

@@ -526,8 +526,8 @@ describe('AWS S3 - SDK', () => {
   // bucket name (parseBucketAndKey), such a request is indistinguishable from a
   // flat, default-bucket object op — the semantics the bucket-support migration
   // and legacy flat keys rely on. Bucket endpoints are therefore left
-  // unimplemented, and clients must set `no_check_bucket = true` (see
-  // docs/rclone) so they never emit CreateBucket/HeadBucket. These tests lock
+  // unimplemented, and clients must set `no_check_bucket = true` so they never
+  // emit CreateBucket/HeadBucket. These tests lock
   // that decision: a bare, slash-less PUT/HEAD/DELETE is handled as a
   // default-bucket object op, so adopting a "no-slash = bucket op" rule later is
   // a conscious, test-breaking change rather than a silent regression.
@@ -557,9 +557,20 @@ describe('AWS S3 - SDK', () => {
       expect(Buffer.from(await get.arrayBuffer())).toEqual(body)
     }, 15_000)
 
-    it('HEAD of a bare, slash-less name is HeadObject (404 when absent), not HeadBucket', async () => {
-      const res = await raw('HEAD', '/never-created-bucket-name')
-      expect(res.status).toBe(404)
+    it('HEAD of a bare, slash-less name returns default-bucket object metadata (200), not HeadBucket', async () => {
+      // A missing-name HEAD would 404 either way — HeadObject (NoSuchKey) and
+      // HeadBucket (NoSuchBucket) both return 404 — so that alone locks
+      // nothing. Instead seed a bare object and HEAD the same bare path:
+      // HeadObject answers 200 with the object's Content-Length and MD5 ETag,
+      // whereas HeadBucket returns neither, so a future "no-slash = bucket op"
+      // rule would break these assertions.
+      const body = Buffer.from('bare-head-target')
+      expect((await raw('PUT', '/bare-head-target', body)).status).toBe(200)
+
+      const head = await raw('HEAD', '/bare-head-target')
+      expect(head.status).toBe(200)
+      expect(head.headers.get('content-length')).toBe(String(body.length))
+      expect(head.headers.get('etag')).toMatch(MD5_ETAG_RE)
     }, 15_000)
 
     it('DELETE of a bare, slash-less name is DeleteObject (403 immutable), not DeleteBucket', async () => {
