@@ -4,7 +4,6 @@ import {
 } from '../../infrastructure/repositories/index.js'
 import { DownloadUseCase } from '../downloads/index.js'
 import { ObjectUseCases } from '../objects/object.js'
-import { OwnershipUseCases } from '../objects/ownership.js'
 import { err, ok, Result } from 'neverthrow'
 import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
 import {
@@ -420,9 +419,40 @@ const copyObject = async (
     )
   }
 
-  // Don't copy a source that isn't actually readable (owner-removed, banned, or
-  // otherwise blocked): a GET of it would fail, so a copy must too, rather than
-  // creating a destination that then 404s/451s on read. Treat as NoSuchKey.
+  // Ownership gate: the S3 namespace is shared across API keys, so only an
+  // active ADMIN owner of the source content may copy it (mirrors deleteObject).
+  // Without this, any caller who can name another user's (bucket, key) could
+  // copy it, become an owner of the CID, and then — via deleteObject's admin
+  // gate — hide the victim's key. A copy grants NO new ownership: the caller
+  // already owns the content (that is why they may copy it), so the destination
+  // is already theirs and appears in their Drive without a re-grant (which would
+  // also wrongly pull the CID out of their own Trash).
+  const owners = await ownershipRepository.getOwnerships(source.cid)
+  const isAdminOwner = owners.some(
+    (o) =>
+      o.is_admin &&
+      o.oauth_provider === user.oauthProvider &&
+      o.oauth_user_id === user.oauthUserId,
+  )
+  if (!isAdminOwner) {
+    logger.warn(
+      'Ignoring CopyObject from non-admin-owner (src=%s/%s cid=%s user=%s)',
+      params.SourceBucket,
+      params.SourceKey,
+      source.cid,
+      user.oauthUserId,
+    )
+    // Don't reveal the object's existence to a non-owner.
+    return err(
+      new ObjectNotFoundError(
+        `Object ${params.SourceBucket}/${params.SourceKey} not found`,
+      ),
+    )
+  }
+
+  // Even for the owner, don't copy a source that isn't actually readable (banned
+  // or otherwise blocked) into a new key that would then 404/451 on read. Treat
+  // as NoSuchKey.
   const authorized = await ObjectUseCases.authorizeDownload(source.cid)
   if (authorized.isErr()) {
     return err(
@@ -441,11 +471,6 @@ const copyObject = async (
     source.md5,
     mtime,
   )
-
-  // The destination is the copier's object: grant them ownership so it appears
-  // in their Drive and they can manage it. Idempotent for a same-user copy
-  // (the uploader already owns the source's content).
-  await OwnershipUseCases.setUserAsAdmin(user, source.cid)
 
   logger.debug(
     'Copied S3 mapping: %s/%s -> %s/%s (cid=%s)',

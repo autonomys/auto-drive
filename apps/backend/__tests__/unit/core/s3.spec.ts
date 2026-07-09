@@ -14,7 +14,6 @@ import {
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
-import { OwnershipUseCases } from '../../../src/core/objects/ownership.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
 import { ObjectNotFoundError, ForbiddenError } from '../../../src/errors/index.js'
@@ -804,25 +803,23 @@ describe('S3UseCases', () => {
     }
 
     beforeEach(() => {
-      // Happy-path defaults: source is readable, ownership grant is a no-op.
+      // Happy-path defaults: caller is the active admin owner and the source is
+      // readable.
+      jest
+        .spyOn(ownershipRepository, 'getOwnerships')
+        .mockResolvedValue([ownerRow])
       jest
         .spyOn(ObjectUseCases, 'authorizeDownload')
         .mockResolvedValue(ok(undefined))
-      jest
-        .spyOn(OwnershipUseCases, 'setUserAsAdmin')
-        .mockResolvedValue(undefined)
     })
 
-    it('remaps the destination to the source cid and grants the copier ownership', async () => {
+    it('remaps the destination to the source cid (no ownership re-grant)', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(source as any)
       const createSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
         .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
-      const ownSpy = jest
-        .spyOn(OwnershipUseCases, 'setUserAsAdmin')
-        .mockResolvedValue(undefined)
 
       const result = await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
@@ -842,8 +839,6 @@ describe('S3UseCases', () => {
         source.md5,
         null,
       )
-      // The copy is the copier's object.
-      expect(ownSpy).toHaveBeenCalledWith(mockUser, 'srccid')
     })
 
     it('returns a not-found error when the source is missing (NoSuchKey)', async () => {
@@ -860,6 +855,56 @@ describe('S3UseCases', () => {
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+    })
+
+    it('refuses to copy a source the caller does not own (NoSuchKey, no mapping)', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(source as any)
+      // Owned (admin) by a different user.
+      jest
+        .spyOn(ownershipRepository, 'getOwnerships')
+        .mockResolvedValue([{ ...ownerRow, oauth_user_id: 'someone-else' }])
+      const createSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'createMapping',
+      )
+
+      const result = await S3UseCases.copyObject(mockUser, {
+        SourceBucket: 'src',
+        SourceKey: 'a.txt',
+        Bucket: 'dst',
+        Key: 'b.txt',
+      })
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      // A non-owner can't acquire the CID via copy.
+      expect(createSpy).not.toHaveBeenCalled()
+    })
+
+    it('refuses to copy for a shared (non-admin) recipient', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(source as any)
+      // Caller is an active owner, but only a VIEWER (share recipient).
+      jest
+        .spyOn(ownershipRepository, 'getOwnerships')
+        .mockResolvedValue([{ ...ownerRow, is_admin: false }])
+      const createSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'createMapping',
+      )
+
+      const result = await S3UseCases.copyObject(mockUser, {
+        SourceBucket: 'src',
+        SourceKey: 'a.txt',
+        Bucket: 'dst',
+        Key: 'b.txt',
+      })
+
+      expect(result.isErr()).toBe(true)
+      expect(createSpy).not.toHaveBeenCalled()
     })
 
     it('refuses to copy a source that is not downloadable (removed/banned)', async () => {
