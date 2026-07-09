@@ -202,12 +202,46 @@ const uploadPart = async (
   })
 }
 
+/**
+ * True when the destination (bucket, key) already exists and is owned by a
+ * DIFFERENT user. Checked BEFORE finalizing an upload so a cross-owner write is
+ * rejected without finalizing the object or charging credits; the guarded
+ * createMapping upsert remains the atomic backstop for the check-then-write
+ * race. Uses getMappingOwner (not findByKey) so a soft-deleted key still counts
+ * as owned by its user.
+ */
+const destinationOwnedByAnother = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<boolean> => {
+  const owner = await s3ObjectMappingsRepository.getMappingOwner(bucket, key)
+  return (
+    owner != null &&
+    owner.ownerOauthUserId != null &&
+    (owner.ownerOauthProvider !== user.oauthProvider ||
+      owner.ownerOauthUserId !== user.oauthUserId)
+  )
+}
+
 const completeMultipartUpload = async (
   user: UserWithOrganization,
   params: CompleteMultipartUploadParams,
 ): Promise<
   Result<CompleteMultipartUploadResult, ObjectNotFoundError | ForbiddenError>
 > => {
+  // Reject a cross-owner destination BEFORE finalizing: completeUpload applies
+  // ownership/credits (registerInteraction), so finalizing first and rejecting
+  // at createMapping would leave a finalized-but-unmapped object and let a retry
+  // re-finalize/re-charge.
+  if (await destinationOwnedByAnother(user, params.Bucket, params.Key)) {
+    return err(
+      new ForbiddenError(
+        `Key ${params.Bucket}/${params.Key} is owned by another user`,
+      ),
+    )
+  }
+
   const cid = await UploadsUseCases.completeUpload(user, params.UploadId)
 
   // Compute the composite multipart ETag from the per-part MD5s the client
@@ -268,6 +302,17 @@ const putObject = async (
   params: PutObjectParams,
 ): Promise<Result<PutObjectResult, ObjectNotFoundError | ForbiddenError>> => {
   const name = params.Key.split('/').pop()!
+
+  // Reject a cross-owner destination BEFORE creating/uploading anything, so a
+  // doomed write neither finalizes an object (ownership/credits) nor leaves a
+  // finalized-but-unmapped object; createMapping's guard is the atomic backstop.
+  if (await destinationOwnedByAnother(user, params.Bucket, params.Key)) {
+    return err(
+      new ForbiddenError(
+        `Key ${params.Bucket}/${params.Key} is owned by another user`,
+      ),
+    )
+  }
 
   // Compute MD5 before upload so we have it ready for storage.
   const md5 = md5Hex(params.Body)

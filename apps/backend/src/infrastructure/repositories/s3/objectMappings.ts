@@ -131,6 +131,41 @@ const findByKey = async (
 }
 
 /**
+ * Read just the recorded owner of a (bucket, key), regardless of soft-delete
+ * state (unlike findByKey, which hides deleted rows). Used to reject a write to
+ * another user's key BEFORE finalizing the upload — a soft-deleted key still
+ * belongs to its owner and must not be claimed. Returns null when no row exists.
+ */
+const getMappingOwner = async (
+  bucket: string,
+  s3Key: string,
+): Promise<{
+  ownerOauthProvider: string | null
+  ownerOauthUserId: string | null
+} | null> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{
+    owner_oauth_provider: string | null
+    owner_oauth_user_id: string | null
+  }>({
+    text: `
+      SELECT owner_oauth_provider, owner_oauth_user_id
+      FROM "S3".object_mappings
+      WHERE bucket = $1 AND "key" = $2
+    `,
+    values: [bucket, s3Key],
+  })
+
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    ownerOauthProvider: row.owner_oauth_provider ?? null,
+    ownerOauthUserId: row.owner_oauth_user_id ?? null,
+  }
+}
+
+/**
  * Soft-delete a single (bucket, key) mapping (S3 DeleteObject). Sets deleted_at
  * so the key is hidden from every read path; the underlying content is never
  * removed from the DSN. Idempotent: deleting an already-deleted or non-existent
@@ -383,6 +418,7 @@ const listObjects = async (
 export const s3ObjectMappingsRepository = {
   createMapping,
   findByKey,
+  getMappingOwner,
   softDeleteMapping,
   restoreMappingsByCid,
   countActiveMappingsByCid,

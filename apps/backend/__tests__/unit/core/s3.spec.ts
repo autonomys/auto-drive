@@ -48,6 +48,11 @@ describe('S3UseCases', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    // Default: the destination key is unowned/new, so the pre-finalize
+    // cross-owner check is a no-op. Tests that exercise the guard override this.
+    jest
+      .spyOn(s3ObjectMappingsRepository, 'getMappingOwner')
+      .mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -308,6 +313,30 @@ describe('S3UseCases', () => {
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
     })
+
+    it('rejects a cross-owner key BEFORE finalizing (completeUpload not called)', async () => {
+      // Destination key is owned by someone else → the pre-finalize guard must
+      // reject before completeUpload runs, so no ownership/credits are applied
+      // and a retry cannot re-finalize.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'getMappingOwner')
+        .mockResolvedValue({
+          ownerOauthProvider: 'google',
+          ownerOauthUserId: 'someone-else',
+        })
+      const completeSpy = jest.spyOn(UploadsUseCases, 'completeUpload')
+
+      const result = await S3UseCases.completeMultipartUpload(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'victim.txt',
+        UploadId: 'upload123',
+        Parts: [{ PartNumber: 1, ETag: '"aabbccdd11223344aabbccdd11223344"' }],
+      } as any)
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+      expect(completeSpy).not.toHaveBeenCalled()
+    })
   })
 
   describe('putObject', () => {
@@ -469,6 +498,30 @@ describe('S3UseCases', () => {
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    })
+
+    it('rejects a cross-owner key BEFORE uploading (no createFileUpload/finalize)', async () => {
+      // Destination key is owned by someone else → reject before creating the
+      // upload or finalizing, so nothing is uploaded/charged.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'getMappingOwner')
+        .mockResolvedValue({
+          ownerOauthProvider: 'google',
+          ownerOauthUserId: 'someone-else',
+        })
+      const createUploadSpy = jest.spyOn(UploadsUseCases, 'createFileUpload')
+      const completeSpy = jest.spyOn(UploadsUseCases, 'completeUpload')
+
+      const result = await S3UseCases.putObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'victim.txt',
+        Body: Buffer.from('data'),
+      } as any)
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+      expect(createUploadSpy).not.toHaveBeenCalled()
+      expect(completeSpy).not.toHaveBeenCalled()
     })
   })
 
