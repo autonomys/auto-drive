@@ -2,12 +2,11 @@ import { describe, it, expect } from '@jest/globals'
 import { USD_RATE_SCALE } from '@auto-drive/models'
 import {
   parseDecimalToScaledBigint,
-  median,
   isWithinBounds,
   isQuoteFresh,
-} from '../../../src/infrastructure/services/priceOracle/aggregate.js'
+} from '../../../src/infrastructure/services/priceOracle/quote.js'
 
-describe('priceOracle/aggregate', () => {
+describe('priceOracle/quote', () => {
   describe('parseDecimalToScaledBigint', () => {
     it('scales integers', () => {
       expect(parseDecimalToScaledBigint('1')).toBe(USD_RATE_SCALE)
@@ -38,31 +37,6 @@ describe('priceOracle/aggregate', () => {
       expect(() => parseDecimalToScaledBigint('-1')).toThrow()
       expect(() => parseDecimalToScaledBigint('')).toThrow()
       expect(() => parseDecimalToScaledBigint('abc')).toThrow()
-    })
-  })
-
-  describe('median', () => {
-    it('returns the middle value for an odd count', () => {
-      expect(median([3n, 1n, 2n])).toBe(2n)
-    })
-
-    it('returns the integer mean of the two middles for an even count', () => {
-      expect(median([1n, 2n, 3n, 4n])).toBe(2n) // (2 + 3) / 2 = 2 (floor)
-      expect(median([10n, 20n])).toBe(15n)
-    })
-
-    it('returns the single value for one element', () => {
-      expect(median([42n])).toBe(42n)
-    })
-
-    it('does not mutate the input', () => {
-      const input = [3n, 1n, 2n]
-      median(input)
-      expect(input).toEqual([3n, 1n, 2n])
-    })
-
-    it('throws on an empty list', () => {
-      expect(() => median([])).toThrow()
     })
   })
 

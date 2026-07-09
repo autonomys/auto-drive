@@ -5,15 +5,13 @@ import { withTimeout } from '../../../shared/utils/index.js'
 import {
   isQuoteFresh,
   isWithinBounds,
-  median,
   parseDecimalToScaledBigint,
-} from './aggregate.js'
-import { resolveSources } from './sources.js'
+} from './quote.js'
+import { fetchCoingeckoQuote } from './coingecko.js'
 import {
   OracleUnavailableError,
   type OraclePrice,
-  type PriceSourceAdapter,
-  type SourceQuote,
+  type RawQuote,
 } from './types.js'
 
 const logger = createLogger('PriceOracle')
@@ -52,144 +50,108 @@ if (minScaled > maxScaled) {
 type CacheEntry = { value: OraclePrice; expiresAt: number }
 
 // Module-level singleton state (same shape as paymentManager):
-// - `cache`        last successful fresh price, valid until expiresAt.
-// - `lastGood`     last successful price, served (as stale) during an outage.
-// - `nextAttemptAt` earliest time we may hit upstream again; set after EVERY
-//                  refresh attempt so a degraded upstream is retried at most
-//                  once per cacheTtlMs rather than on every request.
-// - `inFlight`     collapses concurrent refreshes into one upstream round-trip.
+// - `cache`         last successful fresh price, valid until expiresAt.
+// - `lastGood`      last successful price, served (as stale) during an outage.
+// - `nextAttemptAt` earliest time we may hit CoinGecko again; set after EVERY
+//                   fetch attempt so a degraded upstream is retried at most once
+//                   per cacheTtlMs rather than on every request.
+// - `inFlight`      collapses concurrent refreshes into one upstream round-trip.
 let cache: CacheEntry | null = null
 let lastGood: OraclePrice | null = null
 let nextAttemptAt = 0
 let inFlight: Promise<Result<OraclePrice, OracleUnavailableError>> | null = null
 
-// Fetch the given sources concurrently, scale + validate each, and return one
-// SourceQuote per source. A failed or rejected source yields ok:false rather
-// than rejecting the whole batch. `adapters` is injectable for tests; production
-// callers use the configured registry.
-const fetchSources = async (
-  adapters: PriceSourceAdapter[] = resolveSources(config.priceOracle.sources),
-): Promise<SourceQuote[]> => {
-  const now = Date.now()
-  return Promise.all(
-    adapters.map(async (source): Promise<SourceQuote> => {
-      const dropped: SourceQuote = {
-        name: source.name,
-        usdPerAi3: null,
-        ok: false,
-      }
-      // Abort the underlying request when the timeout fires so a slow source
-      // does not leak a socket that outlives its usefulness.
-      const controller = new AbortController()
-      try {
-        const raw = await withTimeout(
-          source.fetch(controller.signal),
-          config.priceOracle.fetchTimeoutMs,
-          `priceOracle:${source.name}`,
-          controller,
-        )
-        if (!isWithinBounds(raw.usdPerAi3, minScaled, maxScaled)) {
-          logger.warn(
-            `Price oracle source ${source.name} returned out-of-bounds ` +
-              `price ${raw.usdPerAi3.toString()} (scaled 1e18); dropping`,
-          )
-          return dropped
-        }
-        if (
-          raw.asOfMs !== undefined &&
-          !isQuoteFresh(raw.asOfMs, now, config.priceOracle.maxSourceAgeMs)
-        ) {
-          logger.warn(
-            `Price oracle source ${source.name} returned a stale quote ` +
-              `(asOf ${raw.asOfMs}); dropping`,
-          )
-          return dropped
-        }
-        return { name: source.name, usdPerAi3: raw.usdPerAi3, ok: true }
-      } catch (error) {
-        logger.warn(
-          `Price oracle source ${source.name} failed: ` +
-            `${error instanceof Error ? error.message : String(error)}`,
-        )
-        return dropped
-      }
-    }),
-  )
+// Fetch a single validated AI3/USD quote (scaled 1e18), or null if the source
+// failed, timed out, or returned an out-of-bounds / stale value. Never throws.
+// `fetchRaw` is injectable for tests; production uses the CoinGecko adapter.
+const fetchQuote = async (
+  fetchRaw: (signal?: AbortSignal) => Promise<RawQuote> = fetchCoingeckoQuote,
+): Promise<bigint | null> => {
+  // Abort the underlying request when the timeout fires so a slow source does
+  // not leak a socket that outlives its usefulness.
+  const controller = new AbortController()
+  try {
+    const raw = await withTimeout(
+      fetchRaw(controller.signal),
+      config.priceOracle.fetchTimeoutMs,
+      'priceOracle:coingecko',
+      controller,
+    )
+    if (!isWithinBounds(raw.usdPerAi3, minScaled, maxScaled)) {
+      logger.warn(
+        'Price oracle: CoinGecko returned out-of-bounds price ' +
+          `${raw.usdPerAi3.toString()} (scaled 1e18); dropping`,
+      )
+      return null
+    }
+    if (
+      raw.asOfMs !== undefined &&
+      !isQuoteFresh(raw.asOfMs, Date.now(), config.priceOracle.maxSourceAgeMs)
+    ) {
+      logger.warn(
+        `Price oracle: CoinGecko returned a stale quote (asOf ${raw.asOfMs}); ` +
+          'dropping',
+      )
+      return null
+    }
+    return raw.usdPerAi3
+  } catch (error) {
+    logger.warn(
+      'Price oracle: CoinGecko fetch failed: ' +
+        `${error instanceof Error ? error.message : String(error)}`,
+    )
+    return null
+  }
 }
 
-// Collaborators grouped so unit tests can spy on them (jest.spyOn), mirroring
-// how paymentManager exposes _viemClient. Not for use outside tests.
-const internal = { fetchSources }
+// Grouped so unit tests can spy on the fetch (jest.spyOn), mirroring how
+// paymentManager exposes _viemClient. Not for use outside tests.
+const internal = { fetchQuote }
 
 // Serve the last good price as a stale fallback, or error if none is fresh
-// enough. `sources` is the breakdown of the just-attempted refresh, or [] when
-// the caller was throttled and made no attempt.
-const serveStaleOrError = (
-  sources: SourceQuote[],
-): Result<OraclePrice, OracleUnavailableError> => {
+// enough.
+const serveStaleOrError = (): Result<OraclePrice, OracleUnavailableError> => {
   if (
     lastGood &&
     Date.now() - lastGood.asOf.getTime() < config.priceOracle.maxStaleMs
   ) {
     // A stale fallback is never a fresh TTL cache hit — `fromCache` is reserved
     // for the live cache hit in getPrice, so it is always false here.
-    return ok({ ...lastGood, fromCache: false, stale: true, sources })
+    return ok({ ...lastGood, fromCache: false, stale: true })
   }
   return err(
     new OracleUnavailableError(
-      'Price oracle unavailable: no healthy source and no last-good value ' +
-        `within ${config.priceOracle.maxStaleMs}ms`,
+      'Price oracle unavailable: CoinGecko is unhealthy and there is no ' +
+        `last-good value within ${config.priceOracle.maxStaleMs}ms`,
     ),
   )
 }
 
-// Refresh from the sources, updating cache + last-good on success. Always
-// resolves (never rejects) so the neverthrow contract holds.
+// Refresh from CoinGecko, updating cache + last-good on success. Always resolves
+// (never rejects) so the neverthrow contract holds — fetchQuote absorbs errors.
 const refresh = async (): Promise<
   Result<OraclePrice, OracleUnavailableError>
 > => {
-  let sources: SourceQuote[]
-  try {
-    sources = await internal.fetchSources()
-  } catch (error) {
-    // fetchSources is designed never to reject; this guards the Result contract
-    // against future changes so an unexpected throw cannot bypass neverthrow.
-    nextAttemptAt = Date.now() + config.priceOracle.cacheTtlMs
-    logger.error(
-      error instanceof Error ? error : new Error(String(error)),
-      'Price oracle refresh threw unexpectedly',
-    )
-    return serveStaleOrError([])
-  }
-
+  const usdPerAi3 = await internal.fetchQuote()
   // Throttle the next upstream attempt regardless of outcome, so a degraded
   // source is retried at most once per cacheTtlMs instead of on every request.
   nextAttemptAt = Date.now() + config.priceOracle.cacheTtlMs
 
-  const healthy = sources
-    .map((source) => source.usdPerAi3)
-    .filter((value): value is bigint => value !== null)
-
-  if (healthy.length < config.priceOracle.minSources) {
-    logger.warn(
-      `Price oracle: ${healthy.length}/${config.priceOracle.minSources} ` +
-        'healthy source(s); attempting last-good fallback',
-    )
-    return serveStaleOrError(sources)
+  if (usdPerAi3 === null) {
+    logger.warn('Price oracle: CoinGecko unhealthy; serving last-good fallback')
+    return serveStaleOrError()
   }
 
   const value: OraclePrice = {
-    usdPerAi3: median(healthy),
+    usdPerAi3,
     asOf: new Date(),
     fromCache: false,
     stale: false,
-    sources,
   }
   cache = { value, expiresAt: Date.now() + config.priceOracle.cacheTtlMs }
   lastGood = value
   logger.debug(
-    `Price oracle refreshed AI3/USD=${value.usdPerAi3.toString()} ` +
-      `(scaled 1e18) from ${healthy.length} source(s)`,
+    `Price oracle refreshed AI3/USD=${usdPerAi3.toString()} (scaled 1e18)`,
   )
   return ok(value)
 }
@@ -197,23 +159,23 @@ const refresh = async (): Promise<
 /**
  * Current AI3/USD price as USD-per-AI3 scaled by USD_RATE_SCALE (1e18).
  *
- * Serves the cached value while fresh; otherwise refreshes from the configured
- * sources, with concurrent callers sharing one in-flight request. When a recent
- * refresh failed, subsequent calls within `cacheTtlMs` serve the last-good value
- * (or error) without re-hitting upstream, so a degraded source is not hammered.
- * Returns `err(OracleUnavailableError)` when no trustworthy price is available.
+ * Serves the cached value while fresh; otherwise refreshes from CoinGecko, with
+ * concurrent callers sharing one in-flight request. When a recent fetch failed,
+ * subsequent calls within `cacheTtlMs` serve the last-good value (or error)
+ * without re-hitting upstream, so a degraded source is not hammered. Returns
+ * `err(OracleUnavailableError)` when no trustworthy price is available.
  */
 const getPrice = async (): Promise<
   Result<OraclePrice, OracleUnavailableError>
 > => {
   const now = Date.now()
   if (cache && now < cache.expiresAt) {
-    return ok({ ...cache.value, fromCache: true, sources: [] })
+    return ok({ ...cache.value, fromCache: true })
   }
   if (now < nextAttemptAt) {
-    // Upstream was attempted recently and is degraded; don't hit it again yet.
-    // Served from the last-good fallback (stale), not the fresh TTL cache.
-    return serveStaleOrError([])
+    // Upstream was attempted recently and is degraded; serve the last-good
+    // fallback (stale) rather than hitting CoinGecko again.
+    return serveStaleOrError()
   }
   if (inFlight) {
     return inFlight

@@ -1,10 +1,7 @@
 import { describe, it, expect } from '@jest/globals'
-import {
-  parseCoingeckoResponse,
-  resolveSources,
-} from '../../../src/infrastructure/services/priceOracle/sources.js'
+import { parseCoingeckoResponse } from '../../../src/infrastructure/services/priceOracle/coingecko.js'
 
-describe('priceOracle/sources — CoinGecko parser', () => {
+describe('priceOracle/coingecko — response parser', () => {
   it('parses a live-shaped response into a scaled bigint + asOfMs', () => {
     // Captured verbatim from the live CoinGecko simple-price endpoint.
     const body = {
@@ -34,26 +31,5 @@ describe('priceOracle/sources — CoinGecko parser', () => {
     expect(() =>
       parseCoingeckoResponse({ 'autonomys-network': { usd: Infinity } }),
     ).toThrow()
-  })
-})
-
-describe('priceOracle/sources — resolveSources', () => {
-  it('resolves known source names to adapters', () => {
-    expect(resolveSources(['coingecko']).map((s) => s.name)).toEqual([
-      'coingecko',
-    ])
-  })
-
-  it('skips unknown source names', () => {
-    expect(resolveSources(['nope'])).toEqual([])
-    expect(resolveSources(['coingecko', 'nope']).map((s) => s.name)).toEqual([
-      'coingecko',
-    ])
-  })
-
-  it('de-duplicates repeated source names', () => {
-    expect(
-      resolveSources(['coingecko', 'coingecko']).map((s) => s.name),
-    ).toEqual(['coingecko'])
   })
 })

@@ -106,30 +106,21 @@ export const config = {
     priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
   priceOracle: {
-    // Comma-separated source names (see priceOracle sourceRegistry). Only
-    // 'coingecko' is implemented today; the median/bounds/fallback machinery
-    // generalises to more sources when adapters are added.
-    sources: env('ORACLE_SOURCES', 'coingecko')
-      .split(',')
-      .map((name) => name.trim())
-      .filter((name) => name.length > 0),
-    // Minimum healthy sources required to compute a fresh price. Below this the
-    // oracle serves the last-good value (if within maxStaleMs) or errors.
-    minSources: positiveIntEnv('ORACLE_MIN_SOURCES', 1),
-    // How long a freshly computed price is served from memory before a refresh.
+    // AI3/USD price oracle (CoinGecko). See infrastructure/services/priceOracle.
+    // How long a freshly fetched price is served from memory before a refresh.
     cacheTtlMs: positiveIntEnv('ORACLE_CACHE_TTL_MS', 60000),
-    // Longest a last-good price may be served as a fallback when a refresh
-    // cannot gather enough healthy sources. Default: 10 minutes.
+    // Longest a last-good price may be served as a fallback while CoinGecko is
+    // unavailable. Default: 10 minutes.
     maxStaleMs: positiveIntEnv('ORACLE_MAX_STALE_MS', 600000),
-    // Per-source HTTP timeout.
+    // CoinGecko HTTP timeout.
     fetchTimeoutMs: positiveIntEnv('ORACLE_FETCH_TIMEOUT_MS', 5000),
-    // Drop a source's quote if its own reported update time is older than this.
+    // Drop the quote if CoinGecko's own reported update time is older than this.
     // Default: 5 minutes.
     maxSourceAgeMs: positiveIntEnv('ORACLE_MAX_SOURCE_AGE_MS', 300000),
     // Sanity bounds (USD per AI3) as plain decimals — kept as raw strings and
     // parsed to the 1e18 scale in the priceOracle module (parsing the string
     // directly avoids Number.toString() exponential notation for small values).
-    // A source value outside [min, max] is treated as a glitch and dropped.
+    // A price outside [min, max] is treated as a glitch and dropped.
     minUsdPerAi3: env('ORACLE_MIN_USD_PER_AI3', '0.0001'),
     maxUsdPerAi3: env('ORACLE_MAX_USD_PER_AI3', '100'),
   },

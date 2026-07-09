@@ -27,32 +27,16 @@ export const parseDecimalToScaledBigint = (
   return BigInt(whole) * 10n ** BigInt(scaleDecimals) + BigInt(scaledFraction)
 }
 
-/**
- * Median of a non-empty list of bigints. For an even count returns the integer
- * mean of the two middle values (floor division; sub-unit loss is negligible at
- * 1e18 scale). Throws on an empty list — callers must enforce minSources first.
- */
-export const median = (values: bigint[]): bigint => {
-  if (values.length === 0) {
-    throw new Error('Cannot compute the median of an empty list')
-  }
-  const sorted = [...values].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 1
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2n
-}
-
-// Sanity bound (inclusive): reject absurd prices — a source glitch or the wrong
-// asset — before they can poison the median.
+// Sanity bound (inclusive): reject an absurd price — a source glitch or the
+// wrong asset — before it is trusted.
 export const isWithinBounds = (
   value: bigint,
   minInclusive: bigint,
   maxInclusive: bigint,
 ): boolean => value >= minInclusive && value <= maxInclusive
 
-// A source quote is fresh when it was updated no more than `maxAgeMs` before
-// `nowMs`. Only applied when the source reports its own update time.
+// A quote is fresh when it was updated no more than `maxAgeMs` before `nowMs`.
+// Only applied when the source reports its own update time.
 export const isQuoteFresh = (
   asOfMs: number,
   nowMs: number,

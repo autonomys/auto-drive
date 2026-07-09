@@ -1,11 +1,7 @@
 import { z } from 'zod'
-import { createLogger } from '../../drivers/logger.js'
-import { parseDecimalToScaledBigint } from './aggregate.js'
-import type { PriceSourceAdapter, RawQuote } from './types.js'
+import { parseDecimalToScaledBigint } from './quote.js'
+import type { RawQuote } from './types.js'
 
-const logger = createLogger('PriceOracle:sources')
-
-// --- CoinGecko -------------------------------------------------------------
 // Public simple-price endpoint (no key required). `autonomys-network` is AI3's
 // CoinGecko id; CoinGecko is itself a volume-weighted aggregate across venues.
 const COINGECKO_URL =
@@ -34,7 +30,11 @@ export const parseCoingeckoResponse = (body: unknown): RawQuote => {
   }
 }
 
-const fetchCoingecko = async (signal?: AbortSignal): Promise<RawQuote> => {
+// Fetch the current AI3/USD quote from CoinGecko. `signal` aborts the request
+// when the oracle's fetch timeout fires.
+export const fetchCoingeckoQuote = async (
+  signal?: AbortSignal,
+): Promise<RawQuote> => {
   const response = await fetch(COINGECKO_URL, {
     headers: { accept: 'application/json' },
     signal,
@@ -43,33 +43,4 @@ const fetchCoingecko = async (signal?: AbortSignal): Promise<RawQuote> => {
     throw new Error(`CoinGecko responded with HTTP ${response.status}`)
   }
   return parseCoingeckoResponse(await response.json())
-}
-
-export const coingeckoSource: PriceSourceAdapter = {
-  name: 'coingecko',
-  fetch: fetchCoingecko,
-}
-
-// Available sources keyed by the name used in ORACLE_SOURCES. Only CoinGecko is
-// implemented today; the aggregation machinery generalises to more when added.
-export const sourceRegistry: Record<string, PriceSourceAdapter> = {
-  [coingeckoSource.name]: coingeckoSource,
-}
-
-// Map configured source names to adapters: de-duplicate (so the same source
-// cannot satisfy minSources twice) and warn on + skip unknown names.
-export const resolveSources = (names: string[]): PriceSourceAdapter[] => {
-  const seen = new Set<string>()
-  return names.flatMap((name) => {
-    if (seen.has(name)) {
-      return []
-    }
-    seen.add(name)
-    const adapter = sourceRegistry[name]
-    if (!adapter) {
-      logger.warn(`Unknown price oracle source "${name}"; ignoring`)
-      return []
-    }
-    return [adapter]
-  })
 }
