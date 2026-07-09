@@ -368,9 +368,15 @@ const restoreObject = async (
   const trashedAt = isUserOwner.marked_as_deleted
 
   await OwnershipUseCases.restoreObject(executor, cid)
-  // Un-hide the S3 keys this trash removed so restoring brings the object back to
-  // its S3 name too (no-op when there are none).
-  await s3ObjectMappingsRepository.restoreMappingsByCid(cid, trashedAt)
+  // Un-hide the executor's OWN S3 keys this trash removed so restoring brings the
+  // object back to its S3 name too (scoped to the executor so a dedup co-owner's
+  // keys aren't touched; no-op when there are none).
+  await s3ObjectMappingsRepository.restoreMappingsByCid(
+    cid,
+    executor.oauthProvider,
+    executor.oauthUserId,
+    trashedAt,
+  )
   logger.info('Object restored successfully (cid=%s)', cid)
 
   return ok()

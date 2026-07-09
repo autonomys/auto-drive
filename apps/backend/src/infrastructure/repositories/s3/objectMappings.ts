@@ -16,6 +16,14 @@ export interface S3KeyMapping {
    * full precision; null means the object has no client mtime.
    */
   mtime: string | null
+  /**
+   * The user who created (last wrote) this key mapping — the only principal
+   * allowed to soft-delete it. null for legacy rows created before the owner
+   * column existed and for rows the backfill left ambiguous (a CID with several
+   * admin owners); those fall back to the per-CID admin check.
+   */
+  ownerOauthProvider: string | null
+  ownerOauthUserId: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -31,6 +39,8 @@ interface S3KeyMappingDB {
   cid: S3KeyMapping['cid']
   md5: S3KeyMapping['md5']
   mtime: S3KeyMapping['mtime']
+  owner_oauth_provider: S3KeyMapping['ownerOauthProvider']
+  owner_oauth_user_id: S3KeyMapping['ownerOauthUserId']
   created_at: S3KeyMapping['createdAt']
   updated_at: S3KeyMapping['updatedAt']
 }
@@ -46,6 +56,8 @@ const mapDBToDomain = (db: S3KeyMappingDB): S3KeyMapping => ({
   cid: db.cid,
   md5: db.md5 ?? null,
   mtime: db.mtime ?? null,
+  ownerOauthProvider: db.owner_oauth_provider ?? null,
+  ownerOauthUserId: db.owner_oauth_user_id ?? null,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 })
@@ -56,22 +68,28 @@ const createMapping = async (
   cid: string,
   md5: string | null = null,
   mtime: string | null = null,
+  ownerOauthProvider: string | null = null,
+  ownerOauthUserId: string | null = null,
 ): Promise<S3KeyMapping> => {
   const db = await getDatabase()
 
   // ON CONFLICT resets deleted_at to NULL so a PutObject to a previously
   // soft-deleted key resurrects it — matching S3's "PUT after DELETE re-creates
   // the object" semantics (and TestObjectUpdate, which overwrites in place).
+  // The owner is COALESCE'd so a caller that doesn't supply one (e.g. a test
+  // helper) never wipes an existing owner; a real PUT sets it to the writer.
   const result = await db.query<S3KeyMappingDB>({
     text: `
       INSERT INTO "S3".object_mappings
-      (bucket, "key", cid, md5, mtime)
-      VALUES ($1, $2, $3, $4, $5)
+      (bucket, "key", cid, md5, mtime, owner_oauth_provider, owner_oauth_user_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (bucket, "key") DO UPDATE
-        SET cid = $3, md5 = $4, mtime = $5, deleted_at = NULL, updated_at = NOW()
+        SET cid = $3, md5 = $4, mtime = $5, deleted_at = NULL, updated_at = NOW(),
+            owner_oauth_provider = COALESCE($6, object_mappings.owner_oauth_provider),
+            owner_oauth_user_id = COALESCE($7, object_mappings.owner_oauth_user_id)
       RETURNING *
     `,
-    values: [bucket, s3Key, cid, md5, mtime],
+    values: [bucket, s3Key, cid, md5, mtime, ownerOauthProvider, ownerOauthUserId],
   })
 
   return result.rows.map(mapDBToDomain)[0]
@@ -134,6 +152,11 @@ const softDeleteMapping = async (
  * a DeleteObject reappear too — the reverse of deleteObject's propagation to the
  * Trash, keeping the S3 namespace and the UI in sync ("unified with UI Trash").
  *
+ * Scoped to the restorer's OWN keys (owner columns): with dedup a different
+ * user may hold keys to the same cid, and restoring this owner's object must
+ * not un-hide theirs. Legacy keys with no recorded owner are not matched here
+ * (they can be brought back by re-uploading to the key).
+ *
  * When `since` is given, only keys soft-deleted at/after that instant are
  * restored. deleteObject stamps the object's Trash time (ownership) BEFORE it
  * hides the mapping, so the triggering key's deleted_at is >= the Trash time,
@@ -142,29 +165,30 @@ const softDeleteMapping = async (
  */
 const restoreMappingsByCid = async (
   cid: string,
+  ownerOauthProvider: string,
+  ownerOauthUserId: string,
   since: Date | null = null,
 ): Promise<void> => {
   const db = await getDatabase()
 
+  const base = `
+    UPDATE "S3".object_mappings
+    SET deleted_at = NULL, updated_at = NOW()
+    WHERE cid = $1 AND deleted_at IS NOT NULL
+      AND owner_oauth_provider = $2 AND owner_oauth_user_id = $3
+  `
+
   if (since) {
     await db.query({
-      text: `
-        UPDATE "S3".object_mappings
-        SET deleted_at = NULL, updated_at = NOW()
-        WHERE cid = $1 AND deleted_at IS NOT NULL AND deleted_at >= $2
-      `,
-      values: [cid, since],
+      text: base + ' AND deleted_at >= $4',
+      values: [cid, ownerOauthProvider, ownerOauthUserId, since],
     })
     return
   }
 
   await db.query({
-    text: `
-      UPDATE "S3".object_mappings
-      SET deleted_at = NULL, updated_at = NOW()
-      WHERE cid = $1 AND deleted_at IS NOT NULL
-    `,
-    values: [cid],
+    text: base,
+    values: [cid, ownerOauthProvider, ownerOauthUserId],
   })
 }
 
@@ -172,18 +196,41 @@ const restoreMappingsByCid = async (
  * Count active (non-soft-deleted) mappings pointing at a cid. Used after a
  * DeleteObject to decide whether any S3 key still references the content before
  * propagating the removal to the web-app Trash.
+ *
+ * When an owner is given, only that owner's active keys are counted — with
+ * content-addressed dedup a different user may hold keys to the same cid, and
+ * their keys must not affect this owner's "last key → move to my Trash"
+ * decision. Called without an owner (legacy mappings with no recorded owner) it
+ * counts all active keys for the cid.
  */
-const countActiveMappingsByCid = async (cid: string): Promise<number> => {
+const countActiveMappingsByCid = async (
+  cid: string,
+  ownerOauthProvider: string | null = null,
+  ownerOauthUserId: string | null = null,
+): Promise<number> => {
   const db = await getDatabase()
 
-  const result = await db.query<{ count: string }>({
-    text: `
-      SELECT COUNT(*)::text AS count
-      FROM "S3".object_mappings
-      WHERE cid = $1 AND deleted_at IS NULL
-    `,
-    values: [cid],
-  })
+  const scoped = ownerOauthProvider != null && ownerOauthUserId != null
+  const result = await db.query<{ count: string }>(
+    scoped
+      ? {
+          text: `
+            SELECT COUNT(*)::text AS count
+            FROM "S3".object_mappings
+            WHERE cid = $1 AND deleted_at IS NULL
+              AND owner_oauth_provider = $2 AND owner_oauth_user_id = $3
+          `,
+          values: [cid, ownerOauthProvider, ownerOauthUserId],
+        }
+      : {
+          text: `
+            SELECT COUNT(*)::text AS count
+            FROM "S3".object_mappings
+            WHERE cid = $1 AND deleted_at IS NULL
+          `,
+          values: [cid],
+        },
+  )
 
   return Number(result.rows[0]?.count ?? 0)
 }

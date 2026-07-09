@@ -233,6 +233,8 @@ const completeMultipartUpload = async (
     cid,
     md5ForStorage,
     mtime,
+    user.oauthProvider,
+    user.oauthUserId,
   )
   await s3ObjectMappingsRepository.deleteMultipartMtime(params.UploadId)
   logger.debug(
@@ -285,6 +287,8 @@ const putObject = async (
     cid,
     md5,
     params.Mtime ?? null,
+    user.oauthProvider,
+    user.oauthUserId,
   )
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
@@ -322,21 +326,33 @@ const deleteObject = async (
     return ok()
   }
 
-  // Ownership gate: the S3 namespace is shared across API keys, so only an
-  // ADMIN owner (the uploader) may hide a key. Shared recipients are stored as
-  // non-admin owners and must not be able to hide a key for everyone. A caller
-  // without active admin ownership is a no-op (still reported as success for
-  // idempotency) rather than letting a sharee or other tenant hide the object.
-  const owners = await ownershipRepository.getOwnerships(mapping.cid)
-  const isAdminOwner = owners.some(
-    (o) =>
-      o.is_admin &&
-      o.oauth_provider === user.oauthProvider &&
-      o.oauth_user_id === user.oauthUserId,
-  )
-  if (!isAdminOwner) {
+  // Authorization: only the KEY's owner may hide it. The S3 namespace is shared
+  // across API keys and, because storage is content-addressed, several users can
+  // be admin owners of the same CID (dedup of identical content) — so a per-CID
+  // check would let a dedup co-owner hide another user's key. Modern mappings
+  // record their creator (owner columns), so gate on that. A legacy mapping with
+  // no recorded owner falls back to the per-CID admin check (its historical
+  // behaviour). An unauthorized caller is a no-op (still 204, for idempotency).
+  const hasOwner =
+    mapping.ownerOauthProvider != null && mapping.ownerOauthUserId != null
+
+  let authorized: boolean
+  if (hasOwner) {
+    authorized =
+      mapping.ownerOauthProvider === user.oauthProvider &&
+      mapping.ownerOauthUserId === user.oauthUserId
+  } else {
+    const owners = await ownershipRepository.getOwnerships(mapping.cid)
+    authorized = owners.some(
+      (o) =>
+        o.is_admin &&
+        o.oauth_provider === user.oauthProvider &&
+        o.oauth_user_id === user.oauthUserId,
+    )
+  }
+  if (!authorized) {
     logger.warn(
-      'Ignoring DeleteObject from non-admin-owner (bucket=%s key=%s cid=%s user=%s)',
+      'Ignoring DeleteObject from non-owner (bucket=%s key=%s cid=%s user=%s)',
       bucket,
       key,
       mapping.cid,
@@ -358,11 +374,20 @@ const deleteObject = async (
     }
   }
 
-  // Is this the last active S3 key for the content? countActive includes this
-  // still-active mapping, so <= 1 means it's the last one.
-  const activeBefore = await s3ObjectMappingsRepository.countActiveMappingsByCid(
-    mapping.cid,
-  )
+  // Count the caller's OWN active keys for this content — owner-scoped for a
+  // modern mapping so a dedup co-owner's keys don't affect the "last key" Trash
+  // decision; per-CID for a legacy mapping. Includes the still-active mapping
+  // being deleted, so <= 1 means this is the caller's last key for the content.
+  const countActive = () =>
+    hasOwner
+      ? s3ObjectMappingsRepository.countActiveMappingsByCid(
+          mapping.cid,
+          user.oauthProvider,
+          user.oauthUserId,
+        )
+      : s3ObjectMappingsRepository.countActiveMappingsByCid(mapping.cid)
+
+  const activeBefore = await countActive()
   const isLastKey = activeBefore <= 1
 
   if (isLastKey) {
@@ -382,8 +407,7 @@ const deleteObject = async (
     // last-key deletes could both skip it and leave the object active in the UI
     // with no visible S3 keys. (If both reach here, markAsDeleted is effectively
     // idempotent: the second is a harmless no-op.)
-    const activeAfter =
-      await s3ObjectMappingsRepository.countActiveMappingsByCid(mapping.cid)
+    const activeAfter = await countActive()
     if (activeAfter === 0) {
       await trashObject()
     }
@@ -464,12 +488,15 @@ const copyObject = async (
 
   const mtime = params.Mtime !== undefined ? params.Mtime : source.mtime
 
+  // The destination key is created (owned) by the copier.
   const mapping = await s3ObjectMappingsRepository.createMapping(
     params.Bucket,
     params.Key,
     source.cid,
     source.md5,
     mtime,
+    user.oauthProvider,
+    user.oauthUserId,
   )
 
   logger.debug(

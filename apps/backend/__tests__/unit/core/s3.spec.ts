@@ -272,13 +272,15 @@ describe('S3UseCases', () => {
       // Composite ETag: "<md5>-N" format
       expect(result._unsafeUnwrap().ETag).toMatch(MULTIPART_ETAG_RE)
       expect(result._unsafeUnwrap().Cid).toBe('cid123')
-      // 5th arg is the stashed mtime; the staging row is then cleared.
+      // Args after the md5: mtime (stashed), then the owner (uploading user).
       expect(mappingSpy).toHaveBeenCalledWith(
         'my-bucket',
         'file.txt',
         'cid123',
         expect.stringMatching(MULTIPART_MD5_RE),
         '1620000000.5',
+        'google',
+        'user1',
       )
       expect(clearMtimeSpy).toHaveBeenCalledWith('upload123')
     })
@@ -410,13 +412,15 @@ describe('S3UseCases', () => {
       } as any)
 
       // MD5 of "Hello, world!" — verified with: echo -n "Hello, world!" | md5.
-      // 5th arg is the mtime (null here — no x-amz-meta-mtime was supplied).
+      // Args after the md5: mtime (null — none supplied), then the owner.
       expect(mappingSpy).toHaveBeenCalledWith(
         'my-bucket',
         'file.txt',
         'cid123',
         '6cd3556deb0da54bca060b4c39479839',
         null,
+        'google',
+        'user1',
       )
     })
   })
@@ -590,12 +594,23 @@ describe('S3UseCases', () => {
   })
 
   describe('deleteObject', () => {
+    // Legacy mapping (no recorded owner) → the delete gate falls back to the
+    // per-CID admin check.
     const activeMapping = {
       bucket: 'my-bucket',
       key: 'file.txt',
       cid: 'cid123',
       md5: null,
       mtime: null,
+      ownerOauthProvider: null,
+      ownerOauthUserId: null,
+    } as any
+
+    // Modern mapping owned by mockUser → gated on the per-mapping owner.
+    const ownedMapping = {
+      ...activeMapping,
+      ownerOauthProvider: 'google',
+      ownerOauthUserId: 'user1',
     } as any
 
     it('trashes the object then hides the mapping when it was the last reference', async () => {
@@ -789,6 +804,62 @@ describe('S3UseCases', () => {
       expect(result.isOk()).toBe(true)
       expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'file.txt')
     })
+
+    it('gates on the per-mapping owner (no per-CID lookup) and scopes the count', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(ownedMapping)
+      const getOwnershipsSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
+      const countSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
+        .mockResolvedValue(1)
+      const markSpy = jest
+        .spyOn(ObjectUseCases, 'markAsDeleted')
+        .mockResolvedValue(ok(undefined))
+      const softDeleteSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
+        .mockResolvedValue({ cid: 'cid123' })
+
+      const result = await S3UseCases.deleteObject(
+        mockUser,
+        'my-bucket',
+        'file.txt',
+      )
+
+      expect(result.isOk()).toBe(true)
+      // Owner is known from the mapping → no CID-ownership lookup needed.
+      expect(getOwnershipsSpy).not.toHaveBeenCalled()
+      // The "last key" count is scoped to the caller, not the whole CID.
+      expect(countSpy).toHaveBeenCalledWith('cid123', 'google', 'user1')
+      expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
+      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'file.txt')
+    })
+
+    it('refuses to hide another user’s key even from a dedup co-owner of the CID', async () => {
+      // The mapping belongs to someone else; the caller (mockUser) may well be
+      // an admin owner of the same CID via dedup, but that must NOT let them
+      // hide this key. The per-mapping owner check never consults CID ownership.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue({ ...ownedMapping, ownerOauthUserId: 'someone-else' })
+      const getOwnershipsSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
+      const softDeleteSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'softDeleteMapping',
+      )
+      const markSpy = jest.spyOn(ObjectUseCases, 'markAsDeleted')
+
+      const result = await S3UseCases.deleteObject(
+        mockUser,
+        'my-bucket',
+        'file.txt',
+      )
+
+      expect(result.isOk()).toBe(true)
+      expect(getOwnershipsSpy).not.toHaveBeenCalled()
+      expect(softDeleteSpy).not.toHaveBeenCalled()
+      expect(markSpy).not.toHaveBeenCalled()
+    })
   })
 
   describe('copyObject', () => {
@@ -831,13 +902,16 @@ describe('S3UseCases', () => {
       expect(result.isOk()).toBe(true)
       expect(result._unsafeUnwrap().Cid).toBe('srccid')
       expect(result._unsafeUnwrap().ETag).toMatch(MD5_ETAG_RE)
-      // Destination points at the SAME cid + md5 as the source.
+      // Destination points at the SAME cid + md5 as the source, owned by the
+      // copier (args after md5: mtime, owner provider, owner user id).
       expect(createSpy).toHaveBeenCalledWith(
         'dst',
         'b.txt',
         'srccid',
         source.md5,
         null,
+        'google',
+        'user1',
       )
     })
 
@@ -953,6 +1027,8 @@ describe('S3UseCases', () => {
         'srccid',
         source.md5,
         '111.5',
+        'google',
+        'user1',
       )
     })
 
@@ -978,6 +1054,8 @@ describe('S3UseCases', () => {
         'srccid',
         source.md5,
         '222.9',
+        'google',
+        'user1',
       )
     })
 
