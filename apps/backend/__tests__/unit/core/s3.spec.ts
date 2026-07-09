@@ -284,6 +284,30 @@ describe('S3UseCases', () => {
       )
       expect(clearMtimeSpy).toHaveBeenCalledWith('upload123')
     })
+
+    it('rejects completing onto a key owned by another user (Forbidden)', async () => {
+      jest.spyOn(UploadsUseCases, 'completeUpload').mockResolvedValue('cid123')
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'getMultipartMtime')
+        .mockResolvedValue(null)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'deleteMultipartMtime')
+        .mockResolvedValue(undefined)
+      // Cross-owner conflict → the guarded upsert returns null.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'createMapping')
+        .mockResolvedValue(null)
+
+      const result = await S3UseCases.completeMultipartUpload(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'victim.txt',
+        UploadId: 'upload123',
+        Parts: [{ PartNumber: 1, ETag: '"aabbccdd11223344aabbccdd11223344"' }],
+      } as any)
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    })
   })
 
   describe('putObject', () => {
@@ -422,6 +446,29 @@ describe('S3UseCases', () => {
         'google',
         'user1',
       )
+    })
+
+    it('rejects overwriting a key owned by another user (Forbidden)', async () => {
+      jest
+        .spyOn(UploadsUseCases, 'createFileUpload')
+        .mockResolvedValue({ id: 'upload123' } as any)
+      jest
+        .spyOn(UploadsUseCases, 'uploadChunk')
+        .mockResolvedValue(ok({} as any) as any)
+      jest.spyOn(UploadsUseCases, 'completeUpload').mockResolvedValue('cid123')
+      // Cross-owner conflict → the guarded upsert returns null.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'createMapping')
+        .mockResolvedValue(null)
+
+      const result = await S3UseCases.putObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'victim.txt',
+        Body: Buffer.from('data'),
+      } as any)
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
     })
   })
 
@@ -1105,6 +1152,27 @@ describe('S3UseCases', () => {
       })
 
       expect(result._unsafeUnwrap().ETag).toBe('"srccid"')
+    })
+
+    it('rejects copying onto a destination key owned by another user (Forbidden)', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(source as any)
+      // Caller owns the source (beforeEach getOwnerships → ownerRow); the
+      // destination key is owned by someone else → guarded upsert returns null.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'createMapping')
+        .mockResolvedValue(null)
+
+      const result = await S3UseCases.copyObject(mockUser, {
+        SourceBucket: 'src',
+        SourceKey: 'a.txt',
+        Bucket: 'dst',
+        Key: 'victim.txt',
+      })
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
     })
   })
 

@@ -70,14 +70,20 @@ const createMapping = async (
   mtime: string | null = null,
   ownerOauthProvider: string | null = null,
   ownerOauthUserId: string | null = null,
-): Promise<S3KeyMapping> => {
+): Promise<S3KeyMapping | null> => {
   const db = await getDatabase()
 
   // ON CONFLICT resets deleted_at to NULL so a PutObject to a previously
   // soft-deleted key resurrects it — matching S3's "PUT after DELETE re-creates
   // the object" semantics (and TestObjectUpdate, which overwrites in place).
-  // The owner is COALESCE'd so a caller that doesn't supply one (e.g. a test
-  // helper) never wipes an existing owner; a real PUT sets it to the writer.
+  //
+  // The DO UPDATE is GUARDED: because (bucket, key) is a global namespace shared
+  // across API keys, an unguarded upsert would let any writer overwrite — and
+  // take ownership of — another user's key. The WHERE only permits the update
+  // when the existing row is unowned (legacy) or already owned by the writer;
+  // the owner is then preserved (or claimed if it was NULL), never reassigned to
+  // a different user. A conflict on a key owned by SOMEONE ELSE updates nothing
+  // and RETURNING yields no row (→ null), so the caller can reject the write.
   const result = await db.query<S3KeyMappingDB>({
     text: `
       INSERT INTO "S3".object_mappings
@@ -85,14 +91,19 @@ const createMapping = async (
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (bucket, "key") DO UPDATE
         SET cid = $3, md5 = $4, mtime = $5, deleted_at = NULL, updated_at = NOW(),
-            owner_oauth_provider = COALESCE($6, object_mappings.owner_oauth_provider),
-            owner_oauth_user_id = COALESCE($7, object_mappings.owner_oauth_user_id)
+            owner_oauth_provider = COALESCE(object_mappings.owner_oauth_provider, $6),
+            owner_oauth_user_id = COALESCE(object_mappings.owner_oauth_user_id, $7)
+        WHERE object_mappings.owner_oauth_user_id IS NULL
+           OR (object_mappings.owner_oauth_provider = $6
+               AND object_mappings.owner_oauth_user_id = $7)
       RETURNING *
     `,
     values: [bucket, s3Key, cid, md5, mtime, ownerOauthProvider, ownerOauthUserId],
   })
 
-  return result.rows.map(mapDBToDomain)[0]
+  // null → the key exists and is owned by a different user (guarded update was a
+  // no-op); the caller must reject the write rather than steal the key.
+  return result.rows.map(mapDBToDomain)[0] ?? null
 }
 
 const findByKey = async (

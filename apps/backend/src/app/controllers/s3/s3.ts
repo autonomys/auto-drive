@@ -672,6 +672,14 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
   })
 
   if (result.isErr()) {
+    if (result.error instanceof ForbiddenError) {
+      // Destination key is owned by another user.
+      sendXML(res.status(403), 'Error', {
+        Code: 'AccessDenied',
+        Message: result.error.message,
+      })
+      return
+    }
     // Missing copy source → NoSuchKey, per S3.
     sendNoSuchKey(res, source.key)
     return

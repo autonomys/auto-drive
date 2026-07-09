@@ -205,7 +205,9 @@ const uploadPart = async (
 const completeMultipartUpload = async (
   user: UserWithOrganization,
   params: CompleteMultipartUploadParams,
-): Promise<Result<CompleteMultipartUploadResult, ObjectNotFoundError>> => {
+): Promise<
+  Result<CompleteMultipartUploadResult, ObjectNotFoundError | ForbiddenError>
+> => {
   const cid = await UploadsUseCases.completeUpload(user, params.UploadId)
 
   // Compute the composite multipart ETag from the per-part MD5s the client
@@ -237,6 +239,14 @@ const completeMultipartUpload = async (
     user.oauthUserId,
   )
   await s3ObjectMappingsRepository.deleteMultipartMtime(params.UploadId)
+  // null → the key is owned by another user; refuse to overwrite/steal it.
+  if (!mapping) {
+    return err(
+      new ForbiddenError(
+        `Key ${params.Bucket}/${params.Key} is owned by another user`,
+      ),
+    )
+  }
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
     mapping.bucket,
@@ -256,7 +266,7 @@ const completeMultipartUpload = async (
 const putObject = async (
   user: UserWithOrganization,
   params: PutObjectParams,
-): Promise<Result<PutObjectResult, ObjectNotFoundError>> => {
+): Promise<Result<PutObjectResult, ObjectNotFoundError | ForbiddenError>> => {
   const name = params.Key.split('/').pop()!
 
   // Compute MD5 before upload so we have it ready for storage.
@@ -290,6 +300,14 @@ const putObject = async (
     user.oauthProvider,
     user.oauthUserId,
   )
+  // null → the key is owned by another user; refuse to overwrite/steal it.
+  if (!mapping) {
+    return err(
+      new ForbiddenError(
+        `Key ${params.Bucket}/${params.Key} is owned by another user`,
+      ),
+    )
+  }
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
     mapping.bucket,
@@ -430,7 +448,7 @@ const deleteObject = async (
 const copyObject = async (
   user: UserWithOrganization,
   params: CopyObjectParams,
-): Promise<Result<CopyObjectResult, ObjectNotFoundError>> => {
+): Promise<Result<CopyObjectResult, ObjectNotFoundError | ForbiddenError>> => {
   const source = await s3ObjectMappingsRepository.findByKey(
     params.SourceBucket,
     params.SourceKey,
@@ -498,6 +516,14 @@ const copyObject = async (
     user.oauthProvider,
     user.oauthUserId,
   )
+  // null → the destination key is owned by another user; refuse to overwrite it.
+  if (!mapping) {
+    return err(
+      new ForbiddenError(
+        `Key ${params.Bucket}/${params.Key} is owned by another user`,
+      ),
+    )
+  }
 
   logger.debug(
     'Copied S3 mapping: %s/%s -> %s/%s (cid=%s)',
