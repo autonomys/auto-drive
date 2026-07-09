@@ -103,6 +103,7 @@ describe('priceOracle.getPrice', () => {
     expect(result.isOk()).toBe(true)
     const price = result._unsafeUnwrap()
     expect(price.stale).toBe(true)
+    expect(price.fromCache).toBe(false)
     expect(price.usdPerAi3).toBe(6_400_000_000_000_000n)
   })
 
@@ -115,11 +116,14 @@ describe('priceOracle.getPrice', () => {
     spy.mockResolvedValueOnce([quote(null)]) // refresh #2 loses sources -> stale
     const stale1 = await priceOracle.getPrice()
     expect(stale1._unsafeUnwrap().stale).toBe(true)
+    expect(stale1._unsafeUnwrap().fromCache).toBe(false)
     expect(spy).toHaveBeenCalledTimes(2)
 
     // Still inside the throttle window: must serve last-good WITHOUT a 3rd fetch.
     const stale2 = await priceOracle.getPrice()
     expect(stale2._unsafeUnwrap().stale).toBe(true)
+    // The throttle gate serves a stale fallback, not a fresh TTL cache hit.
+    expect(stale2._unsafeUnwrap().fromCache).toBe(false)
     expect(stale2._unsafeUnwrap().usdPerAi3).toBe(6_400_000_000_000_000n)
     expect(spy).toHaveBeenCalledTimes(2)
   })

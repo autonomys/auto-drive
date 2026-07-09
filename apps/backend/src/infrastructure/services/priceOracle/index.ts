@@ -125,14 +125,15 @@ const internal = { fetchSources }
 // enough. `sources` is the breakdown of the just-attempted refresh, or [] when
 // the caller was throttled and made no attempt.
 const serveStaleOrError = (
-  fromCache: boolean,
   sources: SourceQuote[],
 ): Result<OraclePrice, OracleUnavailableError> => {
   if (
     lastGood &&
     Date.now() - lastGood.asOf.getTime() < config.priceOracle.maxStaleMs
   ) {
-    return ok({ ...lastGood, fromCache, stale: true, sources })
+    // A stale fallback is never a fresh TTL cache hit — `fromCache` is reserved
+    // for the live cache hit in getPrice, so it is always false here.
+    return ok({ ...lastGood, fromCache: false, stale: true, sources })
   }
   return err(
     new OracleUnavailableError(
@@ -158,7 +159,7 @@ const refresh = async (): Promise<
       error instanceof Error ? error : new Error(String(error)),
       'Price oracle refresh threw unexpectedly',
     )
-    return serveStaleOrError(false, [])
+    return serveStaleOrError([])
   }
 
   // Throttle the next upstream attempt regardless of outcome, so a degraded
@@ -174,7 +175,7 @@ const refresh = async (): Promise<
       `Price oracle: ${healthy.length}/${config.priceOracle.minSources} ` +
         'healthy source(s); attempting last-good fallback',
     )
-    return serveStaleOrError(false, sources)
+    return serveStaleOrError(sources)
   }
 
   const value: OraclePrice = {
@@ -211,7 +212,8 @@ const getPrice = async (): Promise<
   }
   if (now < nextAttemptAt) {
     // Upstream was attempted recently and is degraded; don't hit it again yet.
-    return serveStaleOrError(true, [])
+    // Served from the last-good fallback (stale), not the fresh TTL cache.
+    return serveStaleOrError([])
   }
   if (inFlight) {
     return inFlight

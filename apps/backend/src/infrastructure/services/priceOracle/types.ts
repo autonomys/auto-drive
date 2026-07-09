@@ -22,7 +22,8 @@ export type OraclePrice = {
   // When the value was computed (the original computation time when served as a
   // last-good fallback).
   asOf: Date
-  // Served from the in-memory TTL cache rather than a fresh fetch.
+  // True only for a fresh in-memory TTL cache hit; always false for a stale
+  // last-good fallback (see `stale`) and for a freshly fetched value.
   fromCache: boolean
   // Served from the last-good fallback because the latest refresh could not
   // gather enough healthy sources (still within maxStaleMs).
