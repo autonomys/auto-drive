@@ -1028,6 +1028,60 @@ describe('S3UseCases', () => {
       expect(createSpy).not.toHaveBeenCalled()
     })
 
+    it('gates the source on its per-mapping owner without a CID lookup', async () => {
+      // Modern source owned by the caller → authorized via the mapping owner;
+      // the per-CID ownership lookup is not consulted (matches deleteObject).
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue({
+        ...source,
+        ownerOauthProvider: 'google',
+        ownerOauthUserId: 'user1',
+      } as any)
+      const getOwnershipsSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'createMapping')
+        .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
+
+      const result = await S3UseCases.copyObject(mockUser, {
+        SourceBucket: 'src',
+        SourceKey: 'a.txt',
+        Bucket: 'dst',
+        Key: 'b.txt',
+      })
+
+      expect(result.isOk()).toBe(true)
+      expect(getOwnershipsSpy).not.toHaveBeenCalled()
+    })
+
+    it('refuses to copy from a source key owned by another user (dedup co-owner)', async () => {
+      // The source key belongs to someone else. The caller may co-own the CID
+      // via dedup (identical bytes), but must NOT be able to use another user's
+      // key as a copy source — mirrors deleteObject's per-mapping-owner gate.
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue({
+        ...source,
+        ownerOauthProvider: 'google',
+        ownerOauthUserId: 'someone-else',
+      } as any)
+      const getOwnershipsSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
+      const createSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'createMapping',
+      )
+
+      const result = await S3UseCases.copyObject(mockUser, {
+        SourceBucket: 'src',
+        SourceKey: 'a.txt',
+        Bucket: 'dst',
+        Key: 'b.txt',
+      })
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      // Modern source → owner from the mapping; no CID-ownership lookup, and no
+      // destination mapping created.
+      expect(getOwnershipsSpy).not.toHaveBeenCalled()
+      expect(createSpy).not.toHaveBeenCalled()
+    })
+
     it('refuses to copy a source that is not downloadable (removed/banned)', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')

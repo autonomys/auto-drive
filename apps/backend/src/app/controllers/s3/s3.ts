@@ -339,6 +339,16 @@ const sendNoSuchKey = (res: Response, key: string) => {
   })
 }
 
+// S3 error responses must be XML on this API surface (the AWS SDK / rclone parse
+// the <Error> body), so a 403 is sent as XML AccessDenied rather than via
+// handleError, which emits JSON.
+const sendAccessDenied = (res: Response, message: string) => {
+  sendXML(res.status(403), 'Error', {
+    Code: 'AccessDenied',
+    Message: message,
+  })
+}
+
 export const getObjectRetentionHandler = async (
   req: Request,
   res: Response,
@@ -480,6 +490,11 @@ export const completeMultipartUploadHandler = async (
   })
 
   if (result.isErr()) {
+    // Cross-owner key guard → S3 XML AccessDenied (not JSON via handleError).
+    if (result.error instanceof ForbiddenError) {
+      sendAccessDenied(res, result.error.message)
+      return
+    }
     handleError(result.error, res)
     return
   }
@@ -607,6 +622,11 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   })
 
   if (result.isErr()) {
+    // Cross-owner key guard → S3 XML AccessDenied (not JSON via handleError).
+    if (result.error instanceof ForbiddenError) {
+      sendAccessDenied(res, result.error.message)
+      return
+    }
     handleError(result.error, res)
     return
   }
@@ -674,10 +694,7 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
   if (result.isErr()) {
     if (result.error instanceof ForbiddenError) {
       // Destination key is owned by another user.
-      sendXML(res.status(403), 'Error', {
-        Code: 'AccessDenied',
-        Message: result.error.message,
-      })
+      sendAccessDenied(res, result.error.message)
       return
     }
     // Missing copy source → NoSuchKey, per S3.

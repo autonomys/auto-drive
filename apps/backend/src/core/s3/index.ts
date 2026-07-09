@@ -461,30 +461,40 @@ const copyObject = async (
     )
   }
 
-  // Ownership gate: the S3 namespace is shared across API keys, so only an
-  // active ADMIN owner of the source content may copy it (mirrors deleteObject).
-  // Without this, any caller who can name another user's (bucket, key) could
-  // copy it, become an owner of the CID, and then — via deleteObject's admin
-  // gate — hide the victim's key. A copy grants NO new ownership: the caller
-  // already owns the content (that is why they may copy it), so the destination
-  // is already theirs and appears in their Drive without a re-grant (which would
-  // also wrongly pull the CID out of their own Trash).
-  const owners = await ownershipRepository.getOwnerships(source.cid)
-  const isAdminOwner = owners.some(
-    (o) =>
-      o.is_admin &&
-      o.oauth_provider === user.oauthProvider &&
-      o.oauth_user_id === user.oauthUserId,
-  )
-  if (!isAdminOwner) {
+  // Ownership gate on the SOURCE KEY, mirroring deleteObject: only the source
+  // mapping's owner may copy from it. Gating on the source's per-mapping owner
+  // (not merely CID ownership) keeps copy consistent with delete — with
+  // content-addressed dedup a co-owner of the CID must not be able to use
+  // another user's (bucket, key) as a copy source. A legacy source mapping with
+  // no recorded owner falls back to the per-CID admin check. A copy grants NO
+  // new ownership: the caller already owns the source content, so the
+  // destination (created below, owned by the caller) is theirs without a
+  // re-grant. Don't reveal the source's existence to a non-owner.
+  const sourceHasOwner =
+    source.ownerOauthProvider != null && source.ownerOauthUserId != null
+
+  let authorizedSource: boolean
+  if (sourceHasOwner) {
+    authorizedSource =
+      source.ownerOauthProvider === user.oauthProvider &&
+      source.ownerOauthUserId === user.oauthUserId
+  } else {
+    const owners = await ownershipRepository.getOwnerships(source.cid)
+    authorizedSource = owners.some(
+      (o) =>
+        o.is_admin &&
+        o.oauth_provider === user.oauthProvider &&
+        o.oauth_user_id === user.oauthUserId,
+    )
+  }
+  if (!authorizedSource) {
     logger.warn(
-      'Ignoring CopyObject from non-admin-owner (src=%s/%s cid=%s user=%s)',
+      'Ignoring CopyObject from non-owner of source (src=%s/%s cid=%s user=%s)',
       params.SourceBucket,
       params.SourceKey,
       source.cid,
       user.oauthUserId,
     )
-    // Don't reveal the object's existence to a non-owner.
     return err(
       new ObjectNotFoundError(
         `Object ${params.SourceBucket}/${params.SourceKey} not found`,
