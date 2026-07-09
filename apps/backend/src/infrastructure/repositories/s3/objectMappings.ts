@@ -246,46 +246,6 @@ const countActiveMappingsByCid = async (
   return Number(result.rows[0]?.count ?? 0)
 }
 
-const updateMapping = async (
-  bucket: string,
-  s3Key: string,
-  newCid: string,
-  md5: string | null = null,
-): Promise<S3KeyMapping> => {
-  const db = await getDatabase()
-
-  const result = await db.query<S3KeyMappingDB>({
-    text: `
-      UPDATE "S3".object_mappings
-      SET cid = $3, md5 = $4, updated_at = NOW()
-      WHERE bucket = $1 AND "key" = $2
-      RETURNING *
-    `,
-    values: [bucket, s3Key, newCid, md5],
-  })
-
-  if (result.rows.length === 0) {
-    throw new Error(`S3 key mapping not found: ${bucket}/${s3Key}`)
-  }
-
-  return result.rows.map(mapDBToDomain)[0]
-}
-
-const findByCid = async (cid: string): Promise<S3KeyMapping[]> => {
-  const db = await getDatabase()
-
-  const result = await db.query<S3KeyMappingDB>({
-    text: `
-      SELECT * FROM "S3".object_mappings
-      WHERE cid = $1
-      ORDER BY bucket, "key"
-    `,
-    values: [cid],
-  })
-
-  return result.rows.map(mapDBToDomain)
-}
-
 const listBuckets = async (): Promise<S3BucketInfo[]> => {
   const db = await getDatabase()
 
@@ -429,8 +389,6 @@ export const s3ObjectMappingsRepository = {
   setMultipartMtime,
   getMultipartMtime,
   deleteMultipartMtime,
-  updateMapping,
-  findByCid,
   listBuckets,
   listObjects,
 }
