@@ -1059,6 +1059,36 @@ describe('S3UseCases', () => {
       )
     })
 
+    it('clears the destination mtime when an explicit null is given (REPLACE, no mtime)', async () => {
+      // A metadata-REPLACE copy with no x-amz-meta-mtime resolves to Mtime: null
+      // in the controller; the use case must write null (clear), not inherit the
+      // source's mtime.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue({ ...source, mtime: '111.5' } as any)
+      const createSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'createMapping')
+        .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
+
+      await S3UseCases.copyObject(mockUser, {
+        SourceBucket: 'src',
+        SourceKey: 'a.txt',
+        Bucket: 'dst',
+        Key: 'b.txt',
+        Mtime: null,
+      })
+
+      expect(createSpy).toHaveBeenCalledWith(
+        'dst',
+        'b.txt',
+        'srccid',
+        source.md5,
+        null,
+        'google',
+        'user1',
+      )
+    })
+
     it('falls back to the CID as ETag for legacy objects without md5', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')

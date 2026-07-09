@@ -986,6 +986,36 @@ describe('AWS S3 - SDK', () => {
       )
       expect(head.Metadata?.mtime).toBe(Mtime)
     })
+
+    // A metadata-REPLACE copy defines the destination's metadata explicitly, so
+    // omitting mtime means the destination has none — it must NOT inherit the
+    // source's mtime (that's COPY behaviour).
+    it('a metadata-REPLACE copy without mtime clears it (does not inherit source)', async () => {
+      const Src = 'mtime-test/replace-src.txt'
+      const Dst = 'mtime-test/replace-dst.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Src,
+          Body: Buffer.from('replace-clear'),
+          Metadata: { mtime: '1500000000.25' },
+        }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket,
+          Key: Dst,
+          CopySource: Src,
+          MetadataDirective: 'REPLACE',
+          // No mtime in the replacement metadata.
+        }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(head.Metadata?.mtime).toBeUndefined()
+    })
   })
 
   describe('Missing keys', () => {

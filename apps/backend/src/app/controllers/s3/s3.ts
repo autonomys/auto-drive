@@ -650,15 +650,25 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
     return
   }
 
+  // Metadata handling follows x-amz-metadata-directive (default COPY):
+  //  - COPY:    the destination inherits the source metadata → pass undefined so
+  //             the use case keeps the source mtime.
+  //  - REPLACE: the destination's metadata is exactly what this request carries,
+  //             so use the x-amz-meta-mtime header verbatim — a string to set it,
+  //             or null to CLEAR it (REPLACE with no mtime header means no mtime;
+  //             rclone's SetModTime always sends REPLACE + mtime, so it still
+  //             writes the intended value).
+  const directive = req.headers['x-amz-metadata-directive']
+  const isReplace =
+    typeof directive === 'string' && directive.toUpperCase() === 'REPLACE'
+  const mtime = isReplace ? getMtime(req) : undefined
+
   const result = await S3UseCases.copyObject(user, {
     SourceBucket: source.bucket,
     SourceKey: source.key,
     Bucket: bucket,
     Key: key,
-    // An x-amz-meta-mtime on the copy request (metadata REPLACE — how rclone's
-    // SetModTime works) overrides the source mtime; its absence means undefined,
-    // which the use case reads as "inherit the source mtime".
-    Mtime: getMtime(req) ?? undefined,
+    Mtime: mtime,
   })
 
   if (result.isErr()) {
