@@ -872,6 +872,46 @@ describe('AWS S3 - SDK', () => {
         s3Client.send(new HeadObjectCommand({ Bucket, Key: AbortKey })),
       ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
     })
+
+    // S3 clients issue Abort after a successful Complete on retry/cleanup. That
+    // must NOT tear down the just-completed object (whose nodes may still be
+    // migrating) — per the S3 spec it returns NoSuchUpload, and the object stays.
+    it('aborting an already-completed upload returns 404 and leaves the object intact', async () => {
+      const Key2 = 'abort-after-complete.bin'
+      const created = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: Key2 }),
+      )
+      const UploadId = created.UploadId!
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: Key2,
+          UploadId,
+          PartNumber: 1,
+          Body: Buffer.alloc(16 * 1024, 'y'),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: Key2,
+          UploadId,
+          MultipartUpload: { Parts: [{ ETag: part.ETag!, PartNumber: 1 }] },
+        }),
+      )
+
+      // Abort after Complete → NoSuchUpload (404), not a teardown.
+      await expect(
+        s3Client.send(
+          new AbortMultipartUploadCommand({ Bucket, Key: Key2, UploadId }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+
+      // The completed object is still there.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: Key2 })),
+      ).resolves.toBeDefined()
+    })
   })
 
   // rclone stores the source file's modification time in x-amz-meta-mtime (a

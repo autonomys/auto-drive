@@ -506,10 +506,18 @@ const scheduleCachePopulation = async (cid: string): Promise<void> => {
 }
 
 /**
- * Abort an in-progress upload (S3 AbortMultipartUpload / rclone CleanUp),
- * discarding its buffered parts and blockstore/processing artifacts before it is
- * finalized into an object. Permission-checked against the requesting user.
- * Returns ObjectNotFoundError when the upload id is unknown (NoSuchUpload).
+ * Abort an in-progress (PENDING) upload (S3 AbortMultipartUpload / rclone
+ * CleanUp), discarding its buffered parts and blockstore/processing artifacts
+ * before it is finalized into an object. Permission-checked against the
+ * requesting user.
+ *
+ * Returns ObjectNotFoundError (→ NoSuchUpload) when the id is unknown OR the
+ * upload is no longer in progress. Once CompleteMultipartUpload has run the row
+ * is MIGRATING and the async migrate-upload-nodes worker still needs the
+ * blockstore entries to publish the object's nodes to the DSN — deleting them
+ * here would strand a CID the client already holds. S3 clients issue Abort after
+ * a successful Complete on retry/cleanup, and per the S3 spec aborting a
+ * completed upload returns NoSuchUpload, so this is both safe and spec-correct.
  */
 const abortUpload = async (
   user: UserWithOrganization,
@@ -528,6 +536,13 @@ const abortUpload = async (
     return err(
       new ForbiddenError('User does not have permission to abort this upload'),
     )
+  }
+
+  // Only a still-in-progress (PENDING) upload may be aborted. A MIGRATING (or
+  // otherwise terminal) upload has already been completed; its artifacts must
+  // not be torn down mid-migration.
+  if (upload.status !== UploadStatus.PENDING) {
+    return err(new ObjectNotFoundError('Upload not found'))
   }
 
   // removeUploadArtifacts deletes the blockstore entries, the upload rows keyed
