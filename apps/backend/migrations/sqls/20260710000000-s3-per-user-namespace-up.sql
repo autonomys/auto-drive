@@ -40,7 +40,9 @@ END $$;
 
 -- Drop the (bucket, key) uniqueness FIRST, so duplicating a NULL-owner row to
 -- multiple admin owners (same bucket/key, different owner) does not violate it.
-ALTER TABLE "S3".object_mappings DROP CONSTRAINT object_mappings_pkey;
+-- IF EXISTS keeps re-application idempotent (the down migration re-adds this PK,
+-- so an up/down/up cycle must not trip over an already-dropped constraint).
+ALTER TABLE "S3".object_mappings DROP CONSTRAINT IF EXISTS object_mappings_pkey;
 
 -- Duplicate each remaining NULL-owner mapping to every admin owner of its CID.
 INSERT INTO "S3".object_mappings
