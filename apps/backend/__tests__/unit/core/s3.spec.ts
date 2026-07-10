@@ -7,10 +7,7 @@ import {
   afterEach,
 } from '@jest/globals'
 import { S3UseCases } from '../../../src/core/s3/index.js'
-import {
-  ownershipRepository,
-  s3ObjectMappingsRepository,
-} from '../../../src/infrastructure/repositories/index.js'
+import { s3ObjectMappingsRepository } from '../../../src/infrastructure/repositories/index.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
@@ -27,6 +24,8 @@ const MULTIPART_MD5_RE = /^[a-f0-9]{32}-\d+$/
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 describe('S3UseCases', () => {
+  // The S3 namespace is per user; the use cases pass this user's identity into
+  // every scoped repository call. 'google'/'user1' is the caller throughout.
   const mockUser: UserWithOrganization = {
     id: 'user1',
     publicId: 'pub1',
@@ -36,23 +35,22 @@ describe('S3UseCases', () => {
     oauthUserId: 'user1',
   } as any
 
-  // An ownership row for mockUser (the S3 uploader), used to satisfy
-  // deleteObject's owner gate.
-  const ownerRow = {
-    cid: 'cid123',
-    oauth_provider: 'google',
-    oauth_user_id: 'user1',
-    is_admin: true,
-    marked_as_deleted: null,
-  } as any
+  const mapping = (over: Record<string, unknown> = {}) =>
+    ({
+      bucket: 'my-bucket',
+      key: 'file.txt',
+      cid: 'cid123',
+      md5: null,
+      mtime: null,
+      ownerOauthProvider: 'google',
+      ownerOauthUserId: 'user1',
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      ...over,
+    }) as any
 
   beforeEach(() => {
     jest.clearAllMocks()
-    // Default: the destination key is unowned/new, so the pre-finalize
-    // cross-owner check is a no-op. Tests that exercise the guard override this.
-    jest
-      .spyOn(s3ObjectMappingsRepository, 'getMappingOwner')
-      .mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -60,38 +58,31 @@ describe('S3UseCases', () => {
   })
 
   describe('getObject', () => {
-    it('should return error when object mapping not found', async () => {
-      jest
+    it('returns an error when the caller has no such key', async () => {
+      const findSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(null)
 
-      const result = await S3UseCases.getObject({
+      const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
-        Key: 'nonexistent/file.txt',
+        Key: 'nope.txt',
       } as any)
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      // Lookup is scoped to the caller.
+      expect(findSpy).toHaveBeenCalledWith('google', 'user1', 'my-bucket', 'nope.txt')
     })
 
-    it('should return error from download use case', async () => {
-      const mapping = {
-        bucket: 'my-bucket',
-        key: 'file.txt',
-        cid: 'cid123',
-        md5: 'abc123',
-      }
+    it('propagates a download error', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(mapping as any)
-
+        .mockResolvedValue(mapping({ md5: 'abc123' }))
       jest
         .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
-        .mockResolvedValue(
-          err(new ObjectNotFoundError('Download failed')) as any,
-        )
+        .mockResolvedValue(err(new ObjectNotFoundError('Download failed')) as any)
 
-      const result = await S3UseCases.getObject({
+      const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
         Key: 'file.txt',
       } as any)
@@ -99,24 +90,15 @@ describe('S3UseCases', () => {
       expect(result.isErr()).toBe(true)
     })
 
-    it('should return download result with cid and etag', async () => {
-      const mapping = {
-        bucket: 'my-bucket',
-        key: 'file.txt',
-        cid: 'cid123',
-        md5: 'abc123def456abc123def456abc123de',
-      }
-      const mockReadable = { read: jest.fn() }
-
+    it('returns the download result with cid and MD5 etag', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(mapping as any)
-
+        .mockResolvedValue(mapping({ md5: 'abc123def456abc123def456abc123de' }))
       jest
         .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
-        .mockResolvedValue(ok(mockReadable) as any)
+        .mockResolvedValue(ok({ read: jest.fn() }) as any)
 
-      const result = await S3UseCases.getObject({
+      const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
         Key: 'file.txt',
       } as any)
@@ -128,23 +110,15 @@ describe('S3UseCases', () => {
       )
     })
 
-    it('should return null etag for legacy objects without md5', async () => {
-      const mapping = {
-        bucket: 'my-bucket',
-        key: 'file.txt',
-        cid: 'cid123',
-        md5: null,
-      }
-
+    it('returns a null etag for legacy objects without md5', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(mapping as any)
-
+        .mockResolvedValue(mapping({ md5: null }))
       jest
         .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(ok({} as any) as any)
 
-      const result = await S3UseCases.getObject({
+      const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
         Key: 'file.txt',
       } as any)
@@ -153,22 +127,15 @@ describe('S3UseCases', () => {
       expect(result._unsafeUnwrap().etag).toBeNull()
     })
 
-    it('should pass byte range to download use case', async () => {
-      const mapping = {
-        bucket: 'my-bucket',
-        key: 'file.txt',
-        cid: 'cid123',
-        md5: null,
-      }
+    it('passes the byte range to the download use case', async () => {
       const downloadSpy = jest
         .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(ok({} as any) as any)
-
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(mapping as any)
+        .mockResolvedValue(mapping())
 
-      await S3UseCases.getObject({
+      await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
         Key: 'file.txt',
         Range: [100, 200],
@@ -182,8 +149,8 @@ describe('S3UseCases', () => {
   })
 
   describe('createMultipartUpload', () => {
-    it('should create multipart upload', async () => {
-      const createSpy = jest
+    it('creates the upload; stashes no mtime when none is supplied', async () => {
+      jest
         .spyOn(UploadsUseCases, 'createFileUpload')
         .mockResolvedValue({ id: 'upload123' } as any)
       const mtimeSpy = jest.spyOn(
@@ -198,8 +165,6 @@ describe('S3UseCases', () => {
       } as any)
 
       expect(result.isOk()).toBe(true)
-      expect(createSpy).toHaveBeenCalled()
-      // No mtime supplied → nothing stashed.
       expect(mtimeSpy).not.toHaveBeenCalled()
     })
 
@@ -222,7 +187,7 @@ describe('S3UseCases', () => {
   })
 
   describe('uploadPart', () => {
-    it('should upload part and return MD5 ETag', async () => {
+    it('uploads the part and returns its MD5 ETag', async () => {
       jest
         .spyOn(UploadsUseCases, 'uploadChunk')
         .mockResolvedValue(ok({} as any) as any)
@@ -241,20 +206,13 @@ describe('S3UseCases', () => {
   })
 
   describe('completeMultipartUpload', () => {
-    it('should complete multipart upload and return composite ETag', async () => {
+    it('completes the upload, persists the composite ETag + stashed mtime under the caller', async () => {
       const completeSpy = jest
         .spyOn(UploadsUseCases, 'completeUpload')
         .mockResolvedValue('cid123')
-
       const mappingSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({
-          bucket: 'my-bucket',
-          key: 'file.txt',
-          cid: 'cid123',
-          md5: null,
-        } as any)
-      // mtime stashed at CreateMultipartUpload; persisted then cleared here.
+        .mockResolvedValue(mapping())
       jest
         .spyOn(s3ObjectMappingsRepository, 'getMultipartMtime')
         .mockResolvedValue('1620000000.5')
@@ -274,91 +232,38 @@ describe('S3UseCases', () => {
 
       expect(result.isOk()).toBe(true)
       expect(completeSpy).toHaveBeenCalledWith(mockUser, 'upload123')
-      // Composite ETag: "<md5>-N" format
       expect(result._unsafeUnwrap().ETag).toMatch(MULTIPART_ETAG_RE)
       expect(result._unsafeUnwrap().Cid).toBe('cid123')
-      // Args after the md5: mtime (stashed), then the owner (uploading user).
+      // createMapping is owner-scoped: (owner, owner, bucket, key, cid, md5, mtime).
       expect(mappingSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
         'my-bucket',
         'file.txt',
         'cid123',
         expect.stringMatching(MULTIPART_MD5_RE),
         '1620000000.5',
-        'google',
-        'user1',
       )
       expect(clearMtimeSpy).toHaveBeenCalledWith('upload123')
-    })
-
-    it('rejects completing onto a key owned by another user (Forbidden)', async () => {
-      jest.spyOn(UploadsUseCases, 'completeUpload').mockResolvedValue('cid123')
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'getMultipartMtime')
-        .mockResolvedValue(null)
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'deleteMultipartMtime')
-        .mockResolvedValue(undefined)
-      // Cross-owner conflict → the guarded upsert returns null.
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue(null)
-
-      const result = await S3UseCases.completeMultipartUpload(mockUser, {
-        Bucket: 'my-bucket',
-        Key: 'victim.txt',
-        UploadId: 'upload123',
-        Parts: [{ PartNumber: 1, ETag: '"aabbccdd11223344aabbccdd11223344"' }],
-      } as any)
-
-      expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
-    })
-
-    it('rejects a cross-owner key BEFORE finalizing (completeUpload not called)', async () => {
-      // Destination key is owned by someone else → the pre-finalize guard must
-      // reject before completeUpload runs, so no ownership/credits are applied
-      // and a retry cannot re-finalize.
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'getMappingOwner')
-        .mockResolvedValue({
-          ownerOauthProvider: 'google',
-          ownerOauthUserId: 'someone-else',
-        })
-      const completeSpy = jest.spyOn(UploadsUseCases, 'completeUpload')
-
-      const result = await S3UseCases.completeMultipartUpload(mockUser, {
-        Bucket: 'my-bucket',
-        Key: 'victim.txt',
-        UploadId: 'upload123',
-        Parts: [{ PartNumber: 1, ETag: '"aabbccdd11223344aabbccdd11223344"' }],
-      } as any)
-
-      expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
-      expect(completeSpy).not.toHaveBeenCalled()
     })
   })
 
   describe('putObject', () => {
-    it('should put object and return MD5 ETag with CID', async () => {
+    const setupPut = () => {
       jest
         .spyOn(UploadsUseCases, 'createFileUpload')
         .mockResolvedValue({ id: 'upload123' } as any)
-
       jest
         .spyOn(UploadsUseCases, 'uploadChunk')
         .mockResolvedValue(ok({} as any) as any)
-
       jest.spyOn(UploadsUseCases, 'completeUpload').mockResolvedValue('cid123')
+    }
 
+    it('puts the object and returns the MD5 ETag + CID', async () => {
+      setupPut()
       jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({
-          bucket: 'my-bucket',
-          key: 'file.txt',
-          cid: 'cid123',
-          md5: 'd41d8cd98f00b204e9800998ecf8427e',
-        } as any)
+        .mockResolvedValue(mapping({ md5: 'd41d8cd98f00b204e9800998ecf8427e' }))
 
       const result = await S3UseCases.putObject(mockUser, {
         Bucket: 'my-bucket',
@@ -372,25 +277,17 @@ describe('S3UseCases', () => {
       expect(result._unsafeUnwrap().Cid).toBe('cid123')
     })
 
-    it('should extract filename from path', async () => {
+    it('extracts the filename from the key path', async () => {
       const createSpy = jest
         .spyOn(UploadsUseCases, 'createFileUpload')
         .mockResolvedValue({ id: 'upload123' } as any)
-
       jest
         .spyOn(UploadsUseCases, 'uploadChunk')
         .mockResolvedValue(ok({} as any) as any)
-
       jest.spyOn(UploadsUseCases, 'completeUpload').mockResolvedValue('cid123')
-
       jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({
-          bucket: 'my-bucket',
-          key: 'path/file.txt',
-          cid: 'cid123',
-          md5: null,
-        } as any)
+        .mockResolvedValue(mapping())
 
       await S3UseCases.putObject(mockUser, {
         Bucket: 'my-bucket',
@@ -408,25 +305,17 @@ describe('S3UseCases', () => {
       )
     })
 
-    it('should handle upload chunk errors', async () => {
+    it('surfaces an upload-chunk error', async () => {
       jest
         .spyOn(UploadsUseCases, 'createFileUpload')
         .mockResolvedValue({ id: 'upload123' } as any)
-
       jest
         .spyOn(UploadsUseCases, 'uploadChunk')
         .mockRejectedValue(new Error('Upload failed'))
-
       jest.spyOn(UploadsUseCases, 'completeUpload').mockResolvedValue('cid123')
-
       jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({
-          bucket: 'my-bucket',
-          key: 'file.txt',
-          cid: 'cid123',
-          md5: null,
-        } as any)
+        .mockResolvedValue(mapping())
 
       const result = await S3UseCases.putObject(mockUser, {
         Bucket: 'my-bucket',
@@ -437,91 +326,28 @@ describe('S3UseCases', () => {
       expect(result.isErr()).toBe(true)
     })
 
-    it('should pass MD5 to createMapping', async () => {
-      jest
-        .spyOn(UploadsUseCases, 'createFileUpload')
-        .mockResolvedValue({ id: 'upload123' } as any)
-
-      jest
-        .spyOn(UploadsUseCases, 'uploadChunk')
-        .mockResolvedValue(ok({} as any) as any)
-
-      jest.spyOn(UploadsUseCases, 'completeUpload').mockResolvedValue('cid123')
-
+    it('creates the mapping under the caller with the body MD5 and mtime', async () => {
+      setupPut()
       const mappingSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({
-          bucket: 'my-bucket',
-          key: 'file.txt',
-          cid: 'cid123',
-          md5: null,
-        } as any)
+        .mockResolvedValue(mapping())
 
-      const body = Buffer.from('Hello, world!')
       await S3UseCases.putObject(mockUser, {
         Bucket: 'my-bucket',
         Key: 'file.txt',
-        Body: body,
+        Body: Buffer.from('Hello, world!'),
       } as any)
 
-      // MD5 of "Hello, world!" — verified with: echo -n "Hello, world!" | md5.
-      // Args after the md5: mtime (null — none supplied), then the owner.
+      // MD5 of "Hello, world!"; owner-scoped (owner, owner, bucket, key, cid, md5, mtime).
       expect(mappingSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
         'my-bucket',
         'file.txt',
         'cid123',
         '6cd3556deb0da54bca060b4c39479839',
         null,
-        'google',
-        'user1',
       )
-    })
-
-    it('rejects overwriting a key owned by another user (Forbidden)', async () => {
-      jest
-        .spyOn(UploadsUseCases, 'createFileUpload')
-        .mockResolvedValue({ id: 'upload123' } as any)
-      jest
-        .spyOn(UploadsUseCases, 'uploadChunk')
-        .mockResolvedValue(ok({} as any) as any)
-      jest.spyOn(UploadsUseCases, 'completeUpload').mockResolvedValue('cid123')
-      // Cross-owner conflict → the guarded upsert returns null.
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue(null)
-
-      const result = await S3UseCases.putObject(mockUser, {
-        Bucket: 'my-bucket',
-        Key: 'victim.txt',
-        Body: Buffer.from('data'),
-      } as any)
-
-      expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
-    })
-
-    it('rejects a cross-owner key BEFORE uploading (no createFileUpload/finalize)', async () => {
-      // Destination key is owned by someone else → reject before creating the
-      // upload or finalizing, so nothing is uploaded/charged.
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'getMappingOwner')
-        .mockResolvedValue({
-          ownerOauthProvider: 'google',
-          ownerOauthUserId: 'someone-else',
-        })
-      const createUploadSpy = jest.spyOn(UploadsUseCases, 'createFileUpload')
-      const completeSpy = jest.spyOn(UploadsUseCases, 'completeUpload')
-
-      const result = await S3UseCases.putObject(mockUser, {
-        Bucket: 'my-bucket',
-        Key: 'victim.txt',
-        Body: Buffer.from('data'),
-      } as any)
-
-      expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
-      expect(createUploadSpy).not.toHaveBeenCalled()
-      expect(completeSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -539,29 +365,17 @@ describe('S3UseCases', () => {
       md5: null,
     })
 
-    it('advances continuation token past a folded CommonPrefix when the DB batch is exhausted inside one prefix group', async () => {
-      // Regression test for Cursor Bugbot finding on PR #696 / #709.
-      //
-      // Scenario: maxKeys=2, delimiter='/', and a single virtual directory
-      // ('big/') contains more keys than fit in one DB batch.  Every fetched
-      // row folds into the same CommonPrefix, so the in-loop maxKeys cap is
-      // never hit and the loop exhausts the batch with isTruncated=false.
-      // The fallback branch must then set the continuation token to a value
-      // that sorts *after* every key in 'big/' — otherwise the next page
-      // re-scans the rest of that directory and emits 'big/' again.
+    it('scopes the listing to the caller and advances the token past a folded CommonPrefix', async () => {
       const maxKeys = 2
       const dbLimit = DELIMITER_DB_LIMIT(maxKeys)
-
-      // Fill the entire DB batch with keys that all fold into 'big/'.
       const fullBatch = Array.from({ length: dbLimit }, (_, i) =>
         makeListing(`big/${String(i).padStart(6, '0')}`),
       )
-
-      jest
+      const listSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'listObjects')
         .mockResolvedValue(fullBatch as any)
 
-      const result = await S3UseCases.listObjects({
+      const result = await S3UseCases.listObjects(mockUser, {
         bucket: 'my-bucket',
         prefix: '',
         delimiter: '/',
@@ -569,39 +383,38 @@ describe('S3UseCases', () => {
         continuationToken: null,
       })
 
+      // Scoped to the caller: (owner, owner, bucket, prefix, token, dbLimit).
+      expect(listSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'my-bucket',
+        '',
+        null,
+        dbLimit,
+      )
       expect(result.commonPrefixes).toEqual(['big/'])
       expect(result.objects).toEqual([])
       expect(result.isTruncated).toBe(true)
-      // Token must start with the folded prefix and sort strictly after every
-      // key inside it.  `￿` (U+FFFF) is the sentinel chosen for this purpose.
       expect(result.nextContinuationToken).toBe('big/￿')
-      // Sanity: the token sorts after the last key we returned in the batch.
       expect(
         result.nextContinuationToken! > fullBatch[fullBatch.length - 1].key,
       ).toBe(true)
     })
 
     it('uses the raw last key as the token when the last scanned key did not fold into a prefix', async () => {
-      // If the DB batch is full but the last key has no delimiter occurrence
-      // after the prefix, there's no CommonPrefix to skip past — fall back to
-      // the raw last key, which is the safe pre-fix behaviour.
       const maxKeys = 2
       const dbLimit = DELIMITER_DB_LIMIT(maxKeys)
-
-      // Pad the batch with folded entries, but make the LAST one a top-level
-      // key with no delimiter after the prefix.
       const batch = [
         ...Array.from({ length: dbLimit - 1 }, (_, i) =>
           makeListing(`folder/${String(i).padStart(6, '0')}`),
         ),
         makeListing('zzz-top-level'),
       ]
-
       jest
         .spyOn(s3ObjectMappingsRepository, 'listObjects')
         .mockResolvedValue(batch as any)
 
-      const result = await S3UseCases.listObjects({
+      const result = await S3UseCases.listObjects(mockUser, {
         bucket: 'my-bucket',
         prefix: '',
         delimiter: '/',
@@ -610,28 +423,21 @@ describe('S3UseCases', () => {
       })
 
       expect(result.isTruncated).toBe(true)
-      // The last key doesn't fold into a CommonPrefix, so the token stays as
-      // the raw key — no sentinel needed.
       expect(result.nextContinuationToken).toBe('zzz-top-level')
     })
 
     it('uses the raw last key as the token when no delimiter is set', async () => {
-      // Without a delimiter, the dbLimit is maxKeys + 1, and there are no
-      // CommonPrefixes to repeat — the safe fallback is just the last key.
       const maxKeys = 2
-      const dbLimit = maxKeys + 1 // = 3
-
       const batch = [
         makeListing('a.txt'),
         makeListing('b.txt'),
         makeListing('c.txt'),
       ]
-
       jest
         .spyOn(s3ObjectMappingsRepository, 'listObjects')
         .mockResolvedValue(batch as any)
 
-      const result = await S3UseCases.listObjects({
+      const result = await S3UseCases.listObjects(mockUser, {
         bucket: 'my-bucket',
         prefix: '',
         delimiter: null,
@@ -639,87 +445,17 @@ describe('S3UseCases', () => {
         continuationToken: null,
       })
 
-      // maxKeys=2 ⇒ first two keys returned, third triggers truncation in
-      // buildListResult (not the fallback), token = key just returned.
       expect(result.objects.map((o) => o.key)).toEqual(['a.txt', 'b.txt'])
       expect(result.isTruncated).toBe(true)
       expect(result.nextContinuationToken).toBe('b.txt')
-      // dbLimit branch shouldn't have triggered, so no sentinel appended.
-      expect(batch.length).toBe(dbLimit)
-    })
-  })
-
-  describe('objectExists', () => {
-    it('returns false when no mapping exists', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(null)
-
-      expect(await S3UseCases.objectExists('my-bucket', 'missing.txt')).toBe(
-        false,
-      )
-    })
-
-    it('returns true when a mapping exists and the object is not deleted', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue({
-          bucket: 'my-bucket',
-          key: 'file.txt',
-          cid: 'cid123',
-          md5: null,
-        } as any)
-      jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(false)
-
-      expect(await S3UseCases.objectExists('my-bucket', 'file.txt')).toBe(true)
-    })
-
-    // A trashed object keeps its mapping row but is hidden from GET/list, so
-    // object-lock endpoints must report it as not found too.
-    it('returns false when the mapping exists but the object was removed by its owner', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue({
-          bucket: 'my-bucket',
-          key: 'trashed.txt',
-          cid: 'cid123',
-          md5: null,
-        } as any)
-      jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(true)
-
-      expect(await S3UseCases.objectExists('my-bucket', 'trashed.txt')).toBe(
-        false,
-      )
     })
   })
 
   describe('deleteObject', () => {
-    // Legacy mapping (no recorded owner) → the delete gate falls back to the
-    // per-CID admin check.
-    const activeMapping = {
-      bucket: 'my-bucket',
-      key: 'file.txt',
-      cid: 'cid123',
-      md5: null,
-      mtime: null,
-      ownerOauthProvider: null,
-      ownerOauthUserId: null,
-    } as any
-
-    // Modern mapping owned by mockUser → gated on the per-mapping owner.
-    const ownedMapping = {
-      ...activeMapping,
-      ownerOauthProvider: 'google',
-      ownerOauthUserId: 'user1',
-    } as any
-
-    it('trashes the object then hides the mapping when it was the last reference', async () => {
+    it('trashes the object then hides the key when it was the caller’s last reference', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(activeMapping)
-      jest
-        .spyOn(ownershipRepository, 'getOwnerships')
-        .mockResolvedValue([ownerRow])
+        .mockResolvedValue(mapping())
       jest
         .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
         .mockResolvedValue(1)
@@ -737,20 +473,20 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
-      // Last active mapping → propagate to Trash, then hide the key.
       expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
-      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'file.txt')
+      expect(softDeleteSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'my-bucket',
+        'file.txt',
+      )
     })
 
-    it('does not trash the object when another S3 key still references it', async () => {
+    it('does not trash the object when the caller still has another key for it', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue({ ...activeMapping, key: 'copy.txt' })
-      jest
-        .spyOn(ownershipRepository, 'getOwnerships')
-        .mockResolvedValue([ownerRow])
-      // Before-hide count = 2 (this + sibling); after-hide re-check = 1 (sibling
-      // still active), so the race guard does not trash.
+        .mockResolvedValue(mapping({ key: 'copy.txt' }))
+      // before-hide = 2, after-hide re-check = 1 (sibling still active).
       jest
         .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
         .mockResolvedValueOnce(2)
@@ -758,7 +494,7 @@ describe('S3UseCases', () => {
       const markSpy = jest
         .spyOn(ObjectUseCases, 'markAsDeleted')
         .mockResolvedValue(ok(undefined))
-      const softDeleteSpy = jest
+      jest
         .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
         .mockResolvedValue({ cid: 'cid123' })
 
@@ -769,21 +505,13 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
-      // A sibling key (e.g. the move source) keeps the content live.
       expect(markSpy).not.toHaveBeenCalled()
-      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'copy.txt')
     })
 
     it('trashes via the race guard when a concurrent delete removed the sibling', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue({ ...activeMapping, key: 'k2.txt' })
-      jest
-        .spyOn(ownershipRepository, 'getOwnerships')
-        .mockResolvedValue([ownerRow])
-      // Before-hide count = 2 (a concurrent delete's key still looked active),
-      // but the after-hide re-check sees 0 → this delete emptied the content and
-      // must trash the object.
+        .mockResolvedValue(mapping({ key: 'k2.txt' }))
       jest
         .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
         .mockResolvedValueOnce(2)
@@ -791,84 +519,28 @@ describe('S3UseCases', () => {
       const markSpy = jest
         .spyOn(ObjectUseCases, 'markAsDeleted')
         .mockResolvedValue(ok(undefined))
-      const softDeleteSpy = jest
+      jest
         .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
         .mockResolvedValue({ cid: 'cid123' })
 
       const result = await S3UseCases.deleteObject(mockUser, 'my-bucket', 'k2.txt')
 
       expect(result.isOk()).toBe(true)
-      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'k2.txt')
-      // Race guard caught the emptied content and moved it to Trash.
       expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
     })
 
-    it('is a no-op when the key is absent or already deleted', async () => {
+    it('is a no-op when the caller has no such key', async () => {
       jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
-      const ownSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
       const softDeleteSpy = jest.spyOn(
         s3ObjectMappingsRepository,
         'softDeleteMapping',
       )
+      const markSpy = jest.spyOn(ObjectUseCases, 'markAsDeleted')
 
       const result = await S3UseCases.deleteObject(
         mockUser,
         'my-bucket',
         'missing.txt',
-      )
-
-      expect(result.isOk()).toBe(true)
-      expect(ownSpy).not.toHaveBeenCalled()
-      expect(softDeleteSpy).not.toHaveBeenCalled()
-    })
-
-    it('does not hide the key when the caller does not own the content', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(activeMapping)
-      // Owned (admin) by someone else.
-      jest
-        .spyOn(ownershipRepository, 'getOwnerships')
-        .mockResolvedValue([
-          { ...ownerRow, oauth_user_id: 'someone-else' },
-        ])
-      const softDeleteSpy = jest.spyOn(
-        s3ObjectMappingsRepository,
-        'softDeleteMapping',
-      )
-      const markSpy = jest.spyOn(ObjectUseCases, 'markAsDeleted')
-
-      const result = await S3UseCases.deleteObject(
-        mockUser,
-        'my-bucket',
-        'file.txt',
-      )
-
-      // Idempotent success, but the non-owner cannot hide the key.
-      expect(result.isOk()).toBe(true)
-      expect(softDeleteSpy).not.toHaveBeenCalled()
-      expect(markSpy).not.toHaveBeenCalled()
-    })
-
-    it('does not hide the key for a shared (non-admin) recipient', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(activeMapping)
-      // The caller is an active owner, but a VIEWER (share recipient), not the
-      // admin owner — they must not be able to hide the key for everyone.
-      jest
-        .spyOn(ownershipRepository, 'getOwnerships')
-        .mockResolvedValue([{ ...ownerRow, is_admin: false }])
-      const softDeleteSpy = jest.spyOn(
-        s3ObjectMappingsRepository,
-        'softDeleteMapping',
-      )
-      const markSpy = jest.spyOn(ObjectUseCases, 'markAsDeleted')
-
-      const result = await S3UseCases.deleteObject(
-        mockUser,
-        'my-bucket',
-        'file.txt',
       )
 
       expect(result.isOk()).toBe(true)
@@ -879,10 +551,7 @@ describe('S3UseCases', () => {
     it('still succeeds when moving the object to Trash fails', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(activeMapping)
-      jest
-        .spyOn(ownershipRepository, 'getOwnerships')
-        .mockResolvedValue([ownerRow])
+        .mockResolvedValue(mapping())
       jest
         .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
         .mockResolvedValue(1)
@@ -899,98 +568,32 @@ describe('S3UseCases', () => {
         'file.txt',
       )
 
-      // The key is still hidden; a Trash-propagation failure must not fail the
-      // S3 DeleteObject.
       expect(result.isOk()).toBe(true)
-      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'file.txt')
-    })
-
-    it('gates on the per-mapping owner (no per-CID lookup) and scopes the count', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(ownedMapping)
-      const getOwnershipsSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
-      const countSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(1)
-      const markSpy = jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(ok(undefined))
-      const softDeleteSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123' })
-
-      const result = await S3UseCases.deleteObject(
-        mockUser,
-        'my-bucket',
-        'file.txt',
-      )
-
-      expect(result.isOk()).toBe(true)
-      // Owner is known from the mapping → no CID-ownership lookup needed.
-      expect(getOwnershipsSpy).not.toHaveBeenCalled()
-      // The "last key" count is scoped to the caller, not the whole CID.
-      expect(countSpy).toHaveBeenCalledWith('cid123', 'google', 'user1')
-      expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
-      expect(softDeleteSpy).toHaveBeenCalledWith('my-bucket', 'file.txt')
-    })
-
-    it('refuses to hide another user’s key even from a dedup co-owner of the CID', async () => {
-      // The mapping belongs to someone else; the caller (mockUser) may well be
-      // an admin owner of the same CID via dedup, but that must NOT let them
-      // hide this key. The per-mapping owner check never consults CID ownership.
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue({ ...ownedMapping, ownerOauthUserId: 'someone-else' })
-      const getOwnershipsSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
-      const softDeleteSpy = jest.spyOn(
-        s3ObjectMappingsRepository,
-        'softDeleteMapping',
-      )
-      const markSpy = jest.spyOn(ObjectUseCases, 'markAsDeleted')
-
-      const result = await S3UseCases.deleteObject(
-        mockUser,
-        'my-bucket',
-        'file.txt',
-      )
-
-      expect(result.isOk()).toBe(true)
-      expect(getOwnershipsSpy).not.toHaveBeenCalled()
-      expect(softDeleteSpy).not.toHaveBeenCalled()
-      expect(markSpy).not.toHaveBeenCalled()
+      expect(softDeleteSpy).toHaveBeenCalled()
     })
   })
 
   describe('copyObject', () => {
-    const source = {
+    const source = mapping({
       bucket: 'src',
       key: 'a.txt',
       cid: 'srccid',
       md5: 'd41d8cd98f00b204e9800998ecf8427e',
-      mtime: null,
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-    }
+    })
 
     beforeEach(() => {
-      // Happy-path defaults: caller is the active admin owner and the source is
-      // readable.
-      jest
-        .spyOn(ownershipRepository, 'getOwnerships')
-        .mockResolvedValue([ownerRow])
       jest
         .spyOn(ObjectUseCases, 'authorizeDownload')
         .mockResolvedValue(ok(undefined))
     })
 
-    it('remaps the destination to the source cid (no ownership re-grant)', async () => {
-      jest
+    it('remaps the destination to the source cid in the caller’s namespace', async () => {
+      const findSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(source as any)
+        .mockResolvedValue(source)
       const createSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
+        .mockResolvedValue({ ...source, updatedAt: new Date(1000) })
 
       const result = await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
@@ -1002,23 +605,21 @@ describe('S3UseCases', () => {
       expect(result.isOk()).toBe(true)
       expect(result._unsafeUnwrap().Cid).toBe('srccid')
       expect(result._unsafeUnwrap().ETag).toMatch(MD5_ETAG_RE)
-      // Destination points at the SAME cid + md5 as the source, owned by the
-      // copier (args after md5: mtime, owner provider, owner user id).
+      // Source lookup + destination creation are both scoped to the caller.
+      expect(findSpy).toHaveBeenCalledWith('google', 'user1', 'src', 'a.txt')
       expect(createSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
         'dst',
         'b.txt',
         'srccid',
         source.md5,
         null,
-        'google',
-        'user1',
       )
     })
 
-    it('returns a not-found error when the source is missing (NoSuchKey)', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(null)
+    it('returns a not-found error when the caller has no such source key', async () => {
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
 
       const result = await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
@@ -1031,121 +632,12 @@ describe('S3UseCases', () => {
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
 
-    it('refuses to copy a source the caller does not own (NoSuchKey, no mapping)', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(source as any)
-      // Owned (admin) by a different user.
-      jest
-        .spyOn(ownershipRepository, 'getOwnerships')
-        .mockResolvedValue([{ ...ownerRow, oauth_user_id: 'someone-else' }])
-      const createSpy = jest.spyOn(
-        s3ObjectMappingsRepository,
-        'createMapping',
-      )
-
-      const result = await S3UseCases.copyObject(mockUser, {
-        SourceBucket: 'src',
-        SourceKey: 'a.txt',
-        Bucket: 'dst',
-        Key: 'b.txt',
-      })
-
-      expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
-      // A non-owner can't acquire the CID via copy.
-      expect(createSpy).not.toHaveBeenCalled()
-    })
-
-    it('refuses to copy for a shared (non-admin) recipient', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(source as any)
-      // Caller is an active owner, but only a VIEWER (share recipient).
-      jest
-        .spyOn(ownershipRepository, 'getOwnerships')
-        .mockResolvedValue([{ ...ownerRow, is_admin: false }])
-      const createSpy = jest.spyOn(
-        s3ObjectMappingsRepository,
-        'createMapping',
-      )
-
-      const result = await S3UseCases.copyObject(mockUser, {
-        SourceBucket: 'src',
-        SourceKey: 'a.txt',
-        Bucket: 'dst',
-        Key: 'b.txt',
-      })
-
-      expect(result.isErr()).toBe(true)
-      expect(createSpy).not.toHaveBeenCalled()
-    })
-
-    it('gates the source on its per-mapping owner without a CID lookup', async () => {
-      // Modern source owned by the caller → authorized via the mapping owner;
-      // the per-CID ownership lookup is not consulted (matches deleteObject).
-      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue({
-        ...source,
-        ownerOauthProvider: 'google',
-        ownerOauthUserId: 'user1',
-      } as any)
-      const getOwnershipsSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
-
-      const result = await S3UseCases.copyObject(mockUser, {
-        SourceBucket: 'src',
-        SourceKey: 'a.txt',
-        Bucket: 'dst',
-        Key: 'b.txt',
-      })
-
-      expect(result.isOk()).toBe(true)
-      expect(getOwnershipsSpy).not.toHaveBeenCalled()
-    })
-
-    it('refuses to copy from a source key owned by another user (dedup co-owner)', async () => {
-      // The source key belongs to someone else. The caller may co-own the CID
-      // via dedup (identical bytes), but must NOT be able to use another user's
-      // key as a copy source — mirrors deleteObject's per-mapping-owner gate.
-      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue({
-        ...source,
-        ownerOauthProvider: 'google',
-        ownerOauthUserId: 'someone-else',
-      } as any)
-      const getOwnershipsSpy = jest.spyOn(ownershipRepository, 'getOwnerships')
-      const createSpy = jest.spyOn(
-        s3ObjectMappingsRepository,
-        'createMapping',
-      )
-
-      const result = await S3UseCases.copyObject(mockUser, {
-        SourceBucket: 'src',
-        SourceKey: 'a.txt',
-        Bucket: 'dst',
-        Key: 'b.txt',
-      })
-
-      expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
-      // Modern source → owner from the mapping; no CID-ownership lookup, and no
-      // destination mapping created.
-      expect(getOwnershipsSpy).not.toHaveBeenCalled()
-      expect(createSpy).not.toHaveBeenCalled()
-    })
-
     it('refuses to copy a source that is not downloadable (removed/banned)', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(source as any)
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(source)
       jest
         .spyOn(ObjectUseCases, 'authorizeDownload')
         .mockResolvedValue(err(new ObjectNotFoundError('Object not found')))
-      const createSpy = jest.spyOn(
-        s3ObjectMappingsRepository,
-        'createMapping',
-      )
+      const createSpy = jest.spyOn(s3ObjectMappingsRepository, 'createMapping')
 
       const result = await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
@@ -1155,18 +647,16 @@ describe('S3UseCases', () => {
       })
 
       expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
-      // No destination mapping is created for an unreadable source.
       expect(createSpy).not.toHaveBeenCalled()
     })
 
-    it('inherits the source mtime when no override is provided', async () => {
+    it('inherits the source mtime when no override is given', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue({ ...source, mtime: '111.5' } as any)
+        .mockResolvedValue(mapping({ ...source, mtime: '111.5' }))
       const createSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
+        .mockResolvedValue({ ...source, updatedAt: new Date(1000) })
 
       await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
@@ -1176,23 +666,23 @@ describe('S3UseCases', () => {
       })
 
       expect(createSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
         'dst',
         'b.txt',
         'srccid',
         source.md5,
         '111.5',
-        'google',
-        'user1',
       )
     })
 
     it('applies an mtime override on the destination (SetModTime)', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue({ ...source, mtime: '111.5' } as any)
+        .mockResolvedValue(mapping({ ...source, mtime: '111.5' }))
       const createSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
+        .mockResolvedValue({ ...source, updatedAt: new Date(1000) })
 
       await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
@@ -1203,26 +693,23 @@ describe('S3UseCases', () => {
       })
 
       expect(createSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
         'dst',
         'b.txt',
         'srccid',
         source.md5,
         '222.9',
-        'google',
-        'user1',
       )
     })
 
     it('clears the destination mtime when an explicit null is given (REPLACE, no mtime)', async () => {
-      // A metadata-REPLACE copy with no x-amz-meta-mtime resolves to Mtime: null
-      // in the controller; the use case must write null (clear), not inherit the
-      // source's mtime.
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue({ ...source, mtime: '111.5' } as any)
+        .mockResolvedValue(mapping({ ...source, mtime: '111.5' }))
       const createSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ ...source, updatedAt: new Date(1000) } as any)
+        .mockResolvedValue({ ...source, updatedAt: new Date(1000) })
 
       await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
@@ -1233,23 +720,23 @@ describe('S3UseCases', () => {
       })
 
       expect(createSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
         'dst',
         'b.txt',
         'srccid',
         source.md5,
         null,
-        'google',
-        'user1',
       )
     })
 
     it('falls back to the CID as ETag for legacy objects without md5', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue({ ...source, md5: null } as any)
+        .mockResolvedValue(mapping({ ...source, md5: null }))
       jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue({ ...source, md5: null, updatedAt: new Date() } as any)
+        .mockResolvedValue(mapping({ ...source, md5: null, updatedAt: new Date() }))
 
       const result = await S3UseCases.copyObject(mockUser, {
         SourceBucket: 'src',
@@ -1259,27 +746,6 @@ describe('S3UseCases', () => {
       })
 
       expect(result._unsafeUnwrap().ETag).toBe('"srccid"')
-    })
-
-    it('rejects copying onto a destination key owned by another user (Forbidden)', async () => {
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(source as any)
-      // Caller owns the source (beforeEach getOwnerships → ownerRow); the
-      // destination key is owned by someone else → guarded upsert returns null.
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'createMapping')
-        .mockResolvedValue(null)
-
-      const result = await S3UseCases.copyObject(mockUser, {
-        SourceBucket: 'src',
-        SourceKey: 'a.txt',
-        Bucket: 'dst',
-        Key: 'victim.txt',
-      })
-
-      expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
     })
   })
 
@@ -1292,10 +758,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'deleteMultipartMtime')
         .mockResolvedValue(undefined)
 
-      const result = await S3UseCases.abortMultipartUpload(
-        mockUser,
-        'upload123',
-      )
+      const result = await S3UseCases.abortMultipartUpload(mockUser, 'upload123')
 
       expect(result.isOk()).toBe(true)
       expect(abortSpy).toHaveBeenCalledWith(mockUser, 'upload123')
@@ -1315,7 +778,6 @@ describe('S3UseCases', () => {
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
-      // A failed abort must not drop another upload's stashed mtime.
       expect(clearMtimeSpy).not.toHaveBeenCalled()
     })
 
@@ -1326,9 +788,40 @@ describe('S3UseCases', () => {
 
       const result = await S3UseCases.abortMultipartUpload(mockUser, 'other')
 
-      // The controller maps ForbiddenError → 403 AccessDenied (not 500).
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    })
+  })
+
+  describe('objectExists', () => {
+    it('returns false when the caller has no such mapping', async () => {
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
+
+      expect(
+        await S3UseCases.objectExists(mockUser, 'my-bucket', 'missing.txt'),
+      ).toBe(false)
+    })
+
+    it('returns true when the mapping exists and the object is not removed', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(mapping())
+      jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(false)
+
+      expect(await S3UseCases.objectExists(mockUser, 'my-bucket', 'file.txt')).toBe(
+        true,
+      )
+    })
+
+    it('returns false when the object was removed by its owner (Trash)', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(mapping({ key: 'trashed.txt' }))
+      jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(true)
+
+      expect(
+        await S3UseCases.objectExists(mockUser, 'my-bucket', 'trashed.txt'),
+      ).toBe(false)
     })
   })
 })

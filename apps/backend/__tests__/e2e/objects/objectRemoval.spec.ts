@@ -25,8 +25,11 @@ const S3_KEY = 'dir/removed.txt'
 
 const FOLDER_S3_BUCKET = 'folder-removal-bucket'
 
-const listS3Keys = async (bucket: string = S3_BUCKET): Promise<string[]> => {
-  const result = await S3UseCases.listObjects({
+const listS3Keys = async (
+  user: UserWithOrganization,
+  bucket: string = S3_BUCKET,
+): Promise<string[]> => {
+  const result = await S3UseCases.listObjects(user, {
     bucket,
     prefix: '',
     delimiter: null,
@@ -68,6 +71,8 @@ describe('Object removal', () => {
     // (list + get) honours removal/restore in lockstep with the file, without
     // adding a second object that would perturb the global/owner listings.
     await s3ObjectMappingsRepository.createMapping(
+      owner.oauthProvider,
+      owner.oauthUserId,
       S3_BUCKET,
       S3_KEY,
       fileCid,
@@ -140,7 +145,7 @@ describe('Object removal', () => {
     })
 
     it('is listed and retrievable over the S3 API (rclone/aws-cli)', async () => {
-      expect(await listS3Keys()).toContain(S3_KEY)
+      expect(await listS3Keys(owner)).toContain(S3_KEY)
       const getResult = await S3UseCases.getObject({
         Bucket: S3_BUCKET,
         Key: S3_KEY,
@@ -235,7 +240,7 @@ describe('Object removal', () => {
     })
 
     it('is hidden from S3 listing and not retrievable over S3', async () => {
-      expect(await listS3Keys()).not.toContain(S3_KEY)
+      expect(await listS3Keys(owner)).not.toContain(S3_KEY)
       const getResult = await S3UseCases.getObject({
         Bucket: S3_BUCKET,
         Key: S3_KEY,
@@ -301,7 +306,7 @@ describe('Object removal', () => {
     })
 
     it('is listed and retrievable over the S3 API again', async () => {
-      expect(await listS3Keys()).toContain(S3_KEY)
+      expect(await listS3Keys(owner)).toContain(S3_KEY)
       const getResult = await S3UseCases.getObject({
         Bucket: S3_BUCKET,
         Key: S3_KEY,
@@ -354,6 +359,8 @@ describe('Folder removal hides child files', () => {
       const key = `folder/${name}`
       childKeys[key] = cid
       await s3ObjectMappingsRepository.createMapping(
+        owner.oauthProvider,
+        owner.oauthUserId,
         FOLDER_S3_BUCKET,
         key,
         cid,
@@ -400,7 +407,7 @@ describe('Folder removal hides child files', () => {
   })
 
   it('children are listed over the S3 API while available', async () => {
-    const keys = await listS3Keys(FOLDER_S3_BUCKET)
+    const keys = await listS3Keys(owner, FOLDER_S3_BUCKET)
     for (const key of childKeyList()) {
       expect(keys).toContain(key)
     }
@@ -469,7 +476,7 @@ describe('Folder removal hides child files', () => {
     })
 
     it('hides every child from the S3 listing', async () => {
-      const keys = await listS3Keys(FOLDER_S3_BUCKET)
+      const keys = await listS3Keys(owner, FOLDER_S3_BUCKET)
       for (const key of childKeyList()) {
         expect(keys).not.toContain(key)
       }
@@ -509,7 +516,7 @@ describe('Folder removal hides child files', () => {
     })
 
     it('lists every child over the S3 API again', async () => {
-      const keys = await listS3Keys(FOLDER_S3_BUCKET)
+      const keys = await listS3Keys(owner, FOLDER_S3_BUCKET)
       for (const key of childKeyList()) {
         expect(keys).toContain(key)
       }

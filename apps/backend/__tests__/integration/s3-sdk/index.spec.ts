@@ -1222,4 +1222,75 @@ describe('AWS S3 - SDK', () => {
       expect(got).toEqual(Buffer.concat([part1, part2]))
     }, 30_000)
   })
+
+  // The S3 namespace is scoped per user: (owner, bucket, key). Two users can
+  // each own the same (bucket, key) with no contention — the first-writer-wins
+  // squatting / 403 behaviour of a global namespace is gone — and neither can
+  // see or affect the other's key.
+  describe('Per-user namespace isolation', () => {
+    // The suite's `s3Client` authenticates as `user`; clientB uses a second key
+    // that resolves to a second user.
+    const userBKey = 'b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0'
+    let userB: typeof user
+    let clientB: S3Client
+    const IsoKey = 'iso-test/shared.txt'
+
+    beforeAll(async () => {
+      userB = createMockUser()
+      await AccountsUseCases.getOrCreateAccount(userB)
+      // Resolve the API key to distinct principals so A and B are separate.
+      jest
+        .spyOn(AuthManager, 'getUserFromAccessToken')
+        .mockImplementation((key) => Promise.resolve(key === userBKey ? userB : user))
+      clientB = new S3Client({
+        region: 'us-east-1',
+        endpoint: `${BASE_PATH}/s3`,
+        credentials: { accessKeyId: userBKey, secretAccessKey: '' },
+        bucketEndpoint: true,
+      })
+    })
+
+    afterAll(() => {
+      // Restore the single-user mock for any later suites.
+      jest.spyOn(AuthManager, 'getUserFromAccessToken').mockResolvedValue(user)
+    })
+
+    it('two users can own the same (bucket, key) independently', async () => {
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: IsoKey, Body: Buffer.from('A owns this') }),
+      )
+      await clientB.send(
+        new PutObjectCommand({ Bucket, Key: IsoKey, Body: Buffer.from('B owns a different thing') }),
+      )
+
+      const aGet = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: IsoKey }),
+      )
+      const bGet = await clientB.send(
+        new GetObjectCommand({ Bucket, Key: IsoKey }),
+      )
+      expect(Buffer.from(await aGet.Body!.transformToByteArray()).toString()).toBe(
+        'A owns this',
+      )
+      expect(Buffer.from(await bGet.Body!.transformToByteArray()).toString()).toBe(
+        'B owns a different thing',
+      )
+    })
+
+    it('one user deleting their key does not affect the other', async () => {
+      await s3Client.send(new DeleteObjectCommand({ Bucket, Key: IsoKey }))
+
+      // A's key is gone…
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: IsoKey })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+      // …but B's identically-named key is untouched.
+      const bGet = await clientB.send(
+        new GetObjectCommand({ Bucket, Key: IsoKey }),
+      )
+      expect(Buffer.from(await bGet.Body!.transformToByteArray()).toString()).toBe(
+        'B owns a different thing',
+      )
+    })
+  })
 })
