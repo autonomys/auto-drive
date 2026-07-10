@@ -1239,9 +1239,13 @@ describe('AWS S3 - SDK', () => {
       userB = createMockUser()
       await AccountsUseCases.getOrCreateAccount(userB)
       // Resolve the API key to distinct principals so A and B are separate.
+      // handleAuth calls getUserFromAccessToken(provider, accessToken); the
+      // access token is the SigV4 access-key id, so key off the second arg.
       jest
         .spyOn(AuthManager, 'getUserFromAccessToken')
-        .mockImplementation((key) => Promise.resolve(key === userBKey ? userB : user))
+        .mockImplementation((_provider, accessToken) =>
+          Promise.resolve(accessToken === userBKey ? userB : user),
+        )
       clientB = new S3Client({
         region: 'us-east-1',
         endpoint: `${BASE_PATH}/s3`,

@@ -146,7 +146,7 @@ describe('Object removal', () => {
 
     it('is listed and retrievable over the S3 API (rclone/aws-cli)', async () => {
       expect(await listS3Keys(owner)).toContain(S3_KEY)
-      const getResult = await S3UseCases.getObject({
+      const getResult = await S3UseCases.getObject(owner, {
         Bucket: S3_BUCKET,
         Key: S3_KEY,
       })
@@ -241,7 +241,7 @@ describe('Object removal', () => {
 
     it('is hidden from S3 listing and not retrievable over S3', async () => {
       expect(await listS3Keys(owner)).not.toContain(S3_KEY)
-      const getResult = await S3UseCases.getObject({
+      const getResult = await S3UseCases.getObject(owner, {
         Bucket: S3_BUCKET,
         Key: S3_KEY,
       })
@@ -307,7 +307,7 @@ describe('Object removal', () => {
 
     it('is listed and retrievable over the S3 API again', async () => {
       expect(await listS3Keys(owner)).toContain(S3_KEY)
-      const getResult = await S3UseCases.getObject({
+      const getResult = await S3UseCases.getObject(owner, {
         Bucket: S3_BUCKET,
         Key: S3_KEY,
       })

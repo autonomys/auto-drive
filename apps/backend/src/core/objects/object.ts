@@ -372,9 +372,9 @@ const restoreObject = async (
   // object back to its S3 name too (scoped to the executor so a dedup co-owner's
   // keys aren't touched; no-op when there are none).
   await s3ObjectMappingsRepository.restoreMappingsByCid(
-    cid,
     executor.oauthProvider,
     executor.oauthUserId,
+    cid,
     trashedAt,
   )
   logger.info('Object restored successfully (cid=%s)', cid)
