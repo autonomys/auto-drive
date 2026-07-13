@@ -43,7 +43,7 @@ type S3HandlerConfig = {
 // on the first object write. A bare
 // PUT/DELETE/HEAD is therefore dispatched below as an ordinary object op:
 //   PUT  → PutObject       HEAD → HeadObject
-//   DELETE → DeleteObject (403, storage is immutable)
+//   DELETE → DeleteObject (204; soft-delete — the S3 namespace is mutable)
 // There is deliberately no CreateBucket / DeleteBucket / HeadBucket entry.
 const S3HandlerConfig: S3HandlerConfig = {
   GetObject: getObjectHandler,
