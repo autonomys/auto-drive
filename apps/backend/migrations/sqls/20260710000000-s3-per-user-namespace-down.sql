@@ -1,4 +1,4 @@
--- Revert to the global (bucket, key) primary key.
+-- Revert to the global (bucket, key) primary key and drop the owner columns.
 --
 -- The forward migration deliberately lets multiple owners hold the same
 -- (bucket, key). Restoring a UNIQUE (bucket, key) primary key therefore has to
@@ -7,7 +7,7 @@
 -- back after the per-user namespace has been used discards every non-winning
 -- owner's row — but it is done automatically, and deterministically, so the
 -- rollback always completes instead of erroring out on the very data the
--- forward migration was designed to allow. (It also keeps the test-suite's
+-- forward migration was designed to allow. (It also keeps the test suite's
 -- per-suite down/up reset from breaking on cross-owner fixtures.)
 ALTER TABLE "S3".object_mappings DROP CONSTRAINT IF EXISTS object_mappings_pkey;
 
@@ -20,8 +20,8 @@ WHERE ctid NOT IN (
   ORDER BY bucket, "key", updated_at DESC, ctid DESC
 );
 
-ALTER TABLE "S3".object_mappings
-  ALTER COLUMN owner_oauth_provider DROP NOT NULL,
-  ALTER COLUMN owner_oauth_user_id DROP NOT NULL;
-
 ALTER TABLE "S3".object_mappings ADD PRIMARY KEY (bucket, "key");
+
+-- Owner is no longer part of the schema.
+ALTER TABLE "S3".object_mappings DROP COLUMN IF EXISTS owner_oauth_user_id;
+ALTER TABLE "S3".object_mappings DROP COLUMN IF EXISTS owner_oauth_provider;
