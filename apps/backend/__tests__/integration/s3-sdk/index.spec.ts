@@ -14,6 +14,7 @@ import {
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
+  UploadPartCopyCommand,
 } from '@aws-sdk/client-s3'
 import {
   createMockUser,
@@ -752,13 +753,327 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
-  describe('DeleteObject', () => {
-    it('should return 403 AccessDenied - storage is immutable', async () => {
-      const command = new DeleteObjectCommand({ Bucket, Key: 'test.txt' })
-      await expect(s3Client.send(command)).rejects.toMatchObject({
-        $metadata: { httpStatusCode: 403 },
-        Code: 'AccessDenied',
-      })
+  // DeleteObject soft-deletes the (bucket, key) mapping: the S3 name is hidden
+  // but the underlying content is never removed from the DSN. This is what makes
+  // rclone delete/move/sync work while preserving permanence.
+  describe('DeleteObject (soft delete)', () => {
+    const DelListBucket = `${BASE_PATH}/s3/del-test`
+
+    it('returns 204 and the object is then hidden from GET, HEAD and listings', async () => {
+      const Del = 'del-test/gone.txt'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Del, Body: Buffer.from('bye') }),
+      )
+      // Present before deletion.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: Del })),
+      ).resolves.toBeDefined()
+
+      const del = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: Del }),
+      )
+      expect(del.$metadata.httpStatusCode).toBe(204)
+
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: Del })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: Del })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+
+      const list = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: DelListBucket }),
+      )
+      expect((list.Contents ?? []).some((o) => o.Key === 'gone.txt')).toBe(false)
+    })
+
+    it('deleting a missing key succeeds (idempotent)', async () => {
+      const del = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: 'del-test/never-existed.txt' }),
+      )
+      expect(del.$metadata.httpStatusCode).toBe(204)
+    })
+
+    it('re-uploading a deleted key resurrects it with the new content', async () => {
+      const Res = 'del-test/resurrect.txt'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Res, Body: Buffer.from('v1') }),
+      )
+      await s3Client.send(new DeleteObjectCommand({ Bucket, Key: Res }))
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: Res })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+
+      // PUT to the same key after DELETE re-creates the object.
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Res, Body: Buffer.from('v2') }),
+      )
+      const got = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: Res }),
+      )
+      expect(Buffer.from(await got.Body!.transformToByteArray()).toString()).toBe(
+        'v2',
+      )
+    })
+  })
+
+  // Server-side copy is a content-addressed remap (destination key -> same CID),
+  // so it needs no data transfer. rclone implements Move as Copy + Delete, so
+  // these two together give move/rename.
+  describe('CopyObject and Move', () => {
+    it('server-side copies an object to a new key', async () => {
+      const Src = 'copy-test/src.txt'
+      const Dst = 'copy-test/dst.txt'
+      const Content = Buffer.from('copy me')
+      const put = await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Src, Body: Content }),
+      )
+
+      const copy = await s3Client.send(
+        new CopyObjectCommand({ Bucket, Key: Dst, CopySource: Src }),
+      )
+      expect(copy.$metadata.httpStatusCode).toBe(200)
+
+      // Destination is readable and byte-identical to the source.
+      const got = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(Buffer.from(await got.Body!.transformToByteArray())).toEqual(
+        Content,
+      )
+      // Same content => same MD5 ETag as the source.
+      expect(got.ETag).toBe(put.ETag)
+      // Source is untouched.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: Src })),
+      ).resolves.toBeDefined()
+    })
+
+    it('move (copy + delete source) leaves only the destination', async () => {
+      const Src = 'copy-test/move-src.txt'
+      const Dst = 'copy-test/move-dst.txt'
+      const Content = Buffer.from('move me')
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Src, Body: Content }),
+      )
+
+      // rclone move = server-side copy then delete-source.
+      await s3Client.send(
+        new CopyObjectCommand({ Bucket, Key: Dst, CopySource: Src }),
+      )
+      await s3Client.send(new DeleteObjectCommand({ Bucket, Key: Src }))
+
+      // Source gone, destination intact — deleting the source did NOT hide the
+      // destination even though both point at the same CID.
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: Src })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+      const got = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(Buffer.from(await got.Body!.transformToByteArray())).toEqual(
+        Content,
+      )
+    })
+
+    it('returns 404 NoSuchKey when the copy source does not exist', async () => {
+      await expect(
+        s3Client.send(
+          new CopyObjectCommand({
+            Bucket,
+            Key: 'copy-test/dst2.txt',
+            CopySource: 'copy-test/does-not-exist.txt',
+          }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+    })
+  })
+
+  describe('AbortMultipartUpload', () => {
+    it('aborts an in-progress upload; completing it afterwards fails', async () => {
+      const AbortKey = 'abort-me.bin'
+      const created = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: AbortKey }),
+      )
+      const UploadId = created.UploadId!
+
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: AbortKey,
+          UploadId,
+          PartNumber: 1,
+          Body: Buffer.alloc(16 * 1024, 'x'),
+        }),
+      )
+
+      const abort = await s3Client.send(
+        new AbortMultipartUploadCommand({ Bucket, Key: AbortKey, UploadId }),
+      )
+      expect(abort.$metadata.httpStatusCode).toBe(204)
+
+      // The aborted upload no longer exists — completing it must fail.
+      await expect(
+        s3Client.send(
+          new CompleteMultipartUploadCommand({
+            Bucket,
+            Key: AbortKey,
+            UploadId,
+            MultipartUpload: {
+              Parts: [{ ETag: part.ETag!, PartNumber: 1 }],
+            },
+          }),
+        ),
+      ).rejects.toThrow()
+
+      // And the object was never created.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: AbortKey })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+    })
+
+    // S3 clients issue Abort after a successful Complete on retry/cleanup. That
+    // must NOT tear down the just-completed object (whose nodes may still be
+    // migrating) — per the S3 spec it returns NoSuchUpload, and the object stays.
+    it('aborting an already-completed upload returns 404 and leaves the object intact', async () => {
+      const Key2 = 'abort-after-complete.bin'
+      const created = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key: Key2 }),
+      )
+      const UploadId = created.UploadId!
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key: Key2,
+          UploadId,
+          PartNumber: 1,
+          Body: Buffer.alloc(16 * 1024, 'y'),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: Key2,
+          UploadId,
+          MultipartUpload: { Parts: [{ ETag: part.ETag!, PartNumber: 1 }] },
+        }),
+      )
+
+      // Abort after Complete → NoSuchUpload (404), not a teardown.
+      await expect(
+        s3Client.send(
+          new AbortMultipartUploadCommand({ Bucket, Key: Key2, UploadId }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+
+      // The completed object is still there.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: Key2 })),
+      ).resolves.toBeDefined()
+    })
+  })
+
+  // rclone stores the source file's modification time in x-amz-meta-mtime (a
+  // float unix-seconds string) and reads it back via HEAD; SetModTime is a
+  // server-side copy of the object onto itself with metadata REPLACE.
+  describe('Modification time (x-amz-meta-mtime)', () => {
+    it('round-trips the mtime metadata through PutObject and HeadObject', async () => {
+      const MtimeKey = 'mtime-test/file.txt'
+      const Mtime = '1620000000.123456789'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: MtimeKey,
+          Body: Buffer.from('with mtime'),
+          Metadata: { mtime: Mtime },
+        }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: MtimeKey }),
+      )
+      // Echoed back verbatim, full precision preserved.
+      expect(head.Metadata?.mtime).toBe(Mtime)
+    })
+
+    it('updates the mtime via a metadata-REPLACE copy onto the same key (SetModTime)', async () => {
+      const Key2 = 'mtime-test/setmodtime.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Key2,
+          Body: Buffer.from('set mod time'),
+          Metadata: { mtime: '1000000000.5' },
+        }),
+      )
+
+      const NewMtime = '1699999999.987654321'
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket,
+          Key: Key2,
+          CopySource: Key2,
+          MetadataDirective: 'REPLACE',
+          Metadata: { mtime: NewMtime },
+        }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: Key2 }),
+      )
+      expect(head.Metadata?.mtime).toBe(NewMtime)
+    })
+
+    it('a plain server-side copy inherits the source mtime', async () => {
+      const Src = 'mtime-test/inherit-src.txt'
+      const Dst = 'mtime-test/inherit-dst.txt'
+      const Mtime = '1500000000.25'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Src,
+          Body: Buffer.from('inherit'),
+          Metadata: { mtime: Mtime },
+        }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({ Bucket, Key: Dst, CopySource: Src }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(head.Metadata?.mtime).toBe(Mtime)
+    })
+
+    // A metadata-REPLACE copy defines the destination's metadata explicitly, so
+    // omitting mtime means the destination has none — it must NOT inherit the
+    // source's mtime (that's COPY behaviour).
+    it('a metadata-REPLACE copy without mtime clears it (does not inherit source)', async () => {
+      const Src = 'mtime-test/replace-src.txt'
+      const Dst = 'mtime-test/replace-dst.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Src,
+          Body: Buffer.from('replace-clear'),
+          Metadata: { mtime: '1500000000.25' },
+        }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket,
+          Key: Dst,
+          CopySource: Src,
+          MetadataDirective: 'REPLACE',
+          // No mtime in the replacement metadata.
+        }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(head.Metadata?.mtime).toBeUndefined()
     })
   })
 
@@ -780,28 +1095,8 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
-  // Unsupported operations must return 501, never reach a write handler.
+  // These remain unimplemented and must return 501, never reach a write handler.
   describe('Unsupported operations return 501 NotImplemented', () => {
-    it('CopyObject is rejected and creates no object', async () => {
-      const CopyKey = 'copy-dest.txt'
-      await expect(
-        s3Client.send(
-          new CopyObjectCommand({
-            Bucket,
-            Key: CopyKey,
-            CopySource: `${Bucket}/${Key}`,
-          }),
-        ),
-      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
-
-      // The misroute used to PutObject an empty body at the destination.
-      // Assert only that the object does not exist (HEAD rejects); the exact
-      // missing-key status is fixed separately (404 vs 500).
-      await expect(
-        s3Client.send(new HeadObjectCommand({ Bucket, Key: CopyKey })),
-      ).rejects.toThrow()
-    })
-
     it('ListParts is rejected (must not finalise the upload)', async () => {
       // A real, in-progress upload so a misroute would actually complete it.
       const created = await s3Client.send(
@@ -824,16 +1119,21 @@ describe('AWS S3 - SDK', () => {
       ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
     })
 
-    it('AbortMultipartUpload is rejected (must not finalise the upload)', async () => {
+    // UploadPartCopy (a multipart part sourced from another object, used by
+    // rclone's server-side copy of very large files) must 501, NOT be misrouted
+    // to UploadPart — which would read an empty body and corrupt the object.
+    it('UploadPartCopy is rejected with 501 (not misrouted to UploadPart)', async () => {
       const created = await s3Client.send(
-        new CreateMultipartUploadCommand({ Bucket, Key: 'abort-probe.bin' }),
+        new CreateMultipartUploadCommand({ Bucket, Key: 'uploadpartcopy.bin' }),
       )
       await expect(
         s3Client.send(
-          new AbortMultipartUploadCommand({
+          new UploadPartCopyCommand({
             Bucket,
-            Key: 'abort-probe.bin',
+            Key: 'uploadpartcopy.bin',
             UploadId: created.UploadId!,
+            PartNumber: 1,
+            CopySource: `${Key}`,
           }),
         ),
       ).rejects.toMatchObject({ $metadata: { httpStatusCode: 501 } })
@@ -980,5 +1280,80 @@ describe('AWS S3 - SDK', () => {
       const got = Buffer.from(await get.arrayBuffer())
       expect(got).toEqual(Buffer.concat([part1, part2]))
     }, 30_000)
+  })
+
+  // The S3 namespace is scoped per user: (owner, bucket, key). Two users can
+  // each own the same (bucket, key) with no contention — the first-writer-wins
+  // squatting / 403 behaviour of a global namespace is gone — and neither can
+  // see or affect the other's key.
+  describe('Per-user namespace isolation', () => {
+    // The suite's `s3Client` authenticates as `user`; clientB uses a second key
+    // that resolves to a second user.
+    const userBKey = 'b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0'
+    let userB: typeof user
+    let clientB: S3Client
+    const IsoKey = 'iso-test/shared.txt'
+
+    beforeAll(async () => {
+      userB = createMockUser()
+      await AccountsUseCases.getOrCreateAccount(userB)
+      // Resolve the API key to distinct principals so A and B are separate.
+      // handleAuth calls getUserFromAccessToken(provider, accessToken); the
+      // access token is the SigV4 access-key id, so key off the second arg.
+      jest
+        .spyOn(AuthManager, 'getUserFromAccessToken')
+        .mockImplementation((_provider, accessToken) =>
+          Promise.resolve(accessToken === userBKey ? userB : user),
+        )
+      clientB = new S3Client({
+        region: 'us-east-1',
+        endpoint: `${BASE_PATH}/s3`,
+        credentials: { accessKeyId: userBKey, secretAccessKey: '' },
+        bucketEndpoint: true,
+      })
+    })
+
+    afterAll(() => {
+      // Restore the single-user mock for any later suites.
+      jest.spyOn(AuthManager, 'getUserFromAccessToken').mockResolvedValue(user)
+    })
+
+    it('two users can own the same (bucket, key) independently', async () => {
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: IsoKey, Body: Buffer.from('A owns this') }),
+      )
+      await clientB.send(
+        new PutObjectCommand({ Bucket, Key: IsoKey, Body: Buffer.from('B owns a different thing') }),
+      )
+
+      const aGet = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: IsoKey }),
+      )
+      const bGet = await clientB.send(
+        new GetObjectCommand({ Bucket, Key: IsoKey }),
+      )
+      expect(Buffer.from(await aGet.Body!.transformToByteArray()).toString()).toBe(
+        'A owns this',
+      )
+      expect(Buffer.from(await bGet.Body!.transformToByteArray()).toString()).toBe(
+        'B owns a different thing',
+      )
+    })
+
+    it('one user deleting their key does not affect the other', async () => {
+      await s3Client.send(new DeleteObjectCommand({ Bucket, Key: IsoKey }))
+
+      // A's key is gone…
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: IsoKey })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+      // …but B's identically-named key is untouched.
+      const bGet = await clientB.send(
+        new GetObjectCommand({ Bucket, Key: IsoKey }),
+      )
+      expect(Buffer.from(await bGet.Body!.transformToByteArray()).toString()).toBe(
+        'B owns a different thing',
+      )
+    })
   })
 })

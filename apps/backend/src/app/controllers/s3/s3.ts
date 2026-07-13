@@ -1,5 +1,5 @@
 import { S3UseCases } from '../../../core/s3/index.js'
-import { handleError } from '../../../errors/index.js'
+import { handleError, ForbiddenError } from '../../../errors/index.js'
 import { handleS3Auth } from '../../../infrastructure/services/auth/s3.js'
 import {
   getByteRange,
@@ -65,6 +65,43 @@ const getUploadOptions = (req: Request) => {
   }
 
   return UploadOptions
+}
+
+/**
+ * The modification time a client associates with an object, sent as the
+ * x-amz-meta-mtime header (rclone uses a float unix-seconds string). Stored and
+ * echoed back verbatim so the value round-trips with full precision.
+ */
+const getMtime = (req: Request): string | null => {
+  const mtime = req.headers['x-amz-meta-mtime']
+  return typeof mtime === 'string' ? mtime : null
+}
+
+/**
+ * Parse the source object of a CopyObject request from its x-amz-copy-source
+ * header. The value is "/{bucket}/{key}" (the leading slash is optional), with
+ * each path segment URL-encoded and an optional "?versionId=..." suffix — Auto
+ * Drive has no object versioning, so any versionId is dropped. Returns null when
+ * the header is missing or malformed.
+ */
+const parseCopySource = (
+  req: Request,
+): { bucket: string; key: string } | null => {
+  const raw = req.headers['x-amz-copy-source']
+  if (typeof raw !== 'string' || raw.length === 0) return null
+
+  // Drop any ?versionId= suffix, strip a leading slash, then URL-decode.
+  const withoutVersion = raw.split('?')[0].replace(/^\//, '')
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(withoutVersion)
+  } catch {
+    // Malformed percent-encoding — treat as no valid source.
+    return null
+  }
+  if (decoded.length === 0) return null
+
+  return parseBucketAndKey(decoded)
 }
 
 /**
@@ -163,7 +200,7 @@ export const listBucketsHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const buckets = await S3UseCases.listBuckets()
+  const buckets = await S3UseCases.listBuckets(user)
   sendXML(res, 'ListAllMyBucketsResult', {
     Buckets: {
       Bucket: buckets.map((b) => ({
@@ -180,7 +217,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
   const byteRange = getByteRange(req)
-  const downloadResult = await S3UseCases.getObject({
+  const downloadResult = await S3UseCases.getObject(user, {
     Key: key,
     Range: byteRange,
     Bucket: bucket,
@@ -197,6 +234,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     cid,
     etag,
     lastModified,
+    mtime,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
@@ -211,6 +249,8 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)
   res.set('Last-Modified', lastModified.toUTCString())
+  // Echo the client mtime so tools (e.g. rclone) read back what they wrote.
+  if (mtime) res.set('x-amz-meta-mtime', mtime)
 
   pipeline(await startDownload(), res, (err: Error | null) => {
     if (err) {
@@ -230,7 +270,7 @@ export const headObjectHandler = async (req: Request, res: Response) => {
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
   const byteRange = getByteRange(req)
-  const downloadResult = await S3UseCases.getObject({
+  const downloadResult = await S3UseCases.getObject(user, {
     Key: key,
     Range: byteRange,
     Bucket: bucket,
@@ -246,6 +286,7 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     cid,
     etag,
     lastModified,
+    mtime,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
@@ -260,6 +301,8 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)
   res.set('Last-Modified', lastModified.toUTCString())
+  // Echo the client mtime so tools (e.g. rclone) read back what they wrote.
+  if (mtime) res.set('x-amz-meta-mtime', mtime)
 
   // 200, not 204: HeadObject returns the headers GET would send (Content-Length,
   // Content-Type, …) with an empty body. A 204 is defined as bodiless, so Node
@@ -268,27 +311,16 @@ export const headObjectHandler = async (req: Request, res: Response) => {
 }
 
 // ── Object Lock ───────────────────────────────────────────────────────────
-// Auto Drive storage is immutable (WORM) by construction, so we expose a fixed
-// COMPLIANCE-mode lock contract with a far-future retention. The contract is
-// intrinsic and cannot be configured by clients, so the PutObjectLock* / Put*
-// Retention / Put*LegalHold counterparts stay 501 (wired in http.ts).
+// Object Lock is NOT enforced. The S3 namespace is mutable — DeleteObject
+// (soft-delete), overwrite, and rename all succeed — so advertising a
+// COMPLIANCE/WORM lock would be a false promise a client could rely on. (The
+// underlying DSN data is permanent, but that is a storage property, not an S3
+// object-lock guarantee.) These read endpoints therefore report "no Object Lock
+// configured", exactly as a bucket/object without Object Lock does. The
+// PutObjectLock* / Put*Retention / Put*LegalHold counterparts stay 501.
 
-// "Forever" sentinel for RetainUntilDate. S3 has no infinity value, so use the
-// max representable date: year 9999 is the ceiling for SQL DATETIME and Python
-// datetime.max, so anything larger would overflow common clients (e.g. boto3).
-const OBJECT_LOCK_RETAIN_UNTIL = '9999-12-31T23:59:59Z'
-
-export const objectLockConfigurationBody = () => ({
-  ObjectLockEnabled: 'Enabled',
-  Rule: { DefaultRetention: { Mode: 'COMPLIANCE', Years: 100 } },
-})
-
-export const objectRetentionBody = () => ({
-  Mode: 'COMPLIANCE',
-  RetainUntilDate: OBJECT_LOCK_RETAIN_UNTIL,
-})
-
-export const objectLegalHoldBody = () => ({ Status: 'ON' })
+/** Legal hold is never on (Object Lock is not enforced). */
+export const objectLegalHoldBody = () => ({ Status: 'OFF' })
 
 export const getObjectLockConfigurationHandler = async (
   req: Request,
@@ -296,11 +328,15 @@ export const getObjectLockConfigurationHandler = async (
 ) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
-  sendXML(res, 'ObjectLockConfiguration', objectLockConfigurationBody())
+  // No bucket-level Object Lock configuration exists.
+  sendXML(res.status(404), 'Error', {
+    Code: 'ObjectLockConfigurationNotFoundError',
+    Message: 'Object Lock configuration does not exist for this bucket',
+  })
 }
 
-// The retention and legal-hold contracts are object-level, so reject a key
-// that doesn't exist with NoSuchKey rather than asserting a lock over nothing.
+// Reject a key that doesn't exist with NoSuchKey rather than reporting lock
+// state for a nonexistent object.
 const sendNoSuchKey = (res: Response, key: string) => {
   sendXML(res.status(404), 'Error', {
     Code: 'NoSuchKey',
@@ -316,11 +352,15 @@ export const getObjectRetentionHandler = async (
   const user = await handleS3Auth(req, res)
   if (!user) return
   const { bucket, key } = parseBucketAndKey(req.params.key)
-  if (!(await S3UseCases.objectExists(bucket, key))) {
+  if (!(await S3UseCases.objectExists(user, bucket, key))) {
     sendNoSuchKey(res, key)
     return
   }
-  sendXML(res, 'Retention', objectRetentionBody())
+  // The object exists but carries no retention (Object Lock is not enforced).
+  sendXML(res.status(404), 'Error', {
+    Code: 'NoSuchObjectLockConfiguration',
+    Message: 'The specified object does not have a Retention configuration',
+  })
 }
 
 export const getObjectLegalHoldHandler = async (
@@ -330,7 +370,7 @@ export const getObjectLegalHoldHandler = async (
   const user = await handleS3Auth(req, res)
   if (!user) return
   const { bucket, key } = parseBucketAndKey(req.params.key)
-  if (!(await S3UseCases.objectExists(bucket, key))) {
+  if (!(await S3UseCases.objectExists(user, bucket, key))) {
     sendNoSuchKey(res, key)
     return
   }
@@ -352,6 +392,7 @@ export const createMultipartUploadHandler = async (
     Key: key,
     ContentType: req.headers['content-type'],
     UploadOptions: uploadOptions,
+    Mtime: getMtime(req),
   })
 
   if (result.isErr()) {
@@ -485,7 +526,7 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
     (req.query['continuation-token'] as string) ?? null
   const encodingType = (req.query['encoding-type'] as string) ?? null
 
-  const result = await S3UseCases.listObjects({
+  const result = await S3UseCases.listObjects(user, {
     bucket,
     prefix,
     delimiter,
@@ -568,6 +609,7 @@ export const putObjectHandler = async (req: Request, res: Response) => {
     Body: req.body,
     ContentType: req.headers['content-type'],
     UploadOptions: uploadOptions,
+    Mtime: getMtime(req),
   })
 
   if (result.isErr()) {
@@ -583,12 +625,114 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   res.status(200).end()
 }
 
-export const deleteObjectHandler = async (_req: Request, res: Response) => {
-  sendXML(res.status(403), 'Error', {
-    Code: 'AccessDenied',
-    Message:
-      'Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.',
+export const deleteObjectHandler = async (req: Request, res: Response) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  const { bucket, key } = parseBucketAndKey(req.params.key)
+
+  // Soft-delete: the (bucket, key) mapping is hidden and, if it was the last S3
+  // reference to the content, the object is moved to the owner's web-app Trash.
+  // The underlying bytes are never removed from the Autonomys DSN.
+  await S3UseCases.deleteObject(user, bucket, key)
+
+  // S3 DeleteObject responds 204 No Content with an empty body, whether or not
+  // the key existed (delete is idempotent).
+  res.status(204).end()
+}
+
+export const copyObjectHandler = async (req: Request, res: Response) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  const { bucket, key } = parseBucketAndKey(req.params.key)
+  const source = parseCopySource(req)
+  if (!source) {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message: 'The x-amz-copy-source header is missing or malformed.',
+      ArgumentName: 'x-amz-copy-source',
+    })
+    return
+  }
+
+  // Metadata handling follows x-amz-metadata-directive (default COPY):
+  //  - COPY:    the destination inherits the source metadata → pass undefined so
+  //             the use case keeps the source mtime.
+  //  - REPLACE: the destination's metadata is exactly what this request carries,
+  //             so use the x-amz-meta-mtime header verbatim — a string to set it,
+  //             or null to CLEAR it (REPLACE with no mtime header means no mtime;
+  //             rclone's SetModTime always sends REPLACE + mtime, so it still
+  //             writes the intended value).
+  const directive = req.headers['x-amz-metadata-directive']
+  const isReplace =
+    typeof directive === 'string' && directive.toUpperCase() === 'REPLACE'
+  const mtime = isReplace ? getMtime(req) : undefined
+
+  const result = await S3UseCases.copyObject(user, {
+    SourceBucket: source.bucket,
+    SourceKey: source.key,
+    Bucket: bucket,
+    Key: key,
+    Mtime: mtime,
   })
+
+  if (result.isErr()) {
+    // Source key not found in the caller's namespace → NoSuchKey, per S3.
+    sendNoSuchKey(res, source.key)
+    return
+  }
+
+  const { ETag, Cid, LastModified } = result.value
+  res.set('x-amz-meta-cid', Cid)
+  res.set('ETag', ETag)
+  // The CopyObjectResult body carries ETag + LastModified. rclone re-HEADs the
+  // destination afterward, so these are informational, but the XML must be
+  // well-formed for the AWS SDK's response parser.
+  sendXML(res, 'CopyObjectResult', {
+    ETag,
+    LastModified: LastModified.toISOString(),
+  })
+}
+
+export const abortMultipartUploadHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  const uploadId = req.query.uploadId as string
+  if (!uploadId) {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message: 'The uploadId query parameter is required.',
+      ArgumentName: 'uploadId',
+    })
+    return
+  }
+
+  const result = await S3UseCases.abortMultipartUpload(user, uploadId)
+  if (result.isErr()) {
+    if (result.error instanceof ForbiddenError) {
+      sendXML(res.status(403), 'Error', {
+        Code: 'AccessDenied',
+        Message: 'You do not have permission to abort this multipart upload.',
+        UploadId: uploadId,
+      })
+      return
+    }
+    // Unknown upload id → NoSuchUpload.
+    sendXML(res.status(404), 'Error', {
+      Code: 'NoSuchUpload',
+      Message: 'The specified multipart upload does not exist.',
+      UploadId: uploadId,
+    })
+    return
+  }
+
+  // S3 AbortMultipartUpload responds 204 No Content.
+  res.status(204).end()
 }
 
 export const notImplementedHandler = async (_req: Request, res: Response) => {
