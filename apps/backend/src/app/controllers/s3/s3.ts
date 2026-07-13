@@ -194,7 +194,7 @@ export const listBucketsHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const buckets = await S3UseCases.listBuckets()
+  const buckets = await S3UseCases.listBuckets(user)
   sendXML(res, 'ListAllMyBucketsResult', {
     Buckets: {
       Bucket: buckets.map((b) => ({
@@ -211,7 +211,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
   const byteRange = getByteRange(req)
-  const downloadResult = await S3UseCases.getObject({
+  const downloadResult = await S3UseCases.getObject(user, {
     Key: key,
     Range: byteRange,
     Bucket: bucket,
@@ -264,7 +264,7 @@ export const headObjectHandler = async (req: Request, res: Response) => {
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
   const byteRange = getByteRange(req)
-  const downloadResult = await S3UseCases.getObject({
+  const downloadResult = await S3UseCases.getObject(user, {
     Key: key,
     Range: byteRange,
     Bucket: bucket,
@@ -339,16 +339,6 @@ const sendNoSuchKey = (res: Response, key: string) => {
   })
 }
 
-// S3 error responses must be XML on this API surface (the AWS SDK / rclone parse
-// the <Error> body), so a 403 is sent as XML AccessDenied rather than via
-// handleError, which emits JSON.
-const sendAccessDenied = (res: Response, message: string) => {
-  sendXML(res.status(403), 'Error', {
-    Code: 'AccessDenied',
-    Message: message,
-  })
-}
-
 export const getObjectRetentionHandler = async (
   req: Request,
   res: Response,
@@ -356,7 +346,7 @@ export const getObjectRetentionHandler = async (
   const user = await handleS3Auth(req, res)
   if (!user) return
   const { bucket, key } = parseBucketAndKey(req.params.key)
-  if (!(await S3UseCases.objectExists(bucket, key))) {
+  if (!(await S3UseCases.objectExists(user, bucket, key))) {
     sendNoSuchKey(res, key)
     return
   }
@@ -374,7 +364,7 @@ export const getObjectLegalHoldHandler = async (
   const user = await handleS3Auth(req, res)
   if (!user) return
   const { bucket, key } = parseBucketAndKey(req.params.key)
-  if (!(await S3UseCases.objectExists(bucket, key))) {
+  if (!(await S3UseCases.objectExists(user, bucket, key))) {
     sendNoSuchKey(res, key)
     return
   }
@@ -490,11 +480,6 @@ export const completeMultipartUploadHandler = async (
   })
 
   if (result.isErr()) {
-    // Cross-owner key guard → S3 XML AccessDenied (not JSON via handleError).
-    if (result.error instanceof ForbiddenError) {
-      sendAccessDenied(res, result.error.message)
-      return
-    }
     handleError(result.error, res)
     return
   }
@@ -535,7 +520,7 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
     (req.query['continuation-token'] as string) ?? null
   const encodingType = (req.query['encoding-type'] as string) ?? null
 
-  const result = await S3UseCases.listObjects({
+  const result = await S3UseCases.listObjects(user, {
     bucket,
     prefix,
     delimiter,
@@ -622,11 +607,6 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   })
 
   if (result.isErr()) {
-    // Cross-owner key guard → S3 XML AccessDenied (not JSON via handleError).
-    if (result.error instanceof ForbiddenError) {
-      sendAccessDenied(res, result.error.message)
-      return
-    }
     handleError(result.error, res)
     return
   }
@@ -692,12 +672,7 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
   })
 
   if (result.isErr()) {
-    if (result.error instanceof ForbiddenError) {
-      // Destination key is owned by another user.
-      sendAccessDenied(res, result.error.message)
-      return
-    }
-    // Missing copy source → NoSuchKey, per S3.
+    // Source key not found in the caller's namespace → NoSuchKey, per S3.
     sendNoSuchKey(res, source.key)
     return
   }

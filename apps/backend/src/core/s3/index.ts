@@ -1,7 +1,4 @@
-import {
-  ownershipRepository,
-  s3ObjectMappingsRepository,
-} from '../../infrastructure/repositories/index.js'
+import { s3ObjectMappingsRepository } from '../../infrastructure/repositories/index.js'
 import { DownloadUseCase } from '../downloads/index.js'
 import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
@@ -93,11 +90,20 @@ import { S3BucketInfo } from '../../infrastructure/repositories/s3/objectMapping
 
 const logger = createLogger('useCases:s3')
 
+// The S3 key namespace is scoped per user: (owner, bucket, key) is the mapping
+// identity, so every read/write below is scoped to the requesting user. There is
+// no cross-user contention over a shared (bucket, key), hence no ownership gates,
+// guarded upserts, or pre-finalize checks — the scoped findByKey/createMapping IS
+// the boundary. The user's identity comes from handleS3Auth in the HTTP layer.
+
 const listObjects = async (
+  user: UserWithOrganization,
   params: ListObjectsParams,
 ): Promise<ListObjectsResult> => {
   const dbLimit = computeListObjectsDbLimit(params.maxKeys, params.delimiter)
   const allMatching = await s3ObjectMappingsRepository.listObjects(
+    user.oauthProvider,
+    user.oauthUserId,
     params.bucket,
     params.prefix,
     params.continuationToken,
@@ -122,9 +128,12 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
 }
 
 const getObject = async (
+  user: UserWithOrganization,
   params: GetObjectCommandParams,
 ): Promise<Result<GetObjectUseCaseResult, ObjectNotFoundError>> => {
   const mapping = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
     params.Bucket,
     params.Key,
   )
@@ -202,46 +211,10 @@ const uploadPart = async (
   })
 }
 
-/**
- * True when the destination (bucket, key) already exists and is owned by a
- * DIFFERENT user. Checked BEFORE finalizing an upload so a cross-owner write is
- * rejected without finalizing the object or charging credits; the guarded
- * createMapping upsert remains the atomic backstop for the check-then-write
- * race. Uses getMappingOwner (not findByKey) so a soft-deleted key still counts
- * as owned by its user.
- */
-const destinationOwnedByAnother = async (
-  user: UserWithOrganization,
-  bucket: string,
-  key: string,
-): Promise<boolean> => {
-  const owner = await s3ObjectMappingsRepository.getMappingOwner(bucket, key)
-  return (
-    owner != null &&
-    owner.ownerOauthUserId != null &&
-    (owner.ownerOauthProvider !== user.oauthProvider ||
-      owner.ownerOauthUserId !== user.oauthUserId)
-  )
-}
-
 const completeMultipartUpload = async (
   user: UserWithOrganization,
   params: CompleteMultipartUploadParams,
-): Promise<
-  Result<CompleteMultipartUploadResult, ObjectNotFoundError | ForbiddenError>
-> => {
-  // Reject a cross-owner destination BEFORE finalizing: completeUpload applies
-  // ownership/credits (registerInteraction), so finalizing first and rejecting
-  // at createMapping would leave a finalized-but-unmapped object and let a retry
-  // re-finalize/re-charge.
-  if (await destinationOwnedByAnother(user, params.Bucket, params.Key)) {
-    return err(
-      new ForbiddenError(
-        `Key ${params.Bucket}/${params.Key} is owned by another user`,
-      ),
-    )
-  }
-
+): Promise<Result<CompleteMultipartUploadResult, ObjectNotFoundError>> => {
   const cid = await UploadsUseCases.completeUpload(user, params.UploadId)
 
   // Compute the composite multipart ETag from the per-part MD5s the client
@@ -264,23 +237,15 @@ const completeMultipartUpload = async (
   )
 
   const mapping = await s3ObjectMappingsRepository.createMapping(
+    user.oauthProvider,
+    user.oauthUserId,
     params.Bucket,
     params.Key,
     cid,
     md5ForStorage,
     mtime,
-    user.oauthProvider,
-    user.oauthUserId,
   )
   await s3ObjectMappingsRepository.deleteMultipartMtime(params.UploadId)
-  // null → the key is owned by another user; refuse to overwrite/steal it.
-  if (!mapping) {
-    return err(
-      new ForbiddenError(
-        `Key ${params.Bucket}/${params.Key} is owned by another user`,
-      ),
-    )
-  }
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
     mapping.bucket,
@@ -300,19 +265,8 @@ const completeMultipartUpload = async (
 const putObject = async (
   user: UserWithOrganization,
   params: PutObjectParams,
-): Promise<Result<PutObjectResult, ObjectNotFoundError | ForbiddenError>> => {
+): Promise<Result<PutObjectResult, ObjectNotFoundError>> => {
   const name = params.Key.split('/').pop()!
-
-  // Reject a cross-owner destination BEFORE creating/uploading anything, so a
-  // doomed write neither finalizes an object (ownership/credits) nor leaves a
-  // finalized-but-unmapped object; createMapping's guard is the atomic backstop.
-  if (await destinationOwnedByAnother(user, params.Bucket, params.Key)) {
-    return err(
-      new ForbiddenError(
-        `Key ${params.Bucket}/${params.Key} is owned by another user`,
-      ),
-    )
-  }
 
   // Compute MD5 before upload so we have it ready for storage.
   const md5 = md5Hex(params.Body)
@@ -337,22 +291,14 @@ const putObject = async (
   const cid = await UploadsUseCases.completeUpload(user, upload.id)
 
   const mapping = await s3ObjectMappingsRepository.createMapping(
+    user.oauthProvider,
+    user.oauthUserId,
     params.Bucket,
     params.Key,
     cid,
     md5,
     params.Mtime ?? null,
-    user.oauthProvider,
-    user.oauthUserId,
   )
-  // null → the key is owned by another user; refuse to overwrite/steal it.
-  if (!mapping) {
-    return err(
-      new ForbiddenError(
-        `Key ${params.Bucket}/${params.Key} is owned by another user`,
-      ),
-    )
-  }
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
     mapping.bucket,
@@ -365,62 +311,31 @@ const putObject = async (
 }
 
 /**
- * S3 DeleteObject — soft-delete the (bucket, key) mapping. The content is never
- * removed from the Autonomys DSN; only the S3 name is hidden. Always resolves to
- * success (S3 returns 204 whether or not the key existed).
+ * S3 DeleteObject — soft-delete the caller's (bucket, key) mapping. The content
+ * is never removed from the Autonomys DSN; only the S3 name is hidden. Always
+ * resolves to success (S3 returns 204 whether or not the key existed).
  *
- * Because a server-side copy/move only remaps `key -> same cid`, deletion is
- * tracked at the mapping level so that `move = copy + delete-source` keeps the
- * destination live. On top of that, when the deleted key was the LAST active S3
- * mapping for its content, the object is also moved to the owner's web-app Trash
- * (ObjectUseCases.markAsDeleted) so an rclone delete is reflected in the UI and
- * stays recoverable there — the "unified with UI Trash" behaviour.
+ * The lookup is scoped to the caller, so a key that isn't theirs simply isn't
+ * found (no cross-user authorization needed). When the deleted key was the
+ * caller's LAST active mapping for its content, the object is also moved to
+ * their web-app Trash (markAsDeleted) so an rclone delete is reflected in the UI
+ * and stays recoverable — the "unified with UI Trash" behaviour.
  */
 const deleteObject = async (
   user: UserWithOrganization,
   bucket: string,
   key: string,
 ): Promise<Result<void, never>> => {
-  const mapping = await s3ObjectMappingsRepository.findByKey(bucket, key)
+  const mapping = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+  )
 
-  // Key absent or already soft-deleted: nothing to do. DeleteObject is
-  // idempotent and returns success regardless (S3 returns 204 either way).
+  // Not the caller's key (absent or already soft-deleted): nothing to do.
+  // DeleteObject is idempotent and returns success regardless.
   if (!mapping) {
-    return ok()
-  }
-
-  // Authorization: only the KEY's owner may hide it. The S3 namespace is shared
-  // across API keys and, because storage is content-addressed, several users can
-  // be admin owners of the same CID (dedup of identical content) — so a per-CID
-  // check would let a dedup co-owner hide another user's key. Modern mappings
-  // record their creator (owner columns), so gate on that. A legacy mapping with
-  // no recorded owner falls back to the per-CID admin check (its historical
-  // behaviour). An unauthorized caller is a no-op (still 204, for idempotency).
-  const hasOwner =
-    mapping.ownerOauthProvider != null && mapping.ownerOauthUserId != null
-
-  let authorized: boolean
-  if (hasOwner) {
-    authorized =
-      mapping.ownerOauthProvider === user.oauthProvider &&
-      mapping.ownerOauthUserId === user.oauthUserId
-  } else {
-    const owners = await ownershipRepository.getOwnerships(mapping.cid)
-    authorized = owners.some(
-      (o) =>
-        o.is_admin &&
-        o.oauth_provider === user.oauthProvider &&
-        o.oauth_user_id === user.oauthUserId,
-    )
-  }
-  if (!authorized) {
-    logger.warn(
-      'Ignoring DeleteObject from non-owner (bucket=%s key=%s cid=%s user=%s)',
-      bucket,
-      key,
-      mapping.cid,
-      user.oauthUserId,
-    )
     return ok()
   }
 
@@ -437,18 +352,15 @@ const deleteObject = async (
     }
   }
 
-  // Count the caller's OWN active keys for this content — owner-scoped for a
-  // modern mapping so a dedup co-owner's keys don't affect the "last key" Trash
-  // decision; per-CID for a legacy mapping. Includes the still-active mapping
-  // being deleted, so <= 1 means this is the caller's last key for the content.
+  // Is this the caller's last active key for the content? The count is scoped to
+  // the caller, and includes the still-active mapping being deleted, so <= 1
+  // means it's their last one.
   const countActive = () =>
-    hasOwner
-      ? s3ObjectMappingsRepository.countActiveMappingsByCid(
-          mapping.cid,
-          user.oauthProvider,
-          user.oauthUserId,
-        )
-      : s3ObjectMappingsRepository.countActiveMappingsByCid(mapping.cid)
+    s3ObjectMappingsRepository.countActiveMappingsByCid(
+      user.oauthProvider,
+      user.oauthUserId,
+      mapping.cid,
+    )
 
   const activeBefore = await countActive()
   const isLastKey = activeBefore <= 1
@@ -460,16 +372,20 @@ const deleteObject = async (
     await trashObject()
   }
 
-  await s3ObjectMappingsRepository.softDeleteMapping(bucket, key)
+  await s3ObjectMappingsRepository.softDeleteMapping(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+  )
 
   if (!isLastKey) {
     // Race guard: between the count above and this hide, a concurrent
-    // DeleteObject may have removed the sibling last key. Re-check now that ours
-    // is hidden; if no active mapping remains, this delete is the one that
-    // emptied the content and must move it to Trash — otherwise two concurrent
-    // last-key deletes could both skip it and leave the object active in the UI
-    // with no visible S3 keys. (If both reach here, markAsDeleted is effectively
-    // idempotent: the second is a harmless no-op.)
+    // DeleteObject (same user, e.g. rclone --transfers) may have removed the
+    // sibling last key. Re-check now that ours is hidden; if none of the
+    // caller's keys remain, this delete emptied the content and must move it to
+    // Trash. (If two concurrent deletes both reach here, markAsDeleted is
+    // effectively idempotent: the second is a harmless no-op.)
     const activeAfter = await countActive()
     if (activeAfter === 0) {
       await trashObject()
@@ -481,11 +397,12 @@ const deleteObject = async (
 }
 
 /**
- * S3 CopyObject — copy source (bucket, key) to a destination key. In
- * content-addressed storage this is a cheap remap: the destination mapping
+ * S3 CopyObject — copy the caller's source (bucket, key) to a destination key.
+ * In content-addressed storage this is a cheap remap: the destination mapping
  * points at the source's cid, with no data transfer. This is what makes rclone
  * server-side copy and move work (rclone implements Move as Copy + Remove).
  *
+ * The source lookup is scoped to the caller, so you can only copy your own keys.
  * mtime: with the default COPY metadata directive the destination inherits the
  * source mtime; when the client sends an x-amz-meta-mtime (metadata REPLACE, as
  * rclone's SetModTime does by copying an object onto itself) that value wins.
@@ -493,8 +410,10 @@ const deleteObject = async (
 const copyObject = async (
   user: UserWithOrganization,
   params: CopyObjectParams,
-): Promise<Result<CopyObjectResult, ObjectNotFoundError | ForbiddenError>> => {
+): Promise<Result<CopyObjectResult, ObjectNotFoundError>> => {
   const source = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
     params.SourceBucket,
     params.SourceKey,
   )
@@ -506,50 +425,9 @@ const copyObject = async (
     )
   }
 
-  // Ownership gate on the SOURCE KEY, mirroring deleteObject: only the source
-  // mapping's owner may copy from it. Gating on the source's per-mapping owner
-  // (not merely CID ownership) keeps copy consistent with delete — with
-  // content-addressed dedup a co-owner of the CID must not be able to use
-  // another user's (bucket, key) as a copy source. A legacy source mapping with
-  // no recorded owner falls back to the per-CID admin check. A copy grants NO
-  // new ownership: the caller already owns the source content, so the
-  // destination (created below, owned by the caller) is theirs without a
-  // re-grant. Don't reveal the source's existence to a non-owner.
-  const sourceHasOwner =
-    source.ownerOauthProvider != null && source.ownerOauthUserId != null
-
-  let authorizedSource: boolean
-  if (sourceHasOwner) {
-    authorizedSource =
-      source.ownerOauthProvider === user.oauthProvider &&
-      source.ownerOauthUserId === user.oauthUserId
-  } else {
-    const owners = await ownershipRepository.getOwnerships(source.cid)
-    authorizedSource = owners.some(
-      (o) =>
-        o.is_admin &&
-        o.oauth_provider === user.oauthProvider &&
-        o.oauth_user_id === user.oauthUserId,
-    )
-  }
-  if (!authorizedSource) {
-    logger.warn(
-      'Ignoring CopyObject from non-owner of source (src=%s/%s cid=%s user=%s)',
-      params.SourceBucket,
-      params.SourceKey,
-      source.cid,
-      user.oauthUserId,
-    )
-    return err(
-      new ObjectNotFoundError(
-        `Object ${params.SourceBucket}/${params.SourceKey} not found`,
-      ),
-    )
-  }
-
-  // Even for the owner, don't copy a source that isn't actually readable (banned
-  // or otherwise blocked) into a new key that would then 404/451 on read. Treat
-  // as NoSuchKey.
+  // Don't copy a source that isn't actually readable (owner-removed via the web
+  // app, banned, or otherwise blocked) into a new key that would then 404/451 on
+  // read. Treat as NoSuchKey.
   const authorized = await ObjectUseCases.authorizeDownload(source.cid)
   if (authorized.isErr()) {
     return err(
@@ -561,24 +439,16 @@ const copyObject = async (
 
   const mtime = params.Mtime !== undefined ? params.Mtime : source.mtime
 
-  // The destination key is created (owned) by the copier.
+  // The destination key is created in the caller's namespace.
   const mapping = await s3ObjectMappingsRepository.createMapping(
+    user.oauthProvider,
+    user.oauthUserId,
     params.Bucket,
     params.Key,
     source.cid,
     source.md5,
     mtime,
-    user.oauthProvider,
-    user.oauthUserId,
   )
-  // null → the destination key is owned by another user; refuse to overwrite it.
-  if (!mapping) {
-    return err(
-      new ForbiddenError(
-        `Key ${params.Bucket}/${params.Key} is owned by another user`,
-      ),
-    )
-  }
 
   logger.debug(
     'Copied S3 mapping: %s/%s -> %s/%s (cid=%s)',
@@ -610,21 +480,34 @@ const abortMultipartUpload = async (
   return result
 }
 
-const listBuckets = async (): Promise<S3BucketInfo[]> => {
-  return s3ObjectMappingsRepository.listBuckets()
+const listBuckets = async (
+  user: UserWithOrganization,
+): Promise<S3BucketInfo[]> => {
+  return s3ObjectMappingsRepository.listBuckets(
+    user.oauthProvider,
+    user.oauthUserId,
+  )
 }
 
-const objectExists = async (bucket: string, key: string): Promise<boolean> => {
-  const mapping = await s3ObjectMappingsRepository.findByKey(bucket, key)
+const objectExists = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<boolean> => {
+  const mapping = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+  )
   if (!mapping) {
     return false
   }
 
-  // The mapping row persists after an owner removes an object (moved to Trash),
-  // but GET and ListObjects treat such objects as not found via isObjectDeleted
-  // / notRemovedByOwnerSQL. Mirror that here so object-lock endpoints
-  // (GetObjectRetention / GetObjectLegalHold) don't leak retention or
-  // legal-hold metadata for keys that are otherwise reported as not found.
+  // A mapping the owner has since removed via the web app (moved to Trash) is
+  // treated as not found by GET and ListObjects (notRemovedByOwnerSQL /
+  // isObjectDeleted). Mirror that here so the object-lock endpoints
+  // (GetObjectRetention / GetObjectLegalHold) don't report on a hidden key.
   return !(await ObjectUseCases.isObjectDeleted(mapping.cid))
 }
 
