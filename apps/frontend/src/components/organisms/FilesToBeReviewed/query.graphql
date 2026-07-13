@@ -9,7 +9,27 @@ query FilesToBeReviewed($limit: Int!, $offset: Int!) {
     }
     limit: $limit
     offset: $offset
+    order_by: { created_at: desc }
   ) {
     headCid: head_cid
+    tags
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    createdAt: created_at
+  }
+  metadata_roots_aggregate(
+    where: {
+      _and: [
+        { tags: { _contains: ["reported"] } }
+        { _not: { tags: { _contains: ["banned"] } } }
+        { _not: { tags: { _contains: ["report-dismissed"] } } }
+      ]
+    }
+  ) {
+    aggregate {
+      count
+    }
   }
 }

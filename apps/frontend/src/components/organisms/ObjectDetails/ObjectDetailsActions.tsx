@@ -1,4 +1,8 @@
-import { ObjectInformation, ObjectTag } from '@auto-drive/models';
+import {
+  ObjectInformation,
+  isBanned,
+  isToBeReviewed,
+} from '@auto-drive/models';
 import { Button } from '@auto-drive/ui';
 import { cn } from '@/utils/cn';
 import {
@@ -94,15 +98,14 @@ export const ObjectDetailsActions = ({
         variant='primary'
         className={cn(
           'inline-flex items-center text-sm',
-          object.tags.includes(ObjectTag.Banned) &&
-            'cursor-not-allowed opacity-50',
+          isBanned(object.tags) && 'cursor-not-allowed opacity-50',
         )}
-        disabled={object.tags.includes(ObjectTag.Banned)}
+        disabled={isBanned(object.tags)}
         onClick={handleDownload}
       >
         <ArrowDownTrayIcon className='mr-2 h-4 w-4' />
         Download
-        {object.tags.includes(ObjectTag.Banned) && (
+        {isBanned(object.tags) && (
           <span className='ml-2 text-xs text-gray-500'>(File is banned)</span>
         )}
       </Button>
@@ -111,10 +114,10 @@ export const ObjectDetailsActions = ({
           variant='primary'
           className={cn(
             'inline-flex items-center text-sm',
-            (object.tags.includes(ObjectTag.Banned) || isBringingToCache) &&
+            (isBanned(object.tags) || isBringingToCache) &&
               'cursor-not-allowed opacity-50',
           )}
-          disabled={object.tags.includes(ObjectTag.Banned) || isBringingToCache}
+          disabled={isBanned(object.tags) || isBringingToCache}
           onClick={handleBringToCache}
         >
           <CloudArrowDownIcon className='mr-2 h-4 w-4' />
@@ -144,9 +147,7 @@ export const ObjectDetailsActions = ({
         className='inline-flex items-center bg-orange-100 text-sm text-orange-700 hover:bg-orange-200'
         onClick={handleReport}
         disabled={
-          isReporting ||
-          object.tags.includes(ObjectTag.ToBeReviewed) ||
-          object.tags.includes(ObjectTag.Banned)
+          isReporting || isToBeReviewed(object.tags) || isBanned(object.tags)
         }
       >
         <ExclamationTriangleIcon className='mr-2 h-4 w-4' />

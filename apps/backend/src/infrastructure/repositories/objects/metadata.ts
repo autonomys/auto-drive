@@ -314,6 +314,15 @@ const addTag = async (cid: string, tag: string) => {
   })
 }
 
+const removeTag = async (cid: string, tag: string) => {
+  const db = await getDatabase()
+
+  await db.query({
+    text: 'UPDATE metadata SET tags = array_remove(tags, $1) WHERE head_cid = $2',
+    values: [tag, cid],
+  })
+}
+
 const getMetadataByTagIncludeExclude = async (
   tagIncludes: string[],
   tagToExclude: string[],
@@ -347,5 +356,6 @@ export const metadataRepository = {
   markAsArchived,
   getMetadataByIsArchived,
   addTag,
+  removeTag,
   getMetadataByTagIncludeExclude,
 }

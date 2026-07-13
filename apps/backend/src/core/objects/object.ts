@@ -696,6 +696,18 @@ const addTag = async (cid: string, tag: string) => {
   await metadataRepository.addTag(cid, tag)
 }
 
+const removeTag = async (cid: string, tag: string) => {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
+    throw new Error('Object not found')
+  }
+
+  // If the tag is not present, do nothing
+  if (!metadata.tags?.includes(tag)) return
+
+  await metadataRepository.removeTag(cid, tag)
+}
+
 const banObject = async (
   executor: User,
   cid: string,
@@ -720,6 +732,10 @@ const banObject = async (
 
 const reportObject = async (cid: string) => {
   logger.debug('Attempting to report object (cid=%s)', cid)
+  // Clear any earlier dismissal first: a file that was reported, dismissed by an
+  // admin, and then reported again must re-surface in the review queue. Without
+  // this the lingering `report-dismissed` tag would keep it hidden forever.
+  await ObjectUseCases.removeTag(cid, ObjectTag.ReportDismissed)
   await ObjectUseCases.addTag(cid, ObjectTag.ToBeReviewed)
 
   logger.info('Object reported successfully (cid=%s)', cid)
@@ -796,14 +812,28 @@ const authorizeDownload = async (
   return ok()
 }
 
-const getToBeReviewedList = async (limit: number, offset: number) => {
+const getToBeReviewedList = async (
+  executor: User,
+  limit: number,
+  offset: number,
+): Promise<Result<string[], ForbiddenError>> => {
+  // The review queue lists other users' reported content, so restrict it to
+  // admins — matching banObject/dismissReport which already gate on admin.
+  if (!isAdminUser(executor)) {
+    logger.warn(
+      'User (%s) attempted to list reported objects without admin rights',
+      executor.oauthUserId,
+    )
+    return err(new ForbiddenError('User is not an admin'))
+  }
+
   const metadata = await metadataRepository.getMetadataByTagIncludeExclude(
     [ObjectTag.ToBeReviewed],
     [ObjectTag.Banned, ObjectTag.ReportDismissed],
     limit,
     offset,
   )
-  return metadata.rows.map((e) => e.head_cid)
+  return ok(metadata.rows.map((e) => e.head_cid))
 }
 
 export const ObjectUseCases = {
@@ -832,6 +862,7 @@ export const ObjectUseCases = {
   checkArchivalStatusForObjects,
   populateCaches,
   addTag,
+  removeTag,
   banObject,
   reportObject,
   dismissReport,

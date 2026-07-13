@@ -515,12 +515,17 @@ objectController.post(
 objectController.get(
   '/to-be-reviewed/list',
   asyncSafeHandler(async (req, res) => {
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
     const { limit, offset } = req.query
     const limitNumber = limit ? parseInt(limit as string) : 100
     const offsetNumber = offset ? parseInt(offset as string) : 0
 
-    const toBeReviewedList = await handleInternalError(
-      ObjectUseCases.getToBeReviewedList(limitNumber, offsetNumber),
+    const toBeReviewedList = await handleInternalErrorResult(
+      ObjectUseCases.getToBeReviewedList(executor, limitNumber, offsetNumber),
       'Failed to get to be reviewed list',
     )
     if (toBeReviewedList.isErr()) {

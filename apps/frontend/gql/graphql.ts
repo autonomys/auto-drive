@@ -3435,7 +3435,7 @@ export type FilesToBeReviewedQueryVariables = Exact<{
 }>;
 
 
-export type FilesToBeReviewedQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', headCid?: string | null }> };
+export type FilesToBeReviewedQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', headCid?: string | null, tags?: Array<string> | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, createdAt?: any | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
 
 export type MyUndismissedAsyncDownloadsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3528,8 +3528,22 @@ export const FilesToBeReviewedDocument = gql`
     where: {_and: [{tags: {_contains: ["reported"]}}, {_not: {tags: {_contains: ["banned"]}}}, {_not: {tags: {_contains: ["report-dismissed"]}}}]}
     limit: $limit
     offset: $offset
+    order_by: {created_at: desc}
   ) {
     headCid: head_cid
+    tags
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    createdAt: created_at
+  }
+  metadata_roots_aggregate(
+    where: {_and: [{tags: {_contains: ["reported"]}}, {_not: {tags: {_contains: ["banned"]}}}, {_not: {tags: {_contains: ["report-dismissed"]}}}]}
+  ) {
+    aggregate {
+      count
+    }
   }
 }
     `;

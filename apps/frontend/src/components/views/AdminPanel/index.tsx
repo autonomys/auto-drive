@@ -12,7 +12,7 @@ import { useNetwork } from 'contexts/network';
 import { Button, ROUTES } from '@auto-drive/ui';
 import { AdminStats } from './AdminStats';
 import Link from 'next/link';
-import { CreditCard, ChevronRight } from 'lucide-react';
+import { CreditCard, ChevronRight, Flag } from 'lucide-react';
 
 export const AdminPanel = () => {
   const [accountsWithUsers, setAccountsWithUsers] = useState<
@@ -147,6 +147,24 @@ export const AdminPanel = () => {
             <h2 className='text-xl font-semibold'>Purchased Credits</h2>
             <p className='text-sm text-muted-foreground'>
               All credit batches, over-cap intents, and refund processing.
+            </p>
+          </div>
+        </div>
+        <ChevronRight className='h-5 w-5 text-muted-foreground' />
+      </Link>
+
+      {/* Reported Files — dedicated review queue */}
+      <Link
+        href={ROUTES.adminReported(network.network.id)}
+        className='flex items-center justify-between rounded-lg border border-gray-200 bg-background p-6 hover:bg-muted/30'
+      >
+        <div className='flex items-center gap-3'>
+          <Flag className='h-5 w-5 text-muted-foreground' />
+          <div>
+            <h2 className='text-xl font-semibold'>Reported Files</h2>
+            <p className='text-sm text-muted-foreground'>
+              Review files users have flagged, then dismiss the report or ban
+              the file.
             </p>
           </div>
         </div>
