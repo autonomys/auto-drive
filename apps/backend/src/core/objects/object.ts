@@ -730,6 +730,28 @@ const banObject = async (
   return ok()
 }
 
+const unbanObject = async (
+  executor: User,
+  cid: string,
+): Promise<Result<void, ForbiddenError>> => {
+  logger.debug('Attempting to unban object (cid=%s)', cid)
+  if (!isAdminUser(executor)) {
+    logger.warn(
+      'User (%s) attempted to unban object without admin rights (cid=%s)',
+      executor.oauthUserId,
+      cid,
+    )
+    return err(new ForbiddenError('User is not an admin'))
+  }
+
+  await ObjectUseCases.removeTag(cid, ObjectTag.Banned)
+  await FileGateway.unbanFile(cid)
+
+  logger.info('Object unbanned successfully (cid=%s)', cid)
+
+  return ok()
+}
+
 const reportObject = async (cid: string) => {
   logger.debug('Attempting to report object (cid=%s)', cid)
   // Clear any earlier dismissal first: a file that was reported, dismissed by an
@@ -864,6 +886,7 @@ export const ObjectUseCases = {
   addTag,
   removeTag,
   banObject,
+  unbanObject,
   reportObject,
   dismissReport,
   authorizeDownload,

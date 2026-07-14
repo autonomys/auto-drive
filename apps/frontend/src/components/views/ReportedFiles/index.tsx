@@ -1,7 +1,7 @@
 /* eslint-disable camelcase */
 'use client';
 
-import { Fragment, useCallback, useState } from 'react';
+import { Fragment, ReactNode, useCallback, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -11,21 +11,95 @@ import {
   Transition,
   TransitionChild,
 } from '@headlessui/react';
-import { BanIcon, FlagIcon, RefreshCwIcon } from 'lucide-react';
-import { Button, ROUTES } from '@auto-drive/ui';
-import { isAdminUser } from '@auto-drive/models';
-import { useFilesToBeReviewedQuery } from 'gql/graphql';
+import { BanIcon, CheckCircleIcon, FlagIcon, RefreshCwIcon, UndoIcon } from 'lucide-react';
+import { Button, Network, ROUTES } from '@auto-drive/ui';
+import { isAdminUser, getReportStatus, ReportStatus } from '@auto-drive/models';
+import { AdminReportedFilesQuery, useAdminReportedFilesQuery } from 'gql/graphql';
 import { useNetwork } from 'contexts/network';
 import { useUserStore } from 'globalStates/user';
 import { CopiableText } from '@/components/atoms/CopiableText';
 import { formatCid } from '@/utils/table';
 import { formatBytes } from '@/utils/number';
 
+type ReportedFile = AdminReportedFilesQuery['metadata'][number];
+
 // The queue is expected to be small; a generous single-page limit avoids
 // paginating admin tooling that will rarely hold more than a handful of files.
 const REVIEW_LIMIT = 200;
 
-type ConfirmState = { cid: string; action: 'ban' | 'dismiss' } | null;
+type Action = 'ban' | 'dismiss' | 'unban';
+type ConfirmState = { cid: string; action: Action } | null;
+
+const STATUS_LABEL: Record<ReportStatus, string> = {
+  pending: 'Pending review',
+  dismissed: 'Dismissed',
+  banned: 'Banned',
+};
+
+const STATUS_BADGE_CLASSES: Record<ReportStatus, string> = {
+  pending:
+    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  dismissed: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  banned: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+};
+
+const ACTION_COPY: Record<
+  Action,
+  { pending: string; success: string; failure: string }
+> = {
+  ban: {
+    pending: 'Banning file...',
+    success: 'File banned',
+    failure: 'Failed to ban file',
+  },
+  unban: {
+    pending: 'Unbanning file...',
+    success: 'File unbanned',
+    failure: 'Failed to unban file',
+  },
+  dismiss: {
+    pending: 'Dismissing report...',
+    success: 'Report dismissed',
+    failure: 'Failed to dismiss report',
+  },
+};
+
+const MODAL_COPY: Record<
+  Action,
+  {
+    title: string;
+    body: string;
+    confirmLabel: string;
+    variant: 'danger' | 'lightAccent';
+  }
+> = {
+  ban: {
+    title: 'Ban File',
+    body: 'Are you sure you want to ban this file? It will be blocked from download across the network. You can unban it later from this page.',
+    confirmLabel: 'Ban File',
+    variant: 'danger',
+  },
+  unban: {
+    title: 'Unban File',
+    body: 'Are you sure you want to unban this file? It will become downloadable across the network again.',
+    confirmLabel: 'Unban File',
+    variant: 'lightAccent',
+  },
+  dismiss: {
+    title: 'Dismiss Report',
+    body: 'Are you sure you want to dismiss this report? The file stays listed here, marked as dismissed, in case you want to revisit it later.',
+    confirmLabel: 'Dismiss Report',
+    variant: 'lightAccent',
+  },
+};
+
+const StatusBadge = ({ status }: { status: ReportStatus }) => (
+  <span
+    className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE_CLASSES[status]}`}
+  >
+    {STATUS_LABEL[status]}
+  </span>
+);
 
 const formatDate = (date: string) =>
   new Date(date).toLocaleDateString(undefined, {
@@ -44,35 +118,41 @@ export const ReportedFiles = () => {
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data, loading, refetch } = useFilesToBeReviewedQuery({
+  const { data, loading, refetch } = useAdminReportedFilesQuery({
     variables: { limit: REVIEW_LIMIT, offset: 0 },
     fetchPolicy: 'cache-and-network',
     skip: !isAdmin,
   });
 
-  const files = data?.metadata_roots ?? [];
+  // The query dedups same-cid rows via distinct_on, which forces ordering by
+  // head_cid first — re-sort by recency here for display.
+  const files = [...(data?.metadata ?? [])].sort((a, b) =>
+    (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
+  );
   const totalCount =
-    data?.metadata_roots_aggregate?.aggregate?.count ?? files.length;
+    data?.metadata_aggregate?.aggregate?.count ?? files.length;
+
+  const pendingFiles = files.filter(
+    (file) => getReportStatus(file.tags ?? []) === 'pending',
+  );
+  const historyFiles = files.filter(
+    (file) => getReportStatus(file.tags ?? []) !== 'pending',
+  );
 
   const handleConfirm = useCallback(async () => {
     if (!confirm) return;
     const { cid, action } = confirm;
-    const isBan = action === 'ban';
-    const toastId = toast.loading(
-      isBan ? 'Banning file...' : 'Dismissing report...',
-    );
+    const toastId = toast.loading(ACTION_COPY[action].pending);
     setIsSubmitting(true);
     try {
-      await (isBan ? api.banFile(cid) : api.dismissReport(cid));
-      toast.success(isBan ? 'File banned' : 'Report dismissed', {
-        id: toastId,
-      });
+      if (action === 'ban') await api.banFile(cid);
+      else if (action === 'unban') await api.unbanFile(cid);
+      else await api.dismissReport(cid);
+      toast.success(ACTION_COPY[action].success, { id: toastId });
       setConfirm(null);
       await refetch();
     } catch {
-      toast.error(isBan ? 'Failed to ban file' : 'Failed to dismiss report', {
-        id: toastId,
-      });
+      toast.error(ACTION_COPY[action].failure, { id: toastId });
     } finally {
       setIsSubmitting(false);
     }
@@ -93,15 +173,16 @@ export const ReportedFiles = () => {
       <div>
         <h1 className='text-2xl font-bold'>Reported Files</h1>
         <p className='mt-2 text-sm text-gray-600 dark:text-gray-400'>
-          Files that users have flagged for review. Dismiss a report to clear
-          the flag, or ban the file to block it from download across the
-          network. If a dismissed file is reported again it reappears here.
+          Files that users have flagged for review, kept here permanently so
+          decisions can be revisited. Dismiss a report to clear the flag, or
+          ban the file to block it from download across the network — either
+          decision can be reversed later from this same list.
         </p>
       </div>
 
       <div className='flex items-center justify-between'>
         <span className='text-sm text-gray-600 dark:text-gray-400'>
-          {totalCount} file{totalCount === 1 ? '' : 's'} awaiting review
+          {totalCount} reported file{totalCount === 1 ? '' : 's'}
         </span>
         <Button
           variant='lightAccent'
@@ -115,85 +196,29 @@ export const ReportedFiles = () => {
 
       {loading && files.length === 0 ? (
         <div className='py-8 text-center text-gray-500'>Loading...</div>
-      ) : files.length === 0 ? (
-        <div className='flex flex-col items-center gap-2 py-12 text-center text-gray-500'>
-          <FlagIcon className='h-8 w-8 opacity-50' />
-          <span>No reported files. Nothing to review.</span>
-        </div>
       ) : (
-        <div className='overflow-x-auto'>
-          <table className='w-full text-left text-sm'>
-            <thead className='border-b border-gray-200 text-xs uppercase text-gray-500 dark:border-gray-700'>
-              <tr>
-                <th className='px-4 py-3'>Name</th>
-                <th className='px-4 py-3'>CID</th>
-                <th className='px-4 py-3'>Type</th>
-                <th className='px-4 py-3'>Size</th>
-                <th className='px-4 py-3'>Uploaded</th>
-                <th className='px-4 py-3 text-right'>Actions</th>
-              </tr>
-            </thead>
-            <tbody className='divide-y divide-gray-100 dark:divide-gray-700'>
-              {files.map((file) => {
-                const cid = file.headCid ?? '';
-                const name = file.name || `No name (${cid.slice(0, 12)}…)`;
-                return (
-                  <tr
-                    key={cid}
-                    className='hover:bg-gray-50 dark:hover:bg-gray-800'
-                  >
-                    <td className='max-w-[220px] truncate px-4 py-3'>
-                      <Link
-                        href={ROUTES.objectDetails(network.id, cid)}
-                        prefetch={false}
-                        className='font-medium hover:text-primary hover:underline'
-                        title={name}
-                      >
-                        {name}
-                      </Link>
-                    </td>
-                    <td className='px-4 py-3'>
-                      <CopiableText text={cid} displayText={formatCid(cid)} />
-                    </td>
-                    <td className='px-4 py-3 capitalize'>{file.type ?? '-'}</td>
-                    <td className='px-4 py-3'>
-                      {file.size != null ? formatBytes(Number(file.size)) : '-'}
-                    </td>
-                    <td className='px-4 py-3 text-xs'>
-                      {file.createdAt ? formatDate(file.createdAt) : 'Unknown'}
-                    </td>
-                    <td className='px-4 py-3'>
-                      <div className='flex items-center justify-end gap-2'>
-                        <Link
-                          href={ROUTES.objectDetails(network.id, cid)}
-                          prefetch={false}
-                          className='rounded px-2 py-1 text-sm text-foreground hover:bg-background-hover'
-                        >
-                          View
-                        </Link>
-                        <Button
-                          variant='lightAccent'
-                          className='text-xs'
-                          onClick={() => setConfirm({ cid, action: 'dismiss' })}
-                        >
-                          Dismiss
-                        </Button>
-                        <Button
-                          variant='lightDanger'
-                          className='inline-flex items-center gap-1 text-xs'
-                          onClick={() => setConfirm({ cid, action: 'ban' })}
-                        >
-                          <BanIcon className='h-3.5 w-3.5' />
-                          Ban
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <ReportSection
+            title='Needs Review'
+            description='Newly reported files awaiting a decision.'
+            emptyIcon={<FlagIcon className='h-8 w-8 opacity-50' />}
+            emptyMessage='No files currently need review.'
+            files={pendingFiles}
+            showStatusColumn={false}
+            network={network}
+            onAction={setConfirm}
+          />
+          <ReportSection
+            title='Review History'
+            description='Files already dismissed or banned. Revisit and change the decision anytime.'
+            emptyIcon={<CheckCircleIcon className='h-8 w-8 opacity-50' />}
+            emptyMessage='No previously reviewed files yet.'
+            files={historyFiles}
+            showStatusColumn={true}
+            network={network}
+            onAction={setConfirm}
+          />
+        </>
       )}
 
       <ConfirmActionModal
@@ -206,6 +231,135 @@ export const ReportedFiles = () => {
   );
 };
 
+const ReportSection = ({
+  title,
+  description,
+  emptyIcon,
+  emptyMessage,
+  files,
+  showStatusColumn,
+  network,
+  onAction,
+}: {
+  title: string;
+  description: string;
+  emptyIcon: ReactNode;
+  emptyMessage: string;
+  files: ReportedFile[];
+  showStatusColumn: boolean;
+  network: Network;
+  onAction: (state: ConfirmState) => void;
+}) => (
+  <div className='flex flex-col gap-3'>
+    <div>
+      <h2 className='text-lg font-semibold'>
+        {title} ({files.length})
+      </h2>
+      <p className='text-sm text-gray-600 dark:text-gray-400'>{description}</p>
+    </div>
+
+    {files.length === 0 ? (
+      <div className='flex flex-col items-center gap-2 py-10 text-center text-gray-500'>
+        {emptyIcon}
+        <span>{emptyMessage}</span>
+      </div>
+    ) : (
+      <div className='overflow-x-auto'>
+        <table className='w-full text-left text-sm'>
+          <thead className='border-b border-gray-200 text-xs uppercase text-gray-500 dark:border-gray-700'>
+            <tr>
+              <th className='px-4 py-3'>Name</th>
+              <th className='px-4 py-3'>CID</th>
+              <th className='px-4 py-3'>Type</th>
+              <th className='px-4 py-3'>Size</th>
+              <th className='px-4 py-3'>Uploaded</th>
+              {showStatusColumn && <th className='px-4 py-3'>Status</th>}
+              <th className='px-4 py-3 text-right'>Actions</th>
+            </tr>
+          </thead>
+          <tbody className='divide-y divide-gray-100 dark:divide-gray-700'>
+            {files.map((file) => {
+              const cid = file.headCid ?? '';
+              const name = file.name || `No name (${cid.slice(0, 12)}…)`;
+              const status = getReportStatus(file.tags ?? []);
+              return (
+                <tr key={cid} className='hover:bg-gray-50 dark:hover:bg-gray-800'>
+                  <td className='max-w-[220px] truncate px-4 py-3'>
+                    <Link
+                      href={ROUTES.objectDetails(network.id, cid)}
+                      prefetch={false}
+                      className='font-medium hover:text-primary hover:underline'
+                      title={name}
+                    >
+                      {name}
+                    </Link>
+                  </td>
+                  <td className='px-4 py-3'>
+                    <CopiableText text={cid} displayText={formatCid(cid)} />
+                  </td>
+                  <td className='px-4 py-3 capitalize'>{file.type ?? '-'}</td>
+                  <td className='px-4 py-3'>
+                    {file.size != null ? formatBytes(Number(file.size)) : '-'}
+                  </td>
+                  <td className='px-4 py-3 text-xs'>
+                    {file.createdAt ? formatDate(file.createdAt) : 'Unknown'}
+                  </td>
+                  {showStatusColumn && (
+                    <td className='px-4 py-3'>
+                      <StatusBadge status={status} />
+                    </td>
+                  )}
+                  <td className='px-4 py-3'>
+                    <div className='flex items-center justify-end gap-2'>
+                      <Link
+                        href={ROUTES.objectDetails(network.id, cid)}
+                        prefetch={false}
+                        className='rounded px-2 py-1 text-sm text-foreground hover:bg-background-hover'
+                      >
+                        View
+                      </Link>
+                      {status === 'banned' ? (
+                        <Button
+                          variant='lightAccent'
+                          className='inline-flex items-center gap-1 text-xs'
+                          onClick={() => onAction({ cid, action: 'unban' })}
+                        >
+                          <UndoIcon className='h-3.5 w-3.5' />
+                          Unban
+                        </Button>
+                      ) : (
+                        <>
+                          {status === 'pending' && (
+                            <Button
+                              variant='lightAccent'
+                              className='text-xs'
+                              onClick={() => onAction({ cid, action: 'dismiss' })}
+                            >
+                              Dismiss
+                            </Button>
+                          )}
+                          <Button
+                            variant='lightDanger'
+                            className='inline-flex items-center gap-1 text-xs'
+                            onClick={() => onAction({ cid, action: 'ban' })}
+                          >
+                            <BanIcon className='h-3.5 w-3.5' />
+                            Ban
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+);
+
 const ConfirmActionModal = ({
   confirm,
   isSubmitting,
@@ -217,7 +371,7 @@ const ConfirmActionModal = ({
   onCancel: () => void;
   onConfirm: () => void;
 }) => {
-  const isBan = confirm?.action === 'ban';
+  const copy = confirm ? MODAL_COPY[confirm.action] : null;
 
   return (
     <Transition appear show={confirm !== null} as={Fragment}>
@@ -247,13 +401,11 @@ const ConfirmActionModal = ({
             >
               <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-card p-6 text-left align-middle text-card-foreground shadow-xl transition-all'>
                 <DialogTitle as='h3' className='text-lg font-medium leading-6'>
-                  {isBan ? 'Ban File' : 'Dismiss Report'}
+                  {copy?.title}
                 </DialogTitle>
                 <div className='mt-2'>
                   <p className='text-sm text-gray-500 dark:text-gray-400'>
-                    {isBan
-                      ? 'Are you sure you want to ban this file? It will be blocked from download across the network.'
-                      : 'Are you sure you want to dismiss this report? It will be removed from the review queue.'}
+                    {copy?.body}
                   </p>
                   <p className='mt-2 break-all font-mono text-sm text-gray-600 dark:text-gray-300'>
                     {confirm?.cid}
@@ -268,11 +420,11 @@ const ConfirmActionModal = ({
                     Cancel
                   </Button>
                   <Button
-                    variant={isBan ? 'danger' : 'lightAccent'}
+                    variant={copy?.variant}
                     onClick={onConfirm}
                     disabled={isSubmitting}
                   >
-                    {isBan ? 'Ban File' : 'Dismiss Report'}
+                    {copy?.confirmLabel}
                   </Button>
                 </div>
               </DialogPanel>

@@ -149,3 +149,11 @@ export const isToBeReviewed = (tags: string[]) => {
 export const isInsecure = (tags: string[]) => {
   return tags.includes(ObjectTag.Insecure);
 };
+
+export type ReportStatus = "pending" | "dismissed" | "banned";
+
+export const getReportStatus = (tags: string[]): ReportStatus => {
+  if (isBanned(tags)) return "banned";
+  if (isReportDismissed(tags)) return "dismissed";
+  return "pending";
+};

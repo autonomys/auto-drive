@@ -3435,7 +3435,15 @@ export type FilesToBeReviewedQueryVariables = Exact<{
 }>;
 
 
-export type FilesToBeReviewedQuery = { __typename?: 'query_root', metadata_roots: Array<{ __typename?: 'metadata_roots', headCid?: string | null, tags?: Array<string> | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, createdAt?: any | null }>, metadata_roots_aggregate: { __typename?: 'metadata_roots_aggregate', aggregate?: { __typename?: 'metadata_roots_aggregate_fields', count: number } | null } };
+export type FilesToBeReviewedQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', headCid?: string | null, tags?: Array<string> | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, createdAt?: any | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
+
+export type AdminReportedFilesQueryVariables = Exact<{
+  limit: Scalars['Int']['input'];
+  offset: Scalars['Int']['input'];
+}>;
+
+
+export type AdminReportedFilesQuery = { __typename?: 'query_root', metadata: Array<{ __typename?: 'metadata', headCid?: string | null, tags?: Array<string> | null, type?: any | null, name?: any | null, mimeType?: any | null, size?: any | null, createdAt?: any | null }>, metadata_aggregate: { __typename?: 'metadata_aggregate', aggregate?: { __typename?: 'metadata_aggregate_fields', count: number } | null } };
 
 export type MyUndismissedAsyncDownloadsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3524,11 +3532,12 @@ export type SearchUserMetadataByCidOrNameQuery = { __typename?: 'query_root', me
 
 export const FilesToBeReviewedDocument = gql`
     query FilesToBeReviewed($limit: Int!, $offset: Int!) {
-  metadata_roots(
+  metadata(
     where: {_and: [{tags: {_contains: ["reported"]}}, {_not: {tags: {_contains: ["banned"]}}}, {_not: {tags: {_contains: ["report-dismissed"]}}}]}
+    distinct_on: [head_cid]
     limit: $limit
     offset: $offset
-    order_by: {created_at: desc}
+    order_by: [{head_cid: asc}, {created_at: desc}]
   ) {
     headCid: head_cid
     tags
@@ -3538,11 +3547,11 @@ export const FilesToBeReviewedDocument = gql`
     size: metadata(path: "totalSize")
     createdAt: created_at
   }
-  metadata_roots_aggregate(
+  metadata_aggregate(
     where: {_and: [{tags: {_contains: ["reported"]}}, {_not: {tags: {_contains: ["banned"]}}}, {_not: {tags: {_contains: ["report-dismissed"]}}}]}
   ) {
     aggregate {
-      count
+      count(columns: head_cid, distinct: true)
     }
   }
 }
@@ -3581,6 +3590,64 @@ export type FilesToBeReviewedQueryHookResult = ReturnType<typeof useFilesToBeRev
 export type FilesToBeReviewedLazyQueryHookResult = ReturnType<typeof useFilesToBeReviewedLazyQuery>;
 export type FilesToBeReviewedSuspenseQueryHookResult = ReturnType<typeof useFilesToBeReviewedSuspenseQuery>;
 export type FilesToBeReviewedQueryResult = Apollo.QueryResult<FilesToBeReviewedQuery, FilesToBeReviewedQueryVariables>;
+export const AdminReportedFilesDocument = gql`
+    query AdminReportedFiles($limit: Int!, $offset: Int!) {
+  metadata(
+    where: {tags: {_contains: ["reported"]}}
+    distinct_on: [head_cid]
+    limit: $limit
+    offset: $offset
+    order_by: [{head_cid: asc}, {created_at: desc}]
+  ) {
+    headCid: head_cid
+    tags
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    createdAt: created_at
+  }
+  metadata_aggregate(where: {tags: {_contains: ["reported"]}}) {
+    aggregate {
+      count(columns: head_cid, distinct: true)
+    }
+  }
+}
+    `;
+
+/**
+ * __useAdminReportedFilesQuery__
+ *
+ * To run a query within a React component, call `useAdminReportedFilesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useAdminReportedFilesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useAdminReportedFilesQuery({
+ *   variables: {
+ *      limit: // value for 'limit'
+ *      offset: // value for 'offset'
+ *   },
+ * });
+ */
+export function useAdminReportedFilesQuery(baseOptions: Apollo.QueryHookOptions<AdminReportedFilesQuery, AdminReportedFilesQueryVariables> & ({ variables: AdminReportedFilesQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<AdminReportedFilesQuery, AdminReportedFilesQueryVariables>(AdminReportedFilesDocument, options);
+      }
+export function useAdminReportedFilesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<AdminReportedFilesQuery, AdminReportedFilesQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<AdminReportedFilesQuery, AdminReportedFilesQueryVariables>(AdminReportedFilesDocument, options);
+        }
+export function useAdminReportedFilesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<AdminReportedFilesQuery, AdminReportedFilesQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<AdminReportedFilesQuery, AdminReportedFilesQueryVariables>(AdminReportedFilesDocument, options);
+        }
+export type AdminReportedFilesQueryHookResult = ReturnType<typeof useAdminReportedFilesQuery>;
+export type AdminReportedFilesLazyQueryHookResult = ReturnType<typeof useAdminReportedFilesLazyQuery>;
+export type AdminReportedFilesSuspenseQueryHookResult = ReturnType<typeof useAdminReportedFilesSuspenseQuery>;
+export type AdminReportedFilesQueryResult = Apollo.QueryResult<AdminReportedFilesQuery, AdminReportedFilesQueryVariables>;
 export const MyUndismissedAsyncDownloadsDocument = gql`
     query MyUndismissedAsyncDownloads {
   async_downloads(where: {_not: {status: {_eq: "dismissed"}}}) {

@@ -460,6 +460,29 @@ objectController.post(
 )
 
 objectController.post(
+  '/:cid/unban',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
+    const unbanResult = await handleInternalErrorResult(
+      ObjectUseCases.unbanObject(executor, cid),
+      'Failed to unban object',
+    )
+    if (unbanResult.isErr()) {
+      handleError(unbanResult.error, res)
+      return
+    }
+
+    res.sendStatus(204)
+  }),
+)
+
+objectController.post(
   '/:cid/report',
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params

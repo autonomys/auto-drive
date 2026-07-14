@@ -1,0 +1,27 @@
+query AdminReportedFiles($limit: Int!, $offset: Int!) {
+  # Reported files can be nested children of a folder upload (e.g. a single
+  # file inside a reported folder), not just root uploads, so this reads from
+  # `metadata` directly rather than the roots-only `metadata_roots` view.
+  # `distinct_on` collapses duplicate rows the same cid can have from content
+  # deduplication across multiple parent uploads.
+  metadata(
+    where: { tags: { _contains: ["reported"] } }
+    distinct_on: [head_cid]
+    limit: $limit
+    offset: $offset
+    order_by: [{ head_cid: asc }, { created_at: desc }]
+  ) {
+    headCid: head_cid
+    tags
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    createdAt: created_at
+  }
+  metadata_aggregate(where: { tags: { _contains: ["reported"] } }) {
+    aggregate {
+      count(columns: head_cid, distinct: true)
+    }
+  }
+}
