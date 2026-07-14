@@ -574,9 +574,20 @@ describe('AWS S3 - SDK', () => {
       expect(head.headers.get('etag')).toMatch(MD5_ETAG_RE)
     }, 15_000)
 
-    it('DELETE of a bare, slash-less name is DeleteObject (403 immutable), not DeleteBucket', async () => {
-      const res = await raw('DELETE', '/looks-like-a-bucket')
-      expect(res.status).toBe(403)
+    it('DELETE of a bare, slash-less name is DeleteObject (soft-delete, 204), not DeleteBucket', async () => {
+      // Seed a bare object, then DELETE the same bare path. DeleteObject
+      // soft-deletes it and answers 204 (idempotent), after which a GET 404s —
+      // proof the object, not a bucket, was the target. A DeleteBucket would
+      // instead 404 (NoSuchBucket) on this never-created bucket and leave the
+      // object reachable, so a future "no-slash = bucket op" rule would break
+      // these assertions.
+      const body = Buffer.from('bare-delete-target')
+      expect((await raw('PUT', '/bare-delete-target', body)).status).toBe(200)
+
+      const del = await raw('DELETE', '/bare-delete-target')
+      expect(del.status).toBe(204)
+
+      expect((await raw('GET', '/bare-delete-target')).status).toBe(404)
     }, 15_000)
   })
 
