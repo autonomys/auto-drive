@@ -2,11 +2,7 @@ import { describe, it, expect } from '@jest/globals'
 import { Request } from 'express'
 import js2xmlparser from 'js2xmlparser'
 import { getS3Method } from '../../../src/app/controllers/s3/http.js'
-import {
-  objectLegalHoldBody,
-  objectLockConfigurationBody,
-  objectRetentionBody,
-} from '../../../src/app/controllers/s3/s3.js'
+import { objectLegalHoldBody } from '../../../src/app/controllers/s3/s3.js'
 
 const req = (
   method: string,
@@ -50,35 +46,16 @@ describe('getS3Method — Object Lock dispatch', () => {
   })
 })
 
+// Object Lock is not enforced now that the S3 namespace is mutable (delete /
+// overwrite / rename succeed), so the read endpoints report "no lock": the
+// configuration/retention handlers return 404 ObjectLockConfigurationNotFound /
+// NoSuchObjectLockConfiguration (exercised via the endpoints), and legal hold is
+// always OFF.
 describe('Object Lock response bodies', () => {
-  it('GetObjectLockConfiguration advertises Enabled + COMPLIANCE default retention', () => {
-    expect(objectLockConfigurationBody()).toEqual({
-      ObjectLockEnabled: 'Enabled',
-      Rule: { DefaultRetention: { Mode: 'COMPLIANCE', Years: 100 } },
-    })
-    const xml = js2xmlparser.parse(
-      'ObjectLockConfiguration',
-      objectLockConfigurationBody(),
-    )
-    expect(xml).toContain('<ObjectLockEnabled>Enabled</ObjectLockEnabled>')
-    expect(xml).toContain('<Mode>COMPLIANCE</Mode>')
-    expect(xml).toContain('<Years>100</Years>')
-  })
-
-  it('GetObjectRetention is COMPLIANCE with the max-date "forever" RetainUntilDate', () => {
-    const body = objectRetentionBody()
-    expect(body.Mode).toBe('COMPLIANCE')
-    // Year 9999 is the max date common clients (e.g. Python datetime.max) parse.
-    expect(body.RetainUntilDate).toBe('9999-12-31T23:59:59Z')
-    const xml = js2xmlparser.parse('Retention', body)
-    expect(xml).toContain('<Mode>COMPLIANCE</Mode>')
-    expect(xml).toContain(`<RetainUntilDate>${body.RetainUntilDate}`)
-  })
-
-  it('GetObjectLegalHold is ON', () => {
-    expect(objectLegalHoldBody()).toEqual({ Status: 'ON' })
+  it('GetObjectLegalHold is OFF (no enforceable hold)', () => {
+    expect(objectLegalHoldBody()).toEqual({ Status: 'OFF' })
     expect(js2xmlparser.parse('LegalHold', objectLegalHoldBody())).toContain(
-      '<Status>ON</Status>',
+      '<Status>OFF</Status>',
     )
   })
 })

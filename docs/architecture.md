@@ -777,6 +777,8 @@ Interactive API documentation is available at `/docs` on the backend service ([m
 | PUT    | `/s3/:key?uploadId&partNumber` | Upload part        |
 | POST   | `/s3/:key?uploadId`            | Complete multipart |
 
+> **Bucket-level operations (CreateBucket / DeleteBucket / HeadBucket) are intentionally not implemented.** The first path segment is folded into the bucket name, so a bare `/{bucket}` request is indistinguishable from a flat, default-bucket object operation (the semantics the bucket-support migration and legacy flat keys rely on). Buckets are created implicitly on the first object write, and S3 clients such as rclone must set `no_check_bucket = true`. See the decision note in `apps/backend/src/app/controllers/s3/http.ts`.
+
 ---
 
 ## Related Documentation

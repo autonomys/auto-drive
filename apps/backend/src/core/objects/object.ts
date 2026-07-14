@@ -17,6 +17,7 @@ import {
   metadataRepository,
   nodesRepository,
   ownershipRepository,
+  s3ObjectMappingsRepository,
 } from '../../infrastructure/repositories/index.js'
 import { OwnershipUseCases } from './ownership.js'
 import { UploadStatusUseCases } from './uploadStatus.js'
@@ -361,7 +362,21 @@ const restoreObject = async (
     return err(new ForbiddenError('User is not an owner of this object'))
   }
 
+  // The trash time for this owner — S3 keys hidden at/after it are the ones this
+  // trash removed, so only those are un-hidden on restore (see
+  // restoreMappingsByCid); keys deleted individually earlier stay hidden.
+  const trashedAt = isUserOwner.marked_as_deleted
+
   await OwnershipUseCases.restoreObject(executor, cid)
+  // Un-hide the executor's OWN S3 keys this trash removed so restoring brings the
+  // object back to its S3 name too (scoped to the executor so a dedup co-owner's
+  // keys aren't touched; no-op when there are none).
+  await s3ObjectMappingsRepository.restoreMappingsByCid(
+    executor.oauthProvider,
+    executor.oauthUserId,
+    cid,
+    trashedAt,
+  )
   logger.info('Object restored successfully (cid=%s)', cid)
 
   return ok()

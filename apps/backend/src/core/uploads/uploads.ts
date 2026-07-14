@@ -24,7 +24,11 @@ import { config } from '../../config.js'
 import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
 import { BlockstoreUseCases } from './blockstore.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { BadRequestError, ObjectNotFoundError } from '../../errors/index.js'
+import {
+  BadRequestError,
+  ForbiddenError,
+  ObjectNotFoundError,
+} from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 
 const logger = createLogger('useCases:uploads:uploads')
@@ -501,6 +505,54 @@ const scheduleCachePopulation = async (cid: string): Promise<void> => {
   EventRouter.publish(tasks)
 }
 
+/**
+ * Abort an in-progress (PENDING) upload (S3 AbortMultipartUpload / rclone
+ * CleanUp), discarding its buffered parts and blockstore/processing artifacts
+ * before it is finalized into an object. Permission-checked against the
+ * requesting user.
+ *
+ * Returns ObjectNotFoundError (→ NoSuchUpload) when the id is unknown OR the
+ * upload is no longer in progress. Once CompleteMultipartUpload has run the row
+ * is MIGRATING and the async migrate-upload-nodes worker still needs the
+ * blockstore entries to publish the object's nodes to the DSN — deleting them
+ * here would strand a CID the client already holds. S3 clients issue Abort after
+ * a successful Complete on retry/cleanup, and per the S3 spec aborting a
+ * completed upload returns NoSuchUpload, so this is both safe and spec-correct.
+ */
+const abortUpload = async (
+  user: UserWithOrganization,
+  uploadId: string,
+): Promise<Result<void, ObjectNotFoundError | ForbiddenError>> => {
+  const upload = await uploadsRepository.getUploadEntryById(uploadId)
+  if (!upload) {
+    return err(new ObjectNotFoundError('Upload not found'))
+  }
+  // Ownership check returned (not thrown) so a cross-user abort surfaces as a
+  // typed 403, not a 500 from checkPermissions' plain throw.
+  if (
+    upload.oauth_provider !== user.oauthProvider ||
+    upload.oauth_user_id !== user.oauthUserId
+  ) {
+    return err(
+      new ForbiddenError('User does not have permission to abort this upload'),
+    )
+  }
+
+  // Only a still-in-progress (PENDING) upload may be aborted. A MIGRATING (or
+  // otherwise terminal) upload has already been completed; its artifacts must
+  // not be torn down mid-migration.
+  if (upload.status !== UploadStatus.PENDING) {
+    return err(new ObjectNotFoundError('Upload not found'))
+  }
+
+  // removeUploadArtifacts deletes the blockstore entries, the upload rows keyed
+  // by this root_upload_id (a standalone file upload is its own root), the
+  // buffered file parts, and the file-processing-info row.
+  await removeUploadArtifacts(uploadId)
+  logger.info('Aborted multipart upload (uploadId=%s)', uploadId)
+  return ok()
+}
+
 const processMigration = async (uploadId: string): Promise<void> => {
   logger.debug('processMigration invoked (uploadId=%s)', uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
@@ -523,6 +575,7 @@ export const UploadsUseCases = {
   createFileInFolder,
   uploadChunk,
   completeUpload,
+  abortUpload,
   getFileFromFolderUpload,
   getPendingMigrations,
   processMigration,

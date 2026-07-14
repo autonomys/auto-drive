@@ -2,7 +2,9 @@ import { raw, Router, Request, Response } from 'express'
 import { asyncSafeHandler } from '../../../shared/utils/express.js'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import {
+  abortMultipartUploadHandler,
   completeMultipartUploadHandler,
+  copyObjectHandler,
   createMultipartUploadHandler,
   deleteObjectHandler,
   getObjectHandler,
@@ -25,6 +27,24 @@ type S3HandlerConfig = {
   [key: string]: (req: Request, res: Response) => Promise<void>
 }
 
+// ── Bucket-level operations are intentionally NOT implemented ────────────────
+// A true S3 CreateBucket / DeleteBucket / HeadBucket targets a bare `/{bucket}`
+// with no object key (PUT / DELETE / HEAD). This API folds the first path
+// segment into the bucket name (see parseBucketAndKey in s3.ts), so a bare,
+// slash-less path is indistinguishable from a flat, default-bucket object
+// operation — the exact semantics the bucket-support migration and every
+// legacy flat key depend on. Distinguishing the two would require a "no-slash
+// path = bucket op" routing rule that reinterprets every legacy flat-key
+// PUT/DELETE/HEAD (and would force existing objects under a `default/` prefix),
+// so bucket endpoints are deliberately left out to keep object semantics intact.
+//
+// The practical consequence: S3 clients must set `no_check_bucket = true` so
+// they never emit CreateBucket or HeadBucket — buckets are created implicitly
+// on the first object write. A bare
+// PUT/DELETE/HEAD is therefore dispatched below as an ordinary object op:
+//   PUT  → PutObject       HEAD → HeadObject
+//   DELETE → DeleteObject (204; soft-delete — the S3 namespace is mutable)
+// There is deliberately no CreateBucket / DeleteBucket / HeadBucket entry.
 const S3HandlerConfig: S3HandlerConfig = {
   GetObject: getObjectHandler,
   HeadObject: headObjectHandler,
@@ -33,17 +53,21 @@ const S3HandlerConfig: S3HandlerConfig = {
   UploadPart: uploadPartHandler,
   CompleteMultipartUpload: completeMultipartUploadHandler,
   DeleteObject: deleteObjectHandler,
+  CopyObject: copyObjectHandler,
+  AbortMultipartUpload: abortMultipartUploadHandler,
   ListBuckets: listBucketsHandler,
   ListObjectsV2: listObjectsV2Handler,
-  // Object Lock — read-only declarative contract (Auto Drive is immutable).
+  // Object Lock — read-only declarative contract. The underlying DSN data is
+  // permanent even though the S3 namespace supports soft-delete/rename.
   GetObjectLockConfiguration: getObjectLockConfigurationHandler,
   GetObjectRetention: getObjectRetentionHandler,
   GetObjectLegalHold: getObjectLegalHoldHandler,
   // Recognised but unimplemented — mapped to 501, never to a write handler.
-  CopyObject: notImplementedHandler,
   ListParts: notImplementedHandler,
   ListMultipartUploads: notImplementedHandler,
-  AbortMultipartUpload: notImplementedHandler,
+  // Server-side part copy (large-object CopyObject): 501 so it fails cleanly
+  // instead of being misrouted to UploadPart and corrupting the object.
+  UploadPartCopy: notImplementedHandler,
   PostObject: notImplementedHandler,
   // Object Lock is intrinsic and cannot be configured by clients — 501.
   PutObjectLockConfiguration: notImplementedHandler,
@@ -69,7 +93,14 @@ export const getS3Method = (req: Request): string => {
     case 'HEAD':
       return 'HeadObject'
     case 'PUT':
-      if ('uploadId' in q && 'partNumber' in q) return 'UploadPart'
+      if ('uploadId' in q && 'partNumber' in q) {
+        // UploadPartCopy (a part sourced from x-amz-copy-source) is unsupported;
+        // route it to 501 rather than UploadPart, whose handler would read an
+        // empty body and silently corrupt the object. Only rclone server-side
+        // copies of very large files (>= --s3-copy-cutoff, ~4.66 GiB) hit this.
+        if (isCopy) return 'UploadPartCopy'
+        return 'UploadPart'
+      }
       if ('object-lock' in q) return 'PutObjectLockConfiguration'
       if ('retention' in q) return 'PutObjectRetention'
       if ('legal-hold' in q) return 'PutObjectLegalHold'
