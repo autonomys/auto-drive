@@ -1,11 +1,20 @@
-query AdminReportedFiles($limit: Int!, $offset: Int!) {
-  # Reported files can be nested children of a folder upload (e.g. a single
-  # file inside a reported folder), not just root uploads, so this reads from
-  # `metadata` directly rather than the roots-only `metadata_roots` view.
-  # `distinct_on` collapses duplicate rows the same cid can have from content
-  # deduplication across multiple parent uploads.
+query ReportedFilesHistory($limit: Int!, $offset: Int!) {
+  # Files that have already been dismissed or banned. Reported-but-pending
+  # files are fetched separately (FilesToBeReviewedQuery) so a large history
+  # can never crowd pending items out of the shared row budget — each list
+  # is paginated independently (see ReportedFiles/index.tsx "Load more").
   metadata(
-    where: { tags: { _contains: ["reported"] } }
+    where: {
+      _and: [
+        { tags: { _contains: ["reported"] } }
+        {
+          _or: [
+            { tags: { _contains: ["banned"] } }
+            { tags: { _contains: ["report-dismissed"] } }
+          ]
+        }
+      ]
+    }
     distinct_on: [head_cid]
     limit: $limit
     offset: $offset
@@ -19,7 +28,19 @@ query AdminReportedFiles($limit: Int!, $offset: Int!) {
     size: metadata(path: "totalSize")
     createdAt: created_at
   }
-  metadata_aggregate(where: { tags: { _contains: ["reported"] } }) {
+  metadata_aggregate(
+    where: {
+      _and: [
+        { tags: { _contains: ["reported"] } }
+        {
+          _or: [
+            { tags: { _contains: ["banned"] } }
+            { tags: { _contains: ["report-dismissed"] } }
+          ]
+        }
+      ]
+    }
+  ) {
     aggregate {
       count(columns: head_cid, distinct: true)
     }

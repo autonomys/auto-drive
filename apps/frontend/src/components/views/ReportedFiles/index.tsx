@@ -14,18 +14,24 @@ import {
 import { BanIcon, CheckCircleIcon, FlagIcon, RefreshCwIcon, UndoIcon } from 'lucide-react';
 import { Button, Network, ROUTES } from '@auto-drive/ui';
 import { isAdminUser, getReportStatus, ReportStatus } from '@auto-drive/models';
-import { AdminReportedFilesQuery, useAdminReportedFilesQuery } from 'gql/graphql';
+import {
+  FilesToBeReviewedQuery,
+  useFilesToBeReviewedQuery,
+  useReportedFilesHistoryQuery,
+} from 'gql/graphql';
 import { useNetwork } from 'contexts/network';
 import { useUserStore } from 'globalStates/user';
 import { CopiableText } from '@/components/atoms/CopiableText';
 import { formatCid } from '@/utils/table';
 import { formatBytes } from '@/utils/number';
 
-type ReportedFile = AdminReportedFilesQuery['metadata'][number];
+type ReportedFile = FilesToBeReviewedQuery['metadata'][number];
 
-// The queue is expected to be small; a generous single-page limit avoids
-// paginating admin tooling that will rarely hold more than a handful of files.
-const REVIEW_LIMIT = 200;
+// Needs Review and Review History are fetched (and paginated) independently
+// so a large history can never crowd pending files out of a shared row
+// budget — each section's own aggregate count decides whether "Load more"
+// is needed, instead of a single page-wide limit.
+const PAGE_SIZE = 200;
 
 type Action = 'ban' | 'dismiss' | 'unban';
 type ConfirmState = { cid: string; action: Action } | null;
@@ -110,6 +116,11 @@ const formatDate = (date: string) =>
     minute: '2-digit',
   });
 
+// The query dedups same-cid rows via distinct_on, which forces ordering by
+// head_cid first — re-sort by recency here for display.
+const sortByRecency = (files: ReportedFile[]) =>
+  [...files].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+
 export const ReportedFiles = () => {
   const { api, network } = useNetwork();
   const user = useUserStore((e) => e.user);
@@ -117,27 +128,39 @@ export const ReportedFiles = () => {
 
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingPageSize, setPendingPageSize] = useState(PAGE_SIZE);
+  const [historyPageSize, setHistoryPageSize] = useState(PAGE_SIZE);
 
-  const { data, loading, refetch } = useAdminReportedFilesQuery({
-    variables: { limit: REVIEW_LIMIT, offset: 0 },
+  const {
+    data: pendingData,
+    loading: pendingLoading,
+    refetch: refetchPending,
+  } = useFilesToBeReviewedQuery({
+    variables: { limit: pendingPageSize, offset: 0 },
+    fetchPolicy: 'cache-and-network',
+    skip: !isAdmin,
+  });
+  const {
+    data: historyData,
+    loading: historyLoading,
+    refetch: refetchHistory,
+  } = useReportedFilesHistoryQuery({
+    variables: { limit: historyPageSize, offset: 0 },
     fetchPolicy: 'cache-and-network',
     skip: !isAdmin,
   });
 
-  // The query dedups same-cid rows via distinct_on, which forces ordering by
-  // head_cid first — re-sort by recency here for display.
-  const files = [...(data?.metadata ?? [])].sort((a, b) =>
-    (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
-  );
-  const totalCount =
-    data?.metadata_aggregate?.aggregate?.count ?? files.length;
+  const pendingFiles = sortByRecency(pendingData?.metadata ?? []);
+  const historyFiles = sortByRecency(historyData?.metadata ?? []);
+  const pendingTotal =
+    pendingData?.metadata_aggregate?.aggregate?.count ?? pendingFiles.length;
+  const historyTotal =
+    historyData?.metadata_aggregate?.aggregate?.count ?? historyFiles.length;
+  const totalCount = pendingTotal + historyTotal;
 
-  const pendingFiles = files.filter(
-    (file) => getReportStatus(file.tags ?? []) === 'pending',
-  );
-  const historyFiles = files.filter(
-    (file) => getReportStatus(file.tags ?? []) !== 'pending',
-  );
+  const refetchAll = useCallback(async () => {
+    await Promise.all([refetchPending(), refetchHistory()]);
+  }, [refetchPending, refetchHistory]);
 
   const handleConfirm = useCallback(async () => {
     if (!confirm) return;
@@ -150,13 +173,15 @@ export const ReportedFiles = () => {
       else await api.dismissReport(cid);
       toast.success(ACTION_COPY[action].success, { id: toastId });
       setConfirm(null);
-      await refetch();
+      // An action moves a file between sections (e.g. pending -> banned), so
+      // both queries need refetching regardless of which list it came from.
+      await refetchAll();
     } catch {
       toast.error(ACTION_COPY[action].failure, { id: toastId });
     } finally {
       setIsSubmitting(false);
     }
-  }, [confirm, api, refetch]);
+  }, [confirm, api, refetchAll]);
 
   // The GraphQL feed is public, so gate the admin-only view in the UI too — the
   // ban/dismiss mutations are independently enforced as admin-only server-side.
@@ -187,39 +212,39 @@ export const ReportedFiles = () => {
         <Button
           variant='lightAccent'
           className='inline-flex items-center gap-1 text-sm'
-          onClick={() => refetch()}
+          onClick={() => refetchAll()}
         >
           <RefreshCwIcon className='h-4 w-4' />
           Refresh
         </Button>
       </div>
 
-      {loading && files.length === 0 ? (
-        <div className='py-8 text-center text-gray-500'>Loading...</div>
-      ) : (
-        <>
-          <ReportSection
-            title='Needs Review'
-            description='Newly reported files awaiting a decision.'
-            emptyIcon={<FlagIcon className='h-8 w-8 opacity-50' />}
-            emptyMessage='No files currently need review.'
-            files={pendingFiles}
-            showStatusColumn={false}
-            network={network}
-            onAction={setConfirm}
-          />
-          <ReportSection
-            title='Review History'
-            description='Files already dismissed or banned. Revisit and change the decision anytime.'
-            emptyIcon={<CheckCircleIcon className='h-8 w-8 opacity-50' />}
-            emptyMessage='No previously reviewed files yet.'
-            files={historyFiles}
-            showStatusColumn={true}
-            network={network}
-            onAction={setConfirm}
-          />
-        </>
-      )}
+      <ReportSection
+        title='Needs Review'
+        description='Newly reported files awaiting a decision.'
+        emptyIcon={<FlagIcon className='h-8 w-8 opacity-50' />}
+        emptyMessage='No files currently need review.'
+        files={pendingFiles}
+        totalCount={pendingTotal}
+        isLoading={pendingLoading && pendingFiles.length === 0}
+        onLoadMore={() => setPendingPageSize((size) => size + PAGE_SIZE)}
+        showStatusColumn={false}
+        network={network}
+        onAction={setConfirm}
+      />
+      <ReportSection
+        title='Review History'
+        description='Files already dismissed or banned. Revisit and change the decision anytime.'
+        emptyIcon={<CheckCircleIcon className='h-8 w-8 opacity-50' />}
+        emptyMessage='No previously reviewed files yet.'
+        files={historyFiles}
+        totalCount={historyTotal}
+        isLoading={historyLoading && historyFiles.length === 0}
+        onLoadMore={() => setHistoryPageSize((size) => size + PAGE_SIZE)}
+        showStatusColumn={true}
+        network={network}
+        onAction={setConfirm}
+      />
 
       <ConfirmActionModal
         confirm={confirm}
@@ -237,6 +262,9 @@ const ReportSection = ({
   emptyIcon,
   emptyMessage,
   files,
+  totalCount,
+  isLoading,
+  onLoadMore,
   showStatusColumn,
   network,
   onAction,
@@ -246,6 +274,9 @@ const ReportSection = ({
   emptyIcon: ReactNode;
   emptyMessage: string;
   files: ReportedFile[];
+  totalCount: number;
+  isLoading: boolean;
+  onLoadMore: () => void;
   showStatusColumn: boolean;
   network: Network;
   onAction: (state: ConfirmState) => void;
@@ -253,12 +284,14 @@ const ReportSection = ({
   <div className='flex flex-col gap-3'>
     <div>
       <h2 className='text-lg font-semibold'>
-        {title} ({files.length})
+        {title} ({totalCount})
       </h2>
       <p className='text-sm text-gray-600 dark:text-gray-400'>{description}</p>
     </div>
 
-    {files.length === 0 ? (
+    {isLoading ? (
+      <div className='py-8 text-center text-gray-500'>Loading...</div>
+    ) : files.length === 0 ? (
       <div className='flex flex-col items-center gap-2 py-10 text-center text-gray-500'>
         {emptyIcon}
         <span>{emptyMessage}</span>
@@ -355,6 +388,13 @@ const ReportSection = ({
             })}
           </tbody>
         </table>
+        {files.length < totalCount && (
+          <div className='flex justify-center py-3'>
+            <Button variant='lightAccent' className='text-xs' onClick={onLoadMore}>
+              Load more ({totalCount - files.length} remaining)
+            </Button>
+          </div>
+        )}
       </div>
     )}
   </div>
