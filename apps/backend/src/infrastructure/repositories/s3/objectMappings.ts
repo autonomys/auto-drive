@@ -4,6 +4,32 @@ import { ownershipSQL } from '../objects/ownership.js'
 
 export type { S3ObjectListing }
 
+/**
+ * Standard S3 object metadata persisted per key, beside the content rather than
+ * inside the content hash: it is a property of the S3 key, not of the bytes, so
+ * two keys can point at the same CID with different declared metadata while
+ * content-addressed dedup stays intact. All fields are optional — a field is
+ * present only when the client set the corresponding header on write.
+ *
+ * Content-Type is stored here (verbatim) in addition to the IPLD node's mimeType
+ * so GET/HEAD can return exactly what the client sent — byte-for-byte, with no
+ * framework-injected charset — which the IPLD-derived value cannot guarantee.
+ */
+export interface S3ObjectMetadata {
+  /** Verbatim Content-Type as supplied on write (no charset injected on read). */
+  contentType?: string
+  cacheControl?: string
+  contentLanguage?: string
+  contentDisposition?: string
+  contentEncoding?: string
+  /**
+   * Arbitrary user metadata: the map of x-amz-meta-* entries keyed by the name
+   * after the `x-amz-meta-` prefix (lowercased, as S3 stores them). Excludes the
+   * reserved keys handled elsewhere (mtime, compression, encryption, cid).
+   */
+  userMetadata?: Record<string, string>
+}
+
 export interface S3KeyMapping {
   bucket: string
   key: string
@@ -16,6 +42,11 @@ export interface S3KeyMapping {
    * full precision; null means the object has no client mtime.
    */
   mtime: string | null
+  /**
+   * Standard S3 object metadata (Content-Type, Cache-Control, x-amz-meta-*, …).
+   * null for objects written before metadata persistence was introduced.
+   */
+  metadata: S3ObjectMetadata | null
   /**
    * The user who owns this key. Part of the mapping's identity: the S3 namespace
    * is scoped per user — (owner, bucket, key) is unique — so users never contend
@@ -38,6 +69,8 @@ interface S3KeyMappingDB {
   cid: S3KeyMapping['cid']
   md5: S3KeyMapping['md5']
   mtime: S3KeyMapping['mtime']
+  // pg parses a jsonb column into a JS object on read; null when unset.
+  metadata: S3ObjectMetadata | null
   owner_oauth_provider: S3KeyMapping['ownerOauthProvider']
   owner_oauth_user_id: S3KeyMapping['ownerOauthUserId']
   created_at: S3KeyMapping['createdAt']
@@ -55,6 +88,7 @@ const mapDBToDomain = (db: S3KeyMappingDB): S3KeyMapping => ({
   cid: db.cid,
   md5: db.md5 ?? null,
   mtime: db.mtime ?? null,
+  metadata: db.metadata ?? null,
   ownerOauthProvider: db.owner_oauth_provider,
   ownerOauthUserId: db.owner_oauth_user_id,
   createdAt: db.created_at,
@@ -69,6 +103,7 @@ const createMapping = async (
   cid: string,
   md5: string | null = null,
   mtime: string | null = null,
+  metadata: S3ObjectMetadata | null = null,
 ): Promise<S3KeyMapping> => {
   const db = await getDatabase()
 
@@ -76,18 +111,29 @@ const createMapping = async (
   // OWN row, so there is no cross-user contention to guard against. ON CONFLICT
   // resets deleted_at to NULL so a PutObject to a previously soft-deleted key
   // resurrects it — S3's "PUT after DELETE re-creates the object" (and
-  // TestObjectUpdate, which overwrites in place).
+  // TestObjectUpdate, which overwrites in place). Overwriting a key REPLACES its
+  // metadata wholesale (metadata = $8), matching S3: a PUT redefines the object's
+  // metadata rather than merging into what was there.
   const result = await db.query<S3KeyMappingDB>({
     text: `
       INSERT INTO "S3".object_mappings
-      (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (owner_oauth_provider, owner_oauth_user_id, bucket, "key")
-        DO UPDATE SET cid = $5, md5 = $6, mtime = $7,
+        DO UPDATE SET cid = $5, md5 = $6, mtime = $7, metadata = $8,
           deleted_at = NULL, updated_at = NOW()
       RETURNING *
     `,
-    values: [ownerOauthProvider, ownerOauthUserId, bucket, s3Key, cid, md5, mtime],
+    values: [
+      ownerOauthProvider,
+      ownerOauthUserId,
+      bucket,
+      s3Key,
+      cid,
+      md5,
+      mtime,
+      metadata ? JSON.stringify(metadata) : null,
+    ],
   })
 
   return result.rows.map(mapDBToDomain)[0]
@@ -246,39 +292,48 @@ const listBuckets = async (
   }))
 }
 
-// ── Multipart upload mtime staging ────────────────────────────────────────
-// rclone sends x-amz-meta-mtime on CreateMultipartUpload but not on Complete,
-// and the mapping is only created at completion — so the mtime is stashed by
-// upload id here and read back in completeMultipartUpload. Keyed by the (unique)
-// upload id, so no owner scoping is needed.
+// ── Multipart upload metadata staging ─────────────────────────────────────
+// S3 sends the client mtime and system/user metadata on CreateMultipartUpload
+// but NOT on CompleteMultipartUpload, and the mapping is only created at
+// completion — so both are stashed by upload id here and read back in
+// completeMultipartUpload. Keyed by the (unique) upload id, so no owner scoping
+// is needed. Either value may be absent (an upload can carry metadata but no
+// mtime, or vice versa); a row is written whenever at least one is present.
 
-const setMultipartMtime = async (
+const setMultipartMeta = async (
   uploadId: string,
-  mtime: string,
+  mtime: string | null,
+  metadata: S3ObjectMetadata | null,
 ): Promise<void> => {
   const db = await getDatabase()
   await db.query({
     text: `
-      INSERT INTO "S3".multipart_upload_meta (upload_id, mtime)
-      VALUES ($1, $2)
-      ON CONFLICT (upload_id) DO UPDATE SET mtime = $2
+      INSERT INTO "S3".multipart_upload_meta (upload_id, mtime, metadata)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (upload_id) DO UPDATE SET mtime = $2, metadata = $3
     `,
-    values: [uploadId, mtime],
+    values: [uploadId, mtime, metadata ? JSON.stringify(metadata) : null],
   })
 }
 
-const getMultipartMtime = async (
+const getMultipartMeta = async (
   uploadId: string,
-): Promise<string | null> => {
+): Promise<{ mtime: string | null; metadata: S3ObjectMetadata | null }> => {
   const db = await getDatabase()
-  const result = await db.query<{ mtime: string }>({
-    text: 'SELECT mtime FROM "S3".multipart_upload_meta WHERE upload_id = $1',
+  const result = await db.query<{
+    mtime: string | null
+    metadata: S3ObjectMetadata | null
+  }>({
+    text: 'SELECT mtime, metadata FROM "S3".multipart_upload_meta WHERE upload_id = $1',
     values: [uploadId],
   })
-  return result.rows[0]?.mtime ?? null
+  return {
+    mtime: result.rows[0]?.mtime ?? null,
+    metadata: result.rows[0]?.metadata ?? null,
+  }
 }
 
-const deleteMultipartMtime = async (uploadId: string): Promise<void> => {
+const deleteMultipartMeta = async (uploadId: string): Promise<void> => {
   const db = await getDatabase()
   await db.query({
     text: 'DELETE FROM "S3".multipart_upload_meta WHERE upload_id = $1',
@@ -377,9 +432,9 @@ export const s3ObjectMappingsRepository = {
   softDeleteMapping,
   restoreMappingsByCid,
   countActiveMappingsByCid,
-  setMultipartMtime,
-  getMultipartMtime,
-  deleteMultipartMtime,
+  setMultipartMeta,
+  getMultipartMeta,
+  deleteMultipartMeta,
   listBuckets,
   listObjects,
 }

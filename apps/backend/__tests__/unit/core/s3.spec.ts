@@ -42,6 +42,7 @@ describe('S3UseCases', () => {
       cid: 'cid123',
       md5: null,
       mtime: null,
+      metadata: null,
       ownerOauthProvider: 'google',
       ownerOauthUserId: 'user1',
       createdAt: new Date(0),
@@ -110,6 +111,28 @@ describe('S3UseCases', () => {
       )
     })
 
+    it('surfaces the stored object metadata for the response layer', async () => {
+      const objectMetadata = {
+        contentType: 'text/csv',
+        cacheControl: 'max-age=99',
+        userMetadata: { foo: 'bar' },
+      }
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(mapping({ metadata: objectMetadata }))
+      jest
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .mockResolvedValue(ok({ read: jest.fn() }) as any)
+
+      const result = await S3UseCases.getObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'file.txt',
+      } as any)
+
+      expect(result.isOk()).toBe(true)
+      expect(result._unsafeUnwrap().objectMetadata).toEqual(objectMetadata)
+    })
+
     it('returns a null etag for legacy objects without md5', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
@@ -149,14 +172,11 @@ describe('S3UseCases', () => {
   })
 
   describe('createMultipartUpload', () => {
-    it('creates the upload; stashes no mtime when none is supplied', async () => {
+    it('creates the upload; stashes nothing when neither mtime nor metadata is supplied', async () => {
       jest
         .spyOn(UploadsUseCases, 'createFileUpload')
         .mockResolvedValue({ id: 'upload123' } as any)
-      const mtimeSpy = jest.spyOn(
-        s3ObjectMappingsRepository,
-        'setMultipartMtime',
-      )
+      const metaSpy = jest.spyOn(s3ObjectMappingsRepository, 'setMultipartMeta')
 
       const result = await S3UseCases.createMultipartUpload(mockUser, {
         Bucket: 'bucket',
@@ -165,15 +185,15 @@ describe('S3UseCases', () => {
       } as any)
 
       expect(result.isOk()).toBe(true)
-      expect(mtimeSpy).not.toHaveBeenCalled()
+      expect(metaSpy).not.toHaveBeenCalled()
     })
 
     it('stashes the client mtime by upload id when provided', async () => {
       jest
         .spyOn(UploadsUseCases, 'createFileUpload')
         .mockResolvedValue({ id: 'upload123' } as any)
-      const mtimeSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'setMultipartMtime')
+      const metaSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'setMultipartMeta')
         .mockResolvedValue(undefined)
 
       await S3UseCases.createMultipartUpload(mockUser, {
@@ -182,7 +202,25 @@ describe('S3UseCases', () => {
         Mtime: '1620000000.5',
       } as any)
 
-      expect(mtimeSpy).toHaveBeenCalledWith('upload123', '1620000000.5')
+      expect(metaSpy).toHaveBeenCalledWith('upload123', '1620000000.5', null)
+    })
+
+    it('stashes the object metadata by upload id when provided', async () => {
+      jest
+        .spyOn(UploadsUseCases, 'createFileUpload')
+        .mockResolvedValue({ id: 'upload123' } as any)
+      const metaSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'setMultipartMeta')
+        .mockResolvedValue(undefined)
+
+      const metadata = { contentType: 'text/csv', userMetadata: { a: '1' } }
+      await S3UseCases.createMultipartUpload(mockUser, {
+        Bucket: 'bucket',
+        Key: 'file.txt',
+        Metadata: metadata,
+      } as any)
+
+      expect(metaSpy).toHaveBeenCalledWith('upload123', null, metadata)
     })
   })
 
@@ -206,18 +244,19 @@ describe('S3UseCases', () => {
   })
 
   describe('completeMultipartUpload', () => {
-    it('completes the upload, persists the composite ETag + stashed mtime under the caller', async () => {
+    it('completes the upload, persists the composite ETag + stashed mtime/metadata under the caller', async () => {
       const completeSpy = jest
         .spyOn(UploadsUseCases, 'completeUpload')
         .mockResolvedValue('cid123')
       const mappingSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
         .mockResolvedValue(mapping())
+      const stashedMetadata = { contentType: 'text/csv' }
       jest
-        .spyOn(s3ObjectMappingsRepository, 'getMultipartMtime')
-        .mockResolvedValue('1620000000.5')
-      const clearMtimeSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'deleteMultipartMtime')
+        .spyOn(s3ObjectMappingsRepository, 'getMultipartMeta')
+        .mockResolvedValue({ mtime: '1620000000.5', metadata: stashedMetadata })
+      const clearMetaSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'deleteMultipartMeta')
         .mockResolvedValue(undefined)
 
       const result = await S3UseCases.completeMultipartUpload(mockUser, {
@@ -234,7 +273,7 @@ describe('S3UseCases', () => {
       expect(completeSpy).toHaveBeenCalledWith(mockUser, 'upload123')
       expect(result._unsafeUnwrap().ETag).toMatch(MULTIPART_ETAG_RE)
       expect(result._unsafeUnwrap().Cid).toBe('cid123')
-      // createMapping is owner-scoped: (owner, owner, bucket, key, cid, md5, mtime).
+      // createMapping is owner-scoped: (owner, owner, bucket, key, cid, md5, mtime, metadata).
       expect(mappingSpy).toHaveBeenCalledWith(
         'google',
         'user1',
@@ -243,8 +282,9 @@ describe('S3UseCases', () => {
         'cid123',
         expect.stringMatching(MULTIPART_MD5_RE),
         '1620000000.5',
+        stashedMetadata,
       )
-      expect(clearMtimeSpy).toHaveBeenCalledWith('upload123')
+      expect(clearMetaSpy).toHaveBeenCalledWith('upload123')
     })
   })
 
@@ -338,7 +378,7 @@ describe('S3UseCases', () => {
         Body: Buffer.from('Hello, world!'),
       } as any)
 
-      // MD5 of "Hello, world!"; owner-scoped (owner, owner, bucket, key, cid, md5, mtime).
+      // MD5 of "Hello, world!"; owner-scoped (owner, owner, bucket, key, cid, md5, mtime, metadata).
       expect(mappingSpy).toHaveBeenCalledWith(
         'google',
         'user1',
@@ -347,6 +387,38 @@ describe('S3UseCases', () => {
         'cid123',
         '6cd3556deb0da54bca060b4c39479839',
         null,
+        null,
+      )
+    })
+
+    it('persists the captured object metadata onto the mapping', async () => {
+      setupPut()
+      const mappingSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'createMapping')
+        .mockResolvedValue(mapping())
+      const metadata = {
+        contentType: 'text/csv',
+        cacheControl: 'no-cache',
+        userMetadata: { author: 'alice' },
+      }
+
+      await S3UseCases.putObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'file.txt',
+        Body: Buffer.from('data'),
+        Metadata: metadata,
+      } as any)
+
+      // metadata is the 8th positional argument.
+      expect(mappingSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'my-bucket',
+        'file.txt',
+        'cid123',
+        expect.any(String),
+        null,
+        metadata,
       )
     })
   })
@@ -607,6 +679,7 @@ describe('S3UseCases', () => {
       expect(result._unsafeUnwrap().ETag).toMatch(MD5_ETAG_RE)
       // Source lookup + destination creation are both scoped to the caller.
       expect(findSpy).toHaveBeenCalledWith('google', 'user1', 'src', 'a.txt')
+      // Default COPY directive: the destination inherits the source metadata.
       expect(createSpy).toHaveBeenCalledWith(
         'google',
         'user1',
@@ -615,6 +688,7 @@ describe('S3UseCases', () => {
         'srccid',
         source.md5,
         null,
+        source.metadata,
       )
     })
 
@@ -673,6 +747,7 @@ describe('S3UseCases', () => {
         'srccid',
         source.md5,
         '111.5',
+        source.metadata,
       )
     })
 
@@ -700,6 +775,7 @@ describe('S3UseCases', () => {
         'srccid',
         source.md5,
         '222.9',
+        source.metadata,
       )
     })
 
@@ -727,6 +803,69 @@ describe('S3UseCases', () => {
         'srccid',
         source.md5,
         null,
+        source.metadata,
+      )
+    })
+
+    it('inherits the source metadata under the default COPY directive', async () => {
+      const srcMeta = { contentType: 'text/csv', userMetadata: { a: '1' } }
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(mapping({ ...source, metadata: srcMeta }))
+      const createSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'createMapping')
+        .mockResolvedValue({ ...source, updatedAt: new Date(1000) })
+
+      await S3UseCases.copyObject(mockUser, {
+        SourceBucket: 'src',
+        SourceKey: 'a.txt',
+        Bucket: 'dst',
+        Key: 'b.txt',
+      })
+
+      expect(createSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'dst',
+        'b.txt',
+        'srccid',
+        source.md5,
+        null,
+        srcMeta,
+      )
+    })
+
+    it('replaces the destination metadata when the REPLACE directive provides it', async () => {
+      const srcMeta = { contentType: 'text/csv' }
+      const replacement = {
+        contentType: 'application/json',
+        userMetadata: { b: '2' },
+      }
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(mapping({ ...source, metadata: srcMeta }))
+      const createSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'createMapping')
+        .mockResolvedValue({ ...source, updatedAt: new Date(1000) })
+
+      await S3UseCases.copyObject(mockUser, {
+        SourceBucket: 'src',
+        SourceKey: 'a.txt',
+        Bucket: 'dst',
+        Key: 'b.txt',
+        Metadata: replacement,
+      })
+
+      // The replacement wins over the source metadata; mtime is untouched here.
+      expect(createSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'dst',
+        'b.txt',
+        'srccid',
+        source.md5,
+        null,
+        replacement,
       )
     })
 
@@ -750,35 +889,35 @@ describe('S3UseCases', () => {
   })
 
   describe('abortMultipartUpload', () => {
-    it('delegates to UploadsUseCases.abortUpload and clears the stashed mtime', async () => {
+    it('delegates to UploadsUseCases.abortUpload and clears the stashed metadata', async () => {
       const abortSpy = jest
         .spyOn(UploadsUseCases, 'abortUpload')
         .mockResolvedValue(ok(undefined))
-      const clearMtimeSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'deleteMultipartMtime')
+      const clearMetaSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'deleteMultipartMeta')
         .mockResolvedValue(undefined)
 
       const result = await S3UseCases.abortMultipartUpload(mockUser, 'upload123')
 
       expect(result.isOk()).toBe(true)
       expect(abortSpy).toHaveBeenCalledWith(mockUser, 'upload123')
-      expect(clearMtimeSpy).toHaveBeenCalledWith('upload123')
+      expect(clearMetaSpy).toHaveBeenCalledWith('upload123')
     })
 
-    it('propagates a not-found error for an unknown upload id (no mtime clear)', async () => {
+    it('propagates a not-found error for an unknown upload id (no metadata clear)', async () => {
       jest
         .spyOn(UploadsUseCases, 'abortUpload')
         .mockResolvedValue(err(new ObjectNotFoundError('Upload not found')))
-      const clearMtimeSpy = jest.spyOn(
+      const clearMetaSpy = jest.spyOn(
         s3ObjectMappingsRepository,
-        'deleteMultipartMtime',
+        'deleteMultipartMeta',
       )
 
       const result = await S3UseCases.abortMultipartUpload(mockUser, 'nope')
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
-      expect(clearMtimeSpy).not.toHaveBeenCalled()
+      expect(clearMetaSpy).not.toHaveBeenCalled()
     })
 
     it('propagates a forbidden error when the caller does not own the upload', async () => {

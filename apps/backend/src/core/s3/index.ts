@@ -51,16 +51,21 @@ type CompleteMultipartUploadParams = CompleteMultipartUploadCommandParams & {
   Parts?: Array<{ PartNumber: number; ETag: string }>
 }
 
-/** PutObject params extended with the client modification time (x-amz-meta-mtime).
- *  Kept local rather than in the shared DTO — mtime is an rclone/tooling
+/** PutObject params extended with the client modification time (x-amz-meta-mtime)
+ *  and the standard S3 object metadata captured from the request headers.
+ *  Mtime is kept local rather than in the shared DTO — it is an rclone/tooling
  *  convention, not part of the standard S3 PutObject contract. */
-type PutObjectParams = PutObjectCommandParams & { Mtime?: string | null }
+type PutObjectParams = PutObjectCommandParams & {
+  Mtime?: string | null
+  Metadata?: S3ObjectMetadata | null
+}
 
-/** CreateMultipartUpload params extended with the client mtime, stashed by
- *  upload id so completeMultipartUpload can persist it (rclone sends
- *  x-amz-meta-mtime on create but not on complete). */
+/** CreateMultipartUpload params extended with the client mtime and object
+ *  metadata, both stashed by upload id so completeMultipartUpload can persist
+ *  them (S3 sends them on create but not on complete). */
 type CreateMultipartUploadParams = CreateMultipartUploadCommandParams & {
   Mtime?: string | null
+  Metadata?: S3ObjectMetadata | null
 }
 
 /** CopyObject params. Source is resolved from the x-amz-copy-source header in
@@ -73,6 +78,12 @@ type CopyObjectParams = {
   Key: string
   /** When set, overrides the source mtime on the destination (metadata REPLACE). */
   Mtime?: string | null
+  /**
+   * Metadata directive for the destination. `undefined` means COPY: the
+   * destination inherits the source metadata. A value (or explicit null) means
+   * REPLACE: the destination's metadata is exactly this, discarding the source's.
+   */
+  Metadata?: S3ObjectMetadata | null
 }
 
 /** CopyObject result: the standard fields the <CopyObjectResult> body needs,
@@ -86,7 +97,10 @@ import { UploadsUseCases } from '../uploads/uploads.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { S3BucketInfo } from '../../infrastructure/repositories/s3/objectMappings.js'
+import {
+  S3BucketInfo,
+  S3ObjectMetadata,
+} from '../../infrastructure/repositories/s3/objectMappings.js'
 
 const logger = createLogger('useCases:s3')
 
@@ -125,6 +139,12 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
    * so tools like rclone read the same value they wrote. null when unset.
    */
   mtime: string | null
+  /**
+   * Stored S3 object metadata (Content-Type, Cache-Control, x-amz-meta-*, …),
+   * emitted verbatim on the response by the HTTP layer. null for objects written
+   * before metadata persistence (they fall back to the IPLD-derived headers).
+   */
+  objectMetadata: S3ObjectMetadata | null
 }
 
 const getObject = async (
@@ -160,6 +180,7 @@ const getObject = async (
     etag: mapping.md5 ? formatETag(mapping.md5) : null,
     lastModified: mapping.updatedAt,
     mtime: mapping.mtime,
+    objectMetadata: mapping.metadata,
   }))
 }
 
@@ -177,10 +198,14 @@ const createMultipartUpload = async (
     null,
   )
 
-  // Stash the client mtime (if any) so completeMultipartUpload can persist it —
-  // rclone sends x-amz-meta-mtime here, not on completion.
-  if (params.Mtime) {
-    await s3ObjectMappingsRepository.setMultipartMtime(upload.id, params.Mtime)
+  // Stash the client mtime and object metadata (if any) so
+  // completeMultipartUpload can persist them onto the mapping — S3 sends them
+  // here, on create, not on completion. Skip the write when there is nothing to
+  // stash so uploads that carry neither don't touch the staging table.
+  const mtime = params.Mtime ?? null
+  const metadata = params.Metadata ?? null
+  if (mtime || metadata) {
+    await s3ObjectMappingsRepository.setMultipartMeta(upload.id, mtime, metadata)
   }
 
   return ok({
@@ -230,9 +255,9 @@ const completeMultipartUpload = async (
   // for an MD5 on subsequent GET/HEAD requests.
   const md5ForStorage = hasValidParts ? etag.replace(/"/g, '') : null
 
-  // Persist the mtime stashed at CreateMultipartUpload, then clear the staging
-  // row. null when the client sent no x-amz-meta-mtime.
-  const mtime = await s3ObjectMappingsRepository.getMultipartMtime(
+  // Persist the mtime and object metadata stashed at CreateMultipartUpload, then
+  // clear the staging row. Both are null when the client sent neither.
+  const { mtime, metadata } = await s3ObjectMappingsRepository.getMultipartMeta(
     params.UploadId,
   )
 
@@ -244,8 +269,9 @@ const completeMultipartUpload = async (
     cid,
     md5ForStorage,
     mtime,
+    metadata,
   )
-  await s3ObjectMappingsRepository.deleteMultipartMtime(params.UploadId)
+  await s3ObjectMappingsRepository.deleteMultipartMeta(params.UploadId)
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
     mapping.bucket,
@@ -298,6 +324,7 @@ const putObject = async (
     cid,
     md5,
     params.Mtime ?? null,
+    params.Metadata ?? null,
   )
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
@@ -439,6 +466,12 @@ const copyObject = async (
 
   const mtime = params.Mtime !== undefined ? params.Mtime : source.mtime
 
+  // Metadata directive: undefined ⇒ COPY (inherit the source's metadata); a
+  // value or explicit null ⇒ REPLACE (the destination's metadata is exactly what
+  // the request carried, discarding the source's). Mirrors the mtime handling.
+  const metadata =
+    params.Metadata !== undefined ? params.Metadata : source.metadata
+
   // The destination key is created in the caller's namespace.
   const mapping = await s3ObjectMappingsRepository.createMapping(
     user.oauthProvider,
@@ -448,6 +481,7 @@ const copyObject = async (
     source.cid,
     source.md5,
     mtime,
+    metadata,
   )
 
   logger.debug(
@@ -472,10 +506,10 @@ const abortMultipartUpload = async (
   uploadId: string,
 ): Promise<Result<void, ObjectNotFoundError | ForbiddenError>> => {
   const result = await UploadsUseCases.abortUpload(user, uploadId)
-  // Clear any stashed mtime for this upload once it's genuinely aborted (only
+  // Clear any stashed metadata for this upload once it's genuinely aborted (only
   // on success, so a forbidden/unknown abort doesn't drop another upload's row).
   if (result.isOk()) {
-    await s3ObjectMappingsRepository.deleteMultipartMtime(uploadId)
+    await s3ObjectMappingsRepository.deleteMultipartMeta(uploadId)
   }
   return result
 }
