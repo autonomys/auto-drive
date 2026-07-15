@@ -231,21 +231,27 @@ describe('Object moderation (report / dismiss / ban / unban)', () => {
   describe('multi-row objects (same head cid under several roots)', () => {
     it('ban and unban apply to every row of the head cid', async () => {
       // Content dedup can store the same head_cid under several root_cids
-      // (e.g. a file uploaded standalone and inside a folder), and rows
-      // created later never inherit tags from earlier ones.
+      // (e.g. a file uploaded standalone and inside a folder). Rows created
+      // after a moderation action inherit the head's tags on insert.
       const cid = await createObject()
       await ObjectUseCases.banObject(admin, cid)
 
-      // A new row for the same content appears after the ban, with NULL tags.
+      // A new row for the same content appears after the ban and must
+      // inherit the banned state rather than start as a clean row.
       await metadataRepository.setMetadata(
         v4(),
         cid,
         createFileMetadata('moderation-test-nested-copy'),
       )
-
-      await ObjectUseCases.banObject(admin, cid)
       let rows = await getTagsByRoot(cid)
       expect(rows).toHaveLength(2)
+      for (const row of rows) {
+        expect(row.tags).toContain(ObjectTag.Banned)
+      }
+
+      // Re-banning must not duplicate the tag on any row.
+      await ObjectUseCases.banObject(admin, cid)
+      rows = await getTagsByRoot(cid)
       for (const row of rows) {
         expect(
           row.tags?.filter((tag) => tag === ObjectTag.Banned),
@@ -260,6 +266,47 @@ describe('Object moderation (report / dismiss / ban / unban)', () => {
       for (const row of rows) {
         expect(row.tags ?? []).not.toContain(ObjectTag.Banned)
       }
+    })
+
+    it('re-reporting a banned file with a late-added row keeps it out of the review queue', async () => {
+      // Regression for the dual-membership hole: banned content re-uploaded
+      // under a new root used to create a clean row, and a subsequent report
+      // tagged that row 'reported' without 'banned' — making the same cid
+      // show up both as pending (via the clean row) and banned (via the old
+      // rows). With tag inheritance on insert, every row carries 'banned',
+      // so the report changes nothing about queue membership.
+      const cid = await createObject()
+      await ObjectUseCases.reportObject(cid)
+      await ObjectUseCases.banObject(admin, cid)
+
+      await metadataRepository.setMetadata(
+        v4(),
+        cid,
+        createFileMetadata('moderation-test-reupload'),
+      )
+      await ObjectUseCases.reportObject(cid)
+
+      const rows = await getTagsByRoot(cid)
+      expect(rows).toHaveLength(2)
+      for (const row of rows) {
+        expect(row.tags).toContain(ObjectTag.Banned)
+        expect(row.tags).toContain(ObjectTag.ToBeReviewed)
+      }
+      expect(await listToBeReviewed(admin)).not.toContain(cid)
+    })
+
+    it('lists a multi-row head cid only once in the review queue', async () => {
+      const cid = await createObject()
+      await metadataRepository.setMetadata(
+        v4(),
+        cid,
+        createFileMetadata('moderation-test-second-root'),
+      )
+
+      await ObjectUseCases.reportObject(cid)
+
+      const cids = await listToBeReviewed(admin)
+      expect(cids.filter((c) => c === cid)).toHaveLength(1)
     })
   })
 

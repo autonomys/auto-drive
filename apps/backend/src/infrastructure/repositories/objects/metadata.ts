@@ -38,8 +38,19 @@ const setMetadata = async (
 ) => {
   const db = await getDatabase()
 
+  // Tags (moderation state: reported/banned/dismissed) belong to the content
+  // (head_cid), not to one (root_cid, head_cid) row — a new row for already
+  // known content must inherit the union of its siblings' tags, or a banned
+  // file re-uploaded under a new root would surface as a clean row. The
+  // conflict branch leaves tags untouched.
   return db.query({
-    text: 'INSERT INTO metadata (root_cid, head_cid, metadata, name) VALUES ($1, $2, $3, $4) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata, name = EXCLUDED.name',
+    text: `INSERT INTO metadata (root_cid, head_cid, metadata, name, tags)
+      VALUES ($1, $2, $3, $4, (
+        SELECT array_agg(DISTINCT tag)
+        FROM metadata m, unnest(m.tags) AS tag
+        WHERE m.head_cid = $2
+      ))
+      ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata, name = EXCLUDED.name`,
     values: [rootCid, headCid, stringify(metadata), metadata.name],
   })
 }
@@ -335,9 +346,14 @@ const getMetadataByTagIncludeExclude = async (
   const db = await getDatabase()
   // `&&` (overlap) excludes rows carrying ANY of the excluded tags; `@>`
   // (contains) would only exclude rows carrying ALL of them at once.
+  // DISTINCT ON collapses the several rows the same head_cid can have (one
+  // per root_cid), and the ORDER BY it requires also keeps limit/offset
+  // pagination stable.
   return db.query<MetadataEntry>({
     text: `
-      SELECT * FROM metadata WHERE tags @> $1 AND NOT (tags && $2)
+      SELECT DISTINCT ON (head_cid) * FROM metadata
+      WHERE tags @> $1 AND NOT (tags && $2)
+      ORDER BY head_cid
       LIMIT $3 OFFSET $4
     `,
     values: [tagIncludes, tagToExclude, limit, offset],
