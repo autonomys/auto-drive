@@ -105,6 +105,25 @@ export const config = {
     checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
     priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
+  priceOracle: {
+    // AI3/USD price oracle (CoinGecko). See infrastructure/services/priceOracle.
+    // How long a freshly fetched price is served from memory before a refresh.
+    cacheTtlMs: positiveIntEnv('ORACLE_CACHE_TTL_MS', 60000),
+    // Longest a last-good price may be served as a fallback while CoinGecko is
+    // unavailable. Default: 10 minutes.
+    maxStaleMs: positiveIntEnv('ORACLE_MAX_STALE_MS', 600000),
+    // CoinGecko HTTP timeout.
+    fetchTimeoutMs: positiveIntEnv('ORACLE_FETCH_TIMEOUT_MS', 5000),
+    // Drop the quote if CoinGecko's own reported update time is older than this.
+    // Default: 5 minutes.
+    maxSourceAgeMs: positiveIntEnv('ORACLE_MAX_SOURCE_AGE_MS', 300000),
+    // Sanity bounds (USD per AI3) as plain decimals — kept as raw strings and
+    // parsed to the 1e18 scale in the priceOracle module (parsing the string
+    // directly avoids Number.toString() exponential notation for small values).
+    // A price outside [min, max] is treated as a glitch and dropped.
+    minUsdPerAi3: env('ORACLE_MIN_USD_PER_AI3', '0.0001'),
+    maxUsdPerAi3: env('ORACLE_MAX_USD_PER_AI3', '100'),
+  },
   credits: {
     // How many days a purchased credit row remains valid before expiring.
     // Free-tier and one-off allocation credits are unaffected — they live on
@@ -120,6 +139,11 @@ export const config = {
     // After this window the intent is treated as expired and all operations on
     // it are rejected.  Default: 10 minutes.
     intentExpiryMinutes: Number(env('INTENT_EXPIRY_MINUTES', '10')),
+    // Margin (in percent) added on top of the raw oracle-derived USD cost when
+    // quoting a USDC payment. The stored usdRateAtCreation stays the raw market
+    // rate; only the amount the user pays includes this margin. Applied in
+    // createIntent (USDC path). Default: 5 (%).
+    usdQuoteMarginPercent: Number(env('USD_QUOTE_MARGIN', '5')),
   },
   deletion: {
     gracePeriodDays: Number(env('DELETION_GRACE_PERIOD_DAYS', '30')),
