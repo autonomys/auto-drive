@@ -8,11 +8,6 @@ import { useRouter } from 'next/navigation';
 import { useUserStore } from '../../../globalStates/user';
 import { isAdminUser } from '@auto-drive/models';
 
-// This filter (reported, not banned, not dismissed) mirrors the "Needs Review"
-// section on the reported-files page, so the count here matches what an admin
-// would actually need to act on there.
-const REVIEW_LIMIT = 200;
-
 /**
  * Admin-only alert shown above the file lists linking to the reported-files
  * review page. It is a shortcut to the dedicated page (drive/admin/reported)
@@ -24,8 +19,12 @@ export const ToBeReviewedFiles = () => {
   const { user } = useUserStore();
   const isAdmin = !!user && isAdminUser(user);
 
+  // Only the aggregate count is rendered here, so fetch zero rows — the
+  // query's filter (reported, not banned, not dismissed) mirrors the "Needs
+  // Review" section on the reported-files page, and the aggregate count is
+  // unaffected by the row limit.
   const { data } = useFilesToBeReviewedQuery({
-    variables: { limit: REVIEW_LIMIT, offset: 0 },
+    variables: { limit: 0, offset: 0 },
     fetchPolicy: 'cache-and-network',
     skip: !isAdmin,
   });

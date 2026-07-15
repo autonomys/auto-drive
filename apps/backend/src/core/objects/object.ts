@@ -482,9 +482,7 @@ const populateCaches = async (cid: string, signal?: AbortSignal) => {
         stream.destroy(new Error('Cache population aborted by task timeout'))
       } else {
         signal.addEventListener('abort', onAbort, { once: true })
-        stream.once('close', () =>
-          signal.removeEventListener('abort', onAbort),
-        )
+        stream.once('close', () => signal.removeEventListener('abort', onAbort))
       }
     }
 
@@ -493,10 +491,7 @@ const populateCaches = async (cid: string, signal?: AbortSignal) => {
     await consumeStream(stream)
   } catch (e) {
     if (signal?.aborted) {
-      logger.warn(
-        'Cache population aborted for object (cid=%s)',
-        cid,
-      )
+      logger.warn('Cache population aborted for object (cid=%s)', cid)
       return
     }
     logger.warn(
@@ -684,14 +679,16 @@ const checkArchivalStatusForObjects = async (
   }
 }
 
+// A head_cid can span several metadata rows (one per root_cid) with
+// diverging tags, and getMetadata returns an arbitrary one — so don't guard
+// the updates on a single row's tags here. The repository updates are
+// per-row idempotent (dedup in addTag's SQL, array_remove is a no-op for
+// absent tags), making both calls safe to run unconditionally.
 const addTag = async (cid: string, tag: string) => {
-  const tags = await metadataRepository.getMetadata(cid)
-  if (!tags) {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
     throw new Error('Object not found')
   }
-
-  // If the tag is already present, do nothing
-  if (tags.tags?.includes(tag)) return
 
   await metadataRepository.addTag(cid, tag)
 }
@@ -701,9 +698,6 @@ const removeTag = async (cid: string, tag: string) => {
   if (!metadata) {
     throw new Error('Object not found')
   }
-
-  // If the tag is not present, do nothing
-  if (!metadata.tags?.includes(tag)) return
 
   await metadataRepository.removeTag(cid, tag)
 }
@@ -744,8 +738,12 @@ const unbanObject = async (
     return err(new ForbiddenError('User is not an admin'))
   }
 
-  await ObjectUseCases.removeTag(cid, ObjectTag.Banned)
+  // Gateway first so a gateway failure fails closed: the DB tag is only
+  // cleared once the gateway no longer bans the file. The reverse order
+  // would leave the file unbanned locally but still banned at the gateway
+  // (and syncingIsObjectBanned would silently re-add the tag later).
   await FileGateway.unbanFile(cid)
+  await ObjectUseCases.removeTag(cid, ObjectTag.Banned)
 
   logger.info('Object unbanned successfully (cid=%s)', cid)
 
@@ -770,7 +768,7 @@ const dismissReport = async (
   logger.debug('Attempting to dismiss report (cid=%s)', cid)
   if (!isAdminUser(executor)) {
     logger.warn(
-      'User (%s) attempted to ban object without admin rights (cid=%s)',
+      'User (%s) attempted to dismiss report without admin rights (cid=%s)',
       executor.oauthUserId,
       cid,
     )
@@ -778,7 +776,7 @@ const dismissReport = async (
   }
 
   await ObjectUseCases.addTag(cid, ObjectTag.ReportDismissed)
-  logger.info('Object reported successfully (cid=%s)', cid)
+  logger.info('Report dismissed successfully (cid=%s)', cid)
 
   return ok()
 }

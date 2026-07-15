@@ -308,8 +308,11 @@ const getMetadataByIsArchived = async (isArchived: boolean) => {
 const addTag = async (cid: string, tag: string) => {
   const db = await getDatabase()
 
+  // The same head_cid can have several rows (one per root_cid) whose tags
+  // may diverge, so dedup per row here rather than pre-checking one row.
   await db.query({
-    text: 'UPDATE metadata SET tags = array_append(tags, $1) WHERE head_cid = $2',
+    text: `UPDATE metadata SET tags = array_append(COALESCE(tags, '{}'), $1)
+      WHERE head_cid = $2 AND NOT (COALESCE(tags, '{}') @> ARRAY[$1])`,
     values: [tag, cid],
   })
 }
@@ -330,9 +333,11 @@ const getMetadataByTagIncludeExclude = async (
   offset: number,
 ) => {
   const db = await getDatabase()
-  return db.query<MetadataEntryWithTotalCount>({
+  // `&&` (overlap) excludes rows carrying ANY of the excluded tags; `@>`
+  // (contains) would only exclude rows carrying ALL of them at once.
+  return db.query<MetadataEntry>({
     text: `
-      SELECT * FROM metadata WHERE tags @> $1 AND NOT tags @> $2
+      SELECT * FROM metadata WHERE tags @> $1 AND NOT (tags && $2)
       LIMIT $3 OFFSET $4
     `,
     values: [tagIncludes, tagToExclude, limit, offset],

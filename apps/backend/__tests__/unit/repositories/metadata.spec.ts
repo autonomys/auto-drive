@@ -361,6 +361,100 @@ describe('Metadata Repository', () => {
     expect(result?.is_archived).toBe(true)
   })
 
+  it('should not duplicate an existing tag and should tag every row of a head cid', async () => {
+    const headCid = 'multi-row-tag-head-cid'
+    const metadata: OffchainMetadata = {
+      totalSize: 100n,
+      type: 'file',
+      dataCid: 'multi-row-tag-data-cid',
+      totalChunks: 1,
+      chunks: [],
+      name: 'multi-row-tag-file',
+    }
+
+    // Same head_cid under two roots; tag the first row before the second
+    // row exists so their tags diverge (the second starts with NULL tags).
+    await metadataRepository.setMetadata('multi-row-root-1', headCid, metadata)
+    await metadataRepository.addTag(headCid, 'multi-row-tag')
+    await metadataRepository.setMetadata('multi-row-root-2', headCid, metadata)
+
+    await metadataRepository.addTag(headCid, 'multi-row-tag')
+
+    const rows =
+      await metadataRepository.getMetadataByRootCid('multi-row-root-1')
+    const rows2 =
+      await metadataRepository.getMetadataByRootCid('multi-row-root-2')
+    for (const row of [...rows, ...rows2]) {
+      expect(row.tags?.filter((tag) => tag === 'multi-row-tag')).toHaveLength(1)
+    }
+  })
+
+  it('should remove a tag from every row of a head cid', async () => {
+    const headCid = 'multi-row-untag-head-cid'
+    const metadata: OffchainMetadata = {
+      totalSize: 100n,
+      type: 'file',
+      dataCid: 'multi-row-untag-data-cid',
+      totalChunks: 1,
+      chunks: [],
+      name: 'multi-row-untag-file',
+    }
+
+    // One tagged row and one NULL-tags row for the same head_cid: removal
+    // must not depend on which row a pre-check happens to read.
+    await metadataRepository.setMetadata('multi-row-untag-1', headCid, metadata)
+    await metadataRepository.addTag(headCid, 'multi-row-untag')
+    await metadataRepository.setMetadata('multi-row-untag-2', headCid, metadata)
+
+    await metadataRepository.removeTag(headCid, 'multi-row-untag')
+
+    const rows =
+      await metadataRepository.getMetadataByRootCid('multi-row-untag-1')
+    for (const row of rows) {
+      expect(row.tags ?? []).not.toContain('multi-row-untag')
+    }
+  })
+
+  it('should exclude rows carrying ANY excluded tag from getMetadataByTagIncludeExclude', async () => {
+    const metadata: OffchainMetadata = {
+      totalSize: 100n,
+      type: 'file',
+      dataCid: 'include-exclude-data-cid',
+      totalChunks: 1,
+      chunks: [],
+      name: 'include-exclude-file',
+    }
+    const include = 'incl-tag'
+    const excludeA = 'excl-tag-a'
+    const excludeB = 'excl-tag-b'
+
+    const plainCid = 'incl-excl-plain'
+    const withACid = 'incl-excl-with-a'
+    const withBCid = 'incl-excl-with-b'
+    const withBothCid = 'incl-excl-with-both'
+    for (const cid of [plainCid, withACid, withBCid, withBothCid]) {
+      await metadataRepository.setMetadata(cid, cid, metadata)
+      await metadataRepository.addTag(cid, include)
+    }
+    await metadataRepository.addTag(withACid, excludeA)
+    await metadataRepository.addTag(withBCid, excludeB)
+    await metadataRepository.addTag(withBothCid, excludeA)
+    await metadataRepository.addTag(withBothCid, excludeB)
+
+    const result = await metadataRepository.getMetadataByTagIncludeExclude(
+      [include],
+      [excludeA, excludeB],
+      100,
+      0,
+    )
+
+    const cids = result.rows.map((row) => row.head_cid)
+    expect(cids).toContain(plainCid)
+    expect(cids).not.toContain(withACid)
+    expect(cids).not.toContain(withBCid)
+    expect(cids).not.toContain(withBothCid)
+  })
+
   it('should get metadata by archived status', async () => {
     const rootCid = 'archived-status-root-cid'
     const headCid = 'archived-status-head-cid'

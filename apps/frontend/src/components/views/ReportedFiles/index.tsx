@@ -1,7 +1,8 @@
 /* eslint-disable camelcase */
 'use client';
 
-import { Fragment, ReactNode, useCallback, useState } from 'react';
+import { Fragment, ReactNode, useCallback, useMemo, useState } from 'react';
+import { useApolloClient } from '@apollo/client';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -11,7 +12,13 @@ import {
   Transition,
   TransitionChild,
 } from '@headlessui/react';
-import { BanIcon, CheckCircleIcon, FlagIcon, RefreshCwIcon, UndoIcon } from 'lucide-react';
+import {
+  BanIcon,
+  CheckCircleIcon,
+  FlagIcon,
+  RefreshCwIcon,
+  UndoIcon,
+} from 'lucide-react';
 import { Button, Network, ROUTES } from '@auto-drive/ui';
 import { isAdminUser, getReportStatus, ReportStatus } from '@auto-drive/models';
 import {
@@ -24,6 +31,7 @@ import { useUserStore } from 'globalStates/user';
 import { CopiableText } from '@/components/atoms/CopiableText';
 import { formatCid } from '@/utils/table';
 import { formatBytes } from '@/utils/number';
+import { formatDate } from '@/utils/time';
 
 type ReportedFile = FilesToBeReviewedQuery['metadata'][number];
 
@@ -107,60 +115,61 @@ const StatusBadge = ({ status }: { status: ReportStatus }) => (
   </span>
 );
 
-const formatDate = (date: string) =>
-  new Date(date).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
 // The query dedups same-cid rows via distinct_on, which forces ordering by
 // head_cid first — re-sort by recency here for display.
 const sortByRecency = (files: ReportedFile[]) =>
-  [...files].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+  [...files].sort((a, b) =>
+    (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
+  );
 
 export const ReportedFiles = () => {
   const { api, network } = useNetwork();
   const user = useUserStore((e) => e.user);
   const isAdmin = !!user && isAdminUser(user);
+  const apolloClient = useApolloClient();
 
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingPageSize, setPendingPageSize] = useState(PAGE_SIZE);
   const [historyPageSize, setHistoryPageSize] = useState(PAGE_SIZE);
 
-  const {
-    data: pendingData,
-    loading: pendingLoading,
-    refetch: refetchPending,
-  } = useFilesToBeReviewedQuery({
-    variables: { limit: pendingPageSize, offset: 0 },
-    fetchPolicy: 'cache-and-network',
-    skip: !isAdmin,
-  });
-  const {
-    data: historyData,
-    loading: historyLoading,
-    refetch: refetchHistory,
-  } = useReportedFilesHistoryQuery({
-    variables: { limit: historyPageSize, offset: 0 },
-    fetchPolicy: 'cache-and-network',
-    skip: !isAdmin,
-  });
+  const { data: pendingData, loading: pendingLoading } =
+    useFilesToBeReviewedQuery({
+      variables: { limit: pendingPageSize, offset: 0 },
+      fetchPolicy: 'cache-and-network',
+      skip: !isAdmin,
+    });
+  const { data: historyData, loading: historyLoading } =
+    useReportedFilesHistoryQuery({
+      variables: { limit: historyPageSize, offset: 0 },
+      fetchPolicy: 'cache-and-network',
+      skip: !isAdmin,
+    });
 
-  const pendingFiles = sortByRecency(pendingData?.metadata ?? []);
-  const historyFiles = sortByRecency(historyData?.metadata ?? []);
+  const pendingFiles = useMemo(
+    () => sortByRecency(pendingData?.metadata ?? []),
+    [pendingData],
+  );
+  const historyFiles = useMemo(
+    () => sortByRecency(historyData?.metadata ?? []),
+    [historyData],
+  );
   const pendingTotal =
     pendingData?.metadata_aggregate?.aggregate?.count ?? pendingFiles.length;
   const historyTotal =
     historyData?.metadata_aggregate?.aggregate?.count ?? historyFiles.length;
   const totalCount = pendingTotal + historyTotal;
 
+  // Refetch by operation name (not a bound `refetch()`) so every active
+  // instance of these queries updates, however its variables differ — e.g.
+  // the "Files to be reviewed" banner queries FilesToBeReviewed at a fixed
+  // limit, distinct from this page's own paginated (Load more) limit, so a
+  // `refetch()` bound to this page's instance alone would never reach it.
   const refetchAll = useCallback(async () => {
-    await Promise.all([refetchPending(), refetchHistory()]);
-  }, [refetchPending, refetchHistory]);
+    await apolloClient.refetchQueries({
+      include: ['FilesToBeReviewed', 'ReportedFilesHistory'],
+    });
+  }, [apolloClient]);
 
   const handleConfirm = useCallback(async () => {
     if (!confirm) return;
@@ -171,16 +180,19 @@ export const ReportedFiles = () => {
       if (action === 'ban') await api.banFile(cid);
       else if (action === 'unban') await api.unbanFile(cid);
       else await api.dismissReport(cid);
-      toast.success(ACTION_COPY[action].success, { id: toastId });
-      setConfirm(null);
-      // An action moves a file between sections (e.g. pending -> banned), so
-      // both queries need refetching regardless of which list it came from.
-      await refetchAll();
     } catch {
       toast.error(ACTION_COPY[action].failure, { id: toastId });
-    } finally {
       setIsSubmitting(false);
+      return;
     }
+    toast.success(ACTION_COPY[action].success, { id: toastId });
+    setConfirm(null);
+    // An action moves a file between sections (e.g. pending -> banned), so
+    // both queries need refetching regardless of which list it came from. A
+    // refetch failure must not overwrite the success toast — the action DID
+    // succeed; the lists just stay stale until the next manual Refresh.
+    await refetchAll().catch(() => undefined);
+    setIsSubmitting(false);
   }, [confirm, api, refetchAll]);
 
   // The GraphQL feed is public, so gate the admin-only view in the UI too — the
@@ -199,8 +211,8 @@ export const ReportedFiles = () => {
         <h1 className='text-2xl font-bold'>Reported Files</h1>
         <p className='mt-2 text-sm text-gray-600 dark:text-gray-400'>
           Files that users have flagged for review, kept here permanently so
-          decisions can be revisited. Dismiss a report to clear the flag, or
-          ban the file to block it from download across the network — either
+          decisions can be revisited. Dismiss a report to clear the flag, or ban
+          the file to block it from download across the network — either
           decision can be reversed later from this same list.
         </p>
       </div>
@@ -316,7 +328,10 @@ const ReportSection = ({
               const name = file.name || `No name (${cid.slice(0, 12)}…)`;
               const status = getReportStatus(file.tags ?? []);
               return (
-                <tr key={cid} className='hover:bg-gray-50 dark:hover:bg-gray-800'>
+                <tr
+                  key={cid}
+                  className='hover:bg-gray-50 dark:hover:bg-gray-800'
+                >
                   <td className='max-w-[220px] truncate px-4 py-3'>
                     <Link
                       href={ROUTES.objectDetails(network.id, cid)}
@@ -366,7 +381,9 @@ const ReportSection = ({
                             <Button
                               variant='lightAccent'
                               className='text-xs'
-                              onClick={() => onAction({ cid, action: 'dismiss' })}
+                              onClick={() =>
+                                onAction({ cid, action: 'dismiss' })
+                              }
                             >
                               Dismiss
                             </Button>
@@ -390,7 +407,11 @@ const ReportSection = ({
         </table>
         {files.length < totalCount && (
           <div className='flex justify-center py-3'>
-            <Button variant='lightAccent' className='text-xs' onClick={onLoadMore}>
+            <Button
+              variant='lightAccent'
+              className='text-xs'
+              onClick={onLoadMore}
+            >
               Load more ({totalCount - files.length} remaining)
             </Button>
           </div>
