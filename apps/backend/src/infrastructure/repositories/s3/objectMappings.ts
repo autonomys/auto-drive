@@ -30,6 +30,39 @@ export interface S3ObjectMetadata {
   userMetadata?: Record<string, string>
 }
 
+/**
+ * One immutable entry in a key's append-only version history (issue #781).
+ * versionId is the CID. Delete markers are NOT stored as version rows — the
+ * "current key is deleted" state lives on the mapping's deleted_at and the
+ * marker is synthesised from it at read time — so every version row is content.
+ */
+export interface S3ObjectVersion {
+  bucket: string
+  key: string
+  cid: string
+  md5: string | null
+  mtime: string | null
+  metadata: S3ObjectMetadata | null
+  createdAt: Date
+}
+
+/**
+ * A row of a ListObjectVersions query: a content version joined with its key's
+ * current-pointer delete state (deleted_at), so the caller can compute IsLatest
+ * and synthesise the delete marker. Rows come ordered by key asc, then newest
+ * version first.
+ */
+export interface S3ObjectVersionListingRow {
+  key: string
+  cid: string
+  md5: string | null
+  size: bigint
+  /** This version's write time — the S3 Version LastModified. */
+  lastModified: Date
+  /** The key's current-pointer deleted_at (same for every row of a key); null when live. */
+  pointerDeletedAt: Date | null
+}
+
 export interface S3KeyMapping {
   bucket: string
   key: string
@@ -114,6 +147,8 @@ const createMapping = async (
   // TestObjectUpdate, which overwrites in place). Overwriting a key REPLACES its
   // metadata wholesale (metadata = $8), matching S3: a PUT redefines the object's
   // metadata rather than merging into what was there.
+  const metadataJson = metadata ? JSON.stringify(metadata) : null
+
   const result = await db.query<S3KeyMappingDB>({
     text: `
       INSERT INTO "S3".object_mappings
@@ -132,11 +167,178 @@ const createMapping = async (
       cid,
       md5,
       mtime,
-      metadata ? JSON.stringify(metadata) : null,
+      metadataJson,
+    ],
+  })
+
+  // Append the content version to the immutable history (versionId = cid). Every
+  // write — PutObject, CopyObject, CompleteMultipartUpload, and a PUT that
+  // resurrects a soft-deleted key — records a version, so ListObjectVersions and
+  // GET ?versionId can answer without the current-pointer read path changing.
+  await db.query({
+    text: `
+      INSERT INTO "S3".object_versions
+        (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `,
+    values: [
+      ownerOauthProvider,
+      ownerOauthUserId,
+      bucket,
+      s3Key,
+      cid,
+      md5,
+      mtime,
+      metadataJson,
     ],
   })
 
   return result.rows.map(mapDBToDomain)[0]
+}
+
+/**
+ * Look up a single version of a key by its CID (GET/HEAD ?versionId=<cid>).
+ * Scoped to the caller's namespace. Returns the newest matching row if the same
+ * content was written more than once (identical bytes ⇒ identical CID ⇒ the same
+ * versionId), or null when the key never had that version.
+ */
+const findVersionByCid = async (
+  ownerOauthProvider: string,
+  ownerOauthUserId: string,
+  bucket: string,
+  s3Key: string,
+  cid: string,
+): Promise<S3ObjectVersion | null> => {
+  const db = await getDatabase()
+  const result = await db.query<{
+    bucket: string
+    key: string
+    cid: string
+    md5: string | null
+    mtime: string | null
+    metadata: S3ObjectMetadata | null
+    created_at: Date
+  }>({
+    text: `
+      SELECT bucket, "key", cid, md5, mtime, metadata, created_at
+      FROM "S3".object_versions
+      WHERE owner_oauth_provider = $1 AND owner_oauth_user_id = $2
+        AND bucket = $3 AND "key" = $4 AND cid = $5
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+    values: [ownerOauthProvider, ownerOauthUserId, bucket, s3Key, cid],
+  })
+
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    bucket: row.bucket,
+    key: row.key,
+    cid: row.cid,
+    md5: row.md5 ?? null,
+    mtime: row.mtime ?? null,
+    metadata: row.metadata ?? null,
+    createdAt: row.created_at,
+  }
+}
+
+/**
+ * List the version history for a bucket/prefix (ListObjectVersions), scoped to
+ * the caller. Each content version is joined with its key's current-pointer
+ * delete state so the caller can flag IsLatest and synthesise a delete marker
+ * for keys whose current pointer is soft-deleted.
+ *
+ * Unlike ListObjectsV2, this deliberately does NOT hide soft-deleted or
+ * web-app-Trashed keys: version history is the point of WORM versioning and
+ * must persist through deletion (a deleted key still lists its versions + a
+ * delete marker). Retention is unconditional; moderation applies to RETRIEVAL
+ * (GET ?versionId runs authorizeDownload), not to listing metadata.
+ *
+ * Rows are ordered by key asc, then newest version first; `limit` rows are
+ * fetched (the caller detects truncation).
+ */
+const listObjectVersions = async (
+  ownerOauthProvider: string,
+  ownerOauthUserId: string,
+  bucket: string,
+  prefix: string,
+  keyMarker: string | null,
+  limit: number,
+): Promise<S3ObjectVersionListingRow[]> => {
+  const db = await getDatabase()
+
+  const escapedPrefix = prefix
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+
+  const baseSQL = `
+    SELECT
+      ov.key,
+      ov.cid,
+      ov.md5,
+      COALESCE(m.total_size, 0) AS size,
+      ov.created_at AS last_modified,
+      om.deleted_at AS pointer_deleted_at
+    FROM "S3".object_versions ov
+    JOIN "S3".object_mappings om
+      ON om.owner_oauth_provider = ov.owner_oauth_provider
+     AND om.owner_oauth_user_id = ov.owner_oauth_user_id
+     AND om.bucket = ov.bucket
+     AND om.key = ov.key
+    LEFT JOIN LATERAL (
+      SELECT (metadata->>'totalSize')::bigint AS total_size
+      FROM metadata
+      WHERE head_cid = ov.cid
+      LIMIT 1
+    ) m ON true
+    WHERE ov.owner_oauth_provider = $1
+      AND ov.owner_oauth_user_id = $2
+      AND ov.bucket = $3
+      AND ov.key LIKE $4
+  `
+
+  let text: string
+  let values: unknown[]
+  if (keyMarker) {
+    text = baseSQL + ' AND ov.key > $5 ORDER BY ov.key ASC, ov.id DESC LIMIT $6'
+    values = [
+      ownerOauthProvider,
+      ownerOauthUserId,
+      bucket,
+      `${escapedPrefix}%`,
+      keyMarker,
+      limit,
+    ]
+  } else {
+    text = baseSQL + ' ORDER BY ov.key ASC, ov.id DESC LIMIT $5'
+    values = [
+      ownerOauthProvider,
+      ownerOauthUserId,
+      bucket,
+      `${escapedPrefix}%`,
+      limit,
+    ]
+  }
+
+  const result = await db.query<{
+    key: string
+    cid: string
+    md5: string | null
+    size: string
+    last_modified: Date
+    pointer_deleted_at: Date | null
+  }>({ text, values })
+
+  return result.rows.map((row) => ({
+    key: row.key,
+    cid: row.cid,
+    md5: row.md5 ?? null,
+    size: BigInt(row.size),
+    lastModified: row.last_modified,
+    pointerDeletedAt: row.pointer_deleted_at ?? null,
+  }))
 }
 
 const findByKey = async (
@@ -429,6 +631,8 @@ const listObjects = async (
 export const s3ObjectMappingsRepository = {
   createMapping,
   findByKey,
+  findVersionByCid,
+  listObjectVersions,
   softDeleteMapping,
   restoreMappingsByCid,
   countActiveMappingsByCid,

@@ -78,6 +78,17 @@ const getMtime = (req: Request): string | null => {
   return typeof mtime === 'string' ? mtime : null
 }
 
+/**
+ * The versionId query param on a GET/HEAD/DELETE request. versionId is the
+ * content CID of a specific version; absent/empty means "the current version".
+ */
+const getVersionId = (req: Request): string | undefined => {
+  const versionId = req.query.versionId
+  return typeof versionId === 'string' && versionId.length > 0
+    ? versionId
+    : undefined
+}
+
 // x-amz-meta-* keys that are NOT free-form user metadata: they are handled by
 // dedicated paths and must be excluded from the captured userMetadata so they
 // are not double-stored / double-emitted. mtime has its own column; compression
@@ -301,6 +312,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     Key: key,
     Range: byteRange,
     Bucket: bucket,
+    VersionId: getVersionId(req),
   })
 
   if (downloadResult.isErr()) {
@@ -335,6 +347,8 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   if (etag) res.set('ETag', etag)
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)
+  // versionId = the content CID (versioning is always on).
+  res.set('x-amz-version-id', cid)
   res.set('Last-Modified', lastModified.toUTCString())
   // Echo the client mtime so tools (e.g. rclone) read back what they wrote.
   if (mtime) res.set('x-amz-meta-mtime', mtime)
@@ -361,6 +375,7 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     Key: key,
     Range: byteRange,
     Bucket: bucket,
+    VersionId: getVersionId(req),
   })
 
   if (downloadResult.isErr()) {
@@ -394,6 +409,8 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   if (etag) res.set('ETag', etag)
   // Always expose the CID so clients that understand Autonomys can use it.
   res.set('x-amz-meta-cid', cid)
+  // versionId = the content CID (versioning is always on).
+  res.set('x-amz-version-id', cid)
   res.set('Last-Modified', lastModified.toUTCString())
   // Echo the client mtime so tools (e.g. rclone) read back what they wrote.
   if (mtime) res.set('x-amz-meta-mtime', mtime)
@@ -404,17 +421,48 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   res.status(200).end()
 }
 
-// ── Object Lock ───────────────────────────────────────────────────────────
-// Object Lock is NOT enforced. The S3 namespace is mutable — DeleteObject
-// (soft-delete), overwrite, and rename all succeed — so advertising a
-// COMPLIANCE/WORM lock would be a false promise a client could rely on. (The
-// underlying DSN data is permanent, but that is a storage property, not an S3
-// object-lock guarantee.) These read endpoints therefore report "no Object Lock
-// configured", exactly as a bucket/object without Object Lock does. The
-// PutObjectLock* / Put*Retention / Put*LegalHold counterparts stay 501.
+// ── Versioning + Object Lock (honest WORM) ─────────────────────────────────
+// Auto Drive stores content on the Autonomys DSN, where a version can never be
+// destroyed. That is exactly S3's versioned-WORM model: versioning is always on,
+// every write stacks a new version (versionId = CID), DeleteObject writes a
+// delete marker (the key is hidden but nothing is destroyed), and destroying a
+// specific version (DeleteObject?versionId) is refused — here not by policy but
+// because the platform is incapable of it. So we advertise a COMPLIANCE-mode
+// Object Lock with retain-forever retention truthfully. The lock is intrinsic
+// and not client-configurable, so the Put* counterparts stay 501. Legal hold is
+// a separate, per-object client-set concept Auto Drive has no equivalent for, so
+// it stays OFF.
 
-/** Legal hold is never on (Object Lock is not enforced). */
+// "Forever" sentinel for RetainUntilDate. S3 has no infinity value, so use the
+// max representable date: year 9999 is the ceiling for SQL DATETIME and Python
+// datetime.max, so anything larger would overflow common clients (e.g. boto3).
+const OBJECT_LOCK_RETAIN_UNTIL = '9999-12-31T23:59:59Z'
+
+export const bucketVersioningBody = () => ({ Status: 'Enabled' })
+
+export const objectLockConfigurationBody = () => ({
+  ObjectLockEnabled: 'Enabled',
+  Rule: { DefaultRetention: { Mode: 'COMPLIANCE', Years: 100 } },
+})
+
+export const objectRetentionBody = () => ({
+  Mode: 'COMPLIANCE',
+  RetainUntilDate: OBJECT_LOCK_RETAIN_UNTIL,
+})
+
+/** No per-object legal hold concept (distinct from the intrinsic retention). */
 export const objectLegalHoldBody = () => ({ Status: 'OFF' })
+
+// GetBucketVersioning — versioning is always on, by construction; there is no
+// client toggle (PutBucketVersioning stays unrouted → 501).
+export const getBucketVersioningHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+  sendXML(res, 'VersioningConfiguration', bucketVersioningBody())
+}
 
 export const getObjectLockConfigurationHandler = async (
   req: Request,
@@ -422,11 +470,7 @@ export const getObjectLockConfigurationHandler = async (
 ) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
-  // No bucket-level Object Lock configuration exists.
-  sendXML(res.status(404), 'Error', {
-    Code: 'ObjectLockConfigurationNotFoundError',
-    Message: 'Object Lock configuration does not exist for this bucket',
-  })
+  sendXML(res, 'ObjectLockConfiguration', objectLockConfigurationBody())
 }
 
 // Reject a key that doesn't exist with NoSuchKey rather than reporting lock
@@ -450,11 +494,8 @@ export const getObjectRetentionHandler = async (
     sendNoSuchKey(res, key)
     return
   }
-  // The object exists but carries no retention (Object Lock is not enforced).
-  sendXML(res.status(404), 'Error', {
-    Code: 'NoSuchObjectLockConfiguration',
-    Message: 'The specified object does not have a Retention configuration',
-  })
+  // Every retained version carries the same intrinsic COMPLIANCE retention.
+  sendXML(res, 'Retention', objectRetentionBody())
 }
 
 export const getObjectLegalHoldHandler = async (
@@ -594,6 +635,8 @@ export const completeMultipartUploadHandler = async (
   const Location = buildObjectLocation(req, bucket, key)
   res.set('ETag', completeETag)
   res.set('x-amz-meta-cid', completeCid)
+  // versionId of the version this upload created = its content CID.
+  res.set('x-amz-version-id', completeCid)
   res.setHeader('Content-Type', 'application/xml')
   res.end(
     js2xmlparser.parse('CompleteMultipartUploadResult', {
@@ -691,6 +734,85 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
   sendXML(res, 'ListBucketResult', xmlBody)
 }
 
+// ListObjectVersions (GET /{bucket}?versions): enumerate the version history for
+// the caller's keys under a prefix, newest version first, with a synthesised
+// delete marker for any key whose current pointer is soft-deleted. This is what
+// exposes the versioned-WORM history — versionId is the content CID.
+export const listObjectVersionsHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  const bucket = req.params.key.split('/')[0]
+  const prefix = (req.query.prefix as string) ?? ''
+  const rawMaxKeys = parseInt((req.query['max-keys'] as string) ?? '1000', 10)
+  const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
+  const keyMarker = (req.query['key-marker'] as string) ?? null
+  const encodingType = (req.query['encoding-type'] as string) ?? null
+
+  const result = await S3UseCases.getObjectVersions(user, {
+    bucket,
+    prefix,
+    keyMarker,
+    maxKeys,
+  })
+
+  // Same XML-safety contract as ListObjectsV2: keys with characters XML can't
+  // represent need encoding-type=url; without opt-in, reject rather than 500.
+  const plan = planListingEncoding(
+    [
+      ...result.versions.map((v) => v.key),
+      ...result.deleteMarkers.map((m) => m.key),
+    ],
+    encodingType,
+  )
+  if (plan === 'reject') {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message:
+        'This listing contains keys with characters that require URL encoding. Retry the request with encoding-type=url.',
+      ArgumentName: 'encoding-type',
+      Resource: `/${bucket}/`,
+    })
+    return
+  }
+  const encode = plan === 'encode' ? encodeS3Key : (value: string) => value
+
+  const xmlBody: Record<string, unknown> = {
+    Name: bucket,
+    Prefix: encode(prefix),
+    KeyMarker: keyMarker ?? '',
+    MaxKeys: maxKeys,
+    IsTruncated: result.isTruncated,
+  }
+  if (plan === 'encode') xmlBody.EncodingType = 'url'
+  if (result.nextKeyMarker) xmlBody.NextKeyMarker = encode(result.nextKeyMarker)
+
+  if (result.versions.length > 0) {
+    xmlBody.Version = result.versions.map((v) => ({
+      Key: encode(v.key),
+      VersionId: v.versionId,
+      IsLatest: v.isLatest,
+      LastModified: v.lastModified.toISOString(),
+      ETag: v.etag,
+      Size: v.size.toString(),
+      StorageClass: 'STANDARD',
+    }))
+  }
+  if (result.deleteMarkers.length > 0) {
+    xmlBody.DeleteMarker = result.deleteMarkers.map((m) => ({
+      Key: encode(m.key),
+      VersionId: m.versionId,
+      IsLatest: m.isLatest,
+      LastModified: m.lastModified.toISOString(),
+    }))
+  }
+
+  sendXML(res, 'ListVersionsResult', xmlBody)
+}
+
 export const putObjectHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
@@ -718,6 +840,8 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   const { ETag, Cid } = result.value
   res.set('ETag', ETag)
   res.set('x-amz-meta-cid', Cid)
+  // versionId of the version just created = its content CID.
+  res.set('x-amz-version-id', Cid)
   res.status(200).end()
 }
 
@@ -735,6 +859,25 @@ export const deleteObjectHandler = async (req: Request, res: Response) => {
   // S3 DeleteObject responds 204 No Content with an empty body, whether or not
   // the key existed (delete is idempotent).
   res.status(204).end()
+}
+
+// DeleteObject with a versionId targets a specific version. On the Autonomys
+// DSN a version can never be destroyed, so this is refused with 403 AccessDenied
+// — the truthful WORM answer: not a policy choice, the platform is incapable of
+// it. (Delete WITHOUT a versionId still succeeds as a soft-delete / delete
+// marker; only version destruction is forbidden.)
+export const deleteObjectVersionHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const user = await handleS3Auth(req, res)
+  if (!user) return
+
+  sendXML(res.status(403), 'Error', {
+    Code: 'AccessDenied',
+    Message:
+      'Versions are permanent and cannot be destroyed. Autonomys DSN storage is immutable (COMPLIANCE-mode Object Lock); only the current version can be hidden with a delete marker (DeleteObject without a versionId).',
+  })
 }
 
 export const copyObjectHandler = async (req: Request, res: Response) => {
@@ -784,6 +927,8 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
   const { ETag, Cid, LastModified } = result.value
   res.set('x-amz-meta-cid', Cid)
   res.set('ETag', ETag)
+  // versionId of the version this copy created = its content CID.
+  res.set('x-amz-version-id', Cid)
   // The CopyObjectResult body carries ETag + LastModified. rclone re-HEADs the
   // destination afterward, so these are informational, but the XML must be
   // well-formed for the AWS SDK's response parser.

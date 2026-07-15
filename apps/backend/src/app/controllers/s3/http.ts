@@ -7,6 +7,8 @@ import {
   copyObjectHandler,
   createMultipartUploadHandler,
   deleteObjectHandler,
+  deleteObjectVersionHandler,
+  getBucketVersioningHandler,
   getObjectHandler,
   getObjectLegalHoldHandler,
   getObjectLockConfigurationHandler,
@@ -14,6 +16,7 @@ import {
   headObjectHandler,
   listBucketsHandler,
   listObjectsV2Handler,
+  listObjectVersionsHandler,
   notImplementedHandler,
   putObjectHandler,
   uploadPartHandler,
@@ -53,12 +56,18 @@ const S3HandlerConfig: S3HandlerConfig = {
   UploadPart: uploadPartHandler,
   CompleteMultipartUpload: completeMultipartUploadHandler,
   DeleteObject: deleteObjectHandler,
+  // DeleteObject?versionId → 403: a version can never be destroyed (WORM).
+  DeleteObjectVersion: deleteObjectVersionHandler,
   CopyObject: copyObjectHandler,
   AbortMultipartUpload: abortMultipartUploadHandler,
   ListBuckets: listBucketsHandler,
   ListObjectsV2: listObjectsV2Handler,
-  // Object Lock — read-only declarative contract. The underlying DSN data is
-  // permanent even though the S3 namespace supports soft-delete/rename.
+  // Versioning is always on (versionId = CID). GetBucketVersioning reports
+  // Enabled; ListObjectVersions enumerates the append-only history.
+  GetBucketVersioning: getBucketVersioningHandler,
+  ListObjectVersions: listObjectVersionsHandler,
+  // Object Lock — read-only declarative contract, now an honest COMPLIANCE/WORM
+  // lock: the underlying DSN data is permanent and versions are indestructible.
   GetObjectLockConfiguration: getObjectLockConfigurationHandler,
   GetObjectRetention: getObjectRetentionHandler,
   GetObjectLegalHold: getObjectLegalHoldHandler,
@@ -73,6 +82,8 @@ const S3HandlerConfig: S3HandlerConfig = {
   PutObjectLockConfiguration: notImplementedHandler,
   PutObjectRetention: notImplementedHandler,
   PutObjectLegalHold: notImplementedHandler,
+  // Versioning is always on and cannot be toggled off — 501.
+  PutBucketVersioning: notImplementedHandler,
 }
 
 // Match on method first: the same query param (?uploadId, ?uploads) selects a
@@ -85,6 +96,8 @@ export const getS3Method = (req: Request): string => {
     case 'GET':
       if ('uploadId' in q) return 'ListParts'
       if ('uploads' in q) return 'ListMultipartUploads'
+      if ('versioning' in q) return 'GetBucketVersioning'
+      if ('versions' in q) return 'ListObjectVersions'
       if ('object-lock' in q) return 'GetObjectLockConfiguration'
       if ('retention' in q) return 'GetObjectRetention'
       if ('legal-hold' in q) return 'GetObjectLegalHold'
@@ -101,6 +114,10 @@ export const getS3Method = (req: Request): string => {
         if (isCopy) return 'UploadPartCopy'
         return 'UploadPart'
       }
+      // Versioning is always on and not client-configurable; route an attempted
+      // toggle to 501 rather than letting it fall through to PutObject (which
+      // would store the config XML as an object under the bucket key).
+      if ('versioning' in q) return 'PutBucketVersioning'
       if ('object-lock' in q) return 'PutObjectLockConfiguration'
       if ('retention' in q) return 'PutObjectRetention'
       if ('legal-hold' in q) return 'PutObjectLegalHold'
@@ -112,6 +129,8 @@ export const getS3Method = (req: Request): string => {
       return 'PostObject'
     case 'DELETE':
       if ('uploadId' in q) return 'AbortMultipartUpload'
+      // A versioned delete targets a specific version — refused (WORM).
+      if ('versionId' in q) return 'DeleteObjectVersion'
       return 'DeleteObject'
     default:
       return 'Unknown'

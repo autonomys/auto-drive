@@ -6,11 +6,15 @@ import {
   CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
+  GetBucketVersioningCommand,
   GetObjectCommand,
+  GetObjectLockConfigurationCommand,
+  GetObjectRetentionCommand,
   HeadObjectCommand,
   ListBucketsCommand,
   ListMultipartUploadsCommand,
   ListObjectsV2Command,
+  ListObjectVersionsCommand,
   ListPartsCommand,
   PutObjectCommand,
   S3Client,
@@ -1268,6 +1272,193 @@ describe('AWS S3 - SDK', () => {
       expect(head.ContentType).toBe('application/x-custom')
       expect(head.CacheControl).toBe('no-store')
       expect(head.Metadata?.part).toBe('meta')
+    })
+  })
+
+  // Versioned-WORM (issue #781): versioning is always on, versionId = the
+  // content CID, DeleteObject writes a delete marker (hides the key, keeps
+  // history), and destroying a specific version is refused. Object Lock is
+  // advertised as an honest COMPLIANCE lock.
+  describe('Versioning and Object Lock (WORM)', () => {
+    // Bucket-level ops address the bucket via the URL (as ListObjectsV2 does);
+    // object ops use the shared endpoint Bucket + a versions-test/* key.
+    const VBucket = `${BASE_PATH}/s3/versions-test`
+
+    const putVersion = (key: string, body: string) =>
+      s3Client.send(
+        new PutObjectCommand({ Bucket, Key: key, Body: Buffer.from(body) }),
+      )
+
+    it('reports bucket versioning as Enabled', async () => {
+      const res = await s3Client.send(
+        new GetBucketVersioningCommand({ Bucket: VBucket }),
+      )
+      expect(res.Status).toBe('Enabled')
+    })
+
+    it('advertises an Enabled COMPLIANCE Object Lock configuration', async () => {
+      const res = await s3Client.send(
+        new GetObjectLockConfigurationCommand({ Bucket: VBucket }),
+      )
+      expect(res.ObjectLockConfiguration?.ObjectLockEnabled).toBe('Enabled')
+      expect(
+        res.ObjectLockConfiguration?.Rule?.DefaultRetention?.Mode,
+      ).toBe('COMPLIANCE')
+    })
+
+    it('reports COMPLIANCE retain-forever retention for an object', async () => {
+      const key = 'versions-test/retention.txt'
+      await putVersion(key, 'retained')
+      const res = await s3Client.send(
+        new GetObjectRetentionCommand({ Bucket, Key: key }),
+      )
+      expect(res.Retention?.Mode).toBe('COMPLIANCE')
+      // The year-9999 "forever" sentinel, parsed by the SDK into a Date.
+      expect(res.Retention?.RetainUntilDate?.getUTCFullYear()).toBe(9999)
+    })
+
+    it('returns the version id (= CID) on PutObject and stacks a new version per overwrite', async () => {
+      const key = 'versions-test/stack.txt'
+      const v1 = await putVersion(key, 'v1')
+      const v2 = await putVersion(key, 'v2-different')
+
+      expect(v1.VersionId).toBeTruthy()
+      expect(v2.VersionId).toBeTruthy()
+      // Distinct content ⇒ distinct CID ⇒ distinct versionId.
+      expect(v1.VersionId).not.toBe(v2.VersionId)
+
+      const list = await s3Client.send(
+        new ListObjectVersionsCommand({ Bucket: VBucket, Prefix: 'stack.txt' }),
+      )
+      const forKey = (list.Versions ?? []).filter((v) => v.Key === 'stack.txt')
+      expect(forKey.length).toBeGreaterThanOrEqual(2)
+      // The overwrite is the latest version.
+      const latest = forKey.find((v) => v.IsLatest)
+      expect(latest?.VersionId).toBe(v2.VersionId)
+      expect(list.DeleteMarkers ?? []).not.toContainEqual(
+        expect.objectContaining({ Key: 'stack.txt' }),
+      )
+    })
+
+    it('serves an older version by versionId', async () => {
+      const key = 'versions-test/read-old.txt'
+      const v1 = await putVersion(key, 'old-content')
+      await putVersion(key, 'new-content')
+
+      // Current read returns the newest content.
+      const current = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: key }),
+      )
+      expect(
+        Buffer.from(await current.Body!.transformToByteArray()).toString(),
+      ).toBe('new-content')
+
+      // Reading v1 by its CID returns the original bytes.
+      const old = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: key, VersionId: v1.VersionId }),
+      )
+      expect(
+        Buffer.from(await old.Body!.transformToByteArray()).toString(),
+      ).toBe('old-content')
+    })
+
+    it('refuses to destroy a specific version (403 AccessDenied)', async () => {
+      const key = 'versions-test/no-destroy.txt'
+      const v = await putVersion(key, 'immutable')
+
+      let status: number | undefined
+      let code: string | undefined
+      try {
+        await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
+        )
+        throw new Error('expected the versioned delete to be refused')
+      } catch (e) {
+        const err = e as {
+          $metadata?: { httpStatusCode?: number }
+          name?: string
+        }
+        status = err.$metadata?.httpStatusCode
+        code = err.name
+      }
+      expect(status).toBe(403)
+      expect(code).toBe('AccessDenied')
+
+      // The version is still readable — it was never destroyed.
+      const still = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
+      )
+      expect(
+        Buffer.from(await still.Body!.transformToByteArray()).toString(),
+      ).toBe('immutable')
+    })
+
+    it('a bare DeleteObject hides the key but keeps the history behind a delete marker', async () => {
+      const key = 'versions-test/marker.txt'
+      const v1 = await putVersion(key, 'oldest')
+      await putVersion(key, 'newest-then-deleted')
+
+      const del = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: key }),
+      )
+      // Soft-delete: succeeds (204-class), never destroys content.
+      expect(del.$metadata.httpStatusCode).toBe(204)
+
+      // The key is hidden from a normal read.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: key })),
+      ).rejects.toThrow()
+
+      // ...but the version history survives, with a delete marker as latest and
+      // both content versions still listed.
+      const list = await s3Client.send(
+        new ListObjectVersionsCommand({ Bucket: VBucket, Prefix: 'marker.txt' }),
+      )
+      const versions = (list.Versions ?? []).filter((v) => v.Key === 'marker.txt')
+      expect(versions.length).toBeGreaterThanOrEqual(2)
+      const markers = (list.DeleteMarkers ?? []).filter(
+        (m) => m.Key === 'marker.txt',
+      )
+      expect(markers.length).toBe(1)
+      expect(markers[0].IsLatest).toBe(true)
+      // No content version is latest once the marker is on top.
+      expect(versions.every((v) => !v.IsLatest)).toBe(true)
+
+      // An older, non-current version is still retrievable by versionId despite
+      // the marker (the deleting delete only Trashed the current version's CID;
+      // moderation/removal applies per CID to retrieval, not to listing).
+      const old = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: key, VersionId: v1.VersionId }),
+      )
+      expect(
+        Buffer.from(await old.Body!.transformToByteArray()).toString(),
+      ).toBe('oldest')
+    })
+
+    it('a moderated/removed version’s CID is not retrievable via versionId', async () => {
+      // DeleteObject on the sole key moves that content to the web-app Trash
+      // (owner-removal), so retrieval of that exact version is blocked even
+      // though the version is retained and still listed.
+      const key = 'versions-test/removed.txt'
+      const v = await putVersion(key, 'gone-on-delete')
+      await s3Client.send(new DeleteObjectCommand({ Bucket, Key: key }))
+
+      await expect(
+        s3Client.send(
+          new GetObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
+        ),
+      ).rejects.toThrow()
+
+      // Retention ≠ retrieval: the version is still enumerated in the history.
+      const list = await s3Client.send(
+        new ListObjectVersionsCommand({
+          Bucket: VBucket,
+          Prefix: 'removed.txt',
+        }),
+      )
+      expect(
+        (list.Versions ?? []).some((ver) => ver.VersionId === v.VersionId),
+      ).toBe(true)
     })
   })
 

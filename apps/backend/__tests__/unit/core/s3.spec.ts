@@ -169,6 +169,143 @@ describe('S3UseCases', () => {
         expect.objectContaining({ byteRange: [100, 200] }),
       )
     })
+
+    it('serves a specific version by CID and returns that version’s content', async () => {
+      const version = {
+        bucket: 'my-bucket',
+        key: 'file.txt',
+        cid: 'oldcid',
+        md5: 'abc123def456abc123def456abc123de',
+        mtime: '111.5',
+        metadata: { contentType: 'text/csv' },
+        createdAt: new Date(5000),
+      }
+      const findVersionSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
+        .mockResolvedValue(version as any)
+      const findByKeySpy = jest.spyOn(s3ObjectMappingsRepository, 'findByKey')
+      const downloadSpy = jest
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .mockResolvedValue(ok({ read: jest.fn() }) as any)
+
+      const result = await S3UseCases.getObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'file.txt',
+        VersionId: 'oldcid',
+      } as any)
+
+      expect(result.isOk()).toBe(true)
+      const value = result._unsafeUnwrap()
+      expect(value.cid).toBe('oldcid')
+      expect(value.mtime).toBe('111.5')
+      expect(value.objectMetadata).toEqual({ contentType: 'text/csv' })
+      expect(value.lastModified).toEqual(new Date(5000))
+      // The version is fetched by its own CID, and the current-pointer lookup is
+      // bypassed entirely.
+      expect(findVersionSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'my-bucket',
+        'file.txt',
+        'oldcid',
+      )
+      expect(downloadSpy).toHaveBeenCalledWith('oldcid', expect.any(Object))
+      expect(findByKeySpy).not.toHaveBeenCalled()
+    })
+
+    it('returns not-found for an unknown versionId', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
+        .mockResolvedValue(null)
+
+      const result = await S3UseCases.getObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'file.txt',
+        VersionId: 'nope',
+      } as any)
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+    })
+  })
+
+  describe('getObjectVersions', () => {
+    const row = (over: Record<string, unknown> = {}) => ({
+      key: 'file.txt',
+      cid: 'cid1',
+      md5: null,
+      size: 10n,
+      lastModified: new Date(1000),
+      pointerDeletedAt: null,
+      ...over,
+    })
+
+    it('marks the newest version of a live key IsLatest and orders by the rows given', async () => {
+      // Repo returns newest-first per key.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
+        .mockResolvedValue([
+          row({ cid: 'cid2', lastModified: new Date(2000) }),
+          row({ cid: 'cid1', lastModified: new Date(1000) }),
+        ] as any)
+
+      const result = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: null,
+        maxKeys: 1000,
+      })
+
+      expect(result.versions.map((v) => v.versionId)).toEqual(['cid2', 'cid1'])
+      expect(result.versions[0].isLatest).toBe(true)
+      expect(result.versions[1].isLatest).toBe(false)
+      expect(result.deleteMarkers).toHaveLength(0)
+      expect(result.isTruncated).toBe(false)
+    })
+
+    it('synthesises a delete marker as latest when the current pointer is deleted', async () => {
+      const deletedAt = new Date(3000)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
+        .mockResolvedValue([
+          row({ cid: 'cid2', pointerDeletedAt: deletedAt }),
+          row({ cid: 'cid1', pointerDeletedAt: deletedAt }),
+        ] as any)
+
+      const result = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: null,
+        maxKeys: 1000,
+      })
+
+      // No content version is latest; the synthesised marker is.
+      expect(result.versions.every((v) => !v.isLatest)).toBe(true)
+      expect(result.deleteMarkers).toHaveLength(1)
+      expect(result.deleteMarkers[0].isLatest).toBe(true)
+      expect(result.deleteMarkers[0].lastModified).toEqual(deletedAt)
+    })
+
+    it('truncates at maxKeys and reports the next key marker', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
+        .mockResolvedValue([
+          row({ key: 'a.txt', cid: 'a1' }),
+          row({ key: 'b.txt', cid: 'b1' }),
+          row({ key: 'c.txt', cid: 'c1' }),
+        ] as any)
+
+      const result = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: null,
+        maxKeys: 2,
+      })
+
+      expect(result.versions.map((v) => v.key)).toEqual(['a.txt', 'b.txt'])
+      expect(result.isTruncated).toBe(true)
+      expect(result.nextKeyMarker).toBe('b.txt')
+    })
   })
 
   describe('createMultipartUpload', () => {

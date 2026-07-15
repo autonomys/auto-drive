@@ -147,10 +147,50 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
   objectMetadata: S3ObjectMetadata | null
 }
 
+/** GetObject params extended with an optional versionId (the CID of a specific
+ *  version). Kept local — versioning is an Autonomys extension over the shared
+ *  DTO, and versionId maps to the content CID. */
+type GetObjectParams = GetObjectCommandParams & { VersionId?: string }
+
 const getObject = async (
   user: UserWithOrganization,
-  params: GetObjectCommandParams,
+  params: GetObjectParams,
 ): Promise<Result<GetObjectUseCaseResult, ObjectNotFoundError>> => {
+  // Versioned read (GET/HEAD ?versionId=<cid>): fetch the specific version's
+  // content by CID rather than the current pointer. The version must belong to
+  // this key in the caller's namespace; the download itself still runs the
+  // moderation/ban checks (downloadObjectByAnonymous → authorizeDownload), so a
+  // removed/banned version is not retrievable even though it is retained.
+  if (params.VersionId) {
+    const version = await s3ObjectMappingsRepository.findVersionByCid(
+      user.oauthProvider,
+      user.oauthUserId,
+      params.Bucket,
+      params.Key,
+      params.VersionId,
+    )
+    if (!version) {
+      return err(
+        new ObjectNotFoundError(
+          `Version ${params.VersionId} of ${params.Bucket}/${params.Key} not found`,
+        ),
+      )
+    }
+    const versionedDownload = await DownloadUseCase.downloadObjectByAnonymous(
+      version.cid,
+      { byteRange: params.Range },
+    )
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (versionedDownload as any).map((dl: GetObjectCommandResult) => ({
+      ...dl,
+      cid: version.cid,
+      etag: version.md5 ? formatETag(version.md5) : null,
+      lastModified: version.createdAt,
+      mtime: version.mtime,
+      objectMetadata: version.metadata,
+    }))
+  }
+
   const mapping = await s3ObjectMappingsRepository.findByKey(
     user.oauthProvider,
     user.oauthUserId,
@@ -182,6 +222,123 @@ const getObject = async (
     mtime: mapping.mtime,
     objectMetadata: mapping.metadata,
   }))
+}
+
+// ── ListObjectVersions ─────────────────────────────────────────────────────
+
+export interface S3VersionEntry {
+  key: string
+  /** versionId = the content CID. */
+  versionId: string
+  isLatest: boolean
+  lastModified: Date
+  /** Quoted ETag: the MD5 when known, else the CID (matching GET/HEAD/List). */
+  etag: string
+  size: bigint
+}
+
+export interface S3DeleteMarkerEntry {
+  key: string
+  versionId: string
+  isLatest: boolean
+  lastModified: Date
+}
+
+export interface ListObjectVersionsParams {
+  bucket: string
+  prefix: string
+  keyMarker: string | null
+  maxKeys: number
+}
+
+export interface ListObjectVersionsResult {
+  versions: S3VersionEntry[]
+  deleteMarkers: S3DeleteMarkerEntry[]
+  isTruncated: boolean
+  nextKeyMarker: string | null
+}
+
+// Safety ceiling on rows fetched for a single version listing (a key can have
+// many versions). Truncation is reported at the key level via maxKeys; this cap
+// only bounds a pathological single request.
+const VERSION_LISTING_ROW_CAP = 10_000
+
+/**
+ * ListObjectVersions: enumerate the version history for a bucket/prefix in the
+ * caller's namespace, newest version first per key. IsLatest marks the current
+ * content version of each live key; for a key whose current pointer is
+ * soft-deleted, a delete marker is synthesised as the latest entry (its
+ * versionId derived from the delete time — markers are display-only, since
+ * DeleteObject?versionId always 403s). Pagination is key-level: up to maxKeys
+ * keys are returned, with nextKeyMarker set when more remain.
+ */
+const getObjectVersions = async (
+  user: UserWithOrganization,
+  params: ListObjectVersionsParams,
+): Promise<ListObjectVersionsResult> => {
+  const rows = await s3ObjectMappingsRepository.listObjectVersions(
+    user.oauthProvider,
+    user.oauthUserId,
+    params.bucket,
+    params.prefix,
+    params.keyMarker,
+    VERSION_LISTING_ROW_CAP,
+  )
+
+  const versions: S3VersionEntry[] = []
+  const deleteMarkers: S3DeleteMarkerEntry[] = []
+  let keysEmitted = 0
+  let lastKey: string | null = null
+  let isTruncated = false
+
+  // Rows arrive ordered by key asc, then newest version first, so a key's rows
+  // are contiguous and the first row of each key is its newest version.
+  let i = 0
+  while (i < rows.length) {
+    const key = rows[i].key
+    // New key: enforce the maxKeys page limit before emitting its group.
+    if (keysEmitted >= params.maxKeys) {
+      isTruncated = true
+      break
+    }
+    const isDeleted = rows[i].pointerDeletedAt != null
+    let isNewestOfKey = true
+    while (i < rows.length && rows[i].key === key) {
+      const row = rows[i]
+      versions.push({
+        key: row.key,
+        versionId: row.cid,
+        isLatest: isNewestOfKey && !isDeleted,
+        lastModified: row.lastModified,
+        etag: row.md5 ? `"${row.md5}"` : `"${row.cid}"`,
+        size: row.size,
+      })
+      isNewestOfKey = false
+      i++
+    }
+    if (isDeleted) {
+      const deletedAt = rows[i - 1].pointerDeletedAt as Date
+      deleteMarkers.push({
+        key,
+        versionId: `dm-${deletedAt.getTime()}`,
+        isLatest: true,
+        lastModified: deletedAt,
+      })
+    }
+    keysEmitted++
+    lastKey = key
+  }
+
+  // Hitting the row cap means a key's versions may have been cut off; report
+  // truncation so the listing never silently claims to be complete.
+  if (rows.length >= VERSION_LISTING_ROW_CAP) isTruncated = true
+
+  return {
+    versions,
+    deleteMarkers,
+    isTruncated,
+    nextKeyMarker: isTruncated ? lastKey : null,
+  }
 }
 
 const createMultipartUpload = async (
@@ -547,6 +704,7 @@ const objectExists = async (
 
 export const S3UseCases = {
   getObject,
+  getObjectVersions,
   createMultipartUpload,
   uploadPart,
   completeMultipartUpload,
