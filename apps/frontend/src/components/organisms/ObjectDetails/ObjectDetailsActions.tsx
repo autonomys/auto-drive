@@ -13,6 +13,7 @@ import {
   CloudArrowDownIcon,
 } from '@heroicons/react/24/outline';
 import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUserStore } from 'globalStates/user';
 import toast from 'react-hot-toast';
 import { useNetwork } from '../../../contexts/network';
@@ -31,6 +32,7 @@ export const ObjectDetailsActions = ({
 }) => {
   const { user } = useUserStore();
   const { api } = useNetwork();
+  const router = useRouter();
   const [downloadModalCid, setDownloadModalCid] = useState<string | null>(null);
   const [shareModalCid, setShareModalCid] = useState<string | null>(null);
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
@@ -67,13 +69,16 @@ export const ObjectDetailsActions = ({
     try {
       await api.reportFile(object.metadata.dataCid);
       toast.success('File has been reported successfully');
+      // The tags shown here come from a server-fetched prop, so without this
+      // the "reported" tag/disabled state won't show up until a manual reload.
+      router.refresh();
     } catch (error) {
       console.error('Report error:', error);
       toast.error('Failed to report file. Please try again.');
     } finally {
       setIsReporting(false);
     }
-  }, [api, object?.metadata.dataCid]);
+  }, [api, object?.metadata.dataCid, router]);
 
   const handleBringToCache = useCallback(async () => {
     if (!object?.metadata.dataCid) {
