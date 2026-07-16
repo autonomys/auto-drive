@@ -17,7 +17,7 @@ import {
   notImplementedHandler,
   putObjectHandler,
   uploadPartHandler,
-  STASHED_CONTENT_ENCODING_HEADER,
+  stashContentEncoding,
 } from './s3.js'
 
 const s3Controller = Router()
@@ -144,7 +144,10 @@ const neutralizeObjectBodyEncoding = (
     !encoding.toLowerCase().includes('aws-chunked') &&
     BODY_STORED_VERBATIM.has(getS3Method(req))
   ) {
-    req.headers[STASHED_CONTENT_ENCODING_HEADER] = encoding
+    // Stash on a request-scoped side channel (not a header) so it round-trips as
+    // metadata without being forgeable over the wire, then hide the real header
+    // from the parser so the body is stored verbatim.
+    stashContentEncoding(req, encoding)
     delete req.headers['content-encoding']
   }
   next()

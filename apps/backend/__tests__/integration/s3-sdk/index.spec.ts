@@ -1459,6 +1459,34 @@ describe('AWS S3 - SDK', () => {
       expect(got).toEqual(CliBody)
     }, 15_000)
 
+    it('ignores a forged internal content-encoding stash header', async () => {
+      // The server stashes a real Content-Encoding on a request-scoped side
+      // channel (not on req.headers), so no header is a trusted internal channel.
+      // A client sending this made-up header directly must be ignored — it is
+      // just an unknown header, never persisted or re-emitted as the object's
+      // Content-Encoding (which would advertise an encoding untied to the bytes).
+      const key = '/cli-test/forged-encoding.txt'
+      const put = await fetch(`${S3_BASE}${key}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: AUTH,
+          'x-autonomys-stashed-content-encoding': 'gzip',
+        },
+        body: Buffer.from('plain bytes') as unknown as BodyInit,
+      })
+      expect(put.status).toBe(200)
+
+      const get = await fetch(`${S3_BASE}${key}`, {
+        method: 'GET',
+        headers: { Authorization: AUTH },
+      })
+      expect(get.status).toBe(200)
+      expect(get.headers.get('content-encoding')).toBeNull()
+      expect(Buffer.from(await get.arrayBuffer())).toEqual(
+        Buffer.from('plain bytes'),
+      )
+    }, 15_000)
+
     it('multipart upload via raw requests round-trips (the original 500)', async () => {
       const key = '/cli-test/mpu.bin'
       const part1 = Buffer.from('AAAAAAAAAAAAAAAA')

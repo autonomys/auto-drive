@@ -89,14 +89,24 @@ const headerString = (
   value: string | string[] | undefined,
 ): string | undefined => (typeof value === 'string' ? value : undefined)
 
-// Internal request header into which the S3 router moves a client-declared
-// Content-Encoding for the body-storing operations (PutObject/UploadPart)
-// BEFORE body parsing, hiding it from Express's parser so the object bytes are
-// stored verbatim — S3 never inflates a stored body; Content-Encoding is opaque
-// metadata. getObjectMetadata reads it back from here. See
-// neutralizeObjectBodyEncoding in http.ts.
-export const STASHED_CONTENT_ENCODING_HEADER =
-  'x-autonomys-stashed-content-encoding'
+// A client-declared Content-Encoding for a body-storing op (PutObject/
+// UploadPart) is stashed here by the S3 router's pre-parser middleware (see
+// http.ts) once it has hidden the header from Express's parser, so the object
+// bytes are stored verbatim — S3 never inflates a stored body; Content-Encoding
+// is opaque metadata. It is deliberately kept OFF req.headers, in a
+// request-scoped WeakMap keyed by the Request, so a client cannot forge it over
+// the wire: HTTP callers set headers, not this server-side side channel.
+// Entries are garbage-collected with the request.
+const stashedContentEncoding = new WeakMap<Request, string>()
+
+/**
+ * Stash a body-storing op's client Content-Encoding for later metadata capture
+ * (getObjectMetadata). Called only by the S3 router's pre-parser middleware; the
+ * value is thus never read from a client-controllable channel.
+ */
+export const stashContentEncoding = (req: Request, encoding: string): void => {
+  stashedContentEncoding.set(req, encoding)
+}
 
 /**
  * Capture the standard S3 object metadata a write request carries: the system
@@ -116,13 +126,15 @@ const getObjectMetadata = (req: Request): S3ObjectMetadata | null => {
   if (contentLanguage) metadata.contentLanguage = contentLanguage
   const contentDisposition = headerString(req.headers['content-disposition'])
   if (contentDisposition) metadata.contentDisposition = contentDisposition
-  // For PutObject/UploadPart the real Content-Encoding was moved to an internal
-  // header before body parsing (so the body is stored verbatim); read it from
-  // there. Other write ops (CreateMultipartUpload) still carry the real header,
-  // and it is metadata-only for them (no body to inflate).
+  // For PutObject/UploadPart the real Content-Encoding was moved off the headers
+  // before body parsing (so the body is stored verbatim) onto a request-scoped
+  // side channel; read it back from there. It cannot be forged: a client-sent
+  // header only ever lands in req.headers, never in the WeakMap. Other write ops
+  // (CreateMultipartUpload) still carry the real header, metadata-only (no body
+  // to inflate).
   const contentEncoding =
     headerString(req.headers['content-encoding']) ??
-    headerString(req.headers[STASHED_CONTENT_ENCODING_HEADER])
+    stashedContentEncoding.get(req)
   if (contentEncoding) metadata.contentEncoding = contentEncoding
 
   const userMetadata: Record<string, string> = {}
