@@ -258,11 +258,6 @@ export interface ListObjectVersionsResult {
   nextKeyMarker: string | null
 }
 
-// Safety ceiling on rows fetched for a single version listing (a key can have
-// many versions). Truncation is reported at the key level via maxKeys; this cap
-// only bounds a pathological single request.
-const VERSION_LISTING_ROW_CAP = 10_000
-
 /**
  * ListObjectVersions: enumerate the version history for a bucket/prefix in the
  * caller's namespace, newest version first per key. IsLatest marks the current
@@ -270,19 +265,24 @@ const VERSION_LISTING_ROW_CAP = 10_000
  * soft-deleted, a delete marker is synthesised as the latest entry (its
  * versionId derived from the delete time — markers are display-only, since
  * DeleteObject?versionId always 403s). Pagination is key-level: up to maxKeys
- * keys are returned, with nextKeyMarker set when more remain.
+ * keys are returned, with nextKeyMarker set when more remain. The repository
+ * returns WHOLE keys (every version row of up to maxKeys + 1 distinct keys), so
+ * a key's history is never split across a page boundary.
  */
 const getObjectVersions = async (
   user: UserWithOrganization,
   params: ListObjectVersionsParams,
 ): Promise<ListObjectVersionsResult> => {
+  // maxKeys + 1: the extra key (if any) signals more history to page through.
+  // Because whole keys are fetched, that extra key is complete too — nothing is
+  // cut, so paging with `key > nextKeyMarker` can't skip any of a key's history.
   const rows = await s3ObjectMappingsRepository.listObjectVersions(
     user.oauthProvider,
     user.oauthUserId,
     params.bucket,
     params.prefix,
     params.keyMarker,
-    VERSION_LISTING_ROW_CAP,
+    params.maxKeys + 1,
   )
 
   const versions: S3VersionEntry[] = []
@@ -296,15 +296,23 @@ const getObjectVersions = async (
   let i = 0
   while (i < rows.length) {
     const key = rows[i].key
-    // New key: enforce the maxKeys page limit before emitting its group.
+    // New key: enforce the maxKeys page limit before emitting its group. Since
+    // maxKeys + 1 keys were fetched, seeing another key here means more remain.
     if (keysEmitted >= params.maxKeys) {
       isTruncated = true
       break
     }
     const isDeleted = rows[i].pointerDeletedAt != null
+    // versionId = CID, so multiple rows sharing a CID (repeated same-content
+    // writes — e.g. an mtime-only copy-to-self) are ONE version. Collapse them,
+    // keeping the newest occurrence (first in id-desc order) and its metadata.
+    const seenCids = new Set<string>()
     let isNewestOfKey = true
     while (i < rows.length && rows[i].key === key) {
       const row = rows[i]
+      i++
+      if (seenCids.has(row.cid)) continue
+      seenCids.add(row.cid)
       versions.push({
         key: row.key,
         versionId: row.cid,
@@ -314,7 +322,6 @@ const getObjectVersions = async (
         size: row.size,
       })
       isNewestOfKey = false
-      i++
     }
     if (isDeleted) {
       const deletedAt = rows[i - 1].pointerDeletedAt as Date
@@ -328,10 +335,6 @@ const getObjectVersions = async (
     keysEmitted++
     lastKey = key
   }
-
-  // Hitting the row cap means a key's versions may have been cut off; report
-  // truncation so the listing never silently claims to be complete.
-  if (rows.length >= VERSION_LISTING_ROW_CAP) isTruncated = true
 
   return {
     versions,

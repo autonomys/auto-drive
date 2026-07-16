@@ -252,8 +252,13 @@ const findVersionByCid = async (
  * delete marker). Retention is unconditional; moderation applies to RETRIEVAL
  * (GET ?versionId runs authorizeDownload), not to listing metadata.
  *
- * Rows are ordered by key asc, then newest version first; `limit` rows are
- * fetched (the caller detects truncation).
+ * Pagination is by KEY: `keyLimit` bounds the number of distinct keys, and ALL
+ * version rows of each selected key are returned (ordered key asc, then newest
+ * version first). Whole keys are selected — never a partial key — so the caller
+ * can page by key with `key > marker` without ever dropping part of a key's
+ * history. Pass keyLimit = maxKeys + 1 so the caller detects truncation via the
+ * extra key. There is deliberately no flat row cap: one that cut a key mid-
+ * history would make the next page silently skip the remainder.
  */
 const listObjectVersions = async (
   ownerOauthProvider: string,
@@ -261,7 +266,7 @@ const listObjectVersions = async (
   bucket: string,
   prefix: string,
   keyMarker: string | null,
-  limit: number,
+  keyLimit: number,
 ): Promise<S3ObjectVersionListingRow[]> => {
   const db = await getDatabase()
 
@@ -270,7 +275,28 @@ const listObjectVersions = async (
     .replace(/%/g, '\\%')
     .replace(/_/g, '\\_')
 
-  const baseSQL = `
+  // Scope filter shared by the key-selection CTE and the row fetch. ov.key alone
+  // is not unique across owners/buckets, so it is re-applied on the outer query.
+  const scope = `
+    ov.owner_oauth_provider = $1
+    AND ov.owner_oauth_user_id = $2
+    AND ov.bucket = $3
+    AND ov.key LIKE $4
+  `
+  // $5 = keyLimit; $6 = keyMarker (present only when paging).
+  const markerClause = keyMarker ? ' AND ov.key > $6' : ''
+
+  // Pick the page's distinct keys first, then fetch every version row for
+  // exactly those keys. Selecting whole keys (rather than a flat LIMIT on rows)
+  // guarantees no key is truncated mid-history.
+  const text = `
+    WITH page_keys AS (
+      SELECT DISTINCT ov.key
+      FROM "S3".object_versions ov
+      WHERE ${scope}${markerClause}
+      ORDER BY ov.key ASC
+      LIMIT $5
+    )
     SELECT
       ov.key,
       ov.cid,
@@ -279,6 +305,7 @@ const listObjectVersions = async (
       ov.created_at AS last_modified,
       om.deleted_at AS pointer_deleted_at
     FROM "S3".object_versions ov
+    JOIN page_keys pk ON pk.key = ov.key
     JOIN "S3".object_mappings om
       ON om.owner_oauth_provider = ov.owner_oauth_provider
      AND om.owner_oauth_user_id = ov.owner_oauth_user_id
@@ -290,34 +317,26 @@ const listObjectVersions = async (
       WHERE head_cid = ov.cid
       LIMIT 1
     ) m ON true
-    WHERE ov.owner_oauth_provider = $1
-      AND ov.owner_oauth_user_id = $2
-      AND ov.bucket = $3
-      AND ov.key LIKE $4
+    WHERE ${scope}
+    ORDER BY ov.key ASC, ov.id DESC
   `
 
-  let text: string
-  let values: unknown[]
-  if (keyMarker) {
-    text = baseSQL + ' AND ov.key > $5 ORDER BY ov.key ASC, ov.id DESC LIMIT $6'
-    values = [
-      ownerOauthProvider,
-      ownerOauthUserId,
-      bucket,
-      `${escapedPrefix}%`,
-      keyMarker,
-      limit,
-    ]
-  } else {
-    text = baseSQL + ' ORDER BY ov.key ASC, ov.id DESC LIMIT $5'
-    values = [
-      ownerOauthProvider,
-      ownerOauthUserId,
-      bucket,
-      `${escapedPrefix}%`,
-      limit,
-    ]
-  }
+  const values: unknown[] = keyMarker
+    ? [
+        ownerOauthProvider,
+        ownerOauthUserId,
+        bucket,
+        `${escapedPrefix}%`,
+        keyLimit,
+        keyMarker,
+      ]
+    : [
+        ownerOauthProvider,
+        ownerOauthUserId,
+        bucket,
+        `${escapedPrefix}%`,
+        keyLimit,
+      ]
 
   const result = await db.query<{
     key: string

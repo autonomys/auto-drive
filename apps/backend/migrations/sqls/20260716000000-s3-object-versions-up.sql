@@ -36,9 +36,16 @@ CREATE INDEX object_versions_cid_idx
 -- Backfill one version per existing mapping so pre-existing objects have a
 -- history (their single current content version). Soft-deleted mappings are
 -- included: the content version still exists; the delete marker for them is
--- synthesised from deleted_at at read time. updated_at is when the current
--- content was written, so it is the version's creation time.
+-- synthesised from deleted_at at read time.
+--
+-- The version's created_at is its LastModified — when the content was written.
+-- For a live key that is updated_at (its last write). For a soft-deleted key,
+-- updated_at was overwritten with the DELETE time (softDeleteMapping bumps it),
+-- which is NOT a content time; fall back to created_at (the mapping's first
+-- write) — an approximation, but a real content timestamp rather than the
+-- deletion instant.
 INSERT INTO "S3".object_versions
   (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata, created_at)
-SELECT owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata, updated_at
+SELECT owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata,
+  CASE WHEN deleted_at IS NULL THEN updated_at ELSE created_at END
 FROM "S3".object_mappings;

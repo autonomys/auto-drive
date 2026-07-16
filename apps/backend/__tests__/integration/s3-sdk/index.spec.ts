@@ -1340,6 +1340,23 @@ describe('AWS S3 - SDK', () => {
       )
     })
 
+    it('collapses repeated same-content writes into one version entry', async () => {
+      // versionId = CID: writing identical bytes twice yields the same versionId,
+      // so ListObjectVersions must show ONE entry for it, not a duplicate.
+      const key = 'versions-test/dedup.txt'
+      const a = await putVersion(key, 'identical-bytes')
+      const b = await putVersion(key, 'identical-bytes')
+      expect(a.VersionId).toBe(b.VersionId)
+
+      const list = await s3Client.send(
+        new ListObjectVersionsCommand({ Bucket: VBucket, Prefix: 'dedup.txt' }),
+      )
+      const forKey = (list.Versions ?? []).filter((v) => v.Key === 'dedup.txt')
+      expect(forKey).toHaveLength(1)
+      expect(forKey[0].VersionId).toBe(a.VersionId)
+      expect(forKey[0].IsLatest).toBe(true)
+    })
+
     it('serves an older version by versionId', async () => {
       const key = 'versions-test/read-old.txt'
       const v1 = await putVersion(key, 'old-content')

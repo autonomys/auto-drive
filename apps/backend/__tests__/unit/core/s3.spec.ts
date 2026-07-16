@@ -306,6 +306,31 @@ describe('S3UseCases', () => {
       expect(result.isTruncated).toBe(true)
       expect(result.nextKeyMarker).toBe('b.txt')
     })
+
+    it('collapses repeated same-CID writes into one version (versionId = CID is unique per key)', async () => {
+      // The repo returns newest-first; the same CID recurs when identical content
+      // is written more than once (e.g. an mtime-only copy-to-self / SetModTime).
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
+        .mockResolvedValue([
+          row({ cid: 'cidX', md5: 'newmd5', lastModified: new Date(3000) }),
+          row({ cid: 'cidY', md5: 'ymd5', lastModified: new Date(2000) }),
+          row({ cid: 'cidX', md5: 'oldmd5', lastModified: new Date(1000) }),
+        ] as any)
+
+      const result = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: null,
+        maxKeys: 1000,
+      })
+
+      // cidX collapses to a single entry — no duplicate versionId in the listing.
+      expect(result.versions.map((v) => v.versionId)).toEqual(['cidX', 'cidY'])
+      expect(result.versions[0].isLatest).toBe(true)
+      // The newest cidX row's metadata is the one kept.
+      expect(result.versions[0].etag).toBe('"newmd5"')
+    })
   })
 
   describe('createMultipartUpload', () => {
