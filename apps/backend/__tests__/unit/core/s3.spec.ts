@@ -698,7 +698,7 @@ describe('S3UseCases', () => {
         .mockResolvedValue(ok(undefined))
       const softDeleteSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123' })
+        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -707,6 +707,12 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
+      // A delete marker was created; its versionId derives from the delete time
+      // (new Date(5000) → dm-5000), matching what ListObjectVersions reports.
+      expect(result._unsafeUnwrap()).toEqual({
+        deleteMarker: true,
+        versionId: 'dm-5000',
+      })
       expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
       expect(softDeleteSpy).toHaveBeenCalledWith(
         'google',
@@ -730,7 +736,7 @@ describe('S3UseCases', () => {
         .mockResolvedValue(ok(undefined))
       jest
         .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123' })
+        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -755,7 +761,7 @@ describe('S3UseCases', () => {
         .mockResolvedValue(ok(undefined))
       jest
         .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123' })
+        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
 
       const result = await S3UseCases.deleteObject(mockUser, 'my-bucket', 'k2.txt')
 
@@ -778,6 +784,11 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
+      // No active key was hidden, so no marker was created.
+      expect(result._unsafeUnwrap()).toEqual({
+        deleteMarker: false,
+        versionId: null,
+      })
       expect(softDeleteSpy).not.toHaveBeenCalled()
       expect(markSpy).not.toHaveBeenCalled()
     })
@@ -794,7 +805,7 @@ describe('S3UseCases', () => {
         .mockResolvedValue(err(new ForbiddenError('not an owner')))
       const softDeleteSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123' })
+        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
 
       const result = await S3UseCases.deleteObject(
         mockUser,

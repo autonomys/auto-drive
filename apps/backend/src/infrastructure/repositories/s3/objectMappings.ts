@@ -389,29 +389,31 @@ const findByKey = async (
  * deleted_at so the key is hidden from every read path; the underlying content
  * is never removed from the DSN. Idempotent: deleting an already-deleted or
  * non-existent key is a no-op (S3 DeleteObject succeeds regardless). Returns the
- * cid of the row it just soft-deleted, or null if there was no active row — the
- * caller uses this to decide whether to also move the object to the UI Trash.
+ * cid and deleted_at of the row it just soft-deleted, or null if there was no
+ * active row: the caller uses the cid to decide whether to also move the object
+ * to the UI Trash, and deleted_at as the created delete marker's timestamp.
  */
 const softDeleteMapping = async (
   ownerOauthProvider: string,
   ownerOauthUserId: string,
   bucket: string,
   s3Key: string,
-): Promise<{ cid: string } | null> => {
+): Promise<{ cid: string; deletedAt: Date } | null> => {
   const db = await getDatabase()
 
-  const result = await db.query<{ cid: string }>({
+  const result = await db.query<{ cid: string; deleted_at: Date }>({
     text: `
       UPDATE "S3".object_mappings
       SET deleted_at = NOW(), updated_at = NOW()
       WHERE owner_oauth_provider = $1 AND owner_oauth_user_id = $2
         AND bucket = $3 AND "key" = $4 AND deleted_at IS NULL
-      RETURNING cid
+      RETURNING cid, deleted_at
     `,
     values: [ownerOauthProvider, ownerOauthUserId, bucket, s3Key],
   })
 
-  return result.rows[0] ?? null
+  const row = result.rows[0]
+  return row ? { cid: row.cid, deletedAt: row.deleted_at } : null
 }
 
 /**

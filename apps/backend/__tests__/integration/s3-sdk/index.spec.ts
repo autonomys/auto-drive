@@ -1425,6 +1425,10 @@ describe('AWS S3 - SDK', () => {
       )
       // Soft-delete: succeeds (204-class), never destroys content.
       expect(del.$metadata.httpStatusCode).toBe(204)
+      // Versioning-aware clients must see that a delete MARKER was written (not a
+      // destructive remove): x-amz-delete-marker + the marker's versionId.
+      expect(del.DeleteMarker).toBe(true)
+      expect(del.VersionId).toMatch(/^dm-\d+$/)
 
       // The key is hidden from a normal read.
       await expect(

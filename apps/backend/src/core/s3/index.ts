@@ -259,6 +259,14 @@ export interface ListObjectVersionsResult {
   nextKeyMarker: string | null
 }
 
+// A synthesised delete marker's versionId. Markers are not stored — they are
+// derived from the mapping's deleted_at — so their id is derived too, from the
+// delete time. The same value is reported by ListObjectVersions and on the
+// DeleteObject response for a given delete. Display-only: a ?versionId=dm-…
+// GET/DELETE still 404s/403s (a version can't be fetched or destroyed by it).
+const deleteMarkerVersionId = (deletedAt: Date): string =>
+  `dm-${deletedAt.getTime()}`
+
 /**
  * ListObjectVersions: enumerate the version history for a bucket/prefix in the
  * caller's namespace, newest version first per key. IsLatest marks the current
@@ -328,7 +336,7 @@ const getObjectVersions = async (
       const deletedAt = rows[i - 1].pointerDeletedAt as Date
       deleteMarkers.push({
         key,
-        versionId: `dm-${deletedAt.getTime()}`,
+        versionId: deleteMarkerVersionId(deletedAt),
         isLatest: true,
         lastModified: deletedAt,
       })
@@ -509,11 +517,21 @@ const putObject = async (
  * their web-app Trash (markAsDeleted) so an rclone delete is reflected in the UI
  * and stays recoverable — the "unified with UI Trash" behaviour.
  */
+/** DeleteObject result: whether this call created a delete marker (soft-deleted
+ *  an active key) and, if so, the marker's synthesised versionId. Surfaced as
+ *  the x-amz-delete-marker / x-amz-version-id response headers so a
+ *  versioning-aware client can tell a marker was written rather than data
+ *  destroyed (which never happens on the DSN). */
+interface DeleteObjectResult {
+  deleteMarker: boolean
+  versionId: string | null
+}
+
 const deleteObject = async (
   user: UserWithOrganization,
   bucket: string,
   key: string,
-): Promise<Result<void, never>> => {
+): Promise<Result<DeleteObjectResult, never>> => {
   const mapping = await s3ObjectMappingsRepository.findByKey(
     user.oauthProvider,
     user.oauthUserId,
@@ -521,10 +539,10 @@ const deleteObject = async (
     key,
   )
 
-  // Not the caller's key (absent or already soft-deleted): nothing to do.
-  // DeleteObject is idempotent and returns success regardless.
+  // Not the caller's key (absent or already soft-deleted): nothing to do, so no
+  // marker was created. DeleteObject is idempotent and returns success regardless.
   if (!mapping) {
-    return ok()
+    return ok({ deleteMarker: false, versionId: null })
   }
 
   const trashObject = async () => {
@@ -560,7 +578,7 @@ const deleteObject = async (
     await trashObject()
   }
 
-  await s3ObjectMappingsRepository.softDeleteMapping(
+  const softDeleted = await s3ObjectMappingsRepository.softDeleteMapping(
     user.oauthProvider,
     user.oauthUserId,
     bucket,
@@ -581,7 +599,17 @@ const deleteObject = async (
   }
 
   logger.debug('Soft-deleted S3 mapping: bucket=(%s) key=(%s)', bucket, key)
-  return ok()
+  // A delete marker was created iff this call actually hid an active row. (A
+  // concurrent delete may have hidden it first — softDeleteMapping then returns
+  // null and this call created nothing.)
+  return ok(
+    softDeleted
+      ? {
+          deleteMarker: true,
+          versionId: deleteMarkerVersionId(softDeleted.deletedAt),
+        }
+      : { deleteMarker: false, versionId: null },
+  )
 }
 
 /**

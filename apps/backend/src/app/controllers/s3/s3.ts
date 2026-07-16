@@ -879,7 +879,22 @@ export const deleteObjectHandler = async (req: Request, res: Response) => {
   // Soft-delete: the (bucket, key) mapping is hidden and, if it was the last S3
   // reference to the content, the object is moved to the owner's web-app Trash.
   // The underlying bytes are never removed from the Autonomys DSN.
-  await S3UseCases.deleteObject(user, bucket, key)
+  const result = await S3UseCases.deleteObject(user, bucket, key)
+  if (result.isErr()) {
+    handleError(result.error, res)
+    return
+  }
+  const { deleteMarker, versionId } = result.value
+
+  // Versioning is always on: a bare DeleteObject hides the current version
+  // behind a delete marker (nothing is destroyed). Surface that so a
+  // versioning-aware client can tell a marker was written vs. a destructive
+  // remove — matching what ListObjectVersions reports for the same delete. A
+  // no-op delete (key absent/already hidden) creates no marker → bare 204.
+  if (deleteMarker) {
+    res.set('x-amz-delete-marker', 'true')
+    if (versionId) res.set('x-amz-version-id', versionId)
+  }
 
   // S3 DeleteObject responds 204 No Content with an empty body, whether or not
   // the key existed (delete is idempotent).
