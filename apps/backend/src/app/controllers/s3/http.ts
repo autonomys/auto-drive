@@ -1,4 +1,4 @@
-import { raw, Router, Request, Response } from 'express'
+import { raw, Router, Request, Response, NextFunction } from 'express'
 import { asyncSafeHandler } from '../../../shared/utils/express.js'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import {
@@ -17,6 +17,7 @@ import {
   notImplementedHandler,
   putObjectHandler,
   uploadPartHandler,
+  STASHED_CONTENT_ENCODING_HEADER,
 } from './s3.js'
 
 const s3Controller = Router()
@@ -118,6 +119,37 @@ export const getS3Method = (req: Request): string => {
   }
 }
 
+// Operations whose request body IS the stored object. S3 stores that payload
+// byte-for-byte and treats Content-Encoding as opaque metadata — it must never
+// inflate the body. Express's parser otherwise gunzips gzip/deflate bodies (so
+// the stored bytes would no longer match the declared encoding) and rejects
+// unknown encodings (br, zstd) with 415 before they can be stored.
+const BODY_STORED_VERBATIM = new Set(['PutObject', 'UploadPart'])
+
+// Move a client-declared Content-Encoding out of the way of the body parser for
+// those operations, preserving it under an internal header for metadata
+// capture, so the exact wire bytes are stored and later returned verbatim under
+// the same encoding (GetObject/HeadObject re-emit it). aws-chunked is AWS
+// transfer framing, not object content: leave it in place so the parser's
+// existing handling stands rather than storing the framing bytes as data.
+const neutralizeObjectBodyEncoding = (
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+) => {
+  const encoding = req.headers['content-encoding']
+  if (
+    typeof encoding === 'string' &&
+    encoding.toLowerCase() !== 'identity' &&
+    !encoding.toLowerCase().includes('aws-chunked') &&
+    BODY_STORED_VERBATIM.has(getS3Method(req))
+  ) {
+    req.headers[STASHED_CONTENT_ENCODING_HEADER] = encoding
+    delete req.headers['content-encoding']
+  }
+  next()
+}
+
 s3Controller.get(
   '/',
   asyncSafeHandler(async (req: Request, res: Response) => {
@@ -131,6 +163,9 @@ s3Controller.get(
 
 s3Controller.use(
   '/:key(*)',
+  // Runs before the parser: hides a client Content-Encoding on body-storing
+  // ops so the object bytes are stored verbatim (see above).
+  neutralizeObjectBodyEncoding,
   // S3 object bodies are opaque binary payloads. Always read the request body
   // as raw bytes regardless of (or the absence of) a Content-Type header.
   // `type: '*/*'` is insufficient: type-is returns false when no Content-Type

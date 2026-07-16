@@ -89,6 +89,15 @@ const headerString = (
   value: string | string[] | undefined,
 ): string | undefined => (typeof value === 'string' ? value : undefined)
 
+// Internal request header into which the S3 router moves a client-declared
+// Content-Encoding for the body-storing operations (PutObject/UploadPart)
+// BEFORE body parsing, hiding it from Express's parser so the object bytes are
+// stored verbatim — S3 never inflates a stored body; Content-Encoding is opaque
+// metadata. getObjectMetadata reads it back from here. See
+// neutralizeObjectBodyEncoding in http.ts.
+export const STASHED_CONTENT_ENCODING_HEADER =
+  'x-autonomys-stashed-content-encoding'
+
 /**
  * Capture the standard S3 object metadata a write request carries: the system
  * headers (Content-Type, Cache-Control, Content-Language, Content-Disposition,
@@ -107,7 +116,13 @@ const getObjectMetadata = (req: Request): S3ObjectMetadata | null => {
   if (contentLanguage) metadata.contentLanguage = contentLanguage
   const contentDisposition = headerString(req.headers['content-disposition'])
   if (contentDisposition) metadata.contentDisposition = contentDisposition
-  const contentEncoding = headerString(req.headers['content-encoding'])
+  // For PutObject/UploadPart the real Content-Encoding was moved to an internal
+  // header before body parsing (so the body is stored verbatim); read it from
+  // there. Other write ops (CreateMultipartUpload) still carry the real header,
+  // and it is metadata-only for them (no body to inflate).
+  const contentEncoding =
+    headerString(req.headers['content-encoding']) ??
+    headerString(req.headers[STASHED_CONTENT_ENCODING_HEADER])
   if (contentEncoding) metadata.contentEncoding = contentEncoding
 
   const userMetadata: Record<string, string> = {}

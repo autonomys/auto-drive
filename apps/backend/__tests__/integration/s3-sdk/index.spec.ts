@@ -1,4 +1,4 @@
-import { gzipSync } from 'zlib'
+import { gzipSync, gunzipSync } from 'zlib'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   AbortMultipartUploadCommand,
@@ -1163,24 +1163,59 @@ describe('AWS S3 - SDK', () => {
       expect(head.Metadata?.project).toBe('auto-drive')
     })
 
-    it('round-trips Content-Encoding for a non-internally-compressed object', async () => {
+    it('stores the body verbatim under a client Content-Encoding and returns both unchanged', async () => {
       const Key = 'metadata-test/encoding.txt'
-      // A client declaring Content-Encoding: gzip sends actually-gzipped bytes
-      // (the raw body-parser inflates per Content-Encoding, so an unencoded body
-      // with this header would be rejected as malformed — correct HTTP). The
-      // encoding is stored as metadata and returned verbatim; Auto Drive is not
-      // internally compressing this object, so it owns Content-Encoding.
+      // S3 stores object bytes byte-for-byte and treats Content-Encoding as
+      // opaque metadata — it never inflates the stored body. A client uploading
+      // gzipped bytes with Content-Encoding: gzip must therefore read those exact
+      // gzipped bytes back (NOT a server-inflated body), still labelled gzip.
+      // Auto Drive is not internally compressing this object, so it owns
+      // Content-Encoding on the response.
+      const gz = gzipSync(Buffer.from('encoded payload'))
       await s3Client.send(
         new PutObjectCommand({
           Bucket,
           Key,
-          Body: gzipSync(Buffer.from('encoded')),
+          Body: gz,
           ContentEncoding: 'gzip',
         }),
       )
 
       const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
       expect(head.ContentEncoding).toBe('gzip')
+
+      const get = await s3Client.send(new GetObjectCommand({ Bucket, Key }))
+      expect(get.ContentEncoding).toBe('gzip')
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      // The stored bytes are the gzipped bytes, verbatim — not server-inflated —
+      // so they still match the advertised Content-Encoding and gunzip cleanly.
+      expect(body.equals(gz)).toBe(true)
+      expect(gunzipSync(body).toString()).toBe('encoded payload')
+    })
+
+    it('round-trips an arbitrary (non-inflatable) Content-Encoding without rejecting it', async () => {
+      const Key = 'metadata-test/encoding-opaque.bin'
+      // Encodings the body parser cannot inflate (br, zstd, …) must not be
+      // rejected with 415: S3 treats Content-Encoding opaquely. These bytes are
+      // deliberately not valid brotli — the server stores and returns them
+      // verbatim regardless.
+      const bytes = Buffer.from([0x00, 0x01, 0x02, 0xfe, 0xff])
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: bytes,
+          ContentEncoding: 'br',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentEncoding).toBe('br')
+
+      const get = await s3Client.send(new GetObjectCommand({ Bucket, Key }))
+      expect(get.ContentEncoding).toBe('br')
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      expect(body.equals(bytes)).toBe(true)
     })
 
     it('carries metadata through a plain (COPY-directive) server-side copy', async () => {
