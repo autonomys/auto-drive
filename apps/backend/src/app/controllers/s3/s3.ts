@@ -171,9 +171,15 @@ const applyStoredMetadataHeaders = (
 /**
  * Parse the source object of a CopyObject request from its x-amz-copy-source
  * header. The value is "/{bucket}/{key}" (the leading slash is optional), with
- * each path segment URL-encoded and an optional "?versionId=..." suffix — Auto
- * Drive has no object versioning, so any versionId is dropped. Returns null when
- * the header is missing or malformed.
+ * each path segment URL-encoded and an optional "?versionId=..." suffix. Returns
+ * null when the header is missing or malformed.
+ *
+ * A source `?versionId=` is intentionally NOT honoured: a copy always duplicates
+ * the source key's CURRENT version (and stacks a new version on the destination).
+ * Copying a specific historical source version is out of scope — versionId is the
+ * content CID, so a client that needs an exact version can address it another
+ * way. The suffix is stripped (not rejected) so routine clients that append the
+ * current versionId still copy successfully.
  */
 const parseCopySource = (
   req: Request,
@@ -181,7 +187,8 @@ const parseCopySource = (
   const raw = req.headers['x-amz-copy-source']
   if (typeof raw !== 'string' || raw.length === 0) return null
 
-  // Drop any ?versionId= suffix, strip a leading slash, then URL-decode.
+  // Strip any ?versionId= suffix (a specific source version is not honoured — the
+  // current version is copied, see above), strip a leading slash, then URL-decode.
   const withoutVersion = raw.split('?')[0].replace(/^\//, '')
   let decoded: string
   try {

@@ -147,39 +147,36 @@ const createMapping = async (
   // TestObjectUpdate, which overwrites in place). Overwriting a key REPLACES its
   // metadata wholesale (metadata = $8), matching S3: a PUT redefines the object's
   // metadata rather than merging into what was there.
+  //
+  // The current-pointer upsert and the append to the immutable version history
+  // (versionId = cid) are ONE statement via data-modifying CTEs, so they commit
+  // atomically: a partial failure can never advance the pointer without also
+  // writing the matching version row (which would leave the current object
+  // unlistable by ListObjectVersions and un-fetchable by its own versionId).
+  // PostgreSQL runs every data-modifying WITH clause exactly once, to completion,
+  // whether or not the final SELECT reads it — so every write (PutObject,
+  // CopyObject, CompleteMultipartUpload, and a PUT that resurrects a soft-deleted
+  // key) records exactly one version. `getDatabase()` is a Pool, so two separate
+  // queries here could land on different connections and auto-commit apart.
   const metadataJson = metadata ? JSON.stringify(metadata) : null
 
   const result = await db.query<S3KeyMappingDB>({
     text: `
-      INSERT INTO "S3".object_mappings
-      (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT (owner_oauth_provider, owner_oauth_user_id, bucket, "key")
-        DO UPDATE SET cid = $5, md5 = $6, mtime = $7, metadata = $8,
-          deleted_at = NULL, updated_at = NOW()
-      RETURNING *
-    `,
-    values: [
-      ownerOauthProvider,
-      ownerOauthUserId,
-      bucket,
-      s3Key,
-      cid,
-      md5,
-      mtime,
-      metadataJson,
-    ],
-  })
-
-  // Append the content version to the immutable history (versionId = cid). Every
-  // write — PutObject, CopyObject, CompleteMultipartUpload, and a PUT that
-  // resurrects a soft-deleted key — records a version, so ListObjectVersions and
-  // GET ?versionId can answer without the current-pointer read path changing.
-  await db.query({
-    text: `
-      INSERT INTO "S3".object_versions
+      WITH upserted AS (
+        INSERT INTO "S3".object_mappings
         (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (owner_oauth_provider, owner_oauth_user_id, bucket, "key")
+          DO UPDATE SET cid = $5, md5 = $6, mtime = $7, metadata = $8,
+            deleted_at = NULL, updated_at = NOW()
+        RETURNING *
+      ),
+      versioned AS (
+        INSERT INTO "S3".object_versions
+          (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      )
+      SELECT * FROM upserted
     `,
     values: [
       ownerOauthProvider,
