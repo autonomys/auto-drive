@@ -1150,12 +1150,40 @@ describe('S3UseCases', () => {
       ).toBeNull()
     })
 
-    it('returns the mapping updatedAt when visible (the retention anchor)', async () => {
+    it('anchors to the version’s createdAt, not the (bump-prone) updatedAt', async () => {
+      // updatedAt is bumped by soft-delete/restore without a new version, so
+      // retention must use the version row's immutable createdAt.
+      const writtenAt = new Date(1720000000000)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(mapping({ updatedAt: new Date(1730000000000) }))
+      jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(false)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
+        .mockResolvedValue({
+          bucket: 'my-bucket',
+          key: 'file.txt',
+          cid: 'cid123',
+          md5: null,
+          mtime: null,
+          metadata: null,
+          createdAt: writtenAt,
+        })
+
+      expect(
+        await S3UseCases.getObjectWriteTime(mockUser, 'my-bucket', 'file.txt'),
+      ).toEqual(writtenAt)
+    })
+
+    it('falls back to updatedAt when the key has no version row (legacy)', async () => {
       const updatedAt = new Date(1720000000000)
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ updatedAt }))
       jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(false)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
+        .mockResolvedValue(null)
 
       expect(
         await S3UseCases.getObjectWriteTime(mockUser, 'my-bucket', 'file.txt'),

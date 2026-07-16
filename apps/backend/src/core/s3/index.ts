@@ -743,13 +743,28 @@ const objectExists = async (
 // Lock retention anchors its COMPLIANCE window to when the content was written
 // (RetainUntilDate = write time + the retention years), so GetObjectRetention
 // needs this rather than a bare existence check.
+//
+// Anchored to the current version's object_versions.created_at, NOT the mapping's
+// updated_at: a soft-delete or Trash restore (restoreMappingsByCid) bumps
+// updated_at to now WITHOUT writing a new version, which would drift the
+// RetainUntilDate to the restore instant. The version row's created_at is stamped
+// once at write and never moves. Fall back to updated_at only for legacy objects
+// with no version row (pre-#781 data the backfill didn't cover).
 const getObjectWriteTime = async (
   user: UserWithOrganization,
   bucket: string,
   key: string,
 ): Promise<Date | null> => {
   const mapping = await findVisibleMapping(user, bucket, key)
-  return mapping ? mapping.updatedAt : null
+  if (!mapping) return null
+  const version = await s3ObjectMappingsRepository.findVersionByCid(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+    mapping.cid,
+  )
+  return version ? version.createdAt : mapping.updatedAt
 }
 
 export const S3UseCases = {
