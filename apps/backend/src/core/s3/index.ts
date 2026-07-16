@@ -277,6 +277,16 @@ const deleteMarkerVersionId = (deletedAt: Date): string =>
  * keys are returned, with nextKeyMarker set when more remain. The repository
  * returns WHOLE keys (every version row of up to maxKeys + 1 distinct keys), so
  * a key's history is never split across a page boundary.
+ *
+ * KNOWN LIMITATION (tracked in #790): maxKeys bounds the number of distinct KEYS,
+ * not entries. S3 defines max-keys as a hard bound on Version+DeleteMarker
+ * entries with version-id-marker resume; here a single key with > maxKeys
+ * versions returns them all in one page. This is deliberate — whole keys are
+ * never split, so no version is silently dropped (the higher-severity concern) —
+ * at the cost of an oversized page for a pathologically-overwritten key. Proper
+ * entry-level pagination is deferred: it needs an opaque object_versions.id
+ * cursor (versionId=CID isn't monotonic) plus SQL-level DISTINCT ON dedup, per
+ * #790.
  */
 const getObjectVersions = async (
   user: UserWithOrganization,
