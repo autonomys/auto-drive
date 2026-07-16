@@ -3,6 +3,17 @@ import { metadataRepository } from '../../../src/infrastructure/repositories/obj
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { ownershipRepository } from '../../../src/infrastructure/repositories/objects/ownership.js'
+import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
+
+// Forces the legacy divergent state (rows of one head_cid with different
+// tags) that setMetadata's tag inheritance normally prevents nowadays.
+const clearTagsOfRow = async (rootCid: string, headCid: string) => {
+  const db = await getDatabase()
+  await db.query({
+    text: 'UPDATE metadata SET tags = NULL WHERE root_cid = $1 AND head_cid = $2',
+    values: [rootCid, headCid],
+  })
+}
 
 describe('Metadata Repository', () => {
   beforeAll(async () => {
@@ -359,6 +370,180 @@ describe('Metadata Repository', () => {
 
     const result = await metadataRepository.getMetadata(headCid)
     expect(result?.is_archived).toBe(true)
+  })
+
+  it('should not duplicate an existing tag and should tag every row of a head cid', async () => {
+    const headCid = 'multi-row-tag-head-cid'
+    const metadata: OffchainMetadata = {
+      totalSize: 100n,
+      type: 'file',
+      dataCid: 'multi-row-tag-data-cid',
+      totalChunks: 1,
+      chunks: [],
+      name: 'multi-row-tag-file',
+    }
+
+    // Same head_cid under two roots, with tags forced to diverge (as legacy
+    // rows can be): addTag must fill the missing row without duplicating the
+    // tag on the row that already has it.
+    await metadataRepository.setMetadata('multi-row-root-1', headCid, metadata)
+    await metadataRepository.addTag(headCid, 'multi-row-tag')
+    await metadataRepository.setMetadata('multi-row-root-2', headCid, metadata)
+    await clearTagsOfRow('multi-row-root-2', headCid)
+
+    await metadataRepository.addTag(headCid, 'multi-row-tag')
+
+    const rows =
+      await metadataRepository.getMetadataByRootCid('multi-row-root-1')
+    const rows2 =
+      await metadataRepository.getMetadataByRootCid('multi-row-root-2')
+    for (const row of [...rows, ...rows2]) {
+      expect(row.tags?.filter((tag) => tag === 'multi-row-tag')).toHaveLength(1)
+    }
+  })
+
+  it('should remove a tag from every row of a head cid', async () => {
+    const headCid = 'multi-row-untag-head-cid'
+    const metadata: OffchainMetadata = {
+      totalSize: 100n,
+      type: 'file',
+      dataCid: 'multi-row-untag-data-cid',
+      totalChunks: 1,
+      chunks: [],
+      name: 'multi-row-untag-file',
+    }
+
+    // One tagged row and one NULL-tags row for the same head_cid: removal
+    // must not depend on which row a pre-check happens to read.
+    await metadataRepository.setMetadata('multi-row-untag-1', headCid, metadata)
+    await metadataRepository.addTag(headCid, 'multi-row-untag')
+    await metadataRepository.setMetadata('multi-row-untag-2', headCid, metadata)
+    await clearTagsOfRow('multi-row-untag-2', headCid)
+
+    await metadataRepository.removeTag(headCid, 'multi-row-untag')
+
+    const rows =
+      await metadataRepository.getMetadataByRootCid('multi-row-untag-1')
+    for (const row of rows) {
+      expect(row.tags ?? []).not.toContain('multi-row-untag')
+    }
+  })
+
+  it('should inherit sibling tags when inserting a new row for a known head cid', async () => {
+    const headCid = 'inherit-tags-head-cid'
+    const metadata: OffchainMetadata = {
+      totalSize: 100n,
+      type: 'file',
+      dataCid: 'inherit-tags-data-cid',
+      totalChunks: 1,
+      chunks: [],
+      name: 'inherit-tags-file',
+    }
+
+    await metadataRepository.setMetadata(
+      'inherit-tags-root-1',
+      headCid,
+      metadata,
+    )
+    await metadataRepository.addTag(headCid, 'inherit-tag-a')
+    await metadataRepository.addTag(headCid, 'inherit-tag-b')
+
+    // A new row for already-known (e.g. banned) content must not start as a
+    // clean row: it inherits the moderation state of its siblings.
+    await metadataRepository.setMetadata(
+      'inherit-tags-root-2',
+      headCid,
+      metadata,
+    )
+
+    const rows = await metadataRepository.getMetadataByRootCid(
+      'inherit-tags-root-2',
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].tags).toEqual(
+      expect.arrayContaining(['inherit-tag-a', 'inherit-tag-b']),
+    )
+
+    // Re-upserting an existing row (conflict path) must not clobber its tags.
+    await metadataRepository.setMetadata(
+      'inherit-tags-root-1',
+      headCid,
+      metadata,
+    )
+    const originalRows = await metadataRepository.getMetadataByRootCid(
+      'inherit-tags-root-1',
+    )
+    expect(originalRows[0].tags).toEqual(
+      expect.arrayContaining(['inherit-tag-a', 'inherit-tag-b']),
+    )
+  })
+
+  it('should return each head cid only once from getMetadataByTagIncludeExclude', async () => {
+    const headCid = 'dedup-list-head-cid'
+    const metadata: OffchainMetadata = {
+      totalSize: 100n,
+      type: 'file',
+      dataCid: 'dedup-list-data-cid',
+      totalChunks: 1,
+      chunks: [],
+      name: 'dedup-list-file',
+    }
+
+    // Two identically-tagged rows for the same head_cid (content dedup
+    // across roots) must collapse into a single result row.
+    await metadataRepository.setMetadata('dedup-list-root-1', headCid, metadata)
+    await metadataRepository.setMetadata('dedup-list-root-2', headCid, metadata)
+    await metadataRepository.addTag(headCid, 'dedup-list-tag')
+
+    const result = await metadataRepository.getMetadataByTagIncludeExclude(
+      ['dedup-list-tag'],
+      ['dedup-list-absent-tag'],
+      100,
+      0,
+    )
+
+    const cids = result.rows.map((row) => row.head_cid)
+    expect(cids.filter((cid) => cid === headCid)).toHaveLength(1)
+  })
+
+  it('should exclude rows carrying ANY excluded tag from getMetadataByTagIncludeExclude', async () => {
+    const metadata: OffchainMetadata = {
+      totalSize: 100n,
+      type: 'file',
+      dataCid: 'include-exclude-data-cid',
+      totalChunks: 1,
+      chunks: [],
+      name: 'include-exclude-file',
+    }
+    const include = 'incl-tag'
+    const excludeA = 'excl-tag-a'
+    const excludeB = 'excl-tag-b'
+
+    const plainCid = 'incl-excl-plain'
+    const withACid = 'incl-excl-with-a'
+    const withBCid = 'incl-excl-with-b'
+    const withBothCid = 'incl-excl-with-both'
+    for (const cid of [plainCid, withACid, withBCid, withBothCid]) {
+      await metadataRepository.setMetadata(cid, cid, metadata)
+      await metadataRepository.addTag(cid, include)
+    }
+    await metadataRepository.addTag(withACid, excludeA)
+    await metadataRepository.addTag(withBCid, excludeB)
+    await metadataRepository.addTag(withBothCid, excludeA)
+    await metadataRepository.addTag(withBothCid, excludeB)
+
+    const result = await metadataRepository.getMetadataByTagIncludeExclude(
+      [include],
+      [excludeA, excludeB],
+      100,
+      0,
+    )
+
+    const cids = result.rows.map((row) => row.head_cid)
+    expect(cids).toContain(plainCid)
+    expect(cids).not.toContain(withACid)
+    expect(cids).not.toContain(withBCid)
+    expect(cids).not.toContain(withBothCid)
   })
 
   it('should get metadata by archived status', async () => {

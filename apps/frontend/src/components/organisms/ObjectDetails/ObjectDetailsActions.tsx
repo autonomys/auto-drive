@@ -1,4 +1,8 @@
-import { ObjectInformation, ObjectTag } from '@auto-drive/models';
+import {
+  ObjectInformation,
+  isBanned,
+  isToBeReviewed,
+} from '@auto-drive/models';
 import { Button } from '@auto-drive/ui';
 import { cn } from '@/utils/cn';
 import {
@@ -9,6 +13,7 @@ import {
   CloudArrowDownIcon,
 } from '@heroicons/react/24/outline';
 import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUserStore } from 'globalStates/user';
 import toast from 'react-hot-toast';
 import { useNetwork } from '../../../contexts/network';
@@ -27,6 +32,7 @@ export const ObjectDetailsActions = ({
 }) => {
   const { user } = useUserStore();
   const { api } = useNetwork();
+  const router = useRouter();
   const [downloadModalCid, setDownloadModalCid] = useState<string | null>(null);
   const [shareModalCid, setShareModalCid] = useState<string | null>(null);
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
@@ -63,13 +69,16 @@ export const ObjectDetailsActions = ({
     try {
       await api.reportFile(object.metadata.dataCid);
       toast.success('File has been reported successfully');
+      // The tags shown here come from a server-fetched prop, so without this
+      // the "reported" tag/disabled state won't show up until a manual reload.
+      router.refresh();
     } catch (error) {
       console.error('Report error:', error);
       toast.error('Failed to report file. Please try again.');
     } finally {
       setIsReporting(false);
     }
-  }, [api, object?.metadata.dataCid]);
+  }, [api, object?.metadata.dataCid, router]);
 
   const handleBringToCache = useCallback(async () => {
     if (!object?.metadata.dataCid) {
@@ -94,15 +103,14 @@ export const ObjectDetailsActions = ({
         variant='primary'
         className={cn(
           'inline-flex items-center text-sm',
-          object.tags.includes(ObjectTag.Banned) &&
-            'cursor-not-allowed opacity-50',
+          isBanned(object.tags) && 'cursor-not-allowed opacity-50',
         )}
-        disabled={object.tags.includes(ObjectTag.Banned)}
+        disabled={isBanned(object.tags)}
         onClick={handleDownload}
       >
         <ArrowDownTrayIcon className='mr-2 h-4 w-4' />
         Download
-        {object.tags.includes(ObjectTag.Banned) && (
+        {isBanned(object.tags) && (
           <span className='ml-2 text-xs text-gray-500'>(File is banned)</span>
         )}
       </Button>
@@ -111,10 +119,10 @@ export const ObjectDetailsActions = ({
           variant='primary'
           className={cn(
             'inline-flex items-center text-sm',
-            (object.tags.includes(ObjectTag.Banned) || isBringingToCache) &&
+            (isBanned(object.tags) || isBringingToCache) &&
               'cursor-not-allowed opacity-50',
           )}
-          disabled={object.tags.includes(ObjectTag.Banned) || isBringingToCache}
+          disabled={isBanned(object.tags) || isBringingToCache}
           onClick={handleBringToCache}
         >
           <CloudArrowDownIcon className='mr-2 h-4 w-4' />
@@ -144,9 +152,7 @@ export const ObjectDetailsActions = ({
         className='inline-flex items-center bg-orange-100 text-sm text-orange-700 hover:bg-orange-200'
         onClick={handleReport}
         disabled={
-          isReporting ||
-          object.tags.includes(ObjectTag.ToBeReviewed) ||
-          object.tags.includes(ObjectTag.Banned)
+          isReporting || isToBeReviewed(object.tags) || isBanned(object.tags)
         }
       >
         <ExclamationTriangleIcon className='mr-2 h-4 w-4' />
