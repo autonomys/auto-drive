@@ -434,28 +434,45 @@ export const headObjectHandler = async (req: Request, res: Response) => {
 // every write stacks a new version (versionId = CID), DeleteObject writes a
 // delete marker (the key is hidden but nothing is destroyed), and destroying a
 // specific version (DeleteObject?versionId) is refused — here not by policy but
-// because the platform is incapable of it. So we advertise a COMPLIANCE-mode
-// Object Lock with retain-forever retention truthfully. The lock is intrinsic
-// and not client-configurable, so the Put* counterparts stay 501. Legal hold is
-// a separate, per-object client-set concept Auto Drive has no equivalent for, so
-// it stays OFF.
+// because the platform is incapable of it. Storage is permanent: data on the
+// DSN is never destroyed. S3's bucket DefaultRetention must be a finite DURATION
+// (Days/Years), not "forever", so we advertise a COMPLIANCE-mode Object Lock
+// with a 100-year window — the conventional S3 maximum, our stand-in for
+// "permanent". The lock is intrinsic and not client-configurable, so the Put*
+// counterparts stay 501. Legal hold is a separate, per-object client-set concept
+// Auto Drive has no equivalent for, so it stays OFF.
 
-// "Forever" sentinel for RetainUntilDate. S3 has no infinity value, so use the
-// max representable date: year 9999 is the ceiling for SQL DATETIME and Python
-// datetime.max, so anything larger would overflow common clients (e.g. boto3).
-const OBJECT_LOCK_RETAIN_UNTIL = '9999-12-31T23:59:59Z'
+// The COMPLIANCE retention window. BOTH the bucket-level DefaultRetention (a
+// duration, in Years) and each object's RetainUntilDate (a date = write time +
+// this many years) derive from this one value, so the two can never disagree.
+// Kept at a finite 100y rather than a far-future "forever" date: it stays well
+// under the year-9999 ceiling that overflows common clients (e.g. boto3's
+// datetime.max) while still meaning "effectively permanent" for any real object.
+const OBJECT_LOCK_RETENTION_YEARS = 100
 
 export const bucketVersioningBody = () => ({ Status: 'Enabled' })
 
 export const objectLockConfigurationBody = () => ({
   ObjectLockEnabled: 'Enabled',
-  Rule: { DefaultRetention: { Mode: 'COMPLIANCE', Years: 100 } },
+  Rule: {
+    DefaultRetention: { Mode: 'COMPLIANCE', Years: OBJECT_LOCK_RETENTION_YEARS },
+  },
 })
 
-export const objectRetentionBody = () => ({
-  Mode: 'COMPLIANCE',
-  RetainUntilDate: OBJECT_LOCK_RETAIN_UNTIL,
-})
+// Per-object retention: COMPLIANCE until the object's write time + the default
+// window — exactly what the bucket's Years default yields, so the bucket rule
+// and the per-object date always agree. (They were inconsistent before: a
+// 100-year bucket default vs. a year-9999 per-object date.)
+export const objectRetentionBody = (writeTime: Date) => {
+  const retainUntil = new Date(writeTime)
+  retainUntil.setUTCFullYear(
+    retainUntil.getUTCFullYear() + OBJECT_LOCK_RETENTION_YEARS,
+  )
+  return {
+    Mode: 'COMPLIANCE',
+    RetainUntilDate: retainUntil.toISOString(),
+  }
+}
 
 /** No per-object legal hold concept (distinct from the intrinsic retention). */
 export const objectLegalHoldBody = () => ({ Status: 'OFF' })
@@ -497,12 +514,13 @@ export const getObjectRetentionHandler = async (
   const user = await handleS3Auth(req, res)
   if (!user) return
   const { bucket, key } = parseBucketAndKey(req.params.key)
-  if (!(await S3UseCases.objectExists(user, bucket, key))) {
+  const writeTime = await S3UseCases.getObjectWriteTime(user, bucket, key)
+  if (!writeTime) {
     sendNoSuchKey(res, key)
     return
   }
-  // Every retained version carries the same intrinsic COMPLIANCE retention.
-  sendXML(res, 'Retention', objectRetentionBody())
+  // COMPLIANCE retention anchored to this object's write time (write + window).
+  sendXML(res, 'Retention', objectRetentionBody(writeTime))
 }
 
 export const getObjectLegalHoldHandler = async (

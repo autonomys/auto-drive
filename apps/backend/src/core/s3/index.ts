@@ -99,6 +99,7 @@ import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import {
   S3BucketInfo,
+  S3KeyMapping,
   S3ObjectMetadata,
 } from '../../infrastructure/repositories/s3/objectMappings.js'
 
@@ -683,26 +684,44 @@ const listBuckets = async (
   )
 }
 
-const objectExists = async (
+// The caller's mapping for (bucket, key) IF it exists and is not hidden by
+// owner-removal. A mapping the owner has since removed via the web app (moved to
+// Trash) is treated as not found by GET and ListObjects (notRemovedByOwnerSQL /
+// isObjectDeleted); mirror that here so the object-lock endpoints
+// (GetObjectRetention / GetObjectLegalHold) don't report on a hidden key.
+const findVisibleMapping = async (
   user: UserWithOrganization,
   bucket: string,
   key: string,
-): Promise<boolean> => {
+): Promise<S3KeyMapping | null> => {
   const mapping = await s3ObjectMappingsRepository.findByKey(
     user.oauthProvider,
     user.oauthUserId,
     bucket,
     key,
   )
-  if (!mapping) {
-    return false
-  }
+  if (!mapping) return null
+  if (await ObjectUseCases.isObjectDeleted(mapping.cid)) return null
+  return mapping
+}
 
-  // A mapping the owner has since removed via the web app (moved to Trash) is
-  // treated as not found by GET and ListObjects (notRemovedByOwnerSQL /
-  // isObjectDeleted). Mirror that here so the object-lock endpoints
-  // (GetObjectRetention / GetObjectLegalHold) don't report on a hidden key.
-  return !(await ObjectUseCases.isObjectDeleted(mapping.cid))
+const objectExists = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<boolean> => (await findVisibleMapping(user, bucket, key)) !== null
+
+// The current version's write time, or null when the key isn't visible. Object
+// Lock retention anchors its COMPLIANCE window to when the content was written
+// (RetainUntilDate = write time + the retention years), so GetObjectRetention
+// needs this rather than a bare existence check.
+const getObjectWriteTime = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<Date | null> => {
+  const mapping = await findVisibleMapping(user, bucket, key)
+  return mapping ? mapping.updatedAt : null
 }
 
 export const S3UseCases = {
@@ -718,4 +737,5 @@ export const S3UseCases = {
   listBuckets,
   listObjects,
   objectExists,
+  getObjectWriteTime,
 }

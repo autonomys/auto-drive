@@ -71,8 +71,10 @@ describe('getS3Method — Object Lock / versioning dispatch', () => {
 
 // Auto Drive advertises an honest COMPLIANCE/WORM Object Lock: DSN content is
 // permanent and versions are indestructible, so versioning is Enabled, the lock
-// is COMPLIANCE with retain-forever retention, and legal hold — a separate,
-// client-set per-object concept Auto Drive has no equivalent for — stays OFF.
+// is COMPLIANCE with a 100-year retention window (a finite duration standing in
+// for "permanent", consistent between the bucket default and per-object dates),
+// and legal hold — a separate, client-set per-object concept Auto Drive has no
+// equivalent for — stays OFF.
 describe('Versioning + Object Lock response bodies', () => {
   it('GetBucketVersioning is Enabled', () => {
     expect(bucketVersioningBody()).toEqual({ Status: 'Enabled' })
@@ -90,10 +92,12 @@ describe('Versioning + Object Lock response bodies', () => {
     expect(xml).toContain('<Mode>COMPLIANCE</Mode>')
   })
 
-  it('GetObjectRetention is COMPLIANCE, retained to the year-9999 forever sentinel', () => {
-    const body = objectRetentionBody()
+  it('GetObjectRetention is COMPLIANCE, retained 100 years from the write time', () => {
+    const writeTime = new Date('2026-01-15T00:00:00.000Z')
+    const body = objectRetentionBody(writeTime)
     expect(body.Mode).toBe('COMPLIANCE')
-    expect(body.RetainUntilDate).toBe('9999-12-31T23:59:59Z')
+    // write time + the 100-year COMPLIANCE window (matches the bucket default).
+    expect(new Date(body.RetainUntilDate).getUTCFullYear()).toBe(2126)
   })
 
   it('GetObjectLegalHold is OFF (no per-object hold concept)', () => {

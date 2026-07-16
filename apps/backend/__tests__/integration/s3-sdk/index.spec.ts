@@ -1306,15 +1306,20 @@ describe('AWS S3 - SDK', () => {
       ).toBe('COMPLIANCE')
     })
 
-    it('reports COMPLIANCE retain-forever retention for an object', async () => {
+    it('reports a COMPLIANCE 100-year retention for an object', async () => {
       const key = 'versions-test/retention.txt'
       await putVersion(key, 'retained')
       const res = await s3Client.send(
         new GetObjectRetentionCommand({ Bucket, Key: key }),
       )
       expect(res.Retention?.Mode).toBe('COMPLIANCE')
-      // The year-9999 "forever" sentinel, parsed by the SDK into a Date.
-      expect(res.Retention?.RetainUntilDate?.getUTCFullYear()).toBe(9999)
+      // The 100-year COMPLIANCE window from the write (this run): effectively
+      // permanent, and consistent with the bucket's Years=100 default. Allow a
+      // one-year slack for the (unlikely) New-Year boundary between write & now.
+      const nowYear = new Date().getUTCFullYear()
+      const retainYear = res.Retention?.RetainUntilDate?.getUTCFullYear() ?? 0
+      expect(retainYear).toBeGreaterThanOrEqual(nowYear + 99)
+      expect(retainYear).toBeLessThanOrEqual(nowYear + 100)
     })
 
     it('returns the version id (= CID) on PutObject and stacks a new version per overwrite', async () => {

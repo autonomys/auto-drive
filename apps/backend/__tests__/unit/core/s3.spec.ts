@@ -1125,4 +1125,41 @@ describe('S3UseCases', () => {
       ).toBe(false)
     })
   })
+
+  describe('getObjectWriteTime', () => {
+    it('returns null when the caller has no such mapping', async () => {
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
+
+      expect(
+        await S3UseCases.getObjectWriteTime(
+          mockUser,
+          'my-bucket',
+          'missing.txt',
+        ),
+      ).toBeNull()
+    })
+
+    it('returns the mapping updatedAt when visible (the retention anchor)', async () => {
+      const updatedAt = new Date(1720000000000)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(mapping({ updatedAt }))
+      jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(false)
+
+      expect(
+        await S3UseCases.getObjectWriteTime(mockUser, 'my-bucket', 'file.txt'),
+      ).toEqual(updatedAt)
+    })
+
+    it('returns null when the object was removed by its owner (Trash)', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(mapping())
+      jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(true)
+
+      expect(
+        await S3UseCases.getObjectWriteTime(mockUser, 'my-bucket', 'file.txt'),
+      ).toBeNull()
+    })
+  })
 })
