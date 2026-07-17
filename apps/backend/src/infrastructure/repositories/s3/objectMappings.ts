@@ -582,7 +582,7 @@ const listObjects = async (
       om.cid,
       om.md5,
       COALESCE(m.total_size, 0) AS size,
-      om.updated_at
+      COALESCE(v.created_at, om.updated_at) AS last_modified
     FROM "S3".object_mappings om
     LEFT JOIN LATERAL (
       SELECT (metadata->>'totalSize')::bigint AS total_size
@@ -590,6 +590,21 @@ const listObjects = async (
       WHERE head_cid = om.cid
       LIMIT 1
     ) m ON true
+    LEFT JOIN LATERAL (
+      -- The current version's write time is the stable Last-Modified. om.updated_at
+      -- is bumped by soft-delete/restore (BEFORE UPDATE trigger) without a new
+      -- version, so it would drift; object_versions.created_at does not. Falls
+      -- back to updated_at for legacy rows with no version history.
+      SELECT ov.created_at
+      FROM "S3".object_versions ov
+      WHERE ov.owner_oauth_provider = om.owner_oauth_provider
+        AND ov.owner_oauth_user_id = om.owner_oauth_user_id
+        AND ov.bucket = om.bucket
+        AND ov.key = om.key
+        AND ov.cid = om.cid
+      ORDER BY ov.id DESC
+      LIMIT 1
+    ) v ON true
     WHERE om.owner_oauth_provider = $1
       AND om.owner_oauth_user_id = $2
       AND om.bucket = $3
@@ -634,14 +649,14 @@ const listObjects = async (
     cid: string
     md5: string | null
     size: string // pg returns bigint as string
-    updated_at: Date
+    last_modified: Date
   }>({ text, values })
 
   return result.rows.map((row) => ({
     key: row.key,
     cid: row.cid,
     size: BigInt(row.size),
-    lastModified: row.updated_at,
+    lastModified: row.last_modified,
     md5: row.md5 ?? null,
   }))
 }

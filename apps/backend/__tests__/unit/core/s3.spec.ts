@@ -59,6 +59,15 @@ describe('S3UseCases', () => {
   })
 
   describe('getObject', () => {
+    // getObject (non-versioned) looks up the current version to anchor
+    // Last-Modified to its write time; default to "no version row" so the tests
+    // that don't exercise it fall back to the mapping without hitting the DB.
+    beforeEach(() => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
+        .mockResolvedValue(null)
+    })
+
     it('returns an error when the caller has no such key', async () => {
       const findSpy = jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
@@ -131,6 +140,36 @@ describe('S3UseCases', () => {
 
       expect(result.isOk()).toBe(true)
       expect(result._unsafeUnwrap().objectMetadata).toEqual(objectMetadata)
+    })
+
+    it('anchors Last-Modified to the current version’s createdAt, not mapping.updatedAt', async () => {
+      const writtenAt = new Date(1720000000000)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(mapping({ updatedAt: new Date(1730000000000) }))
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
+        .mockResolvedValue({
+          bucket: 'my-bucket',
+          key: 'file.txt',
+          cid: 'cid123',
+          md5: null,
+          mtime: null,
+          metadata: null,
+          createdAt: writtenAt,
+        })
+      jest
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .mockResolvedValue(ok({ read: jest.fn() }) as any)
+
+      const result = await S3UseCases.getObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'file.txt',
+      } as any)
+
+      expect(result.isOk()).toBe(true)
+      // The version's immutable write time, not the drift-prone mapping.updatedAt.
+      expect(result._unsafeUnwrap().lastModified).toEqual(writtenAt)
     })
 
     it('returns a null etag for legacy objects without md5', async () => {

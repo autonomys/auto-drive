@@ -133,7 +133,9 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
   cid: string
   /** null for objects uploaded before MD5 ETag support was introduced. */
   etag: string | null
-  /** Mapping's last-write time, surfaced as the S3 Last-Modified header. */
+  /** The current version's write time (object_versions.created_at), surfaced as
+   *  the S3 Last-Modified header — stable across soft-delete/restore, unlike
+   *  the mapping's updated_at. */
   lastModified: Date
   /**
    * Client-supplied modification time (x-amz-meta-mtime), echoed back verbatim
@@ -204,6 +206,21 @@ const getObject = async (
     )
   }
 
+  // Anchor Last-Modified to the current version's immutable write time, not
+  // mapping.updatedAt: a BEFORE UPDATE trigger bumps updated_at on soft-delete
+  // and Trash restore (which write no new version), so it would drift after a
+  // restore and disagree with GET/HEAD ?versionId and ListObjectVersions, which
+  // read object_versions.created_at. Mirrors getObjectWriteTime; falls back to
+  // updatedAt for legacy rows with no version history.
+  const currentVersion = await s3ObjectMappingsRepository.findVersionByCid(
+    user.oauthProvider,
+    user.oauthUserId,
+    params.Bucket,
+    params.Key,
+    mapping.cid,
+  )
+  const lastModified = currentVersion?.createdAt ?? mapping.updatedAt
+
   const downloadResult = await DownloadUseCase.downloadObjectByAnonymous(
     mapping.cid,
     { byteRange: params.Range },
@@ -219,7 +236,7 @@ const getObject = async (
     // Objects uploaded before this feature have null md5; fall back to null
     // so the controller can omit the ETag header for legacy objects.
     etag: mapping.md5 ? formatETag(mapping.md5) : null,
-    lastModified: mapping.updatedAt,
+    lastModified,
     mtime: mapping.mtime,
     objectMetadata: mapping.metadata,
   }))
