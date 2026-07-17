@@ -1461,6 +1461,27 @@ describe('AWS S3 - SDK', () => {
       ).toBe('oldest')
     })
 
+    it('a repeat DeleteObject on an already-deleted key still returns delete-marker headers', async () => {
+      const key = 'versions-test/repeat-delete.txt'
+      await putVersion(key, 'content')
+
+      const first = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: key }),
+      )
+      expect(first.DeleteMarker).toBe(true)
+      const firstVersionId = first.VersionId
+      expect(firstVersionId).toMatch(/^dm-\d+$/)
+
+      // Deleting again: no new marker is created, but the current state IS a
+      // delete marker, so the response must still say so (same marker id).
+      const second = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: key }),
+      )
+      expect(second.$metadata.httpStatusCode).toBe(204)
+      expect(second.DeleteMarker).toBe(true)
+      expect(second.VersionId).toBe(firstVersionId)
+    })
+
     it('a moderated/removed version’s CID is not retrievable via versionId', async () => {
       // DeleteObject on the sole key moves that content to the web-app Trash
       // (owner-removal), so retrieval of that exact version is blocked even

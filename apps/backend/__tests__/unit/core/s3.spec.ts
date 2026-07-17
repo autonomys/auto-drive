@@ -276,6 +276,7 @@ describe('S3UseCases', () => {
       size: 10n,
       lastModified: new Date(1000),
       pointerDeletedAt: null,
+      ownerRemoved: false,
       ...over,
     })
 
@@ -323,6 +324,34 @@ describe('S3UseCases', () => {
       expect(result.deleteMarkers).toHaveLength(1)
       expect(result.deleteMarkers[0].isLatest).toBe(true)
       expect(result.deleteMarkers[0].lastModified).toEqual(deletedAt)
+    })
+
+    it('synthesises a delete marker for an owner-removed key with no deleted_at', async () => {
+      // Web-app Trash / moderation: mapping still live (pointerDeletedAt null) but
+      // the content is owner-removed. GET/ListObjectsV2/GetObjectRetention treat
+      // it as absent, so ListObjectVersions must show a delete marker, not a live
+      // content version.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
+        .mockResolvedValue([
+          row({ cid: 'cid2', lastModified: new Date(2000), ownerRemoved: true }),
+          row({ cid: 'cid1', lastModified: new Date(1000), ownerRemoved: true }),
+        ] as any)
+
+      const result = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: null,
+        maxKeys: 1000,
+      })
+
+      // Both content versions remain listed (history survives), none IsLatest.
+      expect(result.versions.map((v) => v.versionId)).toEqual(['cid2', 'cid1'])
+      expect(result.versions.every((v) => !v.isLatest)).toBe(true)
+      // Marker is latest; with no deleted_at it takes the newest version's time.
+      expect(result.deleteMarkers).toHaveLength(1)
+      expect(result.deleteMarkers[0].isLatest).toBe(true)
+      expect(result.deleteMarkers[0].lastModified).toEqual(new Date(2000))
     })
 
     it('truncates at maxKeys and reports the next key marker', async () => {
@@ -808,8 +837,12 @@ describe('S3UseCases', () => {
       expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
     })
 
-    it('is a no-op when the caller has no such key', async () => {
+    it('is a no-op with no marker when the key never existed', async () => {
       jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
+      // No soft-deleted row either: the key never existed → no delete marker.
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findSoftDeletedByKey')
+        .mockResolvedValue(null)
       const softDeleteSpy = jest.spyOn(
         s3ObjectMappingsRepository,
         'softDeleteMapping',
@@ -823,13 +856,41 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
-      // No active key was hidden, so no marker was created.
+      // No active key was hidden and none was already deleted, so no marker.
       expect(result._unsafeUnwrap()).toEqual({
         deleteMarker: false,
         versionId: null,
       })
       expect(softDeleteSpy).not.toHaveBeenCalled()
       expect(markSpy).not.toHaveBeenCalled()
+    })
+
+    it('reports the existing delete marker on a repeat delete of an already-deleted key', async () => {
+      // findByKey hides soft-deleted rows, so a repeat DeleteObject sees no live
+      // key — but the current state IS a delete marker, so report it (no new
+      // marker is created).
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findSoftDeletedByKey')
+        .mockResolvedValue({ deletedAt: new Date(5000) })
+      const softDeleteSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'softDeleteMapping',
+      )
+
+      const result = await S3UseCases.deleteObject(
+        mockUser,
+        'my-bucket',
+        'already-deleted.txt',
+      )
+
+      expect(result.isOk()).toBe(true)
+      // Current state is the existing marker (dm-<its deleted_at>); nothing new.
+      expect(result._unsafeUnwrap()).toEqual({
+        deleteMarker: true,
+        versionId: 'dm-5000',
+      })
+      expect(softDeleteSpy).not.toHaveBeenCalled()
     })
 
     it('still succeeds when moving the object to Trash fails', async () => {

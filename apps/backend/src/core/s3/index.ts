@@ -287,9 +287,10 @@ const deleteMarkerVersionId = (deletedAt: Date): string =>
 /**
  * ListObjectVersions: enumerate the version history for a bucket/prefix in the
  * caller's namespace, newest version first per key. IsLatest marks the current
- * content version of each live key; for a key whose current pointer is
- * soft-deleted, a delete marker is synthesised as the latest entry (its
- * versionId derived from the delete time — markers are display-only, since
+ * content version of each live key; for a key that is soft-deleted OR
+ * owner-removed (web-app Trash / moderation) — i.e. absent on every other read
+ * API — a delete marker is synthesised as the latest entry instead (its versionId
+ * derived from the delete time — markers are display-only, since
  * DeleteObject?versionId always 403s). Pagination is key-level: up to maxKeys
  * keys are returned, with nextKeyMarker set when more remain. The repository
  * returns WHOLE keys (every version row of up to maxKeys + 1 distinct keys), so
@@ -338,7 +339,15 @@ const getObjectVersions = async (
       isTruncated = true
       break
     }
-    const isDeleted = rows[i].pointerDeletedAt != null
+    // The key's current state is a delete marker (no content version is IsLatest)
+    // when the pointer is soft-deleted OR the content is owner-removed (web-app
+    // Trash / moderation). Both make GET / ListObjectsV2 / GetObjectRetention
+    // treat the key as absent, so ListObjectVersions must agree.
+    const pointerDeletedAt = rows[i].pointerDeletedAt
+    const isDeleted = pointerDeletedAt != null || rows[i].ownerRemoved
+    // Rows are newest-first, so the first row is the newest version — used as the
+    // marker time for an owner-removed key that has no deleted_at.
+    const newestVersionTime = rows[i].lastModified
     // versionId = CID, so multiple rows sharing a CID (repeated same-content
     // writes — e.g. an mtime-only copy-to-self) are ONE version. Collapse them,
     // keeping the newest occurrence (first in id-desc order) and its metadata.
@@ -360,12 +369,15 @@ const getObjectVersions = async (
       isNewestOfKey = false
     }
     if (isDeleted) {
-      const deletedAt = rows[i - 1].pointerDeletedAt as Date
+      // Soft-delete has a precise deleted_at; an owner-removed key with no
+      // deleted_at falls back to the newest version's time (markers are
+      // display-only, so this just sorts the marker as latest).
+      const markerTime = pointerDeletedAt ?? newestVersionTime
       deleteMarkers.push({
         key,
-        versionId: deleteMarkerVersionId(deletedAt),
+        versionId: deleteMarkerVersionId(markerTime),
         isLatest: true,
-        lastModified: deletedAt,
+        lastModified: markerTime,
       })
     }
     keysEmitted++
@@ -566,10 +578,26 @@ const deleteObject = async (
     key,
   )
 
-  // Not the caller's key (absent or already soft-deleted): nothing to do, so no
-  // marker was created. DeleteObject is idempotent and returns success regardless.
+  // No live key. If it is already soft-deleted (a repeat DeleteObject), the
+  // current state IS a delete marker: report it (with the existing marker's
+  // versionId) even though this idempotent call creates nothing new — a
+  // versioning-aware client expects the marker headers whenever the current
+  // state is a marker. A key that never existed has no marker (bare 204).
   if (!mapping) {
-    return ok({ deleteMarker: false, versionId: null })
+    const deleted = await s3ObjectMappingsRepository.findSoftDeletedByKey(
+      user.oauthProvider,
+      user.oauthUserId,
+      bucket,
+      key,
+    )
+    return ok(
+      deleted
+        ? {
+            deleteMarker: true,
+            versionId: deleteMarkerVersionId(deleted.deletedAt),
+          }
+        : { deleteMarker: false, versionId: null },
+    )
   }
 
   const trashObject = async () => {

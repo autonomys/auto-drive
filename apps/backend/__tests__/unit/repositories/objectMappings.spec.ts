@@ -82,4 +82,53 @@ describe('S3 object mappings repository — Last-Modified anchoring', () => {
     expect(row).toBeDefined()
     expect(row!.lastModified.getTime()).toBe(writtenAt.getTime())
   })
+
+  it('findSoftDeletedByKey returns a soft-deleted key’s deleted_at (repeat-delete marker)', async () => {
+    const bucket = 'worm-delete'
+    const key = 'repeat-delete.txt'
+    await s3ObjectMappingsRepository.createMapping(
+      OWNER,
+      USER,
+      bucket,
+      key,
+      'cidA',
+      'md5A',
+    )
+
+    // Before deletion: no soft-deleted row.
+    expect(
+      await s3ObjectMappingsRepository.findSoftDeletedByKey(
+        OWNER,
+        USER,
+        bucket,
+        key,
+      ),
+    ).toBeNull()
+
+    await s3ObjectMappingsRepository.softDeleteMapping(OWNER, USER, bucket, key)
+
+    // findByKey hides it, but findSoftDeletedByKey surfaces its deleted_at so a
+    // repeat DeleteObject can report the current delete marker.
+    expect(
+      await s3ObjectMappingsRepository.findByKey(OWNER, USER, bucket, key),
+    ).toBeNull()
+    const deleted = await s3ObjectMappingsRepository.findSoftDeletedByKey(
+      OWNER,
+      USER,
+      bucket,
+      key,
+    )
+    expect(deleted).not.toBeNull()
+    expect(deleted!.deletedAt).toBeInstanceOf(Date)
+
+    // A key that never existed has no soft-deleted row.
+    expect(
+      await s3ObjectMappingsRepository.findSoftDeletedByKey(
+        OWNER,
+        USER,
+        bucket,
+        'never-existed.txt',
+      ),
+    ).toBeNull()
+  })
 })

@@ -61,6 +61,13 @@ export interface S3ObjectVersionListingRow {
   lastModified: Date
   /** The key's current-pointer deleted_at (same for every row of a key); null when live. */
   pointerDeletedAt: Date | null
+  /**
+   * True when the content is owner-removed (web-app Trash / moderation). Such a
+   * key reads as absent on GET / ListObjectsV2 / GetObjectRetention, so its
+   * current state in ListObjectVersions must be a delete marker too — not a live
+   * content version. Same for every row of a key.
+   */
+  ownerRemoved: boolean
 }
 
 export interface S3KeyMapping {
@@ -303,7 +310,8 @@ const listObjectVersions = async (
       ov.md5,
       COALESCE(m.total_size, 0) AS size,
       ov.created_at AS last_modified,
-      om.deleted_at AS pointer_deleted_at
+      om.deleted_at AS pointer_deleted_at,
+      NOT (${ownershipSQL.notRemovedByOwnerSQL('ov.cid')}) AS owner_removed
     FROM "S3".object_versions ov
     JOIN page_keys pk ON pk.key = ov.key
     JOIN "S3".object_mappings om
@@ -345,6 +353,7 @@ const listObjectVersions = async (
     size: string
     last_modified: Date
     pointer_deleted_at: Date | null
+    owner_removed: boolean
   }>({ text, values })
 
   return result.rows.map((row) => ({
@@ -354,6 +363,7 @@ const listObjectVersions = async (
     size: BigInt(row.size),
     lastModified: row.last_modified,
     pointerDeletedAt: row.pointer_deleted_at ?? null,
+    ownerRemoved: row.owner_removed,
   }))
 }
 
@@ -382,6 +392,31 @@ const findByKey = async (
   }
 
   return result.rows.map(mapDBToDomain)[0]
+}
+
+/**
+ * The deleted_at of an already-soft-deleted (hidden) key, or null if the key has
+ * no soft-deleted row. findByKey hides deleted rows, so DeleteObject uses this to
+ * tell a repeat delete (current state IS a delete marker → report it) from a key
+ * that never existed (no marker).
+ */
+const findSoftDeletedByKey = async (
+  ownerOauthProvider: string,
+  ownerOauthUserId: string,
+  bucket: string,
+  s3Key: string,
+): Promise<{ deletedAt: Date } | null> => {
+  const db = await getDatabase()
+  const result = await db.query<{ deleted_at: Date }>({
+    text: `
+      SELECT deleted_at FROM "S3".object_mappings
+      WHERE owner_oauth_provider = $1 AND owner_oauth_user_id = $2
+        AND bucket = $3 AND "key" = $4 AND deleted_at IS NOT NULL
+    `,
+    values: [ownerOauthProvider, ownerOauthUserId, bucket, s3Key],
+  })
+  const row = result.rows[0]
+  return row ? { deletedAt: row.deleted_at } : null
 }
 
 /**
@@ -664,6 +699,7 @@ const listObjects = async (
 export const s3ObjectMappingsRepository = {
   createMapping,
   findByKey,
+  findSoftDeletedByKey,
   findVersionByCid,
   listObjectVersions,
   softDeleteMapping,
