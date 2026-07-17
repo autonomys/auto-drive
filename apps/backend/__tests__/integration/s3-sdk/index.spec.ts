@@ -1,3 +1,4 @@
+import { gzipSync, gunzipSync } from 'zlib'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   AbortMultipartUploadCommand,
@@ -1088,6 +1089,313 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  // S3 stores object metadata (system headers + arbitrary x-amz-meta-*) once at
+  // write and returns it verbatim on GET/HEAD; CopyObject carries or replaces it
+  // per the metadata directive. See issue #786.
+  describe('Object metadata', () => {
+    it('returns the stored Content-Type byte-for-byte, with no injected charset', async () => {
+      const Key = 'metadata-test/verbatim.csv'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: Buffer.from('a,b,c\n1,2,3'),
+          ContentType: 'text/csv',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      // Previously came back as "text/csv; charset=utf-8" (Express appended the
+      // charset). It must now be exactly what was written.
+      expect(head.ContentType).toBe('text/csv')
+
+      const get = await s3Client.send(new GetObjectCommand({ Bucket, Key }))
+      expect(get.ContentType).toBe('text/csv')
+    })
+
+    it('preserves an explicit charset in the Content-Type', async () => {
+      const Key = 'metadata-test/charset.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: Buffer.from('hola'),
+          ContentType: 'text/plain; charset=iso-8859-1',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentType).toBe('text/plain; charset=iso-8859-1')
+    })
+
+    it('round-trips system metadata (Cache-Control, Content-Language, Content-Disposition)', async () => {
+      const Key = 'metadata-test/system.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: Buffer.from('sys'),
+          CacheControl: 'max-age=3600, public',
+          ContentLanguage: 'en-GB',
+          ContentDisposition: 'attachment; filename="report.txt"',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.CacheControl).toBe('max-age=3600, public')
+      expect(head.ContentLanguage).toBe('en-GB')
+      expect(head.ContentDisposition).toBe('attachment; filename="report.txt"')
+    })
+
+    it('round-trips arbitrary user metadata (x-amz-meta-*)', async () => {
+      const Key = 'metadata-test/user.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: Buffer.from('user'),
+          Metadata: { author: 'alice', project: 'auto-drive' },
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.Metadata?.author).toBe('alice')
+      expect(head.Metadata?.project).toBe('auto-drive')
+    })
+
+    it('rejects user metadata over the 2 KB limit with MetadataTooLarge', async () => {
+      const Key = 'metadata-test/too-large.txt'
+      // 'big'(3) + 2100-byte value = 2103 bytes of user metadata, over the 2 KB
+      // S3 limit but well under Node's header budget (so the server, not Node,
+      // rejects it) — matching real S3, which returns 400 MetadataTooLarge.
+      let status: number | undefined
+      let code: string | undefined
+      try {
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket,
+            Key,
+            Body: Buffer.from('data'),
+            Metadata: { big: 'x'.repeat(2100) },
+          }),
+        )
+        throw new Error('expected the oversized-metadata PUT to be rejected')
+      } catch (e) {
+        const err = e as {
+          $metadata?: { httpStatusCode?: number }
+          name?: string
+        }
+        status = err.$metadata?.httpStatusCode
+        code = err.name
+      }
+      expect(status).toBe(400)
+      expect(code).toBe('MetadataTooLarge')
+
+      // The object must not have been created (rejected before the upload).
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key })),
+      ).rejects.toThrow()
+    })
+
+    it('stores the body verbatim under a client Content-Encoding and returns both unchanged', async () => {
+      const Key = 'metadata-test/encoding.txt'
+      // S3 stores object bytes byte-for-byte and treats Content-Encoding as
+      // opaque metadata — it never inflates the stored body. A client uploading
+      // gzipped bytes with Content-Encoding: gzip must therefore read those exact
+      // gzipped bytes back (NOT a server-inflated body), still labelled gzip.
+      // Auto Drive is not internally compressing this object, so it owns
+      // Content-Encoding on the response.
+      const gz = gzipSync(Buffer.from('encoded payload'))
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: gz,
+          ContentEncoding: 'gzip',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentEncoding).toBe('gzip')
+
+      const get = await s3Client.send(new GetObjectCommand({ Bucket, Key }))
+      expect(get.ContentEncoding).toBe('gzip')
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      // The stored bytes are the gzipped bytes, verbatim — not server-inflated —
+      // so they still match the advertised Content-Encoding and gunzip cleanly.
+      expect(body.equals(gz)).toBe(true)
+      expect(gunzipSync(body).toString()).toBe('encoded payload')
+    })
+
+    it('round-trips an arbitrary (non-inflatable) Content-Encoding without rejecting it', async () => {
+      const Key = 'metadata-test/encoding-opaque.bin'
+      // Encodings the body parser cannot inflate (br, zstd, …) must not be
+      // rejected with 415: S3 treats Content-Encoding opaquely. These bytes are
+      // deliberately not valid brotli — the server stores and returns them
+      // verbatim regardless.
+      const bytes = Buffer.from([0x00, 0x01, 0x02, 0xfe, 0xff])
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: bytes,
+          ContentEncoding: 'br',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentEncoding).toBe('br')
+
+      const get = await s3Client.send(new GetObjectCommand({ Bucket, Key }))
+      expect(get.ContentEncoding).toBe('br')
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      expect(body.equals(bytes)).toBe(true)
+    })
+
+    it('carries metadata through a plain (COPY-directive) server-side copy', async () => {
+      const Src = 'metadata-test/copy-src.csv'
+      const Dst = 'metadata-test/copy-dst.csv'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Src,
+          Body: Buffer.from('x'),
+          ContentType: 'text/csv',
+          CacheControl: 'max-age=60',
+          Metadata: { origin: 'src' },
+        }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({ Bucket, Key: Dst, CopySource: Src }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key: Dst }))
+      expect(head.ContentType).toBe('text/csv')
+      expect(head.CacheControl).toBe('max-age=60')
+      expect(head.Metadata?.origin).toBe('src')
+    })
+
+    it('replaces metadata on a REPLACE-directive copy', async () => {
+      const Src = 'metadata-test/replace-src.csv'
+      const Dst = 'metadata-test/replace-dst.json'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Src,
+          Body: Buffer.from('x'),
+          ContentType: 'text/csv',
+          Metadata: { origin: 'src' },
+        }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket,
+          Key: Dst,
+          CopySource: Src,
+          MetadataDirective: 'REPLACE',
+          ContentType: 'application/json',
+          Metadata: { origin: 'dst' },
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key: Dst }))
+      expect(head.ContentType).toBe('application/json')
+      expect(head.Metadata?.origin).toBe('dst')
+    })
+
+    it('persists metadata supplied on CreateMultipartUpload', async () => {
+      const Key = 'metadata-test/multipart.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({
+          Bucket,
+          Key,
+          ContentType: 'application/x-custom',
+          CacheControl: 'no-store',
+          Metadata: { part: 'meta' },
+        }),
+      )
+      const uploadId = create.UploadId
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          PartNumber: 1,
+          Body: Buffer.from('multipart body bytes'),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag }] },
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentType).toBe('application/x-custom')
+      expect(head.CacheControl).toBe('no-store')
+      expect(head.Metadata?.part).toBe('meta')
+    })
+
+    it('round-trips a Content-Encoding set on CreateMultipartUpload (empty-body op)', async () => {
+      // Content-Encoding is pure metadata on the bodyless CreateMultipartUpload
+      // POST. Until neutralizeContentEncoding covered this op, 'br' 415'd (and
+      // 'gzip' 400'd) at the body parser — which inspects the encoding before it
+      // notices the empty body — before the handler could capture it.
+      const Key = 'metadata-test/multipart-encoding.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key, ContentEncoding: 'br' }),
+      )
+      const uploadId = create.UploadId
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          PartNumber: 1,
+          Body: Buffer.from('multipart body bytes'),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag }] },
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentEncoding).toBe('br')
+    })
+
+    it('round-trips a Content-Encoding on a REPLACE-directive copy (empty-body op)', async () => {
+      // Same empty-body parser hazard: a REPLACE copy is a bodyless PUT carrying
+      // Content-Encoding as metadata.
+      const Src = 'metadata-test/copy-encoding-src.txt'
+      const Dst = 'metadata-test/copy-encoding-dst.txt'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Src, Body: Buffer.from('x') }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket,
+          Key: Dst,
+          CopySource: Src,
+          MetadataDirective: 'REPLACE',
+          ContentEncoding: 'br',
+        }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(head.ContentEncoding).toBe('br')
+    })
+  })
+
   describe('Missing keys', () => {
     const MissingKey = 'this-key-was-never-uploaded-' + Date.now() + '.txt'
 
@@ -1239,6 +1547,34 @@ describe('AWS S3 - SDK', () => {
       expect(res.status).toBe(200)
       const got = Buffer.from(await res.arrayBuffer())
       expect(got).toEqual(CliBody)
+    }, 15_000)
+
+    it('ignores a forged internal content-encoding stash header', async () => {
+      // The server stashes a real Content-Encoding on a request-scoped side
+      // channel (not on req.headers), so no header is a trusted internal channel.
+      // A client sending this made-up header directly must be ignored — it is
+      // just an unknown header, never persisted or re-emitted as the object's
+      // Content-Encoding (which would advertise an encoding untied to the bytes).
+      const key = '/cli-test/forged-encoding.txt'
+      const put = await fetch(`${S3_BASE}${key}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: AUTH,
+          'x-autonomys-stashed-content-encoding': 'gzip',
+        },
+        body: Buffer.from('plain bytes') as unknown as BodyInit,
+      })
+      expect(put.status).toBe(200)
+
+      const get = await fetch(`${S3_BASE}${key}`, {
+        method: 'GET',
+        headers: { Authorization: AUTH },
+      })
+      expect(get.status).toBe(200)
+      expect(get.headers.get('content-encoding')).toBeNull()
+      expect(Buffer.from(await get.arrayBuffer())).toEqual(
+        Buffer.from('plain bytes'),
+      )
     }, 15_000)
 
     it('multipart upload via raw requests round-trips (the original 500)', async () => {

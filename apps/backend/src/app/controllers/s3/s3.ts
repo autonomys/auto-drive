@@ -17,6 +17,7 @@ import {
   CompressionAlgorithm,
   EncryptionAlgorithm,
 } from '@autonomys/auto-dag-data'
+import { S3ObjectMetadata } from '../../../infrastructure/repositories/s3/objectMappings.js'
 
 const logger = createLogger('s3:controllers')
 
@@ -75,6 +76,154 @@ const getUploadOptions = (req: Request) => {
 const getMtime = (req: Request): string | null => {
   const mtime = req.headers['x-amz-meta-mtime']
   return typeof mtime === 'string' ? mtime : null
+}
+
+// x-amz-meta-* keys that are NOT free-form user metadata: they are handled by
+// dedicated paths and must be excluded from the captured userMetadata so they
+// are not double-stored / double-emitted. mtime has its own column; compression
+// and encryption drive the upload options (and round-trip via the IPLD flags);
+// cid is a response-only header the server sets.
+const RESERVED_META_KEYS = new Set(['mtime', 'compression', 'encryption', 'cid'])
+
+const headerString = (
+  value: string | string[] | undefined,
+): string | undefined => (typeof value === 'string' ? value : undefined)
+
+// A client-declared Content-Encoding for a body-storing op (PutObject/
+// UploadPart) is stashed here by the S3 router's pre-parser middleware (see
+// http.ts) once it has hidden the header from Express's parser, so the object
+// bytes are stored verbatim — S3 never inflates a stored body; Content-Encoding
+// is opaque metadata. It is deliberately kept OFF req.headers, in a
+// request-scoped WeakMap keyed by the Request, so a client cannot forge it over
+// the wire: HTTP callers set headers, not this server-side side channel.
+// Entries are garbage-collected with the request.
+const stashedContentEncoding = new WeakMap<Request, string>()
+
+/**
+ * Stash a body-storing op's client Content-Encoding for later metadata capture
+ * (getObjectMetadata). Called only by the S3 router's pre-parser middleware; the
+ * value is thus never read from a client-controllable channel.
+ */
+export const stashContentEncoding = (req: Request, encoding: string): void => {
+  stashedContentEncoding.set(req, encoding)
+}
+
+/**
+ * Capture the standard S3 object metadata a write request carries: the system
+ * headers (Content-Type, Cache-Control, Content-Language, Content-Disposition,
+ * Content-Encoding) and arbitrary user metadata (x-amz-meta-*, minus the
+ * reserved keys above). Returns null when the request carried no metadata at all
+ * so the stored column stays NULL for such objects.
+ */
+const getObjectMetadata = (req: Request): S3ObjectMetadata | null => {
+  const metadata: S3ObjectMetadata = {}
+
+  const contentType = headerString(req.headers['content-type'])
+  if (contentType) metadata.contentType = contentType
+  const cacheControl = headerString(req.headers['cache-control'])
+  if (cacheControl) metadata.cacheControl = cacheControl
+  const contentLanguage = headerString(req.headers['content-language'])
+  if (contentLanguage) metadata.contentLanguage = contentLanguage
+  const contentDisposition = headerString(req.headers['content-disposition'])
+  if (contentDisposition) metadata.contentDisposition = contentDisposition
+  // The pre-parser middleware (http.ts) moves a client Content-Encoding off the
+  // headers onto a request-scoped side channel for EVERY write op that carries
+  // it — PutObject/UploadPart (body stored verbatim) and CreateMultipartUpload/
+  // CopyObject (empty body the parser would 415/400 on before this ran) — so
+  // read it back from there. It cannot be forged: a client-sent header only ever
+  // lands in req.headers, never in the WeakMap. The req.headers fallback just
+  // catches an 'identity' encoding the middleware intentionally leaves in place.
+  const contentEncoding =
+    headerString(req.headers['content-encoding']) ??
+    stashedContentEncoding.get(req)
+  if (contentEncoding) metadata.contentEncoding = contentEncoding
+
+  const userMetadata: Record<string, string> = {}
+  for (const [name, value] of Object.entries(req.headers)) {
+    // Node lowercases header names, so a direct prefix check is sufficient.
+    const key = name.startsWith('x-amz-meta-')
+      ? name.slice('x-amz-meta-'.length)
+      : null
+    if (!key || RESERVED_META_KEYS.has(key)) continue
+    const v = headerString(value)
+    if (v !== undefined) userMetadata[key] = v
+  }
+  if (Object.keys(userMetadata).length > 0) metadata.userMetadata = userMetadata
+
+  return Object.keys(metadata).length > 0 ? metadata : null
+}
+
+// Real S3 caps user-defined metadata (the x-amz-meta-* entries) at 2 KB — the
+// sum of the UTF-8 byte lengths of every key and value — and rejects a larger
+// write with 400 MetadataTooLarge. System headers (Content-Type, Cache-Control,
+// …) do NOT count toward it. We enforce the same bound: it matches client/SDK
+// expectations (SDKs already handle this error) and keeps the stored metadata —
+// persisted as jsonb and replayed on every GET/HEAD — bounded.
+const MAX_USER_METADATA_BYTES = 2048
+
+/** Sum of the UTF-8 byte lengths of the user-metadata keys and values (the S3
+ *  measure for the 2 KB limit). System headers are excluded — only x-amz-meta-*
+ *  captured into userMetadata is counted. */
+export const userMetadataByteSize = (
+  metadata: S3ObjectMetadata | null | undefined,
+): number => {
+  if (!metadata?.userMetadata) return 0
+  let total = 0
+  for (const [key, value] of Object.entries(metadata.userMetadata)) {
+    total += Buffer.byteLength(key, 'utf8') + Buffer.byteLength(value, 'utf8')
+  }
+  return total
+}
+
+/**
+ * Guard the S3 2 KB user-metadata limit on a write. When exceeded, sends a 400
+ * MetadataTooLarge (S3's error, which SDKs recognise) and returns true so the
+ * caller bails before doing any upload work; returns false (nothing sent) when
+ * within the limit. Shared by every write that captures request metadata
+ * (PutObject, CreateMultipartUpload, CopyObject REPLACE) so none can bypass it.
+ */
+const rejectIfUserMetadataTooLarge = (
+  res: Response,
+  metadata: S3ObjectMetadata | null | undefined,
+): boolean => {
+  if (userMetadataByteSize(metadata) <= MAX_USER_METADATA_BYTES) return false
+  sendXML(res.status(400), 'Error', {
+    Code: 'MetadataTooLarge',
+    Message: 'Your metadata headers exceed the maximum allowed metadata size.',
+  })
+  return true
+}
+
+/**
+ * Emit stored S3 object metadata on a GET/HEAD response verbatim, overriding the
+ * generic values the shared download-header helper computed. Uses res.setHeader
+ * (Node) rather than res.set (Express) so Content-Type is sent byte-for-byte with
+ * no injected "; charset=..." — S3 never mutates a stored Content-Type.
+ */
+const applyStoredMetadataHeaders = (
+  res: Response,
+  metadata: S3ObjectMetadata | null,
+  { isCompressed }: { isCompressed: boolean },
+) => {
+  if (!metadata) return
+  if (metadata.contentType) res.setHeader('Content-Type', metadata.contentType)
+  if (metadata.cacheControl)
+    res.setHeader('Cache-Control', metadata.cacheControl)
+  if (metadata.contentLanguage)
+    res.setHeader('Content-Language', metadata.contentLanguage)
+  if (metadata.contentDisposition)
+    res.setHeader('Content-Disposition', metadata.contentDisposition)
+  // Only surface a stored Content-Encoding when Auto Drive isn't managing the
+  // wire encoding itself: for internally-compressed objects the download helper
+  // owns Content-Encoding (deflate on the wire, or server-side inflate), and
+  // emitting the client's stored value too would double-advertise the encoding.
+  if (metadata.contentEncoding && !isCompressed)
+    res.setHeader('Content-Encoding', metadata.contentEncoding)
+  if (metadata.userMetadata) {
+    for (const [key, value] of Object.entries(metadata.userMetadata)) {
+      res.setHeader(`x-amz-meta-${key}`, value)
+    }
+  }
 }
 
 /**
@@ -235,12 +384,19 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     etag,
     lastModified,
     mtime,
+    objectMetadata,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
+  // Override the generic headers with the stored S3 metadata (verbatim
+  // Content-Type, Cache-Control, x-amz-meta-*, …) — must run after the helpers
+  // above so it wins.
+  applyStoredMetadataHeaders(res, objectMetadata, {
+    isCompressed: metadata.isCompressed,
+  })
 
   // ETag: set to the MD5 for objects uploaded after this feature was introduced.
   // Legacy objects (md5 = null in the DB) do not get an ETag header — the CID
@@ -287,12 +443,19 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     etag,
     lastModified,
     mtime,
+    objectMetadata,
   } = downloadResult.value
 
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
+  // Override the generic headers with the stored S3 metadata (verbatim
+  // Content-Type, Cache-Control, x-amz-meta-*, …) — must run after the helpers
+  // above so it wins.
+  applyStoredMetadataHeaders(res, objectMetadata, {
+    isCompressed: metadata.isCompressed,
+  })
 
   // ETag: set to the MD5 for objects uploaded after this feature was introduced.
   // Legacy objects (md5 = null in the DB) do not get an ETag header — the CID
@@ -387,12 +550,16 @@ export const createMultipartUploadHandler = async (
   const uploadOptions = getUploadOptions(req)
   const { bucket, key } = parseBucketAndKey(req.params.key)
 
+  const metadata = getObjectMetadata(req)
+  if (rejectIfUserMetadataTooLarge(res, metadata)) return
+
   const result = await S3UseCases.createMultipartUpload(user, {
     Bucket: bucket,
     Key: key,
     ContentType: req.headers['content-type'],
     UploadOptions: uploadOptions,
     Mtime: getMtime(req),
+    Metadata: metadata,
   })
 
   if (result.isErr()) {
@@ -603,6 +770,9 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   const uploadOptions = getUploadOptions(req)
   const { bucket, key } = parseBucketAndKey(req.params.key)
 
+  const metadata = getObjectMetadata(req)
+  if (rejectIfUserMetadataTooLarge(res, metadata)) return
+
   const result = await S3UseCases.putObject(user, {
     Bucket: bucket,
     Key: key,
@@ -610,6 +780,7 @@ export const putObjectHandler = async (req: Request, res: Response) => {
     ContentType: req.headers['content-type'],
     UploadOptions: uploadOptions,
     Mtime: getMtime(req),
+    Metadata: metadata,
   })
 
   if (result.isErr()) {
@@ -657,17 +828,22 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
   }
 
   // Metadata handling follows x-amz-metadata-directive (default COPY):
-  //  - COPY:    the destination inherits the source metadata → pass undefined so
-  //             the use case keeps the source mtime.
+  //  - COPY:    the destination inherits the source's metadata → pass undefined
+  //             for both mtime and metadata so the use case keeps the source's.
   //  - REPLACE: the destination's metadata is exactly what this request carries,
-  //             so use the x-amz-meta-mtime header verbatim — a string to set it,
-  //             or null to CLEAR it (REPLACE with no mtime header means no mtime;
-  //             rclone's SetModTime always sends REPLACE + mtime, so it still
-  //             writes the intended value).
+  //             so capture the request's mtime and object metadata verbatim. A
+  //             missing value CLEARS it (REPLACE with no such header means the
+  //             destination has none); rclone's SetModTime always sends
+  //             REPLACE + mtime, so it still writes the intended value.
   const directive = req.headers['x-amz-metadata-directive']
   const isReplace =
     typeof directive === 'string' && directive.toUpperCase() === 'REPLACE'
   const mtime = isReplace ? getMtime(req) : undefined
+  const metadata = isReplace ? getObjectMetadata(req) : undefined
+  // REPLACE carries new metadata on the request; enforce the 2 KB user-metadata
+  // limit here too. (COPY inherits the source's already-bounded metadata, so
+  // `metadata` is undefined and this is a no-op.)
+  if (rejectIfUserMetadataTooLarge(res, metadata)) return
 
   const result = await S3UseCases.copyObject(user, {
     SourceBucket: source.bucket,
@@ -675,6 +851,7 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
     Bucket: bucket,
     Key: key,
     Mtime: mtime,
+    Metadata: metadata,
   })
 
   if (result.isErr()) {
