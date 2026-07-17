@@ -126,12 +126,13 @@ const getObjectMetadata = (req: Request): S3ObjectMetadata | null => {
   if (contentLanguage) metadata.contentLanguage = contentLanguage
   const contentDisposition = headerString(req.headers['content-disposition'])
   if (contentDisposition) metadata.contentDisposition = contentDisposition
-  // For PutObject/UploadPart the real Content-Encoding was moved off the headers
-  // before body parsing (so the body is stored verbatim) onto a request-scoped
-  // side channel; read it back from there. It cannot be forged: a client-sent
-  // header only ever lands in req.headers, never in the WeakMap. Other write ops
-  // (CreateMultipartUpload) still carry the real header, metadata-only (no body
-  // to inflate).
+  // The pre-parser middleware (http.ts) moves a client Content-Encoding off the
+  // headers onto a request-scoped side channel for EVERY write op that carries
+  // it — PutObject/UploadPart (body stored verbatim) and CreateMultipartUpload/
+  // CopyObject (empty body the parser would 415/400 on before this ran) — so
+  // read it back from there. It cannot be forged: a client-sent header only ever
+  // lands in req.headers, never in the WeakMap. The req.headers fallback just
+  // catches an 'identity' encoding the middleware intentionally leaves in place.
   const contentEncoding =
     headerString(req.headers['content-encoding']) ??
     stashedContentEncoding.get(req)

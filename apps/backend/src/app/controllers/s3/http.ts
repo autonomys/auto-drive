@@ -119,20 +119,33 @@ export const getS3Method = (req: Request): string => {
   }
 }
 
-// Operations whose request body IS the stored object. S3 stores that payload
-// byte-for-byte and treats Content-Encoding as opaque metadata — it must never
-// inflate the body. Express's parser otherwise gunzips gzip/deflate bodies (so
-// the stored bytes would no longer match the declared encoding) and rejects
-// unknown encodings (br, zstd) with 415 before they can be stored.
-const BODY_STORED_VERBATIM = new Set(['PutObject', 'UploadPart'])
+// The S3 write ops that may carry a client Content-Encoding the body parser must
+// not see. Two reasons, handled identically:
+//  - PutObject / UploadPart: the request body IS the stored object, so it must be
+//    kept byte-for-byte — S3 never inflates a stored body; Content-Encoding is
+//    opaque metadata. Left alone, Express gunzips gzip/deflate bodies (stored
+//    bytes then wouldn't match the declared encoding) or 415s unknown encodings
+//    (br, zstd) before they can be stored.
+//  - CreateMultipartUpload / CopyObject: no stored body, but Content-Encoding
+//    rides along as pure metadata on an empty body the parser still inspects.
+//    body-parser checks the encoding before it notices the body is empty
+//    (Content-Length: 0 counts as "has body"), so 'br' → 415 and 'gzip' → 400
+//    (gunzip on empty input) before the handler could read it as metadata.
+// For all of them, neutralizeContentEncoding moves the header onto a
+// request-scoped stash that getObjectMetadata reads back.
+const CONTENT_ENCODING_WRITE_OPS = new Set([
+  'PutObject',
+  'UploadPart',
+  'CreateMultipartUpload',
+  'CopyObject',
+])
 
 // Move a client-declared Content-Encoding out of the way of the body parser for
-// those operations, preserving it under an internal header for metadata
-// capture, so the exact wire bytes are stored and later returned verbatim under
-// the same encoding (GetObject/HeadObject re-emit it). aws-chunked is AWS
-// transfer framing, not object content: leave it in place so the parser's
-// existing handling stands rather than storing the framing bytes as data.
-const neutralizeObjectBodyEncoding = (
+// those ops (see above), preserving it under a request-scoped stash for metadata
+// capture; GetObject/HeadObject re-emit it. aws-chunked is AWS transfer framing,
+// not object content: leave it in place so the parser's existing handling stands
+// rather than storing the framing bytes as data.
+const neutralizeContentEncoding = (
   req: Request,
   _res: Response,
   next: NextFunction,
@@ -142,11 +155,12 @@ const neutralizeObjectBodyEncoding = (
     typeof encoding === 'string' &&
     encoding.toLowerCase() !== 'identity' &&
     !encoding.toLowerCase().includes('aws-chunked') &&
-    BODY_STORED_VERBATIM.has(getS3Method(req))
+    CONTENT_ENCODING_WRITE_OPS.has(getS3Method(req))
   ) {
     // Stash on a request-scoped side channel (not a header) so it round-trips as
     // metadata without being forgeable over the wire, then hide the real header
-    // from the parser so the body is stored verbatim.
+    // from the parser (which would otherwise inflate a stored body, or 415/400 on
+    // an empty one).
     stashContentEncoding(req, encoding)
     delete req.headers['content-encoding']
   }
@@ -166,9 +180,10 @@ s3Controller.get(
 
 s3Controller.use(
   '/:key(*)',
-  // Runs before the parser: hides a client Content-Encoding on body-storing
-  // ops so the object bytes are stored verbatim (see above).
-  neutralizeObjectBodyEncoding,
+  // Runs before the parser: moves a client Content-Encoding aside for the write
+  // ops that carry it, so the parser neither inflates a stored body nor 415/400s
+  // on an empty one (see above).
+  neutralizeContentEncoding,
   // S3 object bodies are opaque binary payloads. Always read the request body
   // as raw bytes regardless of (or the absence of) a Content-Type header.
   // `type: '*/*'` is insufficient: type-is returns false when no Content-Type

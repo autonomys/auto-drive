@@ -1338,6 +1338,62 @@ describe('AWS S3 - SDK', () => {
       expect(head.CacheControl).toBe('no-store')
       expect(head.Metadata?.part).toBe('meta')
     })
+
+    it('round-trips a Content-Encoding set on CreateMultipartUpload (empty-body op)', async () => {
+      // Content-Encoding is pure metadata on the bodyless CreateMultipartUpload
+      // POST. Until neutralizeContentEncoding covered this op, 'br' 415'd (and
+      // 'gzip' 400'd) at the body parser — which inspects the encoding before it
+      // notices the empty body — before the handler could capture it.
+      const Key = 'metadata-test/multipart-encoding.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key, ContentEncoding: 'br' }),
+      )
+      const uploadId = create.UploadId
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          PartNumber: 1,
+          Body: Buffer.from('multipart body bytes'),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag }] },
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentEncoding).toBe('br')
+    })
+
+    it('round-trips a Content-Encoding on a REPLACE-directive copy (empty-body op)', async () => {
+      // Same empty-body parser hazard: a REPLACE copy is a bodyless PUT carrying
+      // Content-Encoding as metadata.
+      const Src = 'metadata-test/copy-encoding-src.txt'
+      const Dst = 'metadata-test/copy-encoding-dst.txt'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Src, Body: Buffer.from('x') }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket,
+          Key: Dst,
+          CopySource: Src,
+          MetadataDirective: 'REPLACE',
+          ContentEncoding: 'br',
+        }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(head.ContentEncoding).toBe('br')
+    })
   })
 
   describe('Missing keys', () => {
