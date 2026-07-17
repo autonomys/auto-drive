@@ -152,6 +152,47 @@ const getObjectMetadata = (req: Request): S3ObjectMetadata | null => {
   return Object.keys(metadata).length > 0 ? metadata : null
 }
 
+// Real S3 caps user-defined metadata (the x-amz-meta-* entries) at 2 KB — the
+// sum of the UTF-8 byte lengths of every key and value — and rejects a larger
+// write with 400 MetadataTooLarge. System headers (Content-Type, Cache-Control,
+// …) do NOT count toward it. We enforce the same bound: it matches client/SDK
+// expectations (SDKs already handle this error) and keeps the stored metadata —
+// persisted as jsonb and replayed on every GET/HEAD — bounded.
+const MAX_USER_METADATA_BYTES = 2048
+
+/** Sum of the UTF-8 byte lengths of the user-metadata keys and values (the S3
+ *  measure for the 2 KB limit). System headers are excluded — only x-amz-meta-*
+ *  captured into userMetadata is counted. */
+export const userMetadataByteSize = (
+  metadata: S3ObjectMetadata | null | undefined,
+): number => {
+  if (!metadata?.userMetadata) return 0
+  let total = 0
+  for (const [key, value] of Object.entries(metadata.userMetadata)) {
+    total += Buffer.byteLength(key, 'utf8') + Buffer.byteLength(value, 'utf8')
+  }
+  return total
+}
+
+/**
+ * Guard the S3 2 KB user-metadata limit on a write. When exceeded, sends a 400
+ * MetadataTooLarge (S3's error, which SDKs recognise) and returns true so the
+ * caller bails before doing any upload work; returns false (nothing sent) when
+ * within the limit. Shared by every write that captures request metadata
+ * (PutObject, CreateMultipartUpload, CopyObject REPLACE) so none can bypass it.
+ */
+const rejectIfUserMetadataTooLarge = (
+  res: Response,
+  metadata: S3ObjectMetadata | null | undefined,
+): boolean => {
+  if (userMetadataByteSize(metadata) <= MAX_USER_METADATA_BYTES) return false
+  sendXML(res.status(400), 'Error', {
+    Code: 'MetadataTooLarge',
+    Message: 'Your metadata headers exceed the maximum allowed metadata size.',
+  })
+  return true
+}
+
 /**
  * Emit stored S3 object metadata on a GET/HEAD response verbatim, overriding the
  * generic values the shared download-header helper computed. Uses res.setHeader
@@ -508,13 +549,16 @@ export const createMultipartUploadHandler = async (
   const uploadOptions = getUploadOptions(req)
   const { bucket, key } = parseBucketAndKey(req.params.key)
 
+  const metadata = getObjectMetadata(req)
+  if (rejectIfUserMetadataTooLarge(res, metadata)) return
+
   const result = await S3UseCases.createMultipartUpload(user, {
     Bucket: bucket,
     Key: key,
     ContentType: req.headers['content-type'],
     UploadOptions: uploadOptions,
     Mtime: getMtime(req),
-    Metadata: getObjectMetadata(req),
+    Metadata: metadata,
   })
 
   if (result.isErr()) {
@@ -725,6 +769,9 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   const uploadOptions = getUploadOptions(req)
   const { bucket, key } = parseBucketAndKey(req.params.key)
 
+  const metadata = getObjectMetadata(req)
+  if (rejectIfUserMetadataTooLarge(res, metadata)) return
+
   const result = await S3UseCases.putObject(user, {
     Bucket: bucket,
     Key: key,
@@ -732,7 +779,7 @@ export const putObjectHandler = async (req: Request, res: Response) => {
     ContentType: req.headers['content-type'],
     UploadOptions: uploadOptions,
     Mtime: getMtime(req),
-    Metadata: getObjectMetadata(req),
+    Metadata: metadata,
   })
 
   if (result.isErr()) {
@@ -792,6 +839,10 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
     typeof directive === 'string' && directive.toUpperCase() === 'REPLACE'
   const mtime = isReplace ? getMtime(req) : undefined
   const metadata = isReplace ? getObjectMetadata(req) : undefined
+  // REPLACE carries new metadata on the request; enforce the 2 KB user-metadata
+  // limit here too. (COPY inherits the source's already-bounded metadata, so
+  // `metadata` is undefined and this is a no-op.)
+  if (rejectIfUserMetadataTooLarge(res, metadata)) return
 
   const result = await S3UseCases.copyObject(user, {
     SourceBucket: source.bucket,

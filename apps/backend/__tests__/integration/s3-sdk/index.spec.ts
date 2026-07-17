@@ -1163,6 +1163,40 @@ describe('AWS S3 - SDK', () => {
       expect(head.Metadata?.project).toBe('auto-drive')
     })
 
+    it('rejects user metadata over the 2 KB limit with MetadataTooLarge', async () => {
+      const Key = 'metadata-test/too-large.txt'
+      // 'big'(3) + 2100-byte value = 2103 bytes of user metadata, over the 2 KB
+      // S3 limit but well under Node's header budget (so the server, not Node,
+      // rejects it) — matching real S3, which returns 400 MetadataTooLarge.
+      let status: number | undefined
+      let code: string | undefined
+      try {
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket,
+            Key,
+            Body: Buffer.from('data'),
+            Metadata: { big: 'x'.repeat(2100) },
+          }),
+        )
+        throw new Error('expected the oversized-metadata PUT to be rejected')
+      } catch (e) {
+        const err = e as {
+          $metadata?: { httpStatusCode?: number }
+          name?: string
+        }
+        status = err.$metadata?.httpStatusCode
+        code = err.name
+      }
+      expect(status).toBe(400)
+      expect(code).toBe('MetadataTooLarge')
+
+      // The object must not have been created (rejected before the upload).
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key })),
+      ).rejects.toThrow()
+    })
+
     it('stores the body verbatim under a client Content-Encoding and returns both unchanged', async () => {
       const Key = 'metadata-test/encoding.txt'
       // S3 stores object bytes byte-for-byte and treats Content-Encoding as
