@@ -89,6 +89,38 @@ services:
       - workspace
       - backend
       - start:fe:worker
+  # Dedicated worker for on-chain node publishing. publish-nodes tasks block for
+  # the confirmation-depth window (~2.5-5 min per batch), so they run here on
+  # their own queue (publish-manager) instead of holding task-manager slots and
+  # starving the frontend worker's fast tasks. Shares backend-worker's profiles
+  # so it deploys on the same single host that runs start:fe:worker today.
+  #
+  # IMPORTANT: on-chain publishing must run in exactly ONE process — signing
+  # accounts' nonces are tracked in-memory per process, so a second concurrent
+  # publisher would hand out colliding nonces. Keep this to a single replica; if
+  # you ever run the frontend profile on more than one host, move publishing to
+  # its own single-host profile instead of sharing these.
+  backend-publish-worker:
+    image: ${BACKEND_IMAGE}
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+    profiles:
+      - frontend
+      - frontend-worker
+    logging:
+      driver: loki
+      options:
+        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:publish:worker
   backend-api:
     image: ${BACKEND_IMAGE}
     volumes:

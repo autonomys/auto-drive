@@ -110,6 +110,14 @@ describe('TaskManager', () => {
       )
     })
 
+    it('should subscribe to the publish manager queue', () => {
+      EventRouter.listenPublishEvents()
+      expect(Rabbit.subscribe).toHaveBeenCalledWith(
+        'publish-manager',
+        expect.any(Function),
+      )
+    })
+
     it('should log an error when receiving an invalid task', async () => {
       EventRouter.listenFrontendEvents()
       await subscribeCallback({})
@@ -132,16 +140,35 @@ describe('TaskManager', () => {
       expect(UploadsUseCases.processMigration).toHaveBeenCalledWith('123')
     })
 
+    it('should forward publish-nodes to the publish manager queue without publishing inline', async () => {
+      EventRouter.listenFrontendEvents()
+      const task = {
+        id: 'publish-nodes',
+        params: { nodes: ['node1', 'node2'] },
+        retriesLeft: 3,
+      }
+
+      await subscribeCallback(task)
+
+      // publish-nodes runs on its own worker now; the frontend worker forwards
+      // it to publish-manager rather than signing transactions inline.
+      expect(OnchainPublisher.publishNodes).not.toHaveBeenCalled()
+      expect(Rabbit.publish).toHaveBeenCalledWith(
+        'publish-manager',
+        expect.objectContaining({ id: 'publish-nodes' }),
+      )
+    })
+
     it('should log an error when a task fails and has no retries left', async () => {
       EventRouter.listenFrontendEvents()
       const validTask = {
-        id: 'publish-nodes',
-        params: { nodes: ['node1', 'node2'] },
+        id: 'migrate-upload-nodes',
+        params: { uploadId: '123' },
         retriesLeft: 0,
       }
 
       jest
-        .mocked(OnchainPublisher.publishNodes)
+        .mocked(UploadsUseCases.processMigration)
         .mockImplementationOnce(async () => {
           throw new Error('Test error')
         })
@@ -190,7 +217,7 @@ describe('TaskManager', () => {
 
       expect(Rabbit.publish).toHaveBeenCalledTimes(2)
       expect(Rabbit.publish).toHaveBeenCalledWith('task-manager', tasks[0])
-      expect(Rabbit.publish).toHaveBeenCalledWith('task-manager', tasks[1])
+      expect(Rabbit.publish).toHaveBeenCalledWith('publish-manager', tasks[1])
     })
   })
 })

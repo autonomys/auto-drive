@@ -1,9 +1,9 @@
-import { OnchainPublisher } from '../../services/upload/onchainPublisher/index.js'
 import { NodesUseCases } from '../../../core/objects/nodes.js'
 import { ReconciliationUseCases } from '../../../core/objects/reconciliation.js'
 import { PublishingRecoveryUseCases } from '../../../core/objects/publishingRecovery.js'
 import { UploadsUseCases } from '../../../core/uploads/uploads.js'
-import { Task } from '../tasks.js'
+import { EventRouter } from '../index.js'
+import { Task, createTask } from '../tasks.js'
 import { createHandlerWithRetries } from '../utils.js'
 import { paymentManager } from '../../services/paymentManager/index.js'
 
@@ -17,7 +17,15 @@ export const processFrontendTask = createHandlerWithRetries(
     } else if (id === 'archive-objects') {
       return NodesUseCases.processNodeArchived(params.objects)
     } else if (id === 'publish-nodes') {
-      return OnchainPublisher.publishNodes(params.nodes)
+      // publish-nodes now runs on its own queue/worker (publish-manager) so its
+      // multi-minute on-chain confirmation waits never block the fast tasks on
+      // task-manager. A publish-nodes arriving here was enqueued on task-manager
+      // before this routing change (or is in flight during a rolling deploy):
+      // forward it to the dedicated queue rather than running it, so on-chain
+      // publishing stays in a single process and signing-account nonces never
+      // collide across workers.
+      EventRouter.publish(createTask({ id, params: { nodes: params.nodes } }))
+      return Promise.resolve()
     } else if (id === 'tag-upload') {
       return UploadsUseCases.tagUpload(params.cid)
     } else if (id === 'ensure-object-published') {

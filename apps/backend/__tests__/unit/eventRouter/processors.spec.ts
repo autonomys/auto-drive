@@ -8,6 +8,8 @@ import {
 } from '@jest/globals'
 import { processFrontendTask } from '../../../src/infrastructure/eventRouter/processors/frontend.js'
 import { processDownloadTask } from '../../../src/infrastructure/eventRouter/processors/download.js'
+import { processPublishTask } from '../../../src/infrastructure/eventRouter/processors/publish.js'
+import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { NodesUseCases } from '../../../src/core/objects/nodes.js'
 import { OnchainPublisher } from '../../../src/infrastructure/services/upload/onchainPublisher/index.js'
@@ -67,10 +69,13 @@ describe('EventRouter Processors', () => {
       ])
     })
 
-    it('should handle publish-nodes task', async () => {
+    it('should forward publish-nodes to the dedicated publish queue instead of running it', async () => {
       const publishNodesSpy = jest
         .spyOn(OnchainPublisher, 'publishNodes')
         .mockResolvedValue(undefined)
+      const eventRouterPublishSpy = jest
+        .spyOn(EventRouter, 'publish')
+        .mockImplementation(() => undefined)
 
       const task = {
         id: 'publish-nodes',
@@ -80,7 +85,15 @@ describe('EventRouter Processors', () => {
 
       await processFrontendTask(task)
 
-      expect(publishNodesSpy).toHaveBeenCalledWith(['node1'])
+      // The frontend worker must never sign transactions for publish-nodes; it
+      // forwards them so a single process (the publish worker) owns publishing.
+      expect(publishNodesSpy).not.toHaveBeenCalled()
+      expect(eventRouterPublishSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'publish-nodes',
+          params: { nodes: ['node1'] },
+        }),
+      )
     })
 
     it('should handle tag-upload task', async () => {
@@ -200,6 +213,39 @@ describe('EventRouter Processors', () => {
       }
 
       await expect(processDownloadTask(task)).resolves.toBeUndefined()
+    })
+  })
+
+  describe('processPublishTask', () => {
+    it('should handle publish-nodes task', async () => {
+      const publishNodesSpy = jest
+        .spyOn(OnchainPublisher, 'publishNodes')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'publish-nodes',
+        params: { nodes: ['node1', 'node2'] },
+        retriesLeft: 3,
+      }
+
+      await processPublishTask(task)
+
+      expect(publishNodesSpy).toHaveBeenCalledWith(['node1', 'node2'])
+    })
+
+    it('should resolve without publishing for an unknown task', async () => {
+      const publishNodesSpy = jest
+        .spyOn(OnchainPublisher, 'publishNodes')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'unknown-task',
+        params: {},
+        retriesLeft: 3,
+      }
+
+      await expect(processPublishTask(task)).resolves.toBeUndefined()
+      expect(publishNodesSpy).not.toHaveBeenCalled()
     })
   })
 })
