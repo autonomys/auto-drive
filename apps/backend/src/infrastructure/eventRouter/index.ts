@@ -45,8 +45,11 @@ const getTargetQueueByTask = (task: Task) => {
       return 'download-manager'
     // On-chain publishing blocks for the confirmation-depth window per batch;
     // route it to a dedicated queue/worker so those waits never hold up the
-    // fast frontend tasks on task-manager.
+    // fast frontend tasks on task-manager. publish-nodes and
+    // ensure-object-published both sign via the publisher, so they must share
+    // the single publish worker (signing-account nonces are per-process).
     case 'publish-nodes':
+    case 'ensure-object-published':
       return 'publish-manager'
     default:
       return 'task-manager'

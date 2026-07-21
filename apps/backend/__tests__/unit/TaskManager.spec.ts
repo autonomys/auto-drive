@@ -199,6 +199,18 @@ describe('TaskManager', () => {
       expect(Rabbit.publish).toHaveBeenCalledWith('task-manager', task)
     })
 
+    it('should route ensure-object-published to the publish manager queue', () => {
+      const task: Task = {
+        id: 'ensure-object-published',
+        params: { cid: 'cid-ensure' },
+        retriesLeft: 3,
+      }
+
+      EventRouter.publish(task)
+
+      expect(Rabbit.publish).toHaveBeenCalledWith('publish-manager', task)
+    })
+
     it('should publish multiple tasks', () => {
       const tasks: Task[] = [
         {

@@ -112,10 +112,13 @@ describe('EventRouter Processors', () => {
       expect(tagUploadSpy).toHaveBeenCalledWith('cid123')
     })
 
-    it('should handle ensure-object-published task', async () => {
+    it('should forward ensure-object-published to the dedicated publish queue instead of running it', async () => {
       const ensureObjectPublishedSpy = jest
         .spyOn(NodesUseCases, 'ensureObjectPublished')
         .mockResolvedValue(undefined)
+      const eventRouterPublishSpy = jest
+        .spyOn(EventRouter, 'publish')
+        .mockImplementation(() => undefined)
 
       const task = {
         id: 'ensure-object-published',
@@ -125,7 +128,15 @@ describe('EventRouter Processors', () => {
 
       await processFrontendTask(task)
 
-      expect(ensureObjectPublishedSpy).toHaveBeenCalledWith('cid456')
+      // ensure-object-published signs on-chain (via publishNodes); the frontend
+      // worker must forward it, never run it, to keep publishing single-process.
+      expect(ensureObjectPublishedSpy).not.toHaveBeenCalled()
+      expect(eventRouterPublishSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'ensure-object-published',
+          params: { cid: 'cid456' },
+        }),
+      )
     })
 
     it('should handle watch-intent-tx task', async () => {
@@ -231,6 +242,22 @@ describe('EventRouter Processors', () => {
       await processPublishTask(task)
 
       expect(publishNodesSpy).toHaveBeenCalledWith(['node1', 'node2'])
+    })
+
+    it('should handle ensure-object-published task', async () => {
+      const ensureObjectPublishedSpy = jest
+        .spyOn(NodesUseCases, 'ensureObjectPublished')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'ensure-object-published',
+        params: { cid: 'cid789' },
+        retriesLeft: 3,
+      }
+
+      await processPublishTask(task)
+
+      expect(ensureObjectPublishedSpy).toHaveBeenCalledWith('cid789')
     })
 
     it('should resolve without publishing for an unknown task', async () => {
