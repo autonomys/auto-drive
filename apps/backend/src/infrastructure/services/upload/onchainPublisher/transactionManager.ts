@@ -362,7 +362,7 @@ const submitTransaction = (
 
               // Re-inclusion detector. A second (or nth) `isInBlock` at a
               // *different* block means the previous inclusion block was
-              // retracted and the extrinsic re-included higher up. Two things
+              // retracted and the extrinsic re-included elsewhere. Two things
               // happen on every re-inclusion, and both push confirmation away:
               //   1. the confirmation target becomes inclusionNumber + depth,
               //      so it advances with each re-inclusion;
@@ -371,7 +371,15 @@ const submitTransaction = (
               // the tx by `depth` blocks, the target chases the head forever and
               // the timeout never fires — the tx neither confirms nor fails, and
               // its object is stuck in "publishing". This log makes that visible.
-              if (previousInclusionNumber !== undefined) {
+              //
+              // Gate on the inclusion *hash* actually changing: a repeated
+              // isInBlock for the same block is not a re-inclusion (nothing
+              // moved), and comparing hashes rather than numbers also catches a
+              // re-inclusion into a different fork at the same height.
+              if (
+                previousInclusionHash !== undefined &&
+                newInclusionHash !== previousInclusionHash
+              ) {
                 logger.debug(
                   'Tx %s RE-INCLUDED: inclusion moved #%d (%s) → #%d (%s) [seq %d]. Confirmation target advanced to head #%d (=%d+%d); timeout re-armed to %dms.',
                   txHash,
