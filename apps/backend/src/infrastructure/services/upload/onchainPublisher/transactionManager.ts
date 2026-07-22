@@ -41,6 +41,19 @@ const submitTransaction = (
 ): Promise<TransactionResult> => {
   return new Promise((resolve, reject) => {
     const txHash = transaction.hash.toString()
+    // Diagnostic: record the confirmation contract we are about to enforce for
+    // this transaction. `confirmationDepth` is the number of blocks that must
+    // build on top of the inclusion block before we treat it as published, and
+    // `transactionTimeoutMs` is the backstop that fails the tx if that never
+    // happens. Logged per-tx so a per-block trace can be read against the exact
+    // target values in effect (they are env-driven and can differ per deploy).
+    logger.debug(
+      'Tx %s (nonce %d) submitted — expecting confirmationDepth=%d block(s), timeout=%dms',
+      txHash,
+      nonce,
+      config.chain.confirmationDepth,
+      config.chain.transactionTimeoutMs,
+    )
     let extrinsicUnsub: (() => void) | undefined
     let headsUnsub: (() => void) | undefined
     let isResolved = false
@@ -82,6 +95,16 @@ const submitTransaction = (
       if (isResolved) return
       isResolved = true
       cleanup()
+      // Terminal line for this tx's confirmation trace: whichever branch we
+      // settled on (InBlock success, Reorged, Timeout, ConfirmationError, …).
+      // A tx stuck in "publishing" is precisely one that never emits this line.
+      logger.debug(
+        'Tx %s settled: success=%s status=%s%s',
+        txHash,
+        result.success,
+        result.status,
+        result.blockNumber !== undefined ? ` block=#${result.blockNumber}` : '',
+      )
       resolve(result)
     }
 
@@ -135,6 +158,11 @@ const submitTransaction = (
       // down. Bail out instead.
       if (isResolved || headsSubscribed) return
       headsSubscribed = true
+      logger.debug(
+        'Tx %s: confirmation watch open — subscribed to new heads, waiting for head to reach inclusion + %d',
+        txHash,
+        config.chain.confirmationDepth,
+      )
 
       try {
         const unsub = await api.rpc.chain.subscribeNewHeads(async (header) => {
@@ -144,9 +172,36 @@ const submitTransaction = (
           const targetHash = inclusionHash
           const targetNumber = inclusionNumber
           if (targetHash === undefined || targetNumber === undefined) return
+
+          // Block-by-block confirmation trace. For every new head while this tx
+          // is awaiting confirmation we log: the current head height, the block
+          // the tx is currently considered included in, how many confirmations
+          // have accumulated vs. how many are required, and how many blocks are
+          // still outstanding. If `remaining` fails to trend toward 0 — e.g. it
+          // stays pinned near `confirmationDepth` while `head` keeps climbing —
+          // the inclusion target is moving in lockstep with the head (repeated
+          // re-inclusion; see the RE-INCLUDED log) and the tx will never
+          // confirm. If `head` itself stops advancing, the RPC head stream has
+          // stalled. Either pattern explains a tx stuck in "publishing".
+          const headNumber = header.number.toNumber()
+          const requiredHeadNumber =
+            targetNumber + config.chain.confirmationDepth
+          const confirmations = headNumber - targetNumber
+          logger.debug(
+            'Tx %s confirmation trace: head #%d | inclusion #%d (%s) | %d/%d confirmations | need head >= #%d | %d block(s) remaining',
+            txHash,
+            headNumber,
+            targetNumber,
+            targetHash,
+            confirmations < 0 ? 0 : confirmations,
+            config.chain.confirmationDepth,
+            requiredHeadNumber,
+            Math.max(0, requiredHeadNumber - headNumber),
+          )
+
           if (
             !hasReachedConfirmationDepth(
-              header.number.toNumber(),
+              headNumber,
               targetNumber,
               config.chain.confirmationDepth,
             )
@@ -171,6 +226,23 @@ const submitTransaction = (
             ) {
               return
             }
+
+            // Confirmation depth reached: this is the actual publish/drop
+            // decision. Log the comparison that drives it — the hash we recorded
+            // at inclusion vs. the hash the chain now reports as canonical at
+            // that same height. A mismatch here (rather than a never-reached
+            // depth) means the block was reorged out from under a confirmed tx.
+            logger.debug(
+              'Tx %s reached confirmation depth at head #%d — canonical check @ height #%d: expected(inclusion)=%s canonical(chain)=%s => %s',
+              txHash,
+              headNumber,
+              targetNumber,
+              targetHash,
+              canonicalHash,
+              isStillCanonical(canonicalHash, targetHash)
+                ? 'MATCH → publishing'
+                : 'MISMATCH → reorged/dropping',
+            )
 
             if (isStillCanonical(canonicalHash, targetHash)) {
               resolveOnce({
@@ -283,8 +355,38 @@ const submitTransaction = (
               if (mySeq !== inclusionSeq) {
                 return
               }
+              const previousInclusionNumber = inclusionNumber
+              const previousInclusionHash = inclusionHash
               inclusionHash = newInclusionHash
               inclusionNumber = block.header.number.toNumber()
+
+              // Re-inclusion detector. A second (or nth) `isInBlock` at a
+              // *different* block means the previous inclusion block was
+              // retracted and the extrinsic re-included higher up. Two things
+              // happen on every re-inclusion, and both push confirmation away:
+              //   1. the confirmation target becomes inclusionNumber + depth,
+              //      so it advances with each re-inclusion;
+              //   2. armTimeout() (above, on isInBlock) resets the timeout.
+              // If re-inclusions keep arriving faster than the chain can bury
+              // the tx by `depth` blocks, the target chases the head forever and
+              // the timeout never fires — the tx neither confirms nor fails, and
+              // its object is stuck in "publishing". This log makes that visible.
+              if (previousInclusionNumber !== undefined) {
+                logger.debug(
+                  'Tx %s RE-INCLUDED: inclusion moved #%d (%s) → #%d (%s) [seq %d]. Confirmation target advanced to head #%d (=%d+%d); timeout re-armed to %dms.',
+                  txHash,
+                  previousInclusionNumber,
+                  previousInclusionHash,
+                  inclusionNumber,
+                  inclusionHash,
+                  mySeq,
+                  inclusionNumber + config.chain.confirmationDepth,
+                  inclusionNumber,
+                  config.chain.confirmationDepth,
+                  config.chain.transactionTimeoutMs,
+                )
+              }
+
               logger.info(
                 'Tx %s in block %d (%s) — awaiting %d confirmations',
                 txHash,

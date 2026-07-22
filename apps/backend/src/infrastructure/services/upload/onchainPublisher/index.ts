@@ -55,10 +55,47 @@ const publishNodes = async (cids: string[]) => {
     }
   })
 
+  logger.debug(
+    'Submitting %d transaction(s) to publish (unique cids=%d, repeated=%d, skipped-null=%d)',
+    transactions.length,
+    uniqueCids.length,
+    repeatedNodes.length,
+    skippedNullCount,
+  )
+
   const results = await transactionManager.submit(transactions)
+
+  // Summarise the batch by success + status so the reason a publish attempt
+  // failed is visible in one line rather than by correlating N per-tx traces:
+  // e.g. all `fail:Timeout` points at the confirmation-depth livelock (target
+  // never reached before timeout), `fail:Reorged` at chain instability, and
+  // `fail:Invalid` at a signer/balance fault. Objects stay in "publishing"
+  // whenever this batch throws, so this is the breadcrumb that explains it.
+  const statusBreakdown = results.reduce<Record<string, number>>((acc, r) => {
+    const key = `${r.success ? 'ok' : 'fail'}:${r.status}`
+    acc[key] = (acc[key] ?? 0) + 1
+    return acc
+  }, {})
+  logger.debug(
+    'Publishing batch settled: %d/%d succeeded — status breakdown %o',
+    results.filter((r) => r.success).length,
+    results.length,
+    statusBreakdown,
+  )
+
   const someNodeFailed = results.some((result) => !result.success)
   if (someNodeFailed) {
-    throw new Error('Failed to publish nodes')
+    // Surface the breakdown at warn too: a bare "Failed to publish nodes" gives
+    // no clue why an object won't leave the publishing state.
+    logger.warn(
+      'Failed to publish %d/%d nodes — status breakdown %o',
+      results.filter((r) => !r.success).length,
+      results.length,
+      statusBreakdown,
+    )
+    throw new Error(
+      `Failed to publish nodes (${JSON.stringify(statusBreakdown)})`,
+    )
   }
 
   await Promise.all(
