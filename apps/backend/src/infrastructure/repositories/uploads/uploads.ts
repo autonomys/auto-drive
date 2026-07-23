@@ -63,13 +63,21 @@ export const getUploadEntryById = async (
   return result.rows.at(0) ?? null
 }
 
+// Sets updated_at explicitly on every edit. The set_timestamp trigger on
+// uploads.uploads is declared AFTER UPDATE, so its NEW.updated_at assignment is
+// a no-op and the column is otherwise never refreshed. Migration recovery
+// depends on this: completeUpload flips a root upload to MIGRATING through this
+// function, so updated_at then marks when the upload *entered* MIGRATING —
+// which getStuckRootMigrations uses as the staleness anchor. Without this, the
+// column would keep the row's created_at and recovery could re-enqueue while
+// the original migration is still running.
 export const updateUploadEntry = async (
   upload: UploadEntry,
 ): Promise<UploadEntry> => {
   const db = await getDatabase()
 
   const result = await db.query(
-    'UPDATE uploads.uploads SET status = $2, file_tree = $3, mime_type = $4, root_upload_id = $5, relative_id = $6, upload_options = $7 WHERE id = $1 RETURNING *',
+    'UPDATE uploads.uploads SET status = $2, file_tree = $3, mime_type = $4, root_upload_id = $5, relative_id = $6, upload_options = $7, updated_at = NOW() WHERE id = $1 RETURNING *',
     [
       upload.id,
       upload.status,
@@ -176,11 +184,13 @@ const deleteEntriesByRootUploadId = async (
   ])
 }
 
-// Root uploads still MIGRATING whose last touch predates the staleness
-// window. updated_at is stamped when the upload completes and again on each
-// recovery attempt (the set_timestamp trigger is AFTER UPDATE and therefore a
-// no-op, so these explicit writes are authoritative). The window both excludes
-// freshly-enqueued migrations and rate-limits re-drives.
+// Root uploads that have been MIGRATING longer than the staleness window.
+// updated_at is set explicitly when the upload enters MIGRATING (completeUpload
+// -> updateUploadEntry) and again on each recovery attempt
+// (markMigrationRecoveryAttempt); the AFTER-UPDATE set_timestamp trigger cannot
+// maintain the column, so those explicit writes are what make it track time in
+// MIGRATING. The window therefore excludes migrations still legitimately in
+// flight and rate-limits re-drives of genuinely stuck ones.
 const getStuckRootMigrations = async (
   stalenessMs: number,
   limit: number,
