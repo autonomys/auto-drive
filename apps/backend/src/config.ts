@@ -66,6 +66,14 @@ export const config = {
     // ≈ 1.7 hours — generous enough to not interfere with slow-but-active
     // publishing, while catching genuinely stalled objects.
     stalenessThresholdBlocks: Number(env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000')),
+    // Skip a recovery cycle when publish-manager already holds more than this
+    // many ready (not-yet-started) tasks. Recovery's output (publish-nodes)
+    // lands on publish-manager, so an unchecked recovery would keep piling
+    // duplicate publish tasks onto a saturated queue while confirmations are
+    // stalled, growing the backlog without bound. A threshold (not > 0) is
+    // deliberate: publish-manager legitimately holds a shallow backlog while
+    // batches await confirmation, and that must not suppress recovery.
+    publishManagerBacklogLimit: Number(env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100')),
   },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
