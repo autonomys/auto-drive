@@ -99,6 +99,7 @@ import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import {
   S3BucketInfo,
+  S3KeyMapping,
   S3ObjectMetadata,
 } from '../../infrastructure/repositories/s3/objectMappings.js'
 
@@ -132,7 +133,9 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
   cid: string
   /** null for objects uploaded before MD5 ETag support was introduced. */
   etag: string | null
-  /** Mapping's last-write time, surfaced as the S3 Last-Modified header. */
+  /** The current version's write time (object_versions.created_at), surfaced as
+   *  the S3 Last-Modified header — stable across soft-delete/restore, unlike
+   *  the mapping's updated_at. */
   lastModified: Date
   /**
    * Client-supplied modification time (x-amz-meta-mtime), echoed back verbatim
@@ -147,10 +150,50 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
   objectMetadata: S3ObjectMetadata | null
 }
 
+/** GetObject params extended with an optional versionId (the CID of a specific
+ *  version). Kept local — versioning is an Autonomys extension over the shared
+ *  DTO, and versionId maps to the content CID. */
+type GetObjectParams = GetObjectCommandParams & { VersionId?: string }
+
 const getObject = async (
   user: UserWithOrganization,
-  params: GetObjectCommandParams,
+  params: GetObjectParams,
 ): Promise<Result<GetObjectUseCaseResult, ObjectNotFoundError>> => {
+  // Versioned read (GET/HEAD ?versionId=<cid>): fetch the specific version's
+  // content by CID rather than the current pointer. The version must belong to
+  // this key in the caller's namespace; the download itself still runs the
+  // moderation/ban checks (downloadObjectByAnonymous → authorizeDownload), so a
+  // removed/banned version is not retrievable even though it is retained.
+  if (params.VersionId) {
+    const version = await s3ObjectMappingsRepository.findVersionByCid(
+      user.oauthProvider,
+      user.oauthUserId,
+      params.Bucket,
+      params.Key,
+      params.VersionId,
+    )
+    if (!version) {
+      return err(
+        new ObjectNotFoundError(
+          `Version ${params.VersionId} of ${params.Bucket}/${params.Key} not found`,
+        ),
+      )
+    }
+    const versionedDownload = await DownloadUseCase.downloadObjectByAnonymous(
+      version.cid,
+      { byteRange: params.Range },
+    )
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (versionedDownload as any).map((dl: GetObjectCommandResult) => ({
+      ...dl,
+      cid: version.cid,
+      etag: version.md5 ? formatETag(version.md5) : null,
+      lastModified: version.createdAt,
+      mtime: version.mtime,
+      objectMetadata: version.metadata,
+    }))
+  }
+
   const mapping = await s3ObjectMappingsRepository.findByKey(
     user.oauthProvider,
     user.oauthUserId,
@@ -162,6 +205,21 @@ const getObject = async (
       new ObjectNotFoundError(`Object ${params.Bucket}/${params.Key} not found`),
     )
   }
+
+  // Anchor Last-Modified to the current version's immutable write time, not
+  // mapping.updatedAt: a BEFORE UPDATE trigger bumps updated_at on soft-delete
+  // and Trash restore (which write no new version), so it would drift after a
+  // restore and disagree with GET/HEAD ?versionId and ListObjectVersions, which
+  // read object_versions.created_at. Mirrors getObjectWriteTime; falls back to
+  // updatedAt for legacy rows with no version history.
+  const currentVersion = await s3ObjectMappingsRepository.findVersionByCid(
+    user.oauthProvider,
+    user.oauthUserId,
+    params.Bucket,
+    params.Key,
+    mapping.cid,
+  )
+  const lastModified = currentVersion?.createdAt ?? mapping.updatedAt
 
   const downloadResult = await DownloadUseCase.downloadObjectByAnonymous(
     mapping.cid,
@@ -178,10 +236,160 @@ const getObject = async (
     // Objects uploaded before this feature have null md5; fall back to null
     // so the controller can omit the ETag header for legacy objects.
     etag: mapping.md5 ? formatETag(mapping.md5) : null,
-    lastModified: mapping.updatedAt,
+    lastModified,
     mtime: mapping.mtime,
     objectMetadata: mapping.metadata,
   }))
+}
+
+// ── ListObjectVersions ─────────────────────────────────────────────────────
+
+export interface S3VersionEntry {
+  key: string
+  /** versionId = the content CID. */
+  versionId: string
+  isLatest: boolean
+  lastModified: Date
+  /** Quoted ETag: the MD5 when known, else the CID (matching GET/HEAD/List). */
+  etag: string
+  size: bigint
+}
+
+export interface S3DeleteMarkerEntry {
+  key: string
+  versionId: string
+  isLatest: boolean
+  lastModified: Date
+}
+
+export interface ListObjectVersionsParams {
+  bucket: string
+  prefix: string
+  keyMarker: string | null
+  maxKeys: number
+}
+
+export interface ListObjectVersionsResult {
+  versions: S3VersionEntry[]
+  deleteMarkers: S3DeleteMarkerEntry[]
+  isTruncated: boolean
+  nextKeyMarker: string | null
+}
+
+// A synthesised delete marker's versionId. Markers are not stored — they are
+// derived from the mapping's deleted_at — so their id is derived too, from the
+// delete time. The same value is reported by ListObjectVersions and on the
+// DeleteObject response for a given delete. Display-only: a ?versionId=dm-…
+// GET/DELETE still 404s/403s (a version can't be fetched or destroyed by it).
+const deleteMarkerVersionId = (deletedAt: Date): string =>
+  `dm-${deletedAt.getTime()}`
+
+/**
+ * ListObjectVersions: enumerate the version history for a bucket/prefix in the
+ * caller's namespace, newest version first per key. IsLatest marks the current
+ * content version of each live key; for a key that is soft-deleted OR
+ * owner-removed (web-app Trash / moderation) — i.e. absent on every other read
+ * API — a delete marker is synthesised as the latest entry instead (its versionId
+ * derived from the delete time — markers are display-only, since
+ * DeleteObject?versionId always 403s). Pagination is key-level: up to maxKeys
+ * keys are returned, with nextKeyMarker set when more remain. The repository
+ * returns WHOLE keys (every version row of up to maxKeys + 1 distinct keys), so
+ * a key's history is never split across a page boundary.
+ *
+ * KNOWN LIMITATION (tracked in #790): maxKeys bounds the number of distinct KEYS,
+ * not entries. S3 defines max-keys as a hard bound on Version+DeleteMarker
+ * entries with version-id-marker resume; here a single key with > maxKeys
+ * versions returns them all in one page. This is deliberate — whole keys are
+ * never split, so no version is silently dropped (the higher-severity concern) —
+ * at the cost of an oversized page for a pathologically-overwritten key. Proper
+ * entry-level pagination is deferred: it needs an opaque object_versions.id
+ * cursor (versionId=CID isn't monotonic) plus SQL-level DISTINCT ON dedup, per
+ * #790.
+ */
+const getObjectVersions = async (
+  user: UserWithOrganization,
+  params: ListObjectVersionsParams,
+): Promise<ListObjectVersionsResult> => {
+  // maxKeys + 1: the extra key (if any) signals more history to page through.
+  // Because whole keys are fetched, that extra key is complete too — nothing is
+  // cut, so paging with `key > nextKeyMarker` can't skip any of a key's history.
+  const rows = await s3ObjectMappingsRepository.listObjectVersions(
+    user.oauthProvider,
+    user.oauthUserId,
+    params.bucket,
+    params.prefix,
+    params.keyMarker,
+    params.maxKeys + 1,
+  )
+
+  const versions: S3VersionEntry[] = []
+  const deleteMarkers: S3DeleteMarkerEntry[] = []
+  let keysEmitted = 0
+  let lastKey: string | null = null
+  let isTruncated = false
+
+  // Rows arrive ordered by key asc, then newest version first, so a key's rows
+  // are contiguous and the first row of each key is its newest version.
+  let i = 0
+  while (i < rows.length) {
+    const key = rows[i].key
+    // New key: enforce the maxKeys page limit before emitting its group. Since
+    // maxKeys + 1 keys were fetched, seeing another key here means more remain.
+    if (keysEmitted >= params.maxKeys) {
+      isTruncated = true
+      break
+    }
+    // The key's current state is a delete marker (no content version is IsLatest)
+    // when the pointer is soft-deleted OR the content is owner-removed (web-app
+    // Trash / moderation). Both make GET / ListObjectsV2 / GetObjectRetention
+    // treat the key as absent, so ListObjectVersions must agree.
+    const pointerDeletedAt = rows[i].pointerDeletedAt
+    const isDeleted = pointerDeletedAt != null || rows[i].ownerRemoved
+    // Rows are newest-first, so the first row is the newest version — used as the
+    // marker time for an owner-removed key that has no deleted_at.
+    const newestVersionTime = rows[i].lastModified
+    // versionId = CID, so multiple rows sharing a CID (repeated same-content
+    // writes — e.g. an mtime-only copy-to-self) are ONE version. Collapse them,
+    // keeping the newest occurrence (first in id-desc order) and its metadata.
+    const seenCids = new Set<string>()
+    let isNewestOfKey = true
+    while (i < rows.length && rows[i].key === key) {
+      const row = rows[i]
+      i++
+      if (seenCids.has(row.cid)) continue
+      seenCids.add(row.cid)
+      versions.push({
+        key: row.key,
+        versionId: row.cid,
+        isLatest: isNewestOfKey && !isDeleted,
+        lastModified: row.lastModified,
+        etag: row.md5 ? `"${row.md5}"` : `"${row.cid}"`,
+        size: row.size,
+      })
+      isNewestOfKey = false
+    }
+    if (isDeleted) {
+      // Soft-delete has a precise deleted_at; an owner-removed key with no
+      // deleted_at falls back to the newest version's time (markers are
+      // display-only, so this just sorts the marker as latest).
+      const markerTime = pointerDeletedAt ?? newestVersionTime
+      deleteMarkers.push({
+        key,
+        versionId: deleteMarkerVersionId(markerTime),
+        isLatest: true,
+        lastModified: markerTime,
+      })
+    }
+    keysEmitted++
+    lastKey = key
+  }
+
+  return {
+    versions,
+    deleteMarkers,
+    isTruncated,
+    nextKeyMarker: isTruncated ? lastKey : null,
+  }
 }
 
 const createMultipartUpload = async (
@@ -348,11 +556,21 @@ const putObject = async (
  * their web-app Trash (markAsDeleted) so an rclone delete is reflected in the UI
  * and stays recoverable — the "unified with UI Trash" behaviour.
  */
+/** DeleteObject result: whether this call created a delete marker (soft-deleted
+ *  an active key) and, if so, the marker's synthesised versionId. Surfaced as
+ *  the x-amz-delete-marker / x-amz-version-id response headers so a
+ *  versioning-aware client can tell a marker was written rather than data
+ *  destroyed (which never happens on the DSN). */
+interface DeleteObjectResult {
+  deleteMarker: boolean
+  versionId: string | null
+}
+
 const deleteObject = async (
   user: UserWithOrganization,
   bucket: string,
   key: string,
-): Promise<Result<void, never>> => {
+): Promise<Result<DeleteObjectResult, never>> => {
   const mapping = await s3ObjectMappingsRepository.findByKey(
     user.oauthProvider,
     user.oauthUserId,
@@ -360,10 +578,26 @@ const deleteObject = async (
     key,
   )
 
-  // Not the caller's key (absent or already soft-deleted): nothing to do.
-  // DeleteObject is idempotent and returns success regardless.
+  // No live key. If it is already soft-deleted (a repeat DeleteObject), the
+  // current state IS a delete marker: report it (with the existing marker's
+  // versionId) even though this idempotent call creates nothing new — a
+  // versioning-aware client expects the marker headers whenever the current
+  // state is a marker. A key that never existed has no marker (bare 204).
   if (!mapping) {
-    return ok()
+    const deleted = await s3ObjectMappingsRepository.findSoftDeletedByKey(
+      user.oauthProvider,
+      user.oauthUserId,
+      bucket,
+      key,
+    )
+    return ok(
+      deleted
+        ? {
+            deleteMarker: true,
+            versionId: deleteMarkerVersionId(deleted.deletedAt),
+          }
+        : { deleteMarker: false, versionId: null },
+    )
   }
 
   const trashObject = async () => {
@@ -399,7 +633,7 @@ const deleteObject = async (
     await trashObject()
   }
 
-  await s3ObjectMappingsRepository.softDeleteMapping(
+  const softDeleted = await s3ObjectMappingsRepository.softDeleteMapping(
     user.oauthProvider,
     user.oauthUserId,
     bucket,
@@ -420,7 +654,17 @@ const deleteObject = async (
   }
 
   logger.debug('Soft-deleted S3 mapping: bucket=(%s) key=(%s)', bucket, key)
-  return ok()
+  // A delete marker was created iff this call actually hid an active row. (A
+  // concurrent delete may have hidden it first — softDeleteMapping then returns
+  // null and this call created nothing.)
+  return ok(
+    softDeleted
+      ? {
+          deleteMarker: true,
+          versionId: deleteMarkerVersionId(softDeleted.deletedAt),
+        }
+      : { deleteMarker: false, versionId: null },
+  )
 }
 
 /**
@@ -523,30 +767,64 @@ const listBuckets = async (
   )
 }
 
-const objectExists = async (
+// The caller's mapping for (bucket, key) IF it exists and is not hidden by
+// owner-removal. A mapping the owner has since removed via the web app (moved to
+// Trash) is treated as not found by GET and ListObjects (notRemovedByOwnerSQL /
+// isObjectDeleted); mirror that here so the object-lock endpoints
+// (GetObjectRetention / GetObjectLegalHold) don't report on a hidden key.
+const findVisibleMapping = async (
   user: UserWithOrganization,
   bucket: string,
   key: string,
-): Promise<boolean> => {
+): Promise<S3KeyMapping | null> => {
   const mapping = await s3ObjectMappingsRepository.findByKey(
     user.oauthProvider,
     user.oauthUserId,
     bucket,
     key,
   )
-  if (!mapping) {
-    return false
-  }
+  if (!mapping) return null
+  if (await ObjectUseCases.isObjectDeleted(mapping.cid)) return null
+  return mapping
+}
 
-  // A mapping the owner has since removed via the web app (moved to Trash) is
-  // treated as not found by GET and ListObjects (notRemovedByOwnerSQL /
-  // isObjectDeleted). Mirror that here so the object-lock endpoints
-  // (GetObjectRetention / GetObjectLegalHold) don't report on a hidden key.
-  return !(await ObjectUseCases.isObjectDeleted(mapping.cid))
+const objectExists = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<boolean> => (await findVisibleMapping(user, bucket, key)) !== null
+
+// The current version's write time, or null when the key isn't visible. Object
+// Lock retention anchors its COMPLIANCE window to when the content was written
+// (RetainUntilDate = write time + the retention years), so GetObjectRetention
+// needs this rather than a bare existence check.
+//
+// Anchored to the current version's object_versions.created_at, NOT the mapping's
+// updated_at: a soft-delete or Trash restore (restoreMappingsByCid) bumps
+// updated_at to now WITHOUT writing a new version, which would drift the
+// RetainUntilDate to the restore instant. The version row's created_at is stamped
+// once at write and never moves. Fall back to updated_at only for legacy objects
+// with no version row (pre-#781 data the backfill didn't cover).
+const getObjectWriteTime = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<Date | null> => {
+  const mapping = await findVisibleMapping(user, bucket, key)
+  if (!mapping) return null
+  const version = await s3ObjectMappingsRepository.findVersionByCid(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+    mapping.cid,
+  )
+  return version ? version.createdAt : mapping.updatedAt
 }
 
 export const S3UseCases = {
   getObject,
+  getObjectVersions,
   createMultipartUpload,
   uploadPart,
   completeMultipartUpload,
@@ -557,4 +835,5 @@ export const S3UseCases = {
   listBuckets,
   listObjects,
   objectExists,
+  getObjectWriteTime,
 }
