@@ -67,6 +67,18 @@ export const config = {
     // publishing, while catching genuinely stalled objects.
     stalenessThresholdBlocks: Number(env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000')),
   },
+  migrationRecovery: {
+    intervalMs: Number(env('MIGRATION_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
+    maxUploadsPerCycle: Number(env('MIGRATION_RECOVERY_MAX_PER_CYCLE', '50')),
+    // An upload counts as "stuck" only after sitting in `migrating` longer
+    // than this window. It must comfortably exceed normal migrate processing
+    // time so an in-flight migration is never re-driven (processMigration is
+    // not concurrency-guarded). Each recovery attempt also stamps
+    // updated_at=now(), so this doubles as the per-upload retry interval — a
+    // genuinely failing upload is re-tried at most once per window rather than
+    // every cycle.
+    stalenessMs: Number(env('MIGRATION_RECOVERY_STALENESS_MS', '1800000')), // 30 minutes
+  },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),

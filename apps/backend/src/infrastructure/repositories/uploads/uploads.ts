@@ -63,13 +63,21 @@ export const getUploadEntryById = async (
   return result.rows.at(0) ?? null
 }
 
+// Sets updated_at explicitly on every edit. The set_timestamp trigger on
+// uploads.uploads is declared AFTER UPDATE, so its NEW.updated_at assignment is
+// a no-op and the column is otherwise never refreshed. Migration recovery
+// depends on this: completeUpload flips a root upload to MIGRATING through this
+// function, so updated_at then marks when the upload *entered* MIGRATING —
+// which getStuckRootMigrations uses as the staleness anchor. Without this, the
+// column would keep the row's created_at and recovery could re-enqueue while
+// the original migration is still running.
 export const updateUploadEntry = async (
   upload: UploadEntry,
 ): Promise<UploadEntry> => {
   const db = await getDatabase()
 
   const result = await db.query(
-    'UPDATE uploads.uploads SET status = $2, file_tree = $3, mime_type = $4, root_upload_id = $5, relative_id = $6, upload_options = $7 WHERE id = $1 RETURNING *',
+    'UPDATE uploads.uploads SET status = $2, file_tree = $3, mime_type = $4, root_upload_id = $5, relative_id = $6, upload_options = $7, updated_at = NOW() WHERE id = $1 RETURNING *',
     [
       upload.id,
       upload.status,
@@ -176,6 +184,45 @@ const deleteEntriesByRootUploadId = async (
   ])
 }
 
+// Root uploads that have been MIGRATING longer than the staleness window.
+// updated_at is set explicitly when the upload enters MIGRATING (completeUpload
+// -> updateUploadEntry) and again on each recovery attempt
+// (markMigrationRecoveryAttempt); the AFTER-UPDATE set_timestamp trigger cannot
+// maintain the column, so those explicit writes are what make it track time in
+// MIGRATING. The window therefore excludes migrations still legitimately in
+// flight and rate-limits re-drives of genuinely stuck ones.
+const getStuckRootMigrations = async (
+  stalenessMs: number,
+  limit: number,
+): Promise<string[]> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ id: string }>(
+    `SELECT id FROM uploads.uploads
+      WHERE status = $1
+        AND id = root_upload_id
+        AND updated_at < NOW() - (INTERVAL '1 millisecond' * $2)
+      ORDER BY updated_at ASC
+      LIMIT $3`,
+    [UploadStatus.MIGRATING, stalenessMs, limit],
+  )
+
+  return result.rows.map((row) => row.id)
+}
+
+// Stamp updated_at so the given root uploads drop out of
+// getStuckRootMigrations for a full staleness window after a recovery attempt.
+const markMigrationRecoveryAttempt = async (ids: string[]): Promise<void> => {
+  if (ids.length === 0) return
+  const db = await getDatabase()
+
+  await db.query(
+    `UPDATE uploads.uploads SET updated_at = NOW()
+      WHERE id = ANY($1) AND id = root_upload_id AND status = $2`,
+    [ids, UploadStatus.MIGRATING],
+  )
+}
+
 export const uploadsRepository = {
   createUploadEntry,
   getUploadEntryById,
@@ -187,4 +234,6 @@ export const uploadsRepository = {
   getStatusByCID,
   updateUploadStatusByRootUploadId,
   deleteEntriesByRootUploadId,
+  getStuckRootMigrations,
+  markMigrationRecoveryAttempt,
 }
