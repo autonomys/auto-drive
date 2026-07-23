@@ -176,6 +176,43 @@ const deleteEntriesByRootUploadId = async (
   ])
 }
 
+// Root uploads still MIGRATING whose last touch predates the staleness
+// window. updated_at is stamped when the upload completes and again on each
+// recovery attempt (the set_timestamp trigger is AFTER UPDATE and therefore a
+// no-op, so these explicit writes are authoritative). The window both excludes
+// freshly-enqueued migrations and rate-limits re-drives.
+const getStuckRootMigrations = async (
+  stalenessMs: number,
+  limit: number,
+): Promise<string[]> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ id: string }>(
+    `SELECT id FROM uploads.uploads
+      WHERE status = $1
+        AND id = root_upload_id
+        AND updated_at < NOW() - (INTERVAL '1 millisecond' * $2)
+      ORDER BY updated_at ASC
+      LIMIT $3`,
+    [UploadStatus.MIGRATING, stalenessMs, limit],
+  )
+
+  return result.rows.map((row) => row.id)
+}
+
+// Stamp updated_at so the given root uploads drop out of
+// getStuckRootMigrations for a full staleness window after a recovery attempt.
+const markMigrationRecoveryAttempt = async (ids: string[]): Promise<void> => {
+  if (ids.length === 0) return
+  const db = await getDatabase()
+
+  await db.query(
+    `UPDATE uploads.uploads SET updated_at = NOW()
+      WHERE id = ANY($1) AND id = root_upload_id AND status = $2`,
+    [ids, UploadStatus.MIGRATING],
+  )
+}
+
 export const uploadsRepository = {
   createUploadEntry,
   getUploadEntryById,
@@ -187,4 +224,6 @@ export const uploadsRepository = {
   getStatusByCID,
   updateUploadStatusByRootUploadId,
   deleteEntriesByRootUploadId,
+  getStuckRootMigrations,
+  markMigrationRecoveryAttempt,
 }
