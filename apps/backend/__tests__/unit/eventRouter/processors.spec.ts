@@ -9,7 +9,7 @@ import {
 import { processFrontendTask } from '../../../src/infrastructure/eventRouter/processors/frontend.js'
 import { processDownloadTask } from '../../../src/infrastructure/eventRouter/processors/download.js'
 import { processPublishTask } from '../../../src/infrastructure/eventRouter/processors/publish.js'
-import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
+import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { NodesUseCases } from '../../../src/core/objects/nodes.js'
 import { OnchainPublisher } from '../../../src/infrastructure/services/upload/onchainPublisher/index.js'
@@ -73,9 +73,9 @@ describe('EventRouter Processors', () => {
       const publishNodesSpy = jest
         .spyOn(OnchainPublisher, 'publishNodes')
         .mockResolvedValue(undefined)
-      const eventRouterPublishSpy = jest
-        .spyOn(EventRouter, 'publish')
-        .mockImplementation(() => undefined)
+      const rabbitPublishSpy = jest
+        .spyOn(Rabbit, 'publish')
+        .mockResolvedValue(undefined)
 
       const task = {
         id: 'publish-nodes',
@@ -86,9 +86,11 @@ describe('EventRouter Processors', () => {
       await processFrontendTask(task)
 
       // The frontend worker must never sign transactions for publish-nodes; it
-      // forwards them so a single process (the publish worker) owns publishing.
+      // forwards them to the publish-manager queue so a single process (the
+      // publish worker) owns publishing.
       expect(publishNodesSpy).not.toHaveBeenCalled()
-      expect(eventRouterPublishSpy).toHaveBeenCalledWith(
+      expect(rabbitPublishSpy).toHaveBeenCalledWith(
+        'publish-manager',
         expect.objectContaining({
           id: 'publish-nodes',
           params: { nodes: ['node1'] },
@@ -116,9 +118,9 @@ describe('EventRouter Processors', () => {
       const ensureObjectPublishedSpy = jest
         .spyOn(NodesUseCases, 'ensureObjectPublished')
         .mockResolvedValue(undefined)
-      const eventRouterPublishSpy = jest
-        .spyOn(EventRouter, 'publish')
-        .mockImplementation(() => undefined)
+      const rabbitPublishSpy = jest
+        .spyOn(Rabbit, 'publish')
+        .mockResolvedValue(undefined)
 
       const task = {
         id: 'ensure-object-published',
@@ -131,7 +133,8 @@ describe('EventRouter Processors', () => {
       // ensure-object-published signs on-chain (via publishNodes); the frontend
       // worker must forward it, never run it, to keep publishing single-process.
       expect(ensureObjectPublishedSpy).not.toHaveBeenCalled()
-      expect(eventRouterPublishSpy).toHaveBeenCalledWith(
+      expect(rabbitPublishSpy).toHaveBeenCalledWith(
+        'publish-manager',
         expect.objectContaining({
           id: 'ensure-object-published',
           params: { cid: 'cid456' },

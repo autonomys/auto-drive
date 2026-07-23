@@ -10,15 +10,7 @@ const logger = createLogger('PublishingRecoveryJob')
 let publishingRecoveryInterval: NodeJS.Timeout | null = null
 
 const enqueuePublishingRecovery = async () => {
-  // Defer while either lane has a backlog: recover-publishing itself runs on
-  // task-manager, and the publish-nodes it produces land on publish-manager.
-  // Piling on while either is deep just grows a backlog that isn't draining
-  // (e.g. while on-chain confirmations are stalled).
-  const busy = await isTaskQueueBusy('publishing recovery', [
-    'task-manager',
-    'publish-manager',
-  ])
-  if (busy) return
+  if (await isTaskQueueBusy('publishing recovery')) return
 
   logger.debug('Enqueuing recover-publishing task')
   EventRouter.publish(
