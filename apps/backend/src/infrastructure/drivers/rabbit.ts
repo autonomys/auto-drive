@@ -11,7 +11,7 @@ type Queue = (typeof queues)[number]
 
 const logger = createLogger('drivers:rabbit')
 
-const queues = ['task-manager', 'download-manager'] as const
+const queues = ['task-manager', 'download-manager', 'publish-manager'] as const
 const subscriptions: Partial<Record<Queue, SubscriptionCallback[]>> = {}
 
 let channelPromise: Promise<Channel> | null = null

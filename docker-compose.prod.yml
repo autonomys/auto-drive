@@ -89,6 +89,50 @@ services:
       - workspace
       - backend
       - start:fe:worker
+  # Dedicated worker for on-chain node publishing. publish-nodes tasks block for
+  # the confirmation-depth window (~2.5-5 min per batch), so they run here on
+  # their own queue (publish-manager) instead of holding task-manager slots and
+  # starving the frontend worker's fast tasks. Shares backend-worker's profiles
+  # so it deploys on the same single host that runs start:fe:worker today.
+  #
+  # IMPORTANT: on-chain publishing must run in exactly ONE process — signing
+  # accounts' nonces are tracked in-memory per process, so a second concurrent
+  # publisher would hand out colliding nonces. Keep this to a single replica; if
+  # you ever run the frontend profile on more than one host, move publishing to
+  # its own single-host profile instead of sharing these.
+  #
+  # Rolling-deploy safety: before this change the frontend worker signed
+  # publish-nodes inline, so during the upgrade the OLD start:fe:worker keeps
+  # signing until it stops while this new worker also signs — two signers whose
+  # in-memory nonces can collide. depends_on: backend-worker makes the standard
+  # single-host `docker compose up -d` safe: compose recreates backend-worker
+  # (stop old, start new) before starting this worker, so the old inline signer
+  # is gone before this one begins. For a non-recreate/rolling or multi-host
+  # deploy, stop the old frontend worker before this worker starts signing (or
+  # roll out the new frontend workers first, then start this worker).
+  backend-publish-worker:
+    image: ${BACKEND_IMAGE}
+    depends_on:
+      - backend-worker
+    volumes:
+      - files_cache:/usr/src/app/apps/backend/.cache
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+    profiles:
+      - frontend
+      - frontend-worker
+    logging:
+      driver: loki
+      options:
+        loki-url: 'https://logging.subspace.network/loki/api/v1/push'
+    command:
+      - yarn
+      - workspace
+      - backend
+      - start:publish:worker
   backend-api:
     image: ${BACKEND_IMAGE}
     volumes:
