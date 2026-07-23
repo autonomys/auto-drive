@@ -22,6 +22,12 @@
   // second concurrent publisher would hand out colliding nonces. Run this
   // worker as a single replica and do not enable publish-nodes handling
   // elsewhere.
+  //
+  // Deploy note: the pre-isolation frontend worker signed publish-nodes inline,
+  // so during a rolling upgrade an old start:fe:worker can still be signing when
+  // this worker starts. The compose `depends_on: backend-worker` sequences the
+  // standard single-host deploy so the old worker is stopped first; other deploy
+  // models must ensure the old frontend worker is gone before this worker signs.
   EventRouter.listenPublishEvents()
   logger.info('Publish worker started, consuming publish-manager queue')
 
