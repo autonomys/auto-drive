@@ -1,21 +1,27 @@
 [Unit]
 Description=Auto Drive Backend Service
-After=network.target
+After=network-online.target docker.service
+Requires=docker.service
+Wants=network-online.target
 
 [Service]
+Type=oneshot
+RemainAfterExit=yes
 User=ubuntu
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WorkingDirectory=/home/ubuntu/deploy
 ExecStart=/usr/bin/docker compose --env-file /home/ubuntu/deploy/auto-drive/.env -f /home/ubuntu/deploy/auto-drive/docker-compose.prod.yml up -d --remove-orphans
-Restart=always
-RestartSec=5
+ExecStop=/usr/bin/docker compose --env-file /home/ubuntu/deploy/auto-drive/.env -f /home/ubuntu/deploy/auto-drive/docker-compose.prod.yml stop
+Restart=on-failure
+RestartSec=30
 SyslogIdentifier=auto-drive-backend
 StandardOutput=append:/var/log/auto-drive-backend.log
 StandardError=append:/var/log/auto-drive-backend.log
 
-# Resource limits
-CPUQuota=90%
-MemoryMax=4G
+# NOTE: CPUQuota/MemoryMax were removed. On this Type=oneshot unit they would
+# only bound the short-lived `docker compose` CLI cgroup, not the containers
+# (which run under dockerd). Set real limits via `mem_limit` / `cpus` on the
+# services in docker-compose.prod.yml if needed.
 
 [Install]
 WantedBy=multi-user.target
