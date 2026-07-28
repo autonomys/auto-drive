@@ -58,6 +58,27 @@ export const config = {
   reconciliation: {
     intervalMs: Number(env('RECONCILIATION_INTERVAL_MS', '300000')), // 5 minutes
   },
+  publishing: {
+    // Backstop timeout for a single on-chain publishing task (publish-nodes /
+    // ensure-object-published) on the publish-manager worker. The per-transaction
+    // timeout in transactionManager is re-armed on every `isInBlock`, so a
+    // transaction that is perpetually re-included (the failure mode this worker
+    // isolates) never settles and its handler never returns — holding a prefetch
+    // slot indefinitely. This handler-level timeout aborts such a task so it
+    // retries with a fresh nonce, turning a permanent stall into a bounded retry
+    // (and eventually publish-errors) instead of a silent deadlock of the whole
+    // publish worker.
+    //
+    // It must sit comfortably ABOVE the legitimate worst case so it never fires
+    // for merely-slow batches: a batch is up to PUBLISH_BATCH_SIZE (50) remarks,
+    // drained through the shared pLimit(maxConcurrentUploads) across all in-flight
+    // tasks, each transaction taking ~confirmationDepth blocks (plus inclusion
+    // latency) to confirm. The 60-minute default clears a heavy multi-batch
+    // backlog with headroom; raise it if you raise confirmationDepth /
+    // transactionTimeoutMs or run under sustained congestion. The real cure is
+    // the confirmation-watch fix (separate PR); this is containment.
+    taskTimeoutMs: positiveIntEnv('PUBLISH_TASK_TIMEOUT_MS', 3600000),
+  },
   publishingRecovery: {
     intervalMs: Number(env('PUBLISHING_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
     maxObjectsPerCycle: Number(env('PUBLISHING_RECOVERY_MAX_PER_CYCLE', '5')),

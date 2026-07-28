@@ -3,6 +3,7 @@ import { NodesUseCases } from '../../../core/objects/nodes.js'
 import { Task } from '../tasks.js'
 import { createHandlerWithRetries } from '../utils.js'
 import { createLogger } from '../../drivers/logger.js'
+import { config } from '../../../config.js'
 
 const logger = createLogger('eventRouter:processor:publish')
 
@@ -16,6 +17,16 @@ export const publishErrorPublishedQueue = 'publish-errors'
 // and starving the fast frontend tasks (migrate-upload-nodes, archive-objects,
 // tag-upload, ...). They share this single worker so signing-account nonces
 // (tracked in-memory per process) never collide across processes.
+//
+// `ensure-object-published` has no active producer today (nothing enqueues it —
+// see tasks.ts / eventRouter routing); it is handled here defensively so that
+// if it is ever emitted it lands on the single signer rather than the fast lane.
+//
+// taskTimeoutMs is the backstop for the perpetual-re-inclusion deadlock: without
+// it a handler that never returns would pin a prefetch slot forever (see
+// config.publishing.taskTimeoutMs). On timeout the handler is aborted and the
+// task retries on publish-manager, so a permanent stall degrades to a bounded
+// retry instead of freezing this worker.
 export const processPublishTask = createHandlerWithRetries(
   ({ id, params }: Task) => {
     if (id === 'publish-nodes') {
@@ -32,5 +43,6 @@ export const processPublishTask = createHandlerWithRetries(
   },
   {
     errorPublishQueue: publishErrorPublishedQueue,
+    taskTimeoutMs: config.publishing.taskTimeoutMs,
   },
 )
