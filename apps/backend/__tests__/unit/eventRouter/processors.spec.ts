@@ -277,5 +277,60 @@ describe('EventRouter Processors', () => {
       await expect(processPublishTask(task)).resolves.toBeUndefined()
       expect(publishNodesSpy).not.toHaveBeenCalled()
     })
+
+    it('retries a failed publish task back onto publish-manager, never the fast lane', async () => {
+      jest
+        .spyOn(OnchainPublisher, 'publishNodes')
+        .mockRejectedValue(new Error('publish boom'))
+      const rabbitPublishSpy = jest
+        .spyOn(Rabbit, 'publish')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'publish-nodes',
+        params: { nodes: ['node1'] },
+        retriesLeft: 2,
+      }
+
+      await processPublishTask(task)
+
+      // The retry must stay on the isolated publish lane, decremented, and must
+      // never leak back to task-manager — keeping publishing failures out of the
+      // fast frontend lane is the whole point of the dedicated queue.
+      expect(rabbitPublishSpy).toHaveBeenCalledWith(
+        'publish-manager',
+        expect.objectContaining({ id: 'publish-nodes', retriesLeft: 1 }),
+      )
+      expect(rabbitPublishSpy).not.toHaveBeenCalledWith(
+        'task-manager',
+        expect.anything(),
+      )
+    })
+
+    it('routes an exhausted publish task to publish-errors, not the fast lane', async () => {
+      jest
+        .spyOn(OnchainPublisher, 'publishNodes')
+        .mockRejectedValue(new Error('publish boom'))
+      const rabbitPublishSpy = jest
+        .spyOn(Rabbit, 'publish')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'publish-nodes',
+        params: { nodes: ['node1'] },
+        retriesLeft: 0,
+      }
+
+      await processPublishTask(task)
+
+      expect(rabbitPublishSpy).toHaveBeenCalledWith(
+        'publish-errors',
+        expect.objectContaining({ id: 'publish-nodes' }),
+      )
+      expect(rabbitPublishSpy).not.toHaveBeenCalledWith(
+        'task-manager',
+        expect.anything(),
+      )
+    })
   })
 })

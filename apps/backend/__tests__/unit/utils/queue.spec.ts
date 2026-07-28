@@ -28,9 +28,11 @@ describe('isTaskQueueBusy', () => {
     await expect(isTaskQueueBusy('caller')).resolves.toBe(false)
   })
 
-  it('inspects the requested queue', async () => {
+  it('inspects the requested queue and returns false when below threshold', async () => {
     const spy = jest.spyOn(Rabbit, 'getMessageCount').mockResolvedValue(0)
-    await isTaskQueueBusy('caller', 'publish-manager', 100)
+    await expect(
+      isTaskQueueBusy('caller', 'publish-manager', 100),
+    ).resolves.toBe(false)
     expect(spy).toHaveBeenCalledWith('publish-manager')
   })
 
