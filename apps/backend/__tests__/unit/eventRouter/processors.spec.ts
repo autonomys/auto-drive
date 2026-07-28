@@ -244,7 +244,10 @@ describe('EventRouter Processors', () => {
 
       await processPublishTask(task)
 
-      expect(publishNodesSpy).toHaveBeenCalledWith(['node1', 'node2'])
+      expect(publishNodesSpy).toHaveBeenCalledWith(
+        ['node1', 'node2'],
+        expect.any(AbortSignal),
+      )
     })
 
     it('should handle ensure-object-published task', async () => {
@@ -260,7 +263,10 @@ describe('EventRouter Processors', () => {
 
       await processPublishTask(task)
 
-      expect(ensureObjectPublishedSpy).toHaveBeenCalledWith('cid789')
+      expect(ensureObjectPublishedSpy).toHaveBeenCalledWith(
+        'cid789',
+        expect.any(AbortSignal),
+      )
     })
 
     it('should resolve without publishing for an unknown task', async () => {

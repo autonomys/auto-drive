@@ -8,7 +8,7 @@ const logger = createLogger('upload:onchainPublisher')
 
 export const transactionManager = createTransactionManager()
 
-const publishNodes = async (cids: string[]) => {
+const publishNodes = async (cids: string[], signal?: AbortSignal) => {
   logger.info('Uploading %d nodes', cids.length)
 
   const nodes = await nodesRepository.getNodesByCids(cids)
@@ -55,7 +55,7 @@ const publishNodes = async (cids: string[]) => {
     }
   })
 
-  const results = await transactionManager.submit(transactions)
+  const results = await transactionManager.submit(transactions, signal)
   const someNodeFailed = results.some((result) => !result.success)
   if (someNodeFailed) {
     throw new Error('Failed to publish nodes')

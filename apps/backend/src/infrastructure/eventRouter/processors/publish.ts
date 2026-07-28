@@ -24,15 +24,17 @@ export const publishErrorPublishedQueue = 'publish-errors'
 //
 // taskTimeoutMs is the backstop for the perpetual-re-inclusion deadlock: without
 // it a handler that never returns would pin a prefetch slot forever (see
-// config.publishing.taskTimeoutMs). On timeout the handler is aborted and the
-// task retries on publish-manager, so a permanent stall degrades to a bounded
-// retry instead of freezing this worker.
+// config.publishing.taskTimeoutMs). On timeout createHandlerWithRetries aborts
+// the signal we forward into the publisher, which tears down the in-flight
+// signAndSend / confirmation-watch subscriptions before the task retries on
+// publish-manager — so a permanent stall degrades to a bounded retry without
+// leaking orphaned watches that would otherwise multiply across retries.
 export const processPublishTask = createHandlerWithRetries(
-  ({ id, params }: Task) => {
+  ({ id, params }: Task, signal: AbortSignal) => {
     if (id === 'publish-nodes') {
-      return OnchainPublisher.publishNodes(params.nodes)
+      return OnchainPublisher.publishNodes(params.nodes, signal)
     } else if (id === 'ensure-object-published') {
-      return NodesUseCases.ensureObjectPublished(params.cid)
+      return NodesUseCases.ensureObjectPublished(params.cid, signal)
     } else {
       logger.error(
         'Received task %s but no handler found (processors/publish.ts)',
