@@ -151,6 +151,19 @@ const migrateFromBlockstoreToNodesTable = async (
     return
   }
 
+  // Clear any nodes already written for this root before re-inserting. migrate
+  // is not idempotent on its own: nodes.cid has no unique constraint
+  // (nodes_pkey was dropped in 20250924123851), so a re-driven migration — the
+  // recovery sweep, a handler retry, or a redelivery after a worker restart —
+  // would re-INSERT and silently duplicate rows (which then fan out into
+  // duplicate publish work via getCidsByRootCid). Deleting by root_cid first
+  // makes each run produce a clean set. The per-upload guard in processMigration
+  // prevents a concurrent run from racing this delete+insert; deletion is scoped
+  // to this root_cid, so nodes shared with other objects are untouched, and only
+  // not-yet-published nodes are affected (a published object's upload row is
+  // already gone, so it is never re-driven).
+  await nodesRepository.removeNodeByRootCid(cidToString(rootCID))
+
   for (const upload of uploads) {
     const headCID = await getUploadCID(upload.id)
     const blockstore = await getUploadBlockstore(upload.id)

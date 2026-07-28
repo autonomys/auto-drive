@@ -553,18 +553,18 @@ const abortUpload = async (
   return ok()
 }
 
-// Serialises processMigration per upload_id within this process, skipping
-// (not queueing) a run whose upload is already migrating. A migrate-upload-nodes
-// task can be delivered more than once for the same upload — the recovery sweep
+// Serialises processMigration per upload_id within this process, skipping (not
+// queueing) a run whose upload is already migrating. A migrate-upload-nodes task
+// can be delivered more than once for the same upload — the recovery sweep
 // re-drives a still-MIGRATING row — and the task-manager consumer runs up to
-// RABBITMQ_PREFETCH handlers concurrently without serialising them, so a
-// re-drive can otherwise race an original that is still running. Two concurrent
-// runs would each INSERT the object's nodes, and nodes.cid has no unique
-// constraint (nodes_pkey was dropped in migration 20250924123851), so those
-// inserts don't collide — they silently duplicate rows. Skipping also avoids
-// re-running a migration that just finished. In-process only, like
-// withDrainLock: the migrate consumer (start:fe:worker) runs as a single
-// process, the same single-worker invariant on-chain publishing relies on.
+// RABBITMQ_PREFETCH handlers concurrently without serialising them. migrate
+// clears the root's nodes before re-inserting (see
+// migrateFromBlockstoreToNodesTable), which makes a sequential re-drive
+// idempotent; this guard covers the concurrent case, where two runs racing that
+// delete-then-insert could interleave and drop or duplicate rows (nodes.cid has
+// no unique constraint). In-process only, like withDrainLock: the migrate
+// consumer (start:fe:worker) runs as a single process, the same single-worker
+// invariant on-chain publishing relies on.
 const migrationsInFlight = new Set<string>()
 
 const processMigration = async (uploadId: string): Promise<void> => {

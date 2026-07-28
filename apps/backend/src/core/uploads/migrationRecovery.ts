@@ -21,12 +21,14 @@ let isRunning = false
  * been MIGRATING past the staleness window.
  *
  * Safety:
- * - The staleness window makes re-driving a healthy in-flight migration
- *   unlikely but does not prevent it: isTaskQueueBusy can't see an unacked
- *   in-flight migrate, and the consumer runs handlers concurrently. The actual
- *   guard is in processMigration, which skips per-upload while a migration for
- *   that upload is already running — so a concurrent re-drive is a no-op, not a
- *   duplicate INSERT (nodes.cid has no unique constraint).
+ * - Re-driving is safe even when it races or repeats a real migration. migrate
+ *   clears the root's nodes before re-inserting, so a sequential re-drive (after
+ *   a failed/partial run or a worker restart) is idempotent rather than
+ *   duplicating rows (nodes.cid has no unique constraint); and processMigration
+ *   skips per-upload while a migration for that upload is already running, so a
+ *   concurrent re-drive can't race the delete+insert. The staleness window just
+ *   makes re-drives of healthy in-flight migrations rare (isTaskQueueBusy can't
+ *   see an unacked in-flight migrate).
  * - Each re-drive stamps updated_at=now(), so a genuinely failing upload is
  *   retried at most once per window rather than every cycle.
  * - A successful migration deletes its upload rows (removeUploadArtifacts), so
