@@ -110,10 +110,25 @@ services:
   # is gone before this one begins. For a non-recreate/rolling or multi-host
   # deploy, stop the old frontend worker before this worker starts signing (or
   # roll out the new frontend workers first, then start this worker).
+  #
+  # This depends_on recreation only fires when BACKEND_IMAGE actually changes:
+  # the ansible deploy sets BACKEND_IMAGE from the new image_tag, which changes
+  # backend-worker's config hash and triggers stop-old/start-new. Ship this
+  # compose change WITH a new image tag — a compose-only redeploy on an unchanged
+  # BACKEND_IMAGE neither recreates backend-worker (so the sequencing is lost)
+  # nor finds dist/app/servers/publishWorker.js in the old image (so this worker
+  # crash-loops under restart: unless-stopped).
   backend-publish-worker:
     image: ${BACKEND_IMAGE}
     depends_on:
       - backend-worker
+    # Publish the worker's health endpoint (apis/worker.ts GET /health) like
+    # every other backend service. This is the SOLE on-chain publisher, and the
+    # deploy checklist asks operators to confirm exactly one is running, so it is
+    # the last process that should lose its probe. BACKEND_PUBLISH_WORKER_PORT
+    # must be set in the deploy env (Infisical) alongside BACKEND_WORKER_PORT.
+    ports:
+      - '${BACKEND_PUBLISH_WORKER_PORT}:3000'
     volumes:
       - files_cache:/usr/src/app/apps/backend/.cache
     restart: unless-stopped
@@ -121,6 +136,11 @@ services:
       - .env
     environment:
       - PORT=3000
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
+      interval: 15s
+      timeout: 10s
+      retries: 3
     profiles:
       - frontend
       - frontend-worker
