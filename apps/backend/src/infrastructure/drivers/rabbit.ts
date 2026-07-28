@@ -7,7 +7,7 @@ type SubscriptionCallback = (
   message: Record<string, unknown>,
 ) => Promise<unknown>
 
-type Queue = (typeof queues)[number]
+export type Queue = (typeof queues)[number]
 
 const logger = createLogger('drivers:rabbit')
 
@@ -125,7 +125,11 @@ const subscribe = async (
   }
 }
 
-const getMessageCount = async (queue: string): Promise<number> => {
+// Typed to the known `Queue` union rather than `string`: checkQueue against a
+// non-existent queue returns a 404 that tears down the shared channel (breaking
+// every concurrent publish/consume until keepAlive rebuilds it), so a typo'd
+// queue name must fail at compile time, not at runtime.
+const getMessageCount = async (queue: Queue): Promise<number> => {
   const channel = await getChannel()
   const result = await channel.checkQueue(queue)
   return result.messageCount

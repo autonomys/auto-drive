@@ -1,4 +1,4 @@
-import { Rabbit } from '../../infrastructure/drivers/rabbit.js'
+import { Rabbit, type Queue } from '../../infrastructure/drivers/rabbit.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('utils:queue')
@@ -19,7 +19,7 @@ const TASK_MANAGER_QUEUE = 'task-manager'
  */
 export const isTaskQueueBusy = async (
   callerLabel: string,
-  queue: string = TASK_MANAGER_QUEUE,
+  queue: Queue = TASK_MANAGER_QUEUE,
   threshold: number = 0,
 ): Promise<boolean> => {
   try {
