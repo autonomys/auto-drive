@@ -553,20 +553,46 @@ const abortUpload = async (
   return ok()
 }
 
+// Serialises processMigration per upload_id within this process, skipping
+// (not queueing) a run whose upload is already migrating. A migrate-upload-nodes
+// task can be delivered more than once for the same upload — the recovery sweep
+// re-drives a still-MIGRATING row — and the task-manager consumer runs up to
+// RABBITMQ_PREFETCH handlers concurrently without serialising them, so a
+// re-drive can otherwise race an original that is still running. Two concurrent
+// runs would each INSERT the object's nodes, and nodes.cid has no unique
+// constraint (nodes_pkey was dropped in migration 20250924123851), so those
+// inserts don't collide — they silently duplicate rows. Skipping also avoids
+// re-running a migration that just finished. In-process only, like
+// withDrainLock: the migrate consumer (start:fe:worker) runs as a single
+// process, the same single-worker invariant on-chain publishing relies on.
+const migrationsInFlight = new Set<string>()
+
 const processMigration = async (uploadId: string): Promise<void> => {
   logger.debug('processMigration invoked (uploadId=%s)', uploadId)
-  const upload = await uploadsRepository.getUploadEntryById(uploadId)
-  if (!upload) {
-    logger.error('Upload not found (uploadId=%s)', uploadId)
-    throw new Error('Upload not found')
+  if (migrationsInFlight.has(uploadId)) {
+    logger.warn(
+      'Migration already in progress for upload %s; skipping concurrent run',
+      uploadId,
+    )
+    return
   }
+  migrationsInFlight.add(uploadId)
+  try {
+    const upload = await uploadsRepository.getUploadEntryById(uploadId)
+    if (!upload) {
+      logger.error('Upload not found (uploadId=%s)', uploadId)
+      throw new Error('Upload not found')
+    }
 
-  const cid = await BlockstoreUseCases.getUploadCID(uploadId)
-  await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId)
+    const cid = await BlockstoreUseCases.getUploadCID(uploadId)
+    await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId)
 
-  await removeUploadArtifacts(uploadId)
-  await scheduleUploadTagging(cidToString(cid))
-  await scheduleCachePopulation(cidToString(cid))
+    await removeUploadArtifacts(uploadId)
+    await scheduleUploadTagging(cidToString(cid))
+    await scheduleCachePopulation(cidToString(cid))
+  } finally {
+    migrationsInFlight.delete(uploadId)
+  }
 }
 
 export const UploadsUseCases = {
