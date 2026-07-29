@@ -1,12 +1,14 @@
+# Use copytruncate: systemd holds this log open via its `append:` StandardOutput
+# fd, so a rename+create rotation would leave the service writing to the rotated
+# (now-invisible) inode. copytruncate keeps the same inode and needs no service
+# bounce. Do NOT re-add a `postrotate systemctl restart` hook here: it bounced
+# the whole stack daily and interrupted on-chain publishing (see issue #792).
 /var/log/auto-drive-backend.log {
     daily
     rotate 7
     compress
     missingok
     notifempty
-    create 0644 ubuntu ubuntu
+    copytruncate
     su ubuntu ubuntu
-    postrotate
-        systemctl restart auto-drive-backend.service > /dev/null 2>/dev/null || true
-    endscript
 }
