@@ -73,6 +73,27 @@ export const config = {
   reconciliation: {
     intervalMs: Number(env('RECONCILIATION_INTERVAL_MS', '300000')), // 5 minutes
   },
+  publishing: {
+    // Backstop timeout for a single on-chain publishing task (publish-nodes /
+    // ensure-object-published) on the publish-manager worker. The per-transaction
+    // timeout in transactionManager is re-armed on every `isInBlock`, so a
+    // transaction that is perpetually re-included (the failure mode this worker
+    // isolates) never settles and its handler never returns — holding a prefetch
+    // slot indefinitely. This handler-level timeout aborts such a task so it
+    // retries with a fresh nonce, turning a permanent stall into a bounded retry
+    // (and eventually publish-errors) instead of a silent deadlock of the whole
+    // publish worker.
+    //
+    // It must sit comfortably ABOVE the legitimate worst case so it never fires
+    // for merely-slow batches: a batch is up to PUBLISH_BATCH_SIZE (50) remarks,
+    // drained through the shared pLimit(maxConcurrentUploads) across all in-flight
+    // tasks, each transaction taking ~confirmationDepth blocks (plus inclusion
+    // latency) to confirm. The 60-minute default clears a heavy multi-batch
+    // backlog with headroom; raise it if you raise confirmationDepth /
+    // transactionTimeoutMs or run under sustained congestion. The real cure is
+    // the confirmation-watch fix (separate PR); this is containment.
+    taskTimeoutMs: positiveIntEnv('PUBLISH_TASK_TIMEOUT_MS', 3600000),
+  },
   publishingRecovery: {
     intervalMs: Number(env('PUBLISHING_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
     maxObjectsPerCycle: Number(env('PUBLISHING_RECOVERY_MAX_PER_CYCLE', '5')),
@@ -81,6 +102,26 @@ export const config = {
     // ≈ 1.7 hours — generous enough to not interfere with slow-but-active
     // publishing, while catching genuinely stalled objects.
     stalenessThresholdBlocks: Number(env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000')),
+    // Skip a recovery cycle when publish-manager already holds more than this
+    // many ready (not-yet-started) tasks. Recovery's output (publish-nodes)
+    // lands on publish-manager, so an unchecked recovery would keep piling
+    // duplicate publish tasks onto a saturated queue while confirmations are
+    // stalled, growing the backlog without bound. A threshold (not > 0) is
+    // deliberate: publish-manager legitimately holds a shallow backlog while
+    // batches await confirmation, and that must not suppress recovery.
+    publishManagerBacklogLimit: Number(env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100')),
+  },
+  migrationRecovery: {
+    intervalMs: Number(env('MIGRATION_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
+    maxUploadsPerCycle: Number(env('MIGRATION_RECOVERY_MAX_PER_CYCLE', '50')),
+    // An upload counts as "stuck" only after sitting in `migrating` longer
+    // than this window. It must comfortably exceed normal migrate processing
+    // time so an in-flight migration is never re-driven (processMigration is
+    // not concurrency-guarded). Each recovery attempt also stamps
+    // updated_at=now(), so this doubles as the per-upload retry interval — a
+    // genuinely failing upload is re-tried at most once per window rather than
+    // every cycle.
+    stalenessMs: Number(env('MIGRATION_RECOVERY_STALENESS_MS', '1800000')), // 30 minutes
   },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),

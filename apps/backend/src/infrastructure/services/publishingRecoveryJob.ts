@@ -10,7 +10,23 @@ const logger = createLogger('PublishingRecoveryJob')
 let publishingRecoveryInterval: NodeJS.Timeout | null = null
 
 const enqueuePublishingRecovery = async () => {
+  // Defer while the fast lane is busy (recover-publishing runs on task-manager).
   if (await isTaskQueueBusy('publishing recovery')) return
+
+  // Also defer when the publish lane is genuinely backed up. Recovery's output
+  // (publish-nodes) lands on publish-manager; without this it would keep piling
+  // duplicate publish tasks onto a saturated queue while confirmations are
+  // stalled, growing the backlog without bound. The threshold (not > 0) lets
+  // recovery still run during the shallow backlogs of normal confirmation waits.
+  if (
+    await isTaskQueueBusy(
+      'publishing recovery',
+      'publish-manager',
+      config.publishingRecovery.publishManagerBacklogLimit,
+    )
+  ) {
+    return
+  }
 
   logger.debug('Enqueuing recover-publishing task')
   EventRouter.publish(
