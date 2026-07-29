@@ -1,6 +1,7 @@
 import { NodesUseCases } from '../../../core/objects/nodes.js'
 import { ReconciliationUseCases } from '../../../core/objects/reconciliation.js'
 import { PublishingRecoveryUseCases } from '../../../core/objects/publishingRecovery.js'
+import { MigrationRecoveryUseCases } from '../../../core/uploads/migrationRecovery.js'
 import { UploadsUseCases } from '../../../core/uploads/uploads.js'
 import { Rabbit } from '../../drivers/rabbit.js'
 import { Task } from '../tasks.js'
@@ -40,6 +41,8 @@ export const processFrontendTask = createHandlerWithRetries(
       return ReconciliationUseCases.processReconciliation()
     } else if (id === 'recover-publishing') {
       return PublishingRecoveryUseCases.processPublishingRecovery()
+    } else if (id === 'recover-migrations') {
+      return MigrationRecoveryUseCases.processMigrationRecovery()
     } else {
       throw new Error(`Received task ${id} but no handler found.`)
     }
