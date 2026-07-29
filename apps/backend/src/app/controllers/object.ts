@@ -460,6 +460,29 @@ objectController.post(
 )
 
 objectController.post(
+  '/:cid/unban',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
+    const unbanResult = await handleInternalErrorResult(
+      ObjectUseCases.unbanObject(executor, cid),
+      'Failed to unban object',
+    )
+    if (unbanResult.isErr()) {
+      handleError(unbanResult.error, res)
+      return
+    }
+
+    res.sendStatus(204)
+  }),
+)
+
+objectController.post(
   '/:cid/report',
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
@@ -515,12 +538,17 @@ objectController.post(
 objectController.get(
   '/to-be-reviewed/list',
   asyncSafeHandler(async (req, res) => {
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
     const { limit, offset } = req.query
     const limitNumber = limit ? parseInt(limit as string) : 100
     const offsetNumber = offset ? parseInt(offset as string) : 0
 
-    const toBeReviewedList = await handleInternalError(
-      ObjectUseCases.getToBeReviewedList(limitNumber, offsetNumber),
+    const toBeReviewedList = await handleInternalErrorResult(
+      ObjectUseCases.getToBeReviewedList(executor, limitNumber, offsetNumber),
       'Failed to get to be reviewed list',
     )
     if (toBeReviewedList.isErr()) {

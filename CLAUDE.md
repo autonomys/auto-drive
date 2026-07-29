@@ -10,7 +10,7 @@ Auto Drive is a decentralized content-addressed storage platform built on the Au
 
 Yarn 4.2.2 monorepo with workspaces in `apps/`, `packages/`, and `submodules/`.
 
-- **apps/backend** — Express.js API server (ESM, TypeScript). Runs as multiple processes: frontend API, download API, frontend worker, download worker.
+- **apps/backend** — Express.js API server (ESM, TypeScript). Runs as multiple processes: frontend API, download API, frontend worker, download worker, publish worker (dedicated on-chain publisher).
 - **apps/frontend** — Next.js 14 web app (React 18, Tailwind CSS, Zustand, Apollo Client). Routes are under `src/app/[chain]/`.
 - **apps/auth** — Express.js auth microservice (JWT, OAuth via Google/Discord/GitHub, SIWE for Web3). Deployable as AWS Lambda.
 - **apps/hasura** — Hasura GraphQL engine config (migrations and metadata).
@@ -74,7 +74,8 @@ yarn landing dev           # Landing page dev server
 
 Backend can also be started as split processes:
 - `yarn backend start:fe:api` — Frontend API only
-- `yarn backend start:fe:worker` — Upload processing worker only
+- `yarn backend start:fe:worker` — Upload processing worker only (fast frontend tasks)
+- `yarn backend start:publish:worker` — On-chain publishing worker only (dedicated `publish-manager` consumer; must run as a single process)
 - `yarn backend start:download:api` — Download API only
 - `yarn backend start:download:worker` — Download worker only
 
@@ -160,7 +161,7 @@ PostgreSQL with `db-migrate` for migrations. Migration SQL files live in `apps/b
 
 ### Message Queue
 
-RabbitMQ queues: `task-manager`, `download-manager`, `frontend-errors`, `download-errors`. Tasks have a retry mechanism with `retriesLeft` counter.
+RabbitMQ queues: `task-manager`, `download-manager`, `publish-manager`, `frontend-errors`, `download-errors`, `publish-errors`. On-chain publishing (`publish-nodes`, `ensure-object-published`) is isolated on `publish-manager`, consumed only by the single publish worker. Tasks have a retry mechanism with `retriesLeft` counter; a failed task retries on its own queue and lands on the matching `*-errors` queue when retries are exhausted.
 
 ## Code Conventions
 

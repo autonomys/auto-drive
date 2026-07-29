@@ -1,3 +1,4 @@
+import { gzipSync, gunzipSync } from 'zlib'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   AbortMultipartUploadCommand,
@@ -5,11 +6,15 @@ import {
   CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
+  GetBucketVersioningCommand,
   GetObjectCommand,
+  GetObjectLockConfigurationCommand,
+  GetObjectRetentionCommand,
   HeadObjectCommand,
   ListBucketsCommand,
   ListMultipartUploadsCommand,
   ListObjectsV2Command,
+  ListObjectVersionsCommand,
   ListPartsCommand,
   PutObjectCommand,
   S3Client,
@@ -1088,6 +1093,547 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  // S3 stores object metadata (system headers + arbitrary x-amz-meta-*) once at
+  // write and returns it verbatim on GET/HEAD; CopyObject carries or replaces it
+  // per the metadata directive. See issue #786.
+  describe('Object metadata', () => {
+    it('returns the stored Content-Type byte-for-byte, with no injected charset', async () => {
+      const Key = 'metadata-test/verbatim.csv'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: Buffer.from('a,b,c\n1,2,3'),
+          ContentType: 'text/csv',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      // Previously came back as "text/csv; charset=utf-8" (Express appended the
+      // charset). It must now be exactly what was written.
+      expect(head.ContentType).toBe('text/csv')
+
+      const get = await s3Client.send(new GetObjectCommand({ Bucket, Key }))
+      expect(get.ContentType).toBe('text/csv')
+    })
+
+    it('preserves an explicit charset in the Content-Type', async () => {
+      const Key = 'metadata-test/charset.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: Buffer.from('hola'),
+          ContentType: 'text/plain; charset=iso-8859-1',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentType).toBe('text/plain; charset=iso-8859-1')
+    })
+
+    it('round-trips system metadata (Cache-Control, Content-Language, Content-Disposition)', async () => {
+      const Key = 'metadata-test/system.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: Buffer.from('sys'),
+          CacheControl: 'max-age=3600, public',
+          ContentLanguage: 'en-GB',
+          ContentDisposition: 'attachment; filename="report.txt"',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.CacheControl).toBe('max-age=3600, public')
+      expect(head.ContentLanguage).toBe('en-GB')
+      expect(head.ContentDisposition).toBe('attachment; filename="report.txt"')
+    })
+
+    it('round-trips arbitrary user metadata (x-amz-meta-*)', async () => {
+      const Key = 'metadata-test/user.txt'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: Buffer.from('user'),
+          Metadata: { author: 'alice', project: 'auto-drive' },
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.Metadata?.author).toBe('alice')
+      expect(head.Metadata?.project).toBe('auto-drive')
+    })
+
+    it('rejects user metadata over the 2 KB limit with MetadataTooLarge', async () => {
+      const Key = 'metadata-test/too-large.txt'
+      // 'big'(3) + 2100-byte value = 2103 bytes of user metadata, over the 2 KB
+      // S3 limit but well under Node's header budget (so the server, not Node,
+      // rejects it) — matching real S3, which returns 400 MetadataTooLarge.
+      let status: number | undefined
+      let code: string | undefined
+      try {
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket,
+            Key,
+            Body: Buffer.from('data'),
+            Metadata: { big: 'x'.repeat(2100) },
+          }),
+        )
+        throw new Error('expected the oversized-metadata PUT to be rejected')
+      } catch (e) {
+        const err = e as {
+          $metadata?: { httpStatusCode?: number }
+          name?: string
+        }
+        status = err.$metadata?.httpStatusCode
+        code = err.name
+      }
+      expect(status).toBe(400)
+      expect(code).toBe('MetadataTooLarge')
+
+      // The object must not have been created (rejected before the upload).
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key })),
+      ).rejects.toThrow()
+    })
+
+    it('stores the body verbatim under a client Content-Encoding and returns both unchanged', async () => {
+      const Key = 'metadata-test/encoding.txt'
+      // S3 stores object bytes byte-for-byte and treats Content-Encoding as
+      // opaque metadata — it never inflates the stored body. A client uploading
+      // gzipped bytes with Content-Encoding: gzip must therefore read those exact
+      // gzipped bytes back (NOT a server-inflated body), still labelled gzip.
+      // Auto Drive is not internally compressing this object, so it owns
+      // Content-Encoding on the response.
+      const gz = gzipSync(Buffer.from('encoded payload'))
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: gz,
+          ContentEncoding: 'gzip',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentEncoding).toBe('gzip')
+
+      const get = await s3Client.send(new GetObjectCommand({ Bucket, Key }))
+      expect(get.ContentEncoding).toBe('gzip')
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      // The stored bytes are the gzipped bytes, verbatim — not server-inflated —
+      // so they still match the advertised Content-Encoding and gunzip cleanly.
+      expect(body.equals(gz)).toBe(true)
+      expect(gunzipSync(body).toString()).toBe('encoded payload')
+    })
+
+    it('round-trips an arbitrary (non-inflatable) Content-Encoding without rejecting it', async () => {
+      const Key = 'metadata-test/encoding-opaque.bin'
+      // Encodings the body parser cannot inflate (br, zstd, …) must not be
+      // rejected with 415: S3 treats Content-Encoding opaquely. These bytes are
+      // deliberately not valid brotli — the server stores and returns them
+      // verbatim regardless.
+      const bytes = Buffer.from([0x00, 0x01, 0x02, 0xfe, 0xff])
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: bytes,
+          ContentEncoding: 'br',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentEncoding).toBe('br')
+
+      const get = await s3Client.send(new GetObjectCommand({ Bucket, Key }))
+      expect(get.ContentEncoding).toBe('br')
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      expect(body.equals(bytes)).toBe(true)
+    })
+
+    it('carries metadata through a plain (COPY-directive) server-side copy', async () => {
+      const Src = 'metadata-test/copy-src.csv'
+      const Dst = 'metadata-test/copy-dst.csv'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Src,
+          Body: Buffer.from('x'),
+          ContentType: 'text/csv',
+          CacheControl: 'max-age=60',
+          Metadata: { origin: 'src' },
+        }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({ Bucket, Key: Dst, CopySource: Src }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key: Dst }))
+      expect(head.ContentType).toBe('text/csv')
+      expect(head.CacheControl).toBe('max-age=60')
+      expect(head.Metadata?.origin).toBe('src')
+    })
+
+    it('replaces metadata on a REPLACE-directive copy', async () => {
+      const Src = 'metadata-test/replace-src.csv'
+      const Dst = 'metadata-test/replace-dst.json'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: Src,
+          Body: Buffer.from('x'),
+          ContentType: 'text/csv',
+          Metadata: { origin: 'src' },
+        }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket,
+          Key: Dst,
+          CopySource: Src,
+          MetadataDirective: 'REPLACE',
+          ContentType: 'application/json',
+          Metadata: { origin: 'dst' },
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key: Dst }))
+      expect(head.ContentType).toBe('application/json')
+      expect(head.Metadata?.origin).toBe('dst')
+    })
+
+    it('persists metadata supplied on CreateMultipartUpload', async () => {
+      const Key = 'metadata-test/multipart.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({
+          Bucket,
+          Key,
+          ContentType: 'application/x-custom',
+          CacheControl: 'no-store',
+          Metadata: { part: 'meta' },
+        }),
+      )
+      const uploadId = create.UploadId
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          PartNumber: 1,
+          Body: Buffer.from('multipart body bytes'),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag }] },
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentType).toBe('application/x-custom')
+      expect(head.CacheControl).toBe('no-store')
+      expect(head.Metadata?.part).toBe('meta')
+    })
+
+    it('round-trips a Content-Encoding set on CreateMultipartUpload (empty-body op)', async () => {
+      // Content-Encoding is pure metadata on the bodyless CreateMultipartUpload
+      // POST. Until neutralizeContentEncoding covered this op, 'br' 415'd (and
+      // 'gzip' 400'd) at the body parser — which inspects the encoding before it
+      // notices the empty body — before the handler could capture it.
+      const Key = 'metadata-test/multipart-encoding.bin'
+      const create = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key, ContentEncoding: 'br' }),
+      )
+      const uploadId = create.UploadId
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          PartNumber: 1,
+          Body: Buffer.from('multipart body bytes'),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag }] },
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentEncoding).toBe('br')
+    })
+
+    it('round-trips a Content-Encoding on a REPLACE-directive copy (empty-body op)', async () => {
+      // Same empty-body parser hazard: a REPLACE copy is a bodyless PUT carrying
+      // Content-Encoding as metadata.
+      const Src = 'metadata-test/copy-encoding-src.txt'
+      const Dst = 'metadata-test/copy-encoding-dst.txt'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: Src, Body: Buffer.from('x') }),
+      )
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket,
+          Key: Dst,
+          CopySource: Src,
+          MetadataDirective: 'REPLACE',
+          ContentEncoding: 'br',
+        }),
+      )
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: Dst }),
+      )
+      expect(head.ContentEncoding).toBe('br')
+    })
+  })
+
+  // Versioned-WORM (issue #781): versioning is always on, versionId = the
+  // content CID, DeleteObject writes a delete marker (hides the key, keeps
+  // history), and destroying a specific version is refused. Object Lock is
+  // advertised as an honest COMPLIANCE lock.
+  describe('Versioning and Object Lock (WORM)', () => {
+    // Bucket-level ops address the bucket via the URL (as ListObjectsV2 does);
+    // object ops use the shared endpoint Bucket + a versions-test/* key.
+    const VBucket = `${BASE_PATH}/s3/versions-test`
+
+    const putVersion = (key: string, body: string) =>
+      s3Client.send(
+        new PutObjectCommand({ Bucket, Key: key, Body: Buffer.from(body) }),
+      )
+
+    it('reports bucket versioning as Enabled', async () => {
+      const res = await s3Client.send(
+        new GetBucketVersioningCommand({ Bucket: VBucket }),
+      )
+      expect(res.Status).toBe('Enabled')
+    })
+
+    it('advertises an Enabled COMPLIANCE Object Lock configuration', async () => {
+      const res = await s3Client.send(
+        new GetObjectLockConfigurationCommand({ Bucket: VBucket }),
+      )
+      expect(res.ObjectLockConfiguration?.ObjectLockEnabled).toBe('Enabled')
+      expect(
+        res.ObjectLockConfiguration?.Rule?.DefaultRetention?.Mode,
+      ).toBe('COMPLIANCE')
+    })
+
+    it('reports a COMPLIANCE 100-year retention for an object', async () => {
+      const key = 'versions-test/retention.txt'
+      await putVersion(key, 'retained')
+      const res = await s3Client.send(
+        new GetObjectRetentionCommand({ Bucket, Key: key }),
+      )
+      expect(res.Retention?.Mode).toBe('COMPLIANCE')
+      // The 100-year COMPLIANCE window from the write (this run): effectively
+      // permanent, and consistent with the bucket's Years=100 default. Allow a
+      // one-year slack for the (unlikely) New-Year boundary between write & now.
+      const nowYear = new Date().getUTCFullYear()
+      const retainYear = res.Retention?.RetainUntilDate?.getUTCFullYear() ?? 0
+      expect(retainYear).toBeGreaterThanOrEqual(nowYear + 99)
+      expect(retainYear).toBeLessThanOrEqual(nowYear + 100)
+    })
+
+    it('returns the version id (= CID) on PutObject and stacks a new version per overwrite', async () => {
+      const key = 'versions-test/stack.txt'
+      const v1 = await putVersion(key, 'v1')
+      const v2 = await putVersion(key, 'v2-different')
+
+      expect(v1.VersionId).toBeTruthy()
+      expect(v2.VersionId).toBeTruthy()
+      // Distinct content ⇒ distinct CID ⇒ distinct versionId.
+      expect(v1.VersionId).not.toBe(v2.VersionId)
+
+      const list = await s3Client.send(
+        new ListObjectVersionsCommand({ Bucket: VBucket, Prefix: 'stack.txt' }),
+      )
+      const forKey = (list.Versions ?? []).filter((v) => v.Key === 'stack.txt')
+      expect(forKey.length).toBeGreaterThanOrEqual(2)
+      // The overwrite is the latest version.
+      const latest = forKey.find((v) => v.IsLatest)
+      expect(latest?.VersionId).toBe(v2.VersionId)
+      expect(list.DeleteMarkers ?? []).not.toContainEqual(
+        expect.objectContaining({ Key: 'stack.txt' }),
+      )
+    })
+
+    it('collapses repeated same-content writes into one version entry', async () => {
+      // versionId = CID: writing identical bytes twice yields the same versionId,
+      // so ListObjectVersions must show ONE entry for it, not a duplicate.
+      const key = 'versions-test/dedup.txt'
+      const a = await putVersion(key, 'identical-bytes')
+      const b = await putVersion(key, 'identical-bytes')
+      expect(a.VersionId).toBe(b.VersionId)
+
+      const list = await s3Client.send(
+        new ListObjectVersionsCommand({ Bucket: VBucket, Prefix: 'dedup.txt' }),
+      )
+      const forKey = (list.Versions ?? []).filter((v) => v.Key === 'dedup.txt')
+      expect(forKey).toHaveLength(1)
+      expect(forKey[0].VersionId).toBe(a.VersionId)
+      expect(forKey[0].IsLatest).toBe(true)
+    })
+
+    it('serves an older version by versionId', async () => {
+      const key = 'versions-test/read-old.txt'
+      const v1 = await putVersion(key, 'old-content')
+      await putVersion(key, 'new-content')
+
+      // Current read returns the newest content.
+      const current = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: key }),
+      )
+      expect(
+        Buffer.from(await current.Body!.transformToByteArray()).toString(),
+      ).toBe('new-content')
+
+      // Reading v1 by its CID returns the original bytes.
+      const old = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: key, VersionId: v1.VersionId }),
+      )
+      expect(
+        Buffer.from(await old.Body!.transformToByteArray()).toString(),
+      ).toBe('old-content')
+    })
+
+    it('refuses to destroy a specific version (403 AccessDenied)', async () => {
+      const key = 'versions-test/no-destroy.txt'
+      const v = await putVersion(key, 'immutable')
+
+      let status: number | undefined
+      let code: string | undefined
+      try {
+        await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
+        )
+        throw new Error('expected the versioned delete to be refused')
+      } catch (e) {
+        const err = e as {
+          $metadata?: { httpStatusCode?: number }
+          name?: string
+        }
+        status = err.$metadata?.httpStatusCode
+        code = err.name
+      }
+      expect(status).toBe(403)
+      expect(code).toBe('AccessDenied')
+
+      // The version is still readable — it was never destroyed.
+      const still = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
+      )
+      expect(
+        Buffer.from(await still.Body!.transformToByteArray()).toString(),
+      ).toBe('immutable')
+    })
+
+    it('a bare DeleteObject hides the key but keeps the history behind a delete marker', async () => {
+      const key = 'versions-test/marker.txt'
+      const v1 = await putVersion(key, 'oldest')
+      await putVersion(key, 'newest-then-deleted')
+
+      const del = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: key }),
+      )
+      // Soft-delete: succeeds (204-class), never destroys content.
+      expect(del.$metadata.httpStatusCode).toBe(204)
+      // Versioning-aware clients must see that a delete MARKER was written (not a
+      // destructive remove): x-amz-delete-marker + the marker's versionId.
+      expect(del.DeleteMarker).toBe(true)
+      expect(del.VersionId).toMatch(/^dm-\d+$/)
+
+      // The key is hidden from a normal read.
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: key })),
+      ).rejects.toThrow()
+
+      // ...but the version history survives, with a delete marker as latest and
+      // both content versions still listed.
+      const list = await s3Client.send(
+        new ListObjectVersionsCommand({ Bucket: VBucket, Prefix: 'marker.txt' }),
+      )
+      const versions = (list.Versions ?? []).filter((v) => v.Key === 'marker.txt')
+      expect(versions.length).toBeGreaterThanOrEqual(2)
+      const markers = (list.DeleteMarkers ?? []).filter(
+        (m) => m.Key === 'marker.txt',
+      )
+      expect(markers.length).toBe(1)
+      expect(markers[0].IsLatest).toBe(true)
+      // No content version is latest once the marker is on top.
+      expect(versions.every((v) => !v.IsLatest)).toBe(true)
+
+      // An older, non-current version is still retrievable by versionId despite
+      // the marker (the deleting delete only Trashed the current version's CID;
+      // moderation/removal applies per CID to retrieval, not to listing).
+      const old = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: key, VersionId: v1.VersionId }),
+      )
+      expect(
+        Buffer.from(await old.Body!.transformToByteArray()).toString(),
+      ).toBe('oldest')
+    })
+
+    it('a repeat DeleteObject on an already-deleted key still returns delete-marker headers', async () => {
+      const key = 'versions-test/repeat-delete.txt'
+      await putVersion(key, 'content')
+
+      const first = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: key }),
+      )
+      expect(first.DeleteMarker).toBe(true)
+      const firstVersionId = first.VersionId
+      expect(firstVersionId).toMatch(/^dm-\d+$/)
+
+      // Deleting again: no new marker is created, but the current state IS a
+      // delete marker, so the response must still say so (same marker id).
+      const second = await s3Client.send(
+        new DeleteObjectCommand({ Bucket, Key: key }),
+      )
+      expect(second.$metadata.httpStatusCode).toBe(204)
+      expect(second.DeleteMarker).toBe(true)
+      expect(second.VersionId).toBe(firstVersionId)
+    })
+
+    it('a moderated/removed version’s CID is not retrievable via versionId', async () => {
+      // DeleteObject on the sole key moves that content to the web-app Trash
+      // (owner-removal), so retrieval of that exact version is blocked even
+      // though the version is retained and still listed.
+      const key = 'versions-test/removed.txt'
+      const v = await putVersion(key, 'gone-on-delete')
+      await s3Client.send(new DeleteObjectCommand({ Bucket, Key: key }))
+
+      await expect(
+        s3Client.send(
+          new GetObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
+        ),
+      ).rejects.toThrow()
+
+      // Retention ≠ retrieval: the version is still enumerated in the history.
+      const list = await s3Client.send(
+        new ListObjectVersionsCommand({
+          Bucket: VBucket,
+          Prefix: 'removed.txt',
+        }),
+      )
+      expect(
+        (list.Versions ?? []).some((ver) => ver.VersionId === v.VersionId),
+      ).toBe(true)
+    })
+  })
+
   describe('Missing keys', () => {
     const MissingKey = 'this-key-was-never-uploaded-' + Date.now() + '.txt'
 
@@ -1239,6 +1785,34 @@ describe('AWS S3 - SDK', () => {
       expect(res.status).toBe(200)
       const got = Buffer.from(await res.arrayBuffer())
       expect(got).toEqual(CliBody)
+    }, 15_000)
+
+    it('ignores a forged internal content-encoding stash header', async () => {
+      // The server stashes a real Content-Encoding on a request-scoped side
+      // channel (not on req.headers), so no header is a trusted internal channel.
+      // A client sending this made-up header directly must be ignored — it is
+      // just an unknown header, never persisted or re-emitted as the object's
+      // Content-Encoding (which would advertise an encoding untied to the bytes).
+      const key = '/cli-test/forged-encoding.txt'
+      const put = await fetch(`${S3_BASE}${key}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: AUTH,
+          'x-autonomys-stashed-content-encoding': 'gzip',
+        },
+        body: Buffer.from('plain bytes') as unknown as BodyInit,
+      })
+      expect(put.status).toBe(200)
+
+      const get = await fetch(`${S3_BASE}${key}`, {
+        method: 'GET',
+        headers: { Authorization: AUTH },
+      })
+      expect(get.status).toBe(200)
+      expect(get.headers.get('content-encoding')).toBeNull()
+      expect(Buffer.from(await get.arrayBuffer())).toEqual(
+        Buffer.from('plain bytes'),
+      )
     }, 15_000)
 
     it('multipart upload via raw requests round-trips (the original 500)', async () => {

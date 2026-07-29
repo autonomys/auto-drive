@@ -2,6 +2,10 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { NodesUseCases } from '../../../src/core/objects/nodes.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
+import {
+  uploadsRepository,
+  type UploadEntry,
+} from '../../../src/infrastructure/repositories/uploads/uploads.js'
 
 describe('UploadsUseCases.scheduleNodesPublish', () => {
   beforeEach(() => {
@@ -96,5 +100,44 @@ describe('UploadsUseCases.scheduleNodesPublish', () => {
     await UploadsUseCases.scheduleNodesPublish('my-root-cid')
 
     expect(getCidsSpy).toHaveBeenCalledWith('my-root-cid')
+  })
+})
+
+describe('UploadsUseCases.processMigration', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('skips a concurrent migration for an upload already being migrated', async () => {
+    // Block the first run at the upload lookup so it stays in flight, holding
+    // the per-upload guard, while we fire a second run for the same upload.
+    // getUploadEntryById is called synchronously before the first await, so by
+    // the time the second call runs, the upload is already marked in flight.
+    let resolveLookup: (value: UploadEntry | null) => void = () => {}
+    const lookupGate = new Promise<UploadEntry | null>((resolve) => {
+      resolveLookup = resolve
+    })
+    const getSpy = jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockReturnValue(lookupGate)
+
+    const first = UploadsUseCases.processMigration('upload-1')
+    // Second run for the same upload must short-circuit before touching the repo.
+    await UploadsUseCases.processMigration('upload-1')
+    expect(getSpy).toHaveBeenCalledTimes(1)
+
+    // Let the first run finish; an unknown upload throws, releasing the guard.
+    resolveLookup(null)
+    await expect(first).rejects.toThrow('Upload not found')
+
+    // Guard released — a later run for the same upload proceeds again.
+    await expect(UploadsUseCases.processMigration('upload-1')).rejects.toThrow(
+      'Upload not found',
+    )
+    expect(getSpy).toHaveBeenCalledTimes(2)
   })
 })

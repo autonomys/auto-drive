@@ -7,6 +7,10 @@ import {
   frontendErrorPublishedQueue,
   processFrontendTask,
 } from './processors/frontend.js'
+import {
+  processPublishTask,
+  publishErrorPublishedQueue,
+} from './processors/publish.js'
 import { Task } from './tasks.js'
 
 export const EventRouter = {
@@ -15,6 +19,9 @@ export const EventRouter = {
   },
   listenDownloadEvents: () => {
     Rabbit.subscribe('download-manager', processDownloadTask)
+  },
+  listenPublishEvents: () => {
+    Rabbit.subscribe('publish-manager', processPublishTask)
   },
   publish: (tasks: Task[] | Task) => {
     if (Array.isArray(tasks)) {
@@ -36,6 +43,14 @@ const getTargetQueueByTask = (task: Task) => {
     case 'object-archived':
     case 'populate-cache':
       return 'download-manager'
+    // On-chain publishing blocks for the confirmation-depth window per batch;
+    // route it to a dedicated queue/worker so those waits never hold up the
+    // fast frontend tasks on task-manager. publish-nodes and
+    // ensure-object-published both sign via the publisher, so they must share
+    // the single publish worker (signing-account nonces are per-process).
+    case 'publish-nodes':
+    case 'ensure-object-published':
+      return 'publish-manager'
     default:
       return 'task-manager'
   }
@@ -47,6 +62,8 @@ const getFailedTaskQueue = (task: Task) => {
       return frontendErrorPublishedQueue
     case 'download-manager':
       return downloadErrorPublishedQueue
+    case 'publish-manager':
+      return publishErrorPublishedQueue
     default:
       throw new Error(`Unknown task: ${task.id}`)
   }

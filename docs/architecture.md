@@ -232,34 +232,49 @@ flowchart LR
     subgraph Queues["RabbitMQ Queues"]
         TM["task-manager"]
         DM["download-manager"]
+        PM["publish-manager"]
         FE["frontend-errors"]
         DE["download-errors"]
+        PE["publish-errors"]
     end
 
     subgraph Consumers
         FW["Frontend Worker"]
         DW["Download Worker"]
+        PW["Publish Worker"]
     end
 
     Backend --> TM
     Backend --> DM
+    Backend --> PM
     TM --> FW
     DM --> DW
+    PM --> PW
     FW -->|"retries exhausted"| FE
     DW -->|"retries exhausted"| DE
+    PW -->|"retries exhausted"| PE
     FW -->|"retry"| TM
     DW -->|"retry"| DM
+    PW -->|"retry"| PM
 ```
+
+> On-chain publishing (`publish-nodes`, `ensure-object-published`) runs on its
+> own `publish-manager` queue and a dedicated **Publish Worker** so its long
+> confirmation waits (~2.5–5 min per batch) never hold `task-manager` slots and
+> starve the fast frontend tasks. Publishing must run in exactly one process —
+> signing-account nonces are tracked in-memory per process — so this worker is a
+> single replica and the frontend worker forwards any publish task it receives to
+> `publish-manager` rather than signing it.
 
 #### Task Types
 
 | Task ID                   | Queue            | Description                     |
 | ------------------------- | ---------------- | ------------------------------- |
 | `migrate-upload-nodes`    | task-manager     | Move upload data to nodes table |
-| `publish-nodes`           | task-manager     | Publish IPLD nodes on-chain     |
+| `publish-nodes`           | publish-manager  | Publish IPLD nodes on-chain     |
 | `tag-upload`              | task-manager     | Add security tags to uploads    |
 | `archive-objects`         | task-manager     | Mark objects as archived        |
-| `ensure-object-published` | task-manager     | Verify on-chain publication     |
+| `ensure-object-published` | publish-manager  | Verify on-chain publication     |
 | `watch-intent-tx`         | task-manager     | Monitor payment transactions    |
 | `async-download-created`  | download-manager | Prepare async download          |
 | `object-archived`         | download-manager | Handle post-archival tasks      |
@@ -270,8 +285,17 @@ flowchart LR
 Each task includes a `retriesLeft` counter (configured via `TASK_MANAGER_MAX_RETRIES`):
 
 1. **On success**: Message is acknowledged and removed from queue
-2. **On failure with retries remaining**: Task is re-published with decremented `retriesLeft`
-3. **On failure with no retries**: Task is moved to the error queue (`frontend-errors` or `download-errors`)
+2. **On failure with retries remaining**: Task is re-published with decremented `retriesLeft` (onto its own queue — a failed `publish-manager` task retries on `publish-manager`, never the fast lane)
+3. **On failure with no retries**: Task is moved to the matching error queue (`frontend-errors`, `download-errors`, or `publish-errors`)
+
+> **Error queues are terminal.** `frontend-errors`, `download-errors`, and
+> `publish-errors` have no consumer — they hold tasks that exhausted their
+> retries for manual inspection. `publish-errors` is the terminal destination
+> for on-chain publishing failures (the publish worker is the sole signer), so
+> its depth should be monitored/alerted: a rising `publish-errors` means
+> publishing is failing even after retries. The publish handler also carries a
+> generous per-task timeout (`PUBLISH_TASK_TIMEOUT_MS`) so a transaction that
+> never confirms degrades to a bounded retry instead of pinning a worker slot.
 
 ```typescript
 // Task structure
@@ -301,8 +325,9 @@ apps/backend/src/infrastructure/
     ├── tasks.ts            # Task schemas (Zod validation)
     ├── utils.ts            # Retry wrapper with error handling
     └── processors/
-        ├── frontend.ts     # Upload/publish task handlers
-        └── download.ts     # Download/cache task handlers
+        ├── frontend.ts     # Fast upload task handlers (forwards publish tasks)
+        ├── download.ts     # Download/cache task handlers
+        └── publish.ts      # On-chain publishing (dedicated publish worker)
 ```
 
 ---

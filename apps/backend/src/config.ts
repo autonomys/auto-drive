@@ -45,6 +45,21 @@ export const config = {
     // 5-minute default leaves room for inclusion latency. Raise this if you
     // increase confirmationDepth or run under sustained heavy load.
     transactionTimeoutMs: positiveIntEnv('CHAIN_TRANSACTION_TIMEOUT_MS', 300000),
+    // Safety-net cadence for the confirmation watch. Confirmation is normally
+    // driven by a new-heads subscription, but a WebSocket reconnect can leave
+    // that subscription silently dead while the chain keeps advancing — so
+    // `head >= inclusion + confirmationDepth` is never observed and the tx
+    // hangs until transactionTimeoutMs, is retried with the same nonce,
+    // re-included, and stalls again. In addition to the subscription, the head
+    // is polled on this interval and the same confirmation check is run, so
+    // confirmation still completes when the subscription stops delivering.
+    // Roughly one block time keeps the degraded path about as timely as the
+    // healthy one; the cost is one `getHeader` per in-flight tx per interval.
+    // Falls back to 6000ms for missing/invalid values so the poll never stalls.
+    confirmationPollIntervalMs: positiveIntEnv(
+      'CHAIN_CONFIRMATION_POLL_INTERVAL_MS',
+      6000,
+    ),
   },
   memoryDownloadCache: {
     maxCacheSize: Number(
@@ -58,6 +73,27 @@ export const config = {
   reconciliation: {
     intervalMs: Number(env('RECONCILIATION_INTERVAL_MS', '300000')), // 5 minutes
   },
+  publishing: {
+    // Backstop timeout for a single on-chain publishing task (publish-nodes /
+    // ensure-object-published) on the publish-manager worker. The per-transaction
+    // timeout in transactionManager is re-armed on every `isInBlock`, so a
+    // transaction that is perpetually re-included (the failure mode this worker
+    // isolates) never settles and its handler never returns — holding a prefetch
+    // slot indefinitely. This handler-level timeout aborts such a task so it
+    // retries with a fresh nonce, turning a permanent stall into a bounded retry
+    // (and eventually publish-errors) instead of a silent deadlock of the whole
+    // publish worker.
+    //
+    // It must sit comfortably ABOVE the legitimate worst case so it never fires
+    // for merely-slow batches: a batch is up to PUBLISH_BATCH_SIZE (50) remarks,
+    // drained through the shared pLimit(maxConcurrentUploads) across all in-flight
+    // tasks, each transaction taking ~confirmationDepth blocks (plus inclusion
+    // latency) to confirm. The 60-minute default clears a heavy multi-batch
+    // backlog with headroom; raise it if you raise confirmationDepth /
+    // transactionTimeoutMs or run under sustained congestion. The real cure is
+    // the confirmation-watch fix (separate PR); this is containment.
+    taskTimeoutMs: positiveIntEnv('PUBLISH_TASK_TIMEOUT_MS', 3600000),
+  },
   publishingRecovery: {
     intervalMs: Number(env('PUBLISHING_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
     maxObjectsPerCycle: Number(env('PUBLISHING_RECOVERY_MAX_PER_CYCLE', '5')),
@@ -66,6 +102,26 @@ export const config = {
     // ≈ 1.7 hours — generous enough to not interfere with slow-but-active
     // publishing, while catching genuinely stalled objects.
     stalenessThresholdBlocks: Number(env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000')),
+    // Skip a recovery cycle when publish-manager already holds more than this
+    // many ready (not-yet-started) tasks. Recovery's output (publish-nodes)
+    // lands on publish-manager, so an unchecked recovery would keep piling
+    // duplicate publish tasks onto a saturated queue while confirmations are
+    // stalled, growing the backlog without bound. A threshold (not > 0) is
+    // deliberate: publish-manager legitimately holds a shallow backlog while
+    // batches await confirmation, and that must not suppress recovery.
+    publishManagerBacklogLimit: Number(env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100')),
+  },
+  migrationRecovery: {
+    intervalMs: Number(env('MIGRATION_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
+    maxUploadsPerCycle: Number(env('MIGRATION_RECOVERY_MAX_PER_CYCLE', '50')),
+    // An upload counts as "stuck" only after sitting in `migrating` longer
+    // than this window. It must comfortably exceed normal migrate processing
+    // time so an in-flight migration is never re-driven (processMigration is
+    // not concurrency-guarded). Each recovery attempt also stamps
+    // updated_at=now(), so this doubles as the per-upload retry interval — a
+    // genuinely failing upload is re-tried at most once per window rather than
+    // every cycle.
+    stalenessMs: Number(env('MIGRATION_RECOVERY_STALENESS_MS', '1800000')), // 30 minutes
   },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
@@ -105,6 +161,25 @@ export const config = {
     checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
     priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
+  priceOracle: {
+    // AI3/USD price oracle (CoinGecko). See infrastructure/services/priceOracle.
+    // How long a freshly fetched price is served from memory before a refresh.
+    cacheTtlMs: positiveIntEnv('ORACLE_CACHE_TTL_MS', 60000),
+    // Longest a last-good price may be served as a fallback while CoinGecko is
+    // unavailable. Default: 10 minutes.
+    maxStaleMs: positiveIntEnv('ORACLE_MAX_STALE_MS', 600000),
+    // CoinGecko HTTP timeout.
+    fetchTimeoutMs: positiveIntEnv('ORACLE_FETCH_TIMEOUT_MS', 5000),
+    // Drop the quote if CoinGecko's own reported update time is older than this.
+    // Default: 5 minutes.
+    maxSourceAgeMs: positiveIntEnv('ORACLE_MAX_SOURCE_AGE_MS', 300000),
+    // Sanity bounds (USD per AI3) as plain decimals — kept as raw strings and
+    // parsed to the 1e18 scale in the priceOracle module (parsing the string
+    // directly avoids Number.toString() exponential notation for small values).
+    // A price outside [min, max] is treated as a glitch and dropped.
+    minUsdPerAi3: env('ORACLE_MIN_USD_PER_AI3', '0.0001'),
+    maxUsdPerAi3: env('ORACLE_MAX_USD_PER_AI3', '100'),
+  },
   credits: {
     // How many days a purchased credit row remains valid before expiring.
     // Free-tier and one-off allocation credits are unaffected — they live on
@@ -120,6 +195,11 @@ export const config = {
     // After this window the intent is treated as expired and all operations on
     // it are rejected.  Default: 10 minutes.
     intentExpiryMinutes: Number(env('INTENT_EXPIRY_MINUTES', '10')),
+    // Margin (in percent) added on top of the raw oracle-derived USD cost when
+    // quoting a USDC payment. The stored usdRateAtCreation stays the raw market
+    // rate; only the amount the user pays includes this margin. Applied in
+    // createIntent (USDC path). Default: 5 (%).
+    usdQuoteMarginPercent: Number(env('USD_QUOTE_MARGIN', '5')),
   },
   deletion: {
     gracePeriodDays: Number(env('DELETION_GRACE_PERIOD_DAYS', '30')),

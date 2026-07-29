@@ -9,6 +9,7 @@ import {
   MegaphoneIcon,
   FileTextIcon,
   UserXIcon,
+  FlagIcon,
 } from 'lucide-react';
 import { NetworkId, ROUTES } from '@auto-drive/ui';
 import { SidebarSection } from './SideNavBarContent';
@@ -90,6 +91,12 @@ export const SIDEBAR_DEFINITION: SidebarSection[] = [
         href: (networkId: NetworkId) => ROUTES.adminDeletions(networkId),
         icon: UserXIcon,
         label: 'Deletions',
+        requiresSession: true,
+      },
+      {
+        href: (networkId: NetworkId) => ROUTES.adminReported(networkId),
+        icon: FlagIcon,
+        label: 'Reported Files',
         requiresSession: true,
       },
     ],

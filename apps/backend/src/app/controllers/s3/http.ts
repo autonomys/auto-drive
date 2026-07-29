@@ -1,4 +1,4 @@
-import { raw, Router, Request, Response } from 'express'
+import { raw, Router, Request, Response, NextFunction } from 'express'
 import { asyncSafeHandler } from '../../../shared/utils/express.js'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import {
@@ -7,6 +7,8 @@ import {
   copyObjectHandler,
   createMultipartUploadHandler,
   deleteObjectHandler,
+  deleteObjectVersionHandler,
+  getBucketVersioningHandler,
   getObjectHandler,
   getObjectLegalHoldHandler,
   getObjectLockConfigurationHandler,
@@ -14,9 +16,11 @@ import {
   headObjectHandler,
   listBucketsHandler,
   listObjectsV2Handler,
+  listObjectVersionsHandler,
   notImplementedHandler,
   putObjectHandler,
   uploadPartHandler,
+  stashContentEncoding,
 } from './s3.js'
 
 const s3Controller = Router()
@@ -53,12 +57,18 @@ const S3HandlerConfig: S3HandlerConfig = {
   UploadPart: uploadPartHandler,
   CompleteMultipartUpload: completeMultipartUploadHandler,
   DeleteObject: deleteObjectHandler,
+  // DeleteObject?versionId → 403: a version can never be destroyed (WORM).
+  DeleteObjectVersion: deleteObjectVersionHandler,
   CopyObject: copyObjectHandler,
   AbortMultipartUpload: abortMultipartUploadHandler,
   ListBuckets: listBucketsHandler,
   ListObjectsV2: listObjectsV2Handler,
-  // Object Lock — read-only declarative contract. The underlying DSN data is
-  // permanent even though the S3 namespace supports soft-delete/rename.
+  // Versioning is always on (versionId = CID). GetBucketVersioning reports
+  // Enabled; ListObjectVersions enumerates the append-only history.
+  GetBucketVersioning: getBucketVersioningHandler,
+  ListObjectVersions: listObjectVersionsHandler,
+  // Object Lock — read-only declarative contract, now an honest COMPLIANCE/WORM
+  // lock: the underlying DSN data is permanent and versions are indestructible.
   GetObjectLockConfiguration: getObjectLockConfigurationHandler,
   GetObjectRetention: getObjectRetentionHandler,
   GetObjectLegalHold: getObjectLegalHoldHandler,
@@ -73,6 +83,8 @@ const S3HandlerConfig: S3HandlerConfig = {
   PutObjectLockConfiguration: notImplementedHandler,
   PutObjectRetention: notImplementedHandler,
   PutObjectLegalHold: notImplementedHandler,
+  // Versioning is always on and cannot be toggled off — 501.
+  PutBucketVersioning: notImplementedHandler,
 }
 
 // Match on method first: the same query param (?uploadId, ?uploads) selects a
@@ -85,6 +97,8 @@ export const getS3Method = (req: Request): string => {
     case 'GET':
       if ('uploadId' in q) return 'ListParts'
       if ('uploads' in q) return 'ListMultipartUploads'
+      if ('versioning' in q) return 'GetBucketVersioning'
+      if ('versions' in q) return 'ListObjectVersions'
       if ('object-lock' in q) return 'GetObjectLockConfiguration'
       if ('retention' in q) return 'GetObjectRetention'
       if ('legal-hold' in q) return 'GetObjectLegalHold'
@@ -101,6 +115,10 @@ export const getS3Method = (req: Request): string => {
         if (isCopy) return 'UploadPartCopy'
         return 'UploadPart'
       }
+      // Versioning is always on and not client-configurable; route an attempted
+      // toggle to 501 rather than letting it fall through to PutObject (which
+      // would store the config XML as an object under the bucket key).
+      if ('versioning' in q) return 'PutBucketVersioning'
       if ('object-lock' in q) return 'PutObjectLockConfiguration'
       if ('retention' in q) return 'PutObjectRetention'
       if ('legal-hold' in q) return 'PutObjectLegalHold'
@@ -112,10 +130,60 @@ export const getS3Method = (req: Request): string => {
       return 'PostObject'
     case 'DELETE':
       if ('uploadId' in q) return 'AbortMultipartUpload'
+      // A versioned delete targets a specific version — refused (WORM).
+      if ('versionId' in q) return 'DeleteObjectVersion'
       return 'DeleteObject'
     default:
       return 'Unknown'
   }
+}
+
+// The S3 write ops that may carry a client Content-Encoding the body parser must
+// not see. Two reasons, handled identically:
+//  - PutObject / UploadPart: the request body IS the stored object, so it must be
+//    kept byte-for-byte — S3 never inflates a stored body; Content-Encoding is
+//    opaque metadata. Left alone, Express gunzips gzip/deflate bodies (stored
+//    bytes then wouldn't match the declared encoding) or 415s unknown encodings
+//    (br, zstd) before they can be stored.
+//  - CreateMultipartUpload / CopyObject: no stored body, but Content-Encoding
+//    rides along as pure metadata on an empty body the parser still inspects.
+//    body-parser checks the encoding before it notices the body is empty
+//    (Content-Length: 0 counts as "has body"), so 'br' → 415 and 'gzip' → 400
+//    (gunzip on empty input) before the handler could read it as metadata.
+// For all of them, neutralizeContentEncoding moves the header onto a
+// request-scoped stash that getObjectMetadata reads back.
+const CONTENT_ENCODING_WRITE_OPS = new Set([
+  'PutObject',
+  'UploadPart',
+  'CreateMultipartUpload',
+  'CopyObject',
+])
+
+// Move a client-declared Content-Encoding out of the way of the body parser for
+// those ops (see above), preserving it under a request-scoped stash for metadata
+// capture; GetObject/HeadObject re-emit it. aws-chunked is AWS transfer framing,
+// not object content: leave it in place so the parser's existing handling stands
+// rather than storing the framing bytes as data.
+const neutralizeContentEncoding = (
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+) => {
+  const encoding = req.headers['content-encoding']
+  if (
+    typeof encoding === 'string' &&
+    encoding.toLowerCase() !== 'identity' &&
+    !encoding.toLowerCase().includes('aws-chunked') &&
+    CONTENT_ENCODING_WRITE_OPS.has(getS3Method(req))
+  ) {
+    // Stash on a request-scoped side channel (not a header) so it round-trips as
+    // metadata without being forgeable over the wire, then hide the real header
+    // from the parser (which would otherwise inflate a stored body, or 415/400 on
+    // an empty one).
+    stashContentEncoding(req, encoding)
+    delete req.headers['content-encoding']
+  }
+  next()
 }
 
 s3Controller.get(
@@ -131,6 +199,10 @@ s3Controller.get(
 
 s3Controller.use(
   '/:key(*)',
+  // Runs before the parser: moves a client Content-Encoding aside for the write
+  // ops that carry it, so the parser neither inflates a stored body nor 415/400s
+  // on an empty one (see above).
+  neutralizeContentEncoding,
   // S3 object bodies are opaque binary payloads. Always read the request body
   // as raw bytes regardless of (or the absence of) a Content-Type header.
   // `type: '*/*'` is insufficient: type-is returns false when no Content-Type

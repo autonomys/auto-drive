@@ -1,0 +1,48 @@
+query ReportedFilesHistory($limit: Int!, $offset: Int!) {
+  # Files that have already been dismissed or banned. Reported-but-pending
+  # files are fetched separately (FilesToBeReviewedQuery) so a large history
+  # can never crowd pending items out of the shared row budget — each list
+  # is paginated independently (see ReportedFiles/index.tsx "Load more").
+  metadata(
+    where: {
+      _and: [
+        { tags: { _contains: ["reported"] } }
+        {
+          _or: [
+            { tags: { _contains: ["banned"] } }
+            { tags: { _contains: ["report-dismissed"] } }
+          ]
+        }
+      ]
+    }
+    distinct_on: [head_cid]
+    limit: $limit
+    offset: $offset
+    order_by: [{ head_cid: asc }, { created_at: desc }]
+  ) {
+    headCid: head_cid
+    tags
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    createdAt: created_at
+  }
+  metadata_aggregate(
+    where: {
+      _and: [
+        { tags: { _contains: ["reported"] } }
+        {
+          _or: [
+            { tags: { _contains: ["banned"] } }
+            { tags: { _contains: ["report-dismissed"] } }
+          ]
+        }
+      ]
+    }
+  ) {
+    aggregate {
+      count(columns: head_cid, distinct: true)
+    }
+  }
+}

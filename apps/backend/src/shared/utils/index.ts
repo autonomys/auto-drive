@@ -4,3 +4,4 @@ export {
   sliceReadable,
 } from './readable.js'
 export { withTimeout, TimeoutError } from './timeout.js'
+export { applyMarginPercent } from './pricing.js'

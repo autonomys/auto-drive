@@ -27,6 +27,17 @@
   let somethingActive = false
   if (config.featureFlags.flags.taskManager.active) {
     EventRouter.listenFrontendEvents()
+
+    // Re-drive uploads stranded in `migrating` when their one-shot
+    // migrate-upload-nodes task was lost or exhausted its retries. This needs
+    // only the task-manager consumer (which processes both recover-migrations
+    // and the migrate tasks it re-enqueues), so unlike the archival/publishing
+    // recovery jobs below it is not gated on the object mapping archiver.
+    const { migrationRecoveryJob } = await import(
+      '../../infrastructure/services/migrationRecoveryJob.js'
+    )
+    migrationRecoveryJob.start()
+
     somethingActive = true
   }
   if (config.featureFlags.flags.objectMappingArchiver.active) {
@@ -89,6 +100,12 @@
         '../../infrastructure/services/publishingRecoveryJob.js'
       )
       publishingRecoveryJob.stop()
+    }
+    if (config.featureFlags.flags.taskManager.active) {
+      const { migrationRecoveryJob } = await import(
+        '../../infrastructure/services/migrationRecoveryJob.js'
+      )
+      migrationRecoveryJob.stop()
     }
     paymentManager.stop()
     const { creditExpiryJob } = await import(

@@ -33,14 +33,30 @@ const logger = createLogger('upload:transactionManager')
  * was reorged out, we resolve `success: false` so the node re-enters the
  * publishing pipeline instead of being silently lost.
  */
-const submitTransaction = (
+// Exported for unit testing of the confirmation watch (subscription + poll
+// fallback) against a mocked polkadot api; not part of the module's public API.
+export const submitTransaction = (
   api: ApiPromise,
   keyPair: KeyringPair,
   transaction: SubmittableExtrinsic<'promise'>,
   nonce: number,
+  signal?: AbortSignal,
 ): Promise<TransactionResult> => {
   return new Promise((resolve, reject) => {
     const txHash = transaction.hash.toString()
+    // Diagnostic: record the confirmation contract we are about to enforce for
+    // this transaction. `confirmationDepth` is the number of blocks that must
+    // build on top of the inclusion block before we treat it as published, and
+    // `transactionTimeoutMs` is the backstop that fails the tx if that never
+    // happens. Logged per-tx so a per-block trace can be read against the exact
+    // target values in effect (they are env-driven and can differ per deploy).
+    logger.debug(
+      'Tx %s (nonce %d) submitted — expecting confirmationDepth=%d block(s), timeout=%dms',
+      txHash,
+      nonce,
+      config.chain.confirmationDepth,
+      config.chain.transactionTimeoutMs,
+    )
     let extrinsicUnsub: (() => void) | undefined
     let headsUnsub: (() => void) | undefined
     let isResolved = false
@@ -65,11 +81,21 @@ const submitTransaction = (
     let confirmationChecking = false
 
     let timeoutHandle: ReturnType<typeof setTimeout>
+    // Interval handle for the confirmation poll fallback (startConfirmationPoll);
+    // cleared in cleanup() alongside the subscriptions.
+    let pollHandle: ReturnType<typeof setInterval> | undefined
 
     const cleanup = () => {
       clearTimeout(timeoutHandle)
+      if (pollHandle) {
+        clearInterval(pollHandle)
+        pollHandle = undefined
+      }
       // Remove the API error listener to prevent accumulation
       api.off('error', onApiError)
+      // Stop listening for the task-timeout abort so a settled transaction's
+      // listener doesn't linger on the (long-lived) task signal.
+      signal?.removeEventListener('abort', onAbort)
       if (extrinsicUnsub) {
         extrinsicUnsub()
       }
@@ -82,6 +108,16 @@ const submitTransaction = (
       if (isResolved) return
       isResolved = true
       cleanup()
+      // Terminal line for this tx's confirmation trace: whichever branch we
+      // settled on (InBlock success, Reorged, Timeout, ConfirmationError, …).
+      // A tx stuck in "publishing" is precisely one that never emits this line.
+      logger.debug(
+        'Tx %s settled: success=%s status=%s%s',
+        txHash,
+        result.success,
+        result.status,
+        result.blockNumber !== undefined ? ` block=#${result.blockNumber}` : '',
+      )
       resolve(result)
     }
 
@@ -90,6 +126,26 @@ const submitTransaction = (
       isResolved = true
       cleanup()
       reject(error)
+    }
+
+    // The publish task's overall timeout (config.publishing.taskTimeoutMs) aborts
+    // this signal when it fires. Settle as a non-fault failure so the account is
+    // resynced (not evicted, see isAccountFault) and — the reason for honoring
+    // the signal — cleanup() tears down the signAndSend / new-heads
+    // subscriptions. Without this the confirmation watch keeps running after the
+    // task has already been retried, and the orphaned watches multiply across
+    // retries.
+    const onAbort = () => {
+      logger.warn(
+        'Transaction aborted before confirmation (task timeout). Tx hash: %s',
+        txHash,
+      )
+      resolveOnce({
+        success: false,
+        txHash,
+        status: 'Aborted',
+        error: 'Publishing task aborted before confirmation',
+      })
     }
 
     // (Re)start the timeout clock. The inclusion phase and the confirmation
@@ -121,12 +177,183 @@ const submitTransaction = (
 
     api.once('error', onApiError)
 
+    // If the task was aborted before this transaction's turn in the pLimit queue
+    // came up, settle immediately without opening any subscription. Otherwise
+    // listen for an abort while in flight (cleanup removes the listener).
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+
     /**
-     * Opens a single new-heads subscription (idempotent across re-inclusions)
-     * that, once `confirmationDepth` blocks have built on the *current*
-     * inclusion block, verifies that block is still canonical before resolving.
-     * The inclusion target is read live, so a reorg that re-includes the
-     * extrinsic in a new block is followed rather than mistaken for a drop.
+     * Runs the confirmation/canonical decision for a single observed head
+     * height. Invoked from both the new-heads subscription (the low-latency
+     * primary path) and the poll fallback (the liveness backstop), so the
+     * decision lives in one place. `confirmationChecking` serialises the two, so
+     * a subscription head and a poll tick can never run the canonical lookup
+     * concurrently. `source` is logged so the trace shows which path is driving
+     * progress: if the `head-sub` lines stop while `poll` lines keep advancing,
+     * the subscription has gone silent and the fallback is carrying the tx.
+     */
+    const runConfirmationCheck = async (
+      headNumber: number,
+      source: 'head-sub' | 'poll',
+    ) => {
+      if (isResolved || confirmationChecking) return
+      // Snapshot the current inclusion target; it can change under us if a
+      // reorg re-includes the extrinsic in a new block mid-flight.
+      const targetHash = inclusionHash
+      const targetNumber = inclusionNumber
+      if (targetHash === undefined || targetNumber === undefined) return
+
+      // Block-by-block confirmation trace. For every observed head while this tx
+      // is awaiting confirmation we log: the current head height, the block the
+      // tx is currently considered included in, how many confirmations have
+      // accumulated vs. how many are required, and how many blocks are still
+      // outstanding. If `remaining` fails to trend toward 0 — e.g. it stays
+      // pinned near `confirmationDepth` while `head` keeps climbing — the
+      // inclusion target is moving in lockstep with the head (repeated
+      // re-inclusion; see the RE-INCLUDED log) and the tx will never confirm. If
+      // the `head-sub` source stops advancing while the `poll` source keeps
+      // going, the subscription stalled and the poll is covering for it. Either
+      // pattern explains a tx stuck in "publishing".
+      const requiredHeadNumber = targetNumber + config.chain.confirmationDepth
+      const confirmations = headNumber - targetNumber
+      logger.debug(
+        'Tx %s confirmation trace [%s]: head #%d | inclusion #%d (%s) | %d/%d confirmations | need head >= #%d | %d block(s) remaining',
+        txHash,
+        source,
+        headNumber,
+        targetNumber,
+        targetHash,
+        confirmations < 0 ? 0 : confirmations,
+        config.chain.confirmationDepth,
+        requiredHeadNumber,
+        Math.max(0, requiredHeadNumber - headNumber),
+      )
+
+      if (
+        !hasReachedConfirmationDepth(
+          headNumber,
+          targetNumber,
+          config.chain.confirmationDepth,
+        )
+      )
+        return
+
+      confirmationChecking = true
+      try {
+        // The block is now buried deep enough. Verify the inclusion block is
+        // still the canonical block at its height — if a reorg replaced it, our
+        // transaction is no longer on-chain.
+        const canonicalHash = (
+          await api.rpc.chain.getBlockHash(targetNumber)
+        ).toString()
+
+        // If the inclusion target changed during the async lookup (the extrinsic
+        // was re-included elsewhere), defer to the next head rather than judging
+        // against a stale target.
+        if (inclusionHash !== targetHash || inclusionNumber !== targetNumber) {
+          return
+        }
+
+        // Confirmation depth reached: this is the actual publish/drop decision.
+        // Log the comparison that drives it — the hash we recorded at inclusion
+        // vs. the hash the chain now reports as canonical at that same height. A
+        // mismatch here (rather than a never-reached depth) means the block was
+        // reorged out from under a confirmed tx.
+        logger.debug(
+          'Tx %s reached confirmation depth at head #%d [%s] — canonical check @ height #%d: expected(inclusion)=%s canonical(chain)=%s => %s',
+          txHash,
+          headNumber,
+          source,
+          targetNumber,
+          targetHash,
+          canonicalHash,
+          isStillCanonical(canonicalHash, targetHash)
+            ? 'MATCH → publishing'
+            : 'MISMATCH → reorged/dropping',
+        )
+
+        if (isStillCanonical(canonicalHash, targetHash)) {
+          resolveOnce({
+            success: true,
+            txHash,
+            blockHash: targetHash,
+            blockNumber: targetNumber,
+            status: 'InBlock',
+          })
+        } else {
+          logger.warn(
+            'Tx %s reorged out: inclusion block %d (%s) replaced by %s',
+            txHash,
+            targetNumber,
+            targetHash,
+            canonicalHash,
+          )
+          resolveOnce({
+            success: false,
+            txHash,
+            status: 'Reorged',
+            error: 'Inclusion block reorged out before confirmation',
+          })
+        }
+      } catch (error) {
+        // A transient RPC failure during the canonical-hash lookup must not
+        // surface as an unhandled rejection. Log and let the next observed head
+        // re-trigger the check; the overall timeout is the backstop.
+        logger.warn(
+          error as Error,
+          'Confirmation check failed for tx %s; retrying on next head',
+          txHash,
+        )
+      } finally {
+        confirmationChecking = false
+      }
+    }
+
+    /**
+     * Liveness backstop for the confirmation watch (idempotent). The new-heads
+     * subscription below is the primary signal, but a WebSocket reconnect can
+     * leave that subscription silently dead: the socket comes back — so one-shot
+     * RPC calls like getHeader/getBlockHash work again — while the subscription
+     * never re-delivers, so `head >= inclusion + depth` is never observed. The
+     * tx then hangs until the timeout, is retried with the same nonce,
+     * re-included, and stalls again (the "stuck in publishing" incident).
+     * Polling the head on an interval and running the same check makes
+     * confirmation progress even when the subscription has stopped delivering;
+     * getHeader() is a fresh request each tick, unaffected by a dead
+     * subscription.
+     */
+    const startConfirmationPoll = () => {
+      if (pollHandle) return
+      pollHandle = setInterval(() => {
+        if (isResolved) return
+        api.rpc.chain
+          .getHeader()
+          .then((header) =>
+            runConfirmationCheck(header.number.toNumber(), 'poll'),
+          )
+          .catch((error) => {
+            // Transient RPC failure (e.g. mid-reconnect); the next tick retries
+            // and transactionTimeoutMs is the ultimate backstop.
+            logger.debug(
+              'Tx %s confirmation poll head fetch failed: %s',
+              txHash,
+              (error as Error).message,
+            )
+          })
+      }, config.chain.confirmationPollIntervalMs)
+    }
+
+    /**
+     * Opens the confirmation watch (idempotent across re-inclusions): a
+     * new-heads subscription for low latency plus a poll fallback for liveness.
+     * Both run the same check against the *current* inclusion target (read live,
+     * so a reorg that re-includes the extrinsic elsewhere is followed rather
+     * than mistaken for a drop) and resolve once `confirmationDepth` blocks have
+     * built on top and the inclusion block is still canonical.
      */
     const ensureConfirmationWatch = async () => {
       // The promise may already have settled (e.g. the timeout fired) while the
@@ -135,78 +362,20 @@ const submitTransaction = (
       // down. Bail out instead.
       if (isResolved || headsSubscribed) return
       headsSubscribed = true
+      logger.debug(
+        'Tx %s: confirmation watch open — new-heads subscription + %dms poll fallback, waiting for head to reach inclusion + %d',
+        txHash,
+        config.chain.confirmationPollIntervalMs,
+        config.chain.confirmationDepth,
+      )
+
+      // Start the liveness backstop first, so confirmation still progresses even
+      // if the subscription below fails to open or later goes silent.
+      startConfirmationPoll()
 
       try {
         const unsub = await api.rpc.chain.subscribeNewHeads(async (header) => {
-          if (isResolved || confirmationChecking) return
-          // Snapshot the current inclusion target; it can change under us if a
-          // reorg re-includes the extrinsic in a new block mid-flight.
-          const targetHash = inclusionHash
-          const targetNumber = inclusionNumber
-          if (targetHash === undefined || targetNumber === undefined) return
-          if (
-            !hasReachedConfirmationDepth(
-              header.number.toNumber(),
-              targetNumber,
-              config.chain.confirmationDepth,
-            )
-          )
-            return
-
-          confirmationChecking = true
-          try {
-            // The block is now buried deep enough. Verify the inclusion block
-            // is still the canonical block at its height — if a reorg replaced
-            // it, our transaction is no longer on-chain.
-            const canonicalHash = (
-              await api.rpc.chain.getBlockHash(targetNumber)
-            ).toString()
-
-            // If the inclusion target changed during the async lookup (the
-            // extrinsic was re-included elsewhere), defer to the next head
-            // rather than judging against a stale target.
-            if (
-              inclusionHash !== targetHash ||
-              inclusionNumber !== targetNumber
-            ) {
-              return
-            }
-
-            if (isStillCanonical(canonicalHash, targetHash)) {
-              resolveOnce({
-                success: true,
-                txHash,
-                blockHash: targetHash,
-                blockNumber: targetNumber,
-                status: 'InBlock',
-              })
-            } else {
-              logger.warn(
-                'Tx %s reorged out: inclusion block %d (%s) replaced by %s',
-                txHash,
-                targetNumber,
-                targetHash,
-                canonicalHash,
-              )
-              resolveOnce({
-                success: false,
-                txHash,
-                status: 'Reorged',
-                error: 'Inclusion block reorged out before confirmation',
-              })
-            }
-          } catch (error) {
-            // A transient RPC failure during the canonical-hash lookup must not
-            // surface as an unhandled rejection. Log and let the next head
-            // re-trigger the check; the overall timeout is the backstop.
-            logger.warn(
-              error as Error,
-              'Confirmation check failed for tx %s; retrying on next head',
-              txHash,
-            )
-          } finally {
-            confirmationChecking = false
-          }
+          await runConfirmationCheck(header.number.toNumber(), 'head-sub')
         })
 
         headsUnsub = unsub
@@ -217,15 +386,17 @@ const submitTransaction = (
           headsUnsub = undefined
         }
       } catch (error) {
-        // Failing to subscribe happens after inclusion (the nonce was already
-        // consumed on-chain), so this is transient — resolve with a status that
-        // resyncs the account rather than evicting it from the pool.
-        resolveOnce({
-          success: false,
+        // The subscription failed to open, but the poll fallback is already
+        // running and will drive confirmation to completion, so this is no
+        // longer fatal. Previously this resolved ConfirmationError, which
+        // resynced the nonce and triggered a same-nonce retry — a step in the
+        // loop that fed the incident. Log and rely on the poll;
+        // transactionTimeoutMs remains the ultimate backstop.
+        logger.warn(
+          error as Error,
+          'Tx %s: subscribeNewHeads failed to open; relying on confirmation poll fallback',
           txHash,
-          status: 'ConfirmationError',
-          error: (error as Error).message,
-        })
+        )
       }
     }
 
@@ -283,8 +454,46 @@ const submitTransaction = (
               if (mySeq !== inclusionSeq) {
                 return
               }
+              const previousInclusionNumber = inclusionNumber
+              const previousInclusionHash = inclusionHash
               inclusionHash = newInclusionHash
               inclusionNumber = block.header.number.toNumber()
+
+              // Re-inclusion detector. A second (or nth) `isInBlock` at a
+              // *different* block means the previous inclusion block was
+              // retracted and the extrinsic re-included elsewhere. Two things
+              // happen on every re-inclusion, and both push confirmation away:
+              //   1. the confirmation target becomes inclusionNumber + depth,
+              //      so it advances with each re-inclusion;
+              //   2. armTimeout() (above, on isInBlock) resets the timeout.
+              // If re-inclusions keep arriving faster than the chain can bury
+              // the tx by `depth` blocks, the target chases the head forever and
+              // the timeout never fires — the tx neither confirms nor fails, and
+              // its object is stuck in "publishing". This log makes that visible.
+              //
+              // Gate on the inclusion *hash* actually changing: a repeated
+              // isInBlock for the same block is not a re-inclusion (nothing
+              // moved), and comparing hashes rather than numbers also catches a
+              // re-inclusion into a different fork at the same height.
+              if (
+                previousInclusionHash !== undefined &&
+                newInclusionHash !== previousInclusionHash
+              ) {
+                logger.debug(
+                  'Tx %s RE-INCLUDED: inclusion moved #%d (%s) → #%d (%s) [seq %d]. Confirmation target advanced to head #%d (=%d+%d); timeout re-armed to %dms.',
+                  txHash,
+                  previousInclusionNumber,
+                  previousInclusionHash,
+                  inclusionNumber,
+                  inclusionHash,
+                  mySeq,
+                  inclusionNumber + config.chain.confirmationDepth,
+                  inclusionNumber,
+                  config.chain.confirmationDepth,
+                  config.chain.transactionTimeoutMs,
+                )
+              }
+
               logger.info(
                 'Tx %s in block %d (%s) — awaiting %d confirmations',
                 txHash,
@@ -362,6 +571,7 @@ export const createTransactionManager = () => {
 
   const submit = async (
     transactions: Transaction[],
+    signal?: AbortSignal,
   ): Promise<TransactionResult[]> => {
     await ensureInitialized()
 
@@ -379,7 +589,7 @@ export const createTransactionManager = () => {
         )
 
         return pLimitted(() =>
-          submitTransaction(api, account, trx, nonce)
+          submitTransaction(api, account, trx, nonce, signal)
             .catch((error) => {
               logger.error(error as Error, 'Transaction submission failed')
               return {
