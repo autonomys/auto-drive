@@ -38,6 +38,7 @@ const submitTransaction = (
   keyPair: KeyringPair,
   transaction: SubmittableExtrinsic<'promise'>,
   nonce: number,
+  signal?: AbortSignal,
 ): Promise<TransactionResult> => {
   return new Promise((resolve, reject) => {
     const txHash = transaction.hash.toString()
@@ -83,6 +84,9 @@ const submitTransaction = (
       clearTimeout(timeoutHandle)
       // Remove the API error listener to prevent accumulation
       api.off('error', onApiError)
+      // Stop listening for the task-timeout abort so a settled transaction's
+      // listener doesn't linger on the (long-lived) task signal.
+      signal?.removeEventListener('abort', onAbort)
       if (extrinsicUnsub) {
         extrinsicUnsub()
       }
@@ -115,6 +119,26 @@ const submitTransaction = (
       reject(error)
     }
 
+    // The publish task's overall timeout (config.publishing.taskTimeoutMs) aborts
+    // this signal when it fires. Settle as a non-fault failure so the account is
+    // resynced (not evicted, see isAccountFault) and — the reason for honoring
+    // the signal — cleanup() tears down the signAndSend / new-heads
+    // subscriptions. Without this the confirmation watch keeps running after the
+    // task has already been retried, and the orphaned watches multiply across
+    // retries.
+    const onAbort = () => {
+      logger.warn(
+        'Transaction aborted before confirmation (task timeout). Tx hash: %s',
+        txHash,
+      )
+      resolveOnce({
+        success: false,
+        txHash,
+        status: 'Aborted',
+        error: 'Publishing task aborted before confirmation',
+      })
+    }
+
     // (Re)start the timeout clock. The inclusion phase and the confirmation
     // phase each get their own full `transactionTimeoutMs` budget: the clock is
     // armed at submission and re-armed once the transaction reaches a block, so
@@ -143,6 +167,15 @@ const submitTransaction = (
     }
 
     api.once('error', onApiError)
+
+    // If the task was aborted before this transaction's turn in the pLimit queue
+    // came up, settle immediately without opening any subscription. Otherwise
+    // listen for an abort while in flight (cleanup removes the listener).
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
 
     /**
      * Opens a single new-heads subscription (idempotent across re-inclusions)
@@ -472,6 +505,7 @@ export const createTransactionManager = () => {
 
   const submit = async (
     transactions: Transaction[],
+    signal?: AbortSignal,
   ): Promise<TransactionResult[]> => {
     await ensureInitialized()
 
@@ -489,7 +523,7 @@ export const createTransactionManager = () => {
         )
 
         return pLimitted(() =>
-          submitTransaction(api, account, trx, nonce)
+          submitTransaction(api, account, trx, nonce, signal)
             .catch((error) => {
               logger.error(error as Error, 'Transaction submission failed')
               return {

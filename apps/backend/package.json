@@ -16,6 +16,7 @@
     "start:download": "node dist/app/servers/download.js",
     "start:download:api": "node dist/app/apis/download.js",
     "start:download:worker": "node dist/app/servers/downloadWorker.js",
+    "start:publish:worker": "node dist/app/servers/publishWorker.js",
     "lint": "eslint . "
   },
   "dependencies": {

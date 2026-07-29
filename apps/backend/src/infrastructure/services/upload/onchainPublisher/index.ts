@@ -8,7 +8,7 @@ const logger = createLogger('upload:onchainPublisher')
 
 export const transactionManager = createTransactionManager()
 
-const publishNodes = async (cids: string[]) => {
+const publishNodes = async (cids: string[], signal?: AbortSignal) => {
   logger.info('Uploading %d nodes', cids.length)
 
   const nodes = await nodesRepository.getNodesByCids(cids)
@@ -63,7 +63,7 @@ const publishNodes = async (cids: string[]) => {
     skippedNullCount,
   )
 
-  const results = await transactionManager.submit(transactions)
+  const results = await transactionManager.submit(transactions, signal)
 
   // Summarise the batch by success + status so the reason a publish attempt
   // failed is visible in one line rather than by correlating N per-tx traces:

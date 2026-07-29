@@ -46,7 +46,11 @@ describe('OnchainPublisher', () => {
       .spyOn(nodesRepository, 'getNodesBlockchainDataBatch')
       .mockResolvedValue([])
 
-    await OnchainPublisher.publishNodes(nodes.map((e) => e.cid))
+    const controller = new AbortController()
+    await OnchainPublisher.publishNodes(
+      nodes.map((e) => e.cid),
+      controller.signal,
+    )
 
     const transactions = nodes.map((node) => {
       const buffer = Buffer.from(node.encoded_node, 'base64')
@@ -58,7 +62,9 @@ describe('OnchainPublisher', () => {
       }
     })
 
-    expect(submitSpy).toHaveBeenCalledWith(transactions)
+    // The task abort signal must reach the transaction manager so a timed-out
+    // publish task can tear down its in-flight confirmation watches.
+    expect(submitSpy).toHaveBeenCalledWith(transactions, controller.signal)
   })
 
   it('should not publish nodes if they are already published', async () => {
@@ -99,6 +105,7 @@ describe('OnchainPublisher', () => {
         }
       })
 
-    expect(submitSpy).toHaveBeenCalledWith(transactions)
+    // Signal is optional: called without one here, so it forwards undefined.
+    expect(submitSpy).toHaveBeenCalledWith(transactions, undefined)
   })
 })

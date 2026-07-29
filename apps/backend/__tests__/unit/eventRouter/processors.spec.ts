@@ -8,6 +8,8 @@ import {
 } from '@jest/globals'
 import { processFrontendTask } from '../../../src/infrastructure/eventRouter/processors/frontend.js'
 import { processDownloadTask } from '../../../src/infrastructure/eventRouter/processors/download.js'
+import { processPublishTask } from '../../../src/infrastructure/eventRouter/processors/publish.js'
+import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { NodesUseCases } from '../../../src/core/objects/nodes.js'
 import { OnchainPublisher } from '../../../src/infrastructure/services/upload/onchainPublisher/index.js'
@@ -67,9 +69,12 @@ describe('EventRouter Processors', () => {
       ])
     })
 
-    it('should handle publish-nodes task', async () => {
+    it('should forward publish-nodes to the dedicated publish queue instead of running it', async () => {
       const publishNodesSpy = jest
         .spyOn(OnchainPublisher, 'publishNodes')
+        .mockResolvedValue(undefined)
+      const rabbitPublishSpy = jest
+        .spyOn(Rabbit, 'publish')
         .mockResolvedValue(undefined)
 
       const task = {
@@ -80,7 +85,17 @@ describe('EventRouter Processors', () => {
 
       await processFrontendTask(task)
 
-      expect(publishNodesSpy).toHaveBeenCalledWith(['node1'])
+      // The frontend worker must never sign transactions for publish-nodes; it
+      // forwards them to the publish-manager queue so a single process (the
+      // publish worker) owns publishing.
+      expect(publishNodesSpy).not.toHaveBeenCalled()
+      expect(rabbitPublishSpy).toHaveBeenCalledWith(
+        'publish-manager',
+        expect.objectContaining({
+          id: 'publish-nodes',
+          params: { nodes: ['node1'] },
+        }),
+      )
     })
 
     it('should handle tag-upload task', async () => {
@@ -99,9 +114,12 @@ describe('EventRouter Processors', () => {
       expect(tagUploadSpy).toHaveBeenCalledWith('cid123')
     })
 
-    it('should handle ensure-object-published task', async () => {
+    it('should forward ensure-object-published to the dedicated publish queue instead of running it', async () => {
       const ensureObjectPublishedSpy = jest
         .spyOn(NodesUseCases, 'ensureObjectPublished')
+        .mockResolvedValue(undefined)
+      const rabbitPublishSpy = jest
+        .spyOn(Rabbit, 'publish')
         .mockResolvedValue(undefined)
 
       const task = {
@@ -112,7 +130,16 @@ describe('EventRouter Processors', () => {
 
       await processFrontendTask(task)
 
-      expect(ensureObjectPublishedSpy).toHaveBeenCalledWith('cid456')
+      // ensure-object-published signs on-chain (via publishNodes); the frontend
+      // worker must forward it, never run it, to keep publishing single-process.
+      expect(ensureObjectPublishedSpy).not.toHaveBeenCalled()
+      expect(rabbitPublishSpy).toHaveBeenCalledWith(
+        'publish-manager',
+        expect.objectContaining({
+          id: 'ensure-object-published',
+          params: { cid: 'cid456' },
+        }),
+      )
     })
 
     it('should handle watch-intent-tx task', async () => {
@@ -200,6 +227,116 @@ describe('EventRouter Processors', () => {
       }
 
       await expect(processDownloadTask(task)).resolves.toBeUndefined()
+    })
+  })
+
+  describe('processPublishTask', () => {
+    it('should handle publish-nodes task', async () => {
+      const publishNodesSpy = jest
+        .spyOn(OnchainPublisher, 'publishNodes')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'publish-nodes',
+        params: { nodes: ['node1', 'node2'] },
+        retriesLeft: 3,
+      }
+
+      await processPublishTask(task)
+
+      expect(publishNodesSpy).toHaveBeenCalledWith(
+        ['node1', 'node2'],
+        expect.any(AbortSignal),
+      )
+    })
+
+    it('should handle ensure-object-published task', async () => {
+      const ensureObjectPublishedSpy = jest
+        .spyOn(NodesUseCases, 'ensureObjectPublished')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'ensure-object-published',
+        params: { cid: 'cid789' },
+        retriesLeft: 3,
+      }
+
+      await processPublishTask(task)
+
+      expect(ensureObjectPublishedSpy).toHaveBeenCalledWith(
+        'cid789',
+        expect.any(AbortSignal),
+      )
+    })
+
+    it('should resolve without publishing for an unknown task', async () => {
+      const publishNodesSpy = jest
+        .spyOn(OnchainPublisher, 'publishNodes')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'unknown-task',
+        params: {},
+        retriesLeft: 3,
+      }
+
+      await expect(processPublishTask(task)).resolves.toBeUndefined()
+      expect(publishNodesSpy).not.toHaveBeenCalled()
+    })
+
+    it('retries a failed publish task back onto publish-manager, never the fast lane', async () => {
+      jest
+        .spyOn(OnchainPublisher, 'publishNodes')
+        .mockRejectedValue(new Error('publish boom'))
+      const rabbitPublishSpy = jest
+        .spyOn(Rabbit, 'publish')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'publish-nodes',
+        params: { nodes: ['node1'] },
+        retriesLeft: 2,
+      }
+
+      await processPublishTask(task)
+
+      // The retry must stay on the isolated publish lane, decremented, and must
+      // never leak back to task-manager — keeping publishing failures out of the
+      // fast frontend lane is the whole point of the dedicated queue.
+      expect(rabbitPublishSpy).toHaveBeenCalledWith(
+        'publish-manager',
+        expect.objectContaining({ id: 'publish-nodes', retriesLeft: 1 }),
+      )
+      expect(rabbitPublishSpy).not.toHaveBeenCalledWith(
+        'task-manager',
+        expect.anything(),
+      )
+    })
+
+    it('routes an exhausted publish task to publish-errors, not the fast lane', async () => {
+      jest
+        .spyOn(OnchainPublisher, 'publishNodes')
+        .mockRejectedValue(new Error('publish boom'))
+      const rabbitPublishSpy = jest
+        .spyOn(Rabbit, 'publish')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'publish-nodes',
+        params: { nodes: ['node1'] },
+        retriesLeft: 0,
+      }
+
+      await processPublishTask(task)
+
+      expect(rabbitPublishSpy).toHaveBeenCalledWith(
+        'publish-errors',
+        expect.objectContaining({ id: 'publish-nodes' }),
+      )
+      expect(rabbitPublishSpy).not.toHaveBeenCalledWith(
+        'task-manager',
+        expect.anything(),
+      )
     })
   })
 })
