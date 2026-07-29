@@ -45,6 +45,21 @@ export const config = {
     // 5-minute default leaves room for inclusion latency. Raise this if you
     // increase confirmationDepth or run under sustained heavy load.
     transactionTimeoutMs: positiveIntEnv('CHAIN_TRANSACTION_TIMEOUT_MS', 300000),
+    // Safety-net cadence for the confirmation watch. Confirmation is normally
+    // driven by a new-heads subscription, but a WebSocket reconnect can leave
+    // that subscription silently dead while the chain keeps advancing — so
+    // `head >= inclusion + confirmationDepth` is never observed and the tx
+    // hangs until transactionTimeoutMs, is retried with the same nonce,
+    // re-included, and stalls again. In addition to the subscription, the head
+    // is polled on this interval and the same confirmation check is run, so
+    // confirmation still completes when the subscription stops delivering.
+    // Roughly one block time keeps the degraded path about as timely as the
+    // healthy one; the cost is one `getHeader` per in-flight tx per interval.
+    // Falls back to 6000ms for missing/invalid values so the poll never stalls.
+    confirmationPollIntervalMs: positiveIntEnv(
+      'CHAIN_CONFIRMATION_POLL_INTERVAL_MS',
+      6000,
+    ),
   },
   memoryDownloadCache: {
     maxCacheSize: Number(
