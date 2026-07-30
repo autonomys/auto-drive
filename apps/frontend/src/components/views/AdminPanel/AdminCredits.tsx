@@ -27,6 +27,7 @@ import type {
   OverCapIntent,
 } from '../../../services/api';
 import Link from 'next/link';
+import { CopiableText } from '../../atoms/CopiableText';
 
 // ---------------------------------------------------------------------------
 // Economics summary card
@@ -339,12 +340,14 @@ const AccountBatchGroupSection = ({
                     {batch.userPublicId.slice(0, 12)}…
                   </Link>
                 </td>
+                {/* Purchasing wallet in full (never truncated) with a copy
+                    button — refunds go back to this exact address. */}
                 <td className='px-4 py-2 font-mono text-xs'>
                   {batch.fromAddress ? (
-                    <span title={batch.fromAddress}>
-                      {batch.fromAddress.slice(0, 8)}…
-                      {batch.fromAddress.slice(-6)}
-                    </span>
+                    <CopiableText
+                      text={batch.fromAddress}
+                      className='whitespace-nowrap'
+                    />
                   ) : (
                     <span className='text-muted-foreground'>—</span>
                   )}

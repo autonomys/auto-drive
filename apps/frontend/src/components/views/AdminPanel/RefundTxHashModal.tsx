@@ -6,6 +6,7 @@ import { AlertTriangle, X } from 'lucide-react';
 // Same regex the backend validates with — the backend rejects anything else
 // and the batch is NOT marked as refunded.
 import { EVM_TX_HASH_REGEX } from '@auto-drive/models';
+import { CopiableText } from '../../atoms/CopiableText';
 
 /**
  * Modal that collects the mandatory on-chain refund transaction hash before
@@ -17,6 +18,7 @@ import { EVM_TX_HASH_REGEX } from '@auto-drive/models';
 export const RefundTxHashModal = ({
   batchCount,
   suggestedRefundAi3,
+  refundWalletAddress,
   isSubmitting,
   errorMessage,
   onConfirm,
@@ -29,6 +31,13 @@ export const RefundTxHashModal = ({
    * the transferred amount — the transfer happens out-of-band.
    */
   suggestedRefundAi3?: string | null;
+  /**
+   * Purchasing wallet the batches were paid from — the destination of the
+   * out-of-band AI3 transfer. Shown in full and copiable so the admin can
+   * paste it straight into their wallet. Null for legacy intents with no
+   * recorded address.
+   */
+  refundWalletAddress?: string | null;
   isSubmitting: boolean;
   errorMessage: string | null;
   onConfirm: (refundTxHash: string) => void;
@@ -85,6 +94,16 @@ export const RefundTxHashModal = ({
           the entire remaining balance of the selected{' '}
           {batchCount === 1 ? 'batch' : 'batches'}.
         </p>
+
+        {refundWalletAddress && (
+          <div className='mb-4 rounded border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
+            <p className='mb-1'>Send the refund to the purchasing wallet:</p>
+            <CopiableText
+              text={refundWalletAddress}
+              className='break-all font-mono font-medium text-foreground'
+            />
+          </div>
+        )}
 
         {suggestedRefundAi3 && (
           <p className='mb-4 rounded border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
