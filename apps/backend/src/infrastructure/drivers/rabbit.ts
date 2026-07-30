@@ -25,6 +25,25 @@ const queues = [
 ] as const
 const subscriptions: Partial<Record<Queue, SubscriptionCallback[]>> = {}
 
+interface ActiveConsumer {
+  channel: Channel
+  consumerTag: string
+}
+
+/**
+ * The consumer currently serving each callback, per queue.
+ *
+ * A reconnect re-subscribes every stored callback on a fresh channel and discards
+ * the new unsubscribe handles (see `getChannel`), so a handle that closed over its
+ * own channel and consumer tag went stale the moment the connection bounced:
+ * cancelling it targeted a dead consumer on a closed channel while the live one
+ * kept delivering. Unsubscribing therefore looks the consumer up here, at call
+ * time, rather than capturing it at subscribe time.
+ */
+const activeConsumers: Partial<
+  Record<Queue, Map<SubscriptionCallback, ActiveConsumer>>
+> = {}
+
 let channelPromise: Promise<Channel> | null = null
 let keepAliveInterval: NodeJS.Timeout | null = null
 
@@ -105,7 +124,11 @@ const subscribe = async (
   if (!subscriptions[queue]) {
     subscriptions[queue] = [] as SubscriptionCallback[]
   }
-  subscriptions[queue].push(callback)
+  // Guarded against duplicates so a reconnect cannot register the same callback
+  // twice and start delivering each message to it more than once.
+  if (!subscriptions[queue].includes(callback)) {
+    subscriptions[queue].push(callback)
+  }
 
   const channel = await getChannel()
 
@@ -129,17 +152,41 @@ const subscribe = async (
     },
   )
 
+  if (!activeConsumers[queue]) {
+    activeConsumers[queue] = new Map()
+  }
+  activeConsumers[queue].set(callback, {
+    channel,
+    consumerTag: consume.consumerTag,
+  })
+
   // Awaits the cancel rather than firing and forgetting it: callers that stop a
   // consumer in order to quiesce before doing something else (see
   // EventRouter.stopTaskErrors) need "stopped" to actually mean stopped by the
   // time this resolves. Note that cancelling halts *new* deliveries — messages
   // already handed to the client may still be in their callback afterwards.
   return async () => {
+    // Deregister before cancelling. A reconnect re-subscribes whatever is in
+    // `subscriptions`, so leaving the callback there while awaiting the cancel
+    // gives a reconnect landing mid-cancel the chance to resurrect the consumer.
+    subscriptions[queue] =
+      subscriptions[queue]?.filter((c) => c !== callback) ?? []
+
+    // Looked up now rather than captured above, so this cancels whichever
+    // consumer is live — including one created by a reconnect after this handle
+    // was handed out.
+    const active = activeConsumers[queue]?.get(callback)
+    activeConsumers[queue]?.delete(callback)
+    if (!active) {
+      return
+    }
+
     try {
-      await channel.cancel(consume.consumerTag)
-    } finally {
-      subscriptions[queue] =
-        subscriptions[queue]?.filter((c) => c !== callback) ?? []
+      await active.channel.cancel(active.consumerTag)
+    } catch (error) {
+      // A cancel against an already-closed channel is moot: that consumer is
+      // gone either way, which is what the caller wanted.
+      logger.warn('Failed to cancel consumer on %s: %s', queue, error)
     }
   }
 }
@@ -159,6 +206,7 @@ const close = async () => {
   channelPromise = null
   for (const queue of queues) {
     subscriptions[queue] = []
+    activeConsumers[queue]?.clear()
   }
 
   if (keepAliveInterval) {
