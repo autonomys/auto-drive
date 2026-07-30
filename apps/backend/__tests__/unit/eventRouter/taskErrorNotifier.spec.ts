@@ -136,4 +136,71 @@ describe('taskErrorNotifier', () => {
 
     expect(send).toHaveBeenCalledTimes(2)
   })
+
+  // The shutdown sequence is: stop consuming, flush, close the channel, exit. The
+  // two races below both end with `process.exit` destroying a batch that had
+  // already been taken out of `pending`, so the flush saw nothing left to do.
+  describe('shutdown races', () => {
+    /** A send whose completion the test controls. */
+    const controllableSend = () => {
+      let release: (delivered: boolean) => void = () => undefined
+      const started = new Promise<void>((resolveStarted) => {
+        send.mockImplementation((() => {
+          resolveStarted()
+          return new Promise<boolean>((resolve) => {
+            release = resolve
+          })
+        }) as never)
+      })
+      return { started, release: () => release(true) }
+    }
+
+    it('waits for a send that is already in flight', async () => {
+      const { started, release } = controllableSend()
+
+      await handleFailedTask('download-errors', failedTask())
+      // Stand in for the batching window expiring just as SIGTERM lands.
+      const timerFlush = flushTaskErrorAlerts()
+      await started
+
+      let shutdownFinished = false
+      const shutdownFlush = flushTaskErrorAlerts().then(() => {
+        shutdownFinished = true
+      })
+
+      // The batch is no longer in `pending`, so a naive flush returns here and
+      // lets the caller exit while the webhook call is still open. Drained via a
+      // macrotask so every pending microtask settles first — a single
+      // `await Promise.resolve()` is not enough to distinguish the two, and lets
+      // this assertion pass against the very bug it is meant to catch.
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(shutdownFinished).toBe(false)
+
+      release()
+      await Promise.all([timerFlush, shutdownFlush])
+      expect(shutdownFinished).toBe(true)
+    })
+
+    it('delivers failures that arrive while the final send is awaited', async () => {
+      const { started, release } = controllableSend()
+
+      await handleFailedTask('download-errors', failedTask())
+      const shutdownFlush = flushTaskErrorAlerts()
+      await started
+
+      // A consumer acks one more failure before the channel is closed.
+      await handleFailedTask('download-errors', {
+        ...failedTask(),
+        params: { cid: 'arrived-during-shutdown' },
+      })
+
+      send.mockResolvedValue(true as never)
+      release()
+      await shutdownFlush
+
+      expect(send).toHaveBeenCalledTimes(2)
+      const second = (send.mock.calls[1] as unknown[])[0] as { details: string }
+      expect(second.details).toContain('arrived-during-shutdown')
+    })
+  })
 })

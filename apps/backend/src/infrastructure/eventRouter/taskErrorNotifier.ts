@@ -31,6 +31,24 @@ let pending: PendingFailure[] = []
 let flushTimer: NodeJS.Timeout | null = null
 
 /**
+ * The send currently in progress.
+ *
+ * Tracked so a shutdown can *await* a send rather than abort it: a batch is
+ * removed from `pending` before the webhook call starts, so a `process.exit`
+ * landing mid-send would take the batch with it while `pending` looked empty.
+ */
+let inFlightFlush: Promise<void> | null = null
+
+/**
+ * Passes the shutdown drain will make before giving up.
+ *
+ * More than one is needed because the error-queue consumers stay active while a
+ * send is awaited, so failures acked during that wait land in a fresh batch.
+ * Bounded so a steady stream of failures cannot hold shutdown open forever.
+ */
+const MAX_DRAIN_PASSES = 5
+
+/**
  * Best-effort identifier for the thing that failed, so an alert points at
  * something actionable rather than just a task name.
  */
@@ -83,7 +101,7 @@ const formatBatch = (failures: PendingFailure[]) => {
   return { title, details: lines.join('\n') }
 }
 
-const flush = async () => {
+const deliverBatch = async () => {
   flushTimer = null
   const batch = pending
   pending = []
@@ -103,6 +121,33 @@ const flush = async () => {
       details,
     )
   }
+}
+
+/**
+ * Sends the current batch, serialised against any send already in progress.
+ *
+ * Serialisation matters because two callers can arrive at once — a window expiry
+ * and a shutdown — and each takes the whole of `pending`. Running them
+ * concurrently would split one batch across two messages, or lose one entirely
+ * if the process exits while the second is still queued behind the first.
+ */
+const flush = (): Promise<void> => {
+  const previous = inFlightFlush ?? Promise.resolve()
+  const run = previous
+    .catch(() => undefined)
+    .then(deliverBatch)
+    .catch((error) => {
+      logger.error(error as Error, 'Failed to flush task error alerts')
+    })
+
+  inFlightFlush = run
+  void run.finally(() => {
+    if (inFlightFlush === run) {
+      inFlightFlush = null
+    }
+  })
+
+  return run
 }
 
 /**
@@ -150,12 +195,51 @@ export const handleFailedTask = async (
   }
 }
 
-/** Flushes any batched alerts immediately. Exposed for tests and shutdown. */
+/**
+ * Sends everything batched, for shutdown and tests.
+ *
+ * Drains in passes rather than flushing once. Two things make a single flush
+ * insufficient:
+ *
+ * - A send already in progress has taken its batch out of `pending`, so a single
+ *   `flush()` would see nothing to do and return immediately, letting the caller
+ *   proceed to `process.exit` and kill that send.
+ * - The error-queue consumers keep acking failures while a send is awaited, and
+ *   those land in a fresh batch behind it.
+ *
+ * Callers should stop the consumers first (`EventRouter.stopTaskErrors`) so the
+ * second case is bounded; the passes are belt-and-braces for messages whose
+ * handler was already running when the consumer was cancelled.
+ */
 export const flushTaskErrorAlerts = async () => {
-  if (flushTimer) {
-    clearTimeout(flushTimer)
+  for (let pass = 0; pass < MAX_DRAIN_PASSES; pass++) {
+    if (flushTimer) {
+      clearTimeout(flushTimer)
+      flushTimer = null
+    }
+
+    // Never let the caller exit out from under a send that already cleared its
+    // batch — that is the one way a batch disappears without being delivered.
+    if (inFlightFlush) {
+      await inFlightFlush
+    }
+
+    if (pending.length === 0) {
+      return
+    }
+
+    await flush()
   }
-  await flush()
+
+  if (pending.length > 0) {
+    // Not silent: each of these was already logged individually as it arrived,
+    // so the failures survive in the logs even though the alert did not.
+    logger.error(
+      'Gave up flushing %d task error alert(s) after %d passes; they remain in the logs only',
+      pending.length,
+      MAX_DRAIN_PASSES,
+    )
+  }
 }
 
 /** Drops batched state without sending. Tests only. */
@@ -165,4 +249,5 @@ export const resetTaskErrorAlerts = () => {
   }
   flushTimer = null
   pending = []
+  inFlightFlush = null
 }

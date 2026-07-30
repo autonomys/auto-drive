@@ -13,6 +13,12 @@ import {
 } from './processors/publish.js'
 import { Task } from './tasks.js'
 import { handleFailedTask } from './taskErrorNotifier.js'
+import { createLogger } from '../drivers/logger.js'
+
+const logger = createLogger('eventRouter')
+
+/** Unsubscribe handles for the error-queue consumers, so shutdown can stop them. */
+let taskErrorUnsubscribers: Array<() => void> = []
 
 export const EventRouter = {
   listenFrontendEvents: () => {
@@ -42,7 +48,35 @@ export const EventRouter = {
       downloadErrorPublishedQueue,
       publishErrorPublishedQueue,
     ] as const) {
-      Rabbit.subscribe(queue, (message) => handleFailedTask(queue, message))
+      Rabbit.subscribe(queue, (message) =>
+        handleFailedTask(queue, message),
+      ).then(
+        (unsubscribe) => {
+          taskErrorUnsubscribers.push(unsubscribe)
+        },
+        (error) => {
+          logger.error(error as Error, 'Failed to consume error queue %s', queue)
+        },
+      )
+    }
+  },
+  /**
+   * Cancels the error-queue consumers.
+   *
+   * Must run before `flushTaskErrorAlerts` on shutdown. Otherwise failures keep
+   * being acked while the final send is awaited, landing in a batch created after
+   * the flush decided it was finished — which is how a deploy drops exactly the
+   * alerts the shutdown flush exists to preserve.
+   */
+  stopTaskErrors: () => {
+    const unsubscribers = taskErrorUnsubscribers
+    taskErrorUnsubscribers = []
+    for (const unsubscribe of unsubscribers) {
+      try {
+        unsubscribe()
+      } catch (error) {
+        logger.warn(error as Error, 'Failed to cancel an error-queue consumer')
+      }
     }
   },
   publish: (tasks: Task[] | Task) => {

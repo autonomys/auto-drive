@@ -121,7 +121,10 @@
     )
     deletionAnonymisationJob.stop()
     // Send anything still inside the batching window before the channel closes,
-    // so a deploy doesn't swallow the alerts it may itself have caused.
+    // so a deploy doesn't swallow the alerts it may itself have caused. Stop
+    // consuming first, or failures keep arriving while the final send is awaited
+    // and land in a batch created after the flush decided it was finished.
+    EventRouter.stopTaskErrors()
     const { flushTaskErrorAlerts } = await import(
       '../../infrastructure/eventRouter/taskErrorNotifier.js'
     )
