@@ -17,8 +17,16 @@ import { createLogger } from '../drivers/logger.js'
 
 const logger = createLogger('eventRouter')
 
-/** Unsubscribe handles for the error-queue consumers, so shutdown can stop them. */
-let taskErrorUnsubscribers: Array<() => void> = []
+/**
+ * In-flight subscriptions to the error queues, so shutdown can stop them.
+ *
+ * Holds the *promises* rather than the resolved unsubscribe handles, and is
+ * appended to synchronously. Storing resolved handles left a window between
+ * process start and the subscribe resolving in which this list was empty, so a
+ * shutdown arriving in that window cancelled nothing and the "stopped consumers"
+ * guarantee silently did not hold.
+ */
+let taskErrorSubscriptions: Array<Promise<() => Promise<void>>> = []
 
 export const EventRouter = {
   listenFrontendEvents: () => {
@@ -48,36 +56,50 @@ export const EventRouter = {
       downloadErrorPublishedQueue,
       publishErrorPublishedQueue,
     ] as const) {
-      Rabbit.subscribe(queue, (message) =>
+      const subscription = Rabbit.subscribe(queue, (message) =>
         handleFailedTask(queue, message),
-      ).then(
-        (unsubscribe) => {
-          taskErrorUnsubscribers.push(unsubscribe)
-        },
-        (error) => {
-          logger.error(error as Error, 'Failed to consume error queue %s', queue)
-        },
       )
+      // Tracked synchronously so a shutdown cannot race the subscribe resolving.
+      taskErrorSubscriptions.push(subscription)
+      // Failures are surfaced (and the rejection handled) here; stopTaskErrors
+      // catches its own await of the same promise.
+      subscription.catch((error: unknown) => {
+        logger.error(error as Error, 'Failed to consume error queue %s', queue)
+      })
     }
   },
   /**
-   * Cancels the error-queue consumers.
+   * Cancels the error-queue consumers and waits for the cancels to take effect.
    *
-   * Must run before `flushTaskErrorAlerts` on shutdown. Otherwise failures keep
-   * being acked while the final send is awaited, landing in a batch created after
-   * the flush decided it was finished — which is how a deploy drops exactly the
-   * alerts the shutdown flush exists to preserve.
+   * Must be awaited before `flushTaskErrorAlerts` on shutdown. Otherwise failures
+   * keep being acked while the final send is awaited, landing in a batch created
+   * after the flush decided it was finished — which is how a deploy drops exactly
+   * the alerts the shutdown flush exists to preserve.
+   *
+   * Cancelling stops *new* deliveries; a message already handed to the client can
+   * still be inside its handler when this resolves. That residue is what the
+   * drain passes in `flushTaskErrorAlerts` cover — the two work together, and
+   * neither is sufficient alone.
    */
-  stopTaskErrors: () => {
-    const unsubscribers = taskErrorUnsubscribers
-    taskErrorUnsubscribers = []
-    for (const unsubscribe of unsubscribers) {
-      try {
-        unsubscribe()
-      } catch (error) {
-        logger.warn(error as Error, 'Failed to cancel an error-queue consumer')
-      }
-    }
+  stopTaskErrors: async () => {
+    const subscriptions = taskErrorSubscriptions
+    taskErrorSubscriptions = []
+
+    await Promise.all(
+      subscriptions.map(async (subscription) => {
+        try {
+          const unsubscribe = await subscription
+          await unsubscribe()
+        } catch (error) {
+          // A subscribe that never succeeded has nothing to cancel, and a cancel
+          // on an already-closed channel is moot. Either way shutdown continues.
+          logger.warn(
+            error as Error,
+            'Failed to cancel an error-queue consumer during shutdown',
+          )
+        }
+      }),
+    )
   },
   publish: (tasks: Task[] | Task) => {
     if (Array.isArray(tasks)) {

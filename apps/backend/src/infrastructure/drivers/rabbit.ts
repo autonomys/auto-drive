@@ -129,10 +129,18 @@ const subscribe = async (
     },
   )
 
-  return () => {
-    channel.cancel(consume.consumerTag)
-    subscriptions[queue] =
-      subscriptions[queue]?.filter((c) => c !== callback) ?? []
+  // Awaits the cancel rather than firing and forgetting it: callers that stop a
+  // consumer in order to quiesce before doing something else (see
+  // EventRouter.stopTaskErrors) need "stopped" to actually mean stopped by the
+  // time this resolves. Note that cancelling halts *new* deliveries — messages
+  // already handed to the client may still be in their callback afterwards.
+  return async () => {
+    try {
+      await channel.cancel(consume.consumerTag)
+    } finally {
+      subscriptions[queue] =
+        subscriptions[queue]?.filter((c) => c !== callback) ?? []
+    }
   }
 }
 

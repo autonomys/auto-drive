@@ -28,7 +28,7 @@
     logger.info('Shutting down download worker...')
     // Stop consuming before flushing: otherwise failures keep arriving while the
     // final send is awaited and land in a batch created after the flush finished.
-    EventRouter.stopTaskErrors()
+    await EventRouter.stopTaskErrors()
     const { flushTaskErrorAlerts } = await import(
       '../../infrastructure/eventRouter/taskErrorNotifier.js'
     )

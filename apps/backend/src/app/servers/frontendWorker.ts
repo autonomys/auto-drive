@@ -124,7 +124,7 @@
     // so a deploy doesn't swallow the alerts it may itself have caused. Stop
     // consuming first, or failures keep arriving while the final send is awaited
     // and land in a batch created after the flush decided it was finished.
-    EventRouter.stopTaskErrors()
+    await EventRouter.stopTaskErrors()
     const { flushTaskErrorAlerts } = await import(
       '../../infrastructure/eventRouter/taskErrorNotifier.js'
     )
