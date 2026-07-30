@@ -30,7 +30,7 @@ const send = async (message: SlackMessage): Promise<boolean> => {
   }
 
   const text = [
-    `*[${config.slack.environment}]* ${message.title}`,
+    message.title,
     message.details ? `\`\`\`\n${message.details}\n\`\`\`` : null,
   ]
     .filter(Boolean)

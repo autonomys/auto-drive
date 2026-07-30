@@ -155,7 +155,6 @@ export const config = {
     alertWindowMs: Number(env('TASK_ERROR_ALERT_WINDOW_MS', '60000')),
     // Failures listed individually in a batch before collapsing to a count.
     alertMaxItems: Number(env('TASK_ERROR_ALERT_MAX_ITEMS', '10')),
-    environment: env('SLACK_ALERT_ENVIRONMENT', 'unknown'),
   },
   monitoring: {
     active: env('VICTORIA_ACTIVE', 'false') === 'true',
