@@ -23,6 +23,7 @@ import type { AdminUserCreditBatch } from '../../../services/api';
 import Link from 'next/link';
 import { shannonsToAi3 } from '@autonomys/auto-utils';
 import { RefundTxHashModal } from './RefundTxHashModal';
+import { CopiableText } from '../../atoms/CopiableText';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -209,6 +210,14 @@ export const AdminUserCredits = ({
     }
   }, [refundTarget, batches]);
 
+  // Destination of the out-of-band AI3 transfer for the batches in the modal.
+  // Combined refunds are constrained to one (account, purchasing wallet) pair,
+  // so the first target batch's wallet is the wallet for all of them.
+  const refundTargetWallet = useMemo(() => {
+    if (!refundTarget) return null;
+    return batches.find((b) => b.id === refundTarget[0])?.fromAddress ?? null;
+  }, [refundTarget, batches]);
+
   return (
     <div className='space-y-6 p-6'>
       {/* Header */}
@@ -287,21 +296,38 @@ export const AdminUserCredits = ({
       {/* Combined refund action bar */}
       {selectedRefundableIds.length > 0 && (
         <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-700 dark:bg-amber-900/20'>
-          <p className='text-sm text-amber-800 dark:text-amber-300'>
-            {selectedRefundableIds.length}{' '}
-            {selectedRefundableIds.length === 1 ? 'batch' : 'batches'} selected
-            {hasMultipleRefundGroups && selectedBatch && (
-              <span className='font-mono'>
-                {' '}
-                (account {selectedBatch.accountId.slice(0, 8)}…, wallet{' '}
-                {selectedBatch.fromAddress
-                  ? `${selectedBatch.fromAddress.slice(0, 8)}…`
-                  : 'unknown'}
-                )
-              </span>
-            )}{' '}
-            — one transaction hash will be recorded on all of them.
-          </p>
+          <div className='space-y-1'>
+            <p className='text-sm text-amber-800 dark:text-amber-300'>
+              {selectedRefundableIds.length}{' '}
+              {selectedRefundableIds.length === 1 ? 'batch' : 'batches'}{' '}
+              selected
+              {hasMultipleRefundGroups && selectedBatch && (
+                <span className='font-mono'>
+                  {' '}
+                  (account {selectedBatch.accountId.slice(0, 8)}…)
+                </span>
+              )}{' '}
+              — one transaction hash will be recorded on all of them.
+            </p>
+            {/* Destination of the AI3 transfer, in full and copiable: every
+                selected batch shares this purchasing wallet, and the admin
+                has to paste it into their wallet to send the refund. */}
+            {selectedBatch && (
+              <div className='flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300'>
+                <span>Refund to wallet:</span>
+                {selectedBatch.fromAddress ? (
+                  <CopiableText
+                    text={selectedBatch.fromAddress}
+                    className='whitespace-nowrap font-mono'
+                  />
+                ) : (
+                  <span className='font-mono'>
+                    unknown (legacy intent — no wallet recorded)
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           <div className='flex items-center gap-2'>
             <Button
               variant='outline'
@@ -460,13 +486,16 @@ export const AdminUserCredits = ({
                       {formatAI3Paid(batch.paymentAmount)}
                     </td>
 
-                    {/* EVM wallet */}
+                    {/* EVM wallet — shown in full, never truncated: the
+                        refund transfer has to go back to this exact address,
+                        so the admin needs to read and copy all 42 chars. The
+                        table scrolls horizontally if the row gets too wide. */}
                     <td className='px-4 py-3 font-mono text-xs'>
                       {batch.fromAddress ? (
-                        <span title={batch.fromAddress}>
-                          {batch.fromAddress.slice(0, 8)}…
-                          {batch.fromAddress.slice(-6)}
-                        </span>
+                        <CopiableText
+                          text={batch.fromAddress}
+                          className='whitespace-nowrap'
+                        />
                       ) : (
                         <span className='text-muted-foreground'>—</span>
                       )}
@@ -521,6 +550,7 @@ export const AdminUserCredits = ({
         <RefundTxHashModal
           batchCount={refundTarget.length}
           suggestedRefundAi3={suggestedRefundAi3}
+          refundWalletAddress={refundTargetWallet}
           isSubmitting={isRefunding}
           errorMessage={refundError}
           onConfirm={(refundTxHash) =>
