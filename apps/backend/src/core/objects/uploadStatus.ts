@@ -8,11 +8,22 @@ const logger = createLogger('useCases:objects:uploadStatus')
 const getUploadStatus = async (cid: string): Promise<ObjectUploadState> => {
   logger.debug('Fetching upload status (cid=%s)', cid)
   const uploadStatus = await uploadsRepository.getStatusByCID(cid)
-  const isMigratingOrPending =
+  // FAILED is included deliberately. An upload row still exists for it (only a
+  // successful migration removes the artifacts), so its nodes were never written
+  // and the counting path below would report 0 uploaded of 0 total — which reads
+  // as "fully published" rather than "never published". Returning the same
+  // all-null state as an in-progress upload keeps that from being reported as
+  // success. Surfacing a distinct failed state to the user needs a new
+  // ObjectUploadState field plus frontend work; tracked separately.
+  const hasNoNodesYet =
     uploadStatus &&
-    [UploadStatus.MIGRATING, UploadStatus.PENDING].includes(uploadStatus)
+    [
+      UploadStatus.MIGRATING,
+      UploadStatus.PENDING,
+      UploadStatus.FAILED,
+    ].includes(uploadStatus)
 
-  if (isMigratingOrPending) {
+  if (hasNoNodesYet) {
     logger.trace('Upload is in %s state (cid=%s)', uploadStatus, cid)
     return {
       uploadedNodes: null,

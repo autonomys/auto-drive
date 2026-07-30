@@ -19,47 +19,80 @@ import { UploadsUseCases } from './uploads.js'
 import { getUploadBlockstore } from '../../infrastructure/services/upload/uploadProcessorCache/index.js'
 import { uploadsRepository } from '../../infrastructure/repositories/uploads/uploads.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { UnrecoverableUploadError } from './errors.js'
 
 const logger = createLogger('useCases:uploads:blockstore')
 
-const getFileUploadIdCID = async (uploadId: string): Promise<CID> => {
-  logger.debug('getFileUploadIdCID invoked (uploadId=%s)', uploadId)
+/**
+ * Resolves the single root node CID an upload's blockstore must contain.
+ *
+ * Tolerates DUPLICATE rows that all carry the same CID. Historically a repeated
+ * completeUpload call re-ran the completion processing and re-INSERTed the root
+ * node (uploads.blockstore has no unique key on (upload_id, cid) — see
+ * blockstore_upload_id_cid_index), leaving 2-3 byte-identical rows and making
+ * this lookup — and therefore migration — fail permanently for an upload whose
+ * data is perfectly intact. completeUpload now refuses to re-run (see
+ * UploadsUseCases.completeUpload), but rows written before that guard still
+ * exist in production, so the read side must accept them.
+ *
+ * Deduplicating on CID rather than row count is safe because it is only used to
+ * identify the ROOT node, of which there can be exactly one per upload; the
+ * per-chunk reads (getChunksByNodeType, getFilteredMany) are deliberately left
+ * alone, since a file containing two identical chunks legitimately stores two
+ * rows with the same CID and both links belong in the DAG.
+ *
+ * A count of zero, or genuinely different CIDs, is not a duplicate — it is an
+ * upload that can never produce a root node, so it raises
+ * UnrecoverableUploadError rather than a bare Error.
+ */
+const getRootNodeCID = async (
+  uploadId: string,
+  nodeType: MetadataType.File | MetadataType.Folder,
+): Promise<CID> => {
   const blockstoreEntry = await blockstoreRepository.getByType(
     uploadId,
-    MetadataType.File,
+    nodeType,
   )
-  if (blockstoreEntry.length !== 1) {
+  const distinctCids = new Set(blockstoreEntry.map((e) => e.cid))
+
+  if (distinctCids.size !== 1) {
     logger.warn(
-      'Invalid number of blockstore entries for file upload (uploadId=%s)',
+      'Invalid number of blockstore entries for %s upload (uploadId=%s, rows=%d, distinctCids=%d)',
+      nodeType,
+      uploadId,
+      blockstoreEntry.length,
+      distinctCids.size,
+    )
+    throw new UnrecoverableUploadError(
+      `Invalid number of blockstore entries for ${nodeType} upload with id=${uploadId} (rows=${blockstoreEntry.length}, distinctCids=${distinctCids.size})`,
       uploadId,
     )
-    throw new Error(
-      `Invalid number of blockstore entries for file upload with id=${uploadId}`,
+  }
+
+  if (blockstoreEntry.length > 1) {
+    logger.warn(
+      'Duplicate root blockstore rows for %s upload, all with the same CID; using it (uploadId=%s, rows=%d)',
+      nodeType,
+      uploadId,
+      blockstoreEntry.length,
     )
   }
-  const cid = blockstoreEntry[0].cid
+
+  const [cid] = distinctCids
 
   return stringToCid(cid)
 }
 
+const getFileUploadIdCID = async (uploadId: string): Promise<CID> => {
+  logger.debug('getFileUploadIdCID invoked (uploadId=%s)', uploadId)
+
+  return getRootNodeCID(uploadId, MetadataType.File)
+}
+
 const getFolderUploadIdCID = async (uploadId: string): Promise<CID> => {
   logger.debug('getFolderUploadIdCID invoked (uploadId=%s)', uploadId)
-  const blockstoreEntry = await blockstoreRepository.getByType(
-    uploadId,
-    MetadataType.Folder,
-  )
-  if (blockstoreEntry.length !== 1) {
-    logger.warn(
-      'Invalid number of blockstore entries for folder upload (uploadId=%s)',
-      uploadId,
-    )
-    throw new Error(
-      `Invalid number of blockstore entries for folder upload with id=${uploadId}`,
-    )
-  }
-  const cid = blockstoreEntry[0].cid
 
-  return stringToCid(cid)
+  return getRootNodeCID(uploadId, MetadataType.Folder)
 }
 
 const getUploadCID = async (uploadId: string): Promise<CID> => {
@@ -67,7 +100,9 @@ const getUploadCID = async (uploadId: string): Promise<CID> => {
   const uploadEntry = await uploadsRepository.getUploadEntryById(uploadId)
   if (!uploadEntry) {
     logger.error('Upload not found (uploadId=%s)', uploadId)
-    throw new Error('Upload not found')
+    // Upload rows never come back, so a migrate task for a deleted upload can
+    // only ever fail; do not let it retry into the dead-letter queue.
+    throw new UnrecoverableUploadError('Upload not found', uploadId)
   }
 
   if (uploadEntry.type === UploadType.FILE) {

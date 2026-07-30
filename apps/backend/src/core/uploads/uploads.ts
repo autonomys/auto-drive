@@ -30,6 +30,7 @@ import {
   ObjectNotFoundError,
 } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
+import { UnrecoverableUploadError } from './errors.js'
 
 const logger = createLogger('useCases:uploads:uploads')
 
@@ -307,6 +308,41 @@ const completeUpload = async (
   }
   await checkPermissions(upload, user)
 
+  // completeUpload is NOT idempotent, so it must run at most once per upload.
+  // completeUploadProcessing re-derives the root IPLD node and writes it to
+  // uploads.blockstore on every call (blockstore.put -> plain INSERT, no unique
+  // key on (upload_id, cid)), and handleFileUploadFinalization re-runs
+  // registerInteraction. A second call therefore leaves a duplicate root node —
+  // which used to make getFileUploadIdCID, and so every future migration
+  // attempt, fail permanently — and double-charges upload credits. A client
+  // retry after a timeout, a double submit, or a proxy retry is enough to
+  // trigger it; only `abortUpload` guarded its status before this.
+  //
+  // A repeat call on an already-completed upload is treated as a no-op that
+  // returns the existing CID, and re-drives migration in case the original
+  // one-shot migrate task was lost — the retry heals the upload instead of
+  // corrupting it.
+  if (upload.status === UploadStatus.MIGRATING) {
+    const cid = cidToString(await BlockstoreUseCases.getUploadCID(uploadId))
+    logger.warn(
+      'completeUpload called on an already-completed upload; re-driving migration (uploadId=%s, cid=%s)',
+      uploadId,
+      cid,
+    )
+    if (upload.root_upload_id === uploadId) {
+      await scheduleNodeMigration(uploadId)
+    }
+    return cid
+  }
+  if (upload.status !== UploadStatus.PENDING) {
+    logger.warn(
+      'completeUpload called on a %s upload (uploadId=%s)',
+      upload.status,
+      uploadId,
+    )
+    throw new Error(`Upload ${uploadId} is ${upload.status}`)
+  }
+
   // FILE uploads: drain any not-yet-processed chunks and reject on a gap before
   // finalising. Folder uploads have no file_processing_info row and finalise
   // via processFolderUpload instead. Both steps share one lock; the lockless
@@ -581,7 +617,7 @@ const processMigration = async (uploadId: string): Promise<void> => {
     const upload = await uploadsRepository.getUploadEntryById(uploadId)
     if (!upload) {
       logger.error('Upload not found (uploadId=%s)', uploadId)
-      throw new Error('Upload not found')
+      throw new UnrecoverableUploadError('Upload not found', uploadId)
     }
 
     const cid = await BlockstoreUseCases.getUploadCID(uploadId)
@@ -590,6 +626,37 @@ const processMigration = async (uploadId: string): Promise<void> => {
     await removeUploadArtifacts(uploadId)
     await scheduleUploadTagging(cidToString(cid))
     await scheduleCachePopulation(cidToString(cid))
+  } catch (error) {
+    // A permanently broken upload must not be retried. Left to the normal retry
+    // path it would burn its three retries, publish one message to the
+    // consumer-less frontend-errors queue, stay MIGRATING, and then be re-driven
+    // by the migration recovery sweep on the next staleness window — forever, so
+    // the dead-letter queue grows without bound (this is exactly what filled it
+    // with 300+ messages). Parking the upload in FAILED takes it out of
+    // getStuckRootMigrations, so the sweep stops selecting it, and swallowing the
+    // error acks the task instead of dead-lettering it. Mirrors the
+    // `unrecoverable` bucket that publishing recovery already logs.
+    if (error instanceof UnrecoverableUploadError) {
+      logger.error(
+        error,
+        'Migration is unrecoverable, parking upload as failed (uploadId=%s)',
+        uploadId,
+      )
+      await uploadsRepository
+        .updateUploadStatusByRootUploadId(uploadId, UploadStatus.FAILED)
+        .catch((updateError) =>
+          // Best-effort: if the status write fails the task still acks and the
+          // sweep may re-drive it once more, which is strictly better than
+          // rethrowing into an unbounded dead-letter loop.
+          logger.error(
+            updateError as Error,
+            'Failed to park unrecoverable upload as failed (uploadId=%s)',
+            uploadId,
+          ),
+        )
+      return
+    }
+    throw error
   } finally {
     migrationsInFlight.delete(uploadId)
   }

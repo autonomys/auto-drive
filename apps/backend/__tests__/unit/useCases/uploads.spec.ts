@@ -6,6 +6,7 @@ import {
   uploadsRepository,
   type UploadEntry,
 } from '../../../src/infrastructure/repositories/uploads/uploads.js'
+import { UploadStatus } from '@auto-drive/models'
 
 describe('UploadsUseCases.scheduleNodesPublish', () => {
   beforeEach(() => {
@@ -124,20 +125,27 @@ describe('UploadsUseCases.processMigration', () => {
     const getSpy = jest
       .spyOn(uploadsRepository, 'getUploadEntryById')
       .mockReturnValue(lookupGate)
+    // A missing upload is unrecoverable, so processMigration parks it as failed
+    // and resolves rather than throwing (see UnrecoverableUploadError) — stub the
+    // status write so the guard assertions below don't reach the database.
+    const setStatusSpy = jest
+      .spyOn(uploadsRepository, 'updateUploadStatusByRootUploadId')
+      .mockResolvedValue(undefined)
 
     const first = UploadsUseCases.processMigration('upload-1')
     // Second run for the same upload must short-circuit before touching the repo.
     await UploadsUseCases.processMigration('upload-1')
     expect(getSpy).toHaveBeenCalledTimes(1)
 
-    // Let the first run finish; an unknown upload throws, releasing the guard.
+    // Let the first run finish; an unknown upload is parked, releasing the guard.
     resolveLookup(null)
-    await expect(first).rejects.toThrow('Upload not found')
+    await expect(first).resolves.toBeUndefined()
+    expect(setStatusSpy).toHaveBeenCalledWith('upload-1', UploadStatus.FAILED)
 
     // Guard released — a later run for the same upload proceeds again.
-    await expect(UploadsUseCases.processMigration('upload-1')).rejects.toThrow(
-      'Upload not found',
-    )
+    await expect(
+      UploadsUseCases.processMigration('upload-1'),
+    ).resolves.toBeUndefined()
     expect(getSpy).toHaveBeenCalledTimes(2)
   })
 })
