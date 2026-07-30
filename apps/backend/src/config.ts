@@ -152,7 +152,13 @@ export const config = {
     webhookUrl: process.env.SLACK_WEBHOOK_URL,
     // Failures are batched into one message per window rather than posted
     // individually: a drained backlog would otherwise post hundreds of times.
-    alertWindowMs: Number(env('TASK_ERROR_ALERT_WINDOW_MS', '60000')),
+    //
+    // 30 minutes deliberately favours a quiet channel over a fast alert. These
+    // are tasks that already exhausted every retry, so nothing is waiting on the
+    // notification — but note that a batched failure has already been acked off
+    // the queue, so this is also how much alerting a hard crash can lose. Both
+    // workers flush on SIGTERM, which covers ordinary deploys.
+    alertWindowMs: Number(env('TASK_ERROR_ALERT_WINDOW_MS', '1800000')),
     // Failures listed individually in a batch before collapsing to a count.
     alertMaxItems: Number(env('TASK_ERROR_ALERT_MAX_ITEMS', '10')),
   },
