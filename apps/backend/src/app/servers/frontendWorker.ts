@@ -24,6 +24,10 @@
     '../../infrastructure/drivers/rabbit.js'
   )
 
+  // Ungated by feature flags: a task that exhausted its retries needs to be
+  // reported regardless of which subsystems this host runs.
+  EventRouter.listenTaskErrors()
+
   let somethingActive = false
   if (config.featureFlags.flags.taskManager.active) {
     EventRouter.listenFrontendEvents()
@@ -116,6 +120,12 @@
       '../../infrastructure/services/deletionAnonymisationJob.js'
     )
     deletionAnonymisationJob.stop()
+    // Send anything still inside the batching window before the channel closes,
+    // so a deploy doesn't swallow the alerts it may itself have caused.
+    const { flushTaskErrorAlerts } = await import(
+      '../../infrastructure/eventRouter/taskErrorNotifier.js'
+    )
+    await flushTaskErrorAlerts()
     await Rabbit.close()
     logger.info('Frontend worker shut down successfully')
     process.exit(0)

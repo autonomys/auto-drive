@@ -11,7 +11,18 @@ export type Queue = (typeof queues)[number]
 
 const logger = createLogger('drivers:rabbit')
 
-const queues = ['task-manager', 'download-manager', 'publish-manager'] as const
+// Error queues are listed here so they are asserted at channel setup and are
+// valid `subscribe`/`getMessageCount` targets. They were previously created
+// implicitly by `publish` alone, which left them unsubscribable — and so they
+// accumulated permanently failed tasks that nobody ever read.
+const queues = [
+  'task-manager',
+  'download-manager',
+  'publish-manager',
+  'frontend-errors',
+  'download-errors',
+  'publish-errors',
+] as const
 const subscriptions: Partial<Record<Queue, SubscriptionCallback[]>> = {}
 
 let channelPromise: Promise<Channel> | null = null

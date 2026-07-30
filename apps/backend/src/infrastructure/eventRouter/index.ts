@@ -12,6 +12,7 @@ import {
   publishErrorPublishedQueue,
 } from './processors/publish.js'
 import { Task } from './tasks.js'
+import { handleFailedTask } from './taskErrorNotifier.js'
 
 export const EventRouter = {
   listenFrontendEvents: () => {
@@ -22,6 +23,27 @@ export const EventRouter = {
   },
   listenPublishEvents: () => {
     Rabbit.subscribe('publish-manager', processPublishTask)
+  },
+  /**
+   * Consumes the error queues and alerts on what lands there.
+   *
+   * Until now nothing subscribed to them, so a task that exhausted its retries
+   * was published to a queue with no reader and stayed there forever — the count
+   * was a growing tally of silent failures, not a backlog anything would drain.
+   *
+   * Safe to call from more than one process: RabbitMQ delivers each message to a
+   * single consumer, so extra readers share the work rather than duplicating
+   * alerts. The only effect of multiple readers is that a batching window may be
+   * split between them, producing two smaller summaries instead of one.
+   */
+  listenTaskErrors: () => {
+    for (const queue of [
+      frontendErrorPublishedQueue,
+      downloadErrorPublishedQueue,
+      publishErrorPublishedQueue,
+    ] as const) {
+      Rabbit.subscribe(queue, (message) => handleFailedTask(queue, message))
+    }
   },
   publish: (tasks: Task[] | Task) => {
     if (Array.isArray(tasks)) {

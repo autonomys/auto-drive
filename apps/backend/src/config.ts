@@ -144,6 +144,19 @@ export const config = {
     prefetch: Number(env('RABBITMQ_PREFETCH', '10')),
     keepAliveInterval: Number(env('RABBITMQ_KEEP_ALIVE_INTERVAL', '60000')),
   },
+  // Alerting for tasks that exhausted their retries. Without a consumer the
+  // error queues grow forever and nobody finds out a task died.
+  slack: {
+    // Incoming-webhook URL. The channel is encoded in the URL, so there is no
+    // separate channel setting. Unset disables alerting (log-only).
+    webhookUrl: process.env.SLACK_WEBHOOK_URL,
+    // Failures are batched into one message per window rather than posted
+    // individually: a drained backlog would otherwise post hundreds of times.
+    alertWindowMs: Number(env('TASK_ERROR_ALERT_WINDOW_MS', '60000')),
+    // Failures listed individually in a batch before collapsing to a count.
+    alertMaxItems: Number(env('TASK_ERROR_ALERT_MAX_ITEMS', '10')),
+    environment: env('SLACK_ALERT_ENVIRONMENT', 'unknown'),
+  },
   monitoring: {
     active: env('VICTORIA_ACTIVE', 'false') === 'true',
     victoriaEndpoint: process.env.VICTORIA_ENDPOINT,
