@@ -341,32 +341,52 @@ const completeUpload = async (
   // The status read above is not a guard on its own — two overlapping calls
   // would both see PENDING and both fall through. Take the claim atomically so
   // exactly one caller runs the processing, across every API process.
-  const claimed = await uploadsRepository.claimUploadForCompletion(
+  let claimed = await uploadsRepository.claimUploadForCompletion(
     uploadId,
     config.uploads.completionClaimStaleMs,
   )
   if (!claimed) {
-    // Losing the claim does not necessarily mean a completion is still running:
-    // the winner may have finished the whole thing between the status read above
-    // and this compare-and-swap, which for a small upload is an easy window to
-    // hit. Re-read before erroring so a retry of an already-successful
-    // completion still gets its CID instead of a spurious failure.
+    // Losing the claim does not by itself mean a completion is still running, so
+    // re-read before erroring — the row's state says which of three things
+    // happened while this call was between its status read and the CAS.
     const current = await uploadsRepository.getUploadEntryById(uploadId)
     if (!current) {
       logger.warn('Upload not found (uploadId=%s)', uploadId)
       throw new Error('Upload not found')
     }
     if (current.status === UploadStatus.MIGRATING) {
+      // The winner finished the whole completion — an easy window to hit for a
+      // small upload. This call is then just a retry of a completed upload.
       return resolveAlreadyCompletedUpload(current, uploadId)
     }
-    logger.warn(
-      'completeUpload could not claim the upload (uploadId=%s, status=%s)',
-      uploadId,
-      current.status,
-    )
-    throw new BadRequestError(
-      `Upload ${uploadId} is already being completed; retry once it finishes`,
-    )
+    if (current.status === UploadStatus.PENDING) {
+      // The winner failed and released the claim (e.g. insufficient credits, or
+      // a gap in the stored parts). Nothing holds the claim now, so this call is
+      // free to take it rather than telling the client to retry something that
+      // is not in progress. Exactly one re-attempt: a repeatedly failing sibling
+      // must not turn this into a loop.
+      logger.warn(
+        'Completion claim was released before this call could take it; retrying the claim once (uploadId=%s)',
+        uploadId,
+      )
+      claimed = await uploadsRepository.claimUploadForCompletion(
+        uploadId,
+        config.uploads.completionClaimStaleMs,
+      )
+    }
+    if (!claimed) {
+      logger.warn(
+        'completeUpload could not claim the upload (uploadId=%s, status=%s)',
+        uploadId,
+        current.status,
+      )
+      throw new BadRequestError(
+        current.status === UploadStatus.PENDING ||
+        current.status === UploadStatus.COMPLETING
+          ? `Upload ${uploadId} is already being completed; retry once it finishes`
+          : `Upload ${uploadId} is ${current.status}`,
+      )
+    }
   }
 
   try {

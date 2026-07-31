@@ -159,6 +159,68 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
     ).rejects.toThrow(/Upload not found/)
   })
 
+  // The winner can fail fast (insufficient credits, a gap in the stored parts)
+  // and hand the upload back before the loser re-reads it. Nothing holds the
+  // claim at that point, so telling the client to "retry once it finishes" would
+  // be wrong — take the claim instead.
+  it('takes the claim when the winner already released it', async () => {
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValue({ ...upload, status: UploadStatus.PENDING })
+    const claim = jest
+      .spyOn(uploadsRepository, 'claimUploadForCompletion')
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true)
+    const processing = jest
+      .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
+      .mockResolvedValue(CID as any)
+    jest
+      .spyOn(UploadFileProcessingUseCase, 'handleFileUploadFinalization')
+      .mockResolvedValue(CID)
+    jest
+      .spyOn(uploadsRepository, 'updateUploadEntry')
+      .mockImplementation(async (entry) => entry)
+    jest.spyOn(EventRouter, 'publish').mockReturnValue()
+    jest
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .mockResolvedValue({
+        upload_id: upload.id,
+        last_processed_part_index: 0,
+      } as any)
+    jest
+      .spyOn(filePartsRepository, 'getChunkByUploadIdAndPartIndex')
+      .mockResolvedValue(null as any)
+    jest
+      .spyOn(filePartsRepository, 'getPartIndicesGreaterThan')
+      .mockResolvedValue([])
+
+    const result = await UploadsUseCases.completeUpload(mockUser, upload.id)
+
+    expect(result).toBe(CID)
+    expect(claim).toHaveBeenCalledTimes(2)
+    expect(processing).toHaveBeenCalledTimes(1)
+  })
+
+  // Exactly one re-attempt: a sibling that keeps failing and releasing must not
+  // turn the claim path into a loop.
+  it('gives up after one re-attempt when the claim keeps being taken', async () => {
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValue({ ...upload, status: UploadStatus.PENDING })
+    const claim = jest
+      .spyOn(uploadsRepository, 'claimUploadForCompletion')
+      .mockResolvedValue(false)
+    const processing = jest
+      .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
+      .mockResolvedValue(CID as any)
+
+    await expect(
+      UploadsUseCases.completeUpload(mockUser, upload.id),
+    ).rejects.toThrow(/already being completed/)
+    expect(claim).toHaveBeenCalledTimes(2)
+    expect(processing).not.toHaveBeenCalled()
+  })
+
   it('claims the upload before processing and only then flips it to MIGRATING', async () => {
     jest
       .spyOn(uploadsRepository, 'getUploadEntryById')
