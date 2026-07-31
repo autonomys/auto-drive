@@ -123,6 +123,17 @@ export const config = {
     // every cycle.
     stalenessMs: Number(env('MIGRATION_RECOVERY_STALENESS_MS', '1800000')), // 30 minutes
   },
+  uploads: {
+    // How long a completion claim (status=completing) is respected before
+    // another completeUpload call may take it over. Only reached when a process
+    // dies mid-completion, since the claim is released on both success and
+    // failure — so this must comfortably exceed the time it takes to derive the
+    // root IPLD node for the largest expected upload, or a slow completion could
+    // be claimed a second time and duplicate the root blockstore node.
+    completionClaimStaleMs: Number(
+      env('UPLOAD_COMPLETION_CLAIM_STALE_MS', '3600000'),
+    ), // 1 hour
+  },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),

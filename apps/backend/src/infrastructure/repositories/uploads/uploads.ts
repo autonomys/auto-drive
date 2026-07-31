@@ -92,6 +92,57 @@ export const updateUploadEntry = async (
   return result.rows[0]
 }
 
+/**
+ * Atomically claims a PENDING upload for completion, returning false if someone
+ * else holds the claim.
+ *
+ * A plain read-then-act guard in completeUpload is not enough: two overlapping
+ * calls for the same upload (a client timeout retry while the first is still in
+ * flight) would both read PENDING and both run the completion processing, each
+ * re-INSERTing the root blockstore node and re-charging credits. A single
+ * conditional UPDATE makes the transition a compare-and-swap, so exactly one
+ * caller can win regardless of how many API processes are running.
+ *
+ * A claim older than staleClaimMs is re-claimable so a process that died
+ * mid-completion does not strand the upload: COMPLETING is not selected by
+ * getStuckRootMigrations (correctly — there is no root node to migrate yet), so
+ * without this the row would never become completable again.
+ */
+export const claimUploadForCompletion = async (
+  id: string,
+  staleClaimMs: number,
+): Promise<boolean> => {
+  const db = await getDatabase()
+
+  const result = await db.query(
+    `UPDATE uploads.uploads
+     SET status = $2, updated_at = NOW()
+     WHERE id = $1
+       AND (
+         status = $3
+         OR (status = $2 AND updated_at < NOW() - ($4::bigint * INTERVAL '1 millisecond'))
+       )
+     RETURNING id`,
+    [id, UploadStatus.COMPLETING, UploadStatus.PENDING, staleClaimMs],
+  )
+
+  return result.rowCount === 1
+}
+
+// Releases a completion claim so the client can retry. Only ever moves a row we
+// still hold (COMPLETING) back to PENDING — never touches an upload that has
+// already reached MIGRATING or a terminal state.
+export const releaseUploadCompletionClaim = async (
+  id: string,
+): Promise<void> => {
+  const db = await getDatabase()
+
+  await db.query(
+    'UPDATE uploads.uploads SET status = $2, updated_at = NOW() WHERE id = $1 AND status = $3',
+    [id, UploadStatus.PENDING, UploadStatus.COMPLETING],
+  )
+}
+
 export const updateUploadStatusByRootUploadId = async (
   root_upload_id: string,
   status: UploadStatus,
@@ -232,6 +283,8 @@ export const uploadsRepository = {
   getUploadEntriesByRelativeId,
   getUploadsByStatus,
   getStatusByCID,
+  claimUploadForCompletion,
+  releaseUploadCompletionClaim,
   updateUploadStatusByRootUploadId,
   deleteEntriesByRootUploadId,
   getStuckRootMigrations,

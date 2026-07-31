@@ -20,6 +20,7 @@ const getUploadStatus = async (cid: string): Promise<ObjectUploadState> => {
     [
       UploadStatus.MIGRATING,
       UploadStatus.PENDING,
+      UploadStatus.COMPLETING,
       UploadStatus.FAILED,
     ].includes(uploadStatus)
 

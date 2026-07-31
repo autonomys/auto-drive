@@ -18,6 +18,7 @@ import { fileProcessingInfoRepository } from '../../infrastructure/repositories/
 import { NodesUseCases } from '../objects/nodes.js'
 import { ObjectUseCases } from '../objects/object.js'
 import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
+import { CID } from 'multiformats'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { createTask, Task } from '../../infrastructure/eventRouter/tasks.js'
 import { config } from '../../config.js'
@@ -334,7 +335,10 @@ const completeUpload = async (
     }
     return cid
   }
-  if (upload.status !== UploadStatus.PENDING) {
+  if (
+    upload.status !== UploadStatus.PENDING &&
+    upload.status !== UploadStatus.COMPLETING
+  ) {
     logger.warn(
       'completeUpload called on a %s upload (uploadId=%s)',
       upload.status,
@@ -343,32 +347,75 @@ const completeUpload = async (
     throw new Error(`Upload ${uploadId} is ${upload.status}`)
   }
 
-  // FILE uploads: drain any not-yet-processed chunks and reject on a gap before
-  // finalising. Folder uploads have no file_processing_info row and finalise
-  // via processFolderUpload instead. Both steps share one lock; the lockless
-  // helpers are used because the lock-acquiring path would deadlock here
-  // (withDrainLock is not reentrant).
-  if (upload.type === UploadType.FILE) {
-    await withDrainLock(uploadId, async () => {
-      await drainLoop(uploadId)
-      await assertNoUnprocessedParts(uploadId)
-    })
-  }
-
-  const cid = await UploadFileProcessingUseCase.completeUploadProcessing(upload)
-
-  if (upload.type === UploadType.FILE) {
-    await UploadFileProcessingUseCase.handleFileUploadFinalization(
-      user,
+  // The status read above is not a guard on its own — two overlapping calls
+  // would both see PENDING and both fall through. Take the claim atomically so
+  // exactly one caller runs the processing, across every API process.
+  const claimed = await uploadsRepository.claimUploadForCompletion(
+    uploadId,
+    config.uploads.completionClaimStaleMs,
+  )
+  if (!claimed) {
+    logger.warn(
+      'completeUpload is already in progress for this upload (uploadId=%s)',
       uploadId,
     )
-  } else if (upload.type === UploadType.FOLDER) {
-    await UploadFileProcessingUseCase.handleFolderUploadFinalization(
-      user,
-      uploadId,
+    throw new BadRequestError(
+      `Upload ${uploadId} is already being completed; retry once it finishes`,
     )
   }
 
+  try {
+    // FILE uploads: drain any not-yet-processed chunks and reject on a gap before
+    // finalising. Folder uploads have no file_processing_info row and finalise
+    // via processFolderUpload instead. Both steps share one lock; the lockless
+    // helpers are used because the lock-acquiring path would deadlock here
+    // (withDrainLock is not reentrant).
+    if (upload.type === UploadType.FILE) {
+      await withDrainLock(uploadId, async () => {
+        await drainLoop(uploadId)
+        await assertNoUnprocessedParts(uploadId)
+      })
+    }
+
+    const cid =
+      await UploadFileProcessingUseCase.completeUploadProcessing(upload)
+
+    if (upload.type === UploadType.FILE) {
+      await UploadFileProcessingUseCase.handleFileUploadFinalization(
+        user,
+        uploadId,
+      )
+    } else if (upload.type === UploadType.FOLDER) {
+      await UploadFileProcessingUseCase.handleFolderUploadFinalization(
+        user,
+        uploadId,
+      )
+    }
+
+    return await finalizeCompletedUpload(upload, uploadId, cid)
+  } catch (error) {
+    // Hand the upload back so the client can retry — a failed completion (e.g.
+    // insufficient credits, or a gap in the stored parts) must not leave the row
+    // parked in COMPLETING, which nothing sweeps. Only rolls back rows still in
+    // COMPLETING, so a failure after the flip to MIGRATING cannot undo it.
+    await uploadsRepository
+      .releaseUploadCompletionClaim(uploadId)
+      .catch((releaseError) =>
+        logger.error(
+          releaseError as Error,
+          'Failed to release completion claim (uploadId=%s)',
+          uploadId,
+        ),
+      )
+    throw error
+  }
+}
+
+const finalizeCompletedUpload = async (
+  upload: UploadEntry,
+  uploadId: string,
+  cid: CID,
+): Promise<string> => {
   const updatedUpload = {
     ...upload,
     status: UploadStatus.MIGRATING,

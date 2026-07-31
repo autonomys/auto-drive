@@ -12,6 +12,9 @@ import { UploadFileProcessingUseCase } from '../../../src/core/uploads/uploadPro
 import { UnrecoverableUploadError } from '../../../src/core/uploads/errors.js'
 import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
 import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/blockstore.js'
+import { fileProcessingInfoRepository } from '../../../src/infrastructure/repositories/uploads/fileProcessingInfo.js'
+import { filePartsRepository } from '../../../src/infrastructure/repositories/uploads/fileParts.js'
+import { config } from '../../../src/config.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { NodesUseCases } from '../../../src/core/objects/nodes.js'
 import {
@@ -87,6 +90,124 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
       UploadsUseCases.completeUpload(mockUser, upload.id),
     ).rejects.toThrow(/is failed/)
     expect(processing).not.toHaveBeenCalled()
+  })
+
+  // The status read is not a guard by itself: two overlapping calls both observe
+  // PENDING. Only the caller that wins the atomic claim may process the upload.
+  it('refuses to process when another call holds the completion claim', async () => {
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValue({ ...upload, status: UploadStatus.PENDING })
+    const claim = jest
+      .spyOn(uploadsRepository, 'claimUploadForCompletion')
+      .mockResolvedValue(false)
+    const processing = jest
+      .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
+      .mockResolvedValue(CID as any)
+
+    await expect(
+      UploadsUseCases.completeUpload(mockUser, upload.id),
+    ).rejects.toThrow(/already being completed/)
+    expect(claim).toHaveBeenCalledWith(
+      upload.id,
+      config.uploads.completionClaimStaleMs,
+    )
+    expect(processing).not.toHaveBeenCalled()
+  })
+
+  it('claims the upload before processing and only then flips it to MIGRATING', async () => {
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValue({ ...upload, status: UploadStatus.PENDING })
+    const order: string[] = []
+    jest
+      .spyOn(uploadsRepository, 'claimUploadForCompletion')
+      .mockImplementation(async () => {
+        order.push('claim')
+        return true
+      })
+    jest
+      .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
+      .mockImplementation(async () => {
+        order.push('processing')
+        return CID as any
+      })
+    jest
+      .spyOn(UploadFileProcessingUseCase, 'handleFileUploadFinalization')
+      .mockResolvedValue(CID)
+    jest
+      .spyOn(uploadsRepository, 'updateUploadEntry')
+      .mockImplementation(async (entry) => {
+        order.push(`status:${entry.status}`)
+        return entry
+      })
+    jest.spyOn(EventRouter, 'publish').mockReturnValue()
+    const release = jest
+      .spyOn(uploadsRepository, 'releaseUploadCompletionClaim')
+      .mockResolvedValue(undefined)
+    // A FILE upload drains its parts first; both helpers read the same cursor.
+    jest
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .mockResolvedValue({
+        upload_id: upload.id,
+        last_processed_part_index: 0,
+      } as any)
+    jest
+      .spyOn(filePartsRepository, 'getChunkByUploadIdAndPartIndex')
+      .mockResolvedValue(null as any)
+    jest
+      .spyOn(filePartsRepository, 'getPartIndicesGreaterThan')
+      .mockResolvedValue([])
+
+    const result = await UploadsUseCases.completeUpload(mockUser, upload.id)
+
+    expect(result).toBe(CID)
+    // MIGRATING is only reached after the root node exists, so the migration
+    // recovery sweep can never select a still-completing upload.
+    expect(order).toEqual([
+      'claim',
+      'processing',
+      `status:${UploadStatus.MIGRATING}`,
+    ])
+    expect(release).not.toHaveBeenCalled()
+  })
+
+  // A failed completion must hand the upload back: COMPLETING is not swept by
+  // migration recovery, so a stranded claim would be invisible.
+  it('releases the claim when completion fails so the client can retry', async () => {
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValue({ ...upload, status: UploadStatus.PENDING })
+    jest
+      .spyOn(uploadsRepository, 'claimUploadForCompletion')
+      .mockResolvedValue(true)
+    jest
+      .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
+      .mockRejectedValue(new Error('Not enough upload credits'))
+    const release = jest
+      .spyOn(uploadsRepository, 'releaseUploadCompletionClaim')
+      .mockResolvedValue(undefined)
+    const updateEntry = jest
+      .spyOn(uploadsRepository, 'updateUploadEntry')
+      .mockImplementation(async (entry) => entry)
+    jest
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .mockResolvedValue({
+        upload_id: upload.id,
+        last_processed_part_index: 0,
+      } as any)
+    jest
+      .spyOn(filePartsRepository, 'getChunkByUploadIdAndPartIndex')
+      .mockResolvedValue(null as any)
+    jest
+      .spyOn(filePartsRepository, 'getPartIndicesGreaterThan')
+      .mockResolvedValue([])
+
+    await expect(
+      UploadsUseCases.completeUpload(mockUser, upload.id),
+    ).rejects.toThrow(/Not enough upload credits/)
+    expect(release).toHaveBeenCalledWith(upload.id)
+    expect(updateEntry).not.toHaveBeenCalled()
   })
 })
 
