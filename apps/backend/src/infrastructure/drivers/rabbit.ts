@@ -27,7 +27,11 @@ const subscriptions: Partial<Record<Queue, SubscriptionCallback[]>> = {}
 
 interface ActiveConsumer {
   channel: Channel
-  consumerTag: string
+  // Held as a promise, and stored in the same tick as the `consume` call that
+  // produces it, so the entry doubles as an in-flight reservation: a second
+  // caller arriving while the first `consume` is still on the wire sees it and
+  // reuses it instead of opening a rival consumer.
+  consumerTag: Promise<string>
 }
 
 /**
@@ -39,6 +43,9 @@ interface ActiveConsumer {
  * cancelling it targeted a dead consumer on a closed channel while the live one
  * kept delivering. Unsubscribing therefore looks the consumer up here, at call
  * time, rather than capturing it at subscribe time.
+ *
+ * The map is also what keeps consumers unique per (queue, callback, channel) —
+ * see `ensureConsumer`.
  */
 const activeConsumers: Partial<
   Record<Queue, Map<SubscriptionCallback, ActiveConsumer>>
@@ -117,6 +124,90 @@ const keepAlive = async () => {
   }
 }
 
+/**
+ * Starts consuming `queue` with `callback`, or reuses the consumer already doing
+ * so on this channel.
+ *
+ * Two paths race to establish the same consumer: the `subscribe` call itself,
+ * and the re-subscribe loop `getChannel` runs once its channel resolves. On the
+ * very first subscribe both fire — the callback is registered in `subscriptions`
+ * before `getChannel` is even called, so the loop that is meant to restore
+ * consumers after a reconnect also picks up the subscribe that is still in
+ * flight. Each then called `consume` and the later one overwrote the other's
+ * entry in `activeConsumers`, leaving a second live consumer that nothing held a
+ * tag for: `unsubscribe`/`stopTaskErrors` cancelled one, the orphan kept
+ * delivering, and on shutdown its messages landed in a batch created after the
+ * final flush had already run.
+ *
+ * Reserving the entry synchronously — before awaiting the `consume` — closes
+ * that window regardless of which path gets there first.
+ */
+const ensureConsumer = (
+  queue: Queue,
+  callback: SubscriptionCallback,
+  channel: Channel,
+): ActiveConsumer => {
+  let consumers = activeConsumers[queue]
+  if (!consumers) {
+    consumers = new Map()
+    activeConsumers[queue] = consumers
+  }
+
+  const existing = consumers.get(callback)
+  if (existing) {
+    if (existing.channel === channel) {
+      return existing
+    }
+    // A different channel means a reconnect replaced the one this consumer lived
+    // on. That channel is normally closed already (which kills its consumers),
+    // but a close that failed would leave the old consumer delivering into a
+    // callback nobody can stop, so cancel it best-effort before dropping it.
+    existing.consumerTag
+      .then((tag) => existing.channel.cancel(tag))
+      .catch((error) => {
+        logger.debug(
+          'Could not cancel superseded consumer on %s: %s',
+          queue,
+          error,
+        )
+      })
+  }
+
+  const consumerTag = channel
+    .consume(queue, async (message: ConsumeMessage | null): Promise<void> => {
+      if (message) {
+        try {
+          const payload = JSON.parse(message.content.toString())
+          logger.debug('Received message from %s', queue)
+          await callback(payload)
+          logger.debug('Message processed successfully for %s', queue)
+          channel.ack(message)
+        } catch (error) {
+          logger.error('Error processing message from %s', queue, error)
+          channel.nack(message, false, true)
+        }
+      } else {
+        logger.warn('No message received from %s', queue)
+      }
+    })
+    .then((consume) => consume.consumerTag)
+
+  const consumer: ActiveConsumer = { channel, consumerTag }
+  consumers.set(callback, consumer)
+
+  // A failed `consume` must not leave its reservation behind, or a later
+  // subscribe on this same channel would hand back a consumer that never
+  // existed. Also marks the rejection handled — `subscribe` re-raises it to its
+  // own caller.
+  consumerTag.catch(() => {
+    if (consumers.get(callback) === consumer) {
+      consumers.delete(callback)
+    }
+  })
+
+  return consumer
+}
+
 const subscribe = async (
   queue: Queue,
   callback: (message: Record<string, unknown>) => Promise<unknown>,
@@ -132,33 +223,8 @@ const subscribe = async (
 
   const channel = await getChannel()
 
-  const consume = await channel.consume(
-    queue,
-    async (message: ConsumeMessage | null): Promise<void> => {
-      if (message) {
-        try {
-          const payload = JSON.parse(message.content.toString())
-          logger.debug('Received message from %s', queue)
-          await callback(payload)
-          logger.debug('Message processed successfully for %s', queue)
-          channel.ack(message)
-        } catch (error) {
-          logger.error('Error processing message from %s', queue, error)
-          channel.nack(message, false, true)
-        }
-      } else {
-        logger.warn('No message received from %s', queue)
-      }
-    },
-  )
-
-  if (!activeConsumers[queue]) {
-    activeConsumers[queue] = new Map()
-  }
-  activeConsumers[queue].set(callback, {
-    channel,
-    consumerTag: consume.consumerTag,
-  })
+  // Awaited so this resolves only once the broker has the consumer, as before.
+  await ensureConsumer(queue, callback, channel).consumerTag
 
   // Awaits the cancel rather than firing and forgetting it: callers that stop a
   // consumer in order to quiesce before doing something else (see
@@ -182,7 +248,7 @@ const subscribe = async (
     }
 
     try {
-      await active.channel.cancel(active.consumerTag)
+      await active.channel.cancel(await active.consumerTag)
     } catch (error) {
       // A cancel against an already-closed channel is moot: that consumer is
       // gone either way, which is what the caller wanted.
