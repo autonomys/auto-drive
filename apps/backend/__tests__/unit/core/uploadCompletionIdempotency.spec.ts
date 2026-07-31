@@ -97,7 +97,10 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
   it('refuses to process when another call holds the completion claim', async () => {
     jest
       .spyOn(uploadsRepository, 'getUploadEntryById')
-      .mockResolvedValue({ ...upload, status: UploadStatus.PENDING })
+      // First read races the winner; the re-read after losing the claim shows the
+      // winner still working.
+      .mockResolvedValueOnce({ ...upload, status: UploadStatus.PENDING })
+      .mockResolvedValue({ ...upload, status: UploadStatus.COMPLETING })
     const claim = jest
       .spyOn(uploadsRepository, 'claimUploadForCompletion')
       .mockResolvedValue(false)
@@ -113,6 +116,47 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
       config.uploads.completionClaimStaleMs,
     )
     expect(processing).not.toHaveBeenCalled()
+  })
+
+  // Losing the claim is not proof that a completion is still running: the winner
+  // can finish everything between our status read and the compare-and-swap. That
+  // retry has to get its CID, not a spurious failure.
+  it('returns the CID when the claim is lost to a winner that already finished', async () => {
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValueOnce({ ...upload, status: UploadStatus.PENDING })
+      .mockResolvedValue({ ...upload, status: UploadStatus.MIGRATING })
+    jest
+      .spyOn(uploadsRepository, 'claimUploadForCompletion')
+      .mockResolvedValue(false)
+    jest.spyOn(BlockstoreUseCases, 'getUploadCID').mockResolvedValue(CID as any)
+    const processing = jest
+      .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
+      .mockResolvedValue(CID as any)
+    const publish = jest.spyOn(EventRouter, 'publish').mockReturnValue()
+
+    const result = await UploadsUseCases.completeUpload(mockUser, upload.id)
+
+    expect(result).toBe(CID)
+    expect(processing).not.toHaveBeenCalled()
+    // Still re-drives migration, exactly like the plain already-completed path.
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [tasks] = publish.mock.calls[0] as any
+    expect(tasks[0].id).toBe('migrate-upload-nodes')
+  })
+
+  it('reports a not-found upload when the claim is lost and the row is gone', async () => {
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValueOnce({ ...upload, status: UploadStatus.PENDING })
+      .mockResolvedValue(null)
+    jest
+      .spyOn(uploadsRepository, 'claimUploadForCompletion')
+      .mockResolvedValue(false)
+
+    await expect(
+      UploadsUseCases.completeUpload(mockUser, upload.id),
+    ).rejects.toThrow(/Upload not found/)
   })
 
   it('claims the upload before processing and only then flips it to MIGRATING', async () => {

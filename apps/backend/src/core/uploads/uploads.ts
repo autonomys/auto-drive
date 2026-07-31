@@ -324,16 +324,7 @@ const completeUpload = async (
   // one-shot migrate task was lost — the retry heals the upload instead of
   // corrupting it.
   if (upload.status === UploadStatus.MIGRATING) {
-    const cid = cidToString(await BlockstoreUseCases.getUploadCID(uploadId))
-    logger.warn(
-      'completeUpload called on an already-completed upload; re-driving migration (uploadId=%s, cid=%s)',
-      uploadId,
-      cid,
-    )
-    if (upload.root_upload_id === uploadId) {
-      await scheduleNodeMigration(uploadId)
-    }
-    return cid
+    return resolveAlreadyCompletedUpload(upload, uploadId)
   }
   if (
     upload.status !== UploadStatus.PENDING &&
@@ -355,9 +346,23 @@ const completeUpload = async (
     config.uploads.completionClaimStaleMs,
   )
   if (!claimed) {
+    // Losing the claim does not necessarily mean a completion is still running:
+    // the winner may have finished the whole thing between the status read above
+    // and this compare-and-swap, which for a small upload is an easy window to
+    // hit. Re-read before erroring so a retry of an already-successful
+    // completion still gets its CID instead of a spurious failure.
+    const current = await uploadsRepository.getUploadEntryById(uploadId)
+    if (!current) {
+      logger.warn('Upload not found (uploadId=%s)', uploadId)
+      throw new Error('Upload not found')
+    }
+    if (current.status === UploadStatus.MIGRATING) {
+      return resolveAlreadyCompletedUpload(current, uploadId)
+    }
     logger.warn(
-      'completeUpload is already in progress for this upload (uploadId=%s)',
+      'completeUpload could not claim the upload (uploadId=%s, status=%s)',
       uploadId,
+      current.status,
     )
     throw new BadRequestError(
       `Upload ${uploadId} is already being completed; retry once it finishes`,
@@ -409,6 +414,27 @@ const completeUpload = async (
       )
     throw error
   }
+}
+
+// A repeat completeUpload call for an upload that already finished is a no-op
+// that returns the existing CID, and re-drives migration in case the original
+// one-shot migrate task was lost — so the retry heals the upload instead of
+// corrupting it. Reached both when the status read sees MIGRATING and when the
+// completion claim is lost to a winner that has already finished.
+const resolveAlreadyCompletedUpload = async (
+  upload: UploadEntry,
+  uploadId: string,
+): Promise<string> => {
+  const cid = cidToString(await BlockstoreUseCases.getUploadCID(uploadId))
+  logger.warn(
+    'completeUpload called on an already-completed upload; re-driving migration (uploadId=%s, cid=%s)',
+    uploadId,
+    cid,
+  )
+  if (upload.root_upload_id === uploadId) {
+    await scheduleNodeMigration(uploadId)
+  }
+  return cid
 }
 
 const finalizeCompletedUpload = async (
