@@ -81,4 +81,62 @@ describe('Intents Repository — payment fields', () => {
     expect(updated?.quotedTokenAmount).toBe(1_000_000n)
     expect(updated?.usdRateAtCreation).toBe(6_400_000_000_000_000n)
   })
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // quoted_bytes (20260804000000-intent-quoted-bytes)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  it('round-trips quotedBytes as a bigint', async () => {
+    await intentsRepository.createIntent({
+      ...baseIntent('qb-1'),
+      quotedBytes: 1_073_741_824n, // 1 GiB
+    })
+
+    const fetched = await intentsRepository.getById('qb-1')
+    expect(fetched?.quotedBytes).toBe(1_073_741_824n)
+    expect(typeof fetched?.quotedBytes).toBe('bigint')
+  })
+
+  it('leaves quotedBytes undefined — not 0n — when created without a size', async () => {
+    const created = await intentsRepository.createIntent(baseIntent('qb-2'))
+    expect(created.quotedBytes).toBeUndefined()
+
+    // A NULL column must not read back as 0n: "no size recorded" and "a size of
+    // zero bytes" have to stay distinguishable, since #747 branches on presence.
+    const fetched = await intentsRepository.getById('qb-2')
+    expect(fetched?.quotedBytes).toBeUndefined()
+  })
+
+  it('round-trips a cap-sized quotedBytes through numeric(78,0)', async () => {
+    // 100 GiB — the default per-user cap, and past the range where a float
+    // round-trip would still be exact.
+    await intentsRepository.createIntent({
+      ...baseIntent('qb-3'),
+      quotedBytes: 107_374_182_400n,
+    })
+
+    const fetched = await intentsRepository.getById('qb-3')
+    expect(fetched?.quotedBytes).toBe(107_374_182_400n)
+  })
+
+  it('preserves quotedBytes across a status transition', async () => {
+    // The trap this guards: updateIntent rewrites the full column list, so a
+    // column present in the INSERT but missing from the UPDATE is silently
+    // nulled by the first status change — invisible until credits are wrong.
+    await intentsRepository.createIntent({
+      ...baseIntent('qb-4'),
+      quotedBytes: 4_096n,
+    })
+
+    const loaded = await intentsRepository.getById('qb-4')
+    await intentsRepository.updateIntent({
+      ...(loaded as Intent),
+      status: IntentStatus.CONFIRMED,
+      paymentAmount: 4_096_000n,
+    })
+
+    const updated = await intentsRepository.getById('qb-4')
+    expect(updated?.status).toBe(IntentStatus.CONFIRMED)
+    expect(updated?.quotedBytes).toBe(4_096n)
+  })
 })

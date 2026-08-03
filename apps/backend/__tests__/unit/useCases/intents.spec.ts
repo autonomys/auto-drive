@@ -1,10 +1,26 @@
 import { jest } from '@jest/globals'
 import { IntentsUseCases } from '../../../src/core/users/intents.js'
 import { intentsRepository } from '../../../src/infrastructure/repositories/users/intents.js'
+import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
-import { ConflictError, ForbiddenError, GoneError } from '../../../src/errors/index.js'
-import { IntentStatus, UserRole, type Intent, type User } from '@auto-drive/models'
+import { config } from '../../../src/config.js'
+import {
+  BadRequestError,
+  ConflictError,
+  CreditCapExceededError,
+  ForbiddenError,
+  GoneError,
+} from '../../../src/errors/index.js'
+import {
+  IntentStatus,
+  UserRole,
+  type Account,
+  type Intent,
+  type PurchasedCreditSummary,
+  type User,
+  type UserWithOrganization,
+} from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
 
 describe('IntentsUseCases', () => {
@@ -16,7 +32,30 @@ describe('IntentsUseCases', () => {
     createdAt: now,
     updatedAt: now,
     authProvider: 'github',
+    organizationId: 'org-1',
   } as unknown as User
+
+  // createIntent needs the organization to resolve an account for the cap
+  // pre-check; handleAuth already hands the controller this shape.
+  const orgUser = user as unknown as UserWithOrganization
+
+  const cap = config.credits.maxBytesPerUser
+
+  // Point the cap pre-check at a given already-purchased balance.
+  const mockPurchasedBalance = (uploadBytesRemaining: bigint) => {
+    jest
+      .spyOn(AccountsUseCases, 'getOrCreateAccount')
+      .mockResolvedValue({ id: 'acc-1' } as unknown as Account)
+    return jest
+      .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+      .mockResolvedValue({
+        uploadBytesRemaining,
+        uploadBytesOriginal: uploadBytesRemaining,
+        downloadBytesRemaining: 0n,
+        nextExpiryDate: null,
+        activeRowCount: 1,
+      } as PurchasedCreditSummary)
+  }
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -36,8 +75,10 @@ describe('IntentsUseCases', () => {
       .spyOn(intentsRepository, 'createIntent')
       .mockImplementation(async (intent) => intent)
 
-    const intent = await IntentsUseCases.createIntent(user)
+    const result = await IntentsUseCases.createIntent(orgUser)
 
+    expect(result.isOk()).toBe(true)
+    const intent = result._unsafeUnwrap()
     expect(intent.userPublicId).toBe(user.publicId)
     expect(intent.status).toBe(IntentStatus.PENDING)
     expect(intent.shannonsPerByte).toBe(1n)
@@ -49,9 +90,10 @@ describe('IntentsUseCases', () => {
       .mockImplementation(async (intent) => intent)
 
     const before = new Date()
-    const intent = await IntentsUseCases.createIntent(user)
+    const result = await IntentsUseCases.createIntent(orgUser)
     const after = new Date()
 
+    const intent = result._unsafeUnwrap()
     expect(intent.expiresAt).toBeDefined()
     expect(intent.expiresAt!.getTime()).toBeGreaterThan(before.getTime())
     // expiresAt should be at least 1 minute ahead (config default is 10 min)
@@ -61,6 +103,170 @@ describe('IntentsUseCases', () => {
     expect(intent.expiresAt!.getTime()).toBeLessThan(
       after.getTime() + 15 * 60 * 1000,
     )
+  })
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // createIntent — requestedBytes
+  //
+  // The regression that matters most in this group is the first test: the live
+  // frontend posts no body, and that path must stay byte-for-byte what it was.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('createIntent without requestedBytes leaves quotedBytes unset and runs no cap pre-check', async () => {
+    const createSpy = jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+    const accountSpy = jest.spyOn(AccountsUseCases, 'getOrCreateAccount')
+    const balanceSpy = jest.spyOn(
+      purchasedCreditsRepository,
+      'getRemainingCredits',
+    )
+
+    const result = await IntentsUseCases.createIntent(orgUser)
+
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap().quotedBytes).toBeUndefined()
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ quotedBytes: undefined }),
+    )
+    // No size given means nothing to check — the balance must not even be read.
+    expect(accountSpy).not.toHaveBeenCalled()
+    expect(balanceSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent persists a valid requestedBytes as quotedBytes', async () => {
+    mockPurchasedBalance(0n)
+    const createSpy = jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+
+    const result = await IntentsUseCases.createIntent(orgUser, 1_073_741_824n)
+
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap().quotedBytes).toBe(1_073_741_824n)
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ quotedBytes: 1_073_741_824n }),
+    )
+  })
+
+  it.each<[string, bigint]>([
+    ['zero', 0n],
+    ['negative', -1n],
+  ])(
+    'createIntent rejects a %s requestedBytes without pricing or reading the balance',
+    async (_label, requestedBytes) => {
+      const priceSpy = jest.spyOn(IntentsUseCases, 'getPrice')
+      const balanceSpy = jest.spyOn(
+        purchasedCreditsRepository,
+        'getRemainingCredits',
+      )
+      const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+
+      const result = await IntentsUseCases.createIntent(orgUser, requestedBytes)
+
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+      expect(priceSpy).not.toHaveBeenCalled()
+      expect(balanceSpy).not.toHaveBeenCalled()
+      expect(createSpy).not.toHaveBeenCalled()
+    },
+  )
+
+  it('createIntent rejects a requestedBytes above the per-user cap as a bad request', async () => {
+    const priceSpy = jest.spyOn(IntentsUseCases, 'getPrice')
+    const balanceSpy = jest.spyOn(
+      purchasedCreditsRepository,
+      'getRemainingCredits',
+    )
+
+    const result = await IntentsUseCases.createIntent(orgUser, cap + 1n)
+
+    expect(result.isErr()).toBe(true)
+    // A size that can never fit is malformed, not a headroom problem — and it
+    // must not cost a balance read to find out.
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+    expect(result._unsafeUnwrapErr()).not.toBeInstanceOf(CreditCapExceededError)
+    expect(balanceSpy).not.toHaveBeenCalled()
+    expect(priceSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent rejects with CREDIT_CAP_EXCEEDED when the existing balance leaves no room', async () => {
+    mockPurchasedBalance(cap - 100n)
+    const priceSpy = jest.spyOn(IntentsUseCases, 'getPrice')
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+
+    const result = await IntentsUseCases.createIntent(orgUser, 101n)
+
+    expect(result.isErr()).toBe(true)
+    const error = result._unsafeUnwrapErr()
+    expect(error).toBeInstanceOf(CreditCapExceededError)
+    expect(error).toBeInstanceOf(ForbiddenError)
+    // The message has to tell a caller how much room is actually left.
+    expect(error.message).toContain(cap.toString())
+    expect(error.message).toContain((cap - 100n).toString())
+    // Rejected before pricing, and before any intent row exists.
+    expect(priceSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent accepts a purchase that lands exactly on the cap', async () => {
+    mockPurchasedBalance(cap - 100n)
+    jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+
+    const result = await IntentsUseCases.createIntent(orgUser, 100n)
+
+    // Boundary must match the authoritative check in
+    // createPurchasedCreditWithCapCheck, which uses `>`. A stricter pre-check
+    // here would refuse purchases the real check would have granted.
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap().quotedBytes).toBe(100n)
+  })
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // parseRequestedBytes
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it.each<[string, unknown]>([
+    ['undefined', undefined],
+    ['null', null],
+  ])('parseRequestedBytes treats %s as no size given', (_label, raw) => {
+    const result = IntentsUseCases.parseRequestedBytes(raw)
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap()).toBeUndefined()
+  })
+
+  it.each<[string, unknown, bigint]>([
+    ['a decimal string', '1073741824', 1_073_741_824n],
+    ['a zero string', '0', 0n],
+    ['a safe-integer number', 1_073_741_824, 1_073_741_824n],
+    ['a bigint', 1_073_741_824n, 1_073_741_824n],
+  ])('parseRequestedBytes accepts %s', (_label, raw, expected) => {
+    const result = IntentsUseCases.parseRequestedBytes(raw)
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap()).toBe(expected)
+  })
+
+  it.each<[string, unknown]>([
+    ['a fractional string', '1.5'],
+    ['a fractional number', 1.5],
+    ['exponential notation', '1e9'],
+    ['a hex string', '0x10'],
+    ['an empty string', ''],
+    ['whitespace', ' 10 '],
+    ['a signed string', '+10'],
+    ['a non-numeric string', 'lots'],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['a number beyond safe-integer range', 2 ** 53],
+    ['a boolean', true],
+    ['an object', { bytes: 10 }],
+    ['an array', ['10']],
+  ])('parseRequestedBytes rejects %s', (_label, raw) => {
+    const result = IntentsUseCases.parseRequestedBytes(raw)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
   })
 
   // ────────────────────────────────────────────────────────────────────────────

@@ -10,6 +10,9 @@ type DBIntent = {
   shannons_per_byte: string
   expires_at: Date | null
   from_address: string | null
+  // Purchase size captured at creation. NULL for pre-column rows and for
+  // sizeless AI3 intents.
+  quoted_bytes: string | null
   // NOT NULL in the DB (defaults to 'ai3_native'), so always present.
   payment_method: PaymentMethod
   // Token-payment columns: populated for USDC_ETH intents, NULL for AI3_NATIVE.
@@ -28,6 +31,9 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
       ? BigInt(row.payment_amount).valueOf()
       : undefined,
     shannonsPerByte: BigInt(row.shannons_per_byte).valueOf(),
+    quotedBytes: row.quoted_bytes
+      ? BigInt(row.quoted_bytes).valueOf()
+      : undefined,
     expiresAt: row.expires_at ?? undefined,
     fromAddress: row.from_address ?? undefined,
     paymentMethod: row.payment_method,
@@ -57,9 +63,9 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
   const result = await db.query<DBIntent>(
     `INSERT INTO intents
        (id, user_public_id, status, tx_hash, payment_amount, shannons_per_byte,
-        expires_at, payment_method, token_amount, quoted_token_amount,
-        usd_rate_at_creation)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        expires_at, quoted_bytes, payment_method, token_amount,
+        quoted_token_amount, usd_rate_at_creation)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       intent.id,
@@ -69,6 +75,7 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
       intent.paymentAmount?.toString() ?? null,
       intent.shannonsPerByte,
       intent.expiresAt ?? null,
+      intent.quotedBytes?.toString() ?? null,
       // payment_method is NOT NULL; default to native AI3 when unset (the USDC
       // creation flow sets it explicitly).
       intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
@@ -86,9 +93,10 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
     `UPDATE intents
      SET status = $1, user_public_id = $2, tx_hash = $3,
          payment_amount = $4, shannons_per_byte = $5, expires_at = $6,
-         from_address = $7, payment_method = $8, token_amount = $9,
-         quoted_token_amount = $10, usd_rate_at_creation = $11
-     WHERE id = $12
+         from_address = $7, quoted_bytes = $8, payment_method = $9,
+         token_amount = $10, quoted_token_amount = $11,
+         usd_rate_at_creation = $12
+     WHERE id = $13
      RETURNING *`,
     [
       intent.status,
@@ -100,6 +108,9 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
       intent.fromAddress ?? null,
       // Callers load the intent (getById → mapRows) and spread it before
       // updating, so these round-trip unchanged unless explicitly overridden.
+      // This statement rewrites the full column list, so a column missing here
+      // is silently nulled on every status transition.
+      intent.quotedBytes?.toString() ?? null,
       intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
       intent.tokenAmount?.toString() ?? null,
       intent.quotedTokenAmount?.toString() ?? null,
