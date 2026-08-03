@@ -44,7 +44,10 @@ export const config = {
     // of it. At 25 blocks * ~6s the confirmation phase alone is ~150s; the
     // 5-minute default leaves room for inclusion latency. Raise this if you
     // increase confirmationDepth or run under sustained heavy load.
-    transactionTimeoutMs: positiveIntEnv('CHAIN_TRANSACTION_TIMEOUT_MS', 300000),
+    transactionTimeoutMs: positiveIntEnv(
+      'CHAIN_TRANSACTION_TIMEOUT_MS',
+      300000,
+    ),
     // Safety-net cadence for the confirmation watch. Confirmation is normally
     // driven by a new-heads subscription, but a WebSocket reconnect can leave
     // that subscription silently dead while the chain keeps advancing — so
@@ -63,7 +66,10 @@ export const config = {
   },
   memoryDownloadCache: {
     maxCacheSize: Number(
-      env('MEMORY_DOWNLOAD_CACHE_MAX_SIZE', DEFAULT_MEMORY_CACHE_MAX_SIZE.toString()),
+      env(
+        'MEMORY_DOWNLOAD_CACHE_MAX_SIZE',
+        DEFAULT_MEMORY_CACHE_MAX_SIZE.toString(),
+      ),
     ),
   },
   objectMappingArchiver: {
@@ -101,7 +107,9 @@ export const config = {
     // this many blocks behind the chain head. At ~6s block time, 1000 blocks
     // ≈ 1.7 hours — generous enough to not interfere with slow-but-active
     // publishing, while catching genuinely stalled objects.
-    stalenessThresholdBlocks: Number(env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000')),
+    stalenessThresholdBlocks: Number(
+      env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000'),
+    ),
     // Skip a recovery cycle when publish-manager already holds more than this
     // many ready (not-yet-started) tasks. Recovery's output (publish-nodes)
     // lands on publish-manager, so an unchecked recovery would keep piling
@@ -109,7 +117,9 @@ export const config = {
     // stalled, growing the backlog without bound. A threshold (not > 0) is
     // deliberate: publish-manager legitimately holds a shallow backlog while
     // batches await confirmation, and that must not suppress recovery.
-    publishManagerBacklogLimit: Number(env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100')),
+    publishManagerBacklogLimit: Number(
+      env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100'),
+    ),
   },
   migrationRecovery: {
     intervalMs: Number(env('MIGRATION_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
@@ -126,9 +136,7 @@ export const config = {
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),
-    fetchTimeoutMs: Number(
-      env('FILES_GATEWAY_FETCH_TIMEOUT_MS', '60000'),
-    ),
+    fetchTimeoutMs: Number(env('FILES_GATEWAY_FETCH_TIMEOUT_MS', '60000')),
   },
   authService: {
     url: env('AUTH_SERVICE_URL', 'http://localhost:3030'),
@@ -162,17 +170,28 @@ export const config = {
     priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
   priceOracle: {
-    // AI3/USD price oracle (CoinGecko). See infrastructure/services/priceOracle.
-    // How long a freshly fetched price is served from memory before a refresh.
+    // AI3/USD price oracle, read from the Uniswap v4 WAI3/USDC pool on Ethereum.
+    // See infrastructure/services/priceOracle.
+    //
+    // Ethereum RPC endpoint. Read directly (not via `env`) so it stays optional:
+    // a deployment that does not quote in USDC boots without it, and the oracle
+    // fails fast naming this variable the first time it is asked for a price.
+    ethRpcUrl: process.env.ETH_CHAIN_ENDPOINT,
+    // How long a freshly read price is served from memory before a refresh.
     cacheTtlMs: positiveIntEnv('ORACLE_CACHE_TTL_MS', 60000),
-    // Longest a last-good price may be served as a fallback while CoinGecko is
-    // unavailable. Default: 10 minutes.
+    // Longest a last-good price may be served as a fallback while the pool
+    // cannot be read. Default: 10 minutes.
     maxStaleMs: positiveIntEnv('ORACLE_MAX_STALE_MS', 600000),
-    // CoinGecko HTTP timeout.
+    // RPC timeout for both the pool read and the quoter simulation.
     fetchTimeoutMs: positiveIntEnv('ORACLE_FETCH_TIMEOUT_MS', 5000),
-    // Drop the quote if CoinGecko's own reported update time is older than this.
-    // Default: 5 minutes.
+    // Drop the quote if the block the pool state came from is older than this,
+    // which catches a lagging RPC node. Default: 5 minutes.
     maxSourceAgeMs: positiveIntEnv('ORACLE_MAX_SOURCE_AGE_MS', 300000),
+    // Depth guard: reject a purchase whose conversion would move the pool by
+    // more than this percentage. The marginal price only describes an
+    // infinitesimal trade, so without a cap a purchase that is large relative
+    // to pool liquidity is quoted far below what converting it costs.
+    maxPriceImpactPercent: Number(env('ORACLE_MAX_PRICE_IMPACT', '2')),
     // Sanity bounds (USD per AI3) as plain decimals — kept as raw strings and
     // parsed to the 1e18 scale in the priceOracle module (parsing the string
     // directly avoids Number.toString() exponential notation for small values).
@@ -188,9 +207,13 @@ export const config = {
     // Maximum total purchased credit balance (in bytes) per account, summed
     // across all active purchased_credits rows.
     // Default: 100 GiB — matches the economic protection design document.
-    maxBytesPerUser: BigInt(env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3))),
+    maxBytesPerUser: BigInt(
+      env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3)),
+    ),
     // How often (in ms) the credit expiry background job runs.
-    expiryCheckIntervalMs: Number(env('CREDIT_EXPIRY_CHECK_INTERVAL', '3600000')),
+    expiryCheckIntervalMs: Number(
+      env('CREDIT_EXPIRY_CHECK_INTERVAL', '3600000'),
+    ),
     // Price-lock window: how many minutes a PENDING intent remains valid.
     // After this window the intent is treated as expired and all operations on
     // it are rejected.  Default: 10 minutes.

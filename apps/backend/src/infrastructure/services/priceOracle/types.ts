@@ -30,11 +30,49 @@ export type RawQuote = {
   asOfMs?: number
 }
 
+/**
+ * Size-aware cost of converting a specific intent, from the v4 Quoter.
+ *
+ * `usdcAmount` is what the conversion would actually execute at; `usdPerAi3` is
+ * the pool's marginal price at the same moment (what gets persisted as the
+ * intent's locked rate). `priceImpactBps` is the gap between them, i.e. how far
+ * this trade alone moves the pool.
+ */
+export type ExecutableQuote = {
+  // USDC base units (6 decimals) required to acquire the requested AI3.
+  usdcAmount: bigint
+  // Marginal AI3/USD price, scaled by USD_RATE_SCALE (1e18).
+  usdPerAi3: bigint
+  // (executable cost / marginal cost - 1), in basis points.
+  priceImpactBps: bigint
+}
+
 // Wrapped in a neverthrow `err` when a fetch fails and there is no last-good
 // value within `maxStaleMs` — i.e. USDC quoting cannot safely proceed right now.
 export class OracleUnavailableError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'OracleUnavailableError'
+  }
+}
+
+/**
+ * The requested purchase is too large for the pool to absorb: converting it
+ * would move the price by more than `maxPriceImpactBps`, or the pool cannot fill
+ * the size at all.
+ *
+ * This is the depth guard. Without it, a purchase large relative to pool
+ * liquidity is quoted at the marginal price but converted at a far worse average
+ * one, and the shortfall is absorbed silently.
+ */
+export class QuoteTooLargeError extends Error {
+  constructor(
+    message: string,
+    // Undefined when the pool could not fill the size at all, so no impact was
+    // measurable.
+    readonly priceImpactBps?: bigint,
+  ) {
+    super(message)
+    this.name = 'QuoteTooLargeError'
   }
 }

@@ -29,7 +29,7 @@ describe('priceOracle.getPrice', () => {
     jest.useRealTimers()
   })
 
-  it('returns the fetched CoinGecko price', async () => {
+  it('returns the price read from the pool', async () => {
     jest.spyOn(priceOracle._internal, 'fetchQuote').mockResolvedValue(PRICE)
 
     const result = await priceOracle.getPrice()
@@ -73,7 +73,7 @@ describe('priceOracle.getPrice', () => {
     await priceOracle.getPrice()
 
     jest.advanceTimersByTime(TTL_MS + 1) // expire cache + clear throttle
-    spy.mockResolvedValueOnce(null) // CoinGecko unhealthy
+    spy.mockResolvedValueOnce(null) // pool read failed
     const result = await priceOracle.getPrice()
 
     expect(result.isOk()).toBe(true)
@@ -104,7 +104,7 @@ describe('priceOracle.getPrice', () => {
     expect(spy).toHaveBeenCalledTimes(2)
   })
 
-  it('errors when CoinGecko is unhealthy and there is no last-good value', async () => {
+  it('errors when the pool cannot be read and there is no last-good value', async () => {
     jest.spyOn(priceOracle._internal, 'fetchQuote').mockResolvedValue(null)
 
     const result = await priceOracle.getPrice()
@@ -156,10 +156,7 @@ describe('priceOracle fetchQuote (validation + failure handling)', () => {
     jest.useRealTimers()
   })
 
-  const rawFetch =
-    (quote: RawQuote) =>
-    async (): Promise<RawQuote> =>
-      quote
+  const rawFetch = (quote: RawQuote) => async (): Promise<RawQuote> => quote
 
   it('returns an in-bounds, fresh quote', async () => {
     const result = await priceOracle._internal.fetchQuote(
@@ -202,5 +199,99 @@ describe('priceOracle fetchQuote (validation + failure handling)', () => {
     )
     await jest.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 1)
     expect(await result).toBeNull()
+  })
+})
+
+describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () => {
+  // 1000 AI3 at the 0.0064 USD/AI3 test price is $6.40, i.e. 6_400_000 USDC
+  // base units at the marginal price.
+  const ONE_THOUSAND_AI3 = 10n ** 21n
+  const MARGINAL_USDC = 6_400_000n
+  // config default ORACLE_MAX_PRICE_IMPACT=2 -> 200bps.
+  const MAX_IMPACT_BPS = 200n
+
+  beforeEach(() => {
+    priceOracle._reset()
+    jest.useFakeTimers()
+    jest.spyOn(priceOracle._internal, 'fetchQuote').mockResolvedValue(PRICE)
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+    jest.useRealTimers()
+  })
+
+  it('returns the quoter amount and zero impact when it matches the marginal cost', async () => {
+    jest
+      .spyOn(priceOracle._internal, 'quoteUsdcForAi3')
+      .mockResolvedValue(MARGINAL_USDC)
+
+    const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+    expect(result.isOk()).toBe(true)
+    const quote = result._unsafeUnwrap()
+    expect(quote.usdcAmount).toBe(MARGINAL_USDC)
+    expect(quote.usdPerAi3).toBe(PRICE)
+    expect(quote.priceImpactBps).toBe(0n)
+  })
+
+  it('charges the executable amount, not the marginal one, within the limit', async () => {
+    // +1% over marginal = 100bps, inside the 200bps limit.
+    const executable = 6_464_000n
+    jest
+      .spyOn(priceOracle._internal, 'quoteUsdcForAi3')
+      .mockResolvedValue(executable)
+
+    const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+    const quote = result._unsafeUnwrap()
+    expect(quote.usdcAmount).toBe(executable)
+    expect(quote.usdcAmount).toBeGreaterThan(MARGINAL_USDC)
+    expect(quote.priceImpactBps).toBe(100n)
+    expect(quote.priceImpactBps).toBeLessThanOrEqual(MAX_IMPACT_BPS)
+  })
+
+  it('rejects a conversion whose price impact exceeds the limit', async () => {
+    // 6_600_000 over a 6_400_000 marginal cost is 312bps, above the limit.
+    jest
+      .spyOn(priceOracle._internal, 'quoteUsdcForAi3')
+      .mockResolvedValue(6_600_000n)
+
+    const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+    expect(result.isErr()).toBe(true)
+    const error = result._unsafeUnwrapErr()
+    expect(error.name).toBe('QuoteTooLargeError')
+    expect((error as { priceImpactBps?: bigint }).priceImpactBps).toBe(312n)
+  })
+
+  it('rejects when the pool cannot fill the size at all', async () => {
+    // The quoter reverts rather than returning a partial fill.
+    jest
+      .spyOn(priceOracle._internal, 'quoteUsdcForAi3')
+      .mockRejectedValue(new Error('execution reverted'))
+
+    const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr().name).toBe('QuoteTooLargeError')
+  })
+
+  it('propagates an unavailable oracle rather than quoting blind', async () => {
+    jest.spyOn(priceOracle._internal, 'fetchQuote').mockResolvedValue(null)
+    const quoterSpy = jest.spyOn(priceOracle._internal, 'quoteUsdcForAi3')
+
+    const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr().name).toBe('OracleUnavailableError')
+    // No point asking the quoter when there is no rate to measure impact against.
+    expect(quoterSpy).not.toHaveBeenCalled()
+  })
+
+  it('rejects a non-positive amount', async () => {
+    const result = await priceOracle.getExecutableQuote(0n)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr().name).toBe('QuoteTooLargeError')
   })
 })
