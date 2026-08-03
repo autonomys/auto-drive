@@ -218,7 +218,7 @@ describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () =
   // given real execution premium once the fee is removed.
   const GROSS_AT_ZERO_SLIPPAGE = 6_471_118n // -> 0bps impact, 111bps premium
   const GROSS_AT_100_BPS = 6_535_829n // -> 100bps impact
-  const GROSS_AT_300_BPS = 6_665_252n // -> 300bps impact, over the 200 limit
+  const GROSS_AT_300_BPS = 6_665_252n // -> 300bps impact
 
   const observation = (amountIn: bigint) => ({
     usdPerAi3: PRICE,
@@ -276,7 +276,7 @@ describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () =
     expect(quote.asOf).toBeInstanceOf(Date)
   })
 
-  it('admits real slippage below the limit', async () => {
+  it('reports the slippage a mid-sized trade incurs', async () => {
     jest
       .spyOn(priceOracle._internal, 'readPoolQuote')
       .mockResolvedValue(observation(GROSS_AT_100_BPS))
@@ -289,17 +289,35 @@ describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () =
     expect(quote.usdcAmount).toBe(GROSS_AT_100_BPS)
   })
 
-  it('rejects a conversion whose price impact exceeds the limit', async () => {
+  it('prices heavy slippage in rather than refusing the size', async () => {
+    // How much a user may buy is enforced upstream against the credit cap. The
+    // oracle's job is to say what this size costs — including the slippage it
+    // causes — not to veto it. The breaker that could veto is off by default.
     jest
       .spyOn(priceOracle._internal, 'readPoolQuote')
       .mockResolvedValue(observation(GROSS_AT_300_BPS))
 
     const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
 
-    expect(result.isErr()).toBe(true)
-    const error = result._unsafeUnwrapErr()
-    expect(error.name).toBe('QuoteTooLargeError')
-    expect((error as { priceImpactBps?: bigint }).priceImpactBps).toBe(300n)
+    expect(result.isOk()).toBe(true)
+    const quote = result._unsafeUnwrap()
+    // The slippage is charged, and reported so the caller can show it.
+    expect(quote.usdcAmount).toBe(GROSS_AT_300_BPS)
+    expect(quote.priceImpactBps).toBe(300n)
+  })
+
+  it('still prices a size whose slippage dwarfs the trade', async () => {
+    // ~36% slippage is what this pool costs at that size; it is a real quote,
+    // not an error condition.
+    const grossAt3600Bps = 8_800_000n
+    jest
+      .spyOn(priceOracle._internal, 'readPoolQuote')
+      .mockResolvedValue(observation(grossAt3600Bps))
+
+    const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap().priceImpactBps).toBeGreaterThan(3_000n)
   })
 
   it('never serves a cached or stale price behind a binding quote', async () => {

@@ -47,8 +47,10 @@ export type ExecutableQuote = {
   usdcAmount: bigint
   // Marginal AI3/USD price, scaled by USD_RATE_SCALE (1e18).
   usdPerAi3: bigint
-  // How far this trade alone moves the pool, EXCLUDING the swap fee that every
-  // trade pays regardless of size. Negative values are clamped to zero.
+  // The slippage this trade's own size incurs, EXCLUDING the swap fee that any
+  // trade pays. Already reflected in `usdcAmount`; reported so callers can
+  // display it, alert on it, and reconcile against it. Not a rejection signal —
+  // negative values are clamped to zero.
   priceImpactBps: bigint
   // Total premium of the executable cost over the marginal cost, fee included —
   // the honest "what this costs above spot" figure for display and telemetry.
@@ -70,13 +72,14 @@ export class OracleUnavailableError extends Error {
 }
 
 /**
- * The requested purchase is too large for the pool to absorb: converting it
- * would move the price by more than `maxPriceImpactBps`, or the pool cannot fill
- * the size at all.
+ * The pool cannot fill the requested size at all, or an operator has opted into
+ * the slippage circuit breaker and this quote tripped it.
  *
- * This is the depth guard. Without it, a purchase large relative to pool
- * liquidity is quoted at the marginal price but converted at a far worse average
- * one, and the shortfall is absorbed silently.
+ * Expensive is NOT the same as too large: a size that converts at heavy
+ * slippage still gets a quote, with the slippage priced into `usdcAmount`.
+ * Deciding whether a size is permitted happens upstream, against the per-user
+ * credit cap, before an intent exists. So by default this error only means the
+ * pool genuinely has no liquidity for the size.
  *
  * Reserved strictly for "reduce the amount" — a caller may safely surface it as
  * that instruction. Amounts that are invalid for any other reason raise

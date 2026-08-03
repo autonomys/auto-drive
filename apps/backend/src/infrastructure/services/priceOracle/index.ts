@@ -76,9 +76,11 @@ const parsePercentToBps = (value: number, name: string): bigint => {
   return BigInt(Math.round(value * 100))
 }
 
-const maxPriceImpactBps = parsePercentToBps(
-  config.priceOracle.maxPriceImpactPercent,
-  'ORACLE_MAX_PRICE_IMPACT',
+// 0 disables the breaker, which is the default: sizing a purchase is business
+// policy, not the oracle's call.
+const slippageCircuitBreakerBps = parsePercentToBps(
+  config.priceOracle.slippageCircuitBreakerPercent,
+  'ORACLE_SLIPPAGE_CIRCUIT_BREAKER',
 )
 const maxSpotDeviationBps = parsePercentToBps(
   config.priceOracle.maxSpotDeviationPercent,
@@ -368,8 +370,15 @@ const checkSpotDeviation = async (
  * comparable when read at the same block — a cached marginal price against a
  * live quote measures elapsed drift as much as it measures slippage.
  *
+ * Slippage is PRICED IN, not refused. `usdcAmount` is what converting this size
+ * actually costs, and `priceImpactBps` reports how much of that is the size's
+ * own doing. Deciding whether a size is allowed belongs upstream, where the
+ * per-user credit cap is enforced before an intent exists — the oracle prices
+ * what it is handed.
+ *
  * Failure modes are deliberately distinct:
- *  - `QuoteTooLargeError`      reduce the amount
+ *  - `QuoteTooLargeError`      the pool cannot fill it, or an opt-in circuit
+ *                              breaker tripped
  *  - `InvalidQuoteAmountError` the amount is unquotable on its own terms
  *  - `PriceDeviationError`     the pool's price is not currently trustworthy
  *  - `OracleUnavailableError`  we could not reach the chain to find out
@@ -485,17 +494,33 @@ const getExecutableQuote = async (
   // marginal cost on tiny amounts; a negative premium is not meaningful.
   const priceImpactBps = rawImpactBps > 0n ? rawImpactBps : 0n
 
-  if (priceImpactBps > maxPriceImpactBps) {
+  // Slippage is priced in, not refused: `usdcAmount` already carries it, and
+  // the caller decides what to do with a size that converts expensively. The
+  // breaker below is off unless an operator opts in, and exists only for a
+  // quote so extreme it reads as a broken pool.
+  if (
+    slippageCircuitBreakerBps > 0n &&
+    priceImpactBps > slippageCircuitBreakerBps
+  ) {
     logger.warn(
-      `Price oracle: rejecting quote for ${ai3Shannons} shannons — execution ` +
-        `premium ${priceImpactBps}bps exceeds the ${maxPriceImpactBps}bps limit`,
+      `Price oracle: circuit breaker tripped for ${ai3Shannons} shannons — ` +
+        `execution premium ${priceImpactBps}bps exceeds the configured ` +
+        `${slippageCircuitBreakerBps}bps abort threshold`,
     )
     return err(
       new QuoteTooLargeError(
         `Converting this amount would cost ${priceImpactBps} basis points ` +
-          `above spot, over the ${maxPriceImpactBps} basis point limit`,
+          `above spot, past the ${slippageCircuitBreakerBps} basis point ` +
+          'circuit breaker',
         priceImpactBps,
       ),
+    )
+  }
+
+  if (priceImpactBps > 0n) {
+    logger.debug(
+      `Price oracle: quoted ${ai3Shannons} shannons at ${amountIn} USDC ` +
+        `(${priceImpactBps}bps slippage, ${quotePremiumBps}bps over spot)`,
     )
   }
 

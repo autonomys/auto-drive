@@ -193,13 +193,19 @@ export const config = {
     // Drop the quote if the block the pool state came from is older than this,
     // which catches a lagging RPC node. Default: 5 minutes.
     maxSourceAgeMs: positiveIntEnv('ORACLE_MAX_SOURCE_AGE_MS', 300000),
-    // Depth guard: reject a purchase whose conversion would move the pool price
-    // by more than this percentage, measured EXCLUSIVE of the pool's own swap
-    // fee (which every trade pays regardless of size). The marginal price only
-    // describes an infinitesimal trade, so without this cap a purchase that is
-    // large relative to pool liquidity is quoted far below what converting it
-    // costs. Validated at oracle load — see priceOracle/index.ts.
-    maxPriceImpactPercent: Number(env('ORACLE_MAX_PRICE_IMPACT', '2')),
+    // Circuit breaker, DISABLED by default (0). This is deliberately not a
+    // purchase limit: how much a user may buy is business policy, enforced
+    // against the per-user credit cap before an intent is ever created. The
+    // oracle's job is to price whatever size it is handed — including the
+    // slippage that size incurs — not to decide what is allowed.
+    //
+    // Set a percentage only to abort on a quote so far above spot that it
+    // signals a broken pool rather than an expensive one. Note that a large
+    // slippage figure is not itself an error: it is what converting that size
+    // genuinely costs, and it belongs in the quote. Validated at oracle load.
+    slippageCircuitBreakerPercent: Number(
+      env('ORACLE_SLIPPAGE_CIRCUIT_BREAKER', '0'),
+    ),
     // Manipulation gate. The pool has no oracle hook, so every read is
     // single-block spot state and a trade immediately before our read moves it.
     // The current price is compared against the median of these samples, taken
