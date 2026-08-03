@@ -98,10 +98,11 @@ export const updateUploadEntry = async (
  *
  * A plain read-then-act guard in completeUpload is not enough: two overlapping
  * calls for the same upload (a client timeout retry while the first is still in
- * flight) would both read PENDING and both run the completion processing, each
- * re-INSERTing the root blockstore node and re-charging credits. A single
- * conditional UPDATE makes the transition a compare-and-swap, so exactly one
- * caller can win regardless of how many API processes are running.
+ * flight) would both read PENDING and both run the completion processing, which
+ * re-charges upload credits (and, before blockstore_root_node_unique_idx, also
+ * duplicated the root blockstore node). A single conditional UPDATE makes the
+ * transition a compare-and-swap, so exactly one caller can win regardless of how
+ * many API processes are running.
  *
  * A claim older than staleClaimMs is re-claimable so a process that died
  * mid-completion does not strand the upload: COMPLETING is not selected by

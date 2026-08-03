@@ -28,12 +28,17 @@ const logger = createLogger('useCases:uploads:blockstore')
  *
  * Tolerates DUPLICATE rows that all carry the same CID. Historically a repeated
  * completeUpload call re-ran the completion processing and re-INSERTed the root
- * node (uploads.blockstore has no unique key on (upload_id, cid) — see
- * blockstore_upload_id_cid_index), leaving 2-3 byte-identical rows and making
- * this lookup — and therefore migration — fail permanently for an upload whose
- * data is perfectly intact. completeUpload now refuses to re-run (see
- * UploadsUseCases.completeUpload), but rows written before that guard still
- * exist in production, so the read side must accept them.
+ * node — uploads.blockstore had only the NON-unique
+ * blockstore_upload_id_cid_index on (upload_id, cid) — leaving 2-3 byte-identical
+ * rows and making this lookup, and therefore migration, fail permanently for an
+ * upload whose data is perfectly intact.
+ *
+ * Both ends of that are now closed: completeUpload refuses to re-run, and
+ * blockstore_root_node_unique_idx makes a duplicate root row unrepresentable. So
+ * this tolerance is no longer load-bearing for new writes — it stays because a
+ * replica or a rolled-back deploy may still be reading rows written before the
+ * migration deduplicated them, and because failing an intact upload permanently
+ * is a far worse outcome than picking the single CID they all agree on.
  *
  * Deduplicating on CID rather than row count is safe because it is only used to
  * identify the ROOT node, of which there can be exactly one per upload; the

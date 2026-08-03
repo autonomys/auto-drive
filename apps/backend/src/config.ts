@@ -127,9 +127,14 @@ export const config = {
     // How long a completion claim (status=completing) is respected before
     // another completeUpload call may take it over. Only reached when a process
     // dies mid-completion, since the claim is released on both success and
-    // failure — so this must comfortably exceed the time it takes to derive the
-    // root IPLD node for the largest expected upload, or a slow completion could
-    // be claimed a second time and duplicate the root blockstore node.
+    // failure — so this should comfortably exceed the time it takes to derive
+    // the root IPLD node for the largest expected upload, or a slow completion
+    // can be claimed a second time while it is still running.
+    //
+    // That second run no longer duplicates the root blockstore node:
+    // blockstore_root_node_unique_idx plus the ON CONFLICT DO NOTHING on the
+    // insert make the write idempotent, so this value is a liveness knob, not
+    // the thing standing between us and a corrupt row.
     completionClaimStaleMs: Number(
       env('UPLOAD_COMPLETION_CLAIM_STALE_MS', '3600000'),
     ), // 1 hour
