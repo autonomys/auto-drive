@@ -210,16 +210,20 @@ describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () =
   const MARGINAL_USDC = 6_400_000n
   const BLOCK = 21_000_000n
 
-  // The quoter returns input GROSS of the pool's 1% fee, so a zero-slippage
-  // trade already comes back ~101bps above marginal. These are the gross
-  // amounts that net out to a given real slippage once the fee is removed.
-  const GROSS_AT_ZERO_SLIPPAGE = 6_464_646n // -> 0bps impact, 101bps premium
-  const GROSS_AT_100_BPS = 6_529_294n // -> 100bps impact
-  const GROSS_AT_300_BPS = 6_658_586n // -> 300bps impact, over the 200 limit
+  // Live pool fee: 1% LP + 0.1% protocol, composed to 10_990 pips.
+  const FEE_PIPS = 10_990n
+
+  // The quoter returns input GROSS of that fee, so a zero-slippage trade comes
+  // back ~111bps above marginal. These are the gross amounts that net out to a
+  // given real execution premium once the fee is removed.
+  const GROSS_AT_ZERO_SLIPPAGE = 6_471_118n // -> 0bps impact, 111bps premium
+  const GROSS_AT_100_BPS = 6_535_829n // -> 100bps impact
+  const GROSS_AT_300_BPS = 6_665_252n // -> 300bps impact, over the 200 limit
 
   const observation = (amountIn: bigint) => ({
     usdPerAi3: PRICE,
     amountIn,
+    feePips: FEE_PIPS,
     blockNumber: BLOCK,
     asOfMs: Date.now(),
   })
@@ -254,7 +258,7 @@ describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () =
     expect(quote.usdcAmount).toBeGreaterThan(MARGINAL_USDC)
     // ...but it is not depth, so it must not count against the depth guard.
     expect(quote.priceImpactBps).toBe(0n)
-    expect(quote.quotePremiumBps).toBe(101n)
+    expect(quote.quotePremiumBps).toBe(111n)
   })
 
   it('carries the block and amount it was derived from', async () => {
@@ -310,7 +314,8 @@ describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () =
       .spyOn(priceOracle._internal, 'readPoolQuote')
       .mockResolvedValue({
         usdPerAi3: movedPrice,
-        amountIn: 12_929_292n, // ~0bps impact against the moved price
+        amountIn: 12_942_236n, // ~0bps impact against the moved price
+        feePips: FEE_PIPS,
         blockNumber: BLOCK,
         asOfMs: Date.now(),
       })
@@ -375,10 +380,31 @@ describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () =
       expect(result._unsafeUnwrapErr().name).toBe('InvalidQuoteAmountError')
     })
 
+    it('rejects an amount wider than the pool can accept as invalid', async () => {
+      // uint128 exact-output width. Reported as an invalid amount, not leaked
+      // out of the adapter's throw as an oracle outage.
+      const result = await priceOracle.getExecutableQuote(1n << 200n)
+      expect(result._unsafeUnwrapErr().name).toBe('InvalidQuoteAmountError')
+    })
+
+    it('refuses a quote that costs less than the spot value it buys', async () => {
+      // No real quote can be cheaper than spot — fee and impact both push up.
+      // Getting one means the quoter result was misread (a transposed return
+      // value, ABI drift), and it is about to become a binding undercharge.
+      jest
+        .spyOn(priceOracle._internal, 'readPoolQuote')
+        .mockResolvedValue(observation(42_000n)) // gasEstimate-shaped, not a price
+
+      const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+      expect(result._unsafeUnwrapErr().name).toBe('OracleUnavailableError')
+    })
+
     it('refuses an out-of-bounds pool price', async () => {
       jest.spyOn(priceOracle._internal, 'readPoolQuote').mockResolvedValue({
         usdPerAi3: 200n * 10n ** 18n, // above the 100 USD bound
         amountIn: 1_000n,
+        feePips: FEE_PIPS,
         blockNumber: BLOCK,
         asOfMs: Date.now(),
       })
@@ -392,6 +418,7 @@ describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () =
       jest.spyOn(priceOracle._internal, 'readPoolQuote').mockResolvedValue({
         usdPerAi3: PRICE,
         amountIn: GROSS_AT_ZERO_SLIPPAGE,
+        feePips: FEE_PIPS,
         blockNumber: BLOCK,
         asOfMs: Date.now() - (MAX_SOURCE_AGE_MS + 1),
       })
@@ -430,6 +457,51 @@ describe('priceOracle.getExecutableQuote (size-aware quote + depth guard)', () =
       jest
         .spyOn(priceOracle._internal, 'sampleUsdPerAi3')
         .mockResolvedValue([PRICE, PRICE, PRICE * 50n, PRICE, PRICE])
+
+      const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+      expect(result.isOk()).toBe(true)
+    })
+
+    it('samples history strictly behind the block being judged', async () => {
+      // Including the current block would put the price under test inside the
+      // median it is judged against, diluting its own deviation.
+      const sampleSpy = jest
+        .spyOn(priceOracle._internal, 'sampleUsdPerAi3')
+        .mockResolvedValue([PRICE, PRICE, PRICE, PRICE, PRICE])
+      jest
+        .spyOn(priceOracle._internal, 'readPoolQuote')
+        .mockResolvedValue(observation(GROSS_AT_ZERO_SLIPPAGE))
+
+      await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+      expect(sampleSpy).toHaveBeenCalledWith(BLOCK, 5, 20)
+    })
+
+    it('reuses the sampled reference across quotes within the TTL', async () => {
+      // Each quote otherwise costs spotSampleCount archival reads on top of its
+      // own; the reference is a slow baseline and does not need re-deriving.
+      const sampleSpy = jest
+        .spyOn(priceOracle._internal, 'sampleUsdPerAi3')
+        .mockResolvedValue([PRICE, PRICE, PRICE])
+      jest
+        .spyOn(priceOracle._internal, 'readPoolQuote')
+        .mockResolvedValue(observation(GROSS_AT_ZERO_SLIPPAGE))
+
+      await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+      await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
+
+      expect(sampleSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('skips the gate when there is too little history to form a reference', async () => {
+      // A pool near genesis: pre-initialisation blocks are dropped upstream.
+      jest
+        .spyOn(priceOracle._internal, 'sampleUsdPerAi3')
+        .mockResolvedValue([PRICE])
+      jest
+        .spyOn(priceOracle._internal, 'readPoolQuote')
+        .mockResolvedValue(observation(GROSS_AT_ZERO_SLIPPAGE))
 
       const result = await priceOracle.getExecutableQuote(ONE_THOUSAND_AI3)
 

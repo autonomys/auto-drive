@@ -1,11 +1,17 @@
 import { describe, it, expect } from '@jest/globals'
-import { encodeAbiParameters, keccak256 } from 'viem'
 import {
-  FEE_DENOMINATOR,
+  BaseError,
+  ContractFunctionRevertedError,
+  encodeAbiParameters,
+  keccak256,
+} from 'viem'
+import {
   POOL_ID,
   POOL_KEY,
   USDC_ADDRESS,
   WAI3_ADDRESS,
+  effectiveFeePips,
+  isQuoterRevert,
   removePoolFee,
   sqrtPriceX96ToUsdPerAi3,
 } from '../../../src/infrastructure/services/priceOracle/uniswapV4.js'
@@ -46,9 +52,17 @@ describe('priceOracle/uniswapV4 — pool identity', () => {
 })
 
 describe('priceOracle/uniswapV4 — sqrtPriceX96 conversion', () => {
-  it('converts a value captured from the live pool', () => {
-    // sqrtPriceX96 corresponding to the pool's observed price of
-    // ~$0.0043555041574 per AI3.
+  it('converts a slot0 value read from the live pool', () => {
+    // Read verbatim from StateView.getSlot0 on mainnet — an odd, full-entropy
+    // value rather than one reconstructed from a rounded price, so it exercises
+    // the low bits the Q64.96 arithmetic has to carry.
+    const quote = sqrtPriceX96ToUsdPerAi3(5_800_964_266_494_512_825_611n)
+    expect(quote).toBe(5_360_943_288_753_826n) // $0.005360943288753826
+  })
+
+  it('converts a value reconstructed from a known price', () => {
+    // Derived as round(sqrt(p / 1e12) * 2^96) for p = $0.0043555041574, so the
+    // low bits are zero — it checks the scaling, not the precision.
     const quote = sqrtPriceX96ToUsdPerAi3(5_228_761_106_144_941_834_240n)
     expect(quote).toBe(4_355_504_157_437_379n)
   })
@@ -74,26 +88,99 @@ describe('priceOracle/uniswapV4 — sqrtPriceX96 conversion', () => {
   })
 })
 
-describe('priceOracle/uniswapV4 — pool fee removal', () => {
-  it('undoes the 1% fee the quoter includes in amountIn', () => {
-    // A trade whose gross input is 1_000_000 base units paid 1% in fee, so the
-    // portion attributable to price is 990_000.
-    expect(removePoolFee(1_000_000n)).toBe(990_000n)
+describe('priceOracle/uniswapV4 — swap fee', () => {
+  // Captured from mainnet slot0: the pool carries a governance-set 0.1%
+  // protocol fee on top of its 1% LP fee.
+  const LIVE_PROTOCOL_FEE = 4_097_000
+  const LIVE_LP_FEE = 10_000
+
+  it('composes the protocol fee with the LP fee', () => {
+    // protocolFee packs two 12-bit values; we swap oneForZero, so the high half
+    // applies: 1000 + 10000 - (1000*10000/1e6) = 10990 pips = 1.099%.
+    expect(effectiveFeePips(LIVE_PROTOCOL_FEE, LIVE_LP_FEE)).toBe(10_990n)
   })
 
-  it('brings a zero-slippage quote back to its marginal cost', () => {
-    // This is the property the depth guard depends on: without it, a trade with
-    // no price impact at all still measures ~101bps and the guard becomes a
-    // constant offset rather than a measure of depth.
-    const marginal = 6_400_000n
-    const grossAtZeroSlippage =
-      (marginal * FEE_DENOMINATOR) / (FEE_DENOMINATOR - BigInt(POOL_KEY.fee))
+  it('reads the two packed halves independently', () => {
+    // Low 12 bits (zeroForOne) must NOT be the ones we use. A pool with a fee
+    // only on zeroForOne composes to just the LP fee for our direction.
+    expect(effectiveFeePips(0x000, LIVE_LP_FEE)).toBe(10_000n)
+    // 2000 pips in the high half, none in the low half.
+    expect(effectiveFeePips(2000 << 12, LIVE_LP_FEE)).toBe(11_980n)
+  })
 
-    const netOfFee = removePoolFee(grossAtZeroSlippage)
+  it('is a no-op composition when no protocol fee is set', () => {
+    expect(effectiveFeePips(0, 3_000)).toBe(3_000n)
+  })
 
-    // Within one base unit of the marginal cost (integer division).
-    const delta =
-      netOfFee > marginal ? netOfFee - marginal : marginal - netOfFee
-    expect(delta).toBeLessThanOrEqual(1n)
+  it('brings a real quoter result back to its marginal cost', () => {
+    // Captured together from mainnet: buying 100 AI3 quoted 542_123 USDC base
+    // units against a spot value of 536_095. These are independent observations,
+    // not values derived from removePoolFee, so this asserts the real
+    // relationship rather than restating the implementation.
+    const marginal = 536_095n
+    const quoterAmountIn = 542_123n
+
+    const netOfFee = removePoolFee(
+      quoterAmountIn,
+      effectiveFeePips(LIVE_PROTOCOL_FEE, LIVE_LP_FEE),
+    )
+
+    // Stripping the fee should leave essentially the spot value: a trade this
+    // small barely moves the pool, so what remains is ~1bp of real impact.
+    const impactBps = ((netOfFee - marginal) * 10_000n) / marginal
+    expect(impactBps).toBe(1n)
+  })
+
+  it('would report ~10bps of phantom impact if the protocol fee were ignored', () => {
+    // Regression guard: assuming the static 1% LP fee leaves a constant offset
+    // in every measurement, which is exactly what removePoolFee exists to
+    // remove. If this ever equals the value above, the live fee is being
+    // dropped again.
+    const marginal = 536_095n
+    const lpFeeOnly = removePoolFee(542_123n, BigInt(POOL_KEY.fee))
+    const impactBps = ((lpFeeOnly - marginal) * 10_000n) / marginal
+    expect(impactBps).toBe(11n)
+  })
+})
+
+describe('priceOracle/uniswapV4 — isQuoterRevert', () => {
+  const revertWith = (init: {
+    data?: { errorName: string }
+    reason?: string
+  }) =>
+    new BaseError('reverted', {
+      cause: Object.assign(
+        new ContractFunctionRevertedError({
+          abi: [],
+          functionName: 'quoteExactOutputSingle',
+          message: 'reverted',
+        }),
+        init,
+      ),
+    })
+
+  it('recognises the pool refusing the size', () => {
+    expect(
+      isQuoterRevert(revertWith({ data: { errorName: 'NotEnoughLiquidity' } })),
+    ).toBe(true)
+    expect(isQuoterRevert(revertWith({ reason: 'NotEnoughLiquidity' }))).toBe(
+      true,
+    )
+  })
+
+  it('does not treat an unrelated revert as a size problem', () => {
+    // A wrong pool key or a hook revert means the integration is broken, not
+    // that the buyer should purchase less.
+    expect(
+      isQuoterRevert(revertWith({ data: { errorName: 'PoolNotInitialized' } })),
+    ).toBe(false)
+    // An empty revert carries no evidence either way.
+    expect(isQuoterRevert(revertWith({}))).toBe(false)
+  })
+
+  it('does not treat transport failures as reverts', () => {
+    expect(isQuoterRevert(new Error('fetch failed: ECONNREFUSED'))).toBe(false)
+    expect(isQuoterRevert(new BaseError('HTTP request failed'))).toBe(false)
+    expect(isQuoterRevert(undefined)).toBe(false)
   })
 })

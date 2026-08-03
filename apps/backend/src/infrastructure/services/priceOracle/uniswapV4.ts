@@ -22,11 +22,14 @@ import type { RawQuote } from './types.js'
  *
  *  - `fetchUniswapV4Quote` reads `slot0` for the pool's marginal (spot) price.
  *    This is the market rate we persist as `intents.usdRateAtCreation`.
- *  - `quoteUsdcForAi3` asks the v4 Quoter what a *specific* trade would cost.
- *    This is size-aware: it walks the liquidity curve and includes the pool fee,
- *    so it reflects what converting a given intent would actually execute at.
+ *  - `readPoolQuote` additionally asks the v4 Quoter what a *specific* trade
+ *    would cost. That is size-aware: it walks the liquidity curve and includes
+ *    the swap fee, so it reflects what converting an intent would execute at.
+ *    Both halves are pinned to one block, since they are only comparable when
+ *    they describe the same pool state.
  *
- * The gap between the two is price impact, which `index.ts` turns into a guard.
+ * The gap between the two, net of the fee, is the execution premium that
+ * `index.ts` turns into a depth guard.
  */
 
 // --- Pool identity -----------------------------------------------------------
@@ -168,7 +171,7 @@ const PRICE_SCALE_EXPONENT = BigInt(
 
 /**
  * Convert a v4 `sqrtPriceX96` into USD-per-AI3 scaled by USD_RATE_SCALE (1e18).
- * Exported for unit testing against values captured from the live pool.
+ * Exported for unit testing against values read from the live pool.
  */
 export const sqrtPriceX96ToUsdPerAi3 = (sqrtPriceX96: bigint): bigint => {
   if (sqrtPriceX96 <= 0n) {
@@ -178,49 +181,86 @@ export const sqrtPriceX96ToUsdPerAi3 = (sqrtPriceX96: bigint): bigint => {
 }
 
 /**
- * Remove the pool's swap fee from a quoter `amountIn`.
- *
- * `quoteExactOutputSingle` returns the gross input, so the LP fee is baked in
- * and a *zero-slippage* trade still comes back above the marginal cost — for
- * this pool's 1% fee, by ~101bps. Comparing gross input against a fee-free
- * marginal cost therefore reports a price impact that no trade size can get
- * below, which would turn the depth guard into a constant offset rather than a
- * measure of how far the trade moves the pool.
- *
- * v4 states `fee` in hundredths of a bip (1e-6), so the fee-exclusive input is
- * `amountIn * (1e6 - fee) / 1e6`.
+ * Fees are stated in hundredths of a bip (1e-6), so 10_000 is 1%.
  */
 export const FEE_DENOMINATOR = 1_000_000n
 
-export const removePoolFee = (amountIn: bigint): bigint =>
-  (amountIn * (FEE_DENOMINATOR - BigInt(POOL_KEY.fee))) / FEE_DENOMINATOR
-
-// v4 takes the exact-output amount as a uint128.
-const MAX_UINT128 = (1n << 128n) - 1n
-
-const assertQuotableAmount = (ai3Shannons: bigint): void => {
-  if (ai3Shannons <= 0n) {
-    throw new Error(`Invalid AI3 amount: ${ai3Shannons}`)
-  }
-  if (ai3Shannons > MAX_UINT128) {
-    throw new Error(
-      `AI3 amount ${ai3Shannons} exceeds the uint128 exact-output limit`,
-    )
-  }
+/**
+ * Total swap fee a USDC→WAI3 trade pays, in the same 1e-6 units.
+ *
+ * A v4 pool charges the LP fee *and* — when governance has switched one on — a
+ * protocol fee, composed as `pf + lp - pf*lp/1e6`. `protocolFee` packs two
+ * independent values into a uint24: the low 12 bits apply to zeroForOne swaps
+ * and the high 12 bits to oneForZero. We spend currency1 to receive currency0,
+ * which is oneForZero, hence the shift.
+ *
+ * This must come from live `slot0` rather than from `POOL_KEY.fee`: the pool
+ * currently carries a 0.1% protocol fee on top of its 1% LP fee, and assuming
+ * the static 1% leaves ~10bps of phantom "impact" in every measurement — the
+ * exact constant offset `removePoolFee` exists to eliminate. Governance can
+ * change the protocol fee at any time, so it is read, not hardcoded.
+ */
+export const effectiveFeePips = (
+  protocolFee: number,
+  lpFee: number,
+): bigint => {
+  const oneForZeroProtocolFee = BigInt(protocolFee >> 12)
+  const lp = BigInt(lpFee)
+  return (
+    oneForZeroProtocolFee + lp - (oneForZeroProtocolFee * lp) / FEE_DENOMINATOR
+  )
 }
 
 /**
- * True when `error` is an on-chain revert from the quoter, as opposed to an RPC,
- * transport, timeout, or configuration failure.
+ * Remove the swap fee from a quoter `amountIn`.
  *
- * The distinction matters because it decides which error the caller reports: a
- * revert means the pool genuinely cannot fill the size, while everything else
- * means we could not find out. Collapsing the two makes an Ethereum outage look
- * like a demand problem in logs and metrics.
+ * `quoteExactOutputSingle` returns the gross input, so the fee is baked in and a
+ * *zero-slippage* trade still comes back above the marginal cost. Comparing
+ * gross input against a fee-free marginal cost would report a premium that no
+ * trade size can get below, turning the depth guard into a constant offset
+ * rather than a measure of the trade's own execution premium.
  */
-export const isQuoterRevert = (error: unknown): boolean =>
-  error instanceof BaseError &&
-  error.walk((e) => e instanceof ContractFunctionRevertedError) !== null
+export const removePoolFee = (amountIn: bigint, feePips: bigint): bigint =>
+  (amountIn * (FEE_DENOMINATOR - feePips)) / FEE_DENOMINATOR
+
+// v4 takes the exact-output amount as a uint128.
+export const MAX_UINT128 = (1n << 128n) - 1n
+
+const assertQuotableAmount = (ai3Shannons: bigint): void => {
+  if (ai3Shannons <= 0n || ai3Shannons > MAX_UINT128) {
+    throw new Error(`Unquotable AI3 amount: ${ai3Shannons}`)
+  }
+}
+
+// v4 reverts with this when a pool lacks the liquidity to fill an exact-output
+// swap. Declared so viem can decode it and we can tell "too big for the pool"
+// apart from every other revert.
+const NOT_ENOUGH_LIQUIDITY = 'NotEnoughLiquidity'
+
+/**
+ * True only when `error` is the pool telling us it cannot fill the requested
+ * size.
+ *
+ * Deliberately narrow. An uninitialised pool key, a hook revert, or a quoter
+ * that has been redeployed all revert too, but none of them mean "buy less" —
+ * they mean the integration is broken, and reporting them as a size problem
+ * both misleads the user and hides a total outage from logs and metrics. So a
+ * revert only counts when it decodes to the liquidity error; anything else,
+ * including an empty revert, falls through to being treated as unavailable.
+ */
+export const isQuoterRevert = (error: unknown): boolean => {
+  if (!(error instanceof BaseError)) {
+    return false
+  }
+  const reverted = error.walk((e) => e instanceof ContractFunctionRevertedError)
+  if (!(reverted instanceof ContractFunctionRevertedError)) {
+    return false
+  }
+  return (
+    reverted.data?.errorName === NOT_ENOUGH_LIQUIDITY ||
+    reverted.reason === NOT_ENOUGH_LIQUIDITY
+  )
+}
 
 // --- Reads -------------------------------------------------------------------
 
@@ -235,9 +275,11 @@ export const isQuoterRevert = (error: unknown): boolean =>
 export type PoolObservation = {
   // Marginal price, scaled by USD_RATE_SCALE (1e18).
   usdPerAi3: bigint
-  // Gross USDC base units to buy the requested AI3, fee included. Only present
-  // when an amount was quoted.
-  amountIn?: bigint
+  // Gross USDC base units to buy the requested AI3, fee included.
+  amountIn: bigint
+  // Total swap fee applying to this trade, in 1e-6 units, read from the same
+  // block. Live rather than assumed, because the protocol fee is governance-set.
+  feePips: bigint
   blockNumber: bigint
   asOfMs: number
 }
@@ -254,16 +296,14 @@ const getHeadBlock = async (): Promise<{
   return { number: block.number, timestamp: block.timestamp }
 }
 
-const readSqrtPriceX96At = async (blockNumber: bigint): Promise<bigint> => {
-  const [sqrtPriceX96] = await getClient().readContract({
+const readSlot0At = async (blockNumber: bigint) =>
+  getClient().readContract({
     address: STATE_VIEW_ADDRESS,
     abi: stateViewAbi,
     functionName: 'getSlot0',
     args: [POOL_ID],
     blockNumber,
   })
-  return sqrtPriceX96
-}
 
 /**
  * Marginal price at the head block, as a `RawQuote` for the oracle's existing
@@ -274,7 +314,7 @@ const readSqrtPriceX96At = async (blockNumber: bigint): Promise<bigint> => {
  */
 export const fetchUniswapV4Quote = async (): Promise<RawQuote> => {
   const head = await getHeadBlock()
-  const sqrtPriceX96 = await readSqrtPriceX96At(head.number)
+  const [sqrtPriceX96] = await readSlot0At(head.number)
   return {
     usdPerAi3: sqrtPriceX96ToUsdPerAi3(sqrtPriceX96),
     asOfMs: Number(head.timestamp) * 1000,
@@ -282,11 +322,11 @@ export const fetchUniswapV4Quote = async (): Promise<RawQuote> => {
 }
 
 /**
- * Marginal price and executable cost for `ai3Shannons`, both read at the same
- * block.
+ * Marginal price, live swap fee and executable cost for `ai3Shannons`, all read
+ * at the same block.
  *
  * `amountIn` is the gross USDC (6-decimal base units) needed to buy exactly that
- * much WAI3 — inclusive of the pool fee and of the price impact of the trade
+ * much WAI3 — inclusive of the swap fee and of the price impact of the trade
  * itself. `zeroForOne` is false because we spend currency1 (USDC) to receive
  * currency0 (WAI3).
  *
@@ -296,13 +336,13 @@ export const fetchUniswapV4Quote = async (): Promise<RawQuote> => {
  */
 export const readPoolQuote = async (
   ai3Shannons: bigint,
-): Promise<Required<PoolObservation>> => {
+): Promise<PoolObservation> => {
   assertQuotableAmount(ai3Shannons)
   const head = await getHeadBlock()
   const publicClient = getClient()
 
-  const [sqrtPriceX96, simulation] = await Promise.all([
-    readSqrtPriceX96At(head.number),
+  const [slot0, simulation] = await Promise.all([
+    readSlot0At(head.number),
     publicClient.simulateContract({
       address: QUOTER_ADDRESS,
       abi: quoterAbi,
@@ -319,10 +359,12 @@ export const readPoolQuote = async (
     }),
   ])
 
+  const [sqrtPriceX96, , protocolFee, lpFee] = slot0
   const [amountIn] = simulation.result
   return {
     usdPerAi3: sqrtPriceX96ToUsdPerAi3(sqrtPriceX96),
     amountIn,
+    feePips: effectiveFeePips(protocolFee, lpFee),
     blockNumber: head.number,
     asOfMs: Number(head.timestamp) * 1000,
   }
@@ -334,9 +376,17 @@ export const readPoolQuote = async (
  *
  * Feeds the manipulation gate in index.ts: the pool has no oracle hook, so there
  * is no TWAP to ask for, and sampling historical blocks is the closest
- * equivalent available. Requires an RPC with state at that depth — a pruned node
- * rejects the older reads, which surfaces as an unavailable oracle rather than a
- * silently unguarded quote.
+ * equivalent available. Requires an RPC with state at `(samples * spacing)`
+ * blocks of depth — a pruned node rejects the older reads, which surfaces as an
+ * unavailable oracle rather than a silently unguarded quote.
+ *
+ * Sampling starts one full spacing BEHIND `blockNumber`: including the block
+ * under test would put the value being judged inside the median it is judged
+ * against, halving the measured deviation at two samples and diluting it at any
+ * count.
+ *
+ * Blocks before the pool was initialised report a zero price; those are dropped
+ * rather than converted, since the conversion rejects non-positive input.
  */
 export const sampleUsdPerAi3 = async (
   blockNumber: bigint,
@@ -345,12 +395,17 @@ export const sampleUsdPerAi3 = async (
 ): Promise<bigint[]> => {
   const offsets = Array.from(
     { length: samples },
-    (_, i) => BigInt(i) * BigInt(spacingBlocks),
+    (_, i) => BigInt(i + 1) * BigInt(spacingBlocks),
   ).filter((offset) => offset < blockNumber)
 
-  return Promise.all(
-    offsets.map(async (offset) =>
-      sqrtPriceX96ToUsdPerAi3(await readSqrtPriceX96At(blockNumber - offset)),
-    ),
+  const prices = await Promise.all(
+    offsets.map(async (offset) => {
+      const [sqrtPriceX96] = await readSlot0At(blockNumber - offset)
+      return sqrtPriceX96
+    }),
   )
+
+  return prices
+    .filter((sqrtPriceX96) => sqrtPriceX96 > 0n)
+    .map(sqrtPriceX96ToUsdPerAi3)
 }

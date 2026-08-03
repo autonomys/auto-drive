@@ -203,11 +203,14 @@ export const config = {
     // Manipulation gate. The pool has no oracle hook, so every read is
     // single-block spot state and a trade immediately before our read moves it.
     // The current price is compared against the median of these samples, taken
-    // `spotSampleSpacingBlocks` apart, and a quote is refused when it diverges
-    // by more than `maxSpotDeviationPercent`. Sampling costs one archival-depth
-    // `eth_call` per sample per quote.
+    // `spotSampleSpacingBlocks` apart and starting one spacing behind the block
+    // being judged, and a quote is refused when it diverges by more than
+    // `maxSpotDeviationPercent`. Reaches `count * spacing` blocks back, which
+    // must stay inside the RPC's state window — the defaults sit just under a
+    // standard full node's 128 blocks. The derived median is cached for
+    // `cacheTtlMs`, so a burst of quotes does not re-read the history.
     spotSampleCount: positiveIntEnv('ORACLE_SPOT_SAMPLES', 5),
-    spotSampleSpacingBlocks: positiveIntEnv('ORACLE_SPOT_SAMPLE_SPACING', 25),
+    spotSampleSpacingBlocks: positiveIntEnv('ORACLE_SPOT_SAMPLE_SPACING', 20),
     maxSpotDeviationPercent: Number(env('ORACLE_MAX_SPOT_DEVIATION', '10')),
     // Sanity bounds (USD per AI3) as plain decimals — kept as raw strings and
     // parsed to the 1e18 scale in the priceOracle module (parsing the string
