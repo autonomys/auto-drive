@@ -72,14 +72,14 @@ export class OracleUnavailableError extends Error {
 }
 
 /**
- * The pool cannot fill the requested size at all, or an operator has opted into
- * the slippage circuit breaker and this quote tripped it.
+ * The pool has no liquidity to fill the requested size — the quoter reverts
+ * rather than returning a partial fill.
  *
- * Expensive is NOT the same as too large: a size that converts at heavy
- * slippage still gets a quote, with the slippage priced into `usdcAmount`.
- * Deciding whether a size is permitted happens upstream, against the per-user
- * credit cap, before an intent exists. So by default this error only means the
- * pool genuinely has no liquidity for the size.
+ * Expensive is NOT the same as too large. A size that converts at heavy
+ * slippage still gets a quote, with the slippage priced into `usdcAmount`;
+ * whether such a size is permitted is settled upstream against the per-user
+ * credit cap, before an intent exists. So this error never reflects a policy
+ * threshold, only the pool's actual inability to fill.
  *
  * Reserved strictly for "reduce the amount" — a caller may safely surface it as
  * that instruction. Amounts that are invalid for any other reason raise
@@ -87,12 +87,7 @@ export class OracleUnavailableError extends Error {
  * `OracleUnavailableError`.
  */
 export class QuoteTooLargeError extends Error {
-  constructor(
-    message: string,
-    // Undefined when the pool could not fill the size at all, so no impact was
-    // measurable.
-    readonly priceImpactBps?: bigint,
-  ) {
+  constructor(message: string) {
     super(message)
     this.name = 'QuoteTooLargeError'
   }
