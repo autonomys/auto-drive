@@ -169,15 +169,21 @@ export const config = {
     checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
     priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
+  // Ethereum mainnet. Distinct from `paymentManager.url`, which points at Auto
+  // EVM (chain 870) — two different chains, so keep the endpoints separate.
+  // Read directly (not via `env`) so it stays optional: a deployment that does
+  // not quote in USDC boots without it, and the consumer fails fast naming this
+  // variable the first time it is needed.
+  ethereum: {
+    rpcUrl: process.env.ETH_CHAIN_ENDPOINT,
+  },
   priceOracle: {
     // AI3/USD price oracle, read from the Uniswap v4 WAI3/USDC pool on Ethereum.
     // See infrastructure/services/priceOracle.
     //
-    // Ethereum RPC endpoint. Read directly (not via `env`) so it stays optional:
-    // a deployment that does not quote in USDC boots without it, and the oracle
-    // fails fast naming this variable the first time it is asked for a price.
-    ethRpcUrl: process.env.ETH_CHAIN_ENDPOINT,
     // How long a freshly read price is served from memory before a refresh.
+    // Applies to the marginal price only — an executable quote always reads the
+    // chain, since it backs a binding charge.
     cacheTtlMs: positiveIntEnv('ORACLE_CACHE_TTL_MS', 60000),
     // Longest a last-good price may be served as a fallback while the pool
     // cannot be read. Default: 10 minutes.
@@ -187,11 +193,22 @@ export const config = {
     // Drop the quote if the block the pool state came from is older than this,
     // which catches a lagging RPC node. Default: 5 minutes.
     maxSourceAgeMs: positiveIntEnv('ORACLE_MAX_SOURCE_AGE_MS', 300000),
-    // Depth guard: reject a purchase whose conversion would move the pool by
-    // more than this percentage. The marginal price only describes an
-    // infinitesimal trade, so without a cap a purchase that is large relative
-    // to pool liquidity is quoted far below what converting it costs.
+    // Depth guard: reject a purchase whose conversion would move the pool price
+    // by more than this percentage, measured EXCLUSIVE of the pool's own swap
+    // fee (which every trade pays regardless of size). The marginal price only
+    // describes an infinitesimal trade, so without this cap a purchase that is
+    // large relative to pool liquidity is quoted far below what converting it
+    // costs. Validated at oracle load — see priceOracle/index.ts.
     maxPriceImpactPercent: Number(env('ORACLE_MAX_PRICE_IMPACT', '2')),
+    // Manipulation gate. The pool has no oracle hook, so every read is
+    // single-block spot state and a trade immediately before our read moves it.
+    // The current price is compared against the median of these samples, taken
+    // `spotSampleSpacingBlocks` apart, and a quote is refused when it diverges
+    // by more than `maxSpotDeviationPercent`. Sampling costs one archival-depth
+    // `eth_call` per sample per quote.
+    spotSampleCount: positiveIntEnv('ORACLE_SPOT_SAMPLES', 5),
+    spotSampleSpacingBlocks: positiveIntEnv('ORACLE_SPOT_SAMPLE_SPACING', 25),
+    maxSpotDeviationPercent: Number(env('ORACLE_MAX_SPOT_DEVIATION', '10')),
     // Sanity bounds (USD per AI3) as plain decimals — kept as raw strings and
     // parsed to the 1e18 scale in the priceOracle module (parsing the string
     // directly avoids Number.toString() exponential notation for small values).

@@ -10,9 +10,17 @@ import {
   isWithinBounds,
   parseDecimalToScaledBigint,
 } from './quote.js'
-import { fetchUniswapV4Quote, quoteUsdcForAi3 } from './uniswapV4.js'
 import {
+  fetchUniswapV4Quote,
+  isQuoterRevert,
+  readPoolQuote,
+  removePoolFee,
+  sampleUsdPerAi3,
+} from './uniswapV4.js'
+import {
+  InvalidQuoteAmountError,
   OracleUnavailableError,
+  PriceDeviationError,
   QuoteTooLargeError,
   type ExecutableQuote,
   type OraclePrice,
@@ -52,6 +60,30 @@ if (minScaled > maxScaled) {
   )
 }
 
+const BASIS_POINTS = 10_000n
+
+// Percent thresholds are converted to basis points once, at load, so a
+// malformed value fails here — naming the variable — rather than as a bare
+// `RangeError` from BigInt(NaN) at the first import that pulls this module in.
+const parsePercentToBps = (value: number, name: string): bigint => {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(
+      `Invalid ${name}: "${value}" — use a non-negative number of percent ` +
+        '(e.g. 2 or 2.5)',
+    )
+  }
+  return BigInt(Math.round(value * 100))
+}
+
+const maxPriceImpactBps = parsePercentToBps(
+  config.priceOracle.maxPriceImpactPercent,
+  'ORACLE_MAX_PRICE_IMPACT',
+)
+const maxSpotDeviationBps = parsePercentToBps(
+  config.priceOracle.maxSpotDeviationPercent,
+  'ORACLE_MAX_SPOT_DEVIATION',
+)
+
 type CacheEntry = { value: OraclePrice; expiresAt: number }
 
 // Module-level singleton state (same shape as paymentManager):
@@ -72,8 +104,10 @@ let inFlight: Promise<Result<OraclePrice, OracleUnavailableError>> | null = null
 const fetchQuote = async (
   fetchRaw: (signal?: AbortSignal) => Promise<RawQuote> = fetchUniswapV4Quote,
 ): Promise<bigint | null> => {
-  // Abort the underlying request when the timeout fires so a slow source does
-  // not leak a socket that outlives its usefulness.
+  // The signal is offered to `fetchRaw` for sources that can honour one; the
+  // production adapter cannot, because viem's actions take no AbortSignal — its
+  // requests are bounded by the transport timeout instead. `withTimeout` is what
+  // bounds this call either way.
   const controller = new AbortController()
   try {
     const raw = await withTimeout(
@@ -111,7 +145,7 @@ const fetchQuote = async (
 
 // Grouped so unit tests can spy on the fetch (jest.spyOn), mirroring how
 // paymentManager exposes _viemClient. Not for use outside tests.
-const internal = { fetchQuote, quoteUsdcForAi3 }
+const internal = { fetchQuote, readPoolQuote, sampleUsdPerAi3 }
 
 // Serve the last good price as a stale fallback, or error if none is fresh
 // enough.
@@ -196,16 +230,112 @@ const getPrice = async (): Promise<
   }
 }
 
-const BASIS_POINTS = 10_000n
+/**
+ * Smallest marginal cost (USDC base units, so this is $0.01) an amount may have
+ * and still be quotable.
+ *
+ * Not a business minimum — a numerical one. Price impact is a ratio against the
+ * marginal cost, so at a marginal cost of a few base units a single unit of
+ * integer rounding is worth thousands of basis points and the depth guard would
+ * reject or admit essentially at random. At $0.01 one base unit is 1bps, which
+ * is below any threshold worth setting.
+ */
+const MIN_QUOTABLE_USDC = 10_000n
 
-const maxPriceImpactBps = BigInt(
-  Math.round(config.priceOracle.maxPriceImpactPercent * 100),
-)
+export type ExecutableQuoteError =
+  | OracleUnavailableError
+  | QuoteTooLargeError
+  | InvalidQuoteAmountError
+  | PriceDeviationError
+
+// Median of a non-empty list. Chosen over a mean because it is what makes a
+// single manipulated sample inert: one outlier moves a mean, but cannot move a
+// median past its neighbours.
+const median = (values: bigint[]): bigint => {
+  const sorted = [...values].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2n
+}
+
+const absDeviationBps = (value: bigint, reference: bigint): bigint => {
+  const delta = value > reference ? value - reference : reference - value
+  return (delta * BASIS_POINTS) / reference
+}
+
+/**
+ * Refuse the quote when the pool's current price is far from its recent median.
+ *
+ * The pool has no oracle hook, so `getSlot0` is single-block spot state and a
+ * swap in the block before ours moves it. Sampling earlier blocks is the closest
+ * thing to a TWAP available here: a price pushed for one block stands out
+ * against the median of the samples, while genuine drift carries the samples
+ * with it.
+ *
+ * Skipped when sampling is disabled (`ORACLE_SPOT_SAMPLES` <= 1). A sampling
+ * failure is fatal to the quote rather than ignored — an RPC without state at
+ * that depth would otherwise silently leave every quote unguarded.
+ */
+const checkSpotDeviation = async (
+  usdPerAi3: bigint,
+  blockNumber: bigint,
+): Promise<Result<void, OracleUnavailableError | PriceDeviationError>> => {
+  const { spotSampleCount, spotSampleSpacingBlocks } = config.priceOracle
+  if (spotSampleCount <= 1) {
+    return ok(undefined)
+  }
+
+  let samples: bigint[]
+  try {
+    samples = await withTimeout(
+      internal.sampleUsdPerAi3(
+        blockNumber,
+        spotSampleCount,
+        spotSampleSpacingBlocks,
+      ),
+      config.priceOracle.fetchTimeoutMs,
+      'priceOracle:spotSamples',
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.warn(`Price oracle: spot sampling failed: ${message}`)
+    return err(
+      new OracleUnavailableError(
+        'Price oracle unavailable: could not sample historical pool state ' +
+          `(${message})`,
+      ),
+    )
+  }
+
+  const usable = samples.filter((sample) => sample > 0n)
+  if (usable.length < 2) {
+    // Too little history to form a reference — e.g. a pool near genesis.
+    return ok(undefined)
+  }
+
+  const reference = median(usable)
+  const deviationBps = absDeviationBps(usdPerAi3, reference)
+  if (deviationBps > maxSpotDeviationBps) {
+    logger.warn(
+      `Price oracle: refusing to quote — spot ${usdPerAi3} deviates ` +
+        `${deviationBps}bps from the ${usable.length}-sample median ` +
+        `${reference}, above the ${maxSpotDeviationBps}bps limit`,
+    )
+    return err(
+      new PriceDeviationError(
+        `The pool price moved ${deviationBps} basis points away from its ` +
+          `recent median, above the ${maxSpotDeviationBps} basis point limit`,
+        deviationBps,
+      ),
+    )
+  }
+  return ok(undefined)
+}
 
 /**
  * Price a specific conversion: how much USDC it takes to acquire `ai3Shannons`
- * of AI3 from the pool right now, including the pool fee and the price impact of
- * the trade itself.
+ * of AI3 from the pool, and how far that trade moves the pool.
  *
  * Why this exists rather than multiplying `getPrice()` by the size: the marginal
  * price only describes an infinitesimal trade. A real conversion walks the
@@ -213,65 +343,104 @@ const maxPriceImpactBps = BigInt(
  * `size × marginal price`. Quoting the marginal price and converting at the
  * executable one silently absorbs that difference on every purchase.
  *
- * Returns `err(QuoteTooLargeError)` when the conversion would move the pool by
- * more than `ORACLE_MAX_PRICE_IMPACT`, or when the pool cannot fill the size at
- * all. Callers should surface that as a "reduce the amount" condition rather
- * than falling back to the marginal price.
+ * Unlike `getPrice`, this never serves a cached or stale price. It backs a
+ * binding charge, and the marginal price and the quoter result are only
+ * comparable when read at the same block — a cached marginal price against a
+ * live quote measures elapsed drift as much as it measures slippage.
+ *
+ * Failure modes are deliberately distinct:
+ *  - `QuoteTooLargeError`      reduce the amount
+ *  - `InvalidQuoteAmountError` the amount is unquotable on its own terms
+ *  - `PriceDeviationError`     the pool's price is not currently trustworthy
+ *  - `OracleUnavailableError`  we could not reach the chain to find out
  */
 const getExecutableQuote = async (
   ai3Shannons: bigint,
-): Promise<
-  Result<ExecutableQuote, OracleUnavailableError | QuoteTooLargeError>
-> => {
+): Promise<Result<ExecutableQuote, ExecutableQuoteError>> => {
   if (ai3Shannons <= 0n) {
-    return err(new QuoteTooLargeError(`Invalid AI3 amount: ${ai3Shannons}`))
-  }
-
-  const priceResult = await getPrice()
-  if (priceResult.isErr()) {
-    return err(priceResult.error)
-  }
-  const { usdPerAi3 } = priceResult.value
-
-  // Baseline the impact against the marginal price read above, so both sides of
-  // the comparison describe the same pool state.
-  const marginalCost = ai3ShannonsToUsdcBaseUnits(ai3Shannons, usdPerAi3)
-  if (marginalCost <= 0n) {
     return err(
-      new QuoteTooLargeError(
-        `AI3 amount ${ai3Shannons} is below one USDC base unit at the ` +
-          'current rate',
-      ),
+      new InvalidQuoteAmountError(`Invalid AI3 amount: ${ai3Shannons}`),
     )
   }
 
-  let usdcAmount: bigint
+  let observation: Awaited<ReturnType<typeof readPoolQuote>>
   try {
-    // The RPC request itself is bounded by the transport timeout in
-    // uniswapV4.ts; this races the whole call so a wedged client cannot hold an
-    // intent open indefinitely.
-    usdcAmount = await withTimeout(
-      internal.quoteUsdcForAi3(ai3Shannons),
+    // The individual RPC requests are bounded by the transport timeout in
+    // uniswapV4.ts; this races the whole multi-call sequence so a wedged client
+    // cannot hold an intent open indefinitely.
+    observation = await withTimeout(
+      internal.readPoolQuote(ai3Shannons),
       config.priceOracle.fetchTimeoutMs,
       'priceOracle:quoter',
     )
   } catch (error) {
-    // The Quoter reverts rather than returning a partial fill, so a revert here
-    // is indistinguishable from "the pool cannot absorb this size". Treating it
-    // as unfillable is the safe reading either way.
-    logger.warn(
-      `Price oracle: quoter failed for ${ai3Shannons} shannons: ` +
-        `${error instanceof Error ? error.message : String(error)}`,
-    )
+    const message = error instanceof Error ? error.message : String(error)
+    // Only an on-chain revert means the pool genuinely cannot fill the size. RPC
+    // failures, timeouts and misconfiguration mean we could not find out, and
+    // reporting those as "too large" would blame the buyer for our outage.
+    if (isQuoterRevert(error)) {
+      logger.warn(
+        `Price oracle: quoter reverted for ${ai3Shannons} shannons: ${message}`,
+      )
+      return err(
+        new QuoteTooLargeError(
+          `The pool cannot fill ${ai3Shannons} shannons of AI3`,
+        ),
+      )
+    }
+    logger.warn(`Price oracle: quote read failed: ${message}`)
     return err(
-      new QuoteTooLargeError(
-        `The pool could not quote ${ai3Shannons} shannons of AI3`,
+      new OracleUnavailableError(
+        `Price oracle unavailable: the pool could not be quoted (${message})`,
       ),
     )
   }
 
-  const priceImpactBps =
-    ((usdcAmount - marginalCost) * BASIS_POINTS) / marginalCost
+  const { usdPerAi3, amountIn, blockNumber, asOfMs } = observation
+
+  if (!isWithinBounds(usdPerAi3, minScaled, maxScaled)) {
+    return err(
+      new OracleUnavailableError(
+        `Price oracle unavailable: pool price ${usdPerAi3} (scaled 1e18) is ` +
+          'outside the configured bounds',
+      ),
+    )
+  }
+  if (!isQuoteFresh(asOfMs, Date.now(), config.priceOracle.maxSourceAgeMs)) {
+    return err(
+      new OracleUnavailableError(
+        `Price oracle unavailable: pool state at block ${blockNumber} is stale`,
+      ),
+    )
+  }
+
+  // Manipulation gate. Runs before the cost is trusted, so a price pushed in the
+  // block we read never reaches a quote.
+  const deviationResult = await checkSpotDeviation(usdPerAi3, blockNumber)
+  if (deviationResult.isErr()) {
+    return err(deviationResult.error)
+  }
+
+  const marginalCost = ai3ShannonsToUsdcBaseUnits(ai3Shannons, usdPerAi3)
+  if (marginalCost < MIN_QUOTABLE_USDC) {
+    return err(
+      new InvalidQuoteAmountError(
+        `AI3 amount ${ai3Shannons} prices at ${marginalCost} USDC base units, ` +
+          `below the ${MIN_QUOTABLE_USDC} minimum needed to quote it`,
+      ),
+    )
+  }
+
+  // The quoter's amountIn is gross of the pool's swap fee, which every trade
+  // pays regardless of size. Measuring impact against it would put a constant
+  // floor under the number and make the limit mean something other than depth.
+  const quotePremiumBps =
+    ((amountIn - marginalCost) * BASIS_POINTS) / marginalCost
+  const netOfFee = removePoolFee(amountIn)
+  const rawImpactBps = ((netOfFee - marginalCost) * BASIS_POINTS) / marginalCost
+  // Integer division of the fee can leave the net a base unit under the
+  // marginal cost on tiny amounts; a negative impact is not meaningful.
+  const priceImpactBps = rawImpactBps > 0n ? rawImpactBps : 0n
 
   if (priceImpactBps > maxPriceImpactBps) {
     logger.warn(
@@ -287,7 +456,15 @@ const getExecutableQuote = async (
     )
   }
 
-  return ok({ usdcAmount, usdPerAi3, priceImpactBps })
+  return ok({
+    usdcAmount: amountIn,
+    usdPerAi3,
+    priceImpactBps,
+    quotePremiumBps,
+    ai3Shannons,
+    blockNumber,
+    asOf: new Date(asOfMs),
+  })
 }
 
 // Clear all singleton state. Test-only (the service is a module singleton).

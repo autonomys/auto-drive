@@ -33,18 +33,31 @@ export type RawQuote = {
 /**
  * Size-aware cost of converting a specific intent, from the v4 Quoter.
  *
- * `usdcAmount` is what the conversion would actually execute at; `usdPerAi3` is
- * the pool's marginal price at the same moment (what gets persisted as the
- * intent's locked rate). `priceImpactBps` is the gap between them, i.e. how far
- * this trade alone moves the pool.
+ * Every field describes the same block: `usdcAmount` is what the conversion
+ * would execute at, `usdPerAi3` is the pool's marginal price at that same
+ * block (what gets persisted as the intent's locked rate), and the two are only
+ * comparable because they were read together.
+ *
+ * `blockNumber` / `asOf` / `ai3Shannons` are carried so a binding charge can be
+ * reconciled later against the exact pool state it was derived from.
  */
 export type ExecutableQuote = {
-  // USDC base units (6 decimals) required to acquire the requested AI3.
+  // USDC base units (6 decimals) required to acquire the requested AI3,
+  // inclusive of the pool's swap fee.
   usdcAmount: bigint
   // Marginal AI3/USD price, scaled by USD_RATE_SCALE (1e18).
   usdPerAi3: bigint
-  // (executable cost / marginal cost - 1), in basis points.
+  // How far this trade alone moves the pool, EXCLUDING the swap fee that every
+  // trade pays regardless of size. Negative values are clamped to zero.
   priceImpactBps: bigint
+  // Total premium of the executable cost over the marginal cost, fee included —
+  // the honest "what this costs above spot" figure for display and telemetry.
+  quotePremiumBps: bigint
+  // The amount that was quoted, echoed back so callers cannot mismatch it.
+  ai3Shannons: bigint
+  // Block every field above was read at.
+  blockNumber: bigint
+  asOf: Date
 }
 
 // Wrapped in a neverthrow `err` when a fetch fails and there is no last-good
@@ -64,6 +77,11 @@ export class OracleUnavailableError extends Error {
  * This is the depth guard. Without it, a purchase large relative to pool
  * liquidity is quoted at the marginal price but converted at a far worse average
  * one, and the shortfall is absorbed silently.
+ *
+ * Reserved strictly for "reduce the amount" — a caller may safely surface it as
+ * that instruction. Amounts that are invalid for any other reason raise
+ * `InvalidQuoteAmountError`, and failures to reach the chain raise
+ * `OracleUnavailableError`.
  */
 export class QuoteTooLargeError extends Error {
   constructor(
@@ -74,5 +92,38 @@ export class QuoteTooLargeError extends Error {
   ) {
     super(message)
     this.name = 'QuoteTooLargeError'
+  }
+}
+
+/**
+ * The requested amount cannot be quoted on its own terms — non-positive, beyond
+ * the exact-output width the pool accepts, or so small it prices below a single
+ * USDC base unit.
+ *
+ * Deliberately distinct from `QuoteTooLargeError`: telling a user who asked for
+ * too little to reduce their purchase is worse than not answering at all.
+ */
+export class InvalidQuoteAmountError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'InvalidQuoteAmountError'
+  }
+}
+
+/**
+ * The pool's current price is too far from its recent median to be trusted.
+ *
+ * The pool has no oracle hook, so every read is single-block spot state that a
+ * trade immediately beforehand can move. This is the gate against quoting off a
+ * manipulated price; it is a refusal to answer, not a statement about the
+ * requested amount.
+ */
+export class PriceDeviationError extends Error {
+  constructor(
+    message: string,
+    readonly deviationBps: bigint,
+  ) {
+    super(message)
+    this.name = 'PriceDeviationError'
   }
 }

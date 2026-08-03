@@ -1,4 +1,11 @@
-import { createPublicClient, http, type Address, type Hex } from 'viem'
+import {
+  BaseError,
+  ContractFunctionRevertedError,
+  createPublicClient,
+  http,
+  type Address,
+  type Hex,
+} from 'viem'
 import { mainnet } from 'viem/chains'
 import { USD_RATE_DECIMALS } from '@auto-drive/models'
 import { config } from '../../../config.js'
@@ -121,7 +128,7 @@ const getClient = () => {
   if (client) {
     return client
   }
-  const url = config.priceOracle.ethRpcUrl
+  const url = config.ethereum.rpcUrl
   if (!url) {
     throw new Error(
       'ETH_CHAIN_ENDPOINT is not set — it is required to read the AI3/USD ' +
@@ -170,67 +177,180 @@ export const sqrtPriceX96ToUsdPerAi3 = (sqrtPriceX96: bigint): bigint => {
   return (sqrtPriceX96 * sqrtPriceX96 * 10n ** PRICE_SCALE_EXPONENT) / Q192
 }
 
+/**
+ * Remove the pool's swap fee from a quoter `amountIn`.
+ *
+ * `quoteExactOutputSingle` returns the gross input, so the LP fee is baked in
+ * and a *zero-slippage* trade still comes back above the marginal cost — for
+ * this pool's 1% fee, by ~101bps. Comparing gross input against a fee-free
+ * marginal cost therefore reports a price impact that no trade size can get
+ * below, which would turn the depth guard into a constant offset rather than a
+ * measure of how far the trade moves the pool.
+ *
+ * v4 states `fee` in hundredths of a bip (1e-6), so the fee-exclusive input is
+ * `amountIn * (1e6 - fee) / 1e6`.
+ */
+export const FEE_DENOMINATOR = 1_000_000n
+
+export const removePoolFee = (amountIn: bigint): bigint =>
+  (amountIn * (FEE_DENOMINATOR - BigInt(POOL_KEY.fee))) / FEE_DENOMINATOR
+
+// v4 takes the exact-output amount as a uint128.
+const MAX_UINT128 = (1n << 128n) - 1n
+
+const assertQuotableAmount = (ai3Shannons: bigint): void => {
+  if (ai3Shannons <= 0n) {
+    throw new Error(`Invalid AI3 amount: ${ai3Shannons}`)
+  }
+  if (ai3Shannons > MAX_UINT128) {
+    throw new Error(
+      `AI3 amount ${ai3Shannons} exceeds the uint128 exact-output limit`,
+    )
+  }
+}
+
+/**
+ * True when `error` is an on-chain revert from the quoter, as opposed to an RPC,
+ * transport, timeout, or configuration failure.
+ *
+ * The distinction matters because it decides which error the caller reports: a
+ * revert means the pool genuinely cannot fill the size, while everything else
+ * means we could not find out. Collapsing the two makes an Ethereum outage look
+ * like a demand problem in logs and metrics.
+ */
+export const isQuoterRevert = (error: unknown): boolean =>
+  error instanceof BaseError &&
+  error.walk((e) => e instanceof ContractFunctionRevertedError) !== null
+
 // --- Reads -------------------------------------------------------------------
 
 /**
- * Current marginal price of the pool, as a `RawQuote` for the oracle's existing
+ * A pool observation, with everything read at a single block.
+ *
+ * Pinning matters: the marginal price and the quoter result are only comparable
+ * if they describe the same pool state. Reading one at `latest` and the other a
+ * moment later measures drift as well as slippage, and on a pool that trades a
+ * handful of times a day that drift can dominate.
+ */
+export type PoolObservation = {
+  // Marginal price, scaled by USD_RATE_SCALE (1e18).
+  usdPerAi3: bigint
+  // Gross USDC base units to buy the requested AI3, fee included. Only present
+  // when an amount was quoted.
+  amountIn?: bigint
+  blockNumber: bigint
+  asOfMs: number
+}
+
+// Resolve the head block once so every subsequent read can pin to it.
+const getHeadBlock = async (): Promise<{
+  number: bigint
+  timestamp: bigint
+}> => {
+  const block = await getClient().getBlock({ blockTag: 'latest' })
+  if (block.number === null) {
+    throw new Error('Ethereum node returned a pending block for "latest"')
+  }
+  return { number: block.number, timestamp: block.timestamp }
+}
+
+const readSqrtPriceX96At = async (blockNumber: bigint): Promise<bigint> => {
+  const [sqrtPriceX96] = await getClient().readContract({
+    address: STATE_VIEW_ADDRESS,
+    abi: stateViewAbi,
+    functionName: 'getSlot0',
+    args: [POOL_ID],
+    blockNumber,
+  })
+  return sqrtPriceX96
+}
+
+/**
+ * Marginal price at the head block, as a `RawQuote` for the oracle's existing
  * validation pipeline.
  *
  * The block timestamp is reported as `asOfMs` so a lagging RPC node is caught by
  * the same `maxSourceAgeMs` staleness check that any other source is subject to.
  */
 export const fetchUniswapV4Quote = async (): Promise<RawQuote> => {
-  const publicClient = getClient()
-  const [slot0, block] = await Promise.all([
-    publicClient.readContract({
-      address: STATE_VIEW_ADDRESS,
-      abi: stateViewAbi,
-      functionName: 'getSlot0',
-      args: [POOL_ID],
-    }),
-    publicClient.getBlock({ blockTag: 'latest' }),
-  ])
-
-  const [sqrtPriceX96] = slot0
+  const head = await getHeadBlock()
+  const sqrtPriceX96 = await readSqrtPriceX96At(head.number)
   return {
     usdPerAi3: sqrtPriceX96ToUsdPerAi3(sqrtPriceX96),
-    asOfMs: Number(block.timestamp) * 1000,
+    asOfMs: Number(head.timestamp) * 1000,
   }
 }
 
 /**
- * USDC (6-decimal base units) required to buy exactly `ai3Shannons` of WAI3 from
- * the pool right now, inclusive of the 1% pool fee and the price impact of the
- * trade itself.
+ * Marginal price and executable cost for `ai3Shannons`, both read at the same
+ * block.
  *
- * This is the executable cost of converting an intent, as opposed to the
- * marginal price `fetchUniswapV4Quote` reports. `zeroForOne` is false because we
- * spend currency1 (USDC) to receive currency0 (WAI3).
+ * `amountIn` is the gross USDC (6-decimal base units) needed to buy exactly that
+ * much WAI3 — inclusive of the pool fee and of the price impact of the trade
+ * itself. `zeroForOne` is false because we spend currency1 (USDC) to receive
+ * currency0 (WAI3).
  *
- * Throws when the pool cannot fill the requested size — the Quoter reverts
- * rather than returning a partial fill, which `index.ts` translates into a
- * typed rejection.
+ * Throws when the pool cannot fill the size: the quoter reverts rather than
+ * returning a partial fill. Use `isQuoterRevert` to tell that apart from an RPC
+ * failure.
  */
-export const quoteUsdcForAi3 = async (
+export const readPoolQuote = async (
   ai3Shannons: bigint,
-): Promise<bigint> => {
-  if (ai3Shannons <= 0n) {
-    throw new Error(`Invalid AI3 amount: ${ai3Shannons}`)
-  }
+): Promise<Required<PoolObservation>> => {
+  assertQuotableAmount(ai3Shannons)
+  const head = await getHeadBlock()
   const publicClient = getClient()
-  const { result } = await publicClient.simulateContract({
-    address: QUOTER_ADDRESS,
-    abi: quoterAbi,
-    functionName: 'quoteExactOutputSingle',
-    args: [
-      {
-        poolKey: POOL_KEY,
-        zeroForOne: false,
-        exactAmount: ai3Shannons,
-        hookData: '0x',
-      },
-    ],
-  })
-  const [amountIn] = result
-  return amountIn
+
+  const [sqrtPriceX96, simulation] = await Promise.all([
+    readSqrtPriceX96At(head.number),
+    publicClient.simulateContract({
+      address: QUOTER_ADDRESS,
+      abi: quoterAbi,
+      functionName: 'quoteExactOutputSingle',
+      args: [
+        {
+          poolKey: POOL_KEY,
+          zeroForOne: false,
+          exactAmount: ai3Shannons,
+          hookData: '0x',
+        },
+      ],
+      blockNumber: head.number,
+    }),
+  ])
+
+  const [amountIn] = simulation.result
+  return {
+    usdPerAi3: sqrtPriceX96ToUsdPerAi3(sqrtPriceX96),
+    amountIn,
+    blockNumber: head.number,
+    asOfMs: Number(head.timestamp) * 1000,
+  }
+}
+
+/**
+ * Marginal prices sampled backwards from `blockNumber`, newest first, spaced
+ * `spacingBlocks` apart.
+ *
+ * Feeds the manipulation gate in index.ts: the pool has no oracle hook, so there
+ * is no TWAP to ask for, and sampling historical blocks is the closest
+ * equivalent available. Requires an RPC with state at that depth — a pruned node
+ * rejects the older reads, which surfaces as an unavailable oracle rather than a
+ * silently unguarded quote.
+ */
+export const sampleUsdPerAi3 = async (
+  blockNumber: bigint,
+  samples: number,
+  spacingBlocks: number,
+): Promise<bigint[]> => {
+  const offsets = Array.from(
+    { length: samples },
+    (_, i) => BigInt(i) * BigInt(spacingBlocks),
+  ).filter((offset) => offset < blockNumber)
+
+  return Promise.all(
+    offsets.map(async (offset) =>
+      sqrtPriceX96ToUsdPerAi3(await readSqrtPriceX96At(blockNumber - offset)),
+    ),
+  )
 }

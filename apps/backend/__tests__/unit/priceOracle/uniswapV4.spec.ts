@@ -1,10 +1,12 @@
 import { describe, it, expect } from '@jest/globals'
 import { encodeAbiParameters, keccak256 } from 'viem'
 import {
+  FEE_DENOMINATOR,
   POOL_ID,
   POOL_KEY,
   USDC_ADDRESS,
   WAI3_ADDRESS,
+  removePoolFee,
   sqrtPriceX96ToUsdPerAi3,
 } from '../../../src/infrastructure/services/priceOracle/uniswapV4.js'
 
@@ -69,5 +71,29 @@ describe('priceOracle/uniswapV4 — sqrtPriceX96 conversion', () => {
   it('rejects a non-positive sqrtPriceX96', () => {
     expect(() => sqrtPriceX96ToUsdPerAi3(0n)).toThrow()
     expect(() => sqrtPriceX96ToUsdPerAi3(-1n)).toThrow()
+  })
+})
+
+describe('priceOracle/uniswapV4 — pool fee removal', () => {
+  it('undoes the 1% fee the quoter includes in amountIn', () => {
+    // A trade whose gross input is 1_000_000 base units paid 1% in fee, so the
+    // portion attributable to price is 990_000.
+    expect(removePoolFee(1_000_000n)).toBe(990_000n)
+  })
+
+  it('brings a zero-slippage quote back to its marginal cost', () => {
+    // This is the property the depth guard depends on: without it, a trade with
+    // no price impact at all still measures ~101bps and the guard becomes a
+    // constant offset rather than a measure of depth.
+    const marginal = 6_400_000n
+    const grossAtZeroSlippage =
+      (marginal * FEE_DENOMINATOR) / (FEE_DENOMINATOR - BigInt(POOL_KEY.fee))
+
+    const netOfFee = removePoolFee(grossAtZeroSlippage)
+
+    // Within one base unit of the marginal cost (integer division).
+    const delta =
+      netOfFee > marginal ? netOfFee - marginal : marginal - netOfFee
+    expect(delta).toBeLessThanOrEqual(1n)
   })
 })

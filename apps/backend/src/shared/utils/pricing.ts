@@ -22,7 +22,12 @@ const USDC_CONVERSION_EXPONENT = BigInt(
  * and as the baseline that price impact is measured against; use the oracle's
  * executable quote for the amount actually charged.
  *
- * Rounds UP so a conversion is never valued below its exact amount.
+ * Rounds UP, which is the right direction for a charge. Note the effect where
+ * it serves as the price-impact baseline is the opposite — a larger baseline
+ * makes the measured impact marginally smaller, so the guard is very slightly
+ * more permissive. The bias is at most one USDC base unit (1e-6 USD) against a
+ * baseline of the whole purchase, so it is dominated by the guard's own
+ * threshold rather than being a meaningful loosening.
  *
  * @throws if either argument is negative.
  */
@@ -49,6 +54,15 @@ export const ai3ShannonsToUsdcBaseUnits = (
  * usdRateAtCreation stays the raw market rate; only the charged amount carries
  * the margin. The percent is converted to basis points (so fractional percents
  * like 2.5 work) and the result is rounded UP so rounding never undercharges.
+ *
+ * Apply this to the oracle's EXECUTABLE quote (`ExecutableQuote.usdcAmount`),
+ * not to the marginal value: the executable quote already covers the swap fee
+ * and the trade's own price impact at quote time, and this margin covers what it
+ * cannot — drift between quoting and converting, while the intent's price lock
+ * is open. Applying it to the marginal value instead would discard the reason
+ * the executable quote is read at all. Note the resulting all-in spread is the
+ * margin *plus* the pool fee plus impact, so size the percent knowing the other
+ * two are already in the base.
  *
  * @throws if `amount` is negative, or `percent` is negative or not finite.
  */
