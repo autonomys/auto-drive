@@ -50,6 +50,18 @@ export const IntentSchema = z.object({
   txHash: z.string().optional(),
   paymentAmount: z.bigint().optional(),
   shannonsPerByte: z.bigint(),
+  // Bytes the user asked to purchase, captured at creation so the size is known
+  // before payment rather than reverse-derived from it.
+  //
+  // Optional because it is genuinely absent in two cases: intents created before
+  // the field existed, and AI3 intents created without a size (the endpoint
+  // accepts a body-less request, which is what the live frontend sends).
+  //
+  // Recorded but NOT authoritative — credits are still derived as
+  // paymentAmount / shannonsPerByte. The USDC flow makes this the source of
+  // truth for its own credit derivation, because inverting usdRateAtCreation
+  // instead would over-credit by the pool fee, slippage and quote margin.
+  quotedBytes: z.bigint().optional(),
   // Price-lock window: set at creation, intent is rejected after this time.
   // NULL for intents created before this feature was introduced.
   expiresAt: z.date().optional(),

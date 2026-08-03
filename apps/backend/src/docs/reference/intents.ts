@@ -77,6 +77,24 @@ export const intents = {
 9. Upload content via the Auto Drive SDK using the same API key`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  requestedBytes: {
+                    type: 'string',
+                    description:
+                      'Optional. How many bytes the purchase is for, as a decimal string (a JSON number is also accepted while it is a safe integer). When supplied it is checked against the per-user credit cap before the intent is created, so a purchase with no headroom fails here rather than after an irreversible on-chain payment. It is recorded on the intent as `quotedBytes`; credits granted are still derived from the amount actually paid.',
+                    example: '1073741824',
+                  },
+                },
+              },
+            },
+          },
+        },
         responses: {
           '200': {
             description: 'Intent created successfully',
@@ -88,12 +106,16 @@ export const intents = {
               },
             },
           },
+          '400': {
+            description:
+              '`requestedBytes` was supplied but is not a positive whole number of bytes, or is larger than the per-account maximum',
+          },
           '401': {
             description: 'Unauthorized — missing or invalid credentials',
           },
           '403': {
             description:
-              'Google-verified account required — the authenticated account was not registered via Google OAuth',
+              'Google-verified account required (`GOOGLE_ACCOUNT_REQUIRED`), or the purchase would exceed the per-user credit cap (`CREDIT_CAP_EXCEEDED`, with the cap and current balance in `message`)',
           },
           '404': {
             description:
@@ -258,6 +280,11 @@ export const intents = {
             type: 'string',
             description:
               'Locked price per byte in shannons (bigint as string)',
+          },
+          quotedBytes: {
+            type: 'string',
+            description:
+              'Bytes the purchase was created for, if `requestedBytes` was supplied (bigint as string). Absent otherwise. Recorded for audit — the credits granted are derived from paymentAmount / shannonsPerByte, not from this value.',
           },
           expiresAt: {
             type: 'string',
