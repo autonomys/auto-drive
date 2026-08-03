@@ -8,13 +8,23 @@ const logger = createLogger('useCases:objects:uploadStatus')
 const getUploadStatus = async (cid: string): Promise<ObjectUploadState> => {
   logger.debug('Fetching upload status (cid=%s)', cid)
   const uploadStatus = await uploadsRepository.getStatusByCID(cid)
-  // FAILED is included deliberately. An upload row still exists for it (only a
-  // successful migration removes the artifacts), so its nodes were never written
-  // and the counting path below would report 0 uploaded of 0 total — which reads
-  // as "fully published" rather than "never published". Returning the same
-  // all-null state as an in-progress upload keeps that from being reported as
-  // success. Surfacing a distinct failed state to the user needs a new
-  // ObjectUploadState field plus frontend work; tracked separately.
+  // COMPLETING and FAILED are included deliberately: an upload row still exists
+  // for both (only a successful migration removes the artifacts) and neither has
+  // written any nodes, so the counting path below would report 0 uploaded of 0
+  // total and 0 archived of 0 total. Returning explicit nulls says "no counts
+  // yet" instead of handing callers zeroes that every ratio reads as complete.
+  //
+  // This is about the API being honest, not about a live UI bug: objectStatus()
+  // maps totalNodes === 0 to Processing before it compares archivedNodes to
+  // totalNodes, and the web app's file lists compute uploadState from Hasura
+  // aggregates rather than this endpoint — so neither renders a false "archived"
+  // today. It is REST/SDK consumers doing their own arithmetic that the zeroes
+  // mislead.
+  //
+  // Surfacing a distinct failed state to the user needs a new ObjectUploadState
+  // field plus frontend work; until then a FAILED upload reads as Processing,
+  // and auto_drive_upload_migration_unrecoverable (emitted where the upload is
+  // parked) is what makes it visible to us.
   const hasNoNodesYet =
     uploadStatus &&
     [

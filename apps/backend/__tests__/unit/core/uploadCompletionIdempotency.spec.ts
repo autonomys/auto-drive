@@ -22,6 +22,7 @@ import {
   UploadType,
   UserWithOrganization,
 } from '@auto-drive/models'
+import { BadRequestError } from '../../../src/errors/index.js'
 import { MetadataType } from '@autonomys/auto-dag-data'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -86,6 +87,12 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
       .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
       .mockResolvedValue(CID as any)
 
+    // An HttpError, not a bare Error: the caller's fault, not ours. Both flatten
+    // to a 500 through handleInternalError today, but the type is what makes this
+    // a 4xx for free once that is fixed.
+    await expect(
+      UploadsUseCases.completeUpload(mockUser, upload.id),
+    ).rejects.toBeInstanceOf(BadRequestError)
     await expect(
       UploadsUseCases.completeUpload(mockUser, upload.id),
     ).rejects.toThrow(/is failed/)
@@ -139,10 +146,11 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
 
     expect(result).toBe(CID)
     expect(processing).not.toHaveBeenCalled()
-    // Still re-drives migration, exactly like the plain already-completed path.
-    expect(publish).toHaveBeenCalledTimes(1)
-    const [tasks] = publish.mock.calls[0] as any
-    expect(tasks[0].id).toBe('migrate-upload-nodes')
+    // No re-drive on this path, unlike the plain already-completed one: the
+    // winner reached MIGRATING while this call was in flight, so it has just
+    // enqueued the migrate task itself and a re-drive would be a guaranteed
+    // duplicate on every concurrent retry.
+    expect(publish).not.toHaveBeenCalled()
   })
 
   it('reports a not-found upload when the claim is lost and the row is gone', async () => {
@@ -276,6 +284,64 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
       `status:${UploadStatus.MIGRATING}`,
     ])
     expect(release).not.toHaveBeenCalled()
+  })
+
+  // The snapshot read before the compare-and-swap can be stale by the time the
+  // claim is won, and finalizeCompletedUpload writes the whole row back — so a
+  // stale snapshot would revert whatever a concurrent writer had changed.
+  it('processes the row as it stands after the claim, not the pre-claim snapshot', async () => {
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      // Pre-claim snapshot, then the row as it stands once the claim is held.
+      .mockResolvedValueOnce({
+        ...upload,
+        status: UploadStatus.PENDING,
+        mime_type: 'application/octet-stream',
+      })
+      .mockResolvedValue({
+        ...upload,
+        status: UploadStatus.COMPLETING,
+        mime_type: 'text/plain',
+      })
+    jest
+      .spyOn(uploadsRepository, 'claimUploadForCompletion')
+      .mockResolvedValue(true)
+    const processing = jest
+      .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
+      .mockResolvedValue(CID as any)
+    jest
+      .spyOn(UploadFileProcessingUseCase, 'handleFileUploadFinalization')
+      .mockResolvedValue(CID)
+    const updateEntry = jest
+      .spyOn(uploadsRepository, 'updateUploadEntry')
+      .mockImplementation(async (entry) => entry)
+    jest.spyOn(EventRouter, 'publish').mockReturnValue()
+    jest
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .mockResolvedValue({
+        upload_id: upload.id,
+        last_processed_part_index: 0,
+      } as any)
+    jest
+      .spyOn(filePartsRepository, 'getChunkByUploadIdAndPartIndex')
+      .mockResolvedValue(null as any)
+    jest
+      .spyOn(filePartsRepository, 'getPartIndicesGreaterThan')
+      .mockResolvedValue([])
+
+    await UploadsUseCases.completeUpload(mockUser, upload.id)
+
+    expect(processing).toHaveBeenCalledWith(
+      expect.objectContaining({ mime_type: 'text/plain' }),
+    )
+    // The flip to MIGRATING carries the fresh row forward rather than writing the
+    // pre-claim snapshot's fields back over it.
+    expect(updateEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mime_type: 'text/plain',
+        status: UploadStatus.MIGRATING,
+      }),
+    )
   })
 
   // A failed completion must hand the upload back: COMPLETING is not swept by

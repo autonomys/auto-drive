@@ -25,6 +25,7 @@ import { config } from '../../config.js'
 import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
 import { BlockstoreUseCases } from './blockstore.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { sendMetricToVictoria } from '../../infrastructure/drivers/vmetrics.js'
 import {
   BadRequestError,
   ForbiddenError,
@@ -311,20 +312,29 @@ const completeUpload = async (
 
   // completeUpload is NOT idempotent, so it must run at most once per upload.
   // completeUploadProcessing re-derives the root IPLD node and writes it to
-  // uploads.blockstore on every call (blockstore.put -> plain INSERT, no unique
-  // key on (upload_id, cid)), and handleFileUploadFinalization re-runs
-  // registerInteraction. A second call therefore leaves a duplicate root node —
-  // which used to make getFileUploadIdCID, and so every future migration
-  // attempt, fail permanently — and double-charges upload credits. A client
-  // retry after a timeout, a double submit, or a proxy retry is enough to
-  // trigger it; only `abortUpload` guarded its status before this.
+  // uploads.blockstore on every call, and handleFileUploadFinalization re-runs
+  // registerInteraction. A second call therefore used to leave a duplicate root
+  // node — which made getFileUploadIdCID, and so every future migration attempt,
+  // fail permanently — and it still double-charges upload credits. A client retry
+  // after a timeout, a double submit, or a proxy retry is enough to trigger it;
+  // only `abortUpload` guarded its status before this.
+  //
+  // The duplicate root node is now also prevented one layer down
+  // (blockstore_root_node_unique_idx + ON CONFLICT DO NOTHING), which covers the
+  // holes this claim cannot: a claim that goes stale under a still-running
+  // completion, and old processes during a rolling deploy. The credit charge has
+  // no such backstop, so this guard is still the load-bearing one.
   //
   // A repeat call on an already-completed upload is treated as a no-op that
   // returns the existing CID, and re-drives migration in case the original
   // one-shot migrate task was lost — the retry heals the upload instead of
   // corrupting it.
   if (upload.status === UploadStatus.MIGRATING) {
-    return resolveAlreadyCompletedUpload(upload, uploadId)
+    // Already MIGRATING before this call, so the one-shot migrate task may have
+    // been enqueued long ago and lost; re-drive it.
+    return resolveAlreadyCompletedUpload(upload, uploadId, {
+      redriveMigration: true,
+    })
   }
   if (
     upload.status !== UploadStatus.PENDING &&
@@ -335,7 +345,7 @@ const completeUpload = async (
       upload.status,
       uploadId,
     )
-    throw new Error(`Upload ${uploadId} is ${upload.status}`)
+    throw new BadRequestError(`Upload ${uploadId} is ${upload.status}`)
   }
 
   // The status read above is not a guard on its own — two overlapping calls
@@ -357,7 +367,14 @@ const completeUpload = async (
     if (current.status === UploadStatus.MIGRATING) {
       // The winner finished the whole completion — an easy window to hit for a
       // small upload. This call is then just a retry of a completed upload.
-      return resolveAlreadyCompletedUpload(current, uploadId)
+      //
+      // No re-drive here: the winner reached MIGRATING while this call was in
+      // flight, so it has just enqueued the migrate task itself. Re-driving
+      // would be a guaranteed-duplicate enqueue on every concurrent retry, and
+      // the task is too fresh to be a lost one.
+      return resolveAlreadyCompletedUpload(current, uploadId, {
+        redriveMigration: false,
+      })
     }
     if (current.status === UploadStatus.PENDING) {
       // The winner failed and released the claim (e.g. insufficient credits, or
@@ -389,13 +406,23 @@ const completeUpload = async (
     }
   }
 
+  // Re-read now that the claim is held. The snapshot taken before the CAS can be
+  // stale — a sibling call may have run and released a failed completion in
+  // between — and finalizeCompletedUpload writes the whole row back through
+  // updateUploadEntry (file_tree, mime_type, upload_options), so a stale
+  // snapshot would revert any of those a concurrent writer had changed. Nothing
+  // in the completion path edits them today, which makes this a latent hazard
+  // rather than a live bug; one query removes it.
+  const claimedUpload =
+    (await uploadsRepository.getUploadEntryById(uploadId)) ?? upload
+
   try {
     // FILE uploads: drain any not-yet-processed chunks and reject on a gap before
     // finalising. Folder uploads have no file_processing_info row and finalise
     // via processFolderUpload instead. Both steps share one lock; the lockless
     // helpers are used because the lock-acquiring path would deadlock here
     // (withDrainLock is not reentrant).
-    if (upload.type === UploadType.FILE) {
+    if (claimedUpload.type === UploadType.FILE) {
       await withDrainLock(uploadId, async () => {
         await drainLoop(uploadId)
         await assertNoUnprocessedParts(uploadId)
@@ -403,21 +430,21 @@ const completeUpload = async (
     }
 
     const cid =
-      await UploadFileProcessingUseCase.completeUploadProcessing(upload)
+      await UploadFileProcessingUseCase.completeUploadProcessing(claimedUpload)
 
-    if (upload.type === UploadType.FILE) {
+    if (claimedUpload.type === UploadType.FILE) {
       await UploadFileProcessingUseCase.handleFileUploadFinalization(
         user,
         uploadId,
       )
-    } else if (upload.type === UploadType.FOLDER) {
+    } else if (claimedUpload.type === UploadType.FOLDER) {
       await UploadFileProcessingUseCase.handleFolderUploadFinalization(
         user,
         uploadId,
       )
     }
 
-    return await finalizeCompletedUpload(upload, uploadId, cid)
+    return await finalizeCompletedUpload(claimedUpload, uploadId, cid)
   } catch (error) {
     // Hand the upload back so the client can retry — a failed completion (e.g.
     // insufficient credits, or a gap in the stored parts) must not leave the row
@@ -437,21 +464,33 @@ const completeUpload = async (
 }
 
 // A repeat completeUpload call for an upload that already finished is a no-op
-// that returns the existing CID, and re-drives migration in case the original
-// one-shot migrate task was lost — so the retry heals the upload instead of
-// corrupting it. Reached both when the status read sees MIGRATING and when the
-// completion claim is lost to a winner that has already finished.
+// that returns the existing CID. Reached both when the status read sees
+// MIGRATING and when the completion claim is lost to a winner that has already
+// finished.
+//
+// redriveMigration re-enqueues the migrate task in case the original one-shot
+// one was lost, so the retry heals the upload instead of corrupting it. It is
+// off for the claim-lost path, where the winner has only just enqueued its own
+// task and a re-drive would be a guaranteed duplicate; the recovery sweep
+// (migrationRecovery) is the backstop there. Where it is on, the enqueue rate is
+// bounded by how often the client retries, and duplicates are harmless — migrate
+// clears the root's nodes before re-inserting and processMigration skips a
+// concurrent run for the same upload.
 const resolveAlreadyCompletedUpload = async (
   upload: UploadEntry,
   uploadId: string,
+  { redriveMigration }: { redriveMigration: boolean },
 ): Promise<string> => {
   const cid = cidToString(await BlockstoreUseCases.getUploadCID(uploadId))
+  const isRootUpload = upload.root_upload_id === uploadId
+  const willRedrive = redriveMigration && isRootUpload
   logger.warn(
-    'completeUpload called on an already-completed upload; re-driving migration (uploadId=%s, cid=%s)',
+    'completeUpload called on an already-completed upload (uploadId=%s, cid=%s, redrivingMigration=%s)',
     uploadId,
     cid,
+    willRedrive,
   )
-  if (upload.root_upload_id === uploadId) {
+  if (willRedrive) {
     await scheduleNodeMigration(uploadId)
   }
   return cid
@@ -735,6 +774,25 @@ const processMigration = async (uploadId: string): Promise<void> => {
         'Migration is unrecoverable, parking upload as failed (uploadId=%s)',
         uploadId,
       )
+      // Parking silences the dead-letter loop, which means it also silences the
+      // only signal that anything is wrong: a FAILED upload keeps its rows, is
+      // no longer swept, and reports the same in-progress-looking state to the
+      // client as a healthy one. Unbounded-but-visible was how this incident got
+      // noticed at all; emit a counter so unbounded-and-invisible does not
+      // replace it. Fire-and-forget, like every other metric call — a monitoring
+      // failure must not turn an acked park back into a throw.
+      sendMetricToVictoria({
+        measurement: 'auto_drive_upload_migration_unrecoverable',
+        tags: {
+          chain: config.monitoring.metricEnvironmentTag,
+        },
+        // uploadId is a field, not a tag, deliberately: it is unbounded
+        // cardinality and would blow up the series count if indexed.
+        fields: {
+          count: 1,
+          uploadId,
+        },
+      })
       await uploadsRepository
         .updateUploadStatusByRootUploadId(uploadId, UploadStatus.FAILED)
         .catch((updateError) =>
