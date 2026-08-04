@@ -1,0 +1,278 @@
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+} from '@jest/globals'
+import { MetadataType, cidToString } from '@autonomys/auto-dag-data'
+import { UploadType } from '@auto-drive/models'
+import { UploadFileProcessingUseCase } from '../../../src/core/uploads/uploadProcessing.js'
+import { createNodeDeduplicator } from '../../../src/core/objects/nodes.js'
+import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/blockstore.js'
+import { fileProcessingInfoRepository } from '../../../src/infrastructure/repositories/uploads/fileProcessingInfo.js'
+import { filePartsRepository } from '../../../src/infrastructure/repositories/uploads/fileParts.js'
+import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+const UPLOAD_ID = 'upload-retry-1'
+
+// The root node types are the ones blockstore_root_node_unique_idx covers.
+const ROOT_NODE_TYPES = [MetadataType.File, MetadataType.Folder]
+
+/**
+ * In-memory stand-in for uploads.blockstore that reproduces the SQL semantics
+ * the code depends on: rows ordered by an ascending surrogate key, duplicates
+ * permitted for chunk rows, and ON CONFLICT DO NOTHING against the partial
+ * unique index on the root node types.
+ *
+ * Faking at the repository layer rather than the blockstore layer keeps the real
+ * MultiUploadBlockstore in the test, so the DAG is built by the same code that
+ * builds it in production.
+ */
+const installFakeBlockstore = () => {
+  const rows: Array<{
+    sort_id: number
+    upload_id: string
+    cid: string
+    node_type: MetadataType
+    node_size: bigint
+    data: Buffer
+  }> = []
+  let nextSortId = 1
+
+  jest
+    .spyOn(blockstoreRepository, 'addBlockstoreEntry')
+    .mockImplementation(async (uploadId, cid, nodeType, nodeSize, data) => {
+      const violatesRootUnique =
+        ROOT_NODE_TYPES.includes(nodeType) &&
+        rows.some((r) => r.upload_id === uploadId && r.cid === cid)
+      if (violatesRootUnique) return
+
+      rows.push({
+        sort_id: nextSortId++,
+        upload_id: uploadId,
+        cid,
+        node_type: nodeType,
+        node_size: nodeSize,
+        data,
+      })
+    })
+
+  const byUpload = (uploadId: string) =>
+    rows
+      .filter((r) => r.upload_id === uploadId)
+      .sort((a, b) => a.sort_id - b.sort_id)
+
+  jest
+    .spyOn(blockstoreRepository, 'getByType')
+    .mockImplementation(async (uploadId, nodeType) =>
+      byUpload(uploadId).filter((r) => r.node_type === nodeType).map(
+        (r) => ({ ...r, node_size: r.node_size.toString() }) as any,
+      ),
+    )
+
+  jest
+    .spyOn(blockstoreRepository, 'getByCid')
+    .mockImplementation(
+      async (uploadId, cid) =>
+        (byUpload(uploadId)
+          .filter((r) => r.cid === cid)
+          .map((r) => ({ ...r, node_size: r.node_size.toString() }))
+          .at(0) as any) ?? null,
+    )
+
+  jest
+    .spyOn(blockstoreRepository, 'getByCIDWithoutData')
+    .mockImplementation(
+      async (uploadId, cid) =>
+        (byUpload(uploadId)
+          .filter((r) => r.cid === cid)
+          .map((r) => ({ ...r, node_size: r.node_size.toString() }))
+          .at(0) as any) ?? null,
+    )
+
+  jest
+    .spyOn(blockstoreRepository, 'getBlockstoreEntriesWithoutData')
+    .mockImplementation(
+      async (uploadId) =>
+        byUpload(uploadId).map(
+          (r) => ({ ...r, node_size: r.node_size.toString() }) as any,
+        ),
+    )
+
+  // The DAG builder deletes nodes it has folded into a parent. Mirrors the SQL,
+  // which deletes every row for that (upload_id, cid) — not just one.
+  jest
+    .spyOn(blockstoreRepository, 'deleteBlockstoreEntry')
+    .mockImplementation(async (uploadId, cid) => {
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (rows[i].upload_id === uploadId && rows[i].cid === cid) {
+          rows.splice(i, 1)
+        }
+      }
+    })
+
+  return {
+    rows,
+    countOf: (nodeType: MetadataType) =>
+      rows.filter((r) => r.node_type === nodeType).length,
+    distinctCidsOf: (nodeType: MetadataType) =>
+      new Set(rows.filter((r) => r.node_type === nodeType).map((r) => r.cid))
+        .size,
+  }
+}
+
+describe('completeUploadProcessing retry idempotency', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  // The claim is released back to PENDING when completion FAILS, and the
+  // documented failure (`Not enough upload credits`) is thrown by
+  // handleFileUploadFinalization strictly AFTER the root node has been written.
+  // So the "top up and retry" flow re-enters here — and used to re-put the tail
+  // chunk that pending_bytes still held, gaining an extra DAG link and deriving a
+  // DIFFERENT root CID. Two distinct root CIDs is the unrecoverable shape:
+  // getRootNodeCID refuses it and every later retry appends another root row.
+  it('derives the same root CID when completion is retried after a failure', async () => {
+    const store = installFakeBlockstore()
+
+    // A tail that never filled a chunk, i.e. pending_bytes is set at completion.
+    const pendingBytes = Buffer.from('the unflushed tail of the last part')
+    let storedInfo: any = {
+      upload_id: UPLOAD_ID,
+      last_processed_part_index: 0,
+      pending_bytes: pendingBytes,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }
+
+    jest
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .mockImplementation(async () => storedInfo)
+    const updateInfo = jest
+      .spyOn(fileProcessingInfoRepository, 'updateFileProcessingInfo')
+      .mockImplementation(async (info) => {
+        storedInfo = { ...info }
+        return storedInfo
+      })
+    jest
+      .spyOn(filePartsRepository, 'getUploadFilePartsSize')
+      .mockResolvedValue(BigInt(pendingBytes.byteLength))
+    jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue({
+      id: UPLOAD_ID,
+      root_upload_id: UPLOAD_ID,
+      type: UploadType.FILE,
+      name: 'tail.txt',
+      upload_options: null,
+    } as any)
+
+    const upload = { id: UPLOAD_ID, type: UploadType.FILE } as any
+
+    const firstCid = await UploadFileProcessingUseCase.completeUploadProcessing(
+      upload,
+    )
+    // The tail is consumed, so a retry cannot flush it a second time.
+    expect(updateInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ pending_bytes: null }),
+    )
+    expect(storedInfo.pending_bytes).toBeNull()
+
+    // The reason re-derivation cannot be allowed: the chunker consumed the chunk
+    // it folded into the root (get -> delete -> put). There is nothing left to
+    // rebuild the same DAG from, so a second derivation would produce a root over
+    // a different link set — a different CID, which is the unrecoverable shape.
+    expect(store.countOf(MetadataType.FileChunk)).toBe(0)
+
+    // Simulates the retry after `Not enough upload credits`.
+    const secondCid = await UploadFileProcessingUseCase.completeUploadProcessing(
+      upload,
+    )
+
+    expect(cidToString(secondCid)).toBe(cidToString(firstCid))
+    // Exactly one root row, and one root CID — the shape getRootNodeCID accepts.
+    expect(store.countOf(MetadataType.File)).toBe(1)
+    expect(store.distinctCidsOf(MetadataType.File)).toBe(1)
+  })
+
+  // Guards the other half: even if some future path does re-put the root node,
+  // the ON CONFLICT DO NOTHING keeps it a single row rather than a duplicate.
+  it('absorbs a repeated root node write instead of duplicating the row', async () => {
+    const store = installFakeBlockstore()
+
+    await blockstoreRepository.addBlockstoreEntry(
+      UPLOAD_ID,
+      'bafkr6icio4rqi75syx2xkxwmnnnwx3gzmnbjmtnqoydtfcxrjuqvvxxs4u',
+      MetadataType.File,
+      BigInt(10),
+      Buffer.from('root'),
+    )
+    await blockstoreRepository.addBlockstoreEntry(
+      UPLOAD_ID,
+      'bafkr6icio4rqi75syx2xkxwmnnnwx3gzmnbjmtnqoydtfcxrjuqvvxxs4u',
+      MetadataType.File,
+      BigInt(10),
+      Buffer.from('root'),
+    )
+
+    expect(store.countOf(MetadataType.File)).toBe(1)
+  })
+
+  // Chunks are deliberately NOT covered by the unique index: a file containing
+  // two identical chunks legitimately stores two rows with the same CID, and the
+  // DAG builder iterates every chunk row to build its links.
+  it('still stores two identical chunk rows', async () => {
+    const store = installFakeBlockstore()
+
+    for (let i = 0; i < 2; i++) {
+      await blockstoreRepository.addBlockstoreEntry(
+        UPLOAD_ID,
+        'bafkr6ie5s3iyyqjmnwqzuz5rzsnfhpvgvbrhfpwbcnbnqvbcqchbmqvxqm',
+        MetadataType.FileChunk,
+        BigInt(5),
+        Buffer.from('chunk'),
+      )
+    }
+
+    expect(store.countOf(MetadataType.FileChunk)).toBe(2)
+  })
+})
+
+describe('createNodeDeduplicator', () => {
+  const node = (cid: string) => ({ cid: cid as any })
+
+  // The bug this replaces: uniqueNodes was built per batch, so a duplicate more
+  // than BATCH_SIZE rows away from its original survived into nodes, where
+  // nodes.cid has no unique constraint and getCidsByRootCid has no DISTINCT.
+  it('drops a duplicate that arrives in a later batch', () => {
+    const takeUnseen = createNodeDeduplicator(UPLOAD_ID)
+    const firstBatch = Array.from({ length: 100 }, (_, i) => node(`cid-${i}`))
+
+    expect(takeUnseen(firstBatch)).toHaveLength(100)
+    // The duplicate of cid-0 lands 100 rows later, in the next batch.
+    expect(takeUnseen([node('cid-0')])).toHaveLength(0)
+    expect(takeUnseen([node('cid-100')])).toHaveLength(1)
+  })
+
+  it('still drops a duplicate within a single batch', () => {
+    const takeUnseen = createNodeDeduplicator(UPLOAD_ID)
+
+    expect(takeUnseen([node('a'), node('a'), node('b')])).toHaveLength(2)
+  })
+
+  it('keeps deduplication scoped to one upload', () => {
+    const first = createNodeDeduplicator('upload-a')
+    const second = createNodeDeduplicator('upload-b')
+
+    expect(first([node('shared')])).toHaveLength(1)
+    // A node shared between two objects must still be written for each.
+    expect(second([node('shared')])).toHaveLength(1)
+  })
+})
