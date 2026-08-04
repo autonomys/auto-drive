@@ -54,32 +54,99 @@ const activeConsumers: Partial<
 let channelPromise: Promise<Channel> | null = null
 let keepAliveInterval: NodeJS.Timeout | null = null
 
+/**
+ * Restores one registered consumer on a freshly opened channel.
+ *
+ * Retried rather than attempted once: nothing else re-runs this. The callback
+ * stays in `subscriptions`, but the only thing that reads that list is the next
+ * reconnect — and reconnects are driven by a failing keepalive, which a healthy
+ * channel never produces. A `consume` that failed here therefore left the queue
+ * with no reader indefinitely, and silently.
+ *
+ * The failure is also caught here rather than propagated. `subscribe` re-raises
+ * a failed `consume` to its caller, and this call site is a bare loop with no
+ * caller to return to, so the rejection reached `unhandledRejection` — which,
+ * with no handler registered anywhere in the backend and Node defaulting to
+ * `--unhandled-rejections=throw`, took the whole worker down.
+ */
+const resubscribeAfterReconnect = async (
+  queue: Queue,
+  callback: SubscriptionCallback,
+) => {
+  try {
+    await withBackingOffRetries(
+      async () => {
+        // An unsubscribe landing mid-retry deregisters the callback; without
+        // this check the next attempt would resurrect the consumer it just
+        // cancelled.
+        if (!subscriptions[queue]?.includes(callback)) {
+          return
+        }
+        await subscribe(queue, callback)
+      },
+      { maxRetries: 3, startingDelay: 1000 },
+    )
+  } catch (error) {
+    logger.error(
+      error as Error,
+      'Gave up re-subscribing %s after reconnect; it has no consumer until the next one',
+      queue,
+    )
+  }
+}
+
 const getChannel = async () => {
   if (!channelPromise) {
-    channelPromise = connect(config.rabbitmq.url).then((connection) =>
+    const pending = connect(config.rabbitmq.url).then((connection) =>
       connection.createChannel().then((channel) => {
         queues.forEach((q) => channel.assertQueue(q))
         channel.prefetch(config.rabbitmq.prefetch)
         return channel
       }),
     )
-    channelPromise.then(() => {
-      for (const queue of queues) {
-        const queueSubscriptions = subscriptions[queue] ?? []
-        subscriptions[queue] = []
-        for (const callback of queueSubscriptions) {
-          subscribe(queue, callback)
-        }
+    channelPromise = pending
+
+    // A rejected channel must not stay cached. `getChannel` hands back whatever
+    // is in `channelPromise`, so a single failed connect wedged the driver on
+    // that one error for good: every later publish, subscribe and keepalive
+    // replayed the same rejection and no further connection was ever attempted,
+    // including after the broker came back. Cleared by identity so it cannot
+    // discard a channel opened in the meantime (or one `close` already dropped).
+    pending.catch(() => {
+      if (channelPromise === pending) {
+        channelPromise = null
       }
     })
+
+    pending.then(
+      () => {
+        for (const queue of queues) {
+          // Snapshotted rather than drained: `subscribe` de-duplicates against
+          // `subscriptions` itself, and emptying the list first would leave a
+          // retry unable to tell a callback that is still wanted from one that
+          // has since been unsubscribed.
+          for (const callback of [...(subscriptions[queue] ?? [])]) {
+            resubscribeAfterReconnect(queue, callback)
+          }
+        }
+      },
+      // Nothing to restore when the channel never opened, and the failure is
+      // reported by whoever awaited `getChannel`. Handled all the same, so this
+      // branch of the chain is not itself an unhandled rejection.
+      () => {},
+    )
+
     if (keepAliveInterval) {
       clearInterval(keepAliveInterval)
       keepAliveInterval = null
     }
-    keepAliveInterval = setInterval(
-      keepAlive,
-      config.rabbitmq.keepAliveInterval,
-    )
+    keepAliveInterval = setInterval(() => {
+      // `setInterval` discards what its callback returns, so anything escaping
+      // keepAlive would surface as an unhandled rejection and stop the process.
+      keepAlive().catch((error) => {
+        logger.error(error as Error, 'RabbitMQ keepalive failed unexpectedly')
+      })
+    }, config.rabbitmq.keepAliveInterval)
   }
 
   return channelPromise
@@ -99,7 +166,17 @@ const publish = async (queue: string, message: object) => {
 }
 
 const keepAlive = async () => {
-  const channel = await getChannel()
+  let channel: Channel
+  try {
+    channel = await getChannel()
+  } catch (error) {
+    // There is no channel to probe yet, so there is nothing for the reconnect
+    // below to do either — the next tick opens a fresh one now that a rejected
+    // channel is no longer cached. Caught because this runs on an interval with
+    // no caller: an escaping rejection would take the worker down.
+    logger.error(error as Error, 'RabbitMQ keepalive could not open a channel')
+    return
+  }
   try {
     // Passive check against an existing queue to keep the connection active
     await channel.checkQueue(queues[0])
