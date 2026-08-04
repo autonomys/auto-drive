@@ -32,7 +32,10 @@ import {
   ObjectNotFoundError,
 } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
-import { UnrecoverableUploadError } from './errors.js'
+import {
+  UnrecoverableUploadError,
+  UploadCompletionInProgressError,
+} from './errors.js'
 
 const logger = createLogger('useCases:uploads:uploads')
 
@@ -397,12 +400,15 @@ const completeUpload = async (
         uploadId,
         current.status,
       )
-      throw new BadRequestError(
-        current.status === UploadStatus.PENDING ||
-        current.status === UploadStatus.COMPLETING
-          ? `Upload ${uploadId} is already being completed; retry once it finishes`
-          : `Upload ${uploadId} is ${current.status}`,
-      )
+      // Transient vs terminal, as separate types: the first is worth retrying,
+      // the second never is, and the S3 route needs to tell a client which.
+      throw current.status === UploadStatus.PENDING ||
+      current.status === UploadStatus.COMPLETING
+        ? new UploadCompletionInProgressError(
+            `Upload ${uploadId} is already being completed; retry once it finishes`,
+            uploadId,
+          )
+        : new BadRequestError(`Upload ${uploadId} is ${current.status}`)
     }
   }
 
@@ -472,10 +478,14 @@ const completeUpload = async (
 // one was lost, so the retry heals the upload instead of corrupting it. It is
 // off for the claim-lost path, where the winner has only just enqueued its own
 // task and a re-drive would be a guaranteed duplicate; the recovery sweep
-// (migrationRecovery) is the backstop there. Where it is on, the enqueue rate is
-// bounded by how often the client retries, and duplicates are harmless — migrate
-// clears the root's nodes before re-inserting and processMigration skips a
-// concurrent run for the same upload.
+// (migrationRecovery) is the backstop there.
+//
+// Where it is on it is rate-limited by the same staleness window the recovery
+// sweep uses, because a re-drive is NOT cheap: each migrate run does a
+// removeNodeByRootCid followed by a full re-insert of every node in the object.
+// Unthrottled, a client retrying complete in a loop would multiply that against
+// a large object. Reusing the sweep's window means a repeat complete can only
+// ever pull a re-drive forward that the sweep was about to do anyway.
 const resolveAlreadyCompletedUpload = async (
   upload: UploadEntry,
   uploadId: string,
@@ -483,11 +493,14 @@ const resolveAlreadyCompletedUpload = async (
 ): Promise<string> => {
   const cid = cidToString(await BlockstoreUseCases.getUploadCID(uploadId))
   const isRootUpload = upload.root_upload_id === uploadId
-  const willRedrive = redriveMigration && isRootUpload
+  const migratingForMs = Date.now() - new Date(upload.updated_at).getTime()
+  const isStale = migratingForMs >= config.migrationRecovery.stalenessMs
+  const willRedrive = redriveMigration && isRootUpload && isStale
   logger.warn(
-    'completeUpload called on an already-completed upload (uploadId=%s, cid=%s, redrivingMigration=%s)',
+    'completeUpload called on an already-completed upload (uploadId=%s, cid=%s, migratingForMs=%d, redrivingMigration=%s)',
     uploadId,
     cid,
+    migratingForMs,
     willRedrive,
   )
   if (willRedrive) {
@@ -706,10 +719,27 @@ const abortUpload = async (
     )
   }
 
-  // Only a still-in-progress (PENDING) upload may be aborted. A MIGRATING (or
-  // otherwise terminal) upload has already been completed; its artifacts must
-  // not be torn down mid-migration.
-  if (upload.status !== UploadStatus.PENDING) {
+  // Only a still-in-progress upload may be aborted. A MIGRATING (or otherwise
+  // terminal) upload has already been completed; its artifacts must not be torn
+  // down mid-migration.
+  //
+  // COMPLETING counts as in-progress only once its claim has gone stale. Without
+  // that exception, introducing COMPLETING would have made a stranded claim
+  // un-abortable for the full UPLOAD_COMPLETION_CLAIM_STALE_MS window — S3
+  // AbortMultipartUpload answering NoSuchUpload for an hour — where the
+  // equivalent stranded PENDING row can be aborted immediately. A stale claim
+  // means the completion that held it is gone, which is exactly when tearing the
+  // upload down is safe and is the same judgement claimUploadForCompletion makes
+  // when it lets the claim be re-taken.
+  //
+  // A LIVE completion stays non-abortable on purpose: it is not stranded, it is
+  // working, and racing removeUploadArtifacts against it would pull rows out from
+  // under a running DAG build.
+  const isStaleClaim =
+    upload.status === UploadStatus.COMPLETING &&
+    Date.now() - new Date(upload.updated_at).getTime() >=
+      config.uploads.completionClaimStaleMs
+  if (upload.status !== UploadStatus.PENDING && !isStaleClaim) {
     return err(new ObjectNotFoundError('Upload not found'))
   }
 

@@ -23,6 +23,7 @@ import {
   UserWithOrganization,
 } from '@auto-drive/models'
 import { BadRequestError } from '../../../src/errors/index.js'
+import { UploadCompletionInProgressError } from '../../../src/core/uploads/errors.js'
 import { MetadataType } from '@autonomys/auto-dag-data'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -34,6 +35,13 @@ const mockUser: UserWithOrganization = {
   oauthUserId: 'user1',
 } as any
 
+// updated_at is deliberately old: a migration re-drive is rate-limited by the
+// recovery sweep's staleness window, so the default fixture is one the sweep
+// would already be re-driving.
+const staleUpdatedAt = new Date(
+  Date.now() - config.migrationRecovery.stalenessMs - 1_000,
+)
+
 const upload = {
   id: 'upload123',
   root_upload_id: 'upload123',
@@ -41,6 +49,7 @@ const upload = {
   status: UploadStatus.MIGRATING,
   oauth_provider: 'google',
   oauth_user_id: 'user1',
+  updated_at: staleUpdatedAt,
 } as any
 
 const entry = (cid: string) =>
@@ -115,14 +124,33 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
       .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
       .mockResolvedValue(CID as any)
 
+    // A dedicated type, not a generic bad request: the S3 route maps it to a
+    // retryable 503 SlowDown, which is unreachable if the failure is opaque.
     await expect(
       UploadsUseCases.completeUpload(mockUser, upload.id),
-    ).rejects.toThrow(/already being completed/)
+    ).rejects.toBeInstanceOf(UploadCompletionInProgressError)
     expect(claim).toHaveBeenCalledWith(
       upload.id,
       config.uploads.completionClaimStaleMs,
     )
     expect(processing).not.toHaveBeenCalled()
+  })
+
+  // A re-drive is a removeNodeByRootCid plus a full node re-insert, so it is
+  // rate-limited to the recovery sweep's window; a client retrying in a loop must
+  // not multiply that against a large object.
+  it('does not re-drive migration for an upload that just started migrating', async () => {
+    jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue({
+      ...upload,
+      updated_at: new Date(),
+    })
+    jest.spyOn(BlockstoreUseCases, 'getUploadCID').mockResolvedValue(CID as any)
+    const publish = jest.spyOn(EventRouter, 'publish').mockReturnValue()
+
+    const result = await UploadsUseCases.completeUpload(mockUser, upload.id)
+
+    expect(result).toBe(CID)
+    expect(publish).not.toHaveBeenCalled()
   })
 
   // Losing the claim is not proof that a completion is still running: the winner
@@ -380,6 +408,64 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
     ).rejects.toThrow(/Not enough upload credits/)
     expect(release).toHaveBeenCalledWith(upload.id)
     expect(updateEntry).not.toHaveBeenCalled()
+  })
+})
+
+describe('UploadsUseCases.abortUpload with a completion claim', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  // A live completion is working, not stranded. Tearing its rows out from under a
+  // running DAG build would be worse than making the client wait.
+  it('refuses to abort an upload whose completion is still running', async () => {
+    jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue({
+      ...upload,
+      status: UploadStatus.COMPLETING,
+      updated_at: new Date(),
+    })
+    const remove = jest
+      .spyOn(uploadsRepository, 'deleteEntriesByRootUploadId')
+      .mockResolvedValue(undefined)
+
+    const result = await UploadsUseCases.abortUpload(mockUser, upload.id)
+
+    expect(result.isErr()).toBe(true)
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  // Once the claim is stale the process that held it is gone. Without this the
+  // new COMPLETING state would make a stranded upload un-abortable for a full
+  // hour — S3 AbortMultipartUpload answering NoSuchUpload the whole time — where
+  // the equivalent stranded PENDING row can be aborted at once.
+  it('aborts an upload whose completion claim has gone stale', async () => {
+    jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue({
+      ...upload,
+      status: UploadStatus.COMPLETING,
+      updated_at: new Date(
+        Date.now() - config.uploads.completionClaimStaleMs - 1_000,
+      ),
+    })
+    jest
+      .spyOn(uploadsRepository, 'deleteEntriesByRootUploadId')
+      .mockResolvedValue(undefined)
+    jest
+      .spyOn(blockstoreRepository, 'deleteBlockstoreEntries')
+      .mockResolvedValue(undefined)
+    jest
+      .spyOn(filePartsRepository, 'deleteChunksByUploadId')
+      .mockResolvedValue(undefined)
+    jest
+      .spyOn(fileProcessingInfoRepository, 'deleteFileProcessingInfo')
+      .mockResolvedValue(undefined)
+
+    const result = await UploadsUseCases.abortUpload(mockUser, upload.id)
+
+    expect(result.isOk()).toBe(true)
   })
 })
 

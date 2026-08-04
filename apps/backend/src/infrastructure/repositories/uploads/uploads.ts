@@ -14,6 +14,15 @@ export type UploadEntry = {
   oauth_provider: string
   oauth_user_id: string
   upload_options: FileUploadOptions | null
+  // Always selected (every read is SELECT *) but previously untyped. Typed now
+  // because callers need to reason about claim and migration age. Every status
+  // transition that anything waits on sets it explicitly — updateUploadEntry,
+  // claimUploadForCompletion, releaseUploadCompletionClaim,
+  // markMigrationRecoveryAttempt — since the set_timestamp trigger is AFTER
+  // UPDATE and therefore a no-op. The one exception is
+  // updateUploadStatusByRootUploadId (parking as FAILED), which leaves it stale;
+  // that is harmless because nothing selects FAILED rows by age.
+  updated_at: Date
 }
 
 export const createUploadEntry = async (
