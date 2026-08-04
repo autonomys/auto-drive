@@ -20,8 +20,10 @@
     '../../infrastructure/services/paymentManager/index.js'
   )
 
-  const { Rabbit } = await import(
-    '../../infrastructure/drivers/rabbit.js'
+  const { Rabbit } = await import('../../infrastructure/drivers/rabbit.js')
+
+  const { startShutdownWatchdog, shutdownStep } = await import(
+    '../../shared/utils/shutdown.js'
   )
 
   // Ungated by feature flags: a task that exhausted its retries needs to be
@@ -89,6 +91,11 @@
 
   const shutdown = async () => {
     logger.info('Shutting down frontend worker...')
+    // Armed before the first step: Docker allows 10s between SIGTERM and
+    // SIGKILL, and the awaits below can want far longer than that — the alert
+    // drain makes up to five sends of 10s each, and cancelling a consumer or
+    // closing a channel waits on a broker reply that may never come.
+    const stopWatchdog = startShutdownWatchdog(logger)
     objectMappingArchiver.stop()
     // Stop periodic recovery jobs (safe even if never started — stop() is a no-op)
     if (
@@ -124,12 +131,22 @@
     // so a deploy doesn't swallow the alerts it may itself have caused. Stop
     // consuming first, or failures keep arriving while the final send is awaited
     // and land in a batch created after the flush decided it was finished.
-    await EventRouter.stopTaskErrors()
+    await shutdownStep(logger, 'stop error consumers', 2_000, () =>
+      EventRouter.stopTaskErrors(),
+    )
     const { flushTaskErrorAlerts } = await import(
       '../../infrastructure/eventRouter/taskErrorNotifier.js'
     )
-    await flushTaskErrorAlerts()
-    await Rabbit.close()
+    // The flush talks to Slack, not to the broker, so a cancel that timed out
+    // above must not cost us the alerts it was making room for.
+    await shutdownStep(logger, 'flush task error alerts', 4_000, () =>
+      flushTaskErrorAlerts(),
+    )
+    await shutdownStep(logger, 'close rabbit channel', 2_000, () =>
+      Rabbit.close(),
+    )
+
+    stopWatchdog()
     logger.info('Frontend worker shut down successfully')
     process.exit(0)
   }
