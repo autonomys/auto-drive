@@ -49,6 +49,28 @@ let inFlightFlush: Promise<void> | null = null
 const MAX_DRAIN_PASSES = 5
 
 /**
+ * Caps on the size of an alert body.
+ *
+ * Slack truncates a message past 40,000 characters, and a wall of text stops
+ * being readable long before that. The number of items is already capped by
+ * `alertMaxItems`, but neither half of the product is otherwise bounded: a
+ * reason is whatever `Error.message` a library produced — a polkadot RPC error
+ * can carry a hex-encoded extrinsic — and `alertMaxItems` is an environment
+ * variable somebody may well raise mid-incident, which is when batches are
+ * largest.
+ *
+ * Nothing is lost to a clamp: every failure is logged in full as it arrives,
+ * and a batch that fails to deliver is logged in full as well.
+ */
+const MAX_REASON_CHARS = 500
+const MAX_DETAILS_CHARS = 8000
+
+const clamp = (text: string, limit: number) =>
+  text.length > limit
+    ? `${text.slice(0, limit)}… [+${text.length - limit} chars, see logs]`
+    : text
+
+/**
  * Best-effort identifier for the thing that failed, so an alert points at
  * something actionable rather than just a task name.
  */
@@ -89,16 +111,23 @@ const formatBatch = (failures: PendingFailure[]) => {
   const lines = shown.map(({ queue, task }) =>
     [
       `[${queue}] ${task.id} ${subjectOf(task)}`,
-      task.error ? `  reason: ${task.error}` : '  reason: <not recorded>',
+      task.error
+        ? `  reason: ${clamp(task.error, MAX_REASON_CHARS)}`
+        : '  reason: <not recorded>',
     ].join('\n'),
   )
 
-  const omitted = failures.length - shown.length
-  if (omitted > 0) {
-    lines.push(`… and ${omitted} more`)
-  }
+  // Clamped before the "and N more" marker is appended rather than after:
+  // truncation takes the tail, which is where that marker would sit, and it is
+  // the one line telling a reader the batch was larger than what they can see.
+  const body = clamp(lines.join('\n'), MAX_DETAILS_CHARS)
 
-  return { title, details: lines.join('\n') }
+  const omitted = failures.length - shown.length
+
+  return {
+    title,
+    details: omitted > 0 ? `${body}\n… and ${omitted} more` : body,
+  }
 }
 
 const deliverBatch = async () => {

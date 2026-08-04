@@ -91,6 +91,39 @@ describe('taskErrorNotifier', () => {
     expect(message.details).not.toContain('cid-9')
   })
 
+  // Slack truncates a body past 40,000 characters, and it truncates the tail —
+  // which is where the "and N more" count sits. Neither factor of the batch size
+  // is otherwise bounded: a reason is an arbitrary library error message, and
+  // the item cap is an environment variable somebody may raise mid-incident.
+  it('bounds a single overlong reason', async () => {
+    await handleFailedTask(
+      'publish-errors',
+      failedTask({ error: 'x'.repeat(50_000) }),
+    )
+    await flushTaskErrorAlerts()
+
+    const message = (send.mock.calls[0] as unknown[])[0] as { details: string }
+    expect(message.details.length).toBeLessThan(2000)
+    expect(message.details).toContain('see logs')
+  })
+
+  it('bounds the whole body and still reports what it left out', async () => {
+    config.slack.alertMaxItems = 500
+    for (let i = 0; i < 600; i++) {
+      await handleFailedTask('download-errors', {
+        ...failedTask(),
+        params: { cid: `cid-${i}` },
+        error: 'y'.repeat(400),
+      })
+    }
+    await flushTaskErrorAlerts()
+
+    const message = (send.mock.calls[0] as unknown[])[0] as { details: string }
+    expect(message.details.length).toBeLessThan(40_000)
+    // Clamping the body must not eat the count of what was never listed.
+    expect(message.details).toContain('… and 100 more')
+  })
+
   it('reports a missing reason rather than omitting the line', async () => {
     await handleFailedTask('publish-errors', failedTask({ error: undefined }))
     await flushTaskErrorAlerts()
