@@ -140,6 +140,41 @@ const getUploadCID = async (uploadId: string): Promise<CID> => {
   return cid
 }
 
+/**
+ * Returns a filter that keeps only nodes whose CID it has not seen before,
+ * across every call — i.e. across every batch of one upload's migration.
+ *
+ * Deduplicating per batch is not enough. getAllKeys yields in sort_id
+ * (insertion) order, so a duplicate row appended by a later completion pass
+ * lands in a DIFFERENT batch from its original whenever the two are more than
+ * BATCH_SIZE rows apart, and a per-batch Map cannot see it. Verified: a 100-row
+ * blockstore plus one duplicate root row produced 101 nodes rows with the root
+ * present twice. nodes.cid has no unique constraint and getCidsByRootCid has no
+ * DISTINCT, so that fans straight out into duplicate on-chain publish work —
+ * exactly what the removeNodeByRootCid comment warns about.
+ *
+ * Holds one CID string per unique node for the duration of the upload's
+ * migration, the same order of magnitude as the batch data already in flight.
+ */
+export const createNodeDeduplicator = (uploadId: string) => {
+  const seenCids = new Set<string>()
+
+  return <T extends { cid: CID }>(nodes: T[]): T[] =>
+    nodes.filter((node) => {
+      const cid = cidToString(node.cid)
+      if (seenCids.has(cid)) {
+        logger.warn(
+          'Skipping duplicate blockstore node (uploadId=%s, cid=%s)',
+          uploadId,
+          cid,
+        )
+        return false
+      }
+      seenCids.add(cid)
+      return true
+    })
+}
+
 const migrateFromBlockstoreToNodesTable = async (
   uploadId: string,
 ): Promise<void> => {
@@ -168,6 +203,8 @@ const migrateFromBlockstoreToNodesTable = async (
     const headCID = await getUploadCID(upload.id)
     const blockstore = await getUploadBlockstore(upload.id)
 
+    const takeUnseenNodes = createNodeDeduplicator(upload.id)
+
     const BATCH_SIZE = 100
     await asyncIterableForEach(
       blockstore.getAllKeys(),
@@ -175,9 +212,7 @@ const migrateFromBlockstoreToNodesTable = async (
         const nodes = await asyncIterableToPromiseOfArray(
           blockstore.getMany(batch),
         )
-        const uniqueNodes = Array.from(
-          new Map(nodes.map((node) => [cidToString(node.cid), node])).values(),
-        )
+        const uniqueNodes = takeUnseenNodes(nodes)
 
         await nodesRepository.saveNodes(
           uniqueNodes.map((e) => ({
