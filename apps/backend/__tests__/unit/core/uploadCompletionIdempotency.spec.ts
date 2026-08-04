@@ -9,7 +9,10 @@ import {
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
 import { UploadFileProcessingUseCase } from '../../../src/core/uploads/uploadProcessing.js'
-import { UnrecoverableUploadError } from '../../../src/core/uploads/errors.js'
+import {
+  UnrecoverableUploadError,
+  UploadCompletionInProgressError,
+} from '../../../src/core/uploads/errors.js'
 import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
 import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/blockstore.js'
 import { fileProcessingInfoRepository } from '../../../src/infrastructure/repositories/uploads/fileProcessingInfo.js'
@@ -23,7 +26,6 @@ import {
   UserWithOrganization,
 } from '@auto-drive/models'
 import { BadRequestError } from '../../../src/errors/index.js'
-import { UploadCompletionInProgressError } from '../../../src/core/uploads/errors.js'
 import { MetadataType } from '@autonomys/auto-dag-data'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
