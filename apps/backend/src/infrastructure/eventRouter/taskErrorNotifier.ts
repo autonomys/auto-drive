@@ -31,6 +31,14 @@ let pending: PendingFailure[] = []
 let flushTimer: NodeJS.Timeout | null = null
 
 /**
+ * Failures dropped for want of room since the last batch was taken.
+ *
+ * Kept so a cap that silently ate a flood cannot be mistaken for a small one —
+ * the count rides along in the alert.
+ */
+let droppedSinceLastBatch = 0
+
+/**
  * The send currently in progress.
  *
  * Tracked so a shutdown can *await* a send rather than abort it: a batch is
@@ -64,6 +72,20 @@ const MAX_DRAIN_PASSES = 5
  */
 const MAX_REASON_CHARS = 500
 const MAX_DETAILS_CHARS = 8000
+
+/**
+ * Ceiling on failures held for the next batch.
+ *
+ * The character caps above bound the *message*; this bounds the *heap*. Nothing
+ * else does: a batching window is 30 minutes by default, and a poison-message
+ * loop can dead-letter at a rate limited only by how fast the broker redelivers —
+ * every one of which is retained here, with its params, until the window expires.
+ *
+ * Sized well above any batch worth reading (the alert lists 10 by default) and
+ * well below anything that troubles a worker's heap. Overflow is counted, not
+ * ignored, and each failure is logged in full as it arrives regardless.
+ */
+const MAX_PENDING_FAILURES = 1_000
 
 const clamp = (text: string, limit: number) =>
   text.length > limit
@@ -102,7 +124,7 @@ const subjectOf = (task: FailedTask): string => {
   return 'no subject'
 }
 
-const formatBatch = (failures: PendingFailure[]) => {
+const formatBatch = (failures: PendingFailure[], dropped: number) => {
   const countsByTask = new Map<string, number>()
   for (const { task } of failures) {
     countsByTask.set(task.id, (countsByTask.get(task.id) ?? 0) + 1)
@@ -113,10 +135,13 @@ const formatBatch = (failures: PendingFailure[]) => {
     .map(([id, count]) => `${id}×${count}`)
     .join(', ')
 
-  const title =
+  const base =
     failures.length === 1
       ? `:warning: Task permanently failed: \`${failures[0].task.id}\``
       : `:warning: ${failures.length} tasks permanently failed (${breakdown})`
+  // The headline carries the overflow too: understating a flood as a handful is
+  // the one way this cap could mislead somebody triaging.
+  const title = dropped > 0 ? `${base} — plus ${dropped} not recorded` : base
 
   const shown = failures.slice(0, config.slack.alertMaxItems)
   const lines = shown.map(({ queue, task }) =>
@@ -128,16 +153,22 @@ const formatBatch = (failures: PendingFailure[]) => {
     ].join('\n'),
   )
 
-  // Clamped before the "and N more" marker is appended rather than after:
-  // truncation takes the tail, which is where that marker would sit, and it is
-  // the one line telling a reader the batch was larger than what they can see.
+  // Clamped before the "and N more" markers are appended rather than after:
+  // truncation takes the tail, which is where those markers would sit, and they
+  // are the lines telling a reader the batch was larger than what they can see.
   const body = clamp(lines.join('\n'), MAX_DETAILS_CHARS)
 
   const omitted = failures.length - shown.length
+  const notes = [
+    omitted > 0 ? `… and ${omitted} more` : null,
+    dropped > 0
+      ? `… and ${dropped} dropped before batching (over ${MAX_PENDING_FAILURES}); see logs`
+      : null,
+  ].filter(Boolean)
 
   return {
     title,
-    details: omitted > 0 ? `${body}\n… and ${omitted} more` : body,
+    details: [body, ...notes].join('\n'),
   }
 }
 
@@ -145,11 +176,13 @@ const deliverBatch = async () => {
   flushTimer = null
   const batch = pending
   pending = []
+  const dropped = droppedSinceLastBatch
+  droppedSinceLastBatch = 0
   if (batch.length === 0) {
     return
   }
 
-  const { title, details } = formatBatch(batch)
+  const { title, details } = formatBatch(batch, dropped)
   const delivered = await slackNotifier.send({ title, details })
   if (!delivered) {
     // Logged rather than requeued. The queue driver requeues immediately with no
@@ -224,6 +257,22 @@ export const handleFailedTask = async (
     return
   }
 
+  if (pending.length >= MAX_PENDING_FAILURES) {
+    droppedSinceLastBatch++
+    // Once per batch, not once per drop: the situation that fills this buffer is
+    // a flood, and a log line per dropped message would be one more of them. The
+    // failures themselves are each logged above regardless.
+    if (droppedSinceLastBatch === 1) {
+      logger.warn(
+        'Holding %d pending task error alerts; further failures will be counted rather than listed until the next batch is sent',
+        pending.length,
+      )
+    }
+    // A non-empty `pending` means the window timer is already armed, so the
+    // counted drops still reach the next alert.
+    return
+  }
+
   pending.push({ queue, task: parsed.data })
 
   if (!flushTimer) {
@@ -289,5 +338,6 @@ export const resetTaskErrorAlerts = () => {
   }
   flushTimer = null
   pending = []
+  droppedSinceLastBatch = 0
   inFlightFlush = null
 }

@@ -145,6 +145,45 @@ describe('taskErrorNotifier', () => {
     expect(message.details.split('\n')).toHaveLength(2)
   })
 
+  // The character caps bound the message; this bounds the heap. A batching window
+  // is 30 minutes by default and a poison-message loop dead-letters as fast as the
+  // broker redelivers, all of it retained here with params until the window ends.
+  it('bounds how many failures it holds and counts the overflow', async () => {
+    for (let i = 0; i < 1_200; i++) {
+      await handleFailedTask('download-errors', {
+        ...failedTask(),
+        params: { cid: `cid-${i}` },
+      })
+    }
+    await flushTaskErrorAlerts()
+
+    const message = (send.mock.calls[0] as unknown[])[0] as {
+      title: string
+      details: string
+    }
+    // Capped at 1,000 held, so 200 are counted rather than kept.
+    expect(message.title).toContain('1000 tasks permanently failed')
+    expect(message.title).toContain('plus 200 not recorded')
+    expect(message.details).toContain('200 dropped before batching')
+  })
+
+  it('starts counting overflow again from zero after a flush', async () => {
+    for (let i = 0; i < 1_100; i++) {
+      await handleFailedTask('download-errors', failedTask())
+    }
+    await flushTaskErrorAlerts()
+
+    await handleFailedTask('download-errors', failedTask())
+    await flushTaskErrorAlerts()
+
+    const second = (send.mock.calls[1] as unknown[])[0] as {
+      title: string
+      details: string
+    }
+    expect(second.title).not.toContain('not recorded')
+    expect(second.details).not.toContain('dropped before batching')
+  })
+
   it('reports a missing reason rather than omitting the line', async () => {
     await handleFailedTask('publish-errors', failedTask({ error: undefined }))
     await flushTaskErrorAlerts()
