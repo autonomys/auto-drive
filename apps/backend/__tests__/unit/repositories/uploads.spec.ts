@@ -15,6 +15,35 @@ describe('Uploads Repository', () => {
     await dbMigration.down()
   })
 
+  // The migration builds this index with CONCURRENTLY so it does not block writes
+  // to a table holding every in-flight upload's node payloads. That has to happen
+  // outside db-migrate's per-migration transaction, and a CONCURRENTLY build that
+  // fails leaves an INVALID index behind rather than none — an index that enforces
+  // nothing while looking present. So assert the end state, not just that the
+  // migration exited zero.
+  describe('blockstore_root_node_unique_idx', () => {
+    it('is a valid unique index after migrating', async () => {
+      const db = await getDatabase()
+
+      const result = await db.query<{
+        indisvalid: boolean
+        indisunique: boolean
+        indpred: string | null
+      }>(
+        `SELECT i.indisvalid, i.indisunique, pg_get_expr(i.indpred, i.indrelid) AS indpred
+         FROM pg_index i
+         JOIN pg_class c ON c.oid = i.indexrelid
+         WHERE c.relname = 'blockstore_root_node_unique_idx'`,
+      )
+
+      expect(result.rows).toHaveLength(1)
+      expect(result.rows[0].indisvalid).toBe(true)
+      expect(result.rows[0].indisunique).toBe(true)
+      // Partial, so identical chunk rows are still allowed to repeat.
+      expect(result.rows[0].indpred).not.toBeNull()
+    })
+  })
+
   describe('getUploadAgeMs', () => {
     it('returns null for an upload that does not exist', async () => {
       expect(await uploadsRepository.getUploadAgeMs('no-such-upload')).toBeNull()

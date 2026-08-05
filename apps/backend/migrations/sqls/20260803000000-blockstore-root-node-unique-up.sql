@@ -25,6 +25,9 @@
 -- (getByType orders by sort_id ASC). Uploads broken this way are still
 -- MIGRATING with their payload intact, so this deletion repairs them rather
 -- than discarding anything.
+-- The index itself is built by the migration's JS, not from this file: it needs
+-- CONCURRENTLY, which cannot run inside a transaction block. See the comment
+-- there.
 DELETE FROM uploads.blockstore AS b
 WHERE b.node_type IN ('File', 'Folder')
   AND b.sort_id > (
@@ -34,7 +37,3 @@ WHERE b.node_type IN ('File', 'Folder')
       AND inner_b.cid = b.cid
       AND inner_b.node_type = b.node_type
   );
-
-CREATE UNIQUE INDEX blockstore_root_node_unique_idx
-  ON uploads.blockstore (upload_id, cid)
-  WHERE node_type IN ('File', 'Folder');
