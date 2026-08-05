@@ -1,4 +1,4 @@
-import { Rabbit } from '../drivers/rabbit.js'
+import { Queue, Rabbit } from '../drivers/rabbit.js'
 import {
   downloadErrorPublishedQueue,
   processDownloadTask,
@@ -18,6 +18,30 @@ import { createLogger } from '../drivers/logger.js'
 const logger = createLogger('eventRouter')
 
 /**
+ * Starts consuming a queue without letting a failed start take the worker with it.
+ *
+ * `subscribe` re-raises a `consume` that failed, and these listeners are called
+ * from a server entry point with no caller to return to — so a broker that is not
+ * up yet when a worker starts produced an unhandled rejection, which Node's
+ * default `--unhandled-rejections=throw` turns into a dead process.
+ *
+ * Logging and carrying on is a real recovery rather than a swallowed error: the
+ * callback is registered in the driver's subscription list *before* the channel is
+ * awaited, and a rejected channel is no longer cached, so the next keepalive tick
+ * opens a fresh channel and re-subscribes it.
+ */
+const startConsumer = (
+  queue: Queue,
+  handler: (message: Record<string, unknown>) => Promise<unknown>,
+) => {
+  const subscription = Rabbit.subscribe(queue, handler)
+  subscription.catch((error: unknown) => {
+    logger.error(error as Error, 'Failed to consume %s', queue)
+  })
+  return subscription
+}
+
+/**
  * In-flight subscriptions to the error queues, so shutdown can stop them.
  *
  * Holds the *promises* rather than the resolved unsubscribe handles, and is
@@ -30,13 +54,13 @@ let taskErrorSubscriptions: Array<Promise<() => Promise<void>>> = []
 
 export const EventRouter = {
   listenFrontendEvents: () => {
-    Rabbit.subscribe('task-manager', processFrontendTask)
+    startConsumer('task-manager', processFrontendTask)
   },
   listenDownloadEvents: () => {
-    Rabbit.subscribe('download-manager', processDownloadTask)
+    startConsumer('download-manager', processDownloadTask)
   },
   listenPublishEvents: () => {
-    Rabbit.subscribe('publish-manager', processPublishTask)
+    startConsumer('publish-manager', processPublishTask)
   },
   /**
    * Consumes the error queues and alerts on what lands there.
@@ -56,16 +80,12 @@ export const EventRouter = {
       downloadErrorPublishedQueue,
       publishErrorPublishedQueue,
     ] as const) {
-      const subscription = Rabbit.subscribe(queue, (message) =>
-        handleFailedTask(queue, message),
-      )
+      // Failures are logged (and the rejection handled) by startConsumer;
+      // stopTaskErrors catches its own await of the same promise.
       // Tracked synchronously so a shutdown cannot race the subscribe resolving.
-      taskErrorSubscriptions.push(subscription)
-      // Failures are surfaced (and the rejection handled) here; stopTaskErrors
-      // catches its own await of the same promise.
-      subscription.catch((error: unknown) => {
-        logger.error(error as Error, 'Failed to consume error queue %s', queue)
-      })
+      taskErrorSubscriptions.push(
+        startConsumer(queue, (message) => handleFailedTask(queue, message)),
+      )
     }
   },
   /**
