@@ -71,6 +71,17 @@ const clamp = (text: string, limit: number) =>
     : text
 
 /**
+ * Collapses a reason onto one line.
+ *
+ * `reason:` is a single-line field in a list of them, and an `Error.message` is
+ * under no obligation to cooperate — a wrapped RPC error or anything carrying a
+ * stack arrives with its own newlines, which break the layout of the entry and
+ * push the rest of the batch down the message. Applied before clamping so the
+ * character budget counts what a reader actually sees.
+ */
+const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim()
+
+/**
  * Best-effort identifier for the thing that failed, so an alert points at
  * something actionable rather than just a task name.
  */
@@ -112,7 +123,7 @@ const formatBatch = (failures: PendingFailure[]) => {
     [
       `[${queue}] ${task.id} ${subjectOf(task)}`,
       task.error
-        ? `  reason: ${clamp(task.error, MAX_REASON_CHARS)}`
+        ? `  reason: ${clamp(oneLine(task.error), MAX_REASON_CHARS)}`
         : '  reason: <not recorded>',
     ].join('\n'),
   )

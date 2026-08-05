@@ -124,6 +124,27 @@ describe('taskErrorNotifier', () => {
     expect(message.details).toContain('… and 100 more')
   })
 
+  // `reason:` is one line in a list of them. An Error carrying a stack, or a
+  // wrapped RPC error, arrives with its own newlines and breaks that layout —
+  // pushing the rest of the batch down the message.
+  it('keeps a multi-line reason on one line', async () => {
+    await handleFailedTask(
+      'publish-errors',
+      failedTask({
+        error: '1010: Invalid Transaction\n  at signAndSend\n  at publishNodes',
+      }),
+    )
+    await flushTaskErrorAlerts()
+
+    const message = (send.mock.calls[0] as unknown[])[0] as { details: string }
+    const reason = message.details
+      .split('\n')
+      .find((line) => line.includes('reason:'))
+    expect(reason).toContain('1010: Invalid Transaction at signAndSend')
+    // One entry, so exactly two lines: the subject and its reason.
+    expect(message.details.split('\n')).toHaveLength(2)
+  })
+
   it('reports a missing reason rather than omitting the line', async () => {
     await handleFailedTask('publish-errors', failedTask({ error: undefined }))
     await flushTaskErrorAlerts()
