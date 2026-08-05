@@ -37,12 +37,13 @@ const mockUser: UserWithOrganization = {
   oauthUserId: 'user1',
 } as any
 
-// updated_at is deliberately old: a migration re-drive is rate-limited by the
-// recovery sweep's staleness window, so the default fixture is one the sweep
-// would already be re-driving.
-const staleUpdatedAt = new Date(
-  Date.now() - config.migrationRecovery.stalenessMs - 1_000,
-)
+// The default fixture is an upload the recovery sweep would already be
+// re-driving: a re-drive is rate-limited by the sweep's staleness window.
+//
+// Stubbed through getUploadAgeMs rather than by backdating updated_at, because
+// that is where the age comes from — Postgres computes it, so that the answer
+// does not depend on the process and the database agreeing about time zones.
+const staleAgeMs = config.migrationRecovery.stalenessMs + 1_000
 
 const upload = {
   id: 'upload123',
@@ -51,8 +52,11 @@ const upload = {
   status: UploadStatus.MIGRATING,
   oauth_provider: 'google',
   oauth_user_id: 'user1',
-  updated_at: staleUpdatedAt,
+  updated_at: new Date(),
 } as any
+
+const stubUploadAgeMs = (ageMs: number) =>
+  jest.spyOn(uploadsRepository, 'getUploadAgeMs').mockResolvedValue(ageMs)
 
 const entry = (cid: string) =>
   ({ upload_id: upload.id, cid, node_type: MetadataType.File }) as any
@@ -73,6 +77,7 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
     jest
       .spyOn(uploadsRepository, 'getUploadEntryById')
       .mockResolvedValue(upload)
+    stubUploadAgeMs(staleAgeMs)
     jest.spyOn(BlockstoreUseCases, 'getUploadCID').mockResolvedValue(CID as any)
     const processing = jest
       .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
@@ -142,10 +147,10 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
   // rate-limited to the recovery sweep's window; a client retrying in a loop must
   // not multiply that against a large object.
   it('does not re-drive migration for an upload that just started migrating', async () => {
-    jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue({
-      ...upload,
-      updated_at: new Date(),
-    })
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValue(upload)
+    stubUploadAgeMs(1_000)
     jest.spyOn(BlockstoreUseCases, 'getUploadCID').mockResolvedValue(CID as any)
     const publish = jest.spyOn(EventRouter, 'publish').mockReturnValue()
 
@@ -428,8 +433,8 @@ describe('UploadsUseCases.abortUpload with a completion claim', () => {
     jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue({
       ...upload,
       status: UploadStatus.COMPLETING,
-      updated_at: new Date(),
     })
+    stubUploadAgeMs(1_000)
     const remove = jest
       .spyOn(uploadsRepository, 'deleteEntriesByRootUploadId')
       .mockResolvedValue(undefined)
@@ -448,10 +453,8 @@ describe('UploadsUseCases.abortUpload with a completion claim', () => {
     jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue({
       ...upload,
       status: UploadStatus.COMPLETING,
-      updated_at: new Date(
-        Date.now() - config.uploads.completionClaimStaleMs - 1_000,
-      ),
     })
+    stubUploadAgeMs(config.uploads.completionClaimStaleMs + 1_000)
     jest
       .spyOn(uploadsRepository, 'deleteEntriesByRootUploadId')
       .mockResolvedValue(undefined)
@@ -468,6 +471,32 @@ describe('UploadsUseCases.abortUpload with a completion claim', () => {
     const result = await UploadsUseCases.abortUpload(mockUser, upload.id)
 
     expect(result.isOk()).toBe(true)
+  })
+
+  // The decision must come from the age Postgres computes, not from parsing
+  // updated_at. That column is `timestamp` with no zone, so node-postgres reads it
+  // in the process's zone: a process an hour ahead of the database saw every claim
+  // as an hour older than it was, and a claim taken seconds ago read as stale —
+  // which is exactly how this used to tear down a LIVE completion, the one thing
+  // the stale-claim exception promises not to do.
+  it('ignores a misleading updated_at and trusts the age from Postgres', async () => {
+    jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue({
+      ...upload,
+      status: UploadStatus.COMPLETING,
+      // What a +1h zone skew makes a seconds-old claim look like in JS.
+      updated_at: new Date(
+        Date.now() - config.uploads.completionClaimStaleMs - 1_000,
+      ),
+    })
+    stubUploadAgeMs(2_000)
+    const remove = jest
+      .spyOn(uploadsRepository, 'deleteEntriesByRootUploadId')
+      .mockResolvedValue(undefined)
+
+    const result = await UploadsUseCases.abortUpload(mockUser, upload.id)
+
+    expect(result.isErr()).toBe(true)
+    expect(remove).not.toHaveBeenCalled()
   })
 })
 

@@ -493,11 +493,20 @@ const resolveAlreadyCompletedUpload = async (
 ): Promise<string> => {
   const cid = cidToString(await BlockstoreUseCases.getUploadCID(uploadId))
   const isRootUpload = upload.root_upload_id === uploadId
-  const migratingForMs = Date.now() - new Date(upload.updated_at).getTime()
-  const isStale = migratingForMs >= config.migrationRecovery.stalenessMs
-  const willRedrive = redriveMigration && isRootUpload && isStale
+  // Age comes from Postgres, not from Date.now() against the parsed row: see
+  // getUploadAgeMs. Looked up only when a re-drive is otherwise on the table, so
+  // the claim-lost path — the one a client retry storm hammers, and the one that
+  // never re-drives — costs no extra query. A null age (the row vanished under
+  // us, or we never asked) is not a reason to re-drive anything.
+  const migratingForMs =
+    redriveMigration && isRootUpload
+      ? await uploadsRepository.getUploadAgeMs(uploadId)
+      : null
+  const willRedrive =
+    migratingForMs !== null &&
+    migratingForMs >= config.migrationRecovery.stalenessMs
   logger.warn(
-    'completeUpload called on an already-completed upload (uploadId=%s, cid=%s, migratingForMs=%d, redrivingMigration=%s)',
+    'completeUpload called on an already-completed upload (uploadId=%s, cid=%s, migratingForMs=%s, redrivingMigration=%s)',
     uploadId,
     cid,
     migratingForMs,
@@ -735,10 +744,18 @@ const abortUpload = async (
   // A LIVE completion stays non-abortable on purpose: it is not stranded, it is
   // working, and racing removeUploadArtifacts against it would pull rows out from
   // under a running DAG build.
+  //
+  // The age is computed by Postgres (see getUploadAgeMs) because getting it wrong
+  // in the positive direction breaks exactly the promise the paragraph above
+  // makes: a claim taken seconds ago would read as stale and this would tear down
+  // a live completion. Queried only for a COMPLETING row, so the common abort of a
+  // PENDING upload costs nothing extra.
+  const claimAgeMs =
+    upload.status === UploadStatus.COMPLETING
+      ? await uploadsRepository.getUploadAgeMs(uploadId)
+      : null
   const isStaleClaim =
-    upload.status === UploadStatus.COMPLETING &&
-    Date.now() - new Date(upload.updated_at).getTime() >=
-      config.uploads.completionClaimStaleMs
+    claimAgeMs !== null && claimAgeMs >= config.uploads.completionClaimStaleMs
   if (upload.status !== UploadStatus.PENDING && !isStaleClaim) {
     return err(new ObjectNotFoundError('Upload not found'))
   }

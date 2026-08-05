@@ -14,14 +14,18 @@ export type UploadEntry = {
   oauth_provider: string
   oauth_user_id: string
   upload_options: FileUploadOptions | null
-  // Always selected (every read is SELECT *) but previously untyped. Typed now
-  // because callers need to reason about claim and migration age. Every status
+  // Always selected (every read is SELECT *) but previously untyped. Every status
   // transition that anything waits on sets it explicitly — updateUploadEntry,
   // claimUploadForCompletion, releaseUploadCompletionClaim,
   // markMigrationRecoveryAttempt — since the set_timestamp trigger is AFTER
   // UPDATE and therefore a no-op. The one exception is
   // updateUploadStatusByRootUploadId (parking as FAILED), which leaves it stale;
   // that is harmless because nothing selects FAILED rows by age.
+  //
+  // Do NOT compute an age from this in JS. The column is `timestamp` with no time
+  // zone, so node-postgres parses it in the process's zone while Postgres wrote
+  // it in the session's — see getUploadAgeMs, which is what every age comparison
+  // goes through.
   updated_at: Date
 }
 
@@ -137,6 +141,42 @@ export const claimUploadForCompletion = async (
   )
 
   return result.rowCount === 1
+}
+
+/**
+ * How long ago an upload's updated_at was stamped, in milliseconds, computed by
+ * Postgres.
+ *
+ * The subtraction has to happen in SQL. uploads.uploads.updated_at is `timestamp`
+ * with no time zone and every writer sets it with NOW(), so the stored value is
+ * the DB session's local wall clock; node-postgres then parses that string in the
+ * *process's* zone. `Date.now() - new Date(upload.updated_at).getTime()` is
+ * therefore only right while the two zones agree, and nothing pins TZ in the
+ * pool, the compose files or the Dockerfile — one DB string parses to 12:00:00Z,
+ * 11:00:00Z or 19:00:00Z under UTC, Europe/London and America/Los_Angeles.
+ *
+ * The consequences are not symmetric but both are bad. Under a positive offset
+ * every age reads too old, so a claim taken seconds ago looks stale and
+ * abortUpload would tear down a LIVE completion — precisely what it promises not
+ * to do. Under a negative offset nothing is ever stale, so a stranded COMPLETING
+ * row stays un-abortable and a migration re-drive never fires.
+ *
+ * Subtracting inside a single session cancels the zone out, which is what
+ * getStuckRootMigrations and claimUploadForCompletion already get for free by
+ * comparing in SQL. Returns null when the row does not exist.
+ */
+export const getUploadAgeMs = async (id: string): Promise<number | null> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ age_ms: string }>(
+    `SELECT EXTRACT(EPOCH FROM (NOW() - updated_at)) * 1000 AS age_ms
+     FROM uploads.uploads
+     WHERE id = $1`,
+    [id],
+  )
+
+  const ageMs = result.rows.at(0)?.age_ms
+  return ageMs === undefined ? null : Number(ageMs)
 }
 
 // Releases a completion claim so the client can retry. Only ever moves a row we
@@ -295,6 +335,7 @@ export const uploadsRepository = {
   getStatusByCID,
   claimUploadForCompletion,
   releaseUploadCompletionClaim,
+  getUploadAgeMs,
   updateUploadStatusByRootUploadId,
   deleteEntriesByRootUploadId,
   getStuckRootMigrations,
