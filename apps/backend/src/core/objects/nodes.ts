@@ -17,6 +17,7 @@ import {
   asyncIterableToPromiseOfArray,
 } from '@autonomys/asynchronous'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
+import { UnrecoverableUploadError } from '../uploads/errors.js'
 import {
   UploadType,
   ObjectMapping,
@@ -181,9 +182,37 @@ const migrateFromBlockstoreToNodesTable = async (
   const uploads = await uploadsRepository.getUploadsByRoot(uploadId)
   const rootCID = await getUploadCID(uploadId)
 
+  // getMetadata returns a neverthrow Result, and a Result object is always truthy,
+  // so the `if (!metadata) return` this replaces could never fire — migration ran
+  // regardless of whether the object had a metadata row.
+  //
+  // Proceeding is the worst of the options. handleFileUploadFinalization and
+  // handleFolderUploadFinalization save the metadata strictly BEFORE the upload
+  // flips to MIGRATING and the migrate task is enqueued, and migrate only ever
+  // runs on a root upload, so a missing row means the completion never got that
+  // far and no retry will change it. Migrating anyway writes the nodes, deletes the
+  // upload artifacts, then hands tag-upload a cid it cannot resolve — tagUpload
+  // returns its error before reaching scheduleNodesPublish, so the object ends up
+  // with nodes in the database, nothing enqueued to publish them, and no upload row
+  // left for the recovery sweep to find.
+  //
+  // Restoring the original intent would only trade that for a silent return, which
+  // leaves the row MIGRATING for the sweep to re-drive every staleness window,
+  // forever. Parking it as FAILED is what this branch already does with the other
+  // permanently-broken shapes: the sweep stops selecting it, the task acks instead
+  // of dead-lettering, and auto_drive_upload_migration_unrecoverable makes it
+  // visible.
   const metadata = await ObjectUseCases.getMetadata(cidToString(rootCID))
-  if (!metadata) {
-    return
+  if (metadata.isErr()) {
+    logger.error(
+      'No metadata for the root of a migrating upload (uploadId=%s, rootCid=%s)',
+      uploadId,
+      cidToString(rootCID),
+    )
+    throw new UnrecoverableUploadError(
+      `No metadata found for the root of upload ${uploadId} (rootCid=${cidToString(rootCID)})`,
+      uploadId,
+    )
   }
 
   // Clear any nodes already written for this root before re-inserting. migrate

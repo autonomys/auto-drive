@@ -10,11 +10,17 @@ import {
   DEFAULT_MAX_CHUNK_SIZE,
   MetadataType,
   cidToString,
+  stringToCid,
 } from '@autonomys/auto-dag-data'
 import { UploadType } from '@auto-drive/models'
-import { ok } from 'neverthrow'
+import { err, ok } from 'neverthrow'
 import { UploadFileProcessingUseCase } from '../../../src/core/uploads/uploadProcessing.js'
-import { UploadPartsChangedError } from '../../../src/core/uploads/errors.js'
+import {
+  UnrecoverableUploadError,
+  UploadPartsChangedError,
+} from '../../../src/core/uploads/errors.js'
+import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
+import { ObjectNotFoundError } from '../../../src/errors/index.js'
 import {
   NodesUseCases,
   createNodeDeduplicator,
@@ -29,6 +35,7 @@ import { nodesRepository } from '../../../src/infrastructure/repositories/object
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const UPLOAD_ID = 'upload-retry-1'
+const ROOT_CID = 'bafkr6icio4rqi75syx2xkxwmnnnwx3gzmnbjmtnqoydtfcxrjuqvvxxs4u'
 
 // The root node types are the ones blockstore_root_node_unique_idx covers.
 const ROOT_NODE_TYPES = [MetadataType.File, MetadataType.Folder]
@@ -491,5 +498,48 @@ describe('migrateFromBlockstoreToNodesTable over repeated content', () => {
     expect(insertedBatches.every((batch) => batch.length > 0)).toBe(true)
     // Each distinct node written exactly once, across every batch.
     expect(insertedBatches.flat()).toHaveLength(distinctCids.size)
+  })
+
+  // The guard on this used to be `if (!metadata) return` against a neverthrow
+  // Result, which is always truthy — so it never fired and migration proceeded
+  // without metadata, writing nodes that nothing would ever publish. Unrecoverable
+  // is the honest verdict: the metadata is written before the upload reaches
+  // MIGRATING, so a missing row cannot be fixed by retrying.
+  it('parks an upload whose root has no metadata instead of migrating it', async () => {
+    installFakeBlockstore()
+
+    const uploadEntry = {
+      id: UPLOAD_ID,
+      root_upload_id: UPLOAD_ID,
+      type: UploadType.FILE,
+      name: 'orphan.bin',
+      upload_options: null,
+    } as any
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValue(uploadEntry)
+    jest
+      .spyOn(uploadsRepository, 'getUploadsByRoot')
+      .mockResolvedValue([uploadEntry])
+    jest
+      .spyOn(BlockstoreUseCases, 'getFileUploadIdCID')
+      .mockResolvedValue(stringToCid(ROOT_CID))
+    jest
+      .spyOn(ObjectUseCases, 'getMetadata')
+      .mockResolvedValue(err(new ObjectNotFoundError('not found')))
+    const removeNodes = jest
+      .spyOn(nodesRepository, 'removeNodeByRootCid')
+      .mockResolvedValue(undefined as any)
+    const saveNodes = jest
+      .spyOn(nodesRepository, 'saveNodes')
+      .mockResolvedValue(undefined)
+
+    await expect(
+      NodesUseCases.migrateFromBlockstoreToNodesTable(UPLOAD_ID),
+    ).rejects.toBeInstanceOf(UnrecoverableUploadError)
+    // Nothing written, and nothing deleted either: the check happens before the
+    // clear-and-reinsert.
+    expect(removeNodes).not.toHaveBeenCalled()
+    expect(saveNodes).not.toHaveBeenCalled()
   })
 })
