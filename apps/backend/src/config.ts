@@ -148,7 +148,9 @@ export const config = {
   // error queues grow forever and nobody finds out a task died.
   slack: {
     // Incoming-webhook URL. The channel is encoded in the URL, so there is no
-    // separate channel setting. Unset disables alerting (log-only).
+    // separate channel setting. Unset disables alerting *and* the error-queue
+    // consumers, so failures stay queued instead of being acked away unreported
+    // (see EventRouter.listenTaskErrors).
     webhookUrl: process.env.SLACK_WEBHOOK_URL,
     // Failures are batched into one message per window rather than posted
     // individually: a drained backlog would otherwise post hundreds of times.

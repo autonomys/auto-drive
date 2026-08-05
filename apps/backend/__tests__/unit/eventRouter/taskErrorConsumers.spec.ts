@@ -1,11 +1,26 @@
-import { jest, describe, it, expect, afterEach } from '@jest/globals'
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+} from '@jest/globals'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
+import { config } from '../../../src/config.js'
 
 const ERROR_QUEUES = ['frontend-errors', 'download-errors', 'publish-errors']
 
 describe('EventRouter task-error consumers', () => {
+  const originalWebhook = config.slack.webhookUrl
+
+  beforeEach(() => {
+    config.slack.webhookUrl = 'https://hooks.slack.example/T/B/XYZ'
+  })
+
   afterEach(() => {
+    config.slack.webhookUrl = originalWebhook
     jest.restoreAllMocks()
   })
 
@@ -90,5 +105,20 @@ describe('EventRouter task-error consumers', () => {
     EventRouter.listenTaskErrors()
 
     await expect(EventRouter.stopTaskErrors()).resolves.toBeUndefined()
+  })
+
+  // Consuming acks each failure off a durable queue. With no webhook configured
+  // there is nowhere for the alert to go, so consuming would reduce the backlog
+  // to log lines and destroy the only copy that outlives a log rotation.
+  it('does not consume anything when Slack alerting is unconfigured', async () => {
+    config.slack.webhookUrl = undefined
+    const subscribe = jest
+      .spyOn(Rabbit, 'subscribe')
+      .mockResolvedValue(async () => undefined)
+
+    EventRouter.listenTaskErrors()
+    await EventRouter.stopTaskErrors()
+
+    expect(subscribe).not.toHaveBeenCalled()
   })
 })

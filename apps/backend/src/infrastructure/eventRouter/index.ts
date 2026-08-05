@@ -14,6 +14,7 @@ import {
 import { Task } from './tasks.js'
 import { handleFailedTask } from './taskErrorNotifier.js'
 import { createLogger } from '../drivers/logger.js'
+import { slackNotifier } from '../services/slack/index.js'
 
 const logger = createLogger('eventRouter')
 
@@ -73,8 +74,22 @@ export const EventRouter = {
    * single consumer, so extra readers share the work rather than duplicating
    * alerts. The only effect of multiple readers is that a batching window may be
    * split between them, producing two smaller summaries instead of one.
+   *
+   * Does nothing when Slack alerting is unconfigured. Consuming would ack each
+   * failure off a durable queue and reduce it to a log line, so a deploy that
+   * simply forgot `SLACK_WEBHOOK_URL` would quietly drain the very backlog these
+   * consumers exist to report — and destroy it, since the queue is the only place
+   * a failed task survives a log rotation. Left unread the messages wait, and the
+   * first deploy that does have a webhook alerts on all of them.
    */
   listenTaskErrors: () => {
+    if (!slackNotifier.isEnabled()) {
+      logger.warn(
+        'Slack alerting is not configured (no SLACK_WEBHOOK_URL); leaving the error queues unconsumed so permanently failed tasks are preserved rather than acked away',
+      )
+      return
+    }
+
     for (const queue of [
       frontendErrorPublishedQueue,
       downloadErrorPublishedQueue,
