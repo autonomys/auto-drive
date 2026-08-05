@@ -15,6 +15,14 @@ export enum UploadType {
 
 export enum UploadStatus {
   PENDING = "pending",
+  // Completion is running: the root IPLD node is being derived and written.
+  // Claimed atomically so two concurrent completes cannot both process the same
+  // upload (which would duplicate the root blockstore node and double-charge
+  // credits). Deliberately distinct from MIGRATING, which the migration recovery
+  // sweep selects on — a still-completing upload has no root node yet and must
+  // not be re-driven. Rolled back to PENDING if completion fails, so a client
+  // can retry.
+  COMPLETING = "completing",
   MIGRATING = "migrating",
   CANCELLED = "cancelled",
   FAILED = "failed",
