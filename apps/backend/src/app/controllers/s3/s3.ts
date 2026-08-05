@@ -1,6 +1,9 @@
 import { S3UseCases } from '../../../core/s3/index.js'
 import { handleError, ForbiddenError } from '../../../errors/index.js'
-import { UploadCompletionInProgressError } from '../../../core/uploads/errors.js'
+import {
+  UploadCompletionInProgressError,
+  UploadPartsChangedError,
+} from '../../../core/uploads/errors.js'
 import { handleS3Auth } from '../../../infrastructure/services/auth/s3.js'
 import {
   getByteRange,
@@ -737,6 +740,22 @@ export const completeMultipartUploadHandler = async (
         Code: 'SlowDown',
         Message:
           'A completion for this upload is already in progress. Please retry.',
+      })
+      return
+    }
+    // The other end of the same problem: this one is terminal, so it must NOT
+    // look retryable. A client that appended a part after a failed completion
+    // has to abort and start again, and it can only learn that from a 4xx it can
+    // parse — the same reason SlowDown is spelled out above rather than left to
+    // Express's default handler.
+    if (error instanceof UploadPartsChangedError) {
+      logger.warn(
+        'Parts changed after the root node was derived, answering InvalidRequest (uploadId=%s)',
+        error.uploadId,
+      )
+      sendXML(res.status(400), 'Error', {
+        Code: 'InvalidRequest',
+        Message: error.message,
       })
       return
     }

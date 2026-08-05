@@ -38,6 +38,7 @@ import { UploadArtifactsUseCase } from './artifacts.js'
 import { CID } from 'multiformats'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from '../users/accounts.js'
+import { UploadPartsChangedError } from './errors.js'
 
 const logger = createLogger('useCases:uploads:uploadProcessing')
 
@@ -128,6 +129,42 @@ const completeFileProcessing = async (uploadId: string): Promise<CID> => {
     // Delegates rather than reading [0] so duplicate-but-identical rows are
     // tolerated and genuinely divergent ones still raise UnrecoverableUploadError.
     const existingCid = await BlockstoreUseCases.getFileUploadIdCID(uploadId)
+
+    // Reuse is only correct while the upload still holds the bytes the root was
+    // built from, and that can stop being true between the two calls. uploadChunk
+    // has no status guard, the failed completion above released the row back to
+    // PENDING, and S3 permits UploadPart after a failed CompleteMultipartUpload —
+    // so `part A, failed complete, part B, complete` is legal at every step.
+    // Returning the existing root there answers 200 with a CID covering A alone,
+    // and on the S3 route the composite ETag is computed from the client's part
+    // list, so the mapping would store an ETag that does not describe the stored
+    // object. Loud-and-unrecoverable was the wrong answer to a retry, but
+    // silently truncating an object the client stores and references is a worse
+    // one in a content-addressed store.
+    //
+    // Detected by size because the root node's size IS the uploadedSize it was
+    // derived from, so one aggregate query over the stored parts settles it. The
+    // alternative — refusing uploadChunk once a root exists — costs a query on
+    // the per-part hot path and still cannot see a part that arrives after the
+    // derivation within a single completion, which this comparison does.
+    const derivedSize = BigInt(existingRootNodes[0].node_size).valueOf()
+    const storedSize =
+      (await filePartsRepository.getUploadFilePartsSize(uploadId)) ??
+      BigInt(0).valueOf()
+    if (storedSize !== derivedSize) {
+      logger.error(
+        'Stored parts no longer match the derived root node (uploadId=%s, cid=%s, derivedSize=%s, storedSize=%s)',
+        uploadId,
+        cidToString(existingCid),
+        derivedSize.toString(),
+        storedSize.toString(),
+      )
+      throw new UploadPartsChangedError(
+        `Upload ${uploadId} has ${storedSize} bytes of parts stored but its root node covers ${derivedSize}; parts changed after the root node was derived. Abort the upload and start again.`,
+        uploadId,
+      )
+    }
+
     logger.warn(
       'Reusing the already-derived root node instead of re-deriving (uploadId=%s, cid=%s)',
       uploadId,

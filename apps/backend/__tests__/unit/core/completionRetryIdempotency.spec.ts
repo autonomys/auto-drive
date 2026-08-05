@@ -14,6 +14,7 @@ import {
 import { UploadType } from '@auto-drive/models'
 import { ok } from 'neverthrow'
 import { UploadFileProcessingUseCase } from '../../../src/core/uploads/uploadProcessing.js'
+import { UploadPartsChangedError } from '../../../src/core/uploads/errors.js'
 import {
   NodesUseCases,
   createNodeDeduplicator,
@@ -210,6 +211,114 @@ describe('completeUploadProcessing retry idempotency', () => {
     // Exactly one root row, and one root CID — the shape getRootNodeCID accepts.
     expect(store.countOf(MetadataType.File)).toBe(1)
     expect(store.distinctCidsOf(MetadataType.File)).toBe(1)
+  })
+
+  // The limit of that resume. Reusing the derived root is right only while the
+  // upload still holds the bytes it was derived from, and `part A, failed
+  // complete, part B, complete` is legal at every step: uploadChunk has no status
+  // guard, the failed completion released the row to PENDING, and S3 permits
+  // UploadPart after a failed CompleteMultipartUpload. Silently returning A's CID
+  // would hand the client a truncated object to store and reference.
+  it('refuses to reuse a root node once more parts have been stored', async () => {
+    installFakeBlockstore()
+
+    // Part A: one full chunk and a tail, i.e. the ordinary mid-upload state.
+    const partA = Buffer.alloc(DEFAULT_MAX_CHUNK_SIZE + 1000, 1)
+    let storedBytes = BigInt(partA.byteLength)
+    let storedInfo: any = {
+      upload_id: UPLOAD_ID,
+      last_processed_part_index: null,
+      pending_bytes: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }
+
+    jest
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .mockImplementation(async () => storedInfo)
+    jest
+      .spyOn(fileProcessingInfoRepository, 'updateFileProcessingInfo')
+      .mockImplementation(async (info: any) => {
+        storedInfo = { ...info }
+        return storedInfo
+      })
+    jest
+      .spyOn(filePartsRepository, 'getUploadFilePartsSize')
+      .mockImplementation(async () => storedBytes)
+
+    const upload = {
+      id: UPLOAD_ID,
+      root_upload_id: UPLOAD_ID,
+      type: UploadType.FILE,
+      name: 'grew.bin',
+      upload_options: null,
+    } as any
+    jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue(upload)
+
+    await UploadFileProcessingUseCase.processChunk(UPLOAD_ID, partA, 0)
+    const firstCid =
+      await UploadFileProcessingUseCase.completeUploadProcessing(upload)
+
+    // Part B arrives while the upload is PENDING again after the failed
+    // completion, then the client completes a second time.
+    const partB = Buffer.alloc(DEFAULT_MAX_CHUNK_SIZE, 2)
+    await UploadFileProcessingUseCase.processChunk(UPLOAD_ID, partB, 1)
+    storedBytes += BigInt(partB.byteLength)
+
+    await expect(
+      UploadFileProcessingUseCase.completeUploadProcessing(upload),
+    ).rejects.toThrow(UploadPartsChangedError)
+    // Not a 500, and not retryable: the client has to abort and start again.
+    await expect(
+      UploadFileProcessingUseCase.completeUploadProcessing(upload),
+    ).rejects.toMatchObject({ statusCode: 400 })
+
+    // The truncated CID is never handed back.
+    expect(cidToString(firstCid)).toBeDefined()
+  })
+
+  // The resume itself must keep working: same parts, same root, no error. This is
+  // the advertised "top up your credits and retry" flow.
+  it('still reuses the root node when the stored parts are unchanged', async () => {
+    installFakeBlockstore()
+
+    const part = Buffer.alloc(DEFAULT_MAX_CHUNK_SIZE + 500, 7)
+    let storedInfo: any = {
+      upload_id: UPLOAD_ID,
+      last_processed_part_index: null,
+      pending_bytes: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }
+    jest
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .mockImplementation(async () => storedInfo)
+    jest
+      .spyOn(fileProcessingInfoRepository, 'updateFileProcessingInfo')
+      .mockImplementation(async (info: any) => {
+        storedInfo = { ...info }
+        return storedInfo
+      })
+    jest
+      .spyOn(filePartsRepository, 'getUploadFilePartsSize')
+      .mockResolvedValue(BigInt(part.byteLength))
+
+    const upload = {
+      id: UPLOAD_ID,
+      root_upload_id: UPLOAD_ID,
+      type: UploadType.FILE,
+      name: 'unchanged.bin',
+      upload_options: null,
+    } as any
+    jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue(upload)
+
+    await UploadFileProcessingUseCase.processChunk(UPLOAD_ID, part, 0)
+    const firstCid =
+      await UploadFileProcessingUseCase.completeUploadProcessing(upload)
+    const secondCid =
+      await UploadFileProcessingUseCase.completeUploadProcessing(upload)
+
+    expect(cidToString(secondCid)).toBe(cidToString(firstCid))
   })
 
   // Guards the other half: even if some future path does re-put the root node,

@@ -1,4 +1,4 @@
-import { ConflictError } from '../../errors/index.js'
+import { BadRequestError, ConflictError } from '../../errors/index.js'
 
 /**
  * Thrown when an upload can never be migrated, no matter how many times the
@@ -45,5 +45,32 @@ export class UploadCompletionInProgressError extends ConflictError {
   ) {
     super(message)
     this.name = 'UploadCompletionInProgressError'
+  }
+}
+
+/**
+ * Thrown when a completion is retried for an upload whose stored parts no longer
+ * match the root node an earlier attempt already derived.
+ *
+ * completeFileProcessing derives the root at most once and reuses it on re-entry,
+ * which is what makes the "top up your credits and retry" flow resume instead of
+ * restarting. Reuse is only correct while the upload still holds the same bytes
+ * the root was built from, and it can stop being true: uploadChunk has no status
+ * guard, a failed completion releases the row back to PENDING, and S3 permits
+ * UploadPart after a failed CompleteMultipartUpload. Silently returning the old
+ * root would answer 200 with a CID covering a prefix of what the client
+ * uploaded — a truncated object the client then stores and references. This says
+ * so instead.
+ *
+ * 400 rather than a retryable status: no amount of retrying reconciles the two,
+ * the client has to abort the upload and start again.
+ */
+export class UploadPartsChangedError extends BadRequestError {
+  constructor(
+    message: string,
+    readonly uploadId: string,
+  ) {
+    super(message)
+    this.name = 'UploadPartsChangedError'
   }
 }
