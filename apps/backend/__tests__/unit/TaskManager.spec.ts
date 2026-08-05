@@ -85,7 +85,8 @@ describe('TaskManager', () => {
       .mocked(Rabbit.subscribe)
       .mockImplementation(async (queue, callback) => {
         subscribeCallback = callback
-        return Promise.resolve(() => {})
+        // Unsubscribing awaits `channel.cancel`, so the handle is async.
+        return Promise.resolve(async () => {})
       })
   })
 
