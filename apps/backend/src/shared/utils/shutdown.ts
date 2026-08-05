@@ -21,12 +21,19 @@ const DEFAULT_SHUTDOWN_BUDGET_MS = 9_000
  * `stopShutdownWatchdog` on the happy path; the timer is unref'd so it never
  * keeps an otherwise-finished process alive.
  *
+ * Exits 0, not 1. The process was asked to stop and it stopped; a non-zero code
+ * would make a slow shutdown indistinguishable from a crash to whatever is
+ * supervising, at the exact moment (a deploy) when that distinction matters most.
+ * What was cut short is reported by the warning below and by each step's own log
+ * line, which is where it belongs — and every failure an unsent alert would have
+ * described is already in the logs individually.
+ *
  * `onExpiry` exists so tests can observe expiry without exiting the runner.
  */
 export const startShutdownWatchdog = (
   logger: Logger,
   budgetMs: number = DEFAULT_SHUTDOWN_BUDGET_MS,
-  onExpiry: () => void = () => process.exit(1),
+  onExpiry: () => void = () => process.exit(0),
 ) => {
   const watchdog = setTimeout(() => {
     logger.warn(
