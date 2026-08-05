@@ -6,14 +6,24 @@ import {
   beforeEach,
   afterEach,
 } from '@jest/globals'
-import { MetadataType, cidToString } from '@autonomys/auto-dag-data'
+import {
+  DEFAULT_MAX_CHUNK_SIZE,
+  MetadataType,
+  cidToString,
+} from '@autonomys/auto-dag-data'
 import { UploadType } from '@auto-drive/models'
+import { ok } from 'neverthrow'
 import { UploadFileProcessingUseCase } from '../../../src/core/uploads/uploadProcessing.js'
-import { createNodeDeduplicator } from '../../../src/core/objects/nodes.js'
+import {
+  NodesUseCases,
+  createNodeDeduplicator,
+} from '../../../src/core/objects/nodes.js'
+import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/blockstore.js'
 import { fileProcessingInfoRepository } from '../../../src/infrastructure/repositories/uploads/fileProcessingInfo.js'
 import { filePartsRepository } from '../../../src/infrastructure/repositories/uploads/fileParts.js'
 import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
+import { nodesRepository } from '../../../src/infrastructure/repositories/objects/nodes.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -274,5 +284,103 @@ describe('createNodeDeduplicator', () => {
     expect(first([node('shared')])).toHaveLength(1)
     // A node shared between two objects must still be written for each.
     expect(second([node('shared')])).toHaveLength(1)
+  })
+})
+
+// The deduplicator's unit tests above exercise the filter in isolation, where an
+// empty result is harmless. It is not harmless at the call site: saveNodes([])
+// renders `INSERT INTO nodes (...) VALUES ` and Postgres answers `syntax error at
+// end of input`. So this drives the real migration over a real upload, which is
+// also the only way to show the case is reachable without any broken rows.
+describe('migrateFromBlockstoreToNodesTable over repeated content', () => {
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('writes one row per distinct node and never an empty insert', async () => {
+    const store = installFakeBlockstore()
+
+    let info: any = {
+      upload_id: UPLOAD_ID,
+      last_processed_part_index: null,
+      pending_bytes: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }
+    jest
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .mockImplementation(async () => info)
+    jest
+      .spyOn(fileProcessingInfoRepository, 'updateFileProcessingInfo')
+      .mockImplementation(async (next: any) => {
+        info = { ...next }
+        return info
+      })
+
+    let uploadedBytes = BigInt(0)
+    jest
+      .spyOn(filePartsRepository, 'getUploadFilePartsSize')
+      .mockImplementation(async () => uploadedBytes)
+
+    const uploadEntry = {
+      id: UPLOAD_ID,
+      root_upload_id: UPLOAD_ID,
+      type: UploadType.FILE,
+      name: 'zeros.bin',
+      upload_options: null,
+    } as any
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValue(uploadEntry)
+    jest
+      .spyOn(uploadsRepository, 'getUploadsByRoot')
+      .mockResolvedValue([uploadEntry])
+    jest
+      .spyOn(ObjectUseCases, 'getMetadata')
+      .mockResolvedValue(ok({ type: 'file' } as any))
+    jest
+      .spyOn(nodesRepository, 'removeNodeByRootCid')
+      .mockResolvedValue(undefined as any)
+
+    // 14 MB of zeros, streamed part by part through the real chunker exactly as
+    // uploadChunk's drain loop does. Every full chunk is byte-identical, so one
+    // CID covers 225 of the 226 chunk rows — and getAllKeys yields one key per
+    // ROW. The second batch of 100 is therefore entirely already-seen, which is
+    // what the per-batch Map could never produce. Roughly 200 identical
+    // consecutive chunks (about 13 MB at DEFAULT_MAX_CHUNK_SIZE=65066) is the
+    // threshold; sparse files, zero-padded disk images and padded archives all
+    // clear it.
+    const PART_SIZE = 1024 * 1024
+    const PARTS = 14
+    expect(PARTS * PART_SIZE).toBeGreaterThan(200 * DEFAULT_MAX_CHUNK_SIZE)
+    for (let i = 0; i < PARTS; i++) {
+      await UploadFileProcessingUseCase.processChunk(
+        UPLOAD_ID,
+        Buffer.alloc(PART_SIZE, 0),
+        i,
+      )
+      uploadedBytes += BigInt(PART_SIZE)
+    }
+    await UploadFileProcessingUseCase.completeUploadProcessing(uploadEntry)
+
+    const distinctCids = new Set(store.rows.map((r) => r.cid))
+    expect(store.rows.length).toBeGreaterThan(200)
+    expect(distinctCids.size).toBeLessThan(store.rows.length)
+
+    const insertedBatches: unknown[][] = []
+    jest
+      .spyOn(nodesRepository, 'saveNodes')
+      .mockImplementation(async (nodes) => {
+        insertedBatches.push(nodes)
+        return undefined
+      })
+
+    await NodesUseCases.migrateFromBlockstoreToNodesTable(UPLOAD_ID)
+
+    // The regression: one of these batches was empty, and the insert built from
+    // it was not valid SQL.
+    expect(insertedBatches.every((batch) => batch.length > 0)).toBe(true)
+    // Each distinct node written exactly once, across every batch.
+    expect(insertedBatches.flat()).toHaveLength(distinctCids.size)
   })
 })

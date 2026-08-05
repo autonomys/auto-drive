@@ -214,6 +214,34 @@ const migrateFromBlockstoreToNodesTable = async (
         )
         const uniqueNodes = takeUnseenNodes(nodes)
 
+        // An empty batch is ordinary, not exceptional, and it must not reach
+        // saveNodes. getAllKeys yields one key per blockstore ROW, so a file
+        // holding a long run of identical chunks — a sparse file, a zero-padded
+        // disk image, a padded archive — fills whole batches with CIDs the
+        // filter has already seen; a batch-aligned run of BATCH_SIZE * 2
+        // identical chunks (about 13 MB at DEFAULT_MAX_CHUNK_SIZE) is enough.
+        //
+        // saveNodes([]) is not a no-op: pg-format expands `VALUES %L` over an
+        // empty array to nothing, so Postgres receives `INSERT INTO nodes (...)
+        // VALUES ` and answers `syntax error at end of input`. That is not an
+        // UnrecoverableUploadError, so processMigration rethrows it, the task
+        // burns its three retries, dead-letters to frontend-errors, and leaves
+        // the upload MIGRATING for the recovery sweep to re-drive every
+        // staleness window — the unbounded dead-letter loop this branch exists
+        // to close, reachable from an ordinary upload.
+        //
+        // The per-batch Map that createNodeDeduplicator replaced could never
+        // return zero for a non-empty batch, which is why nothing downstream
+        // was ever built to survive it.
+        if (uniqueNodes.length === 0) {
+          logger.info(
+            'Every node in this batch was already migrated; skipping the insert (uploadId=%s, batchSize=%d)',
+            upload.id,
+            nodes.length,
+          )
+          return
+        }
+
         await nodesRepository.saveNodes(
           uniqueNodes.map((e) => ({
             cid: cidToString(e.cid),
