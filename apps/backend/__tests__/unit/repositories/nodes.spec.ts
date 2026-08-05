@@ -92,6 +92,15 @@ describe('Nodes Repository', () => {
     expect(result2?.cid).toBe(nodes[1].cid)
   })
 
+  // Against real Postgres, because the failure is a real Postgres one: pg-format
+  // expands `VALUES %L` over an empty array to nothing, so without the guard this
+  // sends `INSERT INTO nodes (...) VALUES ` and raises `syntax error at end of
+  // input`. A migration batch whose every node was already written by an earlier
+  // batch arrives here empty, and writing nothing must be a no-op.
+  it('should treat saving zero nodes as a no-op', async () => {
+    await expect(nodesRepository.saveNodes([])).resolves.toBeUndefined()
+  })
+
   it('should get nodes by head CID', async () => {
     const headCid = 'test-head-cid-for-query'
     const nodes: Node[] = [

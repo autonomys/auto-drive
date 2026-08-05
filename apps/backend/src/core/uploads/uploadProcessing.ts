@@ -6,6 +6,7 @@ import {
 import { getUploadBlockstore } from '../../infrastructure/services/upload/uploadProcessorCache/index.js'
 import {
   cidOfNode,
+  cidToString,
   createFileChunkIpldNode,
   DEFAULT_MAX_CHUNK_SIZE,
   DEFAULT_MAX_LINK_PER_NODE,
@@ -15,6 +16,7 @@ import {
   processChunksToIPLDFormat,
   OffchainMetadata,
 } from '@autonomys/auto-dag-data'
+import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
 import {
   FolderUpload,
   InteractionType,
@@ -36,6 +38,7 @@ import { UploadArtifactsUseCase } from './artifacts.js'
 import { CID } from 'multiformats'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from '../users/accounts.js'
+import { UploadPartsChangedError } from './errors.js'
 
 const logger = createLogger('useCases:uploads:uploadProcessing')
 
@@ -102,6 +105,74 @@ const completeFileProcessing = async (uploadId: string): Promise<CID> => {
     throw new Error('File processing info not found')
   }
 
+  // Derivation runs AT MOST ONCE per upload, and re-entry returns the root node
+  // the first run produced.
+  //
+  // This is not an optimisation, it is a correctness requirement:
+  // processBufferToIPLDFormatFromChunks is DESTRUCTIVE. For a single-chunk file it
+  // does get -> delete -> put(root) (auto-dag-data chunker.ts), so the chunk it
+  // folded in is gone afterwards. Re-deriving therefore does not reproduce the
+  // first result — it builds a root over whatever chunks remain and yields a
+  // DIFFERENT CID, which is the unrecoverable shape: getRootNodeCID refuses two
+  // distinct root CIDs, so every later retry 500s and appends another root row.
+  //
+  // Re-entry is entirely reachable: completeUpload releases its claim back to
+  // PENDING when completion fails, and the documented failure — `Not enough
+  // upload credits`, thrown by handleFileUploadFinalization — happens strictly
+  // AFTER this derivation. The advertised "top up and retry" flow is exactly this
+  // path, so it has to resume rather than restart.
+  const existingRootNodes = await blockstoreRepository.getByType(
+    uploadId,
+    MetadataType.File,
+  )
+  if (existingRootNodes.length > 0) {
+    // Delegates rather than reading [0] so duplicate-but-identical rows are
+    // tolerated and genuinely divergent ones still raise UnrecoverableUploadError.
+    const existingCid = await BlockstoreUseCases.getFileUploadIdCID(uploadId)
+
+    // Reuse is only correct while the upload still holds the bytes the root was
+    // built from, and that can stop being true between the two calls. uploadChunk
+    // has no status guard, the failed completion above released the row back to
+    // PENDING, and S3 permits UploadPart after a failed CompleteMultipartUpload —
+    // so `part A, failed complete, part B, complete` is legal at every step.
+    // Returning the existing root there answers 200 with a CID covering A alone,
+    // and on the S3 route the composite ETag is computed from the client's part
+    // list, so the mapping would store an ETag that does not describe the stored
+    // object. Loud-and-unrecoverable was the wrong answer to a retry, but
+    // silently truncating an object the client stores and references is a worse
+    // one in a content-addressed store.
+    //
+    // Detected by size because the root node's size IS the uploadedSize it was
+    // derived from, so one aggregate query over the stored parts settles it. The
+    // alternative — refusing uploadChunk once a root exists — costs a query on
+    // the per-part hot path and still cannot see a part that arrives after the
+    // derivation within a single completion, which this comparison does.
+    const derivedSize = BigInt(existingRootNodes[0].node_size).valueOf()
+    const storedSize =
+      (await filePartsRepository.getUploadFilePartsSize(uploadId)) ??
+      BigInt(0).valueOf()
+    if (storedSize !== derivedSize) {
+      logger.error(
+        'Stored parts no longer match the derived root node (uploadId=%s, cid=%s, derivedSize=%s, storedSize=%s)',
+        uploadId,
+        cidToString(existingCid),
+        derivedSize.toString(),
+        storedSize.toString(),
+      )
+      throw new UploadPartsChangedError(
+        `Upload ${uploadId} has ${storedSize} bytes of parts stored but its root node covers ${derivedSize}; parts changed after the root node was derived. Abort the upload and start again.`,
+        uploadId,
+      )
+    }
+
+    logger.warn(
+      'Reusing the already-derived root node instead of re-deriving (uploadId=%s, cid=%s)',
+      uploadId,
+      cidToString(existingCid),
+    )
+    return existingCid
+  }
+
   const blockstore = await getUploadBlockstore(uploadId)
   const latestPartLeftOver =
     await getUnprocessedChunkFromLatestFilePart(fileProcessingInfo)
@@ -109,6 +180,19 @@ const completeFileProcessing = async (uploadId: string): Promise<CID> => {
   if (latestPartLeftOver.byteLength > 0) {
     const fileChunk = createFileChunkIpldNode(latestPartLeftOver)
     await blockstore.put(cidOfNode(fileChunk), encode(fileChunk))
+    // Consume the tail. The guard above covers re-entry after the root node
+    // exists; this covers the narrower window where the first run flushed the
+    // tail and then failed BEFORE deriving a root. Without clearing it, the
+    // retry would re-put the same tail chunk, the DAG would gain a duplicate
+    // link, and the derived CID would differ from the one a clean run produces.
+    //
+    // Ordered after the put deliberately: if the clear fails, the tail bytes are
+    // already durable and behaviour degrades to what it was before this change,
+    // rather than losing the tail.
+    await fileProcessingInfoRepository.updateFileProcessingInfo({
+      ...fileProcessingInfo,
+      pending_bytes: null,
+    })
   }
 
   const uploadedSize =
