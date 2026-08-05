@@ -11,38 +11,142 @@ export type Queue = (typeof queues)[number]
 
 const logger = createLogger('drivers:rabbit')
 
-const queues = ['task-manager', 'download-manager', 'publish-manager'] as const
+// Error queues are listed here so they are asserted at channel setup and are
+// valid `subscribe`/`getMessageCount` targets. They were previously created
+// implicitly by `publish` alone, which left them unsubscribable — and so they
+// accumulated permanently failed tasks that nobody ever read.
+const queues = [
+  'task-manager',
+  'download-manager',
+  'publish-manager',
+  'frontend-errors',
+  'download-errors',
+  'publish-errors',
+] as const
 const subscriptions: Partial<Record<Queue, SubscriptionCallback[]>> = {}
+
+interface ActiveConsumer {
+  channel: Channel
+  // Held as a promise, and stored in the same tick as the `consume` call that
+  // produces it, so the entry doubles as an in-flight reservation: a second
+  // caller arriving while the first `consume` is still on the wire sees it and
+  // reuses it instead of opening a rival consumer.
+  consumerTag: Promise<string>
+}
+
+/**
+ * The consumer currently serving each callback, per queue.
+ *
+ * A reconnect re-subscribes every stored callback on a fresh channel and discards
+ * the new unsubscribe handles (see `getChannel`), so a handle that closed over its
+ * own channel and consumer tag went stale the moment the connection bounced:
+ * cancelling it targeted a dead consumer on a closed channel while the live one
+ * kept delivering. Unsubscribing therefore looks the consumer up here, at call
+ * time, rather than capturing it at subscribe time.
+ *
+ * The map is also what keeps consumers unique per (queue, callback, channel) —
+ * see `ensureConsumer`.
+ */
+const activeConsumers: Partial<
+  Record<Queue, Map<SubscriptionCallback, ActiveConsumer>>
+> = {}
 
 let channelPromise: Promise<Channel> | null = null
 let keepAliveInterval: NodeJS.Timeout | null = null
 
+/**
+ * Restores one registered consumer on a freshly opened channel.
+ *
+ * Retried rather than attempted once: nothing else re-runs this. The callback
+ * stays in `subscriptions`, but the only thing that reads that list is the next
+ * reconnect — and reconnects are driven by a failing keepalive, which a healthy
+ * channel never produces. A `consume` that failed here therefore left the queue
+ * with no reader indefinitely, and silently.
+ *
+ * The failure is also caught here rather than propagated. `subscribe` re-raises
+ * a failed `consume` to its caller, and this call site is a bare loop with no
+ * caller to return to, so the rejection reached `unhandledRejection` — which,
+ * with no handler registered anywhere in the backend and Node defaulting to
+ * `--unhandled-rejections=throw`, took the whole worker down.
+ */
+const resubscribeAfterReconnect = async (
+  queue: Queue,
+  callback: SubscriptionCallback,
+) => {
+  try {
+    await withBackingOffRetries(
+      async () => {
+        // An unsubscribe landing mid-retry deregisters the callback; without
+        // this check the next attempt would resurrect the consumer it just
+        // cancelled.
+        if (!subscriptions[queue]?.includes(callback)) {
+          return
+        }
+        await subscribe(queue, callback)
+      },
+      { maxRetries: 3, startingDelay: 1000 },
+    )
+  } catch (error) {
+    logger.error(
+      error as Error,
+      'Gave up re-subscribing %s after reconnect; it has no consumer until the next one',
+      queue,
+    )
+  }
+}
+
 const getChannel = async () => {
   if (!channelPromise) {
-    channelPromise = connect(config.rabbitmq.url).then((connection) =>
+    const pending = connect(config.rabbitmq.url).then((connection) =>
       connection.createChannel().then((channel) => {
         queues.forEach((q) => channel.assertQueue(q))
         channel.prefetch(config.rabbitmq.prefetch)
         return channel
       }),
     )
-    channelPromise.then(() => {
-      for (const queue of queues) {
-        const queueSubscriptions = subscriptions[queue] ?? []
-        subscriptions[queue] = []
-        for (const callback of queueSubscriptions) {
-          subscribe(queue, callback)
-        }
+    channelPromise = pending
+
+    // A rejected channel must not stay cached. `getChannel` hands back whatever
+    // is in `channelPromise`, so a single failed connect wedged the driver on
+    // that one error for good: every later publish, subscribe and keepalive
+    // replayed the same rejection and no further connection was ever attempted,
+    // including after the broker came back. Cleared by identity so it cannot
+    // discard a channel opened in the meantime (or one `close` already dropped).
+    pending.catch(() => {
+      if (channelPromise === pending) {
+        channelPromise = null
       }
     })
+
+    pending.then(
+      () => {
+        for (const queue of queues) {
+          // Snapshotted rather than drained: `subscribe` de-duplicates against
+          // `subscriptions` itself, and emptying the list first would leave a
+          // retry unable to tell a callback that is still wanted from one that
+          // has since been unsubscribed.
+          for (const callback of [...(subscriptions[queue] ?? [])]) {
+            resubscribeAfterReconnect(queue, callback)
+          }
+        }
+      },
+      // Nothing to restore when the channel never opened, and the failure is
+      // reported by whoever awaited `getChannel`. Handled all the same, so this
+      // branch of the chain is not itself an unhandled rejection.
+      () => {},
+    )
+
     if (keepAliveInterval) {
       clearInterval(keepAliveInterval)
       keepAliveInterval = null
     }
-    keepAliveInterval = setInterval(
-      keepAlive,
-      config.rabbitmq.keepAliveInterval,
-    )
+    keepAliveInterval = setInterval(() => {
+      // `setInterval` discards what its callback returns, so anything escaping
+      // keepAlive would surface as an unhandled rejection and stop the process.
+      keepAlive().catch((error) => {
+        logger.error(error as Error, 'RabbitMQ keepalive failed unexpectedly')
+      })
+    }, config.rabbitmq.keepAliveInterval)
   }
 
   return channelPromise
@@ -62,7 +166,17 @@ const publish = async (queue: string, message: object) => {
 }
 
 const keepAlive = async () => {
-  const channel = await getChannel()
+  let channel: Channel
+  try {
+    channel = await getChannel()
+  } catch (error) {
+    // There is no channel to probe yet, so there is nothing for the reconnect
+    // below to do either — the next tick opens a fresh one now that a rejected
+    // channel is no longer cached. Caught because this runs on an interval with
+    // no caller: an escaping rejection would take the worker down.
+    logger.error(error as Error, 'RabbitMQ keepalive could not open a channel')
+    return
+  }
   try {
     // Passive check against an existing queue to keep the connection active
     await channel.checkQueue(queues[0])
@@ -87,20 +201,57 @@ const keepAlive = async () => {
   }
 }
 
-const subscribe = async (
+/**
+ * Starts consuming `queue` with `callback`, or reuses the consumer already doing
+ * so on this channel.
+ *
+ * Two paths race to establish the same consumer: the `subscribe` call itself,
+ * and the re-subscribe loop `getChannel` runs once its channel resolves. On the
+ * very first subscribe both fire — the callback is registered in `subscriptions`
+ * before `getChannel` is even called, so the loop that is meant to restore
+ * consumers after a reconnect also picks up the subscribe that is still in
+ * flight. Each then called `consume` and the later one overwrote the other's
+ * entry in `activeConsumers`, leaving a second live consumer that nothing held a
+ * tag for: `unsubscribe`/`stopTaskErrors` cancelled one, the orphan kept
+ * delivering, and on shutdown its messages landed in a batch created after the
+ * final flush had already run.
+ *
+ * Reserving the entry synchronously — before awaiting the `consume` — closes
+ * that window regardless of which path gets there first.
+ */
+const ensureConsumer = (
   queue: Queue,
-  callback: (message: Record<string, unknown>) => Promise<unknown>,
-) => {
-  if (!subscriptions[queue]) {
-    subscriptions[queue] = [] as SubscriptionCallback[]
+  callback: SubscriptionCallback,
+  channel: Channel,
+): ActiveConsumer => {
+  let consumers = activeConsumers[queue]
+  if (!consumers) {
+    consumers = new Map()
+    activeConsumers[queue] = consumers
   }
-  subscriptions[queue].push(callback)
 
-  const channel = await getChannel()
+  const existing = consumers.get(callback)
+  if (existing) {
+    if (existing.channel === channel) {
+      return existing
+    }
+    // A different channel means a reconnect replaced the one this consumer lived
+    // on. That channel is normally closed already (which kills its consumers),
+    // but a close that failed would leave the old consumer delivering into a
+    // callback nobody can stop, so cancel it best-effort before dropping it.
+    existing.consumerTag
+      .then((tag) => existing.channel.cancel(tag))
+      .catch((error) => {
+        logger.debug(
+          'Could not cancel superseded consumer on %s: %s',
+          queue,
+          error,
+        )
+      })
+  }
 
-  const consume = await channel.consume(
-    queue,
-    async (message: ConsumeMessage | null): Promise<void> => {
+  const consumerTag = channel
+    .consume(queue, async (message: ConsumeMessage | null): Promise<void> => {
       if (message) {
         try {
           const payload = JSON.parse(message.content.toString())
@@ -115,13 +266,71 @@ const subscribe = async (
       } else {
         logger.warn('No message received from %s', queue)
       }
-    },
-  )
+    })
+    .then((consume) => consume.consumerTag)
 
-  return () => {
-    channel.cancel(consume.consumerTag)
+  const consumer: ActiveConsumer = { channel, consumerTag }
+  consumers.set(callback, consumer)
+
+  // A failed `consume` must not leave its reservation behind, or a later
+  // subscribe on this same channel would hand back a consumer that never
+  // existed. Also marks the rejection handled — `subscribe` re-raises it to its
+  // own caller.
+  consumerTag.catch(() => {
+    if (consumers.get(callback) === consumer) {
+      consumers.delete(callback)
+    }
+  })
+
+  return consumer
+}
+
+const subscribe = async (
+  queue: Queue,
+  callback: (message: Record<string, unknown>) => Promise<unknown>,
+) => {
+  if (!subscriptions[queue]) {
+    subscriptions[queue] = [] as SubscriptionCallback[]
+  }
+  // Guarded against duplicates so a reconnect cannot register the same callback
+  // twice and start delivering each message to it more than once.
+  if (!subscriptions[queue].includes(callback)) {
+    subscriptions[queue].push(callback)
+  }
+
+  const channel = await getChannel()
+
+  // Awaited so this resolves only once the broker has the consumer, as before.
+  await ensureConsumer(queue, callback, channel).consumerTag
+
+  // Awaits the cancel rather than firing and forgetting it: callers that stop a
+  // consumer in order to quiesce before doing something else (see
+  // EventRouter.stopTaskErrors) need "stopped" to actually mean stopped by the
+  // time this resolves. Note that cancelling halts *new* deliveries — messages
+  // already handed to the client may still be in their callback afterwards.
+  return async () => {
+    // Deregister before cancelling. A reconnect re-subscribes whatever is in
+    // `subscriptions`, so leaving the callback there while awaiting the cancel
+    // gives a reconnect landing mid-cancel the chance to resurrect the consumer.
     subscriptions[queue] =
       subscriptions[queue]?.filter((c) => c !== callback) ?? []
+
+    // Looked up now rather than captured above, so this cancels whichever
+    // consumer is live — including one created by a reconnect after this handle
+    // was handed out.
+    const active = activeConsumers[queue]?.get(callback)
+    activeConsumers[queue]?.delete(callback)
+    if (!active) {
+      return
+    }
+
+    try {
+      await active.channel.cancel(await active.consumerTag)
+    } catch (error) {
+      // A cancel against an already-closed channel is moot: that consumer is
+      // gone either way, which is what the caller wanted.
+      logger.warn('Failed to cancel consumer on %s: %s', queue, error)
+    }
   }
 }
 
@@ -140,6 +349,7 @@ const close = async () => {
   channelPromise = null
   for (const queue of queues) {
     subscriptions[queue] = []
+    activeConsumers[queue]?.clear()
   }
 
   if (keepAliveInterval) {
