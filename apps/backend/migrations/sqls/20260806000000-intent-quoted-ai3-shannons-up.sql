@@ -1,0 +1,37 @@
+-- Record the AI3 amount a USDC quote was priced for.
+--
+-- A USDC intent needs to convert the payment it receives back into storage
+-- bytes, and the only rate that makes "pay the quote, receive the quote" true is
+-- the rate the user was actually quoted at. Neither existing column carries it:
+--
+--   usd_rate_at_creation is the pool's MARGINAL price. The user pays the
+--   executable quote, which is that price plus the pool swap fee, plus the
+--   price impact of their own size, plus the quote margin. Converting a received
+--   payment at the marginal rate hands all three back as free storage — 5-8% on
+--   a realistic purchase — and grants more bytes than the pre-payment cap check
+--   was run against.
+--
+--   quoted_token_amount is one half of the rate: what was charged. This column
+--   is the other half: what it was charged FOR.
+--
+-- Together the pair IS the effective rate, held exactly as two integers rather
+-- than as a rounded ratio. That matters because USDC has 6 decimals against
+-- byte counts of ~1e11, so a usdc-per-byte or usdc-per-shannon rate is deeply
+-- sub-unit (~0.0027 base units per byte at 100 GiB) and cannot be stored as an
+-- integer without scaling — and once scaled it is a rounded ratio that no longer
+-- round-trips the quote exactly. Storing the two quantities keeps the
+-- confirmation-path conversion exact:
+--
+--   bytes = token_amount * quoted_ai3_shannons
+--             / quoted_token_amount / shannons_per_byte
+--
+-- With token_amount = quoted_token_amount the ratio cancels and the result is
+-- the requested size exactly, with no rounding in either direction.
+--
+-- numeric(78,0) to match the bigint base-unit convention already used by
+-- payment_amount / shannons_per_byte / quoted_token_amount. NULL for AI3_NATIVE
+-- intents and for rows created before USDC support, both of which derive credits
+-- from payment_amount / shannons_per_byte and never read this.
+
+ALTER TABLE intents
+  ADD COLUMN IF NOT EXISTS quoted_ai3_shannons numeric(78,0);

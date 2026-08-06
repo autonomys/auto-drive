@@ -15,6 +15,9 @@ type DBIntent = {
   // Token-payment columns: populated for USDC_ETH intents, NULL for AI3_NATIVE.
   token_amount: string | null
   quoted_token_amount: string | null
+  // The AI3 amount the quote was priced for. With quoted_token_amount this is
+  // the effective rate the confirmation path converts at.
+  quoted_ai3_shannons: string | null
   usd_rate_at_creation: string | null
 }
 
@@ -37,6 +40,9 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
     quotedTokenAmount: row.quoted_token_amount
       ? BigInt(row.quoted_token_amount).valueOf()
       : undefined,
+    quotedAi3Shannons: row.quoted_ai3_shannons
+      ? BigInt(row.quoted_ai3_shannons).valueOf()
+      : undefined,
     usdRateAtCreation: row.usd_rate_at_creation
       ? BigInt(row.usd_rate_at_creation).valueOf()
       : undefined,
@@ -58,8 +64,8 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
     `INSERT INTO intents
        (id, user_public_id, status, tx_hash, payment_amount, shannons_per_byte,
         expires_at, payment_method, token_amount, quoted_token_amount,
-        usd_rate_at_creation)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        quoted_ai3_shannons, usd_rate_at_creation)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       intent.id,
@@ -74,6 +80,7 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
       intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
       intent.tokenAmount?.toString() ?? null,
       intent.quotedTokenAmount?.toString() ?? null,
+      intent.quotedAi3Shannons?.toString() ?? null,
       intent.usdRateAtCreation?.toString() ?? null,
     ],
   )
@@ -87,8 +94,9 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
      SET status = $1, user_public_id = $2, tx_hash = $3,
          payment_amount = $4, shannons_per_byte = $5, expires_at = $6,
          from_address = $7, payment_method = $8, token_amount = $9,
-         quoted_token_amount = $10, usd_rate_at_creation = $11
-     WHERE id = $12
+         quoted_token_amount = $10, quoted_ai3_shannons = $11,
+         usd_rate_at_creation = $12
+     WHERE id = $13
      RETURNING *`,
     [
       intent.status,
@@ -105,6 +113,7 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
       intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
       intent.tokenAmount?.toString() ?? null,
       intent.quotedTokenAmount?.toString() ?? null,
+      intent.quotedAi3Shannons?.toString() ?? null,
       intent.usdRateAtCreation?.toString() ?? null,
       intent.id,
     ],
