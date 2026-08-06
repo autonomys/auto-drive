@@ -17,12 +17,13 @@
 -- numeric(78,0) matches the bigint base-unit convention already used by
 -- payment_amount / shannons_per_byte and the token_* columns.
 --
--- NOTE: this is what the user ASKED for, never a balance. Credits always follow
--- the amount actually paid, against the rate locked at creation —
--- payment_amount / shannons_per_byte for AI3, and token_amount against
--- quoted_token_amount / quoted_bytes for USDC — so an over- or underpayment
--- grants a different number of bytes than this column records. Reporting that
--- reads quoted_bytes as storage sold will not reconcile with
+-- NOTE: this is what the user ASKED for, never a balance. Credits follow the
+-- amount actually paid, through one derivation for every payment asset:
+-- shannons paid / shannons_per_byte. AI3 pays in shannons; USDC converts to
+-- shannons first, at the effective rate locked at creation (quoted_token_amount
+-- buys quoted_bytes * shannons_per_byte shannons). So an over- or underpayment
+-- grants a different number of bytes than this column records, and reporting
+-- that reads quoted_bytes as storage sold will not reconcile with
 -- purchased_credits.
 
 ALTER TABLE intents
