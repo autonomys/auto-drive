@@ -60,20 +60,22 @@ export const IntentSchema = z.object({
   // slippage is a function of the amount, so there is no size-free USDC-per-byte
   // rate for a sizeless intent to lock.
   //
-  // NOT the credits an account received, for either asset. Credits always follow
-  // the amount actually paid, divided by the rate locked at creation:
+  // NOT the credits an account received. Credits follow the amount actually
+  // paid, through a single derivation shared by every payment asset:
   //
-  //   AI3   paymentAmount / shannonsPerByte
-  //   USDC  tokenAmount * quotedBytes / quotedTokenAmount
+  //   credits = shannons paid / shannonsPerByte
   //
-  // The USDC form is division by the locked price per byte
-  // (quotedTokenAmount / quotedBytes), multiplied out so the rate is never
-  // materialised: as an integer that rate truncates to whole USDC base units per
-  // byte, which for any realistic price per byte is 0.
+  // AI3 pays in shannons already. USDC is converted to shannons at the boundary,
+  // at the EFFECTIVE rate locked at creation — quotedTokenAmount buys
+  // quotedBytes * shannonsPerByte shannons — and everything downstream (the cap
+  // check, dust, OVER_CAP, purchased_credits) then sees the AI3 flow it always
+  // has. A new asset is a new conversion at that boundary, never a second credit
+  // derivation.
   //
-  // So this is an input — the size the quote and the creation-time cap pre-check
-  // were computed for — and an audit record of what was asked for. It equals the
-  // bytes granted only when the user pays exactly what they were quoted.
+  // So this is an input: the size the pool was quoted for, the AI3 leg of the
+  // rate that quote locks, and the basis of the creation-time cap pre-check —
+  // plus an audit record of what was asked for. It equals the bytes granted only
+  // when the user pays exactly what they were quoted.
   quotedBytes: z.bigint().optional(),
   // Price-lock window: set at creation, intent is rejected after this time.
   // NULL for intents created before this feature was introduced.
@@ -88,20 +90,21 @@ export const IntentSchema = z.object({
   // (USDC has 6 decimals). Set by the payment manager on confirmation.
   tokenAmount: z.bigint().optional(),
   // Token amount quoted to the user at creation, in the token's smallest unit.
-  // Together with quotedBytes this IS the locked USDC price per byte, and it is
-  // the only rate credits may be derived against: it comes from the executable
-  // quote, so the pool swap fee, the price impact of this specific size and the
-  // quote margin are all already inside it.
+  // Comes from the executable quote, so the pool swap fee, the price impact of
+  // this specific size and the quote margin are all already inside it. Against
+  // quotedBytes * shannonsPerByte it forms the EFFECTIVE rate — what a received
+  // payment converts to AI3 at, and the only rate credits may pass through.
   quotedTokenAmount: z.bigint().optional(),
-  // AI3/USD rate at creation, scaled by USD_RATE_SCALE (1e18). Display and
-  // reconciliation only — NOT a credit basis.
+  // AI3/USD rate at creation, scaled by USD_RATE_SCALE (1e18). Display,
+  // reporting and oracle reconciliation — NOT the rate credits convert at.
   //
   // This is the pool's MARGINAL price: what an infinitesimally small trade would
   // get. The user pays the executable quote instead, which additionally carries
-  // the swap fee, their own size's price impact and the quote margin. Deriving
-  // credits by inverting this rate would hand back all three as free storage —
-  // roughly 8% on a $290 purchase against the live pool. Use the rate implied by
-  // quotedTokenAmount / quotedBytes.
+  // the swap fee, their own size's price impact and the quote margin. Converting
+  // a received payment to AI3 at this rate hands all three back as free storage
+  // — roughly 8% on a $290 purchase against the live pool. It stays marginal on
+  // purpose, so it remains comparable to the market; the effective rate is a
+  // different number, carried by quotedTokenAmount + quotedBytes.
   usdRateAtCreation: z.bigint().optional(),
 });
 

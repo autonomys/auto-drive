@@ -154,8 +154,8 @@ const parseRequestedBytes = (
 // It also does not bound what the user ends up with. Credits follow the amount
 // actually paid, not requestedBytes, so paying more than quoted grants more than
 // was checked here — and on the USDC path slightly more than proportionally,
-// because the locked rate carries the price impact of the QUOTED size and a
-// larger conversion slips further down the curve. That drift is a deliberate
+// because the locked effective rate carries the price impact of the QUOTED size
+// and a larger conversion slips further down the curve. That drift is a deliberate
 // accepted cost of letting any payment amount settle an intent, and it is the
 // authoritative check that bounds it: re-measuring the real balance under the
 // advisory lock, an overpayment can walk an account up to the cap but never past
