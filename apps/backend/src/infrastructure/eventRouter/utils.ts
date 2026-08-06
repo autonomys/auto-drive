@@ -65,6 +65,11 @@ export const createHandlerWithRetries =
           Rabbit.publish(errorPublishQueue, {
             ...parsingResult.data,
             retriesLeft: errorRetries,
+            // The reason is carried on the message, not just logged: the error
+            // queues are the only record that a task died, and a consumer that
+            // can name the task but not why it failed cannot be acted on.
+            error: error instanceof Error ? error.message : String(error),
+            failedAt: new Date().toISOString(),
           })
         }
         logger.error(error as Error, 'Task failed')

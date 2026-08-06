@@ -17,6 +17,7 @@ import {
   asyncIterableToPromiseOfArray,
 } from '@autonomys/asynchronous'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
+import { UnrecoverableUploadError } from '../uploads/errors.js'
 import {
   UploadType,
   ObjectMapping,
@@ -140,15 +141,78 @@ const getUploadCID = async (uploadId: string): Promise<CID> => {
   return cid
 }
 
+/**
+ * Returns a filter that keeps only nodes whose CID it has not seen before,
+ * across every call — i.e. across every batch of one upload's migration.
+ *
+ * Deduplicating per batch is not enough. getAllKeys yields in sort_id
+ * (insertion) order, so a duplicate row appended by a later completion pass
+ * lands in a DIFFERENT batch from its original whenever the two are more than
+ * BATCH_SIZE rows apart, and a per-batch Map cannot see it. Verified: a 100-row
+ * blockstore plus one duplicate root row produced 101 nodes rows with the root
+ * present twice. nodes.cid has no unique constraint and getCidsByRootCid has no
+ * DISTINCT, so that fans straight out into duplicate on-chain publish work —
+ * exactly what the removeNodeByRootCid comment warns about.
+ *
+ * Holds one CID string per unique node for the duration of the upload's
+ * migration, the same order of magnitude as the batch data already in flight.
+ */
+export const createNodeDeduplicator = (uploadId: string) => {
+  const seenCids = new Set<string>()
+
+  return <T extends { cid: CID }>(nodes: T[]): T[] =>
+    nodes.filter((node) => {
+      const cid = cidToString(node.cid)
+      if (seenCids.has(cid)) {
+        logger.warn(
+          'Skipping duplicate blockstore node (uploadId=%s, cid=%s)',
+          uploadId,
+          cid,
+        )
+        return false
+      }
+      seenCids.add(cid)
+      return true
+    })
+}
+
 const migrateFromBlockstoreToNodesTable = async (
   uploadId: string,
 ): Promise<void> => {
   const uploads = await uploadsRepository.getUploadsByRoot(uploadId)
   const rootCID = await getUploadCID(uploadId)
 
+  // getMetadata returns a neverthrow Result, and a Result object is always truthy,
+  // so the `if (!metadata) return` this replaces could never fire — migration ran
+  // regardless of whether the object had a metadata row.
+  //
+  // Proceeding is the worst of the options. handleFileUploadFinalization and
+  // handleFolderUploadFinalization save the metadata strictly BEFORE the upload
+  // flips to MIGRATING and the migrate task is enqueued, and migrate only ever
+  // runs on a root upload, so a missing row means the completion never got that
+  // far and no retry will change it. Migrating anyway writes the nodes, deletes the
+  // upload artifacts, then hands tag-upload a cid it cannot resolve — tagUpload
+  // returns its error before reaching scheduleNodesPublish, so the object ends up
+  // with nodes in the database, nothing enqueued to publish them, and no upload row
+  // left for the recovery sweep to find.
+  //
+  // Restoring the original intent would only trade that for a silent return, which
+  // leaves the row MIGRATING for the sweep to re-drive every staleness window,
+  // forever. Parking it as FAILED is what this branch already does with the other
+  // permanently-broken shapes: the sweep stops selecting it, the task acks instead
+  // of dead-lettering, and auto_drive_upload_migration_unrecoverable makes it
+  // visible.
   const metadata = await ObjectUseCases.getMetadata(cidToString(rootCID))
-  if (!metadata) {
-    return
+  if (metadata.isErr()) {
+    logger.error(
+      'No metadata for the root of a migrating upload (uploadId=%s, rootCid=%s)',
+      uploadId,
+      cidToString(rootCID),
+    )
+    throw new UnrecoverableUploadError(
+      `No metadata found for the root of upload ${uploadId} (rootCid=${cidToString(rootCID)})`,
+      uploadId,
+    )
   }
 
   // Clear any nodes already written for this root before re-inserting. migrate
@@ -168,6 +232,8 @@ const migrateFromBlockstoreToNodesTable = async (
     const headCID = await getUploadCID(upload.id)
     const blockstore = await getUploadBlockstore(upload.id)
 
+    const takeUnseenNodes = createNodeDeduplicator(upload.id)
+
     const BATCH_SIZE = 100
     await asyncIterableForEach(
       blockstore.getAllKeys(),
@@ -175,9 +241,35 @@ const migrateFromBlockstoreToNodesTable = async (
         const nodes = await asyncIterableToPromiseOfArray(
           blockstore.getMany(batch),
         )
-        const uniqueNodes = Array.from(
-          new Map(nodes.map((node) => [cidToString(node.cid), node])).values(),
-        )
+        const uniqueNodes = takeUnseenNodes(nodes)
+
+        // An empty batch is ordinary, not exceptional, and it must not reach
+        // saveNodes. getAllKeys yields one key per blockstore ROW, so a file
+        // holding a long run of identical chunks — a sparse file, a zero-padded
+        // disk image, a padded archive — fills whole batches with CIDs the
+        // filter has already seen; a batch-aligned run of BATCH_SIZE * 2
+        // identical chunks (about 13 MB at DEFAULT_MAX_CHUNK_SIZE) is enough.
+        //
+        // saveNodes([]) is not a no-op: pg-format expands `VALUES %L` over an
+        // empty array to nothing, so Postgres receives `INSERT INTO nodes (...)
+        // VALUES ` and answers `syntax error at end of input`. That is not an
+        // UnrecoverableUploadError, so processMigration rethrows it, the task
+        // burns its three retries, dead-letters to frontend-errors, and leaves
+        // the upload MIGRATING for the recovery sweep to re-drive every
+        // staleness window — the unbounded dead-letter loop this branch exists
+        // to close, reachable from an ordinary upload.
+        //
+        // The per-batch Map that createNodeDeduplicator replaced could never
+        // return zero for a non-empty batch, which is why nothing downstream
+        // was ever built to survive it.
+        if (uniqueNodes.length === 0) {
+          logger.info(
+            'Every node in this batch was already migrated; skipping the insert (uploadId=%s, batchSize=%d)',
+            upload.id,
+            nodes.length,
+          )
+          return
+        }
 
         await nodesRepository.saveNodes(
           uniqueNodes.map((e) => ({

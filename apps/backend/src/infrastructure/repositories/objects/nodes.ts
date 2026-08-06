@@ -38,6 +38,16 @@ const saveNode = async (node: Node) => {
 }
 
 const saveNodes = async (nodes: Node[]) => {
+  // Writing nothing has to mean nothing. pg-format expands `VALUES %L` over an
+  // empty array to the empty string, so the statement below would go to
+  // Postgres as `INSERT INTO nodes (...) VALUES ` and raise `syntax error at
+  // end of input` — an empty list is the one input that turns a no-op into a
+  // hard failure. Callers reach this legitimately (a migration batch whose every
+  // node was already written by an earlier batch), so absorb it here as well as
+  // at the call site: nothing else in this file has an arity-dependent SQL
+  // shape, and this is the layer that owns the shape.
+  if (nodes.length === 0) return
+
   const db = await getDatabase()
 
   return db.query({

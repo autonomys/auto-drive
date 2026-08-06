@@ -1,5 +1,9 @@
 import { S3UseCases } from '../../../core/s3/index.js'
 import { handleError, ForbiddenError } from '../../../errors/index.js'
+import {
+  UploadCompletionInProgressError,
+  UploadPartsChangedError,
+} from '../../../core/uploads/errors.js'
 import { handleS3Auth } from '../../../infrastructure/services/auth/s3.js'
 import {
   getByteRange,
@@ -711,12 +715,52 @@ export const completeMultipartUploadHandler = async (
     throw error
   }
 
-  const result = await S3UseCases.completeMultipartUpload(user, {
-    Bucket: bucket,
-    Key: key,
-    UploadId: req.query.uploadId as string,
-    Parts: parts,
-  })
+  // completeUpload throws (rather than returning an err) when it cannot take the
+  // completion claim, and this handler has no error middleware behind it — an
+  // uncaught throw reaches Express's default handler and answers a non-XML 500,
+  // which an S3 client cannot parse and will not retry. Concurrent completes are
+  // precisely what a client's own timeout retry produces, so answer with the
+  // retryable error S3 clients already understand: 503 SlowDown, which the AWS
+  // SDK retries with backoff until the winning call finishes.
+  let result
+  try {
+    result = await S3UseCases.completeMultipartUpload(user, {
+      Bucket: bucket,
+      Key: key,
+      UploadId: req.query.uploadId as string,
+      Parts: parts,
+    })
+  } catch (error) {
+    if (error instanceof UploadCompletionInProgressError) {
+      logger.info(
+        'Completion already in progress, answering SlowDown (uploadId=%s)',
+        error.uploadId,
+      )
+      sendXML(res.status(503), 'Error', {
+        Code: 'SlowDown',
+        Message:
+          'A completion for this upload is already in progress. Please retry.',
+      })
+      return
+    }
+    // The other end of the same problem: this one is terminal, so it must NOT
+    // look retryable. A client that appended a part after a failed completion
+    // has to abort and start again, and it can only learn that from a 4xx it can
+    // parse — the same reason SlowDown is spelled out above rather than left to
+    // Express's default handler.
+    if (error instanceof UploadPartsChangedError) {
+      logger.warn(
+        'Parts changed after the root node was derived, answering InvalidRequest (uploadId=%s)',
+        error.uploadId,
+      )
+      sendXML(res.status(400), 'Error', {
+        Code: 'InvalidRequest',
+        Message: error.message,
+      })
+      return
+    }
+    throw error
+  }
 
   if (result.isErr()) {
     handleError(result.error, res)
