@@ -41,6 +41,19 @@ export const positiveIntEnv = (key: string, fallback: number): number => {
   return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : fallback
 }
 
+// As `positiveIntEnv`, but admits 0 — for knobs where zero is a meaningful
+// setting (typically "off") rather than an out-of-range value. `env`'s
+// falsy-check means the literal string "0" would otherwise be replaced by the
+// default, so the raw variable is read here instead.
+export const nonNegativeIntEnv = (key: string, fallback: number): number => {
+  const raw = process.env[key]
+  if (raw === undefined || raw.trim() === '') {
+    return fallback
+  }
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback
+}
+
 export const consumeStream = async (stream: Readable) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for await (const _ of stream) {

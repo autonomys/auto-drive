@@ -4,6 +4,7 @@ import { AccountModel } from '@auto-drive/models'
 import {
   optionalBoolEnvironmentVariable,
   env,
+  nonNegativeIntEnv,
   positiveIntEnv,
 } from './shared/utils/misc.js'
 import { getAddress } from 'viem'
@@ -44,7 +45,10 @@ export const config = {
     // of it. At 25 blocks * ~6s the confirmation phase alone is ~150s; the
     // 5-minute default leaves room for inclusion latency. Raise this if you
     // increase confirmationDepth or run under sustained heavy load.
-    transactionTimeoutMs: positiveIntEnv('CHAIN_TRANSACTION_TIMEOUT_MS', 300000),
+    transactionTimeoutMs: positiveIntEnv(
+      'CHAIN_TRANSACTION_TIMEOUT_MS',
+      300000,
+    ),
     // Safety-net cadence for the confirmation watch. Confirmation is normally
     // driven by a new-heads subscription, but a WebSocket reconnect can leave
     // that subscription silently dead while the chain keeps advancing — so
@@ -63,7 +67,10 @@ export const config = {
   },
   memoryDownloadCache: {
     maxCacheSize: Number(
-      env('MEMORY_DOWNLOAD_CACHE_MAX_SIZE', DEFAULT_MEMORY_CACHE_MAX_SIZE.toString()),
+      env(
+        'MEMORY_DOWNLOAD_CACHE_MAX_SIZE',
+        DEFAULT_MEMORY_CACHE_MAX_SIZE.toString(),
+      ),
     ),
   },
   objectMappingArchiver: {
@@ -101,7 +108,9 @@ export const config = {
     // this many blocks behind the chain head. At ~6s block time, 1000 blocks
     // ≈ 1.7 hours — generous enough to not interfere with slow-but-active
     // publishing, while catching genuinely stalled objects.
-    stalenessThresholdBlocks: Number(env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000')),
+    stalenessThresholdBlocks: Number(
+      env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000'),
+    ),
     // Skip a recovery cycle when publish-manager already holds more than this
     // many ready (not-yet-started) tasks. Recovery's output (publish-nodes)
     // lands on publish-manager, so an unchecked recovery would keep piling
@@ -109,7 +118,9 @@ export const config = {
     // stalled, growing the backlog without bound. A threshold (not > 0) is
     // deliberate: publish-manager legitimately holds a shallow backlog while
     // batches await confirmation, and that must not suppress recovery.
-    publishManagerBacklogLimit: Number(env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100')),
+    publishManagerBacklogLimit: Number(
+      env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100'),
+    ),
   },
   migrationRecovery: {
     intervalMs: Number(env('MIGRATION_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
@@ -142,9 +153,7 @@ export const config = {
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),
-    fetchTimeoutMs: Number(
-      env('FILES_GATEWAY_FETCH_TIMEOUT_MS', '60000'),
-    ),
+    fetchTimeoutMs: Number(env('FILES_GATEWAY_FETCH_TIMEOUT_MS', '60000')),
   },
   authService: {
     url: env('AUTH_SERVICE_URL', 'http://localhost:3030'),
@@ -197,18 +206,66 @@ export const config = {
     checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
     priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
+  // Ethereum mainnet. Distinct from `paymentManager.url`, which points at Auto
+  // EVM (chain 870) — two different chains, so keep the endpoints separate.
+  // Read directly (not via `env`) so it stays optional: a deployment that does
+  // not quote in USDC boots without it, and the consumer fails fast naming this
+  // variable the first time it is needed.
+  ethereum: {
+    rpcUrl: process.env.ETH_CHAIN_ENDPOINT,
+  },
   priceOracle: {
-    // AI3/USD price oracle (CoinGecko). See infrastructure/services/priceOracle.
-    // How long a freshly fetched price is served from memory before a refresh.
+    // AI3/USD price oracle, read from the Uniswap v4 WAI3/USDC pool on Ethereum.
+    // See infrastructure/services/priceOracle.
+    //
+    // How long a freshly read price is served from memory before a refresh.
+    // Applies to the marginal price only — an executable quote always reads the
+    // chain, since it backs a binding charge.
     cacheTtlMs: positiveIntEnv('ORACLE_CACHE_TTL_MS', 60000),
-    // Longest a last-good price may be served as a fallback while CoinGecko is
-    // unavailable. Default: 10 minutes.
+    // Longest a last-good price may be served as a fallback while the pool
+    // cannot be read. Default: 10 minutes.
     maxStaleMs: positiveIntEnv('ORACLE_MAX_STALE_MS', 600000),
-    // CoinGecko HTTP timeout.
-    fetchTimeoutMs: positiveIntEnv('ORACLE_FETCH_TIMEOUT_MS', 5000),
-    // Drop the quote if CoinGecko's own reported update time is older than this.
-    // Default: 5 minutes.
+    // Timeout for a SINGLE RPC request, applied by the viem transport. Every
+    // oracle operation issues several, so this must stay well below
+    // `fetchTimeoutMs` or the total budget fires first and the per-request
+    // bound never applies.
+    rpcTimeoutMs: positiveIntEnv('ORACLE_RPC_TIMEOUT_MS', 5000),
+    // Total budget for one whole oracle operation — the multi-call sequence, not
+    // a single request. A marginal price read is 3 requests, an executable quote
+    // 4, and building the TWAP reference is 1 + one log query per chunk. Must be
+    // a multiple of `rpcTimeoutMs`; validated at load in the priceOracle module.
+    fetchTimeoutMs: positiveIntEnv('ORACLE_FETCH_TIMEOUT_MS', 30000),
+    // Drop the quote if the block the pool state came from is older than this,
+    // which catches a lagging RPC node. Default: 5 minutes.
     maxSourceAgeMs: positiveIntEnv('ORACLE_MAX_SOURCE_AGE_MS', 300000),
+    // Manipulation gate. The pool has no oracle hook, so every read is
+    // single-block spot state that a trade immediately before our read moves.
+    // The reference is therefore built here: a time-weighted average price over
+    // the last `twapWindowBlocks`, reconstructed from the PoolManager's `Swap`
+    // events (each carries its post-swap price) plus one state read for the
+    // price standing at the window's start. Blocks are the time unit — Ethereum
+    // slots are 12s by protocol — so 7200 blocks is ~24h.
+    //
+    // Needs an RPC that serves logs AND state at that depth, i.e. an
+    // archive-capable endpoint. The gate fails closed, so a pruned node refuses
+    // every quote rather than silently leaving them unguarded.
+    twapWindowBlocks: nonNegativeIntEnv('ORACLE_TWAP_WINDOW_BLOCKS', 7200),
+    // eth_getLogs range per request. Providers commonly cap this at 10k blocks;
+    // the window is split into chunks of this size and queried in parallel.
+    twapLogChunkBlocks: positiveIntEnv('ORACLE_TWAP_LOG_CHUNK_BLOCKS', 5000),
+    // How long a derived TWAP is reused. It is a 24h average, so a few minutes
+    // of staleness cannot move it materially, and each rebuild costs several
+    // log queries.
+    twapTtlMs: positiveIntEnv('ORACLE_TWAP_TTL_MS', 300000),
+    // The gate is asymmetric because the two directions are not symmetric risks.
+    // Spot BELOW the average under-collects: the user is charged for AI3 at a
+    // price the treasury may not be able to re-acquire it at once the push
+    // decays. That is the profitable direction to attack, so it is bounded
+    // tightly. Spot ABOVE the average overcharges the user, who sees the quote
+    // before paying and can decline — bounded loosely, as an integration rail
+    // rather than a manipulation control.
+    maxSpotDiscountPercent: Number(env('ORACLE_MAX_SPOT_DISCOUNT', '25')),
+    maxSpotPremiumPercent: Number(env('ORACLE_MAX_SPOT_PREMIUM', '50')),
     // Sanity bounds (USD per AI3) as plain decimals — kept as raw strings and
     // parsed to the 1e18 scale in the priceOracle module (parsing the string
     // directly avoids Number.toString() exponential notation for small values).
@@ -224,9 +281,13 @@ export const config = {
     // Maximum total purchased credit balance (in bytes) per account, summed
     // across all active purchased_credits rows.
     // Default: 100 GiB — matches the economic protection design document.
-    maxBytesPerUser: BigInt(env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3))),
+    maxBytesPerUser: BigInt(
+      env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3)),
+    ),
     // How often (in ms) the credit expiry background job runs.
-    expiryCheckIntervalMs: Number(env('CREDIT_EXPIRY_CHECK_INTERVAL', '3600000')),
+    expiryCheckIntervalMs: Number(
+      env('CREDIT_EXPIRY_CHECK_INTERVAL', '3600000'),
+    ),
     // Price-lock window: how many minutes a PENDING intent remains valid.
     // After this window the intent is treated as expired and all operations on
     // it are rejected.  Default: 10 minutes.

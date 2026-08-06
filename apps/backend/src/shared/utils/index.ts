@@ -1,5 +1,5 @@
 export { safeCallback } from './safe.js'
 export { handleReadableError, sliceReadable } from './readable.js'
 export { withTimeout, TimeoutError } from './timeout.js'
+export { applyMarginPercent, ai3ShannonsToUsdcBaseUnits} from './pricing.js'
 export { startShutdownWatchdog, shutdownStep } from './shutdown.js'
-export { applyMarginPercent } from './pricing.js'
