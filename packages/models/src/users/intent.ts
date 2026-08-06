@@ -65,7 +65,25 @@ export const IntentSchema = z.object({
   // Token amount quoted to the user at creation, in the token's smallest unit.
   // Comes from the executable quote, so the pool swap fee, the price impact of
   // that specific size and the quote margin are all already inside it.
+  //
+  // One half of the effective rate. `quotedAi3Shannons` is the other half.
   quotedTokenAmount: z.bigint().optional(),
+  // The AI3 amount (shannons) `quotedTokenAmount` was quoted FOR — the
+  // requested byte count times `shannonsPerByte`, as handed to the oracle.
+  //
+  // Paired with `quotedTokenAmount` this IS the effective rate the user was
+  // charged at, and it is the pair rather than a rate because a rate here would
+  // have to be a rounded ratio: USDC carries 6 decimals against byte counts near
+  // 1e11, so USDC-per-byte is ~0.0027 base units and only survives as an integer
+  // if it is scaled — at which point it no longer round-trips the quote exactly.
+  // Two exact integers do:
+  //
+  //   bytes = tokenAmount * quotedAi3Shannons
+  //             / quotedTokenAmount / shannonsPerByte
+  //
+  // When the user pays exactly what was quoted the ratio cancels and the result
+  // is the requested size exactly. NULL for AI3_NATIVE.
+  quotedAi3Shannons: z.bigint().optional(),
   // AI3/USD rate at creation, scaled by USD_RATE_SCALE (1e18). Display,
   // reporting and oracle reconciliation — NOT the rate credits convert at.
   //
@@ -73,10 +91,10 @@ export const IntentSchema = z.object({
   // get. The user pays the executable quote instead, which additionally carries
   // the swap fee, their own size's price impact and the quote margin. Converting
   // a received payment to AI3 at this rate hands all three back as free storage
-  // — roughly 8% on a $290 purchase against the live pool. It stays marginal on
-  // purpose so it remains comparable to the market, which means the USDC credit
-  // path has to persist its own effective rate (see #747). Nothing on this type
-  // can stand in for it.
+  // — roughly 8% on a $290 purchase against the live pool — and grants more
+  // bytes than the pre-payment cap check was run against. It stays marginal on
+  // purpose so it remains comparable to the market; the rate credits actually
+  // convert at is `quotedTokenAmount` / `quotedAi3Shannons`.
   usdRateAtCreation: z.bigint().optional(),
 });
 
