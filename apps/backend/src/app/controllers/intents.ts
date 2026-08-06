@@ -21,7 +21,6 @@ const serializeIntent = (intent: Intent) => ({
   ...intent,
   shannonsPerByte: intent.shannonsPerByte.toString(),
   paymentAmount: intent.paymentAmount?.toString(),
-  quotedBytes: intent.quotedBytes?.toString(),
   tokenAmount: intent.tokenAmount?.toString(),
   quotedTokenAmount: intent.quotedTokenAmount?.toString(),
   usdRateAtCreation: intent.usdRateAtCreation?.toString(),

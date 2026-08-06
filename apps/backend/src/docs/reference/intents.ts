@@ -87,7 +87,7 @@ export const intents = {
                   requestedBytes: {
                     type: 'string',
                     description:
-                      'Optional. How many bytes the purchase is for, as a decimal string (a JSON number is also accepted while it is a safe integer). When supplied it is checked against the per-user credit cap before the intent is created, so a purchase with no headroom fails here rather than after an irreversible on-chain payment. It is recorded on the intent as `quotedBytes`; credits granted are still derived from the amount actually paid.',
+                      'Optional. How many bytes the purchase is for, as a decimal string (a JSON number is also accepted while it is a safe integer). When supplied it is checked against the per-user credit cap before the intent is created, so a purchase with no headroom fails here rather than after an irreversible on-chain payment. It is not stored and does not appear on the returned intent: credits are derived from the amount actually paid, so it would never agree with the balance eventually granted.',
                     example: '1073741824',
                   },
                 },
@@ -280,11 +280,6 @@ export const intents = {
             type: 'string',
             description:
               'Locked price per byte in shannons (bigint as string)',
-          },
-          quotedBytes: {
-            type: 'string',
-            description:
-              'Bytes the purchase was created for, if `requestedBytes` was supplied (bigint as string). Absent otherwise. This is what was asked for, not what will be granted: credits are derived from the amount actually paid against the rate locked at creation, so paying more or less than quoted grants proportionally more or fewer bytes than this value.',
           },
           expiresAt: {
             type: 'string',

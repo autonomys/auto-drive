@@ -112,8 +112,8 @@ describe('IntentsUseCases', () => {
   // frontend posts no body, and that path must stay byte-for-byte what it was.
   // ────────────────────────────────────────────────────────────────────────────
 
-  it('createIntent without requestedBytes leaves quotedBytes unset and runs no cap pre-check', async () => {
-    const createSpy = jest
+  it('createIntent without requestedBytes runs no cap pre-check', async () => {
+    jest
       .spyOn(intentsRepository, 'createIntent')
       .mockImplementation(async (intent) => intent)
     const accountSpy = jest.spyOn(AccountsUseCases, 'getOrCreateAccount')
@@ -125,16 +125,12 @@ describe('IntentsUseCases', () => {
     const result = await IntentsUseCases.createIntent(orgUser)
 
     expect(result.isOk()).toBe(true)
-    expect(result._unsafeUnwrap().quotedBytes).toBeUndefined()
-    expect(createSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ quotedBytes: undefined }),
-    )
     // No size given means nothing to check — the balance must not even be read.
     expect(accountSpy).not.toHaveBeenCalled()
     expect(balanceSpy).not.toHaveBeenCalled()
   })
 
-  it('createIntent persists a valid requestedBytes as quotedBytes', async () => {
+  it('createIntent does not persist requestedBytes on the intent', async () => {
     mockPurchasedBalance(0n)
     const createSpy = jest
       .spyOn(intentsRepository, 'createIntent')
@@ -143,10 +139,11 @@ describe('IntentsUseCases', () => {
     const result = await IntentsUseCases.createIntent(orgUser, 1_073_741_824n)
 
     expect(result.isOk()).toBe(true)
-    expect(result._unsafeUnwrap().quotedBytes).toBe(1_073_741_824n)
-    expect(createSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ quotedBytes: 1_073_741_824n }),
-    )
+    // The size gates creation and is then discarded. Persisting it would store a
+    // number that reads like a balance and never agrees with one, since credits
+    // come from paymentAmount / shannonsPerByte.
+    const created = createSpy.mock.calls[0][0]
+    expect(Object.keys(created)).not.toContain('quotedBytes')
   })
 
   it.each<[string, bigint]>([
@@ -221,7 +218,6 @@ describe('IntentsUseCases', () => {
     // createPurchasedCreditWithCapCheck, which uses `>`. A stricter pre-check
     // here would refuse purchases the real check would have granted.
     expect(result.isOk()).toBe(true)
-    expect(result._unsafeUnwrap().quotedBytes).toBe(100n)
   })
 
   // ────────────────────────────────────────────────────────────────────────────
