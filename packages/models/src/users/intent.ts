@@ -64,7 +64,12 @@ export const IntentSchema = z.object({
   // the amount actually paid, divided by the rate locked at creation:
   //
   //   AI3   paymentAmount / shannonsPerByte
-  //   USDC  tokenAmount   / (quotedTokenAmount / quotedBytes)
+  //   USDC  tokenAmount * quotedBytes / quotedTokenAmount
+  //
+  // The USDC form is division by the locked price per byte
+  // (quotedTokenAmount / quotedBytes), multiplied out so the rate is never
+  // materialised: as an integer that rate truncates to whole USDC base units per
+  // byte, which for any realistic price per byte is 0.
   //
   // So this is an input — the size the quote and the creation-time cap pre-check
   // were computed for — and an audit record of what was asked for. It equals the
