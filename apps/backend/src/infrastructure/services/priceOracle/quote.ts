@@ -1,4 +1,5 @@
 import { USD_RATE_DECIMALS } from '@auto-drive/models'
+import type { PricePoint } from './types.js'
 
 /**
  * Parse a non-negative decimal string into an integer scaled by
@@ -42,3 +43,66 @@ export const isQuoteFresh = (
   nowMs: number,
   maxAgeMs: number,
 ): boolean => nowMs - asOfMs <= maxAgeMs
+
+/**
+ * Time-weighted average price over `(fromBlock, toBlock]`, given the price
+ * standing at `fromBlock` and every price change inside the window.
+ *
+ * An AMM price is a step function: it holds whatever the last swap left until
+ * the next swap moves it. So the average is each observed price weighted by how
+ * long it stood, which is what makes it expensive to move — a price must be HELD
+ * to shift the average, not merely printed. Weighting by trade count instead
+ * would be attacker-controlled, since dust wash trades can fill a count window.
+ *
+ * Blocks are the time unit rather than seconds. Ethereum slots are 12s by
+ * protocol, so a block delta is a proportional time delta up to missed slots
+ * (~1% of slots, and they lengthen every segment equally). Buying that last
+ * fraction of a percent would cost one `eth_getBlockByNumber` per swap in the
+ * window, which is the difference between two RPC calls and dozens.
+ *
+ * `seedUsdPerAi3` covers the window from `fromBlock` up to the first
+ * observation, and is load-bearing rather than an edge case: this pool can go
+ * days without a trade, in which case the whole window is the seed and there is
+ * no other price to average.
+ *
+ * Observations at or before `fromBlock`, or after `toBlock`, are ignored. Two
+ * swaps in the same block collapse correctly — the earlier one gets zero weight
+ * and the later one carries forward — provided they arrive in log order, which
+ * the sort below preserves. Note that a swap landing IN `toBlock` also gets zero
+ * weight, so the price being judged can never dilute the average it is judged
+ * against.
+ *
+ * @throws if the window is empty or inverted.
+ */
+export const timeWeightedAverage = (
+  seedUsdPerAi3: bigint,
+  observations: PricePoint[],
+  fromBlock: bigint,
+  toBlock: bigint,
+): bigint => {
+  const span = toBlock - fromBlock
+  if (span <= 0n) {
+    throw new Error(
+      `Invalid TWAP window: ${fromBlock}..${toBlock} spans no blocks`,
+    )
+  }
+
+  // Stable sort by block, so multiple swaps in one block keep their log order.
+  const ordered = [...observations].sort((a, b) =>
+    a.blockNumber < b.blockNumber ? -1 : a.blockNumber > b.blockNumber ? 1 : 0,
+  )
+
+  let weighted = 0n
+  let cursor = fromBlock
+  let standing = seedUsdPerAi3
+  for (const point of ordered) {
+    if (point.blockNumber <= fromBlock || point.blockNumber > toBlock) {
+      continue
+    }
+    weighted += standing * (point.blockNumber - cursor)
+    cursor = point.blockNumber
+    standing = point.usdPerAi3
+  }
+  weighted += standing * (toBlock - cursor)
+  return weighted / span
+}

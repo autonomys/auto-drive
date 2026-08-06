@@ -3,11 +3,15 @@ import {
   BaseError,
   ContractFunctionRevertedError,
   encodeAbiParameters,
+  encodeErrorResult,
   keccak256,
+  toEventSelector,
+  type Hex,
 } from 'viem'
 import {
   POOL_ID,
   POOL_KEY,
+  SWAP_EVENT,
   USDC_ADDRESS,
   WAI3_ADDRESS,
   effectiveFeePips,
@@ -48,6 +52,17 @@ describe('priceOracle/uniswapV4 — pool identity', () => {
     expect(BigInt(WAI3_ADDRESS)).toBeLessThan(BigInt(USDC_ADDRESS))
     expect(POOL_KEY.currency0).toBe(WAI3_ADDRESS)
     expect(POOL_KEY.currency1).toBe(USDC_ADDRESS)
+  })
+
+  it('pins the Swap event signature to the topic emitted on mainnet', () => {
+    // Observed on live PoolManager logs for this pool. A drifted signature is
+    // the failure mode with no symptom: it matches no logs, and "no swaps in
+    // the window" is exactly what a genuinely quiet pool looks like — so the
+    // trailing average would silently collapse to its seed price and the gate
+    // would stop reflecting any trading at all.
+    expect(toEventSelector(SWAP_EVENT)).toBe(
+      '0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f',
+    )
   })
 })
 
@@ -144,38 +159,99 @@ describe('priceOracle/uniswapV4 — swap fee', () => {
 })
 
 describe('priceOracle/uniswapV4 — isQuoterRevert', () => {
-  const revertWith = (init: {
-    data?: { errorName: string }
-    reason?: string
-  }) =>
+  // These build the error viem would ACTUALLY construct, by encoding real revert
+  // data and letting ContractFunctionRevertedError decode it against a real ABI.
+  // The previous version of this suite hand-set `data.errorName`, which asserted
+  // that the classifier reads a field rather than that the field is ever
+  // populated — and it is not, unless the ABI declares the error.
+  const errorAbi = [
+    {
+      type: 'error',
+      name: 'UnexpectedRevertBytes',
+      inputs: [{ name: 'revertData', type: 'bytes' }],
+    },
+    {
+      type: 'error',
+      name: 'NotEnoughLiquidity',
+      inputs: [{ name: 'poolId', type: 'bytes32' }],
+    },
+    {
+      type: 'error',
+      name: 'PoolNotInitialized',
+      inputs: [],
+    },
+  ] as const
+
+  const revertingWith = (data: Hex | undefined) =>
     new BaseError('reverted', {
-      cause: Object.assign(
-        new ContractFunctionRevertedError({
-          abi: [],
-          functionName: 'quoteExactOutputSingle',
-          message: 'reverted',
-        }),
-        init,
-      ),
+      cause: new ContractFunctionRevertedError({
+        // The classifier decodes against the module's own ABI, so the shape of
+        // the error object is all that comes from here.
+        abi: errorAbi,
+        data,
+        functionName: 'quoteExactOutputSingle',
+        message: 'reverted',
+      }),
     })
 
-  it('recognises the pool refusing the size', () => {
-    expect(
-      isQuoterRevert(revertWith({ data: { errorName: 'NotEnoughLiquidity' } })),
-    ).toBe(true)
-    expect(isQuoterRevert(revertWith({ reason: 'NotEnoughLiquidity' }))).toBe(
-      true,
-    )
+  const notEnoughLiquidity = encodeErrorResult({
+    abi: errorAbi,
+    errorName: 'NotEnoughLiquidity',
+    args: [POOL_ID],
+  })
+
+  it('recognises the pool refusing the size, as the quoter actually reports it', () => {
+    // Captured from mainnet: the quoter runs the swap inside poolManager.unlock
+    // and re-throws revert bytes it did not expect, so the liquidity error
+    // arrives WRAPPED rather than at the top level.
+    const wrapped = encodeErrorResult({
+      abi: errorAbi,
+      errorName: 'UnexpectedRevertBytes',
+      args: [notEnoughLiquidity],
+    })
+    expect(wrapped).toContain('7a5ed734') // NotEnoughLiquidity selector, inside
+    expect(isQuoterRevert(revertingWith(wrapped))).toBe(true)
+  })
+
+  it('recognises the unwrapped form too', () => {
+    // In case a future periphery release stops wrapping.
+    expect(isQuoterRevert(revertingWith(notEnoughLiquidity))).toBe(true)
   })
 
   it('does not treat an unrelated revert as a size problem', () => {
     // A wrong pool key or a hook revert means the integration is broken, not
     // that the buyer should purchase less.
+    const unrelated = encodeErrorResult({
+      abi: errorAbi,
+      errorName: 'PoolNotInitialized',
+    })
+    expect(isQuoterRevert(revertingWith(unrelated))).toBe(false)
+    // Nor does an unrelated error wrapped in the same envelope.
     expect(
-      isQuoterRevert(revertWith({ data: { errorName: 'PoolNotInitialized' } })),
+      isQuoterRevert(
+        revertingWith(
+          encodeErrorResult({
+            abi: errorAbi,
+            errorName: 'UnexpectedRevertBytes',
+            args: [unrelated],
+          }),
+        ),
+      ),
+    ).toBe(false)
+    // Nor an envelope carrying bytes that decode to nothing at all.
+    expect(
+      isQuoterRevert(
+        revertingWith(
+          encodeErrorResult({
+            abi: errorAbi,
+            errorName: 'UnexpectedRevertBytes',
+            args: ['0xdeadbeef'],
+          }),
+        ),
+      ),
     ).toBe(false)
     // An empty revert carries no evidence either way.
-    expect(isQuoterRevert(revertWith({}))).toBe(false)
+    expect(isQuoterRevert(revertingWith(undefined))).toBe(false)
   })
 
   it('does not treat transport failures as reverts', () => {

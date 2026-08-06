@@ -2,6 +2,7 @@ import {
   BaseError,
   ContractFunctionRevertedError,
   createPublicClient,
+  decodeErrorResult,
   http,
   type Address,
   type Hex,
@@ -9,7 +10,7 @@ import {
 import { mainnet } from 'viem/chains'
 import { USD_RATE_DECIMALS } from '@auto-drive/models'
 import { config } from '../../../config.js'
-import type { RawQuote } from './types.js'
+import { PoolEmptyError, type PricePoint, type RawQuote } from './types.js'
 
 /**
  * AI3/USD source: the Uniswap v4 WAI3/USDC pool on Ethereum mainnet.
@@ -30,6 +31,12 @@ import type { RawQuote } from './types.js'
  *
  * The gap between the two, net of the fee, is the execution premium that
  * `index.ts` turns into a depth guard.
+ *
+ * A third read, `fetchSwapPrices`, reconstructs the pool's price history from
+ * `Swap` events rather than from state. Each event carries the price the swap
+ * left behind, so a couple of log queries give the exact trade history — which
+ * `index.ts` time-weights into the average that the manipulation gate judges
+ * spot against.
  */
 
 // --- Pool identity -----------------------------------------------------------
@@ -66,10 +73,12 @@ export const POOL_KEY = {
 export const POOL_ID: Hex =
   '0xa65e8c1c28fc60612cb8e2df615cc8612bc6d8a04f96128fbd346df44601b6f6'
 
-// Uniswap v4 periphery on Ethereum mainnet.
+// Uniswap v4 core + periphery on Ethereum mainnet.
 // https://developers.uniswap.org/contracts/v4/deployments
 const STATE_VIEW_ADDRESS: Address = '0x7ffe42c4a5deea5b0fec41c94c136cf115597227'
 const QUOTER_ADDRESS: Address = '0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203'
+export const POOL_MANAGER_ADDRESS: Address =
+  '0x000000000004444c5dc75cB358380D2e3dE08A90'
 
 const stateViewAbi = [
   {
@@ -84,7 +93,41 @@ const stateViewAbi = [
       { name: 'lpFee', type: 'uint24' },
     ],
   },
+  {
+    type: 'function',
+    name: 'getLiquidity',
+    stateMutability: 'view',
+    inputs: [{ name: 'poolId', type: 'bytes32' }],
+    outputs: [{ name: 'liquidity', type: 'uint128' }],
+  },
 ] as const
+
+/**
+ * The v4 `Swap` event, which is how the price history is read.
+ *
+ * `sqrtPriceX96` is the price the swap left the pool at, and `id` is indexed, so
+ * one filtered `eth_getLogs` returns every price this pool has traded at over a
+ * range — served from the log index rather than from archival state.
+ *
+ * The unit tests pin this signature's topic0 against the value observed on
+ * mainnet. That assertion is load-bearing: a drifted signature matches nothing,
+ * and "no swaps in the window" is indistinguishable from a genuinely quiet pool,
+ * which would silently degrade the average to its seed price alone.
+ */
+export const SWAP_EVENT = {
+  type: 'event',
+  name: 'Swap',
+  inputs: [
+    { name: 'id', type: 'bytes32', indexed: true },
+    { name: 'sender', type: 'address', indexed: true },
+    { name: 'amount0', type: 'int128', indexed: false },
+    { name: 'amount1', type: 'int128', indexed: false },
+    { name: 'sqrtPriceX96', type: 'uint160', indexed: false },
+    { name: 'liquidity', type: 'uint128', indexed: false },
+    { name: 'tick', type: 'int24', indexed: false },
+    { name: 'fee', type: 'uint24', indexed: false },
+  ],
+} as const
 
 const quoterAbi = [
   {
@@ -118,6 +161,25 @@ const quoterAbi = [
       { name: 'gasEstimate', type: 'uint256' },
     ],
   },
+  // Error fragments, without which viem cannot decode a revert at all: it has no
+  // selector to match, so `data` and `reason` both come back undefined and every
+  // revert looks alike. `isQuoterRevert` needs them to tell "the pool cannot fill
+  // this" apart from "the integration is broken".
+  {
+    type: 'error',
+    name: 'UnexpectedRevertBytes',
+    inputs: [{ name: 'revertData', type: 'bytes' }],
+  },
+  {
+    type: 'error',
+    name: 'NotEnoughLiquidity',
+    inputs: [{ name: 'poolId', type: 'bytes32' }],
+  },
+  {
+    type: 'error',
+    name: 'QuoteSwap',
+    inputs: [{ name: 'amount', type: 'uint256' }],
+  },
 ] as const
 
 // --- Client ------------------------------------------------------------------
@@ -138,13 +200,15 @@ const getClient = () => {
         'price from the Uniswap v4 pool',
     )
   }
-  // viem's actions take no per-call AbortSignal, so the request bound is set on
-  // the transport. The oracle additionally races its own `withTimeout` around
-  // these calls; this is what actually aborts the in-flight HTTP request rather
-  // than leaving it to run out its own default.
+  // viem's actions take no per-call AbortSignal, so this transport timeout is
+  // the ONLY thing that stops an in-flight request. The `withTimeout` races in
+  // index.ts bound how long a caller waits for a whole multi-call sequence; they
+  // do not abort anything, and a request they give up on runs to completion in
+  // the background. Hence two separate settings: this bounds one request, and
+  // `fetchTimeoutMs` bounds the sequence.
   client = createPublicClient({
     chain: mainnet,
-    transport: http(url, { timeout: config.priceOracle.fetchTimeoutMs }),
+    transport: http(url, { timeout: config.priceOracle.rpcTimeoutMs }),
   })
   return client
 }
@@ -233,9 +297,16 @@ const assertQuotableAmount = (ai3Shannons: bigint): void => {
 }
 
 // v4 reverts with this when a pool lacks the liquidity to fill an exact-output
-// swap. Declared so viem can decode it and we can tell "too big for the pool"
-// apart from every other revert.
+// swap.
 const NOT_ENOUGH_LIQUIDITY = 'NotEnoughLiquidity'
+// ...but it almost never arrives under that name. The quoter runs the swap
+// inside `poolManager.unlock` and catches the result, so a failure comes back as
+// revert bytes it did not expect, re-thrown wrapped: the top-level error is
+// `UnexpectedRevertBytes(abi.encodeWithSelector(NotEnoughLiquidity.selector,
+// poolId))`. Verified against mainnet — every rejected size, from 0.001 AI3
+// upwards, surfaces this way. The unwrapped form is still matched below in case
+// a future periphery release stops wrapping.
+const UNEXPECTED_REVERT_BYTES = 'UnexpectedRevertBytes'
 
 /**
  * True only when `error` is the pool telling us it cannot fill the requested
@@ -247,6 +318,10 @@ const NOT_ENOUGH_LIQUIDITY = 'NotEnoughLiquidity'
  * both misleads the user and hides a total outage from logs and metrics. So a
  * revert only counts when it decodes to the liquidity error; anything else,
  * including an empty revert, falls through to being treated as unavailable.
+ *
+ * Matching on the decoded error NAME rather than on message text is what makes
+ * that narrowness real: viem populates `data` only for selectors present in the
+ * ABI, so the error fragments declared above are what this function runs on.
  */
 export const isQuoterRevert = (error: unknown): boolean => {
   if (!(error instanceof BaseError)) {
@@ -256,10 +331,27 @@ export const isQuoterRevert = (error: unknown): boolean => {
   if (!(reverted instanceof ContractFunctionRevertedError)) {
     return false
   }
-  return (
-    reverted.data?.errorName === NOT_ENOUGH_LIQUIDITY ||
-    reverted.reason === NOT_ENOUGH_LIQUIDITY
-  )
+  const errorName = reverted.data?.errorName
+  if (errorName === NOT_ENOUGH_LIQUIDITY) {
+    return true
+  }
+  if (errorName !== UNEXPECTED_REVERT_BYTES) {
+    return false
+  }
+  const wrapped = reverted.data?.args?.[0]
+  if (typeof wrapped !== 'string') {
+    return false
+  }
+  try {
+    return (
+      decodeErrorResult({ abi: quoterAbi, data: wrapped as Hex }).errorName ===
+      NOT_ENOUGH_LIQUIDITY
+    )
+  } catch {
+    // Bytes we cannot decode are evidence of nothing, so they are not a size
+    // problem.
+    return false
+  }
 }
 
 // --- Reads -------------------------------------------------------------------
@@ -280,6 +372,12 @@ export type PoolObservation = {
   // Total swap fee applying to this trade, in 1e-6 units, read from the same
   // block. Live rather than assumed, because the protocol fee is governance-set.
   feePips: bigint
+  // In-range liquidity at that block. Zero means `usdPerAi3` is a price nobody
+  // can trade at: it is whatever the last swap left behind, held in place by the
+  // absence of anyone able to move it. Worth reading even though the quoter
+  // reverts on its own in that state, because the marginal price is served and
+  // persisted on paths that never call the quoter.
+  liquidity: bigint
   blockNumber: bigint
   asOfMs: number
 }
@@ -305,18 +403,48 @@ const readSlot0At = async (blockNumber: bigint) =>
     blockNumber,
   })
 
+const readLiquidityAt = async (blockNumber: bigint) =>
+  getClient().readContract({
+    address: STATE_VIEW_ADDRESS,
+    abi: stateViewAbi,
+    functionName: 'getLiquidity',
+    args: [POOL_ID],
+    blockNumber,
+  })
+
+/**
+ * Marginal price at a given block, scaled by USD_RATE_SCALE (1e18).
+ *
+ * Seeds the TWAP window: it answers "what price was standing when this window
+ * opened", which no log inside the window can tell us. Reaching
+ * `ORACLE_TWAP_WINDOW_BLOCKS` back is the one archival STATE read the oracle
+ * makes; everything else about the history comes from logs.
+ */
+export const readUsdPerAi3At = async (blockNumber: bigint): Promise<bigint> => {
+  const [sqrtPriceX96] = await readSlot0At(blockNumber)
+  return sqrtPriceX96ToUsdPerAi3(sqrtPriceX96)
+}
+
 /**
  * Marginal price at the head block, as a `RawQuote` for the oracle's existing
  * validation pipeline.
  *
  * The block timestamp is reported as `asOfMs` so a lagging RPC node is caught by
  * the same `maxSourceAgeMs` staleness check that any other source is subject to.
+ * The block number is reported so this price can be put through the same
+ * manipulation gate as an executable quote, and the liquidity so a price from an
+ * empty pool can be refused.
  */
 export const fetchUniswapV4Quote = async (): Promise<RawQuote> => {
   const head = await getHeadBlock()
-  const [sqrtPriceX96] = await readSlot0At(head.number)
+  const [slot0, liquidity] = await Promise.all([
+    readSlot0At(head.number),
+    readLiquidityAt(head.number),
+  ])
   return {
-    usdPerAi3: sqrtPriceX96ToUsdPerAi3(sqrtPriceX96),
+    usdPerAi3: sqrtPriceX96ToUsdPerAi3(slot0[0]),
+    blockNumber: head.number,
+    liquidity,
     asOfMs: Number(head.timestamp) * 1000,
   }
 }
@@ -332,7 +460,9 @@ export const fetchUniswapV4Quote = async (): Promise<RawQuote> => {
  *
  * Throws when the pool cannot fill the size: the quoter reverts rather than
  * returning a partial fill. Use `isQuoterRevert` to tell that apart from an RPC
- * failure.
+ * failure — and note that an EMPTY pool throws `PoolEmptyError` first, since the
+ * quoter's revert is identical in both cases and only the liquidity read
+ * separates them.
  */
 export const readPoolQuote = async (
   ai3Shannons: bigint,
@@ -341,8 +471,13 @@ export const readPoolQuote = async (
   const head = await getHeadBlock()
   const publicClient = getClient()
 
-  const [slot0, simulation] = await Promise.all([
+  // Settled rather than all: a quoter revert must not discard the liquidity
+  // read, because that read is the only thing that tells "this pool is too
+  // shallow for this size" apart from "this pool is empty". Both revert
+  // identically.
+  const [slot0Result, liquidityResult, quoteResult] = await Promise.allSettled([
     readSlot0At(head.number),
+    readLiquidityAt(head.number),
     publicClient.simulateContract({
       address: QUOTER_ADDRESS,
       abi: quoterAbi,
@@ -359,53 +494,90 @@ export const readPoolQuote = async (
     }),
   ])
 
-  const [sqrtPriceX96, , protocolFee, lpFee] = slot0
-  const [amountIn] = simulation.result
+  if (slot0Result.status === 'rejected') {
+    throw slot0Result.reason
+  }
+  if (liquidityResult.status === 'rejected') {
+    throw liquidityResult.reason
+  }
+  const liquidity = liquidityResult.value
+  if (liquidity <= 0n) {
+    throw new PoolEmptyError(
+      `The WAI3/USDC pool has no in-range liquidity at block ${head.number}`,
+    )
+  }
+  if (quoteResult.status === 'rejected') {
+    throw quoteResult.reason
+  }
+
+  const [sqrtPriceX96, , protocolFee, lpFee] = slot0Result.value
+  const [amountIn] = quoteResult.value.result
   return {
     usdPerAi3: sqrtPriceX96ToUsdPerAi3(sqrtPriceX96),
     amountIn,
     feePips: effectiveFeePips(protocolFee, lpFee),
+    liquidity,
     blockNumber: head.number,
     asOfMs: Number(head.timestamp) * 1000,
   }
 }
 
 /**
- * Marginal prices sampled backwards from `blockNumber`, newest first, spaced
- * `spacingBlocks` apart.
+ * Every price this pool traded at over `[fromBlock, toBlock]`, in block order.
  *
- * Feeds the manipulation gate in index.ts: the pool has no oracle hook, so there
- * is no TWAP to ask for, and sampling historical blocks is the closest
- * equivalent available. Requires an RPC with state at `(samples * spacing)`
- * blocks of depth — a pruned node rejects the older reads, which surfaces as an
- * unavailable oracle rather than a silently unguarded quote.
+ * Read from `Swap` events, not from state. That is the difference between a
+ * sampled approximation and the real thing: sampling `slot0` at intervals sees
+ * only where the price happened to be at those moments, and on a pool that goes
+ * days between trades every sample collapses to the same standing value — so a
+ * median of five is one observation counted five times, with none of the outlier
+ * resistance a median is chosen for. The events carry each swap's exact
+ * post-swap price, which is what makes a genuine time-weighted average possible.
  *
- * Sampling starts one full spacing BEHIND `blockNumber`: including the block
- * under test would put the value being judged inside the median it is judged
- * against, halving the measured deviation at two samples and diluting it at any
- * count.
+ * The range is split into `chunkBlocks` requests issued together, because
+ * providers cap the span of a single `eth_getLogs` (commonly at 10k blocks).
+ * Result volume is not a concern here — this pool trades a couple of times a
+ * day.
  *
- * Blocks before the pool was initialised report a zero price; those are dropped
- * rather than converted, since the conversion rejects non-positive input.
+ * A swap whose price converts to zero is dropped rather than averaged in: that
+ * requires a sqrtPrice below ~7.9e13, far outside anything the configured bounds
+ * would accept.
  */
-export const sampleUsdPerAi3 = async (
-  blockNumber: bigint,
-  samples: number,
-  spacingBlocks: number,
-): Promise<bigint[]> => {
-  const offsets = Array.from(
-    { length: samples },
-    (_, i) => BigInt(i + 1) * BigInt(spacingBlocks),
-  ).filter((offset) => offset < blockNumber)
+export const fetchSwapPrices = async (
+  fromBlock: bigint,
+  toBlock: bigint,
+  chunkBlocks: number,
+): Promise<PricePoint[]> => {
+  if (toBlock < fromBlock) {
+    return []
+  }
+  const span = BigInt(Math.max(1, Math.floor(chunkBlocks)))
+  const ranges: { from: bigint; to: bigint }[] = []
+  for (let start = fromBlock; start <= toBlock; start += span) {
+    const end = start + span - 1n
+    ranges.push({ from: start, to: end > toBlock ? toBlock : end })
+  }
 
-  const prices = await Promise.all(
-    offsets.map(async (offset) => {
-      const [sqrtPriceX96] = await readSlot0At(blockNumber - offset)
-      return sqrtPriceX96
-    }),
+  const publicClient = getClient()
+  const chunks = await Promise.all(
+    ranges.map(({ from, to }) =>
+      publicClient.getLogs({
+        address: POOL_MANAGER_ADDRESS,
+        event: SWAP_EVENT,
+        args: { id: POOL_ID },
+        fromBlock: from,
+        toBlock: to,
+        // Drop any log that does not decode against the full event signature,
+        // rather than surfacing it with half-undefined args.
+        strict: true,
+      }),
+    ),
   )
 
-  return prices
-    .filter((sqrtPriceX96) => sqrtPriceX96 > 0n)
-    .map(sqrtPriceX96ToUsdPerAi3)
+  return chunks
+    .flat()
+    .filter((log) => log.args.sqrtPriceX96 > 0n)
+    .map((log) => ({
+      blockNumber: log.blockNumber,
+      usdPerAi3: sqrtPriceX96ToUsdPerAi3(log.args.sqrtPriceX96),
+    }))
 }

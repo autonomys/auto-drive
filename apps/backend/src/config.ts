@@ -4,6 +4,7 @@ import { AccountModel } from '@auto-drive/models'
 import {
   optionalBoolEnvironmentVariable,
   env,
+  nonNegativeIntEnv,
   positiveIntEnv,
 } from './shared/utils/misc.js'
 import { getAddress } from 'viem'
@@ -224,23 +225,47 @@ export const config = {
     // Longest a last-good price may be served as a fallback while the pool
     // cannot be read. Default: 10 minutes.
     maxStaleMs: positiveIntEnv('ORACLE_MAX_STALE_MS', 600000),
-    // RPC timeout for both the pool read and the quoter simulation.
-    fetchTimeoutMs: positiveIntEnv('ORACLE_FETCH_TIMEOUT_MS', 5000),
+    // Timeout for a SINGLE RPC request, applied by the viem transport. Every
+    // oracle operation issues several, so this must stay well below
+    // `fetchTimeoutMs` or the total budget fires first and the per-request
+    // bound never applies.
+    rpcTimeoutMs: positiveIntEnv('ORACLE_RPC_TIMEOUT_MS', 5000),
+    // Total budget for one whole oracle operation — the multi-call sequence, not
+    // a single request. A marginal price read is 3 requests, an executable quote
+    // 4, and building the TWAP reference is 1 + one log query per chunk. Must be
+    // a multiple of `rpcTimeoutMs`; validated at load in the priceOracle module.
+    fetchTimeoutMs: positiveIntEnv('ORACLE_FETCH_TIMEOUT_MS', 30000),
     // Drop the quote if the block the pool state came from is older than this,
     // which catches a lagging RPC node. Default: 5 minutes.
     maxSourceAgeMs: positiveIntEnv('ORACLE_MAX_SOURCE_AGE_MS', 300000),
     // Manipulation gate. The pool has no oracle hook, so every read is
-    // single-block spot state and a trade immediately before our read moves it.
-    // The current price is compared against the median of these samples, taken
-    // `spotSampleSpacingBlocks` apart and starting one spacing behind the block
-    // being judged, and a quote is refused when it diverges by more than
-    // `maxSpotDeviationPercent`. Reaches `count * spacing` blocks back, which
-    // must stay inside the RPC's state window — the defaults sit just under a
-    // standard full node's 128 blocks. The derived median is cached for
-    // `cacheTtlMs`, so a burst of quotes does not re-read the history.
-    spotSampleCount: positiveIntEnv('ORACLE_SPOT_SAMPLES', 5),
-    spotSampleSpacingBlocks: positiveIntEnv('ORACLE_SPOT_SAMPLE_SPACING', 20),
-    maxSpotDeviationPercent: Number(env('ORACLE_MAX_SPOT_DEVIATION', '10')),
+    // single-block spot state that a trade immediately before our read moves.
+    // The reference is therefore built here: a time-weighted average price over
+    // the last `twapWindowBlocks`, reconstructed from the PoolManager's `Swap`
+    // events (each carries its post-swap price) plus one state read for the
+    // price standing at the window's start. Blocks are the time unit — Ethereum
+    // slots are 12s by protocol — so 7200 blocks is ~24h.
+    //
+    // Needs an RPC that serves logs AND state at that depth, i.e. an
+    // archive-capable endpoint. The gate fails closed, so a pruned node refuses
+    // every quote rather than silently leaving them unguarded.
+    twapWindowBlocks: nonNegativeIntEnv('ORACLE_TWAP_WINDOW_BLOCKS', 7200),
+    // eth_getLogs range per request. Providers commonly cap this at 10k blocks;
+    // the window is split into chunks of this size and queried in parallel.
+    twapLogChunkBlocks: positiveIntEnv('ORACLE_TWAP_LOG_CHUNK_BLOCKS', 5000),
+    // How long a derived TWAP is reused. It is a 24h average, so a few minutes
+    // of staleness cannot move it materially, and each rebuild costs several
+    // log queries.
+    twapTtlMs: positiveIntEnv('ORACLE_TWAP_TTL_MS', 300000),
+    // The gate is asymmetric because the two directions are not symmetric risks.
+    // Spot BELOW the average under-collects: the user is charged for AI3 at a
+    // price the treasury may not be able to re-acquire it at once the push
+    // decays. That is the profitable direction to attack, so it is bounded
+    // tightly. Spot ABOVE the average overcharges the user, who sees the quote
+    // before paying and can decline — bounded loosely, as an integration rail
+    // rather than a manipulation control.
+    maxSpotDiscountPercent: Number(env('ORACLE_MAX_SPOT_DISCOUNT', '25')),
+    maxSpotPremiumPercent: Number(env('ORACLE_MAX_SPOT_PREMIUM', '50')),
     // Sanity bounds (USD per AI3) as plain decimals — kept as raw strings and
     // parsed to the 1e18 scale in the priceOracle module (parsing the string
     // directly avoids Number.toString() exponential notation for small values).
