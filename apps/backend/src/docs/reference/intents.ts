@@ -284,7 +284,7 @@ export const intents = {
           quotedBytes: {
             type: 'string',
             description:
-              'Bytes the purchase was created for, if `requestedBytes` was supplied (bigint as string). Absent otherwise. Recorded for audit — the credits granted are derived from paymentAmount / shannonsPerByte, not from this value.',
+              'Bytes the purchase was created for, if `requestedBytes` was supplied (bigint as string). Absent otherwise. This is what was asked for, not what will be granted: credits are derived from the amount actually paid against the rate locked at creation, so paying more or less than quoted grants proportionally more or fewer bytes than this value.',
           },
           expiresAt: {
             type: 'string',

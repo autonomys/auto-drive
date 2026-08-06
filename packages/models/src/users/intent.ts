@@ -55,12 +55,20 @@ export const IntentSchema = z.object({
   //
   // Optional because it is genuinely absent in two cases: intents created before
   // the field existed, and AI3 intents created without a size (the endpoint
-  // accepts a body-less request, which is what the live frontend sends).
+  // accepts a body-less request, which is what the live frontend sends). The
+  // USDC path cannot omit it: a Uniswap quote prices a SPECIFIC size, since
+  // slippage is a function of the amount, so there is no size-free USDC-per-byte
+  // rate for a sizeless intent to lock.
   //
-  // Recorded but NOT authoritative — credits are still derived as
-  // paymentAmount / shannonsPerByte. The USDC flow makes this the source of
-  // truth for its own credit derivation, because inverting usdRateAtCreation
-  // instead would over-credit by the pool fee, slippage and quote margin.
+  // NOT the credits an account received, for either asset. Credits always follow
+  // the amount actually paid, divided by the rate locked at creation:
+  //
+  //   AI3   paymentAmount / shannonsPerByte
+  //   USDC  tokenAmount   / (quotedTokenAmount / quotedBytes)
+  //
+  // So this is an input — the size the quote and the creation-time cap pre-check
+  // were computed for — and an audit record of what was asked for. It equals the
+  // bytes granted only when the user pays exactly what they were quoted.
   quotedBytes: z.bigint().optional(),
   // Price-lock window: set at creation, intent is rejected after this time.
   // NULL for intents created before this feature was introduced.
@@ -75,10 +83,20 @@ export const IntentSchema = z.object({
   // (USDC has 6 decimals). Set by the payment manager on confirmation.
   tokenAmount: z.bigint().optional(),
   // Token amount quoted to the user at creation, in the token's smallest unit.
+  // Together with quotedBytes this IS the locked USDC price per byte, and it is
+  // the only rate credits may be derived against: it comes from the executable
+  // quote, so the pool swap fee, the price impact of this specific size and the
+  // quote margin are all already inside it.
   quotedTokenAmount: z.bigint().optional(),
-  // AI3/USD rate locked at creation, scaled by USD_RATE_SCALE (1e18). Used to
-  // convert the received token amount to an AI3-equivalent for the existing
-  // proportional credit math.
+  // AI3/USD rate at creation, scaled by USD_RATE_SCALE (1e18). Display and
+  // reconciliation only — NOT a credit basis.
+  //
+  // This is the pool's MARGINAL price: what an infinitesimally small trade would
+  // get. The user pays the executable quote instead, which additionally carries
+  // the swap fee, their own size's price impact and the quote margin. Deriving
+  // credits by inverting this rate would hand back all three as free storage —
+  // roughly 8% on a $290 purchase against the live pool. Use the rate implied by
+  // quotedTokenAmount / quotedBytes.
   usdRateAtCreation: z.bigint().optional(),
 });
 
