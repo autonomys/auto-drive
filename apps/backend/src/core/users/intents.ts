@@ -1,6 +1,7 @@
 import {
   Intent,
   IntentStatus,
+  PaymentMethod,
   User,
   UserRole,
   UserWithOrganization,
@@ -16,6 +17,9 @@ import {
   ForbiddenError,
   GoneError,
   ObjectNotFoundError,
+  QuoteErrorCode,
+  QuoteFailedError,
+  ServiceUnavailableError,
 } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 import { config } from '../../config.js'
@@ -24,6 +28,13 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from './accounts.js'
 import { transactionByteFee } from '@autonomys/auto-consensus'
 import { ApiPromise, WsProvider } from '@polkadot/api'
+import { priceOracle } from '../../infrastructure/services/priceOracle/index.js'
+import {
+  InvalidQuoteAmountError,
+  PriceDeviationError,
+  QuoteTooLargeError,
+} from '../../infrastructure/services/priceOracle/types.js'
+import { applyMarginPercent } from '../../shared/utils/index.js'
 
 const logger = createLogger('IntentsUseCases')
 
@@ -136,6 +147,35 @@ const parseRequestedBytes = (
   )
 }
 
+/**
+ * Parse the wire form of `paymentMethod`.
+ *
+ * Absent means AI3 — the live frontend posts no body at all, and that request
+ * must keep meaning exactly what it means today.
+ *
+ * An unrecognised value is rejected rather than defaulted. Defaulting would let a
+ * typo ('usdc', 'USDC_ETH') quietly create an AI3 intent, and the caller would
+ * only find out when the payment they were told to make in USDC was expected in
+ * AI3. Like parseRequestedBytes this checks the wire shape only.
+ */
+const parsePaymentMethod = (
+  raw: unknown,
+): Result<PaymentMethod, BadRequestError> => {
+  if (raw === undefined || raw === null) {
+    return ok(PaymentMethod.AI3_NATIVE)
+  }
+  const known = Object.values(PaymentMethod) as string[]
+  if (typeof raw === 'string' && known.includes(raw)) {
+    return ok(raw as PaymentMethod)
+  }
+  return err(
+    new BadRequestError(
+      `Invalid paymentMethod: expected one of ${known.join(', ')} (got ` +
+        `${JSON.stringify(raw)})`,
+    ),
+  )
+}
+
 // Reject a purchase that cannot fit under the per-user credit cap, before the
 // user has been asked to pay anything.
 //
@@ -206,10 +246,92 @@ const checkCapHeadroom = async (
   return ok(undefined)
 }
 
+// Map a price-oracle failure onto an HTTP status and a client-facing code.
+//
+// The oracle separates four causes on purpose; collapsing them into one status
+// throws that away and misdirects the user. Two are ours and retryable, two are
+// about the size that was asked for:
+//
+//   OracleUnavailableError  503  we could not get a trustworthy price — retry
+//   PriceDeviationError     503  the pool is not stable enough to quote — retry
+//   QuoteTooLargeError      409  the pool cannot fill it — ask for less
+//   InvalidQuoteAmountError 400  the amount is unquotable — below the minimum,
+//                                or out of the quoter's range
+//
+// QuoteTooLargeError is 409 rather than 400: the request is well-formed and was
+// valid for a smaller size or a deeper pool, which is a state conflict rather
+// than a malformed input.
+const quoteErrorToHttpError = (
+  error:
+    | InvalidQuoteAmountError
+    | PriceDeviationError
+    | QuoteTooLargeError
+    | Error,
+): QuoteFailedError => {
+  if (error instanceof QuoteTooLargeError) {
+    return new QuoteFailedError(
+      ConflictError.statusCode,
+      QuoteErrorCode.QUOTE_TOO_LARGE,
+      error.message,
+    )
+  }
+  if (error instanceof InvalidQuoteAmountError) {
+    return new QuoteFailedError(
+      BadRequestError.statusCode,
+      QuoteErrorCode.AMOUNT_INVALID,
+      error.message,
+    )
+  }
+  if (error instanceof PriceDeviationError) {
+    return new QuoteFailedError(
+      ServiceUnavailableError.statusCode,
+      QuoteErrorCode.PRICE_UNSTABLE,
+      error.message,
+    )
+  }
+  // OracleUnavailableError, and anything the oracle grows later: an unrecognised
+  // failure is our problem and retryable, which is the safe default. It must not
+  // fall through to a 4xx and tell the user to change a request that was fine.
+  return new QuoteFailedError(
+    ServiceUnavailableError.statusCode,
+    QuoteErrorCode.ORACLE_UNAVAILABLE,
+    error.message,
+  )
+}
+
+type CreateIntentOptions = {
+  // How many bytes the purchase is for. Optional on the AI3 path, where it only
+  // gates creation against the cap. REQUIRED for USDC_ETH, which has to quote a
+  // specific size.
+  requestedBytes?: bigint
+  // Defaults to AI3_NATIVE so existing callers — including the live frontend,
+  // which posts no body — keep their current behaviour exactly.
+  paymentMethod?: PaymentMethod
+}
+
+// An options object rather than a third positional parameter. Two optional
+// bigint/enum arguments in a row on a money path is the shape where a
+// transposed call site silently prices the wrong thing, and the compiler would
+// not catch swapping them if both were positional.
 const createIntent = async (
   executor: UserWithOrganization,
-  requestedBytes?: bigint,
-): Promise<Result<Intent, BadRequestError | CreditCapExceededError>> => {
+  { requestedBytes, paymentMethod = PaymentMethod.AI3_NATIVE }: CreateIntentOptions = {},
+): Promise<
+  Result<Intent, BadRequestError | CreditCapExceededError | QuoteFailedError>
+> => {
+  // A USDC intent is a fixed-price quote for a specific size, so there is nothing
+  // to quote without one. Checked here rather than in parseRequestedBytes because
+  // a caller reaching this use case directly must be held to the same rule — the
+  // parser's job ends at the wire shape.
+  if (paymentMethod === PaymentMethod.USDC_ETH && requestedBytes === undefined) {
+    return err(
+      new BadRequestError(
+        'requestedBytes is required when paying with USDC: the amount charged ' +
+          'is a quote for a specific purchase size',
+      ),
+    )
+  }
+
   // Validate and cap-check before getPrice(): that call goes over a WebSocket to
   // the consensus chain, and a request that is already invalid should not pay
   // for it.
@@ -242,9 +364,57 @@ const createIntent = async (
   }
 
   const { price } = await IntentsUseCases.getPrice()
+  const shannonsPerByte = BigInt(price)
 
   const expiresAt = new Date(
     Date.now() + config.credits.intentExpiryMinutes * 60 * 1000,
+  )
+
+  // AI3 path: requestedBytes is deliberately not persisted. It exists to gate
+  // creation against the cap, and nothing downstream reads it — credits are
+  // derived from paymentAmount / shannonsPerByte, so a stored copy would be a
+  // number that looks like a balance, never agrees with one, and has no reader.
+  if (paymentMethod !== PaymentMethod.USDC_ETH) {
+    const intent = await intentsRepository.createIntent({
+      id: randomBytes32(),
+      userPublicId: executor.publicId,
+      status: IntentStatus.PENDING,
+      paymentAmount: undefined,
+      shannonsPerByte,
+      paymentMethod,
+      expiresAt,
+    })
+
+    return ok(intent)
+  }
+
+  // USDC path. requestedBytes is guaranteed present by the guard above.
+  //
+  // Quote the AI3 the purchase is worth, not the bytes: the pool prices AI3, and
+  // shannonsPerByte is what ties the two together. Locking both numbers on the
+  // same intent is what makes the charge reproducible.
+  const quotedAi3Shannons = requestedBytes! * shannonsPerByte
+
+  const quote = await priceOracle.getExecutableQuote(quotedAi3Shannons)
+  if (quote.isErr()) {
+    logger.info('Rejecting USDC intent creation — could not quote the purchase', {
+      userPublicId: executor.publicId,
+      requestedBytes: requestedBytes!.toString(),
+      quotedAi3Shannons: quotedAi3Shannons.toString(),
+      error: quote.error.name,
+      message: quote.error.message,
+    })
+    return err(quoteErrorToHttpError(quote.error))
+  }
+
+  // The margin goes on the EXECUTABLE quote, not on the marginal value. The
+  // executable quote already covers the swap fee and this size's own price
+  // impact at quote time; the margin covers what it cannot — drift between
+  // quoting now and converting later, while the 10-minute price lock is open.
+  // Reasoning lives in pricing.ts; do not re-derive it here.
+  const quotedTokenAmount = applyMarginPercent(
+    quote.value.usdcAmount,
+    config.credits.usdQuoteMarginPercent,
   )
 
   const intent = await intentsRepository.createIntent({
@@ -252,12 +422,28 @@ const createIntent = async (
     userPublicId: executor.publicId,
     status: IntentStatus.PENDING,
     paymentAmount: undefined,
-    shannonsPerByte: BigInt(price),
-    // requestedBytes is deliberately not persisted. It exists to gate creation
-    // against the cap, and nothing downstream reads it: credits are derived from
-    // paymentAmount / shannonsPerByte, so a stored copy would be a number that
-    // looks like a balance, never agrees with one, and has no reader.
+    shannonsPerByte,
+    paymentMethod,
+    // The charge, and what it was charged for. The pair is the effective rate the
+    // confirmation path converts at — see getIntentCredits.
+    quotedTokenAmount,
+    quotedAi3Shannons,
+    // Marginal spot price, for display and oracle reconciliation only. NEVER
+    // convert a payment at this rate: it excludes the fee, the impact and the
+    // margin the user actually paid, so doing so grants 5-8% free storage.
+    usdRateAtCreation: quote.value.usdPerAi3,
     expiresAt,
+  })
+
+  logger.info('Created USDC intent with a locked quote', {
+    intentId: intent.id,
+    userPublicId: executor.publicId,
+    requestedBytes: requestedBytes!.toString(),
+    quotedAi3Shannons: quotedAi3Shannons.toString(),
+    quotedTokenAmount: quotedTokenAmount.toString(),
+    priceImpactBps: quote.value.priceImpactBps.toString(),
+    quotePremiumBps: quote.value.quotePremiumBps.toString(),
+    blockNumber: quote.value.blockNumber.toString(),
   })
 
   return ok(intent)
@@ -322,12 +508,32 @@ const triggerWatchIntent = async ({
 const markIntentAsConfirmed = async ({
   intentId,
   paymentAmount,
+  tokenAmount,
   fromAddress,
 }: {
   intentId: string
-  paymentAmount: bigint
+  // AI3 path: shannons received on Auto EVM.
+  paymentAmount?: bigint
+  // USDC path: token base units received (USDC has 6 decimals). Recorded on its
+  // own column rather than reusing paymentAmount, which is denominated in
+  // shannons — putting USDC in it would make every AI3-shaped read of the row
+  // silently wrong, starting with the dust guard in onConfirmedIntent.
+  tokenAmount?: bigint
   fromAddress?: string
 }) => {
+  // Exactly one of the two is expected, but neither is the failure worth
+  // catching: it would confirm an intent with nothing received, which later
+  // surfaces as a 0-credit FAILED row that has to be diagnosed backwards from
+  // an on-chain payment.
+  if (paymentAmount === undefined && tokenAmount === undefined) {
+    return err(
+      new BadRequestError(
+        `Cannot confirm intent ${intentId}: neither an AI3 paymentAmount nor a ` +
+          'tokenAmount was supplied',
+      ),
+    )
+  }
+
   const intent = await intentsRepository.getById(intentId)
   if (!intent) {
     return err(new ObjectNotFoundError('Intent not found'))
@@ -359,13 +565,55 @@ const markIntentAsConfirmed = async ({
     await intentsRepository.updateIntent({
       ...intent,
       status: IntentStatus.CONFIRMED,
-      paymentAmount,
+      paymentAmount: paymentAmount ?? intent.paymentAmount,
+      tokenAmount: tokenAmount ?? intent.tokenAmount,
       fromAddress: fromAddress ?? intent.fromAddress,
     }),
   )
 }
 
+/**
+ * Bytes of storage a confirmed payment buys.
+ *
+ * Both paths are the same idea — convert what was received into AI3, then divide
+ * by the price per byte locked at creation. They differ only in what "convert"
+ * means, because an AI3 payment already IS AI3 and a USDC payment has to be
+ * converted at the rate the user was quoted.
+ *
+ * That rate is `quotedTokenAmount / quotedAi3Shannons`, held as the pair rather
+ * than as a stored ratio so the conversion is exact. It is emphatically NOT
+ * `usdRateAtCreation`: that is the pool's marginal price, while the user paid the
+ * executable quote plus the margin. Converting at the marginal rate refunds the
+ * swap fee, the price impact and the margin as free storage — 5-8% on a realistic
+ * purchase — and grants more bytes than the pre-payment cap check allowed for.
+ *
+ * Multiplication before division throughout, so no intermediate floors. Paying
+ * exactly `quotedTokenAmount` makes the first division exact
+ * (quotedTokenAmount * quotedAi3Shannons / quotedTokenAmount), leaving
+ * quotedAi3Shannons, and since that was requestedBytes * shannonsPerByte the
+ * second division is exact too. The user receives exactly the size they were
+ * quoted — no rounding in either direction. There is a regression test pinning
+ * this.
+ */
 const getIntentCredits = (intent: Intent): bigint => {
+  if (intent.paymentMethod === PaymentMethod.USDC_ETH) {
+    // A USDC intent without all three is not convertible. Returning 0 routes it
+    // to the FAILED branch in onConfirmedIntent for admin review, rather than
+    // guessing at a rate and granting the wrong amount.
+    if (
+      !intent.tokenAmount ||
+      !intent.quotedTokenAmount ||
+      !intent.quotedAi3Shannons
+    ) {
+      return BigInt(0)
+    }
+
+    const shannons =
+      (intent.tokenAmount * intent.quotedAi3Shannons) / intent.quotedTokenAmount
+
+    return shannons / intent.shannonsPerByte
+  }
+
   if (!intent.paymentAmount) {
     return BigInt(0)
   }
@@ -383,31 +631,45 @@ const onConfirmedIntent = async (intentId: string) => {
     return err(new Error('Intent should be not completed'))
   }
 
-  if (!intent.paymentAmount) {
+  // Which column carries "what was received" depends on the asset: shannons in
+  // paymentAmount for AI3, token base units in tokenAmount for USDC.
+  const receivedAmount =
+    intent.paymentMethod === PaymentMethod.USDC_ETH
+      ? intent.tokenAmount
+      : intent.paymentAmount
+
+  if (!receivedAmount) {
     logger.warn('Intent has no deposit amount', {
       intentId,
+      paymentMethod: intent.paymentMethod,
     })
     return err(new Error('Intent has no deposit amount'))
   }
 
   // Guard: reject payments whose value is too small to purchase even a single
-  // byte of storage.  getIntentCredits divides paymentAmount by shannonsPerByte
-  // using BigInt integer division, so a dust payment (paymentAmount <
-  // shannonsPerByte) yields 0 credits.  Granting 0 credits would mark the
-  // intent COMPLETED while giving the user nothing — a misleading outcome that
-  // wastes a DB row and silently discards the payment.
+  // byte of storage.  getIntentCredits divides down to bytes using BigInt
+  // integer division, so a dust payment yields 0 credits.  Granting 0 credits
+  // would mark the intent COMPLETED while giving the user nothing — a misleading
+  // outcome that wastes a DB row and silently discards the payment.
   //
-  // Both paymentAmount and shannonsPerByte are immutable on a confirmed intent,
-  // so this condition is permanent.  We mark the intent FAILED (terminal) so
-  // the polling loop stops retrying.  The on-chain payment is irreversible;
-  // resolution requires admin review (similar to OVER_CAP handling).
+  // On the USDC path this also catches an intent that is missing one of the three
+  // numbers the conversion needs, which getIntentCredits reports as 0 rather than
+  // guessing at a rate.
+  //
+  // Every input is immutable on a confirmed intent, so this condition is
+  // permanent.  We mark the intent FAILED (terminal) so the polling loop stops
+  // retrying.  The on-chain payment is irreversible; resolution requires admin
+  // review (similar to OVER_CAP handling).
   const creditBytes = IntentsUseCases.getIntentCredits(intent)
   if (creditBytes === BigInt(0)) {
     logger.warn(
       'onConfirmedIntent: payment too small to yield any credits — marking FAILED',
       {
         intentId,
-        paymentAmount: intent.paymentAmount.toString(),
+        paymentMethod: intent.paymentMethod,
+        receivedAmount: receivedAmount.toString(),
+        quotedTokenAmount: intent.quotedTokenAmount?.toString(),
+        quotedAi3Shannons: intent.quotedAi3Shannons?.toString(),
         shannonsPerByte: intent.shannonsPerByte.toString(),
       },
     )
@@ -433,7 +695,9 @@ const onConfirmedIntent = async (intentId: string) => {
       logger.warn('Intent blocked by per-user cap — marking OVER_CAP', {
         intentId,
         userPublicId: intent.userPublicId,
-        paymentAmount: intent.paymentAmount.toString(),
+        paymentMethod: intent.paymentMethod,
+        receivedAmount: receivedAmount.toString(),
+        creditBytes: creditBytes.toString(),
       })
       await intentsRepository.updateIntent({
         ...intent,
@@ -565,6 +829,7 @@ const getPendingWithTxHash = async (): Promise<Intent[]> => {
 export const IntentsUseCases = {
   createIntent,
   parseRequestedBytes,
+  parsePaymentMethod,
   getIntent,
   updateIntent,
   triggerWatchIntent,
