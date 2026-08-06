@@ -1,0 +1,25 @@
+# Auto Drive rclone configuration
+#
+# Auto Drive is permanent, immutable storage on the Autonomys Network.
+# Get your API key at https://ai3.storage (Developers section).
+#
+# Usage:
+#   rclone copy ./files/ autodrive:my-bucket/my-archive/ --immutable
+#
+# The first segment of the destination path is the bucket name.
+# Buckets are created implicitly on first write - no setup required.
+# Organize files using key prefixes (the path after the bucket name).
+
+[autodrive]
+type = s3
+provider = Other
+access_key_id = YOUR_API_KEY_HERE
+secret_access_key = placeholder
+endpoint = https://s3.auto-drive.autonomys.xyz
+no_check_bucket = true
+# Required: Auto Drive implements the ListObjectsV2 API only. Without this,
+# rclone defaults to the V1 listing API and directory listings fail.
+list_version = 2
+
+# For local development, use:
+# endpoint = http://localhost:3000/s3
