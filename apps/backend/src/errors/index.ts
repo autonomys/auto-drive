@@ -137,6 +137,65 @@ export class GoneError extends HttpError {
   }
 }
 
+// 503 Service Unavailable — a dependency we need was unreachable, or the data it
+// returned was not trustworthy enough to act on.
+//
+// Deliberately not 500: nothing is wrong with the request, the condition is
+// usually transient, and a client should be told to retry rather than to change
+// what it asked for.
+export class ServiceUnavailableError extends HttpError {
+  static readonly statusCode = 503
+  constructor(message: string) {
+    super(ServiceUnavailableError.statusCode, message)
+    this.name = 'ServiceUnavailableError'
+  }
+}
+
+// Why a USDC quote could not be produced. The price oracle draws four distinct
+// causes and they mean genuinely different things to whoever is buying: two are
+// our problem and retryable, two are about the requested size and are not. An
+// Ethereum outage reaching the user as "your purchase is too large" would send
+// them to shrink a purchase that was never the problem, so the cause travels to
+// the client as a code instead of being flattened into a 500 or into prose.
+export enum QuoteErrorCode {
+  // We could not reach the chain, or what we read failed its sanity checks.
+  ORACLE_UNAVAILABLE = 'PRICE_ORACLE_UNAVAILABLE',
+  // The pool's price is currently moving in a way we will not quote against.
+  PRICE_UNSTABLE = 'PRICE_UNSTABLE',
+  // The pool has no liquidity to fill a conversion this large.
+  QUOTE_TOO_LARGE = 'QUOTE_TOO_LARGE',
+  // The amount is unquotable on its own terms — below the minimum, or out of
+  // range for the quoter.
+  AMOUNT_INVALID = 'QUOTE_AMOUNT_INVALID',
+}
+
+// A quote failure, carrying both the HTTP status the cause maps to and the
+// machine-readable code.
+//
+// One class parameterised by cause rather than four subclasses: the mapping from
+// oracle error to (status, code) is a small table that is far easier to review as
+// a table than as four near-identical class bodies, and the response shape has to
+// be identical across all four regardless.
+export class QuoteFailedError extends HttpError {
+  public readonly code: QuoteErrorCode
+
+  constructor(statusCode: number, code: QuoteErrorCode, message: string) {
+    super(statusCode, message)
+    this.name = 'QuoteFailedError'
+    this.code = code
+  }
+
+  // Mirrors the { error: <code>, message: <human-readable> } shape the intents
+  // controller already uses for GOOGLE_ACCOUNT_REQUIRED and CREDIT_CAP_EXCEEDED,
+  // so a client branches on `error` and can surface `message` verbatim.
+  override handleResponse(res: Response) {
+    res.status(this.statusCode).json({
+      error: this.code,
+      message: this.message,
+    })
+  }
+}
+
 export const handleError = (error: Error, res: Response) => {
   if (error instanceof HttpError) {
     error.handleResponse(res)
