@@ -253,9 +253,10 @@ const createIntent = async (
     status: IntentStatus.PENDING,
     paymentAmount: undefined,
     shannonsPerByte: BigInt(price),
-    // What was asked for, not what will be granted: on this AI3 path credits are
-    // derived from paymentAmount / shannonsPerByte and never read this value.
-    quotedBytes: requestedBytes,
+    // requestedBytes is deliberately not persisted. It exists to gate creation
+    // against the cap, and nothing downstream reads it: credits are derived from
+    // paymentAmount / shannonsPerByte, so a stored copy would be a number that
+    // looks like a balance, never agrees with one, and has no reader.
     expiresAt,
   })
 
