@@ -30,8 +30,16 @@
 --
 -- numeric(78,0) to match the bigint base-unit convention already used by
 -- payment_amount / shannons_per_byte / quoted_token_amount. NULL for AI3_NATIVE
--- intents and for rows created before USDC support, both of which derive credits
--- from payment_amount / shannons_per_byte and never read this.
+-- intents, which derive credits from payment_amount / shannons_per_byte and never
+-- read this.
+--
+-- No existing row needs a backfill: nothing could create a usdc_eth intent before
+-- this column existed. Note that credit derivation routes purely on
+-- payment_method and does NOT fall back to the AI3 formula, so a usdc_eth row
+-- without this column yields 0 credits and is marked FAILED for admin review.
+-- That is the intended outcome for a corrupt row, but it is also why the
+-- down-migration is destructive in a way a column drop usually is not: running it
+-- while paid USDC intents are in flight strands them. Drain or settle them first.
 
 ALTER TABLE intents
   ADD COLUMN IF NOT EXISTS quoted_ai3_shannons numeric(78,0);
