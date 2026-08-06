@@ -595,6 +595,79 @@ describe('IntentsUseCases', () => {
     expect(updated.quotedAi3Shannons).toBe(1000n)
   })
 
+  it('markIntentAsConfirmed refuses an AI3 payment against a USDC intent', async () => {
+    // The live watcher reports every payIntent event as paymentAmount, and
+    // payIntent(bytes32) accepts ANY intent id — so this arrives as a well-formed
+    // call and nothing upstream rejects it.
+    const intent: Intent = {
+      id: '0xusdc-mispaid',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 5n * 10n ** 18n,
+    })
+
+    expect(res.isErr()).toBe(true)
+    expect(res._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+    // Must not go CONFIRMED. Doing so would strand the row in the polling loop
+    // AND make the idempotency guard discard the user's real USDC payment.
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('markIntentAsConfirmed refuses a token payment against an AI3 intent', async () => {
+    const intent: Intent = {
+      id: '0xai3-mispaid',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+    })
+
+    expect(res.isErr()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('markIntentAsConfirmed still treats a duplicate event on a settled intent as a no-op', async () => {
+    // The asset check must not turn re-delivery into an error, or the watcher
+    // would retry a genuinely settled intent indefinitely.
+    const intent: Intent = {
+      id: '0xusdc-dup',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      tokenAmount: 1_050_000n,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 5n * 10n ** 18n,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
   it('markIntentAsConfirmed refuses a confirmation carrying no amount at all', async () => {
     const getByIdSpy = jest.spyOn(intentsRepository, 'getById')
 
@@ -1053,7 +1126,7 @@ describe('IntentsUseCases', () => {
     expect(res.isErr()).toBe(true)
   })
 
-  it('onConfirmedIntent should error when payment amount is missing', async () => {
+  it('onConfirmedIntent marks a confirmed intent with no deposit FAILED instead of retrying it forever', async () => {
     const intent: Intent = {
       id: '0x10',
       userPublicId: user.publicId,
@@ -1062,10 +1135,44 @@ describe('IntentsUseCases', () => {
       shannonsPerByte: 1n,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockResolvedValue({ ...intent, status: IntentStatus.FAILED })
 
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
-    expect(res.isErr()).toBe(true)
+    // Nothing writes the received-amount column after confirmation, so this can
+    // never resolve itself. Returning an error left the row CONFIRMED and
+    // _checkConfirmedIntents re-ran it every 30 seconds forever — payment kept,
+    // no credits, nothing in the admin queue.
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: intent.id, status: IntentStatus.FAILED }),
+    )
+  })
+
+  it('getIntentCredits returns 0 rather than throwing when shannonsPerByte is 0', () => {
+    // BigInt division by zero throws, and that exception would escape
+    // onConfirmedIntent and abort the whole polling tick rather than just this
+    // intent. Reachable via CREDITS_PRICE_MULTIPLIER=0.
+    for (const paymentMethod of [
+      PaymentMethod.AI3_NATIVE,
+      PaymentMethod.USDC_ETH,
+    ]) {
+      expect(
+        IntentsUseCases.getIntentCredits({
+          id: '0xzero',
+          userPublicId: user.publicId,
+          status: IntentStatus.CONFIRMED,
+          shannonsPerByte: 0n,
+          paymentMethod,
+          paymentAmount: 1_000n,
+          tokenAmount: 1_000n,
+          quotedTokenAmount: 1_000n,
+          quotedAi3Shannons: 1_000n,
+        }),
+      ).toBe(0n)
+    }
   })
 
   it('onConfirmedIntent should mark OVER_CAP (not retry) when cap is exceeded', async () => {

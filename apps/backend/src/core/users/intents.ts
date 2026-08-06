@@ -561,6 +561,45 @@ const markIntentAsConfirmed = async ({
     return ok(intent)
   }
 
+  // The amount has to be denominated in the asset the intent was quoted in.
+  //
+  // Nothing upstream enforces this. payIntent(bytes32) on the AI3 receiver
+  // accepts ANY intent id with any non-zero msg.value, and the watcher reports
+  // every such event as `paymentAmount` regardless of what the intent expects. So
+  // an AI3 payment against a USDC intent reaches here as a well-formed call.
+  //
+  // Confirming it anyway is what makes it dangerous. The row would go CONFIRMED
+  // with payment_amount set and token_amount NULL, onConfirmedIntent would look
+  // for the USDC column, find nothing, and the intent would sit in the 30-second
+  // polling loop indefinitely — payment kept, no credits, and no terminal row for
+  // an admin to find. Worse, the idempotency guard above would then treat the
+  // intent as settled, so the user's real USDC payment would be silently
+  // discarded when it arrived.
+  //
+  // Refusing leaves the intent PENDING so it expires on its own schedule. The
+  // mispaid amount still needs manual resolution, which is the same position a
+  // payment to an unknown intent id is already in.
+  const expectsToken = intent.paymentMethod === PaymentMethod.USDC_ETH
+  const suppliedAmount = expectsToken ? tokenAmount : paymentAmount
+  if (suppliedAmount === undefined) {
+    logger.warn(
+      'markIntentAsConfirmed: payment asset does not match the intent — refusing',
+      {
+        intentId,
+        paymentMethod: intent.paymentMethod,
+        gotPaymentAmount: paymentAmount?.toString(),
+        gotTokenAmount: tokenAmount?.toString(),
+      },
+    )
+    return err(
+      new BadRequestError(
+        `Cannot confirm intent ${intentId}: it is denominated in ` +
+          `${intent.paymentMethod ?? PaymentMethod.AI3_NATIVE} but the ` +
+          `confirmation supplied ${expectsToken ? 'an AI3 paymentAmount' : 'a tokenAmount'}`,
+      ),
+    )
+  }
+
   return ok(
     await intentsRepository.updateIntent({
       ...intent,
@@ -596,6 +635,16 @@ const markIntentAsConfirmed = async ({
  * this.
  */
 const getIntentCredits = (intent: Intent): bigint => {
+  // Both branches divide by it, and BigInt division by zero throws rather than
+  // returning a Result — which would escape onConfirmedIntent as an exception and
+  // abort the whole _checkConfirmedIntents tick, not just this intent. Reporting
+  // 0 routes the row to FAILED for admin review and leaves the rest of the batch
+  // alone. Reachable via a misconfigured CREDITS_PRICE_MULTIPLIER=0 or a zero
+  // byte fee at creation.
+  if (intent.shannonsPerByte === 0n) {
+    return BigInt(0)
+  }
+
   if (intent.paymentMethod === PaymentMethod.USDC_ETH) {
     // A USDC intent without all three is not convertible. Returning 0 routes it
     // to the FAILED branch in onConfirmedIntent for admin review, rather than
@@ -638,12 +687,28 @@ const onConfirmedIntent = async (intentId: string) => {
       ? intent.tokenAmount
       : intent.paymentAmount
 
+  // Terminal, not a retry. A CONFIRMED intent whose received-amount column is
+  // empty can never fill it in — nothing writes that column after confirmation —
+  // so returning an error just re-runs this every 30 seconds forever, keeping the
+  // payment with no credits granted and nothing in the admin queue to find.
+  // FAILED stops the loop and surfaces the row, which is how every other
+  // unresolvable confirmation in this function is handled.
+  //
+  // markIntentAsConfirmed now refuses a mismatched asset, so this is
+  // defence-in-depth for rows written before that check existed.
   if (!receivedAmount) {
-    logger.warn('Intent has no deposit amount', {
-      intentId,
-      paymentMethod: intent.paymentMethod,
+    logger.warn(
+      'onConfirmedIntent: confirmed intent has no deposit amount — marking FAILED',
+      {
+        intentId,
+        paymentMethod: intent.paymentMethod,
+      },
+    )
+    await intentsRepository.updateIntent({
+      ...intent,
+      status: IntentStatus.FAILED,
     })
-    return err(new Error('Intent has no deposit amount'))
+    return ok()
   }
 
   // Guard: reject payments whose value is too small to purchase even a single
@@ -652,9 +717,11 @@ const onConfirmedIntent = async (intentId: string) => {
   // would mark the intent COMPLETED while giving the user nothing — a misleading
   // outcome that wastes a DB row and silently discards the payment.
   //
-  // On the USDC path this also catches an intent that is missing one of the three
-  // numbers the conversion needs, which getIntentCredits reports as 0 rather than
-  // guessing at a rate.
+  // On the USDC path this also catches an intent that has a tokenAmount but is
+  // missing one of the other two conversion inputs, which getIntentCredits
+  // reports as 0 rather than guessing at a rate. A missing tokenAmount is caught
+  // by the guard above instead, since there is no received amount to reason about
+  // at all.
   //
   // Every input is immutable on a confirmed intent, so this condition is
   // permanent.  We mark the intent FAILED (terminal) so the polling loop stops
