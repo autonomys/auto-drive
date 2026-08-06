@@ -87,8 +87,11 @@ const DECIMAL_DIGITS = /^\d+$/
  * Parse the wire form of `requestedBytes` into a bigint.
  *
  * Absent (or an explicit null) means "no size given", which is a legitimate
- * request: the create endpoint must keep accepting the body-less calls the
- * frontend makes today.
+ * request on the AI3 path: the create endpoint must keep accepting the body-less
+ * calls the frontend makes today. It will not be legitimate on the USDC path,
+ * where the size is what the pool is quoted for — that path has to require it,
+ * which is a check for the caller rather than for this parser, whose job ends at
+ * the wire shape.
  *
  * A decimal string is the canonical form. Every other size on an intent
  * (shannonsPerByte, paymentAmount) already crosses the wire as a string, and a
@@ -147,6 +150,17 @@ const parseRequestedBytes = (
 // Deliberately not made atomic and deliberately not a hold: a reservation needs
 // an expiry sweep, release-on-failure, and its own contention story, which is a
 // much larger design than the problem here warrants.
+//
+// It also does not bound what the user ends up with. Credits follow the amount
+// actually paid, not requestedBytes, so paying more than quoted grants more than
+// was checked here — and on the USDC path slightly more than proportionally,
+// because the locked rate carries the price impact of the QUOTED size and a
+// larger conversion slips further down the curve. That drift is a deliberate
+// accepted cost of letting any payment amount settle an intent, and it is the
+// authoritative check that bounds it: re-measuring the real balance under the
+// advisory lock, an overpayment can walk an account up to the cap but never past
+// it. The excess lands as OVER_CAP for admin review, which is the same place an
+// unchecked purchase would have landed.
 //
 // Measures exactly what the authoritative check measures — SUM of
 // upload_bytes_remaining over active, unexpired rows — by going through
@@ -239,8 +253,8 @@ const createIntent = async (
     status: IntentStatus.PENDING,
     paymentAmount: undefined,
     shannonsPerByte: BigInt(price),
-    // Recorded, not yet authoritative — credits are still derived from
-    // paymentAmount / shannonsPerByte.
+    // What was asked for, not what will be granted: on this AI3 path credits are
+    // derived from paymentAmount / shannonsPerByte and never read this value.
     quotedBytes: requestedBytes,
     expiresAt,
   })
