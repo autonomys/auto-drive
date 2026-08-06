@@ -157,16 +157,16 @@ export class ServiceUnavailableError extends HttpError {
 // Ethereum outage reaching the user as "your purchase is too large" would send
 // them to shrink a purchase that was never the problem, so the cause travels to
 // the client as a code instead of being flattened into a 500 or into prose.
+// Both codes are 503s. There is deliberately no code here for "ask for less":
+// the oracle reports one size-independent rate, so it never refuses a quote on
+// account of the size, and a code the mapping cannot produce is a promise to
+// clients we would not keep.
 export enum QuoteErrorCode {
-  // We could not reach the chain, or what we read failed its sanity checks.
+  // We could not read a trustworthy rate, or what we read failed its guards.
   ORACLE_UNAVAILABLE = 'PRICE_ORACLE_UNAVAILABLE',
-  // The pool's price is currently moving in a way we will not quote against.
+  // The market has re-priced past the window the average is built from, so the
+  // rate describes a regime that has already been left.
   PRICE_UNSTABLE = 'PRICE_UNSTABLE',
-  // The pool has no liquidity to fill a conversion this large.
-  QUOTE_TOO_LARGE = 'QUOTE_TOO_LARGE',
-  // The amount is unquotable on its own terms — below the minimum, or out of
-  // range for the quoter.
-  AMOUNT_INVALID = 'QUOTE_AMOUNT_INVALID',
 }
 
 // A quote failure, carrying both the HTTP status the cause maps to and the
