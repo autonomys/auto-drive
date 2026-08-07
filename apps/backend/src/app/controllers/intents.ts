@@ -15,14 +15,15 @@ export const intentsController = Router()
 // each response site: the fields are spread wholesale, so a field added to
 // Intent and forgotten here does not fail at compile time — it throws at
 // runtime, on the first request for a row that happens to have it set. The
-// token_* fields are currently always unset, which is the only reason listing
-// them per-endpoint has not broken yet.
+// token_* fields are set for the first time by the USDC creation path, so this
+// is now load-bearing rather than latent.
 const serializeIntent = (intent: Intent) => ({
   ...intent,
   shannonsPerByte: intent.shannonsPerByte.toString(),
   paymentAmount: intent.paymentAmount?.toString(),
   tokenAmount: intent.tokenAmount?.toString(),
   quotedTokenAmount: intent.quotedTokenAmount?.toString(),
+  quotedAi3Shannons: intent.quotedAi3Shannons?.toString(),
   usdRateAtCreation: intent.usdRateAtCreation?.toString(),
 })
 
@@ -69,13 +70,28 @@ intentsController.post(
       return
     }
 
+    // Absent means AI3, so a body-less request keeps its current meaning. An
+    // unrecognised value is rejected rather than defaulted — see
+    // parsePaymentMethod.
+    const paymentMethod = IntentsUseCases.parsePaymentMethod(
+      req.body?.paymentMethod,
+    )
+    if (paymentMethod.isErr()) {
+      handleError(paymentMethod.error, res)
+      return
+    }
+
     const result = await handleInternalErrorResult(
-      IntentsUseCases.createIntent(user, requestedBytes.value),
+      IntentsUseCases.createIntent(user, {
+        requestedBytes: requestedBytes.value,
+        paymentMethod: paymentMethod.value,
+      }),
       'Failed to create intent',
     )
     if (result.isErr()) {
-      // CreditCapExceededError carries its own { error: 'CREDIT_CAP_EXCEEDED',
-      // message } response shape, so the generic path emits it correctly.
+      // CreditCapExceededError and QuoteFailedError each carry their own
+      // { error: <CODE>, message } response shape, so the generic path emits
+      // them — and their 403 / 503 / 409 / 400 statuses — correctly.
       handleError(result.error, res)
       return
     }

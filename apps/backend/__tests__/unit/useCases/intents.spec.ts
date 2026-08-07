@@ -11,9 +11,12 @@ import {
   CreditCapExceededError,
   ForbiddenError,
   GoneError,
+  QuoteErrorCode,
+  QuoteFailedError,
 } from '../../../src/errors/index.js'
 import {
   IntentStatus,
+  PaymentMethod,
   UserRole,
   type Account,
   type Intent,
@@ -22,6 +25,18 @@ import {
   type UserWithOrganization,
 } from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
+import { priceOracle } from '../../../src/infrastructure/services/priceOracle/index.js'
+import {
+  InvalidQuoteAmountError,
+  OracleUnavailableError,
+  PriceDeviationError,
+  QuoteTooLargeError,
+  type ExecutableQuote,
+} from '../../../src/infrastructure/services/priceOracle/types.js'
+import {
+  ai3ShannonsToUsdcBaseUnits,
+  applyMarginPercent,
+} from '../../../src/shared/utils/index.js'
 
 describe('IntentsUseCases', () => {
   const now = new Date()
@@ -136,14 +151,22 @@ describe('IntentsUseCases', () => {
       .spyOn(intentsRepository, 'createIntent')
       .mockImplementation(async (intent) => intent)
 
-    const result = await IntentsUseCases.createIntent(orgUser, 1_073_741_824n)
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1_073_741_824n,
+    })
 
     expect(result.isOk()).toBe(true)
-    // The size gates creation and is then discarded. Persisting it would store a
-    // number that reads like a balance and never agrees with one, since credits
-    // come from paymentAmount / shannonsPerByte.
+    // On the AI3 path the size gates creation and is then discarded. Persisting
+    // it would store a number that reads like a balance and never agrees with
+    // one, since credits come from paymentAmount / shannonsPerByte.
+    //
+    // The USDC path is different and deliberately so: it persists
+    // quotedAi3Shannons, which is the size times the locked price and therefore
+    // half of the rate the payment converts at. See the USDC group below.
     const created = createSpy.mock.calls[0][0]
     expect(Object.keys(created)).not.toContain('quotedBytes')
+    expect(created.quotedAi3Shannons).toBeUndefined()
+    expect(created.quotedTokenAmount).toBeUndefined()
   })
 
   it.each<[string, bigint]>([
@@ -159,7 +182,9 @@ describe('IntentsUseCases', () => {
       )
       const createSpy = jest.spyOn(intentsRepository, 'createIntent')
 
-      const result = await IntentsUseCases.createIntent(orgUser, requestedBytes)
+      const result = await IntentsUseCases.createIntent(orgUser, {
+        requestedBytes,
+      })
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
@@ -176,7 +201,9 @@ describe('IntentsUseCases', () => {
       'getRemainingCredits',
     )
 
-    const result = await IntentsUseCases.createIntent(orgUser, cap + 1n)
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: cap + 1n,
+    })
 
     expect(result.isErr()).toBe(true)
     // A size that can never fit is malformed, not a headroom problem — and it
@@ -192,7 +219,9 @@ describe('IntentsUseCases', () => {
     const priceSpy = jest.spyOn(IntentsUseCases, 'getPrice')
     const createSpy = jest.spyOn(intentsRepository, 'createIntent')
 
-    const result = await IntentsUseCases.createIntent(orgUser, 101n)
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 101n,
+    })
 
     expect(result.isErr()).toBe(true)
     const error = result._unsafeUnwrapErr()
@@ -212,12 +241,482 @@ describe('IntentsUseCases', () => {
       .spyOn(intentsRepository, 'createIntent')
       .mockImplementation(async (intent) => intent)
 
-    const result = await IntentsUseCases.createIntent(orgUser, 100n)
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 100n,
+    })
 
     // Boundary must match the authoritative check in
     // createPurchasedCreditWithCapCheck, which uses `>`. A stricter pre-check
     // here would refuse purchases the real check would have granted.
     expect(result.isOk()).toBe(true)
+  })
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // createIntent — USDC quoting
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // A quote the oracle would plausibly return. usdcAmount is deliberately NOT
+  // the marginal value of ai3Shannons at usdPerAi3 — the gap between them (fee +
+  // price impact) is exactly what must not leak back to the user as free bytes.
+  const stubQuote = (overrides: Partial<ExecutableQuote> = {}) => ({
+    usdcAmount: 1_000_000n,
+    usdPerAi3: 6_400_000_000_000_000n,
+    priceImpactBps: 12n,
+    quotePremiumBps: 42n,
+    ai3Shannons: 0n,
+    blockNumber: 21_000_000n,
+    asOf: new Date(),
+    ...overrides,
+  })
+
+  const mockQuote = (overrides: Partial<ExecutableQuote> = {}) =>
+    jest
+      .spyOn(priceOracle, 'getExecutableQuote')
+      .mockResolvedValue(ok(stubQuote(overrides) as ExecutableQuote))
+
+  it('createIntent requires requestedBytes when paying with USDC', async () => {
+    const quoteSpy = jest.spyOn(priceOracle, 'getExecutableQuote')
+    const priceSpy = jest.spyOn(IntentsUseCases, 'getPrice')
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+    // Nothing may be priced, quoted or written without a size to quote for.
+    expect(priceSpy).not.toHaveBeenCalled()
+    expect(quoteSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent quotes the AI3 value of the purchase, not the byte count', async () => {
+    mockPurchasedBalance(0n)
+    const quoteSpy = mockQuote()
+    jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+    // shannonsPerByte = 3 for this test, so the AI3 handed to the pool is
+    // 1000 bytes * 3 = 3000 shannons.
+    jest
+      .spyOn(IntentsUseCases, 'getPrice')
+      .mockResolvedValue({ price: 3, pricePerGB: 1 })
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    expect(result.isOk()).toBe(true)
+    expect(quoteSpy).toHaveBeenCalledWith(3000n)
+  })
+
+  it('createIntent persists the charge, what it was charged for, and the marginal rate', async () => {
+    mockPurchasedBalance(0n)
+    mockQuote({ usdcAmount: 1_000_000n, usdPerAi3: 6_400_000_000_000_000n })
+    const createSpy = jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    expect(result.isOk()).toBe(true)
+    const created = createSpy.mock.calls[0][0]
+    expect(created.paymentMethod).toBe(PaymentMethod.USDC_ETH)
+    // shannonsPerByte is 1 from the default getPrice mock.
+    expect(created.quotedAi3Shannons).toBe(1000n)
+    // The margin goes on the executable quote. Default USD_QUOTE_MARGIN is 5%,
+    // so 1_000_000 becomes 1_050_000.
+    expect(created.quotedTokenAmount).toBe(
+      applyMarginPercent(1_000_000n, config.credits.usdQuoteMarginPercent),
+    )
+    // The stored rate stays the raw marginal price — it is display and
+    // reconciliation data, never the conversion rate.
+    expect(created.usdRateAtCreation).toBe(6_400_000_000_000_000n)
+  })
+
+  it('createIntent does not quote until the cap pre-check has passed', async () => {
+    mockPurchasedBalance(cap - 100n)
+    const quoteSpy = jest.spyOn(priceOracle, 'getExecutableQuote')
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 101n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(CreditCapExceededError)
+    // An Ethereum round-trip is not spent on a purchase that cannot be granted.
+    expect(quoteSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  // The taxonomy exists so an outage on our side is not reported to the user as
+  // a problem with what they asked for. A generic 500 would waste it.
+  it.each<[string, Error, number, QuoteErrorCode]>([
+    [
+      'an unreachable oracle',
+      new OracleUnavailableError('pool could not be quoted'),
+      503,
+      QuoteErrorCode.ORACLE_UNAVAILABLE,
+    ],
+    [
+      'an untrustworthy pool price',
+      new PriceDeviationError('spot deviates from the quote block', 750n),
+      503,
+      QuoteErrorCode.PRICE_UNSTABLE,
+    ],
+    [
+      'a size the pool cannot fill',
+      new QuoteTooLargeError('pool cannot fill it'),
+      409,
+      QuoteErrorCode.QUOTE_TOO_LARGE,
+    ],
+    [
+      'an unquotable amount',
+      new InvalidQuoteAmountError('below the minimum'),
+      400,
+      QuoteErrorCode.AMOUNT_INVALID,
+    ],
+  ])(
+    'createIntent maps %s to the right status and code',
+    async (_label, oracleError, expectedStatus, expectedCode) => {
+      mockPurchasedBalance(0n)
+      jest
+        .spyOn(priceOracle, 'getExecutableQuote')
+        .mockResolvedValue(err(oracleError as never))
+      const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+
+      const result = await IntentsUseCases.createIntent(orgUser, {
+        requestedBytes: 1000n,
+        paymentMethod: PaymentMethod.USDC_ETH,
+      })
+
+      expect(result.isErr()).toBe(true)
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(QuoteFailedError)
+      expect((error as QuoteFailedError).statusCode).toBe(expectedStatus)
+      expect((error as QuoteFailedError).code).toBe(expectedCode)
+      // A failed quote must not leave a PENDING intent with no price behind.
+      expect(createSpy).not.toHaveBeenCalled()
+    },
+  )
+
+  it('createIntent treats an unrecognised quote failure as retryable, not as bad input', async () => {
+    mockPurchasedBalance(0n)
+    jest
+      .spyOn(priceOracle, 'getExecutableQuote')
+      .mockResolvedValue(err(new Error('something new') as never))
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    const error = result._unsafeUnwrapErr() as QuoteFailedError
+    // Defaulting to 4xx would tell a user to change a request that was fine.
+    expect(error.statusCode).toBe(503)
+    expect(error.code).toBe(QuoteErrorCode.ORACLE_UNAVAILABLE)
+  })
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // The invariant this whole design exists to protect
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('paying exactly the quoted USDC amount grants exactly the requested bytes', async () => {
+    const requestedBytes = 1_073_741_824n // 1 GiB
+    const shannonsPerByte = 422_005_541_622n // realistic, from a $290/100GiB pool
+    mockPurchasedBalance(0n)
+    jest
+      .spyOn(IntentsUseCases, 'getPrice')
+      .mockResolvedValue({ price: Number(shannonsPerByte), pricePerGB: 1 })
+    // A quote with a real fee-and-impact gap over the marginal value, which is
+    // what makes converting at usdRateAtCreation wrong.
+    mockQuote({ usdcAmount: 2_900_000_000n, usdPerAi3: 6_400_000_000_000_000n })
+    const createSpy = jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+
+    const created = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+    expect(created.isOk()).toBe(true)
+    const intent = createSpy.mock.calls[0][0]
+
+    // The user pays precisely what they were quoted.
+    const credits = IntentsUseCases.getIntentCredits({
+      ...intent,
+      tokenAmount: intent.quotedTokenAmount,
+    })
+
+    // Exactly — not "close to". Any rounding here is money.
+    expect(credits).toBe(requestedBytes)
+  })
+
+  it('converting at the marginal rate would over-credit — the regression this guards', () => {
+    const requestedBytes = 1_073_741_824n
+    const shannonsPerByte = 422_005_541_622n
+    const quotedAi3Shannons = requestedBytes * shannonsPerByte
+    const usdPerAi3 = 6_400_000_000_000_000n
+    // Executable cost sits above the marginal value by fee + impact, then the
+    // margin goes on top.
+    const marginal = ai3ShannonsToUsdcBaseUnits(quotedAi3Shannons, usdPerAi3)
+    const quotedTokenAmount = applyMarginPercent(
+      (marginal * 1015n) / 1000n, // +1.5% fee and impact
+      config.credits.usdQuoteMarginPercent,
+    )
+
+    const intent: Intent = {
+      id: '0xusdc-drift',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      shannonsPerByte,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount,
+      quotedAi3Shannons,
+      usdRateAtCreation: usdPerAi3,
+      tokenAmount: quotedTokenAmount,
+    }
+
+    // Correct: the rate the user was actually charged at.
+    expect(IntentsUseCases.getIntentCredits(intent)).toBe(requestedBytes)
+
+    // Wrong, and this is the ~6.5% the epic keeps warning about: converting the
+    // same payment at the marginal spot rate.
+    const viaMarginalRate =
+      (quotedTokenAmount * 10n ** 30n) / usdPerAi3 / shannonsPerByte
+    expect(viaMarginalRate).toBeGreaterThan(requestedBytes)
+    const overCreditBps =
+      ((viaMarginalRate - requestedBytes) * 10_000n) / requestedBytes
+    expect(overCreditBps).toBeGreaterThan(600n) // >6%
+  })
+
+  it('getIntentCredits returns 0 for a USDC intent missing any conversion input', () => {
+    const base: Intent = {
+      id: '0xusdc-partial',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      tokenAmount: 1_050_000n,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+
+    // Guessing at a rate would grant the wrong amount silently; 0 routes the
+    // intent to FAILED for admin review instead.
+    expect(
+      IntentsUseCases.getIntentCredits({ ...base, tokenAmount: undefined }),
+    ).toBe(0n)
+    expect(
+      IntentsUseCases.getIntentCredits({
+        ...base,
+        quotedTokenAmount: undefined,
+      }),
+    ).toBe(0n)
+    expect(
+      IntentsUseCases.getIntentCredits({
+        ...base,
+        quotedAi3Shannons: undefined,
+      }),
+    ).toBe(0n)
+  })
+
+  it('onConfirmedIntent grants credits for a USDC intent from tokenAmount', async () => {
+    const intent: Intent = {
+      id: '0xusdc-confirm',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      shannonsPerByte: 2n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      // 1000 shannons quoted for 1_050_000 base units; paying that exactly
+      // yields 1000 shannons, and at 2 shannons/byte that is 500 bytes.
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+      tokenAmount: 1_050_000n,
+      // No paymentAmount at all — the AI3 column stays NULL on this path.
+      paymentAmount: undefined,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const addCreditsSpy = jest
+      .spyOn(AccountsUseCases, 'addCreditsToAccount')
+      .mockResolvedValue(ok())
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockResolvedValue({ ...intent, status: IntentStatus.COMPLETED })
+
+    const res = await IntentsUseCases.onConfirmedIntent(intent.id)
+
+    expect(res.isOk()).toBe(true)
+    // The old guard read paymentAmount unconditionally and would have refused
+    // this intent as having no deposit.
+    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, 500n, intent.id)
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ status: IntentStatus.COMPLETED }),
+    )
+  })
+
+  it('markIntentAsConfirmed records a USDC payment on tokenAmount, not paymentAmount', async () => {
+    const intent: Intent = {
+      id: '0xusdc-mark',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+      fromAddress: '0xpayer',
+    })
+
+    expect(res.isOk()).toBe(true)
+    const updated = updateSpy.mock.calls[0][0]
+    expect(updated.tokenAmount).toBe(1_050_000n)
+    // paymentAmount is denominated in shannons; writing USDC into it would make
+    // every AI3-shaped read of the row wrong.
+    expect(updated.paymentAmount).toBeUndefined()
+    // The quote must survive the status transition — updateIntent rewrites the
+    // whole column list, so a column missing from it is silently nulled here.
+    expect(updated.quotedTokenAmount).toBe(1_050_000n)
+    expect(updated.quotedAi3Shannons).toBe(1000n)
+  })
+
+  it('markIntentAsConfirmed refuses an AI3 payment against a USDC intent', async () => {
+    // The live watcher reports every payIntent event as paymentAmount, and
+    // payIntent(bytes32) accepts ANY intent id — so this arrives as a well-formed
+    // call and nothing upstream rejects it.
+    const intent: Intent = {
+      id: '0xusdc-mispaid',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 5n * 10n ** 18n,
+    })
+
+    expect(res.isErr()).toBe(true)
+    expect(res._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+    // Must not go CONFIRMED. Doing so would strand the row in the polling loop
+    // AND make the idempotency guard discard the user's real USDC payment.
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('markIntentAsConfirmed refuses a token payment against an AI3 intent', async () => {
+    const intent: Intent = {
+      id: '0xai3-mispaid',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+    })
+
+    expect(res.isErr()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('markIntentAsConfirmed still treats a duplicate event on a settled intent as a no-op', async () => {
+    // The asset check must not turn re-delivery into an error, or the watcher
+    // would retry a genuinely settled intent indefinitely.
+    const intent: Intent = {
+      id: '0xusdc-dup',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      tokenAmount: 1_050_000n,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 5n * 10n ** 18n,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('markIntentAsConfirmed refuses a confirmation carrying no amount at all', async () => {
+    const getByIdSpy = jest.spyOn(intentsRepository, 'getById')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: '0xnothing',
+    })
+
+    expect(res.isErr()).toBe(true)
+    expect(res._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+    // Refused before the row is even read — confirming with nothing received
+    // would surface later as a 0-credit FAILED row to diagnose backwards.
+    expect(getByIdSpy).not.toHaveBeenCalled()
+  })
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // parsePaymentMethod
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it.each<[string, unknown]>([
+    ['undefined', undefined],
+    ['null', null],
+  ])('parsePaymentMethod defaults %s to AI3 (body-less requests)', (_l, raw) => {
+    const result = IntentsUseCases.parsePaymentMethod(raw)
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap()).toBe(PaymentMethod.AI3_NATIVE)
+  })
+
+  it.each<[PaymentMethod]>([
+    [PaymentMethod.AI3_NATIVE],
+    [PaymentMethod.USDC_ETH],
+  ])('parsePaymentMethod accepts %s', (method) => {
+    const result = IntentsUseCases.parsePaymentMethod(method)
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap()).toBe(method)
+  })
+
+  it.each<[string, unknown]>([
+    ['a near-miss casing', 'USDC_ETH'],
+    ['a shorthand', 'usdc'],
+    ['an unknown asset', 'eth_native'],
+    ['an empty string', ''],
+    ['a number', 1],
+    ['an object', { paymentMethod: 'usdc_eth' }],
+  ])('parsePaymentMethod rejects %s rather than defaulting to AI3', (_l, raw) => {
+    // Defaulting would quote in AI3 a purchase the caller intended to pay in
+    // USDC, and they would only find out at payment time.
+    const result = IntentsUseCases.parsePaymentMethod(raw)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
   })
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -627,7 +1126,7 @@ describe('IntentsUseCases', () => {
     expect(res.isErr()).toBe(true)
   })
 
-  it('onConfirmedIntent should error when payment amount is missing', async () => {
+  it('onConfirmedIntent marks a confirmed intent with no deposit FAILED instead of retrying it forever', async () => {
     const intent: Intent = {
       id: '0x10',
       userPublicId: user.publicId,
@@ -636,10 +1135,44 @@ describe('IntentsUseCases', () => {
       shannonsPerByte: 1n,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockResolvedValue({ ...intent, status: IntentStatus.FAILED })
 
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
-    expect(res.isErr()).toBe(true)
+    // Nothing writes the received-amount column after confirmation, so this can
+    // never resolve itself. Returning an error left the row CONFIRMED and
+    // _checkConfirmedIntents re-ran it every 30 seconds forever — payment kept,
+    // no credits, nothing in the admin queue.
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: intent.id, status: IntentStatus.FAILED }),
+    )
+  })
+
+  it('getIntentCredits returns 0 rather than throwing when shannonsPerByte is 0', () => {
+    // BigInt division by zero throws, and that exception would escape
+    // onConfirmedIntent and abort the whole polling tick rather than just this
+    // intent. Reachable via CREDITS_PRICE_MULTIPLIER=0.
+    for (const paymentMethod of [
+      PaymentMethod.AI3_NATIVE,
+      PaymentMethod.USDC_ETH,
+    ]) {
+      expect(
+        IntentsUseCases.getIntentCredits({
+          id: '0xzero',
+          userPublicId: user.publicId,
+          status: IntentStatus.CONFIRMED,
+          shannonsPerByte: 0n,
+          paymentMethod,
+          paymentAmount: 1_000n,
+          tokenAmount: 1_000n,
+          quotedTokenAmount: 1_000n,
+          quotedAi3Shannons: 1_000n,
+        }),
+      ).toBe(0n)
+    }
   })
 
   it('onConfirmedIntent should mark OVER_CAP (not retry) when cap is exceeded', async () => {
