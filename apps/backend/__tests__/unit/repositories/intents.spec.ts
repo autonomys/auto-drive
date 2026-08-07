@@ -81,4 +81,5 @@ describe('Intents Repository — payment fields', () => {
     expect(updated?.quotedTokenAmount).toBe(1_000_000n)
     expect(updated?.usdRateAtCreation).toBe(6_400_000_000_000_000n)
   })
+
 })

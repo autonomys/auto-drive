@@ -100,6 +100,8 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
       intent.fromAddress ?? null,
       // Callers load the intent (getById → mapRows) and spread it before
       // updating, so these round-trip unchanged unless explicitly overridden.
+      // This statement rewrites the full column list, so a column missing here
+      // is silently nulled on every status transition.
       intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
       intent.tokenAmount?.toString() ?? null,
       intent.quotedTokenAmount?.toString() ?? null,

@@ -63,10 +63,20 @@ export const IntentSchema = z.object({
   // (USDC has 6 decimals). Set by the payment manager on confirmation.
   tokenAmount: z.bigint().optional(),
   // Token amount quoted to the user at creation, in the token's smallest unit.
+  // Comes from the executable quote, so the pool swap fee, the price impact of
+  // that specific size and the quote margin are all already inside it.
   quotedTokenAmount: z.bigint().optional(),
-  // AI3/USD rate locked at creation, scaled by USD_RATE_SCALE (1e18). Used to
-  // convert the received token amount to an AI3-equivalent for the existing
-  // proportional credit math.
+  // AI3/USD rate at creation, scaled by USD_RATE_SCALE (1e18). Display,
+  // reporting and oracle reconciliation — NOT the rate credits convert at.
+  //
+  // This is the pool's MARGINAL price: what an infinitesimally small trade would
+  // get. The user pays the executable quote instead, which additionally carries
+  // the swap fee, their own size's price impact and the quote margin. Converting
+  // a received payment to AI3 at this rate hands all three back as free storage
+  // — roughly 8% on a $290 purchase against the live pool. It stays marginal on
+  // purpose so it remains comparable to the market, which means the USDC credit
+  // path has to persist its own effective rate (see #747). Nothing on this type
+  // can stand in for it.
   usdRateAtCreation: z.bigint().optional(),
 });
 
