@@ -145,6 +145,12 @@ export const config = {
     fetchTimeoutMs: Number(
       env('FILES_GATEWAY_FETCH_TIMEOUT_MS', '60000'),
     ),
+    // How many chunk requests to keep in flight when reconstructing a file
+    // from the gateway. The SDK's whole-file reader fetches one chunk per
+    // read(), so a large object cost one sequential round-trip per chunk;
+    // matching the DB path's concurrentChunks turns that into batches.
+    // Raising it trades gateway load for wall-clock on cold downloads.
+    chunkConcurrency: positiveIntEnv('FILES_GATEWAY_CHUNK_CONCURRENCY', 100),
   },
   authService: {
     url: env('AUTH_SERVICE_URL', 'http://localhost:3030'),
