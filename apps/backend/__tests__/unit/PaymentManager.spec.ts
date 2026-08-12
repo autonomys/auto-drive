@@ -482,6 +482,38 @@ describe('PaymentManager', () => {
 
       expect(onConfirmedSpy).toHaveBeenCalledTimes(3)
     })
+
+    // The case the two tests above do not cover: they return errors, and a
+    // returned error was always handled. A THROWN one used to escape the loop
+    // and abandon every intent behind it — users who paid correctly, skipped,
+    // every tick, for as long as the poison row sat in the batch.
+    it('should keep processing the batch when one intent throws', async () => {
+      const intents = [
+        { id: '0xbefore', userPublicId: 'user1', status: 'CONFIRMED' },
+        { id: '0xpoison', userPublicId: 'user2', status: 'CONFIRMED' },
+        { id: '0xafter', userPublicId: 'user3', status: 'CONFIRMED' },
+      ] as any[]
+
+      jest
+        .spyOn(IntentsUseCases, 'getConfirmedIntents')
+        .mockResolvedValue(intents)
+
+      const onConfirmedSpy = jest
+        .spyOn(IntentsUseCases, 'onConfirmedIntent')
+        .mockResolvedValueOnce(ok(undefined))
+        // What a zero shannonsPerByte produces: BigInt division by zero throws
+        // a RangeError rather than returning an err().
+        .mockRejectedValueOnce(new RangeError('Division by zero'))
+        .mockResolvedValueOnce(ok(undefined))
+
+      await expect(
+        paymentManager._checkConfirmedIntents(),
+      ).resolves.not.toThrow()
+
+      // All three attempted, and specifically the one AFTER the thrower.
+      expect(onConfirmedSpy).toHaveBeenCalledTimes(3)
+      expect(onConfirmedSpy).toHaveBeenCalledWith('0xafter')
+    })
   })
 
   describe('start', () => {

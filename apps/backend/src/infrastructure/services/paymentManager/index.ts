@@ -81,15 +81,34 @@ const _checkConfirmedIntents = async () => {
     intents: intents.map((intent) => intent.id),
   })
   for (const intent of intents) {
-    const result = await IntentsUseCases.onConfirmedIntent(intent.id)
+    // Per-intent, because `result.isErr()` only catches what onConfirmedIntent
+    // RETURNS. A thrown exception escapes this loop entirely and is swallowed by
+    // the safeCallback wrapping the interval, so one bad row stops every intent
+    // behind it in the batch from being credited — and since the batch is
+    // re-fetched each tick, it stops them forever, from users who paid
+    // correctly, with nothing terminal written anywhere to show why.
+    //
+    // getIntentCredits dividing by a zero shannonsPerByte is the known way in
+    // (guarded there too), but the point of this catch is the ones that are not
+    // known: an intent that cannot be processed must cost its own turn, never
+    // the queue's.
+    try {
+      const result = await IntentsUseCases.onConfirmedIntent(intent.id)
 
-    if (result.isErr()) {
-      logger.error('Error on confirmed intent', {
-        error: result.error,
-      })
-    } else {
-      logger.info('Marked intent as confirmed', {
+      if (result.isErr()) {
+        logger.error('Error on confirmed intent', {
+          intentId: intent.id,
+          error: result.error,
+        })
+      } else {
+        logger.info('Marked intent as confirmed', {
+          intentId: intent.id,
+        })
+      }
+    } catch (error) {
+      logger.error('Unhandled error on confirmed intent — skipping it', {
         intentId: intent.id,
+        error,
       })
     }
   }
