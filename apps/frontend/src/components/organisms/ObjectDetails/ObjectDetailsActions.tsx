@@ -20,15 +20,23 @@ import { useNetwork } from '../../../contexts/network';
 import { ObjectDownloadModal } from '../../molecules/ObjectDownloadModal';
 import { ObjectShareModal } from '../../molecules/ObjectShareModal';
 import { ObjectDeleteModal } from '../../molecules/ObjectDeleteModal';
+import { useUserAsyncDownloadsStore } from '../UserAsyncDownloads/state';
 
 export const ObjectDetailsActions = ({
   object,
   isOwner,
   isCached,
+  reconstruction,
 }: {
   object: ObjectInformation;
   isOwner: boolean;
   isCached: boolean | null;
+  reconstruction?: {
+    state: 'running' | 'idle';
+    downloadedBytes: string;
+    totalSize: string;
+    startedAt: string | null;
+  } | null;
 }) => {
   const { user } = useUserStore();
   const { api } = useNetwork();
@@ -38,6 +46,7 @@ export const ObjectDetailsActions = ({
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
   const [isReporting, setIsReporting] = useState(false);
   const [isBringingToCache, setIsBringingToCache] = useState(false);
+  const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
 
   const hasFileOwnership = object?.owners.some(
     (o) =>
@@ -88,14 +97,32 @@ export const ObjectDetailsActions = ({
     setIsBringingToCache(true);
     try {
       await api.createAsyncDownload(object.metadata.dataCid);
-      toast.success('File is being brought to cache');
+      // The old copy ("File is being brought to cache") implied the work was
+      // done. It only queues a retrieval that runs for minutes, and nothing
+      // reported on it afterwards — so a user who came back to an unchanged
+      // button concluded it had failed. Point them at the surface that does
+      // track it, and let the polled cache state drive the button from here.
+      toast.success(
+        'Retrieving this file from the network. Progress is shown in Cached Downloads — it can take 20 minutes or more for large files.',
+        { duration: 6000 },
+      );
+      updateAsyncDownloads();
     } catch (error) {
       console.error('Bring to cache error:', error);
-      toast.error('Failed to bring file to cache. Please try again.');
+      toast.error('Failed to start retrieval. Please try again.');
     } finally {
       setIsBringingToCache(false);
     }
-  }, [api, object?.metadata.dataCid]);
+  }, [api, object?.metadata.dataCid, updateAsyncDownloads]);
+
+  // A retrieval already running for this object — started here, by the download
+  // modal, or by another user, since the cache is shared.
+  const isReconstructing = reconstruction?.state === 'running';
+  const reconstructionPercentage = (() => {
+    const total = Number(reconstruction?.totalSize ?? 0);
+    const done = Number(reconstruction?.downloadedBytes ?? 0);
+    return total > 0 ? Math.min(100, Math.floor((done * 100) / total)) : 0;
+  })();
 
   return (
     <div className='flex space-x-2'>
@@ -119,14 +146,20 @@ export const ObjectDetailsActions = ({
           variant='primary'
           className={cn(
             'inline-flex items-center text-sm',
-            (isBanned(object.tags) || isBringingToCache) &&
+            (isBanned(object.tags) || isBringingToCache || isReconstructing) &&
               'cursor-not-allowed opacity-50',
           )}
-          disabled={isBanned(object.tags) || isBringingToCache}
+          disabled={
+            isBanned(object.tags) || isBringingToCache || isReconstructing
+          }
           onClick={handleBringToCache}
         >
           <CloudArrowDownIcon className='mr-2 h-4 w-4' />
-          {isBringingToCache ? 'Bringing to Cache...' : 'Bring to Cache'}
+          {isReconstructing
+            ? `Retrieving… ${reconstructionPercentage}%`
+            : isBringingToCache
+              ? 'Starting…'
+              : 'Bring to Cache'}
         </Button>
       )}
       <Button

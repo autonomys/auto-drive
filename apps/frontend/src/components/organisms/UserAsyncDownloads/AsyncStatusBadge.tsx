@@ -17,12 +17,17 @@ const getStatusColor = (status: AsyncDownloadStatus) => {
 };
 
 const getStatusLabel = (download: AsyncDownload) => {
-  const progress = Math.floor(
-    Number(
-      (BigInt(100) * BigInt(download.downloadedBytes ?? 0)) /
-        BigInt(download.fileSize ?? 0),
-    ),
-  );
+  // `?? 0` does not cover a stored '0' — and BigInt division by zero throws a
+  // RangeError, which escapes render and takes the whole Cached Downloads
+  // dialog down with it. A zero-byte object, or a row written before the size
+  // was known, was enough to break the one screen showing download state.
+  const totalBytes = BigInt(download.fileSize || 0);
+  const progress =
+    totalBytes > BigInt(0)
+      ? Math.floor(
+          Number((BigInt(100) * BigInt(download.downloadedBytes || 0)) / totalBytes),
+        )
+      : 0;
   switch (download.status) {
     case AsyncDownloadStatus.Completed:
       return 'Completed';

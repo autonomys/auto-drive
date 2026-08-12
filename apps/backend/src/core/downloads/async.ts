@@ -30,6 +30,25 @@ const createDownload = async (
     return err(new ObjectNotFoundError(`Object with cid=${cid} not found`))
   }
 
+  // Repeat requests join the run already in flight instead of starting another.
+  // The UI calls this from both the download modal and "Bring to Cache", and a
+  // reconstruction takes long enough that a user will click again — which used
+  // to mean a second row, a second task, and a second full pull of the same
+  // object competing with the first for the same gateway.
+  const existing = await asyncDownloadsRepository.getActiveDownloadByCidAndUser(
+    cid,
+    user.oauthProvider,
+    user.oauthUserId,
+  )
+  if (existing) {
+    logger.info(
+      'Reusing in-flight async download id=%s cid=%s',
+      existing.id,
+      cid,
+    )
+    return ok(existing)
+  }
+
   const download = await asyncDownloadsRepository.createDownload(
     v4(),
     user.oauthProvider,
@@ -161,6 +180,23 @@ const asyncDownload = async (
   if (result.isErr()) {
     return err(result.error)
   }
+
+  // Nothing ever wrote this status before, so a reconstruction sat on "Pending"
+  // for its entire run — the badge renders a percentage only for Downloading,
+  // which meant the one screen the user watches showed no sign of progress for
+  // twenty minutes and read as a stuck job. Setting it here also un-sticks a
+  // row a previous attempt left as Failed: a retry of this task now visibly
+  // takes over instead of leaving the earlier failure on screen.
+  await AsyncDownloadsUseCases.updateStatus(
+    downloadId,
+    AsyncDownloadStatus.Downloading,
+  ).catch((e) =>
+    logger.warn(
+      e as Error,
+      'Failed to mark download as downloading id=%s',
+      downloadId,
+    ),
+  )
 
   let file: Awaited<ReturnType<typeof downloadService.download>>
   try {
@@ -362,9 +398,40 @@ const getDownloadById = async (
   return ok(download)
 }
 
+/**
+ * Whatever the server can currently say about an uncached object being pulled
+ * back from the DSN, for the download-status endpoint.
+ *
+ * Deliberately not scoped to the caller: the cache is shared, so a job another
+ * user started is the reason this caller's file is about to become available,
+ * and reporting a bare "not cached" while that runs is what makes the UI look
+ * like the file is gone.
+ */
+const getReconstructionByCid = async (
+  cid: string,
+): Promise<{
+  state: 'running' | 'idle'
+  downloadedBytes: string
+  totalSize: string
+  startedAt: Date | null
+} | null> => {
+  const active = await asyncDownloadsRepository.getActiveDownloadByCid(cid)
+  if (!active) {
+    return null
+  }
+
+  return {
+    state: 'running',
+    downloadedBytes: active.downloadedBytes ?? '0',
+    totalSize: active.fileSize ?? '0',
+    startedAt: active.createdAt ?? null,
+  }
+}
+
 export const AsyncDownloadsUseCases = {
   createDownload,
   getDownloadsByUser,
+  getReconstructionByCid,
   updateProgress,
   updateStatus,
   dismissDownload,

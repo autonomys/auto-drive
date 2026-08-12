@@ -5,11 +5,7 @@ import {
 } from '../../../../gql/graphql';
 import { useNetwork } from '../../../contexts/network';
 import { useUserAsyncDownloadsStore } from './state';
-import {
-  AsyncDownload,
-  AsyncDownloadStatus,
-  DownloadStatus,
-} from '@auto-drive/models';
+import { AsyncDownload, AsyncDownloadStatus } from '@auto-drive/models';
 import {
   Dialog,
   DialogPanel,
@@ -35,29 +31,21 @@ export const UserAsyncDownloads = () => {
   const removePendingAutoDownload = useUserAsyncDownloadsStore(
     (e) => e.removePendingAutoDownload,
   );
-  const { gql, api, downloadService } = useNetwork();
+  const { gql, downloadService } = useNetwork();
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
   const [isOpen, setIsOpen] = useState(false);
   const autoDownloadingRef = useRef<Set<string>>(new Set());
 
-  const dismissOutdatedAsyncDownloads = useCallback(async () => {
-    let hasDismissedSome = false;
-    for (const asyncDownload of asyncDownloads) {
-      if (asyncDownload.status !== AsyncDownloadStatus.Completed) return;
-      const status = await api.checkDownloadStatus(asyncDownload.cid);
-      if (status === DownloadStatus.NotCached) {
-        api.dismissAsyncDownload(asyncDownload.id);
-        hasDismissedSome = true;
-      }
-    }
-    if (hasDismissedSome) {
-      updateAsyncDownloads();
-    }
-  }, [api, asyncDownloads, updateAsyncDownloads]);
-
-  useEffect(() => {
-    dismissOutdatedAsyncDownloads();
-  }, [dismissOutdatedAsyncDownloads]);
+  // Previously this swept completed downloads whose cache entry had since gone
+  // and dismissed them. Two problems made it destructive: `return` instead of
+  // `continue` aborted the sweep at the first non-completed row, and a single
+  // NotCached read was treated as proof the entry was gone — so a completed
+  // download could be silently removed from the user's only record of it. The
+  // sweep is gone; a completed row stays until the user dismisses it, and a
+  // re-download simply repopulates the cache.
+  //
+  // Kept out of the render path entirely rather than fixed in place: nothing
+  // here needs to mutate server state just to display it.
 
   const fetcher = useCallback(async () => {
     const { data } = await gql.query<MyUndismissedAsyncDownloadsQuery>({
@@ -75,8 +63,13 @@ export const UserAsyncDownloads = () => {
   // Periodic polling so background async downloads are detected even when
   // the download modal is closed.
   useEffect(() => {
+    // Downloading counts as pending here. It didn't before, because nothing
+    // ever set that status — now that a running reconstruction reports it,
+    // omitting it would stop the polling that refreshes its progress.
     const hasPending = asyncDownloads.some(
-      (d) => d.status === AsyncDownloadStatus.Pending,
+      (d) =>
+        d.status === AsyncDownloadStatus.Pending ||
+        d.status === AsyncDownloadStatus.Downloading,
     );
     const hasPendingAuto = pendingAutoDownloads.length > 0;
     if (!hasPending && !hasPendingAuto) return;

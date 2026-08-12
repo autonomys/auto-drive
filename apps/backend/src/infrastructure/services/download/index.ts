@@ -108,6 +108,33 @@ export const downloadService = {
       cid,
     )
 
+    // lru-cache refuses any entry bigger than maxEntrySize, which defaults to
+    // maxSize when it isn't set — as it isn't here. memoryDownloadCache.set
+    // only discovers that after asyncIterableToBuffer has assembled the entire
+    // object in the worker's heap, so a file above the cap costs its full size
+    // in RAM to produce a guaranteed miss, on a process that also serves every
+    // other download. Decide from the size we already hold instead, and give
+    // the filesystem tier the undivided stream when memory is out of the
+    // question. An unknown size means the bytes came from the memory tier in
+    // the first place, so there is nothing to put back there either.
+    const fitsInMemoryCache =
+      size !== undefined &&
+      size <= BigInt(config.memoryDownloadCache.maxCacheSize)
+
+    if (!fitsInMemoryCache) {
+      logger.debug(
+        'Skipping memory cache for cid=%s (size=%s, cap=%d)',
+        cid,
+        size?.toString() ?? 'unknown',
+        config.memoryDownloadCache.maxCacheSize,
+      )
+      fsCache.set(cid, { data: cacheStream, size }).catch((error) => {
+        logger.warn(error, 'Error setting filesystem cache for cid %s', cid)
+      })
+
+      return returnStream
+    }
+
     // Fork the stream again for caching w/o blocking the main thread
     forkStream(cacheStream)
       .then(async ([fsCacheStream, memoryCacheStream]) => {

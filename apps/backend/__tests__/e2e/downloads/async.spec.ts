@@ -20,12 +20,22 @@ import { err } from 'neverthrow'
 describe('Async Downloads', () => {
   let user: User
   let cid: string
+  // A second object, untouched by the other tests. They all share `cid` and
+  // never clean up, so any test that needs to observe a first-ever request for
+  // an object needs one of its own. Content-addressed, hence the distinct body.
+  let dedupeCid: string
 
   beforeAll(async () => {
     await dbMigration.up()
     const mockUser = createMockUser()
     user = mockUser
     cid = await uploadFile(mockUser, 'test.txt', 'test', 'text/plain')
+    dedupeCid = await uploadFile(
+      mockUser,
+      'dedupe.txt',
+      'dedupe-test-content',
+      'text/plain',
+    )
   })
 
   afterAll(async () => {
@@ -207,26 +217,52 @@ describe('Async Downloads', () => {
     )
   })
 
-  it('should get all downloads for a user', async () => {
-    // Create multiple downloads for the same user
-    const download1 = await AsyncDownloadsUseCases.createDownload(
+  it('should reuse the in-flight download instead of queueing another', async () => {
+    const mockPublish = jest.spyOn(Rabbit, 'publish').mockResolvedValue()
+
+    const first = await AsyncDownloadsUseCases.createDownload(
+      user,
+      dedupeCid,
+    ).then((e) => e._unsafeUnwrap())
+    const second = await AsyncDownloadsUseCases.createDownload(
+      user,
+      dedupeCid,
+    ).then((e) => e._unsafeUnwrap())
+
+    // Same row, and crucially only one task: a retrieval runs for minutes, so
+    // a user will click again while it works. Before this, every click queued
+    // another full pull of the same object against the same gateway.
+    expect(second.id).toBe(first.id)
+    expect(mockPublish).toHaveBeenCalledTimes(1)
+
+    await AsyncDownloadsUseCases.dismissDownload(user, first.id)
+  })
+
+  it('should exclude dismissed downloads and allow a fresh request afterwards', async () => {
+    jest.spyOn(Rabbit, 'publish').mockResolvedValue()
+
+    const dismissed = await AsyncDownloadsUseCases.createDownload(
       user,
       cid,
     ).then((e) => e._unsafeUnwrap())
-    const download2 = await AsyncDownloadsUseCases.createDownload(
-      user,
-      cid,
-    ).then((e) => e._unsafeUnwrap())
+    await AsyncDownloadsUseCases.dismissDownload(user, dismissed.id)
 
-    await AsyncDownloadsUseCases.dismissDownload(user, download1.id)
-
-    // Get all downloads for the user
-    const downloads = await AsyncDownloadsUseCases.getDownloadsByUser(user)
-
-    // Verify that the downloads include the ones we just created
-    expect(downloads).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: download2.id })]),
+    // A dismissed row is no longer in flight, so asking again starts a new one
+    // rather than handing back the row the user just dismissed.
+    const fresh = await AsyncDownloadsUseCases.createDownload(user, cid).then(
+      (e) => e._unsafeUnwrap(),
     )
+    expect(fresh.id).not.toBe(dismissed.id)
+
+    const downloads = await AsyncDownloadsUseCases.getDownloadsByUser(user)
+    expect(downloads).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: fresh.id })]),
+    )
+    expect(downloads).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: dismissed.id })]),
+    )
+
+    await AsyncDownloadsUseCases.dismissDownload(user, fresh.id)
   })
 
   it('should get a specific download by id', async () => {

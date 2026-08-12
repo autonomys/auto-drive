@@ -66,6 +66,61 @@ const getDownloadByCid = async (
   return download.rows.map(mapAsyncDownloadDBToAsyncDownload).at(0) ?? null
 }
 
+/**
+ * The most recent still-running reconstruction for this cid, regardless of who
+ * asked for it. The cache is shared, so one user's in-flight job is the answer
+ * to every other user's "is this being fetched?" — without this the status
+ * endpoint can only say "not cached", which reads as "broken" while a
+ * reconstruction is minutes into running.
+ */
+const getActiveDownloadByCid = async (
+  cid: string,
+): Promise<AsyncDownload | null> => {
+  const db = await getDatabase()
+
+  const download = await db.query<AsyncDownloadDB>(
+    `SELECT * FROM public.async_downloads
+     WHERE cid = $1 AND status IN ($2, $3)
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [cid, AsyncDownloadStatus.Pending, AsyncDownloadStatus.Downloading],
+  )
+
+  return download.rows.map(mapAsyncDownloadDBToAsyncDownload).at(0) ?? null
+}
+
+/**
+ * This user's own still-running request for this cid, used to make repeat
+ * clicks idempotent. Without it every click on Download or "Bring to Cache"
+ * inserts another row and publishes another task, so N clicks (or N users on a
+ * popular file) become N concurrent full reconstructions competing for the
+ * same gateway.
+ */
+const getActiveDownloadByCidAndUser = async (
+  cid: string,
+  oauth_provider: string,
+  oauth_user_id: string,
+): Promise<AsyncDownload | null> => {
+  const db = await getDatabase()
+
+  const download = await db.query<AsyncDownloadDB>(
+    `SELECT * FROM public.async_downloads
+     WHERE cid = $1 AND oauth_provider = $2 AND oauth_user_id = $3
+       AND status IN ($4, $5)
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [
+      cid,
+      oauth_provider,
+      oauth_user_id,
+      AsyncDownloadStatus.Pending,
+      AsyncDownloadStatus.Downloading,
+    ],
+  )
+
+  return download.rows.map(mapAsyncDownloadDBToAsyncDownload).at(0) ?? null
+}
+
 const createDownload = async (
   id: string,
   oauth_provider: string,
@@ -143,6 +198,8 @@ export const asyncDownloadsRepository = {
   getDownloadById,
   getUndismissedDownloadsByUser,
   getDownloadByCid,
+  getActiveDownloadByCid,
+  getActiveDownloadByCidAndUser,
   createDownload,
   updateDownloadStatus,
   updateDownloadProgress,

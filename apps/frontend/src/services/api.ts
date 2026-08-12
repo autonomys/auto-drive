@@ -110,6 +110,54 @@ export interface UploadResponse {
 
 export type Api = ReturnType<typeof createApiService>;
 
+/**
+ * What the server knows about an object's availability right now.
+ *
+ * `status` keeps its original two values. `reconstruction` is what lets the UI
+ * distinguish "this file is being pulled back from the DSN and is N% of the
+ * way there" from "nothing is happening" — previously both looked identical
+ * from the client, so a slow retrieval was indistinguishable from a dead file.
+ */
+export interface DownloadAvailability {
+  status: DownloadStatus;
+  reconstruction: {
+    state: 'running' | 'idle';
+    downloadedBytes: string;
+    totalSize: string;
+    startedAt: string | null;
+  } | null;
+}
+
+const fetchDownloadAvailability = async (
+  downloadApiUrl: string,
+  cid: string,
+): Promise<DownloadAvailability> => {
+  const session = await getAuthSession().catch(() => null);
+  const headers: Record<string, string> =
+    session?.accessToken && session.authProvider
+      ? {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        }
+      : {};
+
+  const response = await fetch(`${downloadApiUrl}/downloads/${cid}/status`, {
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Network response was not ok: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as DownloadAvailability;
+  return {
+    status: data.status,
+    // A backend that predates the richer payload answers with `status` alone;
+    // treat that as "nothing known" rather than letting undefined leak on.
+    reconstruction: data.reconstruction ?? null,
+  };
+};
+
 export const createApiService = ({
   apiBaseUrl,
   downloadApiUrl,
@@ -757,27 +805,16 @@ export const createApiService = ({
       },
     });
   },
+  // The server route is unauthenticated, so neither of these throws for
+  // signed-out users any more. They used to, which made every anonymous
+  // download skip the availability check entirely and go straight at a file
+  // that might need minutes of reconstruction, with no way to say so.
   checkDownloadStatus: async (cid: string): Promise<DownloadStatus> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(`${downloadApiUrl}/downloads/${cid}/status`, {
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
-    }
-
-    return (response.json() as Promise<{ status: DownloadStatus }>).then(
-      (data) => data.status,
-    );
+    const { status } = await fetchDownloadAvailability(downloadApiUrl, cid);
+    return status;
   },
+  checkDownloadAvailability: (cid: string): Promise<DownloadAvailability> =>
+    fetchDownloadAvailability(downloadApiUrl, cid),
   getCreditSummary: async (): Promise<CreditSummaryResponse> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {

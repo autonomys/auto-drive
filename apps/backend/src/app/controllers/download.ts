@@ -22,6 +22,7 @@ import {
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
 import { TimeoutError } from '../../shared/utils/timeout.js'
+import { DownloadStatus } from '@auto-drive/models'
 
 const logger = createLogger('http:controllers:download')
 
@@ -40,7 +41,29 @@ downloadController.get(
       handleError(checkStatusResult.error, res)
       return
     }
-    res.json({ status: checkStatusResult.value })
+
+    // `status` keeps its two-value shape so existing clients and the SDK are
+    // unaffected; `reconstruction` is additive. Without it "not-cached" is the
+    // only thing this endpoint can say, and it says the same thing whether a
+    // pull from the DSN is twelve minutes in or was never started — which is
+    // exactly the ambiguity that makes a slow file look like a dead one.
+    const reconstruction =
+      checkStatusResult.value === DownloadStatus.Cached
+        ? null
+        : await AsyncDownloadsUseCases.getReconstructionByCid(cid).catch(
+            (error) => {
+              // Advisory only: never fail the status check over it, or the
+              // client loses the one signal it can still act on.
+              logger.warn(
+                error as Error,
+                'Failed to read reconstruction state (cid=%s)',
+                cid,
+              )
+              return null
+            },
+          )
+
+    res.json({ status: checkStatusResult.value, reconstruction })
   }),
 )
 

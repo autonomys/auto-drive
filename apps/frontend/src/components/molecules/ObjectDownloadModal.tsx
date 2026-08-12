@@ -28,6 +28,8 @@ import { useUserAsyncDownloadsStore } from '../organisms/UserAsyncDownloads/stat
 import {
   ObjectDownloadAbortedError,
   ObjectDownloadPhase,
+  ObjectDownloadPreparationProgress,
+  ObjectDownloadStillPreparingError,
   runObjectDownloadFlow,
 } from 'services/objectDownloadFlow';
 
@@ -52,6 +54,8 @@ export const ObjectDownloadModal = ({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<boolean>(false);
   const [asyncPreparing, setAsyncPreparing] = useState<boolean>(false);
+  const [preparationProgress, setPreparationProgress] =
+    useState<ObjectDownloadPreparationProgress | null>(null);
   const defaultPassword = useEncryptionStore((store) => store.password);
   const network = useNetwork();
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
@@ -63,8 +67,12 @@ export const ObjectDownloadModal = ({
   const downloadAbortRef = useRef<AbortController | null>(null);
   const downloadPhaseRef = useRef<ObjectDownloadPhase | null>(null);
 
-  const handleCloseWhileAsyncPreparing = useCallback(() => {
-    if (!asyncPreparing || !metadata) return;
+  // Kept free of `asyncPreparing` so it is safe to call from inside the
+  // download flow's own error handling: that code runs in a closure created
+  // before preparation started, and a stale `asyncPreparing === false` there
+  // would silently drop the hand-off and lose the user's download.
+  const registerBackgroundDownload = useCallback(() => {
+    if (!metadata) return;
 
     addPendingAutoDownload({
       cid: metadata.dataCid,
@@ -72,18 +80,18 @@ export const ObjectDownloadModal = ({
       skipDecryption,
       fileName: metadata.name ?? undefined,
     });
+  }, [metadata, password, skipDecryption, addPendingAutoDownload]);
+
+  const handleCloseWhileAsyncPreparing = useCallback(() => {
+    if (!asyncPreparing || !metadata) return;
+
+    registerBackgroundDownload();
 
     toast.success(
       'Download continues in the background. Check Cached Downloads for progress.',
       { id: toastId, duration: 5000 },
     );
-  }, [
-    asyncPreparing,
-    metadata,
-    password,
-    skipDecryption,
-    addPendingAutoDownload,
-  ]);
+  }, [asyncPreparing, metadata, registerBackgroundDownload]);
 
   useEffect(() => {
     if (!cid) {
@@ -97,6 +105,7 @@ export const ObjectDownloadModal = ({
       setDownloadError(null);
       setCheckingStatus(false);
       setAsyncPreparing(false);
+      setPreparationProgress(null);
       downloadInitiatedRef.current = null;
       downloadPhaseRef.current = null;
     }
@@ -155,6 +164,7 @@ export const ObjectDownloadModal = ({
           setDownloadProgress(progress);
         },
         onAsyncDownloadsRefresh: updateAsyncDownloads,
+        onPreparationProgress: setPreparationProgress,
         getAsyncDownloads: () =>
           useUserAsyncDownloadsStore.getState().asyncDownloads,
         onPhaseChange: (phase) => {
@@ -191,6 +201,16 @@ export const ObjectDownloadModal = ({
         downloadInitiatedRef.current = null;
       } else if (e instanceof ObjectDownloadAbortedError) {
         return;
+      } else if (e instanceof ObjectDownloadStillPreparingError) {
+        // Not a failure — the server is still pulling this back from the DSN.
+        // Hand it to the background auto-download and say so, instead of
+        // showing a red error box for a retrieval that is working.
+        registerBackgroundDownload();
+        toast.success(e.message, { id: toastId, duration: 6000 });
+        setIsDownloading(false);
+        setAsyncPreparing(false);
+        setCheckingStatus(false);
+        onClose();
       } else {
         console.error('Download failed:', e);
         const errorMessage =
@@ -211,6 +231,7 @@ export const ObjectDownloadModal = ({
     network.api,
     network.downloadService,
     updateAsyncDownloads,
+    registerBackgroundDownload,
     onClose,
   ]);
 
@@ -329,11 +350,39 @@ export const ObjectDownloadModal = ({
           <div className='flex items-center gap-3'>
             <div className='h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary' />
             <p className='text-sm text-gray-600'>
-              This file is being retrieved from the network. This may take
-              several minutes — your download will start automatically when
-              it&apos;s ready.
+              This file is being retrieved from the network. Large files can
+              take 20 minutes or more — your download will start automatically
+              when it&apos;s ready.
             </p>
           </div>
+
+          {/* Server-reported reconstruction progress. Without it this screen
+              was an indefinite spinner, and a retrieval that was working
+              looked identical to one that had died. */}
+          {preparationProgress && preparationProgress.totalBytes > 0 && (
+            <div className='w-full'>
+              <div className='mb-2 flex justify-between text-xs text-gray-600'>
+                <span>
+                  {formatBytes(preparationProgress.downloadedBytes)} retrieved
+                </span>
+                <span>{formatBytes(preparationProgress.totalBytes)}</span>
+              </div>
+              <div className='h-2 w-full overflow-hidden rounded-full bg-gray-200'>
+                <div
+                  className='h-full rounded-full bg-primary transition-all duration-300 ease-out'
+                  style={{ width: `${preparationProgress.percentage}%` }}
+                  role='progressbar'
+                  aria-valuenow={preparationProgress.percentage}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                />
+              </div>
+              <div className='mt-1 text-center text-xs text-gray-500'>
+                {preparationProgress.percentage}% ·{' '}
+                {Math.floor(preparationProgress.elapsedMs / 60000)}m elapsed
+              </div>
+            </div>
+          )}
           <p className='text-center text-xs text-gray-500'>
             You can close this dialog and continue browsing. Your download will
             start automatically when it&apos;s ready.
@@ -466,6 +515,7 @@ export const ObjectDownloadModal = ({
     downloadError,
     progressView,
     asyncPreparing,
+    preparationProgress,
     insecure,
     passwordOrNotEncrypted,
     passwordConfirmed,

@@ -26,6 +26,7 @@ import { useEncryptionStore } from 'globalStates/encryption';
 import { InvalidDecryptKey } from 'utils/file';
 import {
   ObjectDownloadAbortedError,
+  ObjectDownloadStillPreparingError,
   runObjectDownloadFlow,
 } from 'services/objectDownloadFlow';
 import {
@@ -43,6 +44,15 @@ import { shortenString } from 'utils/misc';
 import { useUserAsyncDownloadsStore } from '../organisms/UserAsyncDownloads/state';
 
 const toastId = 'bulk-object-download-modal';
+
+/**
+ * How long a bulk run waits on one item's reconstruction before moving on.
+ *
+ * Items run one at a time, so an unbounded wait would let a single uncached
+ * file hold up every file behind it. Past this the item is handed to the
+ * background auto-download machinery — it still completes, just not inline.
+ */
+const BULK_ASYNC_WAIT_MS = 3 * 60 * 1000;
 
 const statusLabel: Record<BulkDownloadStatus, string> = {
   pending: 'Pending',
@@ -251,6 +261,7 @@ export const BulkObjectDownloadModal = ({
           password,
           skipDecryption,
           signal: abortController.signal,
+          maxAsyncWaitMs: BULK_ASYNC_WAIT_MS,
           onAsyncDownloadsRefresh: updateAsyncDownloads,
           getAsyncDownloads: () =>
             useUserAsyncDownloadsStore.getState().asyncDownloads,
@@ -290,6 +301,29 @@ export const BulkObjectDownloadModal = ({
           break;
         }
 
+        // Still reconstructing server-side, not broken. Hand it to the
+        // background auto-download so the rest of the batch can proceed, and
+        // record it as skipped-for-now rather than failed — marking a healthy
+        // retrieval "Failed" is what taught users to distrust the screen.
+        if (error instanceof ObjectDownloadStillPreparingError) {
+          addPendingAutoDownload({
+            cid: item.cid,
+            password,
+            skipDecryption,
+            fileName: item.information?.metadata.name ?? undefined,
+          });
+          updateItem(item.cid, (current) => ({
+            ...current,
+            status: 'skipped',
+            skippedReason: 'Still being retrieved — will download in background',
+          }));
+          toast.success(
+            `${shortenString(itemName(item), 30)} is still being retrieved; it will download automatically`,
+            { id: `${toastId}-${item.cid}` },
+          );
+          continue;
+        }
+
         const errorMessage =
           error instanceof InvalidDecryptKey
             ? 'Wrong password'
@@ -311,6 +345,7 @@ export const BulkObjectDownloadModal = ({
     setIsRunning(false);
     setIsComplete(true);
   }, [
+    addPendingAutoDownload,
     canStart,
     encryptionContext,
     hasConfirmedInsecure,
