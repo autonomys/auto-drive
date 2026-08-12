@@ -116,6 +116,52 @@ export const IntentSchema = z.object({
 
 export type Intent = z.infer<typeof IntentSchema>;
 
+/**
+ * Why an on-chain payment could not be attached to the intent it named.
+ *
+ * Both receivers take any `intentId` from anyone — `payIntent(bytes32)` on Auto
+ * EVM and `payIntentWithToken(bytes32, uint256)` on Ethereum — so a payment can
+ * name an intent that does not exist, or one denominated in the other asset.
+ * Neither is resolvable in code: the money has moved and the only remaining
+ * question is who it belongs to.
+ */
+export enum IntentMispaymentReason {
+  // The intent id in the event matches no row.
+  UNKNOWN_INTENT = "unknown_intent",
+  // The row exists but is denominated in the other asset — AI3 sent to a USDC
+  // intent, or vice versa.
+  ASSET_MISMATCH = "asset_mismatch",
+}
+
+/**
+ * A payment that arrived and was refused, recorded so it can be resolved.
+ *
+ * Refusing is the right call — confirming a mispayment strands the intent and
+ * makes the idempotency guard discard the user's real payment when it lands —
+ * but a refusal that exists only as a log line leaves an irreversible on-chain
+ * transfer with nothing durable pointing at it. This row is what an admin works
+ * from: which intent was named, what actually arrived, who sent it, and the
+ * transaction to look it up by.
+ *
+ * Deliberately NOT foreign-keyed to `intents`: the UNKNOWN_INTENT case has no
+ * row to point at, and that is precisely the case with the least other evidence.
+ */
+export type IntentMispayment = {
+  id: string;
+  // The id named by the on-chain event. Not necessarily an existing intent.
+  intentId: string;
+  reason: IntentMispaymentReason;
+  // What the named intent was denominated in; absent for UNKNOWN_INTENT.
+  expectedPaymentMethod?: PaymentMethod;
+  // Whichever the watcher reported. Exactly one is set — which one is itself
+  // the evidence of what went wrong.
+  paymentAmount?: bigint;
+  tokenAmount?: bigint;
+  fromAddress?: string;
+  txHash?: string;
+  createdAt: Date;
+};
+
 export const intentCreationSchema = z.object({
   expiresAt: z
     .string()
