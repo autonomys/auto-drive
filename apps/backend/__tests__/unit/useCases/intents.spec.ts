@@ -11,10 +11,15 @@ import {
   CreditCapExceededError,
   ForbiddenError,
   GoneError,
+  ObjectNotFoundError,
   QuoteErrorCode,
   QuoteFailedError,
+  ServiceUnavailableError,
+  UsdcPaymentsDisabledError,
 } from '../../../src/errors/index.js'
+import { intentMispaymentsRepository } from '../../../src/infrastructure/repositories/users/intentMispayments.js'
 import {
+  IntentMispaymentReason,
   IntentStatus,
   PaymentMethod,
   UserRole,
@@ -69,13 +74,21 @@ describe('IntentsUseCases', () => {
       } as PurchasedCreditSummary)
   }
 
+  // Paying in USDC is gated (featureFlags.payWithUsdc). Almost every test below
+  // is about what a quote contains rather than about who may ask for one, so the
+  // flag is opened here and the gate itself is tested separately.
+  const usdcFlag = config.featureFlags.flags.payWithUsdc
+  const usdcFlagDefault = usdcFlag.active
+
   beforeEach(() => {
     jest.clearAllMocks()
     jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({ price: 1, pricePerGB: 1073741824 })
+    usdcFlag.active = true
   })
 
   afterEach(() => {
     jest.restoreAllMocks()
+    usdcFlag.active = usdcFlagDefault
   })
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -277,6 +290,108 @@ describe('IntentsUseCases', () => {
       config.credits.usdQuoteMarginPercent,
     )
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // The payWithUsdc gate
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('createIntent refuses USDC when the flag is off', async () => {
+    usdcFlag.active = false
+    const accountSpy = jest.spyOn(AccountsUseCases, 'getOrCreateAccount')
+    const priceSpy = jest.spyOn(IntentsUseCases, 'getPrice')
+    const rateSpy = jest.spyOn(priceOracle, 'getPrice')
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    expect(result.isErr()).toBe(true)
+    const error = result._unsafeUnwrapErr()
+    expect(error).toBeInstanceOf(UsdcPaymentsDisabledError)
+    expect((error as UsdcPaymentsDisabledError).statusCode).toBe(403)
+    // Refused before anything is read, priced or written: a caller who cannot
+    // use the asset costs nothing to turn away.
+    expect(accountSpy).not.toHaveBeenCalled()
+    expect(priceSpy).not.toHaveBeenCalled()
+    expect(rateSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent lets an admin pay in USDC while the flag is off', async () => {
+    // The point of the exemption: the path stays exercisable against production
+    // while it is shut to everyone else.
+    usdcFlag.active = false
+    mockPurchasedBalance(0n)
+    mockPrice()
+    const createSpy = jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+
+    const admin = {
+      ...orgUser,
+      role: UserRole.Admin,
+    } as unknown as UserWithOrganization
+
+    const result = await IntentsUseCases.createIntent(admin, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    expect(result.isOk()).toBe(true)
+    expect(createSpy.mock.calls[0][0].quotedTokenAmount).toBe(
+      expectedCharge(1000n),
+    )
+  })
+
+  it('createIntent is unaffected by the USDC flag on the AI3 path', async () => {
+    usdcFlag.active = false
+    const createSpy = jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+
+    const result = await IntentsUseCases.createIntent(orgUser)
+
+    expect(result.isOk()).toBe(true)
+    expect(createSpy.mock.calls[0][0].paymentMethod).toBe(
+      PaymentMethod.AI3_NATIVE,
+    )
+  })
+
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('createIntent refuses to create an intent at a zero per-byte price', async () => {
+    // CREDITS_PRICE_MULTIPLIER=0, or a chain reporting a zero byte fee. Every
+    // payment against such an intent converts to 0 credits and lands in FAILED
+    // with the money kept, and on the USDC path the quote itself would be 0.
+    jest
+      .spyOn(IntentsUseCases, 'getPrice')
+      .mockResolvedValue({ price: 0, pricePerGB: 0 })
+    mockPurchasedBalance(0n)
+    const rateSpy = jest.spyOn(priceOracle, 'getPrice')
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+
+    for (const paymentMethod of [
+      PaymentMethod.AI3_NATIVE,
+      PaymentMethod.USDC_ETH,
+    ]) {
+      const result = await IntentsUseCases.createIntent(orgUser, {
+        requestedBytes: 1000n,
+        paymentMethod,
+      })
+
+      expect(result.isErr()).toBe(true)
+      const error = result._unsafeUnwrapErr()
+      // The request was fine; the deployment is not. 503, not 4xx.
+      expect(error).toBeInstanceOf(ServiceUnavailableError)
+      expect((error as ServiceUnavailableError).statusCode).toBe(503)
+    }
+
+    // No unpriceable intent is written, and no rate is fetched to price one.
+    expect(rateSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
   it('createIntent requires requestedBytes when paying with USDC', async () => {
     const rateSpy = jest.spyOn(priceOracle, 'getPrice')
     const priceSpy = jest.spyOn(IntentsUseCases, 'getPrice')
@@ -435,10 +550,20 @@ describe('IntentsUseCases', () => {
   )
 
   it('createIntent treats an unrecognised quote failure as retryable, not as bad input', async () => {
+    // A reason added to OracleUnavailableReason after the mapping was written —
+    // the union has grown twice already. It must not fall through to a 4xx that
+    // tells the user to change a request that was fine.
     mockPurchasedBalance(0n)
     jest
       .spyOn(priceOracle, 'getPrice')
-      .mockResolvedValue(err(new Error('something new') as never))
+      .mockResolvedValue(
+        err(
+          new OracleUnavailableError(
+            'something new',
+            'a-guard-invented-later' as never,
+          ),
+        ),
+      )
 
     const result = await IntentsUseCases.createIntent(orgUser, {
       requestedBytes: 1000n,
@@ -712,6 +837,131 @@ describe('IntentsUseCases', () => {
     // Refused before the row is even read — confirming with nothing received
     // would surface later as a 0-credit FAILED row to diagnose backwards.
     expect(getByIdSpy).not.toHaveBeenCalled()
+  })
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Refused payments have to leave a durable record
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('markIntentAsConfirmed files a mispayment when the asset does not match', async () => {
+    const intent: Intent = {
+      id: '0xusdc-mispaid-recorded',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 5n * 10n ** 18n,
+      fromAddress: '0xpayer',
+      txHash: '0xdeadbeef',
+    })
+
+    expect(res.isErr()).toBe(true)
+    // Refusing is correct but resolves nothing on chain — the transfer happened.
+    // Everything needed to find it again has to be written down.
+    expect(recordSpy).toHaveBeenCalledWith({
+      intentId: intent.id,
+      reason: IntentMispaymentReason.ASSET_MISMATCH,
+      expectedPaymentMethod: PaymentMethod.USDC_ETH,
+      paymentAmount: 5n * 10n ** 18n,
+      tokenAmount: undefined,
+      fromAddress: '0xpayer',
+      txHash: '0xdeadbeef',
+    })
+  })
+
+  it('markIntentAsConfirmed files a mispayment for an unknown intent id', async () => {
+    // The case with the least other evidence: no intent row exists, so nothing
+    // anywhere else records that money arrived.
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(null)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: '0xnosuchintent',
+      paymentAmount: 5n * 10n ** 18n,
+      fromAddress: '0xpayer',
+      txHash: '0xfeedface',
+    })
+
+    expect(res.isErr()).toBe(true)
+    expect(res._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intentId: '0xnosuchintent',
+        reason: IntentMispaymentReason.UNKNOWN_INTENT,
+        txHash: '0xfeedface',
+      }),
+    )
+  })
+
+  it('markIntentAsConfirmed still refuses when the mispayment record cannot be written', async () => {
+    // Filing the paperwork must not change which error actually happened: the
+    // watcher would log the wrong cause, and on the startup-sweep path a throw
+    // here would abort the recovery of unrelated transactions.
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(null)
+    jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockRejectedValue(new Error('db down'))
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: '0xnosuchintent',
+      paymentAmount: 1n,
+    })
+
+    expect(res.isErr()).toBe(true)
+    expect(res._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+  })
+
+  it('markIntentAsConfirmed files nothing when the payment is accepted', async () => {
+    const intent: Intent = {
+      id: '0xai3-fine',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 5n * 10n ** 18n,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
+  it('getMispayments is admin-only', async () => {
+    const listSpy = jest
+      .spyOn(intentMispaymentsRepository, 'list')
+      .mockResolvedValue([])
+
+    const denied = await IntentsUseCases.getMispayments(user)
+    expect(denied.isErr()).toBe(true)
+    expect(denied._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    expect(listSpy).not.toHaveBeenCalled()
+
+    const allowed = await IntentsUseCases.getMispayments({
+      ...user,
+      role: UserRole.Admin,
+    } as User)
+    expect(allowed.isOk()).toBe(true)
+    expect(listSpy).toHaveBeenCalled()
   })
 
   // ────────────────────────────────────────────────────────────────────────────

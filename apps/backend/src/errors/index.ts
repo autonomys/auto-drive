@@ -137,6 +137,28 @@ export class GoneError extends HttpError {
   }
 }
 
+// 403 Forbidden — paying in USDC is not open to this caller.
+//
+// A subclass rather than a bare ForbiddenError for the same reason as
+// CreditCapExceededError: a client has to be able to tell "this asset is not
+// available to you" apart from "you need a Google account" without matching on
+// prose, and the code travels with the error rather than being re-attached at
+// each call site.
+export class UsdcPaymentsDisabledError extends ForbiddenError {
+  static readonly code = 'USDC_PAYMENTS_DISABLED'
+  constructor(message: string) {
+    super(message)
+    this.name = 'UsdcPaymentsDisabledError'
+  }
+
+  override handleResponse(res: Response) {
+    res.status(this.statusCode).json({
+      error: UsdcPaymentsDisabledError.code,
+      message: this.message,
+    })
+  }
+}
+
 // 503 Service Unavailable — a dependency we need was unreachable, or the data it
 // returned was not trustworthy enough to act on.
 //
@@ -151,16 +173,19 @@ export class ServiceUnavailableError extends HttpError {
   }
 }
 
-// Why a USDC quote could not be produced. The price oracle draws four distinct
-// causes and they mean genuinely different things to whoever is buying: two are
-// our problem and retryable, two are about the requested size and are not. An
-// Ethereum outage reaching the user as "your purchase is too large" would send
-// them to shrink a purchase that was never the problem, so the cause travels to
-// the client as a code instead of being flattened into a 500 or into prose.
-// Both codes are 503s. There is deliberately no code here for "ask for less":
-// the oracle reports one size-independent rate, so it never refuses a quote on
-// account of the size, and a code the mapping cannot produce is a promise to
-// clients we would not keep.
+// Why a USDC quote could not be produced.
+//
+// The oracle refuses for a dozen distinct reasons (see OracleUnavailableReason)
+// and they collapse into two facts a buyer can act on: the market has re-priced
+// past the window the average is built from, or we could not obtain a rate we
+// trust. Both are our problem and both are retryable, so both are 503s — the
+// cause still travels as a code, because "the market moved" and "the source is
+// down" call for different words on a screen and different alerts behind it.
+//
+// There is deliberately no code here for "ask for less". The rate is one
+// size-independent average of realized fills, so no oracle failure is about the
+// requested size, and a code the mapping cannot produce is a promise to clients
+// we would not keep.
 export enum QuoteErrorCode {
   // We could not read a trustworthy rate, or what we read failed its guards.
   ORACLE_UNAVAILABLE = 'PRICE_ORACLE_UNAVAILABLE',
@@ -169,18 +194,21 @@ export enum QuoteErrorCode {
   PRICE_UNSTABLE = 'PRICE_UNSTABLE',
 }
 
-// A quote failure, carrying both the HTTP status the cause maps to and the
-// machine-readable code.
+// A quote failure, carrying the machine-readable cause.
 //
-// One class parameterised by cause rather than four subclasses: the mapping from
-// oracle error to (status, code) is a small table that is far easier to review as
-// a table than as four near-identical class bodies, and the response shape has to
-// be identical across all four regardless.
-export class QuoteFailedError extends HttpError {
+// Extends ServiceUnavailableError rather than taking a status: every quote
+// failure is a 503, so the status belongs in the type rather than at each
+// construction site where it could be passed inconsistently.
+//
+// One class parameterised by cause rather than one subclass per code: the
+// mapping from oracle reason to code is a small table, far easier to review as a
+// table than as near-identical class bodies, and the response shape is identical
+// across all of them regardless.
+export class QuoteFailedError extends ServiceUnavailableError {
   public readonly code: QuoteErrorCode
 
-  constructor(statusCode: number, code: QuoteErrorCode, message: string) {
-    super(statusCode, message)
+  constructor(code: QuoteErrorCode, message: string) {
+    super(message)
     this.name = 'QuoteFailedError'
     this.code = code
   }

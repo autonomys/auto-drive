@@ -1,5 +1,6 @@
 import {
   Intent,
+  IntentMispaymentReason,
   IntentStatus,
   PaymentMethod,
   User,
@@ -7,6 +8,7 @@ import {
   UserWithOrganization,
 } from '@auto-drive/models'
 import { intentsRepository } from '../../infrastructure/repositories/users/intents.js'
+import { intentMispaymentsRepository } from '../../infrastructure/repositories/users/intentMispayments.js'
 import { purchasedCreditsRepository } from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../infrastructure/eventRouter/tasks.js'
@@ -20,12 +22,14 @@ import {
   QuoteErrorCode,
   QuoteFailedError,
   ServiceUnavailableError,
+  UsdcPaymentsDisabledError,
 } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 import { config } from '../../config.js'
 import { randomBytes } from 'crypto'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from './accounts.js'
+import { FeatureFlagsUseCases } from '../featureFlags/index.js'
 import { transactionByteFee } from '@autonomys/auto-consensus'
 import { ApiPromise, WsProvider } from '@polkadot/api'
 import { priceOracle } from '../../infrastructure/services/priceOracle/index.js'
@@ -247,38 +251,35 @@ const checkCapHeadroom = async (
   return ok(undefined)
 }
 
-// Map a price-oracle failure onto an HTTP status and a client-facing code.
+// Map a price-oracle failure onto a client-facing code.
 //
-// Every one of them is a 503. That is a narrowing: this mapping used to send two
-// of four causes back as 4xx — 409 "the pool cannot fill it, ask for less" and
-// 400 "the amount is out of the quoter's range". Both told the user to change
-// the size, and since #807 no oracle failure is about the size. The rate is one
-// size-independent average of realized fills; it is refused for the market or
-// for the source, never for how much was asked for. A 4xx here would blame a
-// request that was fine.
+// Every one of them is a 503, carried by QuoteFailedError itself. That is a
+// narrowing: this mapping used to send two of four causes back as 4xx — 409 "the
+// pool cannot fill it, ask for less" and 400 "the amount is out of the quoter's
+// range". Both told the user to change the size, and since #807 no oracle
+// failure is about the size. The rate is one size-independent average of
+// realized fills; it is refused for the market or for the source, never for how
+// much was asked for. A 4xx here would blame a request that was fine.
 //
 // Still two codes rather than one, because the oracle draws the distinction
 // deliberately and flattening it misdirects whoever reads the response: a market
 // that has re-priced past its own window is a different fact from a source we
 // could not read, even though both mean "not right now".
-const quoteErrorToHttpError = (error: Error): QuoteFailedError => {
-  if (
-    error instanceof OracleUnavailableError &&
-    error.reason === 'market-moved'
-  ) {
-    return new QuoteFailedError(
-      ServiceUnavailableError.statusCode,
-      QuoteErrorCode.PRICE_UNSTABLE,
-      error.message,
-    )
+//
+// Takes OracleUnavailableError rather than Error because that is what
+// priceOracle.getPrice() can fail with — the Result type says so. The default
+// branch is not defence against some other error class arriving; it is the
+// mapping's answer for reasons added to OracleUnavailableReason after this was
+// written, which is a union that has grown twice already.
+const quoteErrorToHttpError = (
+  error: OracleUnavailableError,
+): QuoteFailedError => {
+  if (error.reason === 'market-moved') {
+    return new QuoteFailedError(QuoteErrorCode.PRICE_UNSTABLE, error.message)
   }
   // Every other reason, and anything the oracle grows later: an unrecognised
   // failure is our problem and retryable, which is the safe default.
-  return new QuoteFailedError(
-    ServiceUnavailableError.statusCode,
-    QuoteErrorCode.ORACLE_UNAVAILABLE,
-    error.message,
-  )
+  return new QuoteFailedError(QuoteErrorCode.ORACLE_UNAVAILABLE, error.message)
 }
 
 type CreateIntentOptions = {
@@ -302,8 +303,44 @@ const createIntent = async (
     paymentMethod = PaymentMethod.AI3_NATIVE,
   }: CreateIntentOptions = {},
 ): Promise<
-  Result<Intent, BadRequestError | CreditCapExceededError | QuoteFailedError>
+  Result<
+    Intent,
+    | BadRequestError
+    | CreditCapExceededError
+    | QuoteFailedError
+    | ServiceUnavailableError
+    | UsdcPaymentsDisabledError
+  >
 > => {
+  // Is this caller allowed to pay in USDC at all?
+  //
+  // First, before the request is even validated: a caller who cannot use the
+  // asset should be told that, not walked through a critique of a body that was
+  // never going to be quoted. It also keeps the closed path cheap — no account
+  // read, no balance read, no chain round-trip.
+  //
+  // Checked in the use case rather than in the controller, for the same reason
+  // the requestedBytes rule is: `POST /intents` is not the only door, and a
+  // caller reaching this function directly must be held to the same rule.
+  //
+  // Admins are exempt by construction (see featureFlags/isActive), which is what
+  // makes the flag safe to leave off — the path stays exercisable in production
+  // while it is shut to everyone else.
+  if (
+    paymentMethod === PaymentMethod.USDC_ETH &&
+    !FeatureFlagsUseCases.isFlagActive('payWithUsdc', executor)
+  ) {
+    logger.info('Rejecting USDC intent creation — feature not open to caller', {
+      userPublicId: executor.publicId,
+    })
+    return err(
+      new UsdcPaymentsDisabledError(
+        'Paying in USDC is not available on this account. Pay in AI3 instead, ' +
+          'or omit paymentMethod to default to it.',
+      ),
+    )
+  }
+
   // The USDC path cannot price a purchase without knowing its size, so the size
   // is required there and optional on AI3.
   //
@@ -365,6 +402,35 @@ const createIntent = async (
   const { price } = await IntentsUseCases.getPrice()
   const shannonsPerByte = BigInt(price)
 
+  // An intent priced at zero per byte is a trap, not a bargain. Every payment
+  // made against it converts to zero credits — getIntentCredits divides by this
+  // number and returns 0 rather than throwing — so the intent lands in FAILED
+  // with the payment kept and nothing bought. On the USDC path it is worse
+  // still: the quote itself computes to 0, and the user is shown a binding
+  // amount of "nothing" for a purchase that will never be granted.
+  //
+  // Reachable from CREDITS_PRICE_MULTIPLIER=0 or a chain reporting a zero byte
+  // fee — a misconfiguration rather than a market condition, which is why it is
+  // a 503 and not a 4xx: the request was fine, the deployment is not.
+  //
+  // Guarded on both paths, though only the USDC one produces a misleading quote:
+  // the downstream failure is identical, and an intent nobody can settle should
+  // not be created whichever asset it names. The zero check in getIntentCredits
+  // stays as defence for rows written before this existed.
+  if (shannonsPerByte === 0n) {
+    logger.error('Refusing to create an intent at a zero per-byte price', {
+      userPublicId: executor.publicId,
+      paymentMethod,
+      priceMultiplier: config.paymentManager.priceMultiplier,
+    })
+    return err(
+      new ServiceUnavailableError(
+        'Storage is not priceable right now: the per-byte rate resolved to ' +
+          'zero. This is a server-side condition — retry shortly.',
+      ),
+    )
+  }
+
   const expiresAt = new Date(
     Date.now() + config.credits.intentExpiryMinutes * 60 * 1000,
   )
@@ -394,6 +460,16 @@ const createIntent = async (
   // the same intent is what makes the charge reproducible.
   const quotedAi3Shannons = requestedBytes! * shannonsPerByte
 
+  // A last-good rate prices the quote exactly as a fresh one does, and that is a
+  // decision rather than an oversight. The oracle's number is a volume-weighted
+  // average over days of realized fills, so the ORACLE_MAX_STALE_MS window (10
+  // minutes) cannot move it the way it would move a spot price — while refusing
+  // to quote through every subgraph blip would shut the purchase path far more
+  // often than the drift justifies. `stale` and `asOf` are recorded on every
+  // quote below, so a charge can still be explained after the fact.
+  //
+  // The guard that DOES fire on a moved market is `market-moved`, which the
+  // oracle raises against the window itself rather than against its age.
   const rate = await priceOracle.getPrice()
   if (rate.isErr()) {
     logger.info(
@@ -518,11 +594,51 @@ const triggerWatchIntent = async ({
   return ok()
 }
 
+/**
+ * Write down a payment we refused to attach to an intent.
+ *
+ * Never throws. The caller is already on its way to returning a refusal, and a
+ * failure to file the paperwork must not become a different error than the one
+ * that actually happened — the watcher would log the wrong cause, and on the
+ * startup-sweep path it would abort the recovery of unrelated transactions.
+ * A failed write degrades to the log line we had before, which is the floor
+ * rather than the goal.
+ */
+const recordMispayment = async (
+  mispayment: Parameters<typeof intentMispaymentsRepository.record>[0],
+): Promise<void> => {
+  try {
+    const recorded = await intentMispaymentsRepository.record(mispayment)
+    if (recorded) {
+      logger.warn('Recorded a mispayment for admin review', {
+        mispaymentId: recorded.id,
+        intentId: recorded.intentId,
+        reason: recorded.reason,
+        txHash: recorded.txHash,
+      })
+    }
+    // A null return is the ON CONFLICT path: this (transaction, intent) is
+    // already on file, which is the expected outcome of a reorg or the startup
+    // sweep replaying it. Not worth a line.
+  } catch (error) {
+    logger.error('Failed to record a mispayment — it survives only in logs', {
+      intentId: mispayment.intentId,
+      reason: mispayment.reason,
+      txHash: mispayment.txHash,
+      paymentAmount: mispayment.paymentAmount?.toString(),
+      tokenAmount: mispayment.tokenAmount?.toString(),
+      fromAddress: mispayment.fromAddress,
+      error,
+    })
+  }
+}
+
 const markIntentAsConfirmed = async ({
   intentId,
   paymentAmount,
   tokenAmount,
   fromAddress,
+  txHash,
 }: {
   intentId: string
   // AI3 path: shannons received on Auto EVM.
@@ -533,6 +649,10 @@ const markIntentAsConfirmed = async ({
   // silently wrong, starting with the dust guard in onConfirmedIntent.
   tokenAmount?: bigint
   fromAddress?: string
+  // The transaction the payment arrived in. Carried purely so a refusal can be
+  // recorded against something an admin can look up on a block explorer — an
+  // amount and a sender describe a payment, but only the hash finds it.
+  txHash?: string
 }) => {
   // Exactly one of the two is expected, but neither is the failure worth
   // catching: it would confirm an intent with nothing received, which later
@@ -549,6 +669,21 @@ const markIntentAsConfirmed = async ({
 
   const intent = await intentsRepository.getById(intentId)
   if (!intent) {
+    // A payment naming an intent that does not exist. Nothing can be done with
+    // it in code, which is exactly why it is written down: this is the case with
+    // the least evidence attached, and a log line is not evidence anyone finds.
+    logger.warn('markIntentAsConfirmed: payment for an unknown intent', {
+      intentId,
+      txHash,
+    })
+    await recordMispayment({
+      intentId,
+      reason: IntentMispaymentReason.UNKNOWN_INTENT,
+      paymentAmount,
+      tokenAmount,
+      fromAddress,
+      txHash,
+    })
     return err(new ObjectNotFoundError('Intent not found'))
   }
 
@@ -590,8 +725,9 @@ const markIntentAsConfirmed = async ({
   // discarded when it arrived.
   //
   // Refusing leaves the intent PENDING so it expires on its own schedule. The
-  // mispaid amount still needs manual resolution, which is the same position a
-  // payment to an unknown intent id is already in.
+  // mispaid amount still needs manual resolution, so it is recorded in
+  // intent_mispayments — refusing resolves nothing on chain, and an irreversible
+  // transfer must not be left with only a log line pointing at it.
   const expectsToken = intent.paymentMethod === PaymentMethod.USDC_ETH
   const suppliedAmount = expectsToken ? tokenAmount : paymentAmount
   if (suppliedAmount === undefined) {
@@ -602,8 +738,18 @@ const markIntentAsConfirmed = async ({
         paymentMethod: intent.paymentMethod,
         gotPaymentAmount: paymentAmount?.toString(),
         gotTokenAmount: tokenAmount?.toString(),
+        txHash,
       },
     )
+    await recordMispayment({
+      intentId,
+      reason: IntentMispaymentReason.ASSET_MISMATCH,
+      expectedPaymentMethod: intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
+      paymentAmount,
+      tokenAmount,
+      fromAddress,
+      txHash,
+    })
     return err(
       new BadRequestError(
         `Cannot confirm intent ${intentId}: it is denominated in ` +
@@ -634,10 +780,13 @@ const markIntentAsConfirmed = async ({
  *
  * That rate is `quotedTokenAmount / quotedAi3Shannons`, held as the pair rather
  * than as a stored ratio so the conversion is exact. It is emphatically NOT
- * `usdRateAtCreation`: that is the pool's marginal price, while the user paid the
- * executable quote plus the margin. Converting at the marginal rate refunds the
- * swap fee, the price impact and the margin as free storage — 5-8% on a realistic
- * purchase — and grants more bytes than the pre-payment cap check allowed for.
+ * `usdRateAtCreation`: that is the raw rate the oracle reported — a
+ * volume-weighted average of the pool's realized fills — while the user paid
+ * that rate plus USD_QUOTE_MARGIN. Since #807 the margin is the entire wedge
+ * between the two (the swap fee and price impact are inside the rate, paid by
+ * the fills it averages), so converting at the raw rate hands the whole margin
+ * back as free storage and grants more bytes than the pre-payment cap check
+ * allowed for.
  *
  * Multiplication before division throughout, so no intermediate floors. Paying
  * exactly `quotedTokenAmount` makes the first division exact
@@ -810,6 +959,19 @@ const getOverCapIntents = async (executor: User) => {
   return ok(intents)
 }
 
+// Returns refused on-chain payments for admin review — payments naming an
+// unknown intent, or denominated in the other asset.
+//
+// The queue OVER_CAP has for payments we accepted but could not convert. These
+// are the ones we never accepted at all, and they are less visible: the intent
+// they name is untouched, so nothing about its row says a payment happened.
+const getMispayments = async (executor: User) => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('Admin access required'))
+  }
+  return ok(await intentMispaymentsRepository.list())
+}
+
 // Resets an OVER_CAP intent back to CONFIRMED so the payment manager polling
 // loop will attempt to grant credits on its next tick.
 //
@@ -917,6 +1079,7 @@ export const IntentsUseCases = {
   markIntentAsConfirmed,
   getConfirmedIntents,
   getOverCapIntents,
+  getMispayments,
   getPendingWithTxHash,
   reprocessOverCapIntent,
   getIntentCredits,

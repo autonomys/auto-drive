@@ -94,12 +94,14 @@ describe('PaymentManager', () => {
       await paymentManager.watchTransaction(txHash)
 
       // The function should process the logs and attempt to mark intents,
-      // passing fromAddress captured from receipt.from.
+      // passing fromAddress captured from receipt.from and the tx hash, which is
+      // what a refused payment is recorded against for admin review.
       expect(markIntentSpy).toHaveBeenCalledTimes(1)
       expect(markIntentSpy).toHaveBeenCalledWith({
         intentId,
         paymentAmount,
         fromAddress,
+        txHash,
       })
     })
 

@@ -373,6 +373,18 @@ export const config = {
         active: optionalBoolEnvironmentVariable('BUY_CREDITS_ACTIVE'),
         staffOnly: optionalBoolEnvironmentVariable('BUY_CREDITS_STAFF_ONLY'),
       } as FeatureFlag,
+      // Pay-with-USDC. Gates the USDC branch of intent creation only; the AI3
+      // path is unaffected and `buyCredits` still gates the endpoint itself.
+      //
+      // Off by default, and deliberately so for longer than the quote code
+      // takes to land: creating a USDC intent hands the user a binding amount
+      // to transfer, and nothing observes an IntentTokenPaymentReceived event
+      // yet, so a quote issued today is one the backend cannot settle.
+      //
+      // Admins are exempt whatever this says — see featureFlags/isActive.
+      payWithUsdc: {
+        active: optionalBoolEnvironmentVariable('PAY_WITH_USDC_ACTIVE'),
+      } as FeatureFlag,
     },
     allowlistedUsernames: env('STAFF_USERNAME_ALLOWLIST', '<none>')
       .split(',')

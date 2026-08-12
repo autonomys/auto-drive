@@ -95,7 +95,7 @@ export const intents = {
                     enum: ['ai3_native', 'usdc_eth'],
                     default: 'ai3_native',
                     description:
-                      'Which asset the intent will be paid in. Omit for native AI3. With `usdc_eth` the response carries `quotedTokenAmount` — the exact USDC amount (6-decimal base units) to pay — locked for the intent\'s expiry window. An unrecognised value is rejected rather than defaulted, so a typo cannot quietly create an AI3 intent for a caller who intended to pay in USDC.',
+                      'Which asset the intent will be paid in. Omit for native AI3. With `usdc_eth` the response carries `quotedTokenAmount` — the exact USDC amount (6-decimal base units) to pay — locked for the intent\'s expiry window. An unrecognised value is rejected rather than defaulted, so a typo cannot quietly create an AI3 intent for a caller who intended to pay in USDC. `usdc_eth` is gated: it is available to admin accounts always, and to everyone else only where the deployment has enabled it (`PAY_WITH_USDC_ACTIVE`). A caller without access gets 403 `USDC_PAYMENTS_DISABLED`.',
                     example: 'usdc_eth',
                   },
                 },
@@ -123,7 +123,7 @@ export const intents = {
           },
           '403': {
             description:
-              'Google-verified account required (`GOOGLE_ACCOUNT_REQUIRED`), or the purchase would exceed the per-user credit cap (`CREDIT_CAP_EXCEEDED`, with the cap and current balance in `message`)',
+              'Google-verified account required (`GOOGLE_ACCOUNT_REQUIRED`); the purchase would exceed the per-user credit cap (`CREDIT_CAP_EXCEEDED`, with the cap and current balance in `message`); or `paymentMethod` was `usdc_eth` and paying in USDC is not open to this account (`USDC_PAYMENTS_DISABLED`)',
           },
           '404': {
             description:
@@ -131,7 +131,7 @@ export const intents = {
           },
           '503': {
             description:
-              'The USDC price could not be established, which is our problem rather than the caller\'s — retry unchanged. `PRICE_ORACLE_UNAVAILABLE` when the rate could not be read or failed one of its guards; `PRICE_UNSTABLE` when the market has re-priced past the window the rate is averaged over. Note there is no size-related refusal: the rate is a size-independent average, so asking for less never turns a refusal into a quote.',
+              'Storage could not be priced, which is our problem rather than the caller\'s — retry unchanged. On a `usdc_eth` intent: `PRICE_ORACLE_UNAVAILABLE` when the AI3/USD rate could not be read or failed one of its guards, `PRICE_UNSTABLE` when the market has re-priced past the window the rate is averaged over. Note there is no size-related refusal: the rate is a size-independent average, so asking for less never turns a refusal into a quote. On either payment method, also returned when the per-byte AI3 rate resolves to zero, which is a server misconfiguration rather than a market condition.',
           },
         },
       },
@@ -307,7 +307,7 @@ export const intents = {
           quotedTokenAmount: {
             type: 'string',
             description:
-              'For `usdc_eth`: the exact amount to pay, in USDC base units (6 decimals), as a bigint string. Locked until `expiresAt`. Already includes the pool swap fee, the price impact of this purchase size, and the quote margin. Null on `ai3_native`.',
+              'For `usdc_eth`: the exact amount to pay, in USDC base units (6 decimals), as a bigint string. Locked until `expiresAt`. It is the AI3/USD rate applied to `quotedAi3Shannons` plus the quote margin — and the margin is the whole of the difference, because the rate is an average of realized fills that already paid the pool\'s swap fee. This purchase adds no price impact of its own; the treasury converts USDC in batches rather than swapping per intent. Null on `ai3_native`.',
           },
           quotedAi3Shannons: {
             type: 'string',
@@ -322,7 +322,7 @@ export const intents = {
           usdRateAtCreation: {
             type: 'string',
             description:
-              'For `usdc_eth`: the pool\'s marginal AI3/USD price at creation, scaled by 1e18. Reporting and reconciliation only — it excludes the fee, price impact and margin that `quotedTokenAmount` includes, so it is not the rate credits are granted at. Null on `ai3_native`.',
+              'For `usdc_eth`: the raw AI3/USD rate at creation, scaled by 1e18 — a volume-weighted average of the pool\'s recent realized fills. Reporting and reconciliation only. It is short by the quote margin that `quotedTokenAmount` includes, so it is not the rate credits are granted at; that rate is the `quotedTokenAmount` / `quotedAi3Shannons` pair. Null on `ai3_native`.',
           },
         },
       },

@@ -6,7 +6,7 @@ import { handleInternalErrorResult } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 import { config } from '../../config.js'
 import { hasGoogleAuth } from '../../core/featureFlags/index.js'
-import { Intent } from '@auto-drive/models'
+import { Intent, IntentMispayment } from '@auto-drive/models'
 
 export const intentsController = Router()
 
@@ -25,6 +25,13 @@ const serializeIntent = (intent: Intent) => ({
   quotedTokenAmount: intent.quotedTokenAmount?.toString(),
   quotedAi3Shannons: intent.quotedAi3Shannons?.toString(),
   usdRateAtCreation: intent.usdRateAtCreation?.toString(),
+})
+
+// Same reason as serializeIntent: res.json() throws on a raw BigInt.
+const serializeMispayment = (mispayment: IntentMispayment) => ({
+  ...mispayment,
+  paymentAmount: mispayment.paymentAmount?.toString(),
+  tokenAmount: mispayment.tokenAmount?.toString(),
 })
 
 // ---------------------------------------------------------------------------
@@ -89,9 +96,10 @@ intentsController.post(
       'Failed to create intent',
     )
     if (result.isErr()) {
-      // CreditCapExceededError and QuoteFailedError each carry their own
-      // { error: <CODE>, message } response shape, so the generic path emits
-      // them — and their 403 / 503 / 409 / 400 statuses — correctly.
+      // CreditCapExceededError, UsdcPaymentsDisabledError and QuoteFailedError
+      // each carry their own { error: <CODE>, message } response shape, so the
+      // generic path emits them — and their 400 / 403 / 503 statuses —
+      // correctly.
       handleError(result.error, res)
       return
     }
@@ -129,6 +137,37 @@ intentsController.get(
     }
 
     res.status(200).json(result.value.map(serializeIntent))
+  }),
+)
+
+// ---------------------------------------------------------------------------
+// GET /intents/mispayments  (admin only)
+// Lists on-chain payments that were refused rather than attached to an intent:
+// the intent id was unknown, or the payment was denominated in the other asset.
+// The intent itself is untouched in both cases, so nothing about its row records
+// that money arrived — this is the only place it does.
+//
+// NOTE: like /over-cap, this static route must be registered BEFORE GET /:id.
+// ---------------------------------------------------------------------------
+
+intentsController.get(
+  '/mispayments',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      IntentsUseCases.getMispayments(user),
+      'Failed to get mispayments',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json(result.value.map(serializeMispayment))
   }),
 )
 

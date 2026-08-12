@@ -61,6 +61,10 @@ const watchTransaction = async (txHash: string) => {
         // receipt.from is the EVM wallet address that submitted the tx.
         // Stored so admins can identify the payer and process refunds.
         fromAddress: receipt.from,
+        // Passed for the refusal paths: a payment we decline to attach is
+        // recorded in intent_mispayments, and the hash is the only field that
+        // finds it again on a block explorer.
+        txHash,
       })
     }),
   )
