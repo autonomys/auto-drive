@@ -394,8 +394,8 @@ const createIntent = async (
   // the same intent is what makes the charge reproducible.
   const quotedAi3Shannons = requestedBytes! * shannonsPerByte
 
-  const price = await priceOracle.getPrice()
-  if (price.isErr()) {
+  const rate = await priceOracle.getPrice()
+  if (rate.isErr()) {
     logger.info(
       'Rejecting USDC intent creation — could not quote the purchase',
       {
@@ -404,11 +404,11 @@ const createIntent = async (
         quotedAi3Shannons: quotedAi3Shannons.toString(),
         // The reason, not just the message: it is the enum the admin dashboard
         // and #811's kill switch read, and it says which guard closed the door.
-        reason: price.error.reason,
-        message: price.error.message,
+        reason: rate.error.reason,
+        message: rate.error.message,
       },
     )
-    return err(quoteErrorToHttpError(price.error))
+    return err(quoteErrorToHttpError(rate.error))
   }
 
   // A rate times an amount, because the rate prices ONE BYTE and knows nothing
@@ -423,7 +423,7 @@ const createIntent = async (
   // converting a batch later, since the treasury no longer swaps per intent.
   // Reasoning lives in pricing.ts; do not re-derive it here.
   const quotedTokenAmount = applyMarginPercent(
-    ai3ShannonsToUsdcBaseUnits(quotedAi3Shannons, price.value.usdPerAi3),
+    ai3ShannonsToUsdcBaseUnits(quotedAi3Shannons, rate.value.usdPerAi3),
     config.credits.usdQuoteMarginPercent,
   )
 
@@ -441,7 +441,7 @@ const createIntent = async (
     // The raw oracle rate, for display and reconciliation only. NEVER convert a
     // payment at this rate: it is short by the margin the user actually paid, so
     // doing so grants that margin back as free storage.
-    usdRateAtCreation: price.value.usdPerAi3,
+    usdRateAtCreation: rate.value.usdPerAi3,
     expiresAt,
   })
 
@@ -451,12 +451,12 @@ const createIntent = async (
     requestedBytes: requestedBytes!.toString(),
     quotedAi3Shannons: quotedAi3Shannons.toString(),
     quotedTokenAmount: quotedTokenAmount.toString(),
-    usdPerAi3: price.value.usdPerAi3.toString(),
+    usdPerAi3: rate.value.usdPerAi3.toString(),
     // Whether the rate that priced this purchase was the last-good fallback
     // rather than a fresh read, and how old it is. Both are needed to explain a
     // charge after the fact.
-    rateAsOf: price.value.asOf.toISOString(),
-    rateStale: price.value.stale,
+    rateAsOf: rate.value.asOf.toISOString(),
+    rateStale: rate.value.stale,
   })
 
   return ok(intent)

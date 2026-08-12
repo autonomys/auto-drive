@@ -4,12 +4,11 @@
 -- bytes, and the only rate that makes "pay the quote, receive the quote" true is
 -- the rate the user was actually quoted at. Neither existing column carries it:
 --
---   usd_rate_at_creation is the pool's MARGINAL price. The user pays the
---   executable quote, which is that price plus the pool swap fee, plus the
---   price impact of their own size, plus the quote margin. Converting a received
---   payment at the marginal rate hands all three back as free storage — 5-8% on
---   a realistic purchase — and grants more bytes than the pre-payment cap check
---   was run against.
+--   usd_rate_at_creation is the RAW rate the oracle reported. The user pays that
+--   rate plus USD_QUOTE_MARGIN, so converting a received payment at the raw rate
+--   hands the margin back as free storage on every purchase — the whole margin,
+--   exactly, since a rate is a scalar and the error scales with the amount — and
+--   grants more bytes than the pre-payment cap check was run against.
 --
 --   quoted_token_amount is one half of the rate: what was charged. This column
 --   is the other half: what it was charged FOR.
