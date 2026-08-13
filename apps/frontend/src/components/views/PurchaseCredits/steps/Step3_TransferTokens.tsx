@@ -42,6 +42,7 @@ export const PurchaseStep3TransferTokens = ({
     isPollingBackend,
     isBackendCompleted,
     isOverCap,
+    isFailed,
     isExpired,
     waitError,
   } = useTransactionConfirmation({
@@ -194,7 +195,7 @@ export const PurchaseStep3TransferTokens = ({
                   </div>
                 </div>
               )}
-              {isFullyConfirmed && !isOverCap && !isExpired && (
+              {isFullyConfirmed && !isOverCap && !isFailed && !isExpired && (
                 <div className='text-xs text-muted-foreground'>
                   {isPollingBackend
                     ? 'Waiting for backend to update credits…'
@@ -216,15 +217,23 @@ export const PurchaseStep3TransferTokens = ({
                   try again or contact support for assistance.
                 </div>
               )}
+              {isFailed && (
+                <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
+                  <strong>Payment failed.</strong> This payment could not be
+                  applied — for example, the amount was too small to credit any
+                  storage. No credits were added. Please try again with a larger
+                  amount or contact support for assistance.
+                </div>
+              )}
               {waitError && (
                 <div className='text-xs text-red-600'>{waitError.message}</div>
               )}
               <div className='flex gap-3'>
                 <Button
                   onClick={() => onNext({ txHash })}
-                  disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap || isExpired}
+                  disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap || isFailed || isExpired}
                 >
-                  {isFullyConfirmed && !isBackendCompleted && !isOverCap && !isExpired
+                  {isFullyConfirmed && !isBackendCompleted && !isOverCap && !isFailed && !isExpired
                     ? 'Finalizing…'
                     : 'Continue'}
                 </Button>

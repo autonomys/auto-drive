@@ -3,6 +3,7 @@ import { usePublicClient, useWaitForTransactionReceipt } from 'wagmi';
 import { type Hash } from 'viem';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../services/api';
+import { evaluateIntentStatus } from './intentPolling';
 
 interface UseTransactionConfirmationProps {
   txHash: Hash | undefined;
@@ -22,6 +23,8 @@ interface UseTransactionConfirmationReturn {
   isBackendCompleted: boolean;
   /** True when the backend put the intent in the over_cap terminal state. */
   isOverCap: boolean;
+  /** True when the backend marked the intent failed — a permanent terminal state. */
+  isFailed: boolean;
   /** True when the intent has expired and credits will never be applied. */
   isExpired: boolean;
   waitError: Error | null;
@@ -51,6 +54,7 @@ export const useTransactionConfirmation = ({
   const [isPollingBackend, setIsPollingBackend] = useState(false);
   const [isBackendCompleted, setIsBackendCompleted] = useState(false);
   const [isOverCap, setIsOverCap] = useState(false);
+  const [isFailed, setIsFailed] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
 
   // Start watching block numbers to compute confirmations once included
@@ -94,7 +98,7 @@ export const useTransactionConfirmation = ({
 
   // After confirmations threshold, poll backend until IntentStatus.COMPLETED
   useEffect(() => {
-    if (!api || !intentId || !isFullyConfirmed || isBackendCompleted || isOverCap || isExpired) return;
+    if (!api || !intentId || !isFullyConfirmed || isBackendCompleted || isOverCap || isFailed || isExpired) return;
     setIsPollingBackend(true);
     let timer: NodeJS.Timeout | undefined;
     let cancelled = false;
@@ -102,7 +106,8 @@ export const useTransactionConfirmation = ({
     const poll = async () => {
       try {
         const intent = await api.getIntent(intentId);
-        if (intent.status === 'completed') {
+        const decision = evaluateIntentStatus(intent.status);
+        if (decision.completed) {
           // Refresh both the legacy account query and the new credit summary
           queryClient.invalidateQueries({ queryKey: ['account'] });
           queryClient.invalidateQueries({ queryKey: ['creditSummary'] });
@@ -110,10 +115,15 @@ export const useTransactionConfirmation = ({
           setIsPollingBackend(false);
           return;
         }
-        // over_cap is a terminal state — credits will NOT be applied without
-        // admin intervention.  Stop polling immediately and surface the error.
-        if (intent.status === 'over_cap') {
+        // over_cap and failed are terminal — credits will NOT be applied
+        // without admin intervention.  Stop polling and surface the error.
+        if (decision.overCap) {
           setIsOverCap(true);
+          setIsPollingBackend(false);
+          return;
+        }
+        if (decision.failed) {
+          setIsFailed(true);
           setIsPollingBackend(false);
           return;
         }
@@ -138,7 +148,7 @@ export const useTransactionConfirmation = ({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [api, intentId, isFullyConfirmed, isBackendCompleted, isOverCap, isExpired, queryClient]);
+  }, [api, intentId, isFullyConfirmed, isBackendCompleted, isOverCap, isFailed, isExpired, queryClient]);
 
   return {
     isWaitingReceipt,
@@ -148,6 +158,7 @@ export const useTransactionConfirmation = ({
     isPollingBackend,
     isBackendCompleted,
     isOverCap,
+    isFailed,
     isExpired,
     waitError,
   };
