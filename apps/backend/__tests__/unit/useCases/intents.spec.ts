@@ -172,11 +172,34 @@ describe('IntentsUseCases', () => {
     //
     // The USDC path is different and deliberately so: it persists
     // quotedAi3Shannons, which is the size times the locked price and therefore
-    // half of the rate the payment converts at. See the USDC group below.
+    // half of the rate the payment converts at. See the USDC group below. That
+    // makes the assertion below load-bearing in a second way — it is what keeps
+    // the quote fields on the path that has a quote.
+    //
+    // The whole row is asserted, deliberately. The obvious spelling — checking
+    // that no key is named after the size — cannot fail: `Intent` has no size
+    // field, so TypeScript's excess-property check already rejects adding one
+    // to this object literal. What the compiler cannot catch is the size
+    // reaching the row under a field that DOES exist (`paymentAmount:
+    // requestedBytes`), and a value-based check catches that but only while no
+    // legitimate field happens to hold the same number — it would start failing
+    // spuriously the moment the mocked price became realistic.
+    //
+    // Pinning every field has neither weakness, and adds one the others lack:
+    // it fails when the row grows a field this test has not considered, which
+    // is exactly when someone should look at it again. toStrictEqual counts a
+    // present-but-undefined key as a difference, so an AI3 row that started
+    // carrying quotedAi3Shannons at all would fail here.
     const created = createSpy.mock.calls[0][0]
-    expect(Object.keys(created)).not.toContain('quotedBytes')
-    expect(created.quotedAi3Shannons).toBeUndefined()
-    expect(created.quotedTokenAmount).toBeUndefined()
+    expect(created).toStrictEqual({
+      id: expect.any(String),
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+      paymentAmount: undefined,
+      shannonsPerByte: 1n,
+      expiresAt: expect.any(Date),
+    })
   })
 
   it.each<[string, bigint]>([

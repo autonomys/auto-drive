@@ -11,7 +11,7 @@ import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 import { useNetwork } from '../../../../contexts/network';
 import { usePrices } from '../../../../hooks/usePrices';
 import { useTransactionConfirmation } from '../../../../hooks/useTransactionConfirmation';
-import { mibToBytes } from '../../../../utils/credits';
+import { mibToBytes, normaliseMib } from '../../../../utils/credits';
 
 export const PurchaseStep3TransferTokens = ({
   onNext,
@@ -59,7 +59,18 @@ export const PurchaseStep3TransferTokens = ({
     error: writeError,
   } = useWriteContract();
 
-  const canSend = isConnected && !isWriting && !txHash;
+  // Normalised ONCE for the whole step, not per call site. The amount displayed
+  // and the amount charged have to come from the same number, and this step is
+  // reachable by deep link (`?step=3&sizeMB=…`), where `context.sizeMB` is not
+  // guaranteed to be the whole MiB `inputToMib` produces — see normaliseMib.
+  // Normalising inside handleSend alone would have shown the price of 0.5 MiB
+  // while asking the wallet for 1 MiB.
+  const sizeMib = normaliseMib(context.sizeMB);
+
+  // A size that cannot be normalised is not a purchase, and no wallet prompt
+  // should be raised for it. Disabling rather than failing on click is the
+  // difference between "this link is broken" and "the button does nothing".
+  const canSend = isConnected && !isWriting && !txHash && sizeMib !== null;
 
   const handleConnect = () => {
     if (openConnectModal) openConnectModal();
@@ -68,13 +79,14 @@ export const PurchaseStep3TransferTokens = ({
   const handleSend = useCallback(async () => {
     setIntentError(undefined);
     try {
-      const sizeMib = Number(context.sizeMB);
+      // Defence in depth: `canSend` already gates the button on this, but
+      // handleSend must not depend on a caller having checked.
+      if (sizeMib === null) return;
       const depositTransaction = await paymentIntent(
         formatCreditsInMbAsValue(sizeMib),
         // The same byte count the payment is priced from — formatCreditsInMbAsValue
         // multiplies by exactly this before applying shannonsPerByte — so the
         // size the cap is checked against is the size the payment will grant.
-        // sizeMB is whole MiB (inputToMib rounds), so this stays exact.
         mibToBytes(sizeMib),
       );
       // Auto EVM is a Substrate-based network that does not support EIP-1559
@@ -104,7 +116,7 @@ export const PurchaseStep3TransferTokens = ({
   }, [
     paymentIntent,
     formatCreditsInMbAsValue,
-    context.sizeMB,
+    sizeMib,
     publicClient,
     writeContractAsync,
   ]);
@@ -159,8 +171,9 @@ export const PurchaseStep3TransferTokens = ({
               label='Amount'
               value={
                 <span>
-                  {formatCreditsInMbAsAi3(Number(context.sizeMB)).toFixed(2)}{' '}
-                  AI3
+                  {sizeMib === null
+                    ? '—'
+                    : `${formatCreditsInMbAsAi3(sizeMib).toFixed(2)} AI3`}
                 </span>
               }
             />
@@ -169,6 +182,15 @@ export const PurchaseStep3TransferTokens = ({
                 {isWriting ? 'Sending…' : 'Send Transfer'}
               </Button>
             </div>
+            {sizeMib === null && (
+              // Stated up front rather than on click, because this step has no
+              // back button — the only way out is to start the purchase again,
+              // and the user needs to know that before pressing anything.
+              <div className='text-xs text-red-600'>
+                This link does not carry a valid purchase size. Start again from
+                package selection to choose one.
+              </div>
+            )}
             {(intentError || writeError) && (
               <div className='text-xs text-red-600'>
                 {intentError ||
@@ -237,7 +259,10 @@ export const PurchaseStep3TransferTokens = ({
               )}
               <div className='flex gap-3'>
                 <Button
-                  onClick={() => onNext({ txHash })}
+                  // sizeMB travels forward as the normalised value, so the
+                  // success screen reports the size that was bought rather than
+                  // the one the URL happened to carry.
+                  onClick={() => onNext({ txHash, sizeMB: sizeMib })}
                   disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap || isExpired}
                 >
                   {isFullyConfirmed && !isBackendCompleted && !isOverCap && !isExpired
