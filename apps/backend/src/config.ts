@@ -151,11 +151,14 @@ export const config = {
     // matching the DB path's concurrentChunks turns that into batches.
     // Raising it trades gateway load for wall-clock on cold downloads.
     //
-    // Safe above 5 only because FILES_GATEWAY_URL addresses the gateway
-    // process directly. The public gateway vhost caps a single client at
-    // `limit_conn addr 5`, so pointing this at that hostname would leave 95 of
-    // every 100 chunk requests answered with a 503 that no amount of retrying
-    // clears — the limit is not transient.
+    // The ceiling is not ours to choose alone: FILES_GATEWAY_URL is the
+    // gateway's public hostname, so this fan-out crosses whatever the origin
+    // enforces, and that host's vhost caps one client at `limit_conn addr 5`.
+    // Whether this trips it depends on how many connections actually reach the
+    // origin — the hostname is CDN-fronted, so the limiter counts the edge's
+    // connections rather than ours. A 503 from a connection limiter is not
+    // transient, so the retries below will not clear one. Lower this before
+    // assuming a failing cold download is the gateway's fault.
     chunkConcurrency: positiveIntEnv('FILES_GATEWAY_CHUNK_CONCURRENCY', 100),
     // Attempts per chunk request, matching what the SDK's own chunk fetch
     // does. A 1.28 GB object is ~19,650 requests, so at any realistic
