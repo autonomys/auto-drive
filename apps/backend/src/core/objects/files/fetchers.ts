@@ -100,14 +100,23 @@ const composeGatewayFileReadable = (
   // One transient 5xx or timeout out of ~19,650 requests would otherwise fail
   // the whole retrieval. The SDK's own per-chunk fetch retries three times for
   // the same reason; this path has to do it itself.
+  //
+  // A controller per attempt, not per chunk: timing out is what arms it, so a
+  // shared one would abort the retries as soon as it fired. Aborting matters
+  // here because up to CHUNK_CONCURRENCY of these are open at once — a
+  // timed-out request that keeps its connection is holding a slot the retry
+  // now needs.
   const fetchChunk = (index: number): Promise<Buffer | null> =>
     withBackingOffRetries(
-      () =>
-        withTimeout(
-          fetchFileChunk(cid, index),
+      () => {
+        const abortController = new AbortController()
+        return withTimeout(
+          fetchFileChunk(cid, index, abortController.signal),
           GATEWAY_TIMEOUT_MS,
           `FileGateway.chunk(${cid},${index})`,
-        ),
+          abortController,
+        )
+      },
       { maxRetries: CHUNK_RETRIES, startingDelay: CHUNK_RETRY_DELAY_MS },
     )
 
@@ -205,7 +214,15 @@ export const FileGatewayObjectFetcher: ObjectFetcher = {
       // DAG walk from the root gateway-side, for bytes already on its disk.
       if (await isFileCachedOnGateway(cid)) {
         logger.debug('Fetching cached file from gateway cid=%s', cid)
-        return fetchGatewayFile(cid)
+        // Bounds getting the stream, not the transfer over it — a gateway that
+        // accepts the connection and then says nothing would otherwise never
+        // reject, and this call is upstream of everything that reports a
+        // download as running, so nothing would be there to time it out.
+        return withTimeout(
+          fetchGatewayFile(cid),
+          GATEWAY_TIMEOUT_MS,
+          `FileGateway.getFile(${cid})`,
+        )
       }
 
       logger.debug(

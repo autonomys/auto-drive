@@ -150,6 +150,12 @@ export const config = {
     // read(), so a large object cost one sequential round-trip per chunk;
     // matching the DB path's concurrentChunks turns that into batches.
     // Raising it trades gateway load for wall-clock on cold downloads.
+    //
+    // Safe above 5 only because FILES_GATEWAY_URL addresses the gateway
+    // process directly. The public gateway vhost caps a single client at
+    // `limit_conn addr 5`, so pointing this at that hostname would leave 95 of
+    // every 100 chunk requests answered with a 503 that no amount of retrying
+    // clears — the limit is not transient.
     chunkConcurrency: positiveIntEnv('FILES_GATEWAY_CHUNK_CONCURRENCY', 100),
     // Attempts per chunk request, matching what the SDK's own chunk fetch
     // does. A 1.28 GB object is ~19,650 requests, so at any realistic

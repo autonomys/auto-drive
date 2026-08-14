@@ -16,11 +16,15 @@ import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
  * stays small enough to assert on byte for byte.
  */
 const CHUNK_CONCURRENCY = 4
+const GATEWAY_TIMEOUT_MS = 250
 process.env.FILES_GATEWAY_CHUNK_CONCURRENCY = String(CHUNK_CONCURRENCY)
 process.env.FILES_GATEWAY_CHUNK_RETRY_DELAY_MS = '1'
+process.env.FILES_GATEWAY_FETCH_TIMEOUT_MS = String(GATEWAY_TIMEOUT_MS)
 
 const fetchFileChunk =
-  jest.fn<(cid: string, chunk: number) => Promise<Buffer | null>>()
+  jest.fn<
+    (cid: string, chunk: number, signal?: AbortSignal) => Promise<Buffer | null>
+  >()
 const isFileCachedOnGateway = jest.fn<(cid: string) => Promise<boolean>>()
 const fetchGatewayFile = jest.fn<(cid: string) => Promise<Readable>>()
 
@@ -225,6 +229,52 @@ describe('FileGatewayObjectFetcher.fetchFile', () => {
     // Silently ending the stream here would hand the user a short file that
     // looks like a successful download.
     await expect(readAll('test-cid')).rejects.toThrow('gateway exploded')
+  })
+
+  it('aborts a chunk request it has given up on, and retries with a fresh signal', async () => {
+    jest
+      .spyOn(ObjectUseCases, 'getMetadata')
+      .mockResolvedValue(ok(metadataWithChunks(2)))
+
+    // Up to CHUNK_CONCURRENCY of these are open at once, so a request the
+    // fetcher has stopped waiting for is holding a connection its own retry
+    // needs. Timing out without aborting leaves it held for as long as the
+    // gateway does.
+    let attempts = 0
+    fetchFileChunk.mockImplementation(async (_cid, chunk, signal) => {
+      if (chunk >= 2) return null
+      if (chunk === 1 && attempts++ === 0) {
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        })
+      }
+      return Buffer.from(`[${chunk}]`)
+    })
+
+    expect((await readAll('test-cid')).toString()).toBe('[0][1]')
+
+    const signalsForChunkOne = fetchFileChunk.mock.calls
+      .filter(([, chunk]) => chunk === 1)
+      .map(([, , signal]) => signal)
+
+    expect(signalsForChunkOne).toHaveLength(2)
+    expect(signalsForChunkOne[0]?.aborted).toBe(true)
+    // A controller shared across attempts would hand the retry a signal that
+    // is already aborted, so the retry could never succeed.
+    expect(signalsForChunkOne[1]?.aborted).toBe(false)
+  })
+
+  it('bounds the cached-file fetch with a timeout', async () => {
+    jest
+      .spyOn(ObjectUseCases, 'getMetadata')
+      .mockResolvedValue(ok(metadataWithChunks(1)))
+
+    isFileCachedOnGateway.mockResolvedValue(true)
+    // A gateway that accepts the connection and then says nothing. Nothing
+    // downstream has started yet, so nothing else would ever time this out.
+    fetchGatewayFile.mockReturnValue(new Promise(() => {}))
+
+    await expect(readAll('test-cid')).rejects.toThrow('timed out')
   })
 
   it('streams a file the gateway already holds in one request', async () => {

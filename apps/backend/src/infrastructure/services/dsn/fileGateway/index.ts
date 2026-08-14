@@ -2,6 +2,7 @@ import { Readable } from 'stream'
 import { config } from '../../../../config.js'
 import { createAutoFilesApi } from '@autonomys/auto-files'
 import { createLogger } from '../../../drivers/logger.js'
+import { withTimeout } from '../../../../shared/utils/timeout.js'
 
 const logger = createLogger('services:dsn:fileGateway')
 
@@ -20,7 +21,13 @@ export const FileGateway = createAutoFilesApi(
  */
 export const isFileCachedOnGateway = async (cid: string): Promise<boolean> => {
   try {
-    return (await FileGateway.isFileCached(cid)) === true
+    return (
+      (await withTimeout(
+        FileGateway.isFileCached(cid),
+        config.filesGateway.fetchTimeoutMs,
+        `FileGateway.isFileCached(${cid})`,
+      )) === true
+    )
   } catch (error) {
     logger.warn(
       error as Error,
@@ -57,18 +64,25 @@ export const fetchGatewayFile = (cid: string): Promise<Readable> =>
  * PBNode as JSON (res.json), so its bytes are JSON text rather than the chunk
  * payload, and nothing IPLD-decodes them on the way back.
  *
+ * Takes a signal so a caller that gives up on a chunk can hand the connection
+ * back. Without it an abandoned request keeps its slot for as long as the
+ * gateway holds it open, and the callers here run many at once — so the ones
+ * that timed out would crowd out the ones still worth waiting for.
+ *
  * @returns the chunk's bytes, or null once the index is past the last chunk
  *   (the gateway answers 204 there, which is how the end is detected).
  */
 export const fetchFileChunk = async (
   cid: string,
   chunk: number,
+  signal?: AbortSignal,
 ): Promise<Buffer | null> => {
   const url = new URL(`${config.filesGateway.url}/files/${cid}/partial`)
   url.searchParams.set('chunk', chunk.toString())
 
   const response = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${config.filesGateway.token}` },
+    signal,
   })
 
   if (response.status === 204) {
