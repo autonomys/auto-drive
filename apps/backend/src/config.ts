@@ -151,6 +151,12 @@ export const config = {
     // matching the DB path's concurrentChunks turns that into batches.
     // Raising it trades gateway load for wall-clock on cold downloads.
     chunkConcurrency: positiveIntEnv('FILES_GATEWAY_CHUNK_CONCURRENCY', 100),
+    // Attempts per chunk request, matching what the SDK's own chunk fetch
+    // does. A 1.28 GB object is ~19,650 requests, so at any realistic
+    // per-request failure rate an unretried chunk fetch is a retrieval that
+    // fails somewhere in the middle almost every time.
+    chunkRetries: positiveIntEnv('FILES_GATEWAY_CHUNK_RETRIES', 3),
+    chunkRetryDelayMs: positiveIntEnv('FILES_GATEWAY_CHUNK_RETRY_DELAY_MS', 500),
   },
   authService: {
     url: env('AUTH_SERVICE_URL', 'http://localhost:3030'),
@@ -359,6 +365,18 @@ export const config = {
     taskManagerMaxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
     downloadInactivityTimeoutMs: Number(
       env('DOWNLOAD_INACTIVITY_TIMEOUT_MS', '300000'),
+    ),
+    // How often a running async download stamps its row so it still reads as
+    // alive, and how long a row may go unstamped before it is treated as dead.
+    // The window has to clear several heartbeats so a slow database write or a
+    // requeued task doesn't declare a healthy download abandoned.
+    asyncDownloadHeartbeatMs: positiveIntEnv(
+      'ASYNC_DOWNLOAD_HEARTBEAT_MS',
+      30000,
+    ),
+    asyncDownloadStaleAfterMs: positiveIntEnv(
+      'ASYNC_DOWNLOAD_STALE_AFTER_MS',
+      300000,
     ),
   },
   featureFlags: {

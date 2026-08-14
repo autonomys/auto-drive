@@ -72,18 +72,33 @@ const getDownloadByCid = async (
  * to every other user's "is this being fetched?" — without this the status
  * endpoint can only say "not cached", which reads as "broken" while a
  * reconstruction is minutes into running.
+ *
+ * "Still running" has to mean recently alive, not merely Pending or
+ * Downloading. A worker that dies mid-pull, or a task that never arrives,
+ * leaves a row in one of those states forever — and since this query is not
+ * scoped to a user, one such row would tell every user that the cid is already
+ * being fetched, disabling their own request permanently and leaving only its
+ * owner able to dismiss it. The running worker stamps updated_at (see
+ * touchDownload), so anything older than staleAfterMs is a corpse.
  */
 const getActiveDownloadByCid = async (
   cid: string,
+  staleAfterMs: number,
 ): Promise<AsyncDownload | null> => {
   const db = await getDatabase()
 
   const download = await db.query<AsyncDownloadDB>(
     `SELECT * FROM public.async_downloads
      WHERE cid = $1 AND status IN ($2, $3)
+       AND updated_at > NOW() - ($4::bigint * INTERVAL '1 millisecond')
      ORDER BY created_at DESC
      LIMIT 1`,
-    [cid, AsyncDownloadStatus.Pending, AsyncDownloadStatus.Downloading],
+    [
+      cid,
+      AsyncDownloadStatus.Pending,
+      AsyncDownloadStatus.Downloading,
+      staleAfterMs,
+    ],
   )
 
   return download.rows.map(mapAsyncDownloadDBToAsyncDownload).at(0) ?? null
@@ -92,14 +107,20 @@ const getActiveDownloadByCid = async (
 /**
  * This user's own still-running request for this cid, used to make repeat
  * clicks idempotent. Without it every click on Download or "Bring to Cache"
- * inserts another row and publishes another task, so N clicks (or N users on a
- * popular file) become N concurrent full reconstructions competing for the
- * same gateway.
+ * inserts another row and publishes another task, so N clicks become N
+ * concurrent full reconstructions of the same object competing for the same
+ * gateway. Scoped to the user because the row is the user's own record of the
+ * request — two users asking for one cid still get a row each.
+ *
+ * Bounded by staleAfterMs for the same reason as getActiveDownloadByCid: a dead
+ * row must not make a user's every later request a no-op that hands back a job
+ * nothing is working on.
  */
 const getActiveDownloadByCidAndUser = async (
   cid: string,
   oauth_provider: string,
   oauth_user_id: string,
+  staleAfterMs: number,
 ): Promise<AsyncDownload | null> => {
   const db = await getDatabase()
 
@@ -107,6 +128,7 @@ const getActiveDownloadByCidAndUser = async (
     `SELECT * FROM public.async_downloads
      WHERE cid = $1 AND oauth_provider = $2 AND oauth_user_id = $3
        AND status IN ($4, $5)
+       AND updated_at > NOW() - ($6::bigint * INTERVAL '1 millisecond')
      ORDER BY created_at DESC
      LIMIT 1`,
     [
@@ -115,10 +137,29 @@ const getActiveDownloadByCidAndUser = async (
       oauth_user_id,
       AsyncDownloadStatus.Pending,
       AsyncDownloadStatus.Downloading,
+      staleAfterMs,
     ],
   )
 
   return download.rows.map(mapAsyncDownloadDBToAsyncDownload).at(0) ?? null
+}
+
+/**
+ * Stamps updated_at so the row still reads as alive.
+ *
+ * Progress writes already do this, but only once bytes are flowing: a cold
+ * retrieval can spend minutes reconstructing before its first byte, and for
+ * that whole window a healthy download and a dead worker are indistinguishable
+ * in the table. The heartbeat is what lets the staleness bound above be short
+ * enough to be useful.
+ */
+const touchDownload = async (id: string): Promise<void> => {
+  const db = await getDatabase()
+
+  await db.query(
+    'UPDATE public.async_downloads SET updated_at = NOW() WHERE id = $1',
+    [id],
+  )
 }
 
 const createDownload = async (
@@ -200,6 +241,7 @@ export const asyncDownloadsRepository = {
   getDownloadByCid,
   getActiveDownloadByCid,
   getActiveDownloadByCidAndUser,
+  touchDownload,
   createDownload,
   updateDownloadStatus,
   updateDownloadProgress,

@@ -39,6 +39,7 @@ const createDownload = async (
     cid,
     user.oauthProvider,
     user.oauthUserId,
+    config.params.asyncDownloadStaleAfterMs,
   )
   if (existing) {
     logger.info(
@@ -219,10 +220,31 @@ const asyncDownload = async (
 
   return new Promise((resolve) => {
     let settled = false
+
+    // Keeps the row readable as alive while nothing else is writing to it. The
+    // status endpoint reports any recently-stamped Pending/Downloading row for
+    // a cid to every user, and the client disables its own request while one is
+    // running — so without a heartbeat the only way to tell a worker that died
+    // from one still waiting on the gateway's first byte would be to wait long
+    // enough that a dead row blocks the cid for everyone in the meantime.
+    const heartbeat = setInterval(() => {
+      asyncDownloadsRepository
+        .touchDownload(downloadId)
+        .catch((e) =>
+          logger.warn(
+            e as Error,
+            'Failed to stamp heartbeat for download id=%s',
+            downloadId,
+          ),
+        )
+    }, config.params.asyncDownloadHeartbeatMs)
+    heartbeat.unref()
+
     const settle = (value: Result<void, ObjectNotFoundError | InternalError>) => {
       if (settled) return
       settled = true
       clearTimeout(inactivityTimer)
+      clearInterval(heartbeat)
       resolve(value)
     }
 
@@ -405,17 +427,23 @@ const getDownloadById = async (
  * Deliberately not scoped to the caller: the cache is shared, so a job another
  * user started is the reason this caller's file is about to become available,
  * and reporting a bare "not cached" while that runs is what makes the UI look
- * like the file is gone.
+ * like the file is gone. That same lack of scoping is why the repository only
+ * counts a row that has been stamped recently — the client disables its own
+ * request while a reconstruction is running, so a row nothing is working on
+ * would take the feature away from everyone who asks about that cid.
  */
 const getReconstructionByCid = async (
   cid: string,
 ): Promise<{
-  state: 'running' | 'idle'
+  state: 'running'
   downloadedBytes: string
   totalSize: string
   startedAt: Date | null
 } | null> => {
-  const active = await asyncDownloadsRepository.getActiveDownloadByCid(cid)
+  const active = await asyncDownloadsRepository.getActiveDownloadByCid(
+    cid,
+    config.params.asyncDownloadStaleAfterMs,
+  )
   if (!active) {
     return null
   }

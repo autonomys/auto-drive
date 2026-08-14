@@ -20,6 +20,36 @@ export const handleReadableError = (
   return stream
 }
 
+/**
+ * Fails streams derived from `source` when `source` itself fails.
+ *
+ * forkStream is `source.pipe(fork([a, b]))`, and pipe() does not forward errors
+ * downstream. So a source that dies mid-file leaves both branches open with
+ * neither 'end' nor 'error': the response never completes, and the client sits
+ * there until the proxy read timeout — 30 minutes, after this PR — waiting on a
+ * download that is already over. Destroying the branches turns that hang into a
+ * failed request the caller can report and the user can retry.
+ *
+ * No-ops for an AsyncIterable source: forkAsyncIterable drains it before it
+ * returns, so an error there rejects the fork call instead of being swallowed.
+ */
+export const propagateReadableError = (
+  source: Readable | AsyncIterable<Buffer>,
+  ...targets: Readable[]
+) => {
+  if (!(source instanceof Readable)) {
+    return
+  }
+
+  source.on('error', (error) => {
+    for (const target of targets) {
+      if (!target.destroyed) {
+        target.destroy(error as Error)
+      }
+    }
+  })
+}
+
 export const sliceReadable = async (
   readable: Readable,
   start: number,

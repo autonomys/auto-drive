@@ -10,7 +10,10 @@ import {
 import { config } from '../../../config.js'
 import { Readable } from 'stream'
 import { DownloadServiceOptions, DownloadStatus } from '@auto-drive/models'
-import { handleReadableError } from '../../../shared/utils/index.js'
+import {
+  handleReadableError,
+  propagateReadableError,
+} from '../../../shared/utils/index.js'
 
 const logger = createLogger('download-service')
 
@@ -102,6 +105,17 @@ export const downloadService = {
         ? await forkStream(stream)
         : await forkAsyncIterable(stream)
 
+    propagateReadableError(stream, returnStream, cacheStream)
+
+    // Every branch needs a listener of its own before it can be failed: an
+    // 'error' with no listener at all is an uncaught exception, and the point
+    // of propagating is to make these branches emit one. Consumers that pipe
+    // still see the error and still fail the response.
+    handleReadableError(
+      returnStream,
+      'Return branch stream error for cid %s',
+      cid,
+    )
     handleReadableError(
       cacheStream,
       'Cache branch stream error for cid %s',
@@ -138,6 +152,7 @@ export const downloadService = {
     // Fork the stream again for caching w/o blocking the main thread
     forkStream(cacheStream)
       .then(async ([fsCacheStream, memoryCacheStream]) => {
+        propagateReadableError(cacheStream, fsCacheStream, memoryCacheStream)
         handleReadableError(
           fsCacheStream,
           'Filesystem cache stream error for cid %s',
