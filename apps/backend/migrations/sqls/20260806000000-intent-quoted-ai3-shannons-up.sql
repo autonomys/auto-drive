@@ -27,6 +27,16 @@
 -- With token_amount = quoted_token_amount the ratio cancels and the result is
 -- the requested size exactly, with no rounding in either direction.
 --
+-- Not requested_bytes, though the user does pick a size at creation and this
+-- column is exactly that size times shannons_per_byte. The two are
+-- interchangeable — shannons_per_byte is on the same row, so either one recovers
+-- the other exactly — which makes the choice about what settlement needs rather
+-- than about what can be reconstructed later. Credits follow the amount actually
+-- received, so the row has to carry the rate that amount converts at, and this
+-- column is the half of that rate quoted_token_amount is not. Storing the byte
+-- count instead would mean granting it whatever arrives, which is a different
+-- settlement model rather than a different column (discussed on #810).
+--
 -- numeric(78,0) to match the bigint base-unit convention already used by
 -- payment_amount / shannons_per_byte / quoted_token_amount. NULL for AI3_NATIVE
 -- intents, which derive credits from payment_amount / shannons_per_byte and never

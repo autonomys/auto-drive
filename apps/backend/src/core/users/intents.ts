@@ -853,8 +853,17 @@ const markIntentAsConfirmed = async ({
   // intent as settled, so the user's real USDC payment would be silently
   // discarded when it arrived.
   //
-  // Refusing leaves the intent PENDING so it expires on its own schedule. The
-  // mispaid amount still needs manual resolution, so it is recorded in
+  // Refusing writes no terminal status, leaving the intent PENDING so the user's
+  // real payment can still settle it. Which sweep reclaims the row if none
+  // arrives depends on whether it carries a tx_hash: without one the ordinary
+  // expiry sweep takes it at expires_at, and with one — the case whenever the
+  // mispayment arrived via POST /intents/:id/watch — the hash exempts it from
+  // that sweep until intentTxGraceMinutes past the window. Either way it is
+  // reclaimed. It used to be neither: a tx_hash exempted the row from expiry
+  // permanently, so a refusal here left a row that could reach no terminal state
+  // at all.
+  //
+  // The mispaid amount still needs manual resolution, so it is recorded in
   // intent_mispayments — refusing resolves nothing on chain, and an irreversible
   // transfer must not be left with only a log line pointing at it.
   const expectsToken = intent.paymentMethod === PaymentMethod.USDC_ETH
