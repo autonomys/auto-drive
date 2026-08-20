@@ -592,17 +592,34 @@ const triggerWatchIntent = async ({
     return err(new ForbiddenError('Intent not found'))
   }
 
+  // Claim the row before queueing anything, and write only the hash.
+  //
+  // This used to write the whole intent back from the snapshot getIntent returned,
+  // which meant a confirmation landing between the read and the write was undone:
+  // status reverted to PENDING and payment_amount nulled, so a payment that had
+  // already been credited became uncredited and stayed that way until a restart's
+  // recovery sweep re-watched the row. Conditional on PENDING, one column, so
+  // there is nothing stale to write back.
+  const claimed = await intentsRepository.setTxHashIfPending(intentId, txHash)
+
+  if (!claimed) {
+    // Settled (or expired) while we were deciding. Nothing to watch and nothing to
+    // correct: the confirmation path records the transaction that actually paid,
+    // which is the one worth having. ok() because the caller asked us to watch a
+    // payment for an intent that is already resolved, which is not an error.
+    logger.info(
+      'triggerWatchIntent: intent left PENDING before the hash was recorded',
+      { intentId, txHash },
+    )
+    return ok()
+  }
+
   EventRouter.publish({
     id: 'watch-intent-tx',
     retriesLeft: MAX_RETRIES,
     params: {
       txHash,
     },
-  })
-
-  await intentsRepository.updateIntent({
-    ...intent,
-    txHash,
   })
 
   return ok()

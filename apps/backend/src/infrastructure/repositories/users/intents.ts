@@ -174,6 +174,32 @@ const confirmIntentIfPending = async ({
   return mapRows(result.rows)[0] ?? null
 }
 
+/**
+ * Record the transaction a user says they paid with, only while the intent is
+ * still PENDING. Returns false if the status had already moved on.
+ *
+ * Conditional, and touching one column, for the same reason confirmIntentIfPending
+ * is: triggerWatchIntent reads the intent through getIntent and then wrote the
+ * whole row back from that snapshot. A confirmation landing in between was undone
+ * by it — status reverted to PENDING and payment_amount nulled — so a payment that
+ * had already been credited became uncredited, and stayed that way until a restart
+ * re-watched the row.
+ */
+const setTxHashIfPending = async (
+  intentId: string,
+  txHash: string,
+): Promise<boolean> => {
+  const db = await getDatabase()
+  const result = await db.query(
+    `UPDATE intents
+        SET tx_hash = $2
+      WHERE id = $1
+        AND status = $3`,
+    [intentId, txHash, IntentStatus.PENDING],
+  )
+  return (result.rowCount ?? 0) > 0
+}
+
 const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
@@ -267,6 +293,7 @@ export const intentsRepository = {
   createIntent,
   updateIntent,
   confirmIntentIfPending,
+  setTxHashIfPending,
   getByStatus,
   getExpiredPendingIntents,
   expireIntentIfPending,

@@ -1716,9 +1716,9 @@ describe('IntentsUseCases', () => {
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockResolvedValue({ ...intent, txHash: '0xhash' })
+    const setSpy = jest
+      .spyOn(intentsRepository, 'setTxHashIfPending')
+      .mockResolvedValue(true)
     const publishSpy = jest
       .spyOn(EventRouter, 'publish')
       .mockImplementation(() => Promise.resolve())
@@ -1730,12 +1730,48 @@ describe('IntentsUseCases', () => {
     })
 
     expect(res.isOk()).toBe(true)
+    expect(setSpy).toHaveBeenCalledWith(intent.id, '0xhash')
     expect(publishSpy).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'watch-intent-tx' }),
     )
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ id: intent.id, txHash: '0xhash' }),
-    )
+  })
+
+  it('triggerWatchIntent does not revert an intent confirmed while it was deciding', async () => {
+    // getIntent hands back a PENDING snapshot; a confirmation lands before the
+    // write. Writing that snapshot back reverted the status and nulled
+    // payment_amount, so a credited payment became uncredited until a restart
+    // re-watched the row. Reproduced before the fix.
+    const intent: Intent = {
+      id: '0xwatch-race',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    // The row is no longer PENDING by the time the write runs.
+    const setSpy = jest
+      .spyOn(intentsRepository, 'setTxHashIfPending')
+      .mockResolvedValue(false)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const publishSpy = jest
+      .spyOn(EventRouter, 'publish')
+      .mockImplementation(() => Promise.resolve())
+
+    const res = await IntentsUseCases.triggerWatchIntent({
+      executor: user,
+      txHash: '0xhash',
+      intentId: intent.id,
+    })
+
+    // Not an error: the caller asked us to watch a payment for an intent that is
+    // already resolved.
+    expect(res.isOk()).toBe(true)
+    expect(setSpy).toHaveBeenCalled()
+    // Nothing rewrites the row from the stale snapshot, and no pointless watch
+    // task is queued for an intent that is already settled.
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(publishSpy).not.toHaveBeenCalled()
   })
 
   it('triggerWatchIntent should forbid when user mismatches', async () => {
