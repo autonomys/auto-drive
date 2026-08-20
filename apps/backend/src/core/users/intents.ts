@@ -1084,6 +1084,25 @@ const onConfirmedIntent = async (intentId: string) => {
         shannonsPerByte: intent.shannonsPerByte.toString(),
       },
     )
+    // FAILED is terminal and no listing surfaces a FAILED intent, so the row
+    // itself is not something an admin finds — unlike OVER_CAP, which has both an
+    // endpoint and a reprocess path. The payment is real and kept, so it is filed
+    // like any other on-chain money we cannot attach.
+    //
+    // Filed before the status write, so a failed update leaves the money on
+    // record rather than losing both. No log index is available here — this runs
+    // from the stored row, not from the event — so the row cannot de-duplicate;
+    // it does not need to, because reaching FAILED takes the intent out of
+    // getConfirmedIntents and nothing puts it back.
+    await recordMispayment({
+      intentId,
+      reason: IntentMispaymentReason.UNCONVERTIBLE_PAYMENT,
+      expectedPaymentMethod: intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
+      paymentAmount: intent.paymentAmount,
+      tokenAmount: intent.tokenAmount,
+      fromAddress: intent.fromAddress,
+      txHash: intent.txHash,
+    })
     await intentsRepository.updateIntent({
       ...intent,
       status: IntentStatus.FAILED,
@@ -1141,19 +1160,22 @@ const getOverCapIntents = async (executor: User) => {
   return ok(intents)
 }
 
-// Returns on-chain payments that were written down for admin review.
+// Returns on-chain payments written down for admin review: money that arrived and
+// that no other listing would show.
 //
 // Mostly refusals — a payment naming an unknown intent, denominated in the other
 // asset, arriving after the price lock lapsed, or landing on an intent another
 // transfer already settled. Those are the least visible thing that can happen to
-// money here: the intent they name is untouched, so nothing about its row says a
-// payment arrived at all. The queue OVER_CAP has is for payments we accepted and
-// could not convert; these are the ones we never accepted.
+// money here, because the intent they name is untouched and nothing about its row
+// says a payment arrived at all. UNCONVERTIBLE_PAYMENT is a payment we did accept
+// and could not turn into a single byte; its intent is FAILED, which is terminal
+// and has no listing of its own. OVER_CAP is the one case that stays out of this
+// table entirely, having both an endpoint and a way back.
 //
-// AMOUNT_OFF_QUOTE rows are the exception and were accepted, credited, and
-// COMPLETED normally. They are here because no other row records that the amount
-// paid differed from the amount quoted. Filter on `reason` before working the
-// list as a queue.
+// AMOUNT_OFF_QUOTE is the one reason here that needs nothing done: those payments
+// were credited normally, and the row exists only because no other one records
+// that the amount paid differed from the amount quoted. Filter on `reason` before
+// working the list as a queue.
 const getMispayments = async (executor: User) => {
   if (executor.role !== UserRole.Admin) {
     return err(new ForbiddenError('Admin access required'))

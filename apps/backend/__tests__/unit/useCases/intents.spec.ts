@@ -1823,6 +1823,73 @@ describe('IntentsUseCases', () => {
     )
   })
 
+  it('onConfirmedIntent files a payment it could not turn into a single byte', async () => {
+    // Dust: real money, confirmed, converting to zero bytes. The intent goes
+    // FAILED, which is terminal and has no listing of its own, so before this the
+    // payment was invisible — unlike OVER_CAP, which has an endpoint and a way
+    // back.
+    const intent: Intent = {
+      id: '0xusdc-dust',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      shannonsPerByte: 1_000_000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      tokenAmount: 1n,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1_000_000n,
+      fromAddress: '0xpayer',
+      txHash: '0xdust-tx',
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.onConfirmedIntent(intent.id)
+
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: intent.id, status: IntentStatus.FAILED }),
+    )
+    expect(recordSpy).toHaveBeenCalledWith({
+      intentId: intent.id,
+      reason: IntentMispaymentReason.UNCONVERTIBLE_PAYMENT,
+      expectedPaymentMethod: PaymentMethod.USDC_ETH,
+      paymentAmount: undefined,
+      tokenAmount: 1n,
+      fromAddress: '0xpayer',
+      txHash: '0xdust-tx',
+    })
+  })
+
+  it('onConfirmedIntent files nothing when the payment converts to credits', async () => {
+    // The successful path must stay out of the queue entirely.
+    const intent: Intent = {
+      id: '0xai3-fine',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+      paymentAmount: 5_000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+    jest
+      .spyOn(AccountsUseCases, 'addCreditsToAccount')
+      .mockResolvedValue(ok(undefined) as never)
+    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
+
+    const res = await IntentsUseCases.onConfirmedIntent(intent.id)
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
   it('getIntentCredits returns 0 rather than throwing when shannonsPerByte is 0', () => {
     // BigInt division by zero throws, and that exception would escape
     // onConfirmedIntent and abort the whole polling tick rather than just this
