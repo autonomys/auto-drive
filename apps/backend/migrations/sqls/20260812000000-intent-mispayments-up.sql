@@ -29,20 +29,46 @@ CREATE TABLE IF NOT EXISTS intent_mispayments (
   token_amount numeric(78,0),
   from_address text,
   tx_hash text,
+  -- Position of the payment event within its transaction. Part of the dedup key
+  -- below, and the only field that tells two payments sharing a hash apart.
+  log_index integer,
   created_at timestamptz NOT NULL DEFAULT NOW()
 );
 
+-- Stated separately as well as in the CREATE above, so this migration converges
+-- on a database that applied an earlier version of it: CREATE TABLE IF NOT
+-- EXISTS no-ops on an existing table and would leave the column behind.
+ALTER TABLE intent_mispayments
+  ADD COLUMN IF NOT EXISTS log_index integer;
+
 -- The watcher re-runs: chain reorgs re-emit events, and the startup sweep
 -- replays every PENDING intent that has a tx_hash. Recording is therefore
--- idempotent per (transaction, intent) rather than append-only, or one restart
--- loop would turn a single mispayment into a page of them.
+-- idempotent per payment EVENT rather than append-only, or one restart loop
+-- would turn a single mispayment into a page of them.
 --
--- Partial because a NULL tx_hash cannot participate in the constraint anyway
+-- Keyed on (tx_hash, log_index) rather than (tx_hash, intent_id), because one
+-- transaction can carry more than one payment for the same intent. Both
+-- receivers are callable from a contract, so a single transaction can emit the
+-- payment event twice for one intent id with different values, and
+-- watchTransaction calls markIntentAsConfirmed for every log it parses. Under an
+-- (tx_hash, intent_id) key the second refusal collapses into the first, and the
+-- queue then records one payment — whichever amount won the race — when two
+-- arrived. That understates the refund owed, in the one table whose whole
+-- purpose is that an irreversible transfer is never left with nothing but a log
+-- line pointing at it.
+--
+-- A log index is unique within a transaction, so intent_id is not needed in the
+-- key. A re-emitted event carries the same (hash, index) pair and still
+-- de-duplicates; two distinct payments never share one.
+--
+-- Partial because neither column can participate in the constraint while NULL
 -- (NULLs are distinct in a unique index) — stating that in the predicate keeps
--- the index honest about what it enforces, and small.
-CREATE UNIQUE INDEX IF NOT EXISTS intent_mispayments_tx_intent_uniq
-  ON intent_mispayments (tx_hash, intent_id)
-  WHERE tx_hash IS NOT NULL;
+-- the index honest about what it enforces, and small. A row missing either is
+-- append-only by construction; every watcher path supplies both.
+DROP INDEX IF EXISTS intent_mispayments_tx_intent_uniq;
+CREATE UNIQUE INDEX IF NOT EXISTS intent_mispayments_tx_log_uniq
+  ON intent_mispayments (tx_hash, log_index)
+  WHERE tx_hash IS NOT NULL AND log_index IS NOT NULL;
 
 -- The admin listing reads newest-first and nothing else reads this table.
 CREATE INDEX IF NOT EXISTS intent_mispayments_created_at_idx

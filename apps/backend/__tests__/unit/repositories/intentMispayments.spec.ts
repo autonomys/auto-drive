@@ -61,6 +61,7 @@ describe('Intent Mispayments Repository', () => {
       expectedPaymentMethod: PaymentMethod.USDC_ETH,
       paymentAmount: 1n,
       txHash: '0xsamehash',
+      logIndex: 3,
     })
     const second = await intentMispaymentsRepository.record({
       intentId: '0xreplayed',
@@ -68,6 +69,7 @@ describe('Intent Mispayments Repository', () => {
       expectedPaymentMethod: PaymentMethod.USDC_ETH,
       paymentAmount: 1n,
       txHash: '0xsamehash',
+      logIndex: 3,
     })
 
     expect(first).not.toBeNull()
@@ -79,23 +81,63 @@ describe('Intent Mispayments Repository', () => {
   })
 
   it('keeps one transaction paying two different intents apart', async () => {
-    // The constraint is per (transaction, intent), not per transaction: one tx
-    // can carry payments for more than one intent id.
+    // The constraint is per payment event, not per transaction: one tx can carry
+    // payments for more than one intent id.
     await intentMispaymentsRepository.record({
       intentId: '0xintent-a',
       reason: IntentMispaymentReason.UNKNOWN_INTENT,
       paymentAmount: 1n,
       txHash: '0xmultipay',
+      logIndex: 0,
     })
     await intentMispaymentsRepository.record({
       intentId: '0xintent-b',
       reason: IntentMispaymentReason.UNKNOWN_INTENT,
       paymentAmount: 2n,
       txHash: '0xmultipay',
+      logIndex: 1,
     })
 
     const listed = await intentMispaymentsRepository.list()
     expect(listed.filter((m) => m.txHash === '0xmultipay')).toHaveLength(2)
+  })
+
+  it('keeps one transaction paying the SAME intent twice apart', async () => {
+    // The case an (tx_hash, intent_id) key silently lost. Both receivers are
+    // callable from a contract, so one transaction can emit the payment event
+    // twice for a single intent id with different values, and watchTransaction
+    // records every log it parses. Filing only the first understates the refund
+    // owed — in the one table whose purpose is that an irreversible transfer is
+    // never left with nothing but a log line pointing at it.
+    const first = await intentMispaymentsRepository.record({
+      intentId: '0xdouble-paid',
+      reason: IntentMispaymentReason.ASSET_MISMATCH,
+      expectedPaymentMethod: PaymentMethod.USDC_ETH,
+      paymentAmount: 4_000_000_000_000_000_000n,
+      txHash: '0xonetx',
+      logIndex: 0,
+    })
+    const second = await intentMispaymentsRepository.record({
+      intentId: '0xdouble-paid',
+      reason: IntentMispaymentReason.ASSET_MISMATCH,
+      expectedPaymentMethod: PaymentMethod.USDC_ETH,
+      paymentAmount: 7_000_000_000_000_000_000n,
+      txHash: '0xonetx',
+      logIndex: 1,
+    })
+
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+    expect(first!.logIndex).toBe(0)
+    expect(second!.logIndex).toBe(1)
+
+    const listed = await intentMispaymentsRepository.list()
+    const both = listed.filter((m) => m.intentId === '0xdouble-paid')
+    expect(both).toHaveLength(2)
+    // Both amounts are on file, not whichever one won the race.
+    expect(both.map((m) => m.paymentAmount).sort()).toEqual(
+      [4_000_000_000_000_000_000n, 7_000_000_000_000_000_000n].sort(),
+    )
   })
 
   it('lists newest first', async () => {

@@ -886,11 +886,14 @@ describe('IntentsUseCases', () => {
       paymentAmount: 5n * 10n ** 18n,
       fromAddress: '0xpayer',
       txHash: '0xdeadbeef',
+      logIndex: 2,
     })
 
     expect(res.isErr()).toBe(true)
     // Refusing is correct but resolves nothing on chain — the transfer happened.
-    // Everything needed to find it again has to be written down.
+    // Everything needed to find it again has to be written down, including where
+    // in the transaction it sat: that is what separates two payments sharing a
+    // hash, and what makes a replay de-duplicate instead of duplicating.
     expect(recordSpy).toHaveBeenCalledWith({
       intentId: intent.id,
       reason: IntentMispaymentReason.ASSET_MISMATCH,
@@ -899,6 +902,7 @@ describe('IntentsUseCases', () => {
       tokenAmount: undefined,
       fromAddress: '0xpayer',
       txHash: '0xdeadbeef',
+      logIndex: 2,
     })
   })
 
@@ -915,6 +919,7 @@ describe('IntentsUseCases', () => {
       paymentAmount: 5n * 10n ** 18n,
       fromAddress: '0xpayer',
       txHash: '0xfeedface',
+      logIndex: 7,
     })
 
     expect(res.isErr()).toBe(true)
@@ -924,6 +929,7 @@ describe('IntentsUseCases', () => {
         intentId: '0xnosuchintent',
         reason: IntentMispaymentReason.UNKNOWN_INTENT,
         txHash: '0xfeedface',
+        logIndex: 7,
       }),
     )
   })

@@ -84,6 +84,7 @@ describe('PaymentManager', () => {
           address: '0xContractAddress',
           args: { intentId, paymentAmount },
           eventName: 'IntentPaymentReceived',
+          logIndex: 0,
         },
       ] as any)
 
@@ -95,13 +96,71 @@ describe('PaymentManager', () => {
 
       // The function should process the logs and attempt to mark intents,
       // passing fromAddress captured from receipt.from and the tx hash, which is
-      // what a refused payment is recorded against for admin review.
+      // what a refused payment is recorded against for admin review, plus the
+      // log index that separates two payments sharing that hash.
       expect(markIntentSpy).toHaveBeenCalledTimes(1)
       expect(markIntentSpy).toHaveBeenCalledWith({
         intentId,
         paymentAmount,
         fromAddress,
         txHash,
+        logIndex: 0,
+      })
+    })
+
+    it('threads a distinct log index for two payments in one transaction', async () => {
+      // payIntent(bytes32) is payable and callable from a contract, so one
+      // transaction can emit the event twice for the same intent id with
+      // different values. The hash is identical for both, so the log index is
+      // the only thing that stops the second refusal from being filed as a
+      // replay of the first — which would report one payment when two arrived.
+      const txHash = '0xtwopayments'
+      const intentId = '0xintent-double'
+
+      config.paymentManager.contractAddress = '0xContractAddress'
+
+      jest
+        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue({
+          from: '0xSenderWallet',
+          logs: [],
+        } as any)
+
+      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+        {
+          address: '0xContractAddress',
+          args: { intentId, paymentAmount: 100n },
+          eventName: 'IntentPaymentReceived',
+          logIndex: 4,
+        },
+        {
+          address: '0xContractAddress',
+          args: { intentId, paymentAmount: 250n },
+          eventName: 'IntentPaymentReceived',
+          logIndex: 9,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await paymentManager.watchTransaction(txHash)
+
+      expect(markIntentSpy).toHaveBeenCalledTimes(2)
+      expect(markIntentSpy).toHaveBeenNthCalledWith(1, {
+        intentId,
+        paymentAmount: 100n,
+        fromAddress: '0xSenderWallet',
+        txHash,
+        logIndex: 4,
+      })
+      expect(markIntentSpy).toHaveBeenNthCalledWith(2, {
+        intentId,
+        paymentAmount: 250n,
+        fromAddress: '0xSenderWallet',
+        txHash,
+        logIndex: 9,
       })
     })
 

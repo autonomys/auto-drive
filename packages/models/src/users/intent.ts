@@ -159,6 +159,12 @@ export type IntentMispayment = {
   tokenAmount?: bigint;
   fromAddress?: string;
   txHash?: string;
+  // Position of the payment event within its transaction. Together with txHash
+  // this identifies one payment, which is what makes recording idempotent: a
+  // reorg or the startup sweep re-delivers the same pair, while two payments in
+  // one transaction differ by it. A hash alone would collapse the second into
+  // the first and understate what arrived.
+  logIndex?: number;
   createdAt: Date;
 };
 

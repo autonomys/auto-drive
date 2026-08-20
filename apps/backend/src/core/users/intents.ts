@@ -639,6 +639,7 @@ const markIntentAsConfirmed = async ({
   tokenAmount,
   fromAddress,
   txHash,
+  logIndex,
 }: {
   intentId: string
   // AI3 path: shannons received on Auto EVM.
@@ -653,6 +654,11 @@ const markIntentAsConfirmed = async ({
   // recorded against something an admin can look up on a block explorer — an
   // amount and a sender describe a payment, but only the hash finds it.
   txHash?: string
+  // Where the payment event sat inside that transaction. With txHash it names
+  // one payment, which is what lets a recorded refusal de-duplicate across the
+  // watcher's replays while still filing both halves of a transaction that paid
+  // the same intent twice.
+  logIndex?: number
 }) => {
   // Exactly one of the two is expected, but neither is the failure worth
   // catching: it would confirm an intent with nothing received, which later
@@ -683,6 +689,7 @@ const markIntentAsConfirmed = async ({
       tokenAmount,
       fromAddress,
       txHash,
+      logIndex,
     })
     return err(new ObjectNotFoundError('Intent not found'))
   }
@@ -749,6 +756,7 @@ const markIntentAsConfirmed = async ({
       tokenAmount,
       fromAddress,
       txHash,
+      logIndex,
     })
     return err(
       new BadRequestError(

@@ -65,6 +65,12 @@ const watchTransaction = async (txHash: string) => {
         // recorded in intent_mispayments, and the hash is the only field that
         // finds it again on a block explorer.
         txHash,
+        // One transaction can carry two payments for the same intent — the
+        // receivers are callable from a contract, and this maps over every
+        // matching log. The hash alone would make the two indistinguishable, so
+        // recording the second would collapse into the first and the queue would
+        // report one payment when two arrived.
+        logIndex: log.logIndex,
       })
     }),
   )
