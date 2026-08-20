@@ -135,6 +135,11 @@ export enum IntentMispaymentReason {
   // The row exists but is denominated in the other asset — AI3 sent to a USDC
   // intent, or vice versa.
   ASSET_MISMATCH = "asset_mismatch",
+  // The intent had already been settled by a different payment. The first one is
+  // credited and untouched; this row is the second transfer, which cannot be
+  // added to a terminal intent and would otherwise be absorbed by the
+  // idempotency guard without a trace.
+  ALREADY_SETTLED = "already_settled",
   // The intent's price-lock window had already passed when the payment arrived,
   // so there is no rate left to convert it at. The intent is untouched and stays
   // EXPIRED; this row is the only record that money showed up for it.

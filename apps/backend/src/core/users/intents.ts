@@ -722,10 +722,77 @@ const markIntentAsConfirmed = async ({
     intent.status === IntentStatus.OVER_CAP ||
     intent.status === IntentStatus.FAILED
   ) {
-    logger.info('markIntentAsConfirmed: intent already processed — skipping', {
-      intentId,
-      currentStatus: intent.status,
-    })
+    // Re-delivery of the payment that settled this intent, or a second payment
+    // that arrived after it? The guard used to treat both as the same no-op, so
+    // paying an intent twice credited the first transfer and absorbed the second
+    // without a trace — no credits, no row, no log line beyond "already
+    // processed". Two transfers is not an exotic mistake: a user who does not see
+    // the first confirm pays the same quote again.
+    //
+    // Two signals, because neither alone is sound. A differing tx hash proves a
+    // different transaction, but only when the intent carries one — rows settled
+    // before confirmations began recording the hash have none, and comparing
+    // against NULL would file every replay of those as a second payment. A
+    // differing amount proves a different payment outright, and is available on
+    // every row, but says nothing when someone pays the same amount twice.
+    //
+    // A payment in the other asset is a third signal, and an unambiguous one.
+    //
+    // What none of them catches is two logs of the same value inside one
+    // transaction, where the hash matches and the amounts agree. That needs a
+    // contract-mediated double-pay in a single call, and both halves are at least
+    // recorded when the intent is not yet settled.
+    const settledAmount =
+      intent.paymentMethod === PaymentMethod.USDC_ETH
+        ? intent.tokenAmount
+        : intent.paymentAmount
+    const incomingAmount =
+      intent.paymentMethod === PaymentMethod.USDC_ETH
+        ? tokenAmount
+        : paymentAmount
+    const differentTransaction =
+      txHash !== undefined &&
+      intent.txHash !== undefined &&
+      intent.txHash !== txHash
+    const differentAmount =
+      incomingAmount !== undefined && incomingAmount !== settledAmount
+    // The payment is denominated in the other asset, so it cannot be re-delivery
+    // of the one that settled this intent — that one had to be in the asset the
+    // intent was quoted in to have settled it at all. One of the two amounts is
+    // always present by the guard at the top of this function.
+    const differentAsset = incomingAmount === undefined
+
+    if (differentTransaction || differentAmount || differentAsset) {
+      logger.warn(
+        'markIntentAsConfirmed: a second payment arrived for a settled intent — recording it',
+        {
+          intentId,
+          currentStatus: intent.status,
+          settledTxHash: intent.txHash,
+          settledAmount: settledAmount?.toString(),
+          received: incomingAmount?.toString(),
+          txHash,
+        },
+      )
+      await recordMispayment({
+        intentId,
+        reason: IntentMispaymentReason.ALREADY_SETTLED,
+        expectedPaymentMethod: intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
+        paymentAmount,
+        tokenAmount,
+        fromAddress,
+        txHash,
+        logIndex,
+      })
+    } else {
+      logger.info('markIntentAsConfirmed: intent already processed — skipping', {
+        intentId,
+        currentStatus: intent.status,
+      })
+    }
+
+    // ok() either way. The intent is settled and correct; nothing here is a
+    // failure the watcher should retry.
     return ok(intent)
   }
 
@@ -875,6 +942,12 @@ const markIntentAsConfirmed = async ({
       paymentAmount: paymentAmount ?? intent.paymentAmount,
       tokenAmount: tokenAmount ?? intent.tokenAmount,
       fromAddress: fromAddress ?? intent.fromAddress,
+      // The transaction that actually settled this intent. Only POST
+      // /intents/:id/watch used to write this column, so an intent confirmed by
+      // the contract-event watcher had no record of which transaction paid it —
+      // and without one, a later payment cannot be told apart from re-delivery of
+      // this one by the guard above.
+      txHash: txHash ?? intent.txHash,
     }),
   )
 }
@@ -1071,11 +1144,11 @@ const getOverCapIntents = async (executor: User) => {
 // Returns on-chain payments that were written down for admin review.
 //
 // Mostly refusals — a payment naming an unknown intent, denominated in the other
-// asset, or arriving after the intent's price lock lapsed. Those are the least
-// visible thing that can happen to money here: the intent they name is
-// untouched, so nothing about its row says a payment arrived at all. The queue
-// OVER_CAP has is for payments we accepted and could not convert; these are the
-// ones we never accepted.
+// asset, arriving after the price lock lapsed, or landing on an intent another
+// transfer already settled. Those are the least visible thing that can happen to
+// money here: the intent they name is untouched, so nothing about its row says a
+// payment arrived at all. The queue OVER_CAP has is for payments we accepted and
+// could not convert; these are the ones we never accepted.
 //
 // AMOUNT_OFF_QUOTE rows are the exception and were accepted, credited, and
 // COMPLETED normally. They are here because no other row records that the amount

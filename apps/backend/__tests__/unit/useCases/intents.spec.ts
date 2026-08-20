@@ -1003,7 +1003,9 @@ describe('IntentsUseCases', () => {
 
   it('markIntentAsConfirmed still treats a duplicate event on a settled intent as a no-op', async () => {
     // The asset check must not turn re-delivery into an error, or the watcher
-    // would retry a genuinely settled intent indefinitely.
+    // would retry a genuinely settled intent indefinitely. The payment here is in
+    // the other asset, so it is also money that arrived and cannot be attached —
+    // recorded for that reason, while the return stays ok().
     const intent: Intent = {
       id: '0xusdc-dup',
       userPublicId: user.publicId,
@@ -1016,6 +1018,9 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
 
     const res = await IntentsUseCases.markIntentAsConfirmed({
       intentId: intent.id,
@@ -1024,6 +1029,144 @@ describe('IntentsUseCases', () => {
 
     expect(res.isOk()).toBe(true)
     expect(updateSpy).not.toHaveBeenCalled()
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: IntentMispaymentReason.ALREADY_SETTLED,
+      }),
+    )
+  })
+
+  it('markIntentAsConfirmed leaves a true replay of the settling payment silent', async () => {
+    // Same transaction, same amount: this is the event that settled the intent
+    // arriving again after a reorg or a restart. Recording it would put a
+    // correctly-credited payment in the admin queue.
+    const intent: Intent = {
+      id: '0xusdc-replay',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      tokenAmount: 1_050_000n,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+      txHash: '0xsettled-here',
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+      txHash: '0xsettled-here',
+      logIndex: 0,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
+  it('markIntentAsConfirmed files a second transfer paying the same quote twice', async () => {
+    // The likely double-pay: the user does not see the first confirm and pays the
+    // same quote again. Same amount, different transaction — the guard used to
+    // absorb it and the money left no trace anywhere.
+    const intent: Intent = {
+      id: '0xusdc-paid-twice',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      tokenAmount: 1_050_000n,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+      txHash: '0xfirst',
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+      fromAddress: '0xpayer',
+      txHash: '0xsecond',
+      logIndex: 2,
+    })
+
+    // The settled intent is left exactly as it was; only the paperwork is new.
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(recordSpy).toHaveBeenCalledWith({
+      intentId: intent.id,
+      reason: IntentMispaymentReason.ALREADY_SETTLED,
+      expectedPaymentMethod: PaymentMethod.USDC_ETH,
+      paymentAmount: undefined,
+      tokenAmount: 1_050_000n,
+      fromAddress: '0xpayer',
+      txHash: '0xsecond',
+      logIndex: 2,
+    })
+  })
+
+  it('markIntentAsConfirmed files a differing second amount even with no hash on file', async () => {
+    // An intent settled before confirmations began recording the hash has none to
+    // compare against, so the amount has to carry it.
+    const intent: Intent = {
+      id: '0xai3-legacy-settled',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+      paymentAmount: 500n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 900n,
+      txHash: '0xlater',
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: IntentMispaymentReason.ALREADY_SETTLED,
+        paymentAmount: 900n,
+      }),
+    )
+  })
+
+  it('markIntentAsConfirmed records the transaction that settled the intent', async () => {
+    // Only POST /intents/:id/watch used to write tx_hash, so an intent confirmed
+    // by the contract-event watcher had no record of which transaction paid it —
+    // and the guard above needs one to tell a later payment from re-delivery.
+    const intent: Intent = {
+      id: '0xai3-settling-hash',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 500n,
+      txHash: '0xpaid-by-this',
+      logIndex: 0,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy.mock.calls[0][0].txHash).toBe('0xpaid-by-this')
   })
 
   it('markIntentAsConfirmed refuses a confirmation carrying no amount at all', async () => {
