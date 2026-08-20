@@ -121,6 +121,59 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
   return mapRows(result.rows)[0]
 }
 
+/**
+ * Move a PENDING intent to CONFIRMED, only if it is still PENDING. Returns the
+ * updated row, or null if the status had already moved on.
+ *
+ * Conditional for the same reason expireIntentIfPending is: markIntentAsConfirmed
+ * reads the intent, decides, and writes, and watchTransaction issues one call per
+ * parsed log inside a Promise.all. Two payments for the same intent in one
+ * transaction therefore both read PENDING before either writes, and an
+ * unconditional UPDATE by id let the second overwrite the first — one amount
+ * credited, the other gone, and neither call able to tell that it had raced.
+ * Losing this UPDATE is how the caller learns to file the payment instead.
+ *
+ * Sets only the confirmation columns, rather than rewriting the row from a
+ * snapshot the way updateIntent does. The quote columns are what credits are
+ * derived from, and a stale snapshot must not be able to null them.
+ */
+const confirmIntentIfPending = async ({
+  id,
+  paymentAmount,
+  tokenAmount,
+  fromAddress,
+  txHash,
+}: {
+  id: string
+  paymentAmount?: bigint
+  tokenAmount?: bigint
+  fromAddress?: string
+  txHash?: string
+}): Promise<Intent | null> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    `UPDATE intents
+        SET status = $2,
+            payment_amount = COALESCE($3::numeric, payment_amount),
+            token_amount = COALESCE($4::numeric, token_amount),
+            from_address = COALESCE($5::text, from_address),
+            tx_hash = COALESCE($6::text, tx_hash)
+      WHERE id = $1
+        AND status = $7
+      RETURNING *`,
+    [
+      id,
+      IntentStatus.CONFIRMED,
+      paymentAmount?.toString() ?? null,
+      tokenAmount?.toString() ?? null,
+      fromAddress ?? null,
+      txHash ?? null,
+      IntentStatus.PENDING,
+    ],
+  )
+  return mapRows(result.rows)[0] ?? null
+}
+
 const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
@@ -213,6 +266,7 @@ export const intentsRepository = {
   getById,
   createIntent,
   updateIntent,
+  confirmIntentIfPending,
   getByStatus,
   getExpiredPendingIntents,
   expireIntentIfPending,

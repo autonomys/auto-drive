@@ -753,9 +753,14 @@ describe('IntentsUseCases', () => {
       quotedAi3Shannons: 1000n,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async (args) => ({
+        ...intent,
+        status: IntentStatus.CONFIRMED,
+        tokenAmount: args.tokenAmount,
+        fromAddress: args.fromAddress,
+      }))
 
     const res = await IntentsUseCases.markIntentAsConfirmed({
       intentId: intent.id,
@@ -764,15 +769,113 @@ describe('IntentsUseCases', () => {
     })
 
     expect(res.isOk()).toBe(true)
-    const updated = updateSpy.mock.calls[0][0]
-    expect(updated.tokenAmount).toBe(1_050_000n)
+    const written = confirmSpy.mock.calls[0][0]
+    expect(written.tokenAmount).toBe(1_050_000n)
     // paymentAmount is denominated in shannons; writing USDC into it would make
     // every AI3-shaped read of the row wrong.
-    expect(updated.paymentAmount).toBeUndefined()
-    // The quote must survive the status transition — updateIntent rewrites the
-    // whole column list, so a column missing from it is silently nulled here.
-    expect(updated.quotedTokenAmount).toBe(1_050_000n)
-    expect(updated.quotedAi3Shannons).toBe(1000n)
+    expect(written.paymentAmount).toBeUndefined()
+    // The quote columns are not in the statement at all, so no stale snapshot can
+    // null the numbers credits are derived from.
+    expect(res._unsafeUnwrap().quotedTokenAmount).toBe(1_050_000n)
+    expect(res._unsafeUnwrap().quotedAi3Shannons).toBe(1000n)
+  })
+
+  it('markIntentAsConfirmed accounts for both payments in one transaction', async () => {
+    // watchTransaction calls this once per parsed log inside a Promise.all, so two
+    // payments for one intent in a single transaction both read PENDING before
+    // either writes. An unconditional write let the second overwrite the first:
+    // one amount credited, the other gone, and nothing filed either way. Same
+    // amounts on purpose — the three-signal check above cannot separate those, and
+    // the conditional transition is what does.
+    let row: Intent = {
+      id: '0xone-tx-two-logs',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+    }
+    jest
+      .spyOn(intentsRepository, 'getById')
+      .mockImplementation(async () => ({ ...row }))
+    // Mirrors the SQL: the UPDATE only lands while the row is still PENDING.
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async (args) => {
+        if (row.status !== IntentStatus.PENDING) return null
+        row = {
+          ...row,
+          status: IntentStatus.CONFIRMED,
+          paymentAmount: args.paymentAmount,
+          txHash: args.txHash,
+        }
+        return { ...row }
+      })
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    await Promise.all([
+      IntentsUseCases.markIntentAsConfirmed({
+        intentId: row.id,
+        paymentAmount: 100n,
+        txHash: '0xonetx',
+        logIndex: 0,
+      }),
+      IntentsUseCases.markIntentAsConfirmed({
+        intentId: row.id,
+        paymentAmount: 100n,
+        txHash: '0xonetx',
+        logIndex: 1,
+      }),
+    ])
+
+    // One won the transition and is credited; the other is on file rather than
+    // lost. Both are accounted for, which is the whole point.
+    expect(confirmSpy).toHaveBeenCalledTimes(2)
+    expect(row.status).toBe(IntentStatus.CONFIRMED)
+    expect(recordSpy).toHaveBeenCalledTimes(1)
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intentId: row.id,
+        reason: IntentMispaymentReason.ALREADY_SETTLED,
+        paymentAmount: 100n,
+      }),
+    )
+  })
+
+  it('markIntentAsConfirmed files no off-quote row for a payment that lost the race', async () => {
+    // The off-quote check runs after the transition, so a payment that never
+    // settled anything is filed once as ALREADY_SETTLED rather than also as an
+    // off-quote settlement it did not make.
+    const intent: Intent = {
+      id: '0xlost-race-offquote',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockResolvedValue(null)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 900_000n,
+      txHash: '0xlate',
+      logIndex: 3,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).toHaveBeenCalledTimes(1)
+    expect(recordSpy.mock.calls[0][0].reason).toBe(
+      IntentMispaymentReason.ALREADY_SETTLED,
+    )
   })
 
   it('markIntentAsConfirmed files a payment that arrived after the intent expired', async () => {
@@ -833,9 +936,13 @@ describe('IntentsUseCases', () => {
       quotedAi3Shannons: 1000n,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async (args) => ({
+        ...intent,
+        status: IntentStatus.CONFIRMED,
+        tokenAmount: args.tokenAmount,
+      }))
     const recordSpy = jest
       .spyOn(intentMispaymentsRepository, 'record')
       .mockResolvedValue(null)
@@ -851,9 +958,9 @@ describe('IntentsUseCases', () => {
     // Accepted, not refused: refusing would leave a paying user with no storage
     // and put the payment in a queue that has no grant path out.
     expect(res.isOk()).toBe(true)
-    expect(updateSpy).toHaveBeenCalled()
-    expect(updateSpy.mock.calls[0][0].status).toBe(IntentStatus.CONFIRMED)
-    expect(updateSpy.mock.calls[0][0].tokenAmount).toBe(840_000n)
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(confirmSpy.mock.calls[0][0].tokenAmount).toBe(840_000n)
+    expect(res._unsafeUnwrap().status).toBe(IntentStatus.CONFIRMED)
 
     expect(recordSpy).toHaveBeenCalledWith({
       intentId: intent.id,
@@ -882,8 +989,12 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async () => ({
+        ...intent,
+        status: IntentStatus.CONFIRMED,
+        tokenAmount: 2_000_000n,
+      }))
     const recordSpy = jest
       .spyOn(intentMispaymentsRepository, 'record')
       .mockResolvedValue(null)
@@ -915,8 +1026,12 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async () => ({
+        ...intent,
+        status: IntentStatus.CONFIRMED,
+        tokenAmount: 1_050_000n,
+      }))
     const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
 
     const res = await IntentsUseCases.markIntentAsConfirmed({
@@ -940,8 +1055,12 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async () => ({
+        ...intent,
+        status: IntentStatus.CONFIRMED,
+        paymentAmount: 7n * 10n ** 18n,
+      }))
     const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
 
     const res = await IntentsUseCases.markIntentAsConfirmed({
@@ -1154,9 +1273,13 @@ describe('IntentsUseCases', () => {
       paymentMethod: PaymentMethod.AI3_NATIVE,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async (args) => ({
+        ...intent,
+        status: IntentStatus.CONFIRMED,
+        txHash: args.txHash,
+      }))
 
     const res = await IntentsUseCases.markIntentAsConfirmed({
       intentId: intent.id,
@@ -1166,7 +1289,7 @@ describe('IntentsUseCases', () => {
     })
 
     expect(res.isOk()).toBe(true)
-    expect(updateSpy.mock.calls[0][0].txHash).toBe('0xpaid-by-this')
+    expect(confirmSpy.mock.calls[0][0].txHash).toBe('0xpaid-by-this')
   })
 
   it('markIntentAsConfirmed refuses a confirmation carrying no amount at all', async () => {
@@ -1283,8 +1406,12 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async () => ({
+        ...intent,
+        status: IntentStatus.CONFIRMED,
+        paymentAmount: 5n * 10n ** 18n,
+      }))
     const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
 
     const res = await IntentsUseCases.markIntentAsConfirmed({
@@ -1674,8 +1801,8 @@ describe('IntentsUseCases', () => {
       shannonsPerByte: 1n,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
       .mockResolvedValue({
         ...intent,
         status: IntentStatus.CONFIRMED,
@@ -1688,13 +1815,10 @@ describe('IntentsUseCases', () => {
     })
 
     expect(res.isOk()).toBe(true)
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: intent.id,
-        status: IntentStatus.CONFIRMED,
-        paymentAmount: 10n,
-      }),
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: intent.id, paymentAmount: 10n }),
     )
+    expect(res._unsafeUnwrap().status).toBe(IntentStatus.CONFIRMED)
   })
 
   it('markIntentAsConfirmed should error when intent not found', async () => {

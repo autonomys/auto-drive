@@ -130,6 +130,51 @@ describe('Intents Repository — payment fields', () => {
     expect(shannons / confirmed.shannonsPerByte).toBe(requestedBytes)
   })
 
+  it('confirms a PENDING intent once, and refuses the second attempt', async () => {
+    // The conditional transition is what makes two payments in one transaction
+    // distinguishable: whichever loses the UPDATE gets null back and files the
+    // payment instead of overwriting the one that won.
+    const requestedBytes = 1_000n
+    const shannonsPerByte = 422_005_541_622n
+    await intentsRepository.createIntent({
+      ...baseIntent('confirm-race'),
+      shannonsPerByte,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 3_045_000n,
+      quotedAi3Shannons: requestedBytes * shannonsPerByte,
+      usdRateAtCreation: 6_400_000_000_000_000n,
+    })
+
+    const first = await intentsRepository.confirmIntentIfPending({
+      id: 'confirm-race',
+      tokenAmount: 3_045_000n,
+      fromAddress: '0xpayer',
+      txHash: '0xwinner',
+    })
+    const second = await intentsRepository.confirmIntentIfPending({
+      id: 'confirm-race',
+      tokenAmount: 9_999_999n,
+      fromAddress: '0xother',
+      txHash: '0xloser',
+    })
+
+    expect(first).not.toBeNull()
+    expect(first!.status).toBe(IntentStatus.CONFIRMED)
+    expect(first!.tokenAmount).toBe(3_045_000n)
+    // Null is how the caller learns it raced.
+    expect(second).toBeNull()
+
+    // The loser must not have moved anything.
+    const after = (await intentsRepository.getById('confirm-race')) as Intent
+    expect(after.tokenAmount).toBe(3_045_000n)
+    expect(after.txHash).toBe('0xwinner')
+    // The statement never names the quote columns, so nothing it does can null
+    // the numbers credits are derived from.
+    expect(after.quotedTokenAmount).toBe(3_045_000n)
+    expect(after.quotedAi3Shannons).toBe(requestedBytes * shannonsPerByte)
+    expect(after.shannonsPerByte).toBe(shannonsPerByte)
+  })
+
   it('selects expired rows by tx_hash and the grace window', async () => {
     // The grace is what stops a tx_hash from exempting a row from expiry
     // permanently. Worth exercising against real Postgres rather than a spy: the

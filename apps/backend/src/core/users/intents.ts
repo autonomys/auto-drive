@@ -738,10 +738,11 @@ const markIntentAsConfirmed = async ({
     //
     // A payment in the other asset is a third signal, and an unambiguous one.
     //
-    // What none of them catches is two logs of the same value inside one
-    // transaction, where the hash matches and the amounts agree. That needs a
-    // contract-mediated double-pay in a single call, and both halves are at least
-    // recorded when the intent is not yet settled.
+    // None of them separates two logs of the same value inside one transaction,
+    // where the hash matches and the amounts agree. That case does not reach here:
+    // both arrive while the intent is still PENDING, and the conditional
+    // transition below is what tells them apart — whichever loses the UPDATE is
+    // filed by that path rather than this one.
     const settledAmount =
       intent.paymentMethod === PaymentMethod.USDC_ETH
         ? intent.tokenAmount
@@ -898,18 +899,69 @@ const markIntentAsConfirmed = async ({
     )
   }
 
+  // Claim the intent. Conditional on it still being PENDING, because the status
+  // read above is already stale by the time we get here: watchTransaction calls
+  // this once per parsed log inside a Promise.all, so two payments for one intent
+  // in a single transaction both pass the guard above before either writes. An
+  // unconditional write let the second overwrite the first, crediting one amount
+  // and losing the other with nothing filed either way.
+  //
+  // Also writes the transaction that settled the intent. Only POST
+  // /intents/:id/watch used to write that column, so an intent confirmed by the
+  // contract-event watcher had no record of which transaction paid it — and
+  // without one, a later payment cannot be told apart from re-delivery of this
+  // one by the guard above.
+  const confirmed = await intentsRepository.confirmIntentIfPending({
+    id: intentId,
+    paymentAmount,
+    tokenAmount,
+    fromAddress,
+    txHash,
+  })
+
+  // Lost the transition: another payment settled this intent between the read
+  // above and this write. Same situation as the guard above, reached a different
+  // way, so it is filed the same way. Nothing is retried and nothing is
+  // overwritten — the payment that won stays credited.
+  if (!confirmed) {
+    logger.warn(
+      'markIntentAsConfirmed: another payment settled this intent first — recording this one',
+      {
+        intentId,
+        received: (tokenAmount ?? paymentAmount)?.toString(),
+        txHash,
+        logIndex,
+      },
+    )
+    await recordMispayment({
+      intentId,
+      reason: IntentMispaymentReason.ALREADY_SETTLED,
+      expectedPaymentMethod: intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
+      paymentAmount,
+      tokenAmount,
+      fromAddress,
+      txHash,
+      logIndex,
+    })
+    const settled = await intentsRepository.getById(intentId)
+    return ok(settled ?? intent)
+  }
+
   // Settled at an amount that is not the amount quoted.
   //
-  // Not a refusal, and the grant below is unchanged: conversion is proportional,
-  // so the user receives storage worth exactly what they sent, at the rate they
-  // were quoted at. That is the settlement rule on both payment methods and it
-  // needs no human. But "handled" is not "unremarked". The API advertises
-  // quotedTokenAmount as the exact amount to pay, locked until expiresAt, so a
-  // payment that differs from it means the quote was missed — a stale UI, a
-  // hand-built contract call, a wallet the user edited. Afterwards the row holds
-  // both numbers and no reader compares them, so absent this the only signal is a
-  // balance the user has to notice looks short, which is neither detectable nor
-  // recoverable by us.
+  // Checked after the transition rather than before it, so a payment that lost
+  // the race is filed once as ALREADY_SETTLED rather than also as an off-quote
+  // settlement it never made.
+  //
+  // Not a refusal, and the grant is unchanged: conversion is proportional, so the
+  // user receives storage worth exactly what they sent, at the rate they were
+  // quoted at. That is the settlement rule on both payment methods and it needs no
+  // human. But "handled" is not "unremarked". The API advertises quotedTokenAmount
+  // as the exact amount to pay, locked until expiresAt, so a payment that differs
+  // from it means the quote was missed — a stale UI, a hand-built contract call, a
+  // wallet the user edited. Afterwards the row holds both numbers and no reader
+  // compares them, so absent this the only signal is a balance the user has to
+  // notice looks short, which is neither detectable nor recoverable by us.
   //
   // Recorded rather than refused because refusing is the strictly worse trade
   // here: it turns a self-resolving payment into an admin row and leaves a paying
@@ -944,21 +996,7 @@ const markIntentAsConfirmed = async ({
     })
   }
 
-  return ok(
-    await intentsRepository.updateIntent({
-      ...intent,
-      status: IntentStatus.CONFIRMED,
-      paymentAmount: paymentAmount ?? intent.paymentAmount,
-      tokenAmount: tokenAmount ?? intent.tokenAmount,
-      fromAddress: fromAddress ?? intent.fromAddress,
-      // The transaction that actually settled this intent. Only POST
-      // /intents/:id/watch used to write this column, so an intent confirmed by
-      // the contract-event watcher had no record of which transaction paid it —
-      // and without one, a later payment cannot be told apart from re-delivery of
-      // this one by the guard above.
-      txHash: txHash ?? intent.txHash,
-    }),
-  )
+  return ok(confirmed)
 }
 
 /**
