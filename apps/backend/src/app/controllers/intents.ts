@@ -143,10 +143,10 @@ intentsController.get(
 // ---------------------------------------------------------------------------
 // GET /intents/mispayments  (admin only)
 // Lists on-chain payments written down for admin review. Mostly payments refused
-// rather than attached to an intent: the intent id was unknown, or the payment
-// was denominated in the other asset. The intent itself is untouched in both
-// cases, so nothing about its row records that money arrived — this is the only
-// place it does.
+// rather than attached to an intent: the intent id was unknown, the payment was
+// denominated in the other asset, or it arrived after the price lock lapsed. The
+// intent itself is untouched in every case, so nothing about its row records that
+// money arrived — this is the only place it does.
 //
 // Rows with reason 'amount_off_quote' were accepted and credited; they are here
 // because the amount paid differed from the amount quoted and nothing else says

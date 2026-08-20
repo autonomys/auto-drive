@@ -130,19 +130,37 @@ const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
   return mapRows(result.rows)
 }
 
-// Returns PENDING intents whose expires_at has passed and that have no
-// tx_hash — i.e. no on-chain transaction was submitted yet. Intents with a
-// tx_hash are actively being watched and must not be expired by cleanup;
-// their resolution comes from the on-chain watcher (markIntentAsConfirmed).
-const getExpiredPendingIntents = async (): Promise<Intent[]> => {
+// Returns PENDING intents whose price-lock window has passed and that cleanup
+// should reclaim.
+//
+// Two cases, because a tx_hash means two different things depending on how long
+// ago it was written:
+//
+//   • No tx_hash: no transaction was ever submitted. Expired as soon as
+//     expires_at passes, as before.
+//   • A tx_hash older than expires_at + graceMinutes: a hash that is not going
+//     to resolve. The exclusion this replaces assumed a tx_hash means "actively
+//     being watched and will resolve"; a payment the watcher refused is a
+//     standing counterexample, and so is a transaction that never confirms. Left
+//     out, those rows can reach neither EXPIRED nor CONFIRMED: getIntent keeps
+//     serving them as payable indefinitely past their price lock, and the startup
+//     sweep re-watches them on every restart.
+//
+// A hash inside the grace window is still exempt, so the ordinary
+// slow-confirmation case resolves through markIntentAsConfirmed untouched.
+const getExpiredPendingIntents = async (
+  graceMinutes: number,
+): Promise<Intent[]> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
     `SELECT * FROM intents
      WHERE status = $1
        AND expires_at IS NOT NULL
-       AND expires_at < NOW()
-       AND tx_hash IS NULL`,
-    [IntentStatus.PENDING],
+       AND (
+         (tx_hash IS NULL AND expires_at < NOW())
+         OR expires_at < NOW() - ($2::text || ' minutes')::interval
+       )`,
+    [IntentStatus.PENDING, graceMinutes],
   )
   return mapRows(result.rows)
 }

@@ -18,13 +18,13 @@ CREATE TABLE IF NOT EXISTS intent_mispayments (
   -- The id named by the on-chain event, which may match no intent.
   intent_id text NOT NULL,
   -- IntentMispaymentReason: 'unknown_intent' | 'asset_mismatch' |
-  -- 'amount_off_quote'. Text rather than an enum type so a new reason is a code
-  -- change, not a migration.
+  -- 'intent_expired' | 'amount_off_quote'. Text rather than an enum type so a new
+  -- reason is a code change, not a migration.
   --
-  -- Also the field that says whether a row is a work item: the first two are
-  -- payments we refused, the third is one we accepted and credited, on file only
-  -- because nothing else records that the amount paid differed from the amount
-  -- quoted.
+  -- Also the field that says whether a row is a work item: all but
+  -- 'amount_off_quote' are payments we refused and that need resolving.
+  -- 'amount_off_quote' was accepted and credited, and is on file only because
+  -- nothing else records that the amount paid differed from the amount quoted.
   reason text NOT NULL,
   -- What the named intent was denominated in; NULL when there is no such intent.
   expected_payment_method text,

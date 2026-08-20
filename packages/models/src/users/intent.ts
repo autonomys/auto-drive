@@ -119,14 +119,15 @@ export type Intent = z.infer<typeof IntentSchema>;
 /**
  * Why an on-chain payment is on file rather than passing through unremarked.
  *
- * Two of these are refusals. Both receivers take any `intentId` from anyone —
+ * All but one are refusals. Both receivers take any `intentId` from anyone —
  * `payIntent(bytes32)` on Auto EVM and `payIntentWithToken(bytes32, uint256)` on
- * Ethereum — so a payment can name an intent that does not exist, or one
- * denominated in the other asset. Neither is resolvable in code: the money has
- * moved and the only remaining question is who it belongs to.
+ * Ethereum — so a payment can name an intent that does not exist, one
+ * denominated in the other asset, or one whose price lock has already lapsed.
+ * None is resolvable in code: the money has moved and the only remaining
+ * question is who it belongs to.
  *
- * The third is not a refusal. Read `reason` before treating a row as a work
- * item.
+ * `AMOUNT_OFF_QUOTE` is the exception and was credited normally. Read `reason`
+ * before treating a row as a work item.
  */
 export enum IntentMispaymentReason {
   // The intent id in the event matches no row.
@@ -134,6 +135,10 @@ export enum IntentMispaymentReason {
   // The row exists but is denominated in the other asset — AI3 sent to a USDC
   // intent, or vice versa.
   ASSET_MISMATCH = "asset_mismatch",
+  // The intent's price-lock window had already passed when the payment arrived,
+  // so there is no rate left to convert it at. The intent is untouched and stays
+  // EXPIRED; this row is the only record that money showed up for it.
+  INTENT_EXPIRED = "intent_expired",
   // The payment was ACCEPTED and credited, but its amount is not the amount
   // quoted. Settlement converts proportionally, so the user receives storage
   // worth what they actually sent and nothing needs resolving — but the API

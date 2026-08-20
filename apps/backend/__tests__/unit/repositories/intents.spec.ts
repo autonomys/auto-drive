@@ -129,4 +129,43 @@ describe('Intents Repository — payment fields', () => {
       confirmed.quotedTokenAmount!
     expect(shannons / confirmed.shannonsPerByte).toBe(requestedBytes)
   })
+
+  it('selects expired rows by tx_hash and the grace window', async () => {
+    // The grace is what stops a tx_hash from exempting a row from expiry
+    // permanently. Worth exercising against real Postgres rather than a spy: the
+    // window is applied as an interval built from a query parameter, so the whole
+    // behaviour lives in SQL no unit test can reach.
+    const minutesAgo = (m: number) => new Date(Date.now() - m * 60 * 1000)
+
+    const withTxHash = async (id: string, expiresAt: Date, txHash: string) => {
+      const created = await intentsRepository.createIntent({
+        ...baseIntent(id),
+        expiresAt,
+      })
+      await intentsRepository.updateIntent({ ...created, txHash })
+    }
+
+    // Past its window and never paid — expired before this change too.
+    await intentsRepository.createIntent({
+      ...baseIntent('exp-unpaid'),
+      expiresAt: minutesAgo(30),
+    })
+    // A transaction submitted moments ago: still being watched, and must be left
+    // alone or a slow confirmation would expire out from under the payer.
+    await withTxHash('exp-watched', minutesAgo(30), '0xrecent')
+    // A hash that never resolved. Previously unreachable by cleanup forever.
+    await withTxHash('exp-stranded', minutesAgo(60 * 48), '0xnever')
+    // Window still open.
+    await intentsRepository.createIntent({
+      ...baseIntent('exp-live'),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    })
+
+    const graceMinutes = 1440
+    const ids = (await intentsRepository.getExpiredPendingIntents(graceMinutes))
+      .map((i) => i.id)
+      .filter((id) => id.startsWith('exp-'))
+
+    expect(ids.sort()).toEqual(['exp-stranded', 'exp-unpaid'])
+  })
 })

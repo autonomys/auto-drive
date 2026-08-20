@@ -80,13 +80,27 @@ const randomBytes32 = () => {
 // Returns true if the intent has passed its price-lock window.
 // Only PENDING intents can expire — once an intent is CONFIRMED or COMPLETED
 // the expiry window is irrelevant.
-// Intents with a txHash are actively being watched on-chain and must not be
-// treated as expired — their resolution comes from markIntentAsConfirmed.
 // Intents without an expiresAt (pre-feature rows) are considered expired.
+//
+// A txHash exempts the intent while it could still plausibly resolve: it is
+// being watched on-chain and the answer comes from markIntentAsConfirmed. That
+// exemption is time-bounded rather than permanent, because it assumes a hash
+// resolves, and a refused payment or a transaction that never confirms both
+// break the assumption — leaving a row that getIntent advertises as payable
+// forever, long past the price lock it was quoted under. Past
+// intentTxGraceMinutes the hash stops earning the exemption. Kept in step with
+// getExpiredPendingIntents, so what this reports and what cleanup reclaims are
+// the same set.
 const isIntentExpired = (intent: Intent): boolean => {
   if (intent.status === IntentStatus.EXPIRED) return true
   if (intent.status !== IntentStatus.PENDING) return false
-  if (intent.txHash) return false
+  if (intent.txHash) {
+    // A pre-feature row has no window to be past, so the hash keeps its
+    // exemption — as it did before this grace existed.
+    if (!intent.expiresAt) return false
+    const graceMs = config.credits.intentTxGraceMinutes * 60 * 1000
+    return intent.expiresAt.getTime() + graceMs < Date.now()
+  }
   if (!intent.expiresAt) return true
   return intent.expiresAt < new Date()
 }
@@ -706,12 +720,53 @@ const markIntentAsConfirmed = async ({
     intent.status === IntentStatus.CONFIRMED ||
     intent.status === IntentStatus.COMPLETED ||
     intent.status === IntentStatus.OVER_CAP ||
-    intent.status === IntentStatus.FAILED ||
-    intent.status === IntentStatus.EXPIRED
+    intent.status === IntentStatus.FAILED
   ) {
     logger.info('markIntentAsConfirmed: intent already processed — skipping', {
       intentId,
       currentStatus: intent.status,
+    })
+    return ok(intent)
+  }
+
+  // A payment for an intent whose price lock has lapsed.
+  //
+  // Handled apart from the statuses above because it is not the same kind of
+  // no-op. Those four mean the intent was already resolved and this call is
+  // re-delivery of something we acted on. EXPIRED means the opposite: nothing was
+  // ever paid as far as the row knows, so money arriving now is a payment we have
+  // no record of anywhere. Granting it is not an option — the rate it was quoted
+  // under is gone — but returning quietly leaves an irreversible transfer with
+  // nothing pointing at it, which is exactly what intent_mispayments exists to
+  // prevent.
+  //
+  // Reachable on both payment methods today, without the USDC flag: an intent
+  // expires ten minutes after creation, and a payment made near that edge can
+  // confirm after it. It becomes more reachable now that a stale tx_hash no
+  // longer exempts a row from expiry forever, which is why the two land together.
+  //
+  // Still ok() rather than an error — the intent is untouched and there is
+  // nothing for the watcher to retry — and still idempotent, since re-delivery
+  // carries the same (txHash, logIndex) and de-duplicates on insert.
+  if (intent.status === IntentStatus.EXPIRED) {
+    logger.warn(
+      'markIntentAsConfirmed: payment arrived for an expired intent — recording it',
+      {
+        intentId,
+        expiresAt: intent.expiresAt,
+        paymentMethod: intent.paymentMethod,
+        txHash,
+      },
+    )
+    await recordMispayment({
+      intentId,
+      reason: IntentMispaymentReason.INTENT_EXPIRED,
+      expectedPaymentMethod: intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
+      paymentAmount,
+      tokenAmount,
+      fromAddress,
+      txHash,
+      logIndex,
     })
     return ok(intent)
   }
@@ -1015,11 +1070,12 @@ const getOverCapIntents = async (executor: User) => {
 
 // Returns on-chain payments that were written down for admin review.
 //
-// Mostly refusals — a payment naming an unknown intent, or denominated in the
-// other asset. Those are the least visible thing that can happen to money here:
-// the intent they name is untouched, so nothing about its row says a payment
-// arrived at all. The queue OVER_CAP has is for payments we accepted and could
-// not convert; these are the ones we never accepted.
+// Mostly refusals — a payment naming an unknown intent, denominated in the other
+// asset, or arriving after the intent's price lock lapsed. Those are the least
+// visible thing that can happen to money here: the intent they name is
+// untouched, so nothing about its row says a payment arrived at all. The queue
+// OVER_CAP has is for payments we accepted and could not convert; these are the
+// ones we never accepted.
 //
 // AMOUNT_OFF_QUOTE rows are the exception and were accepted, credited, and
 // COMPLETED normally. They are here because no other row records that the amount
@@ -1084,7 +1140,9 @@ const reprocessOverCapIntent = async (executor: User, intentId: string) => {
 // SELECT and UPDATE, the conditional UPDATE simply no-ops instead of
 // overwriting the CONFIRMED status and paymentAmount with stale data.
 const cleanupExpiredIntents = async (): Promise<void> => {
-  const expired = await intentsRepository.getExpiredPendingIntents()
+  const expired = await intentsRepository.getExpiredPendingIntents(
+    config.credits.intentTxGraceMinutes,
+  )
   if (expired.length === 0) return
 
   logger.info('Marking expired intents', { count: expired.length })

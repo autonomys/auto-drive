@@ -775,6 +775,49 @@ describe('IntentsUseCases', () => {
     expect(updated.quotedAi3Shannons).toBe(1000n)
   })
 
+  it('markIntentAsConfirmed files a payment that arrived after the intent expired', async () => {
+    // Not the same no-op as re-delivery for a settled intent. EXPIRED means
+    // nothing was ever paid as far as the row knows, so money arriving now is a
+    // payment with no record anywhere. It cannot be granted — the quoted rate is
+    // gone — but returning quietly would leave an irreversible transfer with
+    // nothing pointing at it.
+    const intent: Intent = {
+      id: '0xexpired-paid',
+      userPublicId: user.publicId,
+      status: IntentStatus.EXPIRED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+      expiresAt: new Date(Date.now() - 60 * 60 * 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 5n * 10n ** 18n,
+      fromAddress: '0xpayer',
+      txHash: '0xlate',
+      logIndex: 0,
+    })
+
+    // ok(): the intent is untouched and there is nothing for the watcher to retry.
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(recordSpy).toHaveBeenCalledWith({
+      intentId: intent.id,
+      reason: IntentMispaymentReason.INTENT_EXPIRED,
+      expectedPaymentMethod: PaymentMethod.AI3_NATIVE,
+      paymentAmount: 5n * 10n ** 18n,
+      tokenAmount: undefined,
+      fromAddress: '0xpayer',
+      txHash: '0xlate',
+      logIndex: 0,
+    })
+  })
+
   it('markIntentAsConfirmed files an off-quote payment and still credits it', async () => {
     // Underpaying a quote the API advertised as exact. The grant stays
     // proportional — the user gets storage worth what they sent — but nothing on
@@ -1293,6 +1336,46 @@ describe('IntentsUseCases', () => {
     expect(result.isOk()).toBe(true)
   })
 
+  it('getIntent should expire a PENDING intent whose txHash outlived the grace', async () => {
+    // The exemption above assumes a txHash means "will resolve". A payment the
+    // watcher refused, or a transaction that never confirms, breaks that: the row
+    // could previously reach neither EXPIRED nor CONFIRMED, so getIntent kept
+    // advertising it as payable indefinitely past its price lock and the startup
+    // sweep re-watched it on every restart.
+    const stale: Intent = {
+      id: '0x1w-stale',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      txHash: '0xnever-confirmed',
+      expiresAt: new Date(
+        Date.now() -
+          (config.credits.intentTxGraceMinutes + 60) * 60 * 1000,
+      ),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(stale)
+
+    const result = await IntentsUseCases.getIntent(user, stale.id)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(GoneError)
+  })
+
+  it('getIntent keeps the txHash exemption for a pre-feature row with no window', async () => {
+    // Nothing to be past, so the hash keeps the exemption it had before the grace
+    // existed.
+    const legacy: Intent = {
+      id: '0x1w-legacy',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      txHash: '0xsubmitted',
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(legacy)
+
+    const result = await IntentsUseCases.getIntent(user, legacy.id)
+    expect(result.isOk()).toBe(true)
+  })
+
   it('getIntent should return ok for CONFIRMED intent even if expiresAt is past', async () => {
     const confirmed: Intent = {
       id: '0x1c',
@@ -1676,6 +1759,19 @@ describe('IntentsUseCases', () => {
   // ────────────────────────────────────────────────────────────────────────────
   // cleanupExpiredIntents
   // ────────────────────────────────────────────────────────────────────────────
+
+  it('cleanupExpiredIntents asks the repository for rows past the tx grace', async () => {
+    // The grace is policy and lives in config; the query only applies it. Passing
+    // it explicitly keeps what cleanup reclaims and what isIntentExpired reports
+    // as the same set.
+    const getSpy = jest
+      .spyOn(intentsRepository, 'getExpiredPendingIntents')
+      .mockResolvedValue([])
+
+    await IntentsUseCases.cleanupExpiredIntents()
+
+    expect(getSpy).toHaveBeenCalledWith(config.credits.intentTxGraceMinutes)
+  })
 
   it('cleanupExpiredIntents should call expireIntentIfPending for each expired intent', async () => {
     const expiredIntent: Intent = {
