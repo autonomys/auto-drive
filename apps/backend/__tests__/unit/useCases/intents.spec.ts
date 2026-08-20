@@ -775,6 +775,141 @@ describe('IntentsUseCases', () => {
     expect(updated.quotedAi3Shannons).toBe(1000n)
   })
 
+  it('markIntentAsConfirmed files an off-quote payment and still credits it', async () => {
+    // Underpaying a quote the API advertised as exact. The grant stays
+    // proportional — the user gets storage worth what they sent — but nothing on
+    // the intent afterwards compares the two amounts, so without this row the
+    // only signal is a balance the user has to notice looks short.
+    const intent: Intent = {
+      id: '0xusdc-underpaid',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 840_000n,
+      fromAddress: '0xpayer',
+      txHash: '0xshort',
+      logIndex: 1,
+    })
+
+    // Accepted, not refused: refusing would leave a paying user with no storage
+    // and put the payment in a queue that has no grant path out.
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).toHaveBeenCalled()
+    expect(updateSpy.mock.calls[0][0].status).toBe(IntentStatus.CONFIRMED)
+    expect(updateSpy.mock.calls[0][0].tokenAmount).toBe(840_000n)
+
+    expect(recordSpy).toHaveBeenCalledWith({
+      intentId: intent.id,
+      reason: IntentMispaymentReason.AMOUNT_OFF_QUOTE,
+      expectedPaymentMethod: PaymentMethod.USDC_ETH,
+      paymentAmount: undefined,
+      tokenAmount: 840_000n,
+      fromAddress: '0xpayer',
+      txHash: '0xshort',
+      logIndex: 1,
+    })
+  })
+
+  it('markIntentAsConfirmed files an overpayment too', async () => {
+    // Paying over the quote grants proportionally more, past the size the cap
+    // pre-check ran against. Bounded by the authoritative check under the
+    // advisory lock, but still worth a record.
+    const intent: Intent = {
+      id: '0xusdc-overpaid',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 2_000_000n,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: IntentMispaymentReason.AMOUNT_OFF_QUOTE,
+        tokenAmount: 2_000_000n,
+      }),
+    )
+  })
+
+  it('markIntentAsConfirmed files nothing when the quote is paid exactly', async () => {
+    // The common case must stay silent, or the record stops meaning anything.
+    const intent: Intent = {
+      id: '0xusdc-exact',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
+  it('markIntentAsConfirmed files nothing for an AI3 payment of any size', async () => {
+    // An AI3 intent is quoted no amount — credits follow whatever arrives — so
+    // there is no promise for a payment to deviate from and nothing to record.
+    const intent: Intent = {
+      id: '0xai3-any-amount',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 7n * 10n ** 18n,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
   it('markIntentAsConfirmed refuses an AI3 payment against a USDC intent', async () => {
     // The live watcher reports every payIntent event as paymentAmount, and
     // payIntent(bytes32) accepts ANY intent id — so this arrives as a well-formed

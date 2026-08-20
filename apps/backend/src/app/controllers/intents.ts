@@ -142,10 +142,15 @@ intentsController.get(
 
 // ---------------------------------------------------------------------------
 // GET /intents/mispayments  (admin only)
-// Lists on-chain payments that were refused rather than attached to an intent:
-// the intent id was unknown, or the payment was denominated in the other asset.
-// The intent itself is untouched in both cases, so nothing about its row records
-// that money arrived — this is the only place it does.
+// Lists on-chain payments written down for admin review. Mostly payments refused
+// rather than attached to an intent: the intent id was unknown, or the payment
+// was denominated in the other asset. The intent itself is untouched in both
+// cases, so nothing about its row records that money arrived — this is the only
+// place it does.
+//
+// Rows with reason 'amount_off_quote' were accepted and credited; they are here
+// because the amount paid differed from the amount quoted and nothing else says
+// so. Filter on `reason` before working the list as a queue.
 //
 // NOTE: like /over-cap, this static route must be registered BEFORE GET /:id.
 // ---------------------------------------------------------------------------

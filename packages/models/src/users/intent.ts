@@ -117,13 +117,16 @@ export const IntentSchema = z.object({
 export type Intent = z.infer<typeof IntentSchema>;
 
 /**
- * Why an on-chain payment could not be attached to the intent it named.
+ * Why an on-chain payment is on file rather than passing through unremarked.
  *
- * Both receivers take any `intentId` from anyone — `payIntent(bytes32)` on Auto
- * EVM and `payIntentWithToken(bytes32, uint256)` on Ethereum — so a payment can
- * name an intent that does not exist, or one denominated in the other asset.
- * Neither is resolvable in code: the money has moved and the only remaining
- * question is who it belongs to.
+ * Two of these are refusals. Both receivers take any `intentId` from anyone —
+ * `payIntent(bytes32)` on Auto EVM and `payIntentWithToken(bytes32, uint256)` on
+ * Ethereum — so a payment can name an intent that does not exist, or one
+ * denominated in the other asset. Neither is resolvable in code: the money has
+ * moved and the only remaining question is who it belongs to.
+ *
+ * The third is not a refusal. Read `reason` before treating a row as a work
+ * item.
  */
 export enum IntentMispaymentReason {
   // The intent id in the event matches no row.
@@ -131,17 +134,28 @@ export enum IntentMispaymentReason {
   // The row exists but is denominated in the other asset — AI3 sent to a USDC
   // intent, or vice versa.
   ASSET_MISMATCH = "asset_mismatch",
+  // The payment was ACCEPTED and credited, but its amount is not the amount
+  // quoted. Settlement converts proportionally, so the user receives storage
+  // worth what they actually sent and nothing needs resolving — but the API
+  // advertises `quotedTokenAmount` as the exact amount to pay, and nothing else
+  // on the intent would ever say that promise was missed. This row is the only
+  // record that it was: evidence, not a queue item.
+  AMOUNT_OFF_QUOTE = "amount_off_quote",
 }
 
 /**
- * A payment that arrived and was refused, recorded so it can be resolved.
+ * An on-chain payment that needs to be findable afterwards, recorded because
+ * nothing else durable points at it.
  *
- * Refusing is the right call — confirming a mispayment strands the intent and
- * makes the idempotency guard discard the user's real payment when it lands —
- * but a refusal that exists only as a log line leaves an irreversible on-chain
- * transfer with nothing durable pointing at it. This row is what an admin works
- * from: which intent was named, what actually arrived, who sent it, and the
- * transaction to look it up by.
+ * Mostly a payment that arrived and was refused. Refusing is the right call —
+ * confirming a mispayment strands the intent and makes the idempotency guard
+ * discard the user's real payment when it lands — but a refusal that exists only
+ * as a log line leaves an irreversible on-chain transfer with nothing durable
+ * pointing at it. This row is what an admin works from: which intent was named,
+ * what actually arrived, who sent it, and the transaction to look it up by.
+ *
+ * `reason` also carries one case that was ACCEPTED and credited
+ * (AMOUNT_OFF_QUOTE), so the field is what says whether a row is a work item.
  *
  * Deliberately NOT foreign-keyed to `intents`: the UNKNOWN_INTENT case has no
  * row to point at, and that is precisely the case with the least other evidence.

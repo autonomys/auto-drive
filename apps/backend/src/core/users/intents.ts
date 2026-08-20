@@ -767,6 +767,52 @@ const markIntentAsConfirmed = async ({
     )
   }
 
+  // Settled at an amount that is not the amount quoted.
+  //
+  // Not a refusal, and the grant below is unchanged: conversion is proportional,
+  // so the user receives storage worth exactly what they sent, at the rate they
+  // were quoted at. That is the settlement rule on both payment methods and it
+  // needs no human. But "handled" is not "unremarked". The API advertises
+  // quotedTokenAmount as the exact amount to pay, locked until expiresAt, so a
+  // payment that differs from it means the quote was missed — a stale UI, a
+  // hand-built contract call, a wallet the user edited. Afterwards the row holds
+  // both numbers and no reader compares them, so absent this the only signal is a
+  // balance the user has to notice looks short, which is neither detectable nor
+  // recoverable by us.
+  //
+  // Recorded rather than refused because refusing is the strictly worse trade
+  // here: it turns a self-resolving payment into an admin row and leaves a paying
+  // user with no storage, and the queue it would land in has no grant path out.
+  //
+  // USDC only. An AI3 intent is quoted no amount at all — credits are
+  // paymentAmount / shannonsPerByte for whatever arrives — so there is no promise
+  // for a payment to deviate from.
+  if (
+    expectsToken &&
+    intent.quotedTokenAmount !== undefined &&
+    suppliedAmount !== intent.quotedTokenAmount
+  ) {
+    logger.warn(
+      'markIntentAsConfirmed: payment differs from the locked quote — crediting it proportionally',
+      {
+        intentId,
+        quotedTokenAmount: intent.quotedTokenAmount.toString(),
+        received: suppliedAmount.toString(),
+        txHash,
+      },
+    )
+    await recordMispayment({
+      intentId,
+      reason: IntentMispaymentReason.AMOUNT_OFF_QUOTE,
+      expectedPaymentMethod: PaymentMethod.USDC_ETH,
+      paymentAmount,
+      tokenAmount,
+      fromAddress,
+      txHash,
+      logIndex,
+    })
+  }
+
   return ok(
     await intentsRepository.updateIntent({
       ...intent,
@@ -967,12 +1013,18 @@ const getOverCapIntents = async (executor: User) => {
   return ok(intents)
 }
 
-// Returns refused on-chain payments for admin review — payments naming an
-// unknown intent, or denominated in the other asset.
+// Returns on-chain payments that were written down for admin review.
 //
-// The queue OVER_CAP has for payments we accepted but could not convert. These
-// are the ones we never accepted at all, and they are less visible: the intent
-// they name is untouched, so nothing about its row says a payment happened.
+// Mostly refusals — a payment naming an unknown intent, or denominated in the
+// other asset. Those are the least visible thing that can happen to money here:
+// the intent they name is untouched, so nothing about its row says a payment
+// arrived at all. The queue OVER_CAP has is for payments we accepted and could
+// not convert; these are the ones we never accepted.
+//
+// AMOUNT_OFF_QUOTE rows are the exception and were accepted, credited, and
+// COMPLETED normally. They are here because no other row records that the amount
+// paid differed from the amount quoted. Filter on `reason` before working the
+// list as a queue.
 const getMispayments = async (executor: User) => {
   if (executor.role !== UserRole.Admin) {
     return err(new ForbiddenError('Admin access required'))
