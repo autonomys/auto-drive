@@ -144,11 +144,12 @@ export enum IntentMispaymentReason {
   // so there is no rate left to convert it at. The intent is untouched and stays
   // EXPIRED; this row is the only record that money showed up for it.
   INTENT_EXPIRED = "intent_expired",
-  // The payment was accepted and confirmed, then converted to zero bytes of
-  // storage: too small to buy one byte, or an intent missing one of its
-  // conversion inputs. The intent is FAILED and the money is kept, which is
-  // terminal — nothing re-runs it — and no other listing surfaces a FAILED
-  // intent, so without this row the payment is invisible.
+  // The payment was accepted and confirmed, then could not be turned into
+  // storage: too small to buy a single byte, missing one of its conversion
+  // inputs, or confirmed with no recorded amount at all. The intent is FAILED and
+  // the money is kept, which is terminal — nothing re-runs it — and no other
+  // listing surfaces a FAILED intent, so without this row the payment is
+  // invisible.
   UNCONVERTIBLE_PAYMENT = "unconvertible_payment",
   // The payment was ACCEPTED and credited, but its amount is not the amount
   // quoted. Settlement converts proportionally, so the user receives storage

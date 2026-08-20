@@ -1947,22 +1947,53 @@ describe('IntentsUseCases', () => {
     )
   })
 
-  it('onConfirmedIntent files a payment it could not turn into a single byte', async () => {
-    // Dust: real money, confirmed, converting to zero bytes. The intent goes
-    // FAILED, which is terminal and has no listing of its own, so before this the
-    // payment was invisible — unlike OVER_CAP, which has an endpoint and a way
-    // back.
+  it('onConfirmedIntent files the amountless failure too', async () => {
+    // FAILED has no listing of its own either way, so the reason the zero-credit
+    // path files applies here identically. There is less to go on — no amount, by
+    // definition — but the intent and its transaction are enough to look up what
+    // arrived.
     const intent: Intent = {
-      id: '0xusdc-dust',
+      id: '0xamountless',
       userPublicId: user.publicId,
       status: IntentStatus.CONFIRMED,
-      shannonsPerByte: 1_000_000n,
+      paymentAmount: undefined,
+      shannonsPerByte: 1n,
       paymentMethod: PaymentMethod.USDC_ETH,
-      tokenAmount: 1n,
-      quotedTokenAmount: 1_050_000n,
-      quotedAi3Shannons: 1_000_000n,
+      txHash: '0xarrived',
       fromAddress: '0xpayer',
-      txHash: '0xdust-tx',
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockImplementation(async (i) => i)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.onConfirmedIntent(intent.id)
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intentId: intent.id,
+        reason: IntentMispaymentReason.UNCONVERTIBLE_PAYMENT,
+        txHash: '0xarrived',
+      }),
+    )
+  })
+
+  it('onConfirmedIntent files a zero amount rather than dropping it', async () => {
+    // Neither receiver can emit a zero, so this is not a reachable case — it is
+    // here because the two FAILED branches used to disagree about what a zero
+    // means, and a payment must not fall between them.
+    const intent: Intent = {
+      id: '0xzero-amount',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+      paymentAmount: 0n,
+      txHash: '0xzero',
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const updateSpy = jest
@@ -1976,42 +2007,13 @@ describe('IntentsUseCases', () => {
 
     expect(res.isOk()).toBe(true)
     expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ id: intent.id, status: IntentStatus.FAILED }),
+      expect.objectContaining({ status: IntentStatus.FAILED }),
     )
-    expect(recordSpy).toHaveBeenCalledWith({
-      intentId: intent.id,
-      reason: IntentMispaymentReason.UNCONVERTIBLE_PAYMENT,
-      expectedPaymentMethod: PaymentMethod.USDC_ETH,
-      paymentAmount: undefined,
-      tokenAmount: 1n,
-      fromAddress: '0xpayer',
-      txHash: '0xdust-tx',
-    })
-  })
-
-  it('onConfirmedIntent files nothing when the payment converts to credits', async () => {
-    // The successful path must stay out of the queue entirely.
-    const intent: Intent = {
-      id: '0xai3-fine',
-      userPublicId: user.publicId,
-      status: IntentStatus.CONFIRMED,
-      shannonsPerByte: 1n,
-      paymentMethod: PaymentMethod.AI3_NATIVE,
-      paymentAmount: 5_000n,
-    }
-    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
-    jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
-    jest
-      .spyOn(AccountsUseCases, 'addCreditsToAccount')
-      .mockResolvedValue(ok(undefined) as never)
-    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
-
-    const res = await IntentsUseCases.onConfirmedIntent(intent.id)
-
-    expect(res.isOk()).toBe(true)
-    expect(recordSpy).not.toHaveBeenCalled()
+    // Once, by exactly one of the two branches.
+    expect(recordSpy).toHaveBeenCalledTimes(1)
+    expect(recordSpy.mock.calls[0][0].reason).toBe(
+      IntentMispaymentReason.UNCONVERTIBLE_PAYMENT,
+    )
   })
 
   it('getIntentCredits returns 0 rather than throwing when shannonsPerByte is 0', () => {

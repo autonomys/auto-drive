@@ -1087,7 +1087,20 @@ const onConfirmedIntent = async (intentId: string) => {
   //
   // markIntentAsConfirmed now refuses a mismatched asset, so this is
   // defence-in-depth for rows written before that check existed.
-  if (!receivedAmount) {
+  //
+  // Filed for the same reason the zero-credit branch below files: FAILED is
+  // terminal and has no listing of its own, so an intent that reaches it is not
+  // something an admin finds. There is less to go on here than there — no amount,
+  // by definition — but the intent id and the transaction are enough to look up
+  // what arrived, and that beats a log line. Recorded before the status write so a
+  // failed update cannot lose both.
+  //
+  // Compared against undefined rather than falsy on purpose. A zero amount is a
+  // different thing from a missing one, and belongs to the zero-credit branch
+  // below, which files it with the amount attached rather than reporting it as
+  // absent. Neither receiver can emit a zero — both revert on it — so this is
+  // about the branch meaning what it says, not a reachable case.
+  if (receivedAmount === undefined) {
     logger.warn(
       'onConfirmedIntent: confirmed intent has no deposit amount — marking FAILED',
       {
@@ -1095,6 +1108,15 @@ const onConfirmedIntent = async (intentId: string) => {
         paymentMethod: intent.paymentMethod,
       },
     )
+    await recordMispayment({
+      intentId,
+      reason: IntentMispaymentReason.UNCONVERTIBLE_PAYMENT,
+      expectedPaymentMethod: intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
+      paymentAmount: intent.paymentAmount,
+      tokenAmount: intent.tokenAmount,
+      fromAddress: intent.fromAddress,
+      txHash: intent.txHash,
+    })
     await intentsRepository.updateIntent({
       ...intent,
       status: IntentStatus.FAILED,
