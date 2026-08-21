@@ -1,4 +1,5 @@
 import { PaymentMethod } from '@auto-drive/models'
+import { invalidAddressEnvironmentVariables } from '../../../config.js'
 import { createLogger } from '../../drivers/logger.js'
 import { ai3PaymentWatcher, getUsdcPaymentWatcher } from './chains.js'
 import { confirmedIntentsPoller } from './confirmedIntents.js'
@@ -50,6 +51,18 @@ const watchTransaction = async (
  * import this module.
  */
 const start = () => {
+  // Said once, by the process that would have used them. An address variable set
+  // to something unusable is discarded at config load, which makes the
+  // deployment behave as though USDC were switched off — safe, but baffling to
+  // debug from the outside ("I set the receiver and it still refuses to quote").
+  const invalid = invalidAddressEnvironmentVariables()
+  if (invalid.length > 0) {
+    logger.error(
+      'Ignoring address environment variables that are not valid addresses',
+      { variables: invalid },
+    )
+  }
+
   const usdcWatcher = getUsdcPaymentWatcher()
 
   logger.info('Starting payment manager', {

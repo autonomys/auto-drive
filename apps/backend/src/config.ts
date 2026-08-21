@@ -6,7 +6,7 @@ import {
   env,
   positiveIntEnv,
 } from './shared/utils/misc.js'
-import { getAddress } from 'viem'
+import { getAddress, isAddress } from 'viem'
 
 const DEFAULT_MEMORY_CACHE_MAX_SIZE = BigInt(1024 ** 3) // 1GB
 
@@ -16,6 +16,40 @@ const DEFAULT_CACHE_TTL = 0 // No TTL
 const ONE_MiB = 1024 ** 2
 const ONE_HUNDRED_MiB = ONE_MiB * 100
 const FIVE_GiB = 1024 ** 3 * 5
+
+/**
+ * An optional address variable, trimmed and validated.
+ *
+ * Trimmed because these values arrive from files far more often than from a
+ * shell: a Kubernetes secret mounted as a file, a Parameter Store value, a
+ * hand-edited .env — all of them routinely carry a trailing newline or space.
+ * Validated because "present" and "usable" have to be the same question here.
+ * The payment watcher normalises addresses through viem's getAddress, which
+ * THROWS on whitespace, on a truncated hex string, and on a missing 0x
+ * prefix — so a truthiness check would call such a value configured while the
+ * watcher refused to build on it, and the whole point of the
+ * configured/not-configured split is that quoting and watching agree.
+ *
+ * Returns undefined for anything unusable, which reads to every consumer as
+ * "not set". The variable is named in a log line at startup rather than
+ * swallowed silently — see invalidAddressEnvironmentVariables below.
+ */
+const invalidAddressEnvVars: string[] = []
+
+export const addressEnv = (
+  name: string,
+  raw?: string,
+): string | undefined => {
+  const trimmed = raw?.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  if (!isAddress(trimmed)) {
+    invalidAddressEnvVars.push(name)
+    return undefined
+  }
+  return trimmed
+}
 
 export const config = {
   postgres: {
@@ -230,17 +264,22 @@ export const config = {
     // reorg can still remove.
     confirmations: positiveIntEnv('ETH_CHAIN_CONFIRMATIONS', 6),
     // AutoDriveUSDCReceiver. Payments are watched here, and this is the address
-    // the frontend sends USDC to. Setting it is what makes this deployment
-    // intend to accept USDC — see usdcConfigured below for what makes it able
-    // to.
-    usdcReceiverAddress: process.env.ETH_USDC_RECEIVER_ADDRESS,
+    // the frontend sends USDC to. Setting it to a VALID address is what makes
+    // this deployment accept USDC — see isUsdcConfigured below.
+    usdcReceiverAddress: addressEnv(
+      'ETH_USDC_RECEIVER_ADDRESS',
+      process.env.ETH_USDC_RECEIVER_ADDRESS,
+    ),
     // The ERC20 the receiver was deployed against. Checked against the `token`
     // field of every payment event before it is credited: the receiver only
     // ever transfers its own configured token, so a mismatch means the address
     // below and the deployed contract disagree — and crediting on the strength
     // of a 6-decimal assumption that no longer holds would grant storage for a
     // token nobody was quoted in.
-    usdcTokenAddress: process.env.USDC_TOKEN_ADDRESS,
+    usdcTokenAddress: addressEnv(
+      'USDC_TOKEN_ADDRESS',
+      process.env.USDC_TOKEN_ADDRESS,
+    ),
   },
   priceOracle: {
     // AI3/USD price oracle: the volume-weighted average of the Uniswap WAI3/USDC
@@ -475,6 +514,18 @@ export const config = {
  * keys after this module has loaded, and a snapshot would answer for the
  * environment instead of for the configuration.
  */
+/**
+ * Names any address variable that was set to something unusable.
+ *
+ * Discarding an invalid address makes the deployment behave as though USDC
+ * were switched off, which is the safe outcome but a confusing one to debug —
+ * "I set the receiver and it still refuses to quote". Called from the payment
+ * manager's start(), so the process that owns payments says so at boot.
+ */
+export const invalidAddressEnvironmentVariables = () => [
+  ...invalidAddressEnvVars,
+]
+
 export const isUsdcConfigured = () =>
   Boolean(
     config.ethereum.rpcUrl &&

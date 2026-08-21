@@ -164,7 +164,8 @@ const buildUsdcWatcher = (
   rpcUrl: string,
   receiverAddress: string,
   tokenAddress: string,
-) => createPaymentWatcher(createUsdcChain(rpcUrl, receiverAddress, tokenAddress))
+) =>
+  createPaymentWatcher(createUsdcChain(rpcUrl, receiverAddress, tokenAddress))
 
 // Typed off the builder rather than off createPaymentWatcher: that generic
 // resolves to its own constraint (any Abi, any event name), which no concrete

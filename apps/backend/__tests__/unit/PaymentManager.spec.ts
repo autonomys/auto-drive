@@ -21,7 +21,11 @@ import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
 import { IntentMispaymentReason, PaymentMethod } from '@auto-drive/models'
 import { IntentsUseCases } from '../../src/core/users/intents.js'
 import { ok, err } from 'neverthrow'
-import { config } from '../../src/config.js'
+import {
+  addressEnv,
+  config,
+  invalidAddressEnvironmentVariables,
+} from '../../src/config.js'
 import { getAddress } from 'viem'
 import { ObjectNotFoundError } from '../../src/errors/index.js'
 
@@ -53,9 +57,9 @@ describe('PaymentManager', () => {
 
   describe('watchTransaction', () => {
     it('should reject invalid tx hash without 0x prefix', async () => {
-      await expect(
-        watcher.watchTransaction('invalidhash'),
-      ).rejects.toThrow('Invalid tx hash')
+      await expect(watcher.watchTransaction('invalidhash')).rejects.toThrow(
+        'Invalid tx hash',
+      )
     })
 
     it('should call viemClient.waitForTransactionReceipt with correct params', async () => {
@@ -289,9 +293,7 @@ describe('PaymentManager', () => {
         .mockResolvedValue(err(new ObjectNotFoundError('Intent error')))
 
       // Should not throw, error should be logged
-      await expect(
-        watcher.watchTransaction(txHash),
-      ).resolves.not.toThrow()
+      await expect(watcher.watchTransaction(txHash)).resolves.not.toThrow()
     })
 
     it('should handle multiple events with mixed success and error', async () => {
@@ -944,7 +946,10 @@ describe('PaymentManager', () => {
 
       expect(waitSpy).toHaveBeenCalledWith({
         hash: txHash,
-        confirmations: config.ethereum.confirmations,
+        // The literal, not config.ethereum.confirmations: both chains default to
+        // 6, so reading the value back from the same field the implementation
+        // read would pass even if createUsdcChain took the Auto EVM key.
+        confirmations: 6,
         // Ethereum gets a longer budget than Auto EVM: 6 confirmations is ~72s
         // of it, so viem's 180s default would time out a transaction that took
         // two minutes to be included and raise a payment-failed alert for a
@@ -1076,16 +1081,12 @@ describe('PaymentManager', () => {
       jest
         .spyOn(watcherUnderTest._viemClient, 'readContract')
         .mockResolvedValue(DAI as any)
-      const slackSpy = jest
-        .spyOn(slackNotifier, 'send')
-        .mockResolvedValue(true)
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
 
       await watcherUnderTest._verifyConfiguration()
 
       expect(slackSpy).toHaveBeenCalledTimes(1)
-      expect(slackSpy.mock.calls[0][0].details).toContain(
-        getAddress(DAI),
-      )
+      expect(slackSpy.mock.calls[0][0].details).toContain(getAddress(DAI))
     })
 
     it('stays quiet when the configuration matches', async () => {
@@ -1096,9 +1097,7 @@ describe('PaymentManager', () => {
       jest
         .spyOn(watcherUnderTest._viemClient, 'readContract')
         .mockResolvedValue(getAddress(USDC) as any)
-      const slackSpy = jest
-        .spyOn(slackNotifier, 'send')
-        .mockResolvedValue(true)
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
 
       await watcherUnderTest._verifyConfiguration()
 
@@ -1116,9 +1115,7 @@ describe('PaymentManager', () => {
       jest
         .spyOn(watcherUnderTest._viemClient, 'readContract')
         .mockRejectedValue(new Error('connect ECONNREFUSED'))
-      const slackSpy = jest
-        .spyOn(slackNotifier, 'send')
-        .mockResolvedValue(true)
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
 
       await expect(
         watcherUnderTest._verifyConfiguration(),
@@ -1239,6 +1236,175 @@ describe('PaymentManager', () => {
 
       expect(watchSpy).toHaveBeenCalledWith('0xusdc')
       expect(ai3Spy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('watchTransaction deduplication', () => {
+    it('joins a transaction that is already being watched', async () => {
+      // Three paths reach watchTransaction — the event subscription, the
+      // watch-intent-tx task, and the startup sweep. Two arriving together for
+      // one transaction used to mean two markIntentAsConfirmed calls for the SAME
+      // payment: one wins the conditional transition, the other is filed as
+      // ALREADY_SETTLED, and an admin is told to reconcile a second transfer that
+      // never happened.
+      const txHash = '0xdeduped'
+
+      let releaseReceipt: ((value: unknown) => void) | undefined
+      const receipt = new Promise((resolve) => {
+        releaseReceipt = resolve
+      })
+      const waitSpy = jest
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
+        .mockImplementation(() => receipt as any)
+
+      jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      const first = watcher.watchTransaction(txHash)
+      const second = watcher.watchTransaction(txHash)
+
+      // One receipt lookup, not two.
+      expect(waitSpy).toHaveBeenCalledTimes(1)
+
+      releaseReceipt?.({ from: '0xSender', logs: [] })
+      await Promise.all([first, second])
+    })
+
+    it('watches the same transaction again once the first has finished', async () => {
+      // Only concurrent calls collapse. A later re-delivery has to run, because
+      // by then the intent is settled and the guard recognises it as a replay —
+      // which is where a genuine second payment is told apart from this one.
+      const txHash = '0xsequential-dedupe'
+
+      const waitSpy = jest
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue({ from: '0xSender', logs: [] } as any)
+
+      jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await watcher.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
+
+      expect(waitSpy).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not strand a failed transaction in the in-flight set', async () => {
+      const txHash = '0xfailing'
+
+      const waitSpy = jest
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
+        .mockRejectedValue(new Error('receipt timeout'))
+
+      await expect(watcher.watchTransaction(txHash)).rejects.toThrow(
+        'receipt timeout',
+      )
+      // A rejection has to clear the entry, or the task's retry would join a
+      // promise that already failed and never look at the chain again.
+      await expect(watcher.watchTransaction(txHash)).rejects.toThrow(
+        'receipt timeout',
+      )
+      expect(waitSpy).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('payment address verification', () => {
+    const RECEIVER = '0x1111111111111111111111111111111111111111'
+    const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+
+    it('escalates an address with no contract behind it', async () => {
+      const watcherUnderTest = createPaymentWatcher(
+        createUsdcChain('http://example.org', RECEIVER, USDC),
+      )
+
+      // A receiver address pointing at an EOA, at the token contract, or at
+      // nothing makes the token() read throw — which would otherwise be filed as
+      // "could not verify, RPC problem" and never escalated, leaving the single
+      // most likely misconfiguration the one nobody is told about.
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockResolvedValue('0x' as any)
+      const readSpy = jest.spyOn(watcherUnderTest._viemClient, 'readContract')
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      await watcherUnderTest._verifyConfiguration()
+
+      expect(slackSpy).toHaveBeenCalledTimes(1)
+      expect(slackSpy.mock.calls[0][0].details).toContain(RECEIVER)
+      // No point asking a non-contract what token it accepts.
+      expect(readSpy).not.toHaveBeenCalled()
+    })
+
+    it('carries on to the token check when the code read fails', async () => {
+      const watcherUnderTest = createPaymentWatcher(
+        createUsdcChain('http://example.org', RECEIVER, USDC),
+      )
+
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockRejectedValue(new Error('connect ECONNREFUSED'))
+      const readSpy = jest
+        .spyOn(watcherUnderTest._viemClient, 'readContract')
+        .mockResolvedValue(getAddress(USDC) as any)
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      await watcherUnderTest._verifyConfiguration()
+
+      // An RPC that cannot answer says nothing about the configuration, either
+      // way — so it neither escalates nor skips the check it was leading up to.
+      expect(readSpy).toHaveBeenCalledTimes(1)
+      expect(slackSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('address configuration', () => {
+    const originalEthereum = { ...config.ethereum }
+
+    afterEach(() => {
+      Object.assign(config.ethereum, originalEthereum)
+      _resetUsdcPaymentWatcher()
+    })
+
+    it('treats a whitespace-padded receiver address as not configured', () => {
+      // The value that made this worth guarding: secrets mounted from files, and
+      // hand-edited .env values, routinely carry a trailing newline. viem's
+      // getAddress THROWS on it, so a truthiness check would have called this
+      // configured — the API would quote USDC while the payment worker
+      // crash-looped on the address.
+      expect(
+        addressEnv(
+          'ETH_USDC_RECEIVER_ADDRESS',
+          '0x1111111111111111111111111111111111111111 ',
+        ),
+      ).toBeUndefined()
+      expect(
+        addressEnv(
+          'ETH_USDC_RECEIVER_ADDRESS',
+          ' 0x1111111111111111111111111111111111111111',
+        ),
+      ).toBe('0x1111111111111111111111111111111111111111')
+    })
+
+    it('treats a truncated or unprefixed address as not configured', () => {
+      expect(
+        addressEnv(
+          'USDC_TOKEN_ADDRESS',
+          '0x111111111111111111111111111111111111111',
+        ),
+      ).toBeUndefined()
+      expect(
+        addressEnv(
+          'USDC_TOKEN_ADDRESS',
+          '1111111111111111111111111111111111111111',
+        ),
+      ).toBeUndefined()
+    })
+
+    it('names every variable it discarded', () => {
+      addressEnv('SOME_ADDRESS_VAR', 'not-an-address')
+      expect(invalidAddressEnvironmentVariables()).toContain('SOME_ADDRESS_VAR')
     })
   })
 })
