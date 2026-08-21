@@ -843,6 +843,47 @@ describe('IntentsUseCases', () => {
     )
   })
 
+  it('markIntentAsConfirmed does not call a lost expiry race a double payment', async () => {
+    // expireIntentIfPending competes for the same PENDING status, so the sweep can
+    // be what makes the conditional confirm miss. Nothing was credited in that
+    // case, and filing it as ALREADY_SETTLED would tell an admin to reconcile a
+    // double payment that never happened.
+    const intent: Intent = {
+      id: '0xexpired-mid-confirm',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+    }
+    jest
+      .spyOn(intentsRepository, 'getById')
+      // PENDING on the way in; the sweep has taken it by the read-back.
+      .mockResolvedValueOnce(intent)
+      .mockResolvedValue({ ...intent, status: IntentStatus.EXPIRED })
+    jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockResolvedValue(null)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 500n,
+      txHash: '0xtoo-late',
+      logIndex: 0,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intentId: intent.id,
+        reason: IntentMispaymentReason.INTENT_EXPIRED,
+        paymentAmount: 500n,
+      }),
+    )
+  })
+
   it('markIntentAsConfirmed files no off-quote row for a payment that lost the race', async () => {
     // The off-quote check runs after the transition, so a payment that never
     // settled anything is filed once as ALREADY_SETTLED rather than also as an

@@ -944,15 +944,29 @@ const markIntentAsConfirmed = async ({
     txHash,
   })
 
-  // Lost the transition: another payment settled this intent between the read
-  // above and this write. Same situation as the guard above, reached a different
-  // way, so it is filed the same way. Nothing is retried and nothing is
-  // overwritten — the payment that won stays credited.
+  // Lost the transition: something else moved the intent out of PENDING between
+  // the read above and this write. Filed the same way as the guard above, reached
+  // a different way. Nothing is retried and nothing is overwritten.
   if (!confirmed) {
+    // Read the row back before naming a reason. Another payment winning the race
+    // is the expected case, but it is not the only writer competing for PENDING:
+    // expireIntentIfPending takes the same status, so a sweep firing in this
+    // window leaves an intent that expired with nothing credited. Calling that
+    // ALREADY_SETTLED would tell whoever works the queue there was a double
+    // payment to reconcile, when in fact the money simply arrived too late — a
+    // different situation with a different resolution.
+    const current = await intentsRepository.getById(intentId)
+    const reason =
+      current?.status === IntentStatus.EXPIRED
+        ? IntentMispaymentReason.INTENT_EXPIRED
+        : IntentMispaymentReason.ALREADY_SETTLED
+
     logger.warn(
-      'markIntentAsConfirmed: another payment settled this intent first — recording this one',
+      'markIntentAsConfirmed: intent left PENDING before this payment could claim it — recording it',
       {
         intentId,
+        currentStatus: current?.status,
+        reason,
         received: (tokenAmount ?? paymentAmount)?.toString(),
         txHash,
         logIndex,
@@ -960,7 +974,7 @@ const markIntentAsConfirmed = async ({
     )
     await recordMispayment({
       intentId,
-      reason: IntentMispaymentReason.ALREADY_SETTLED,
+      reason,
       expectedPaymentMethod: intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
       paymentAmount,
       tokenAmount,
@@ -968,8 +982,7 @@ const markIntentAsConfirmed = async ({
       txHash,
       logIndex,
     })
-    const settled = await intentsRepository.getById(intentId)
-    return ok(settled ?? intent)
+    return ok(current ?? intent)
   }
 
   // Settled at an amount that is not the amount quoted.
