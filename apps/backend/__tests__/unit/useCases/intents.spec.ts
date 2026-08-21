@@ -79,16 +79,24 @@ describe('IntentsUseCases', () => {
   // flag is opened here and the gate itself is tested separately.
   const usdcFlag = config.featureFlags.flags.payWithUsdc
   const usdcFlagDefault = usdcFlag.active
+  // A deployment that accepts USDC, which now takes a configured receiver as
+  // well as an open flag: createIntent refuses to quote an asset whose payments
+  // nothing would be watching for. .env.test sets no ETH_* keys, so every USDC
+  // case has to say so.
+  const usdcReceiverDefault = config.ethereum.usdcReceiverAddress
 
   beforeEach(() => {
     jest.clearAllMocks()
     jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({ price: 1, pricePerGB: 1073741824 })
     usdcFlag.active = true
+    config.ethereum.usdcReceiverAddress =
+      '0x1111111111111111111111111111111111111111'
   })
 
   afterEach(() => {
     jest.restoreAllMocks()
     usdcFlag.active = usdcFlagDefault
+    config.ethereum.usdcReceiverAddress = usdcReceiverDefault
   })
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -338,6 +346,38 @@ describe('IntentsUseCases', () => {
     expect(accountSpy).not.toHaveBeenCalled()
     expect(priceSpy).not.toHaveBeenCalled()
     expect(rateSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent refuses USDC when no receiver is configured, admin or not', async () => {
+    // The gap this closes: the flag's admin exemption exists so the path can be
+    // driven end to end in production, which means an admin is the FIRST person
+    // to reach it — with real money. On a deployment with no Ethereum receiver
+    // there is no watcher, so the quote would be a binding amount whose payment
+    // nothing observes: no confirmation, no credits, and no mispayment row
+    // either, because nothing is reading that chain to file one.
+    usdcFlag.active = false
+    config.ethereum.usdcReceiverAddress = undefined
+
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+    const oracleSpy = jest.spyOn(priceOracle, 'getPrice')
+
+    const admin = {
+      ...orgUser,
+      role: UserRole.Admin,
+    } as unknown as UserWithOrganization
+
+    const res = await IntentsUseCases.createIntent(admin, {
+      paymentMethod: PaymentMethod.USDC_ETH,
+      requestedBytes: 1024n,
+    })
+
+    expect(res.isErr()).toBe(true)
+    if (res.isErr()) {
+      expect(res.error).toBeInstanceOf(UsdcPaymentsDisabledError)
+    }
+    // Refused before anything is spent or written: no rate read, no row.
+    expect(oracleSpy).not.toHaveBeenCalled()
     expect(createSpy).not.toHaveBeenCalled()
   })
 
