@@ -152,57 +152,65 @@ export const createPaymentWatcher = <
       logs,
     })
 
-    // Sequentially, one payment at a time. Both receivers are callable from a
-    // contract, so one transaction can carry two payments for the same intent —
-    // and markIntentAsConfirmed is a read-then-write on the intent's status.
-    // Run concurrently, both calls read PENDING, both take the settle path, and
-    // the second write overwrites the first's amount with neither recorded as a
-    // second payment. The whole point of threading logIndex is that both halves
-    // get filed; that only holds if the first one has landed before the second
-    // is read.
-    for (const log of logs) {
-      const read = chain.toPayment(log, receipt)
+    // Concurrently, and that is load-bearing rather than incidental.
+    //
+    // Both receivers are callable from a contract, so one transaction can carry
+    // two payments for the same intent. markIntentAsConfirmed tells those apart
+    // by which call wins a conditional PENDING -> CONFIRMED update, and files the
+    // loser as ALREADY_SETTLED. That discriminator only works while both calls
+    // are still looking at a PENDING row: serialise them and the second arrives
+    // after the first has settled the intent, where the idempotency guard sees a
+    // matching hash, a matching amount and a matching asset, concludes
+    // re-delivery, and absorbs a real second transfer without a trace.
+    //
+    // So the ordering here is not an optimisation to be tidied into a loop. Two
+    // payments arriving together must reach the transition together.
+    const results = await Promise.all(
+      logs.map(async (log) => {
+        const read = chain.toPayment(log, receipt)
 
-      if (read.kind === 'ignored') {
-        // Loud, because the only way to get here is a configuration or
-        // deployment mismatch — and filed, because the transfer happened and a
-        // log line is not something an admin can query. The intent stays PENDING
-        // and expires on its own schedule.
-        logger.error('Ignoring an unrecognised payment event', {
+        if (read.kind === 'ignored') {
+          // Loud, because the only way to get here is a configuration or
+          // deployment mismatch — and filed, because the transfer happened and a
+          // log line is not something an admin can query. The intent stays
+          // PENDING and expires on its own schedule.
+          logger.error('Ignoring an unrecognised payment event', {
+            txHash,
+            logIndex: log.logIndex,
+            reason: read.reason,
+          })
+          await IntentsUseCases.recordRefusedPayment({
+            intentId: read.refused.intentId,
+            reason: IntentMispaymentReason.UNRECOGNISED_TOKEN,
+            expectedPaymentMethod: chain.paymentMethod,
+            fromAddress: read.refused.fromAddress,
+            txHash,
+            logIndex: log.logIndex,
+          })
+          return null
+        }
+
+        return IntentsUseCases.markIntentAsConfirmed({
+          ...read.payment,
+          // Passed for the refusal paths: a payment we decline to attach is
+          // recorded in intent_mispayments, and the hash is the only field that
+          // finds it again on a block explorer.
           txHash,
-          logIndex: log.logIndex,
-          reason: read.reason,
-        })
-        await IntentsUseCases.recordRefusedPayment({
-          intentId: read.refused.intentId,
-          reason: IntentMispaymentReason.UNRECOGNISED_TOKEN,
-          expectedPaymentMethod: chain.paymentMethod,
-          fromAddress: read.refused.fromAddress,
-          txHash,
+          // Which payment inside this transaction it was. The hash alone cannot
+          // separate two of them, so a filed refusal would collapse into the
+          // first and the queue would report one payment when two arrived.
           logIndex: log.logIndex,
         })
-        continue
-      }
+      }),
+    )
 
-      const result = await IntentsUseCases.markIntentAsConfirmed({
-        ...read.payment,
-        // Passed for the refusal paths: a payment we decline to attach is
-        // recorded in intent_mispayments, and the hash is the only field that
-        // finds it again on a block explorer.
-        txHash,
-        // One transaction can carry two payments for the same intent. The hash
-        // alone would make the two indistinguishable, so recording the second
-        // would collapse into the first and the queue would report one payment
-        // when two arrived.
-        logIndex: log.logIndex,
-      })
-
-      if (result.isErr()) {
+    results.forEach((result) => {
+      if (result?.isErr()) {
         logger.error('Error marking intent as confirmed', {
           error: result.error,
         })
       }
-    }
+    })
   }
 
   const onLogs = safeCallback((logs: Log[]) => {

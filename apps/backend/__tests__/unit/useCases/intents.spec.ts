@@ -1968,9 +1968,9 @@ describe('IntentsUseCases', () => {
       paymentMethod: PaymentMethod.USDC_ETH,
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
-    jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockResolvedValue({ ...intent, txHash: '0xethhash' })
+    // The row is claimed before anything is queued, so the task only exists for
+    // an intent that was still PENDING.
+    jest.spyOn(intentsRepository, 'setTxHashIfPending').mockResolvedValue(true)
     const publishSpy = jest
       .spyOn(EventRouter, 'publish')
       .mockImplementation(() => Promise.resolve())
