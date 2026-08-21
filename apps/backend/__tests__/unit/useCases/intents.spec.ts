@@ -1865,7 +1865,13 @@ describe('IntentsUseCases', () => {
     expect(res.isOk()).toBe(true)
     expect(setSpy).toHaveBeenCalledWith(intent.id, '0xhash')
     expect(publishSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'watch-intent-tx' }),
+      expect.objectContaining({
+        id: 'watch-intent-tx',
+        // The chain travels with the task. A hash is the same 32 bytes on
+        // either chain, so the worker that picks this up cannot derive it — and
+        // by then the intent may have been expired by the cleanup sweep.
+        params: { txHash: '0xhash', paymentMethod: PaymentMethod.AI3_NATIVE },
+      }),
     )
   })
 
@@ -1909,6 +1915,45 @@ describe('IntentsUseCases', () => {
     // the only path by which that payment is ever seen.
     expect(publishSpy).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'watch-intent-tx' }),
+    )
+  })
+
+  it('triggerWatchIntent tells the worker to watch Ethereum for a USDC intent', async () => {
+    const intent: Intent = {
+      id: '0x2-usdc',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      paymentMethod: PaymentMethod.USDC_ETH,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    jest
+      .spyOn(intentsRepository, 'updateIntent')
+      .mockResolvedValue({ ...intent, txHash: '0xethhash' })
+    const publishSpy = jest
+      .spyOn(EventRouter, 'publish')
+      .mockImplementation(() => Promise.resolve())
+
+    const res = await IntentsUseCases.triggerWatchIntent({
+      executor: user,
+      txHash: '0xethhash',
+      intentId: intent.id,
+    })
+
+    expect(res.isOk()).toBe(true)
+    // Routed to the Ethereum watcher. Sent to the Auto EVM one it would resolve
+    // to nothing at all: an unknown hash is not an error there, it is a receipt
+    // that never arrives, so the user's payment would sit unobserved until the
+    // next restart swept it up.
+    expect(publishSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'watch-intent-tx',
+        params: {
+          txHash: '0xethhash',
+          paymentMethod: PaymentMethod.USDC_ETH,
+        },
+      }),
     )
   })
 

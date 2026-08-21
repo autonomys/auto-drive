@@ -627,6 +627,12 @@ const triggerWatchIntent = async ({
     retriesLeft: MAX_RETRIES,
     params: {
       txHash,
+      // Which chain to look this hash up on. The task carries it because the
+      // worker that handles it cannot derive it: a hash is the same 32 bytes on
+      // either chain, and by the time the task runs the intent may have been
+      // expired by the cleanup sweep. Sent even for AI3 so the routing decision
+      // is always a value rather than an absence.
+      paymentMethod: intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
     },
   })
 
@@ -1477,8 +1483,10 @@ const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
 // Returns PENDING intents that already have a tx_hash — used by the payment
 // manager startup sweep to re-watch transactions that were submitted but never
 // confirmed due to a service restart or RPC outage.
-const getPendingWithTxHash = async (): Promise<Intent[]> => {
-  return intentsRepository.getPendingWithTxHash()
+const getPendingWithTxHash = async (
+  paymentMethod: PaymentMethod,
+): Promise<Intent[]> => {
+  return intentsRepository.getPendingWithTxHash(paymentMethod)
 }
 
 export const IntentsUseCases = {

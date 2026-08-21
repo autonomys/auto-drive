@@ -202,8 +202,33 @@ export const config = {
   // Read directly (not via `env`) so it stays optional: a deployment that does
   // not quote in USDC boots without it, and the consumer fails fast naming this
   // variable the first time it is needed.
+  //
+  // The three USDC keys are all-or-nothing rather than individually defaulted,
+  // and the watcher enforces that at startup (see paymentManager/chains.ts). A
+  // default receiver address would be worse than a missing one: it would point
+  // a live payment watcher at a contract nobody deployed, and the failure would
+  // read as "no payments arriving" rather than "not configured".
   ethereum: {
     rpcUrl: process.env.ETH_CHAIN_ENDPOINT,
+    // Informational, and served to the frontend so a wallet can be asked to
+    // switch networks. 1 = Ethereum mainnet; 11155111 = Sepolia for testing.
+    chainId: Number(env('ETH_CHAIN_ID', '1')),
+    // Blocks that must build on the payment before it is credited. Ethereum is
+    // post-Merge, so 2-3 blocks is already economically final and 6 is
+    // conservative — but it is the same default as Auto EVM, which keeps one
+    // fewer number in the operator's head. ~12s a block, so 6 is ~72s of extra
+    // latency on a purchase, which the polling loop makes invisible anyway.
+    confirmations: Number(env('ETH_CHAIN_CONFIRMATIONS', '6')),
+    // AutoDriveUSDCReceiver. Payments are watched here, and this is the address
+    // the frontend sends USDC to.
+    usdcReceiverAddress: process.env.ETH_USDC_RECEIVER_ADDRESS,
+    // The ERC20 the receiver was deployed against. Checked against the `token`
+    // field of every payment event before it is credited: the receiver only
+    // ever transfers its own configured token, so a mismatch means the address
+    // below and the deployed contract disagree — and crediting on the strength
+    // of a 6-decimal assumption that no longer holds would grant storage for a
+    // token nobody was quoted in.
+    usdcTokenAddress: process.env.USDC_TOKEN_ADDRESS,
   },
   priceOracle: {
     // AI3/USD price oracle: the volume-weighted average of the Uniswap WAI3/USDC
