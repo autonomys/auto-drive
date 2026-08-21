@@ -17,9 +17,8 @@ import {
   getUsdcPaymentWatcher,
   paymentManager,
 } from '../../src/infrastructure/services/paymentManager/index.js'
-import { IntentMispaymentReason } from '@auto-drive/models'
 import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
-import { PaymentMethod } from '@auto-drive/models'
+import { IntentMispaymentReason, PaymentMethod } from '@auto-drive/models'
 import { IntentsUseCases } from '../../src/core/users/intents.js'
 import { ok, err } from 'neverthrow'
 import { config } from '../../src/config.js'
@@ -190,14 +189,15 @@ describe('PaymentManager', () => {
       })
     })
 
-    it('settles two payments in one transaction one after the other', async () => {
-      // markIntentAsConfirmed is a read-then-write on the intent's status.
-      // Concurrently, both calls read PENDING, both take the settle path, and
-      // the second write overwrites the first's amount with neither recorded as
-      // a second payment — so the log index this threads would be decorating a
-      // row that never gets written.
-      const txHash = '0xsequential'
-      const intentId = '0xintent-sequential'
+    it('hands both payments in one transaction to the same PENDING row', async () => {
+      // markIntentAsConfirmed separates two payments by which call wins its
+      // conditional PENDING -> CONFIRMED update, so both have to reach it while
+      // the row is still PENDING. Awaiting the first before reading the second
+      // would send the second into the idempotency guard instead, where a
+      // matching hash, amount and asset read as re-delivery — and a real second
+      // transfer would be absorbed with nothing filed.
+      const txHash = '0xconcurrent'
+      const intentId = '0xintent-concurrent'
 
       jest
         .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
@@ -232,14 +232,15 @@ describe('PaymentManager', () => {
 
       const settled = watcher.watchTransaction(txHash)
       await Promise.resolve()
+      await Promise.resolve()
 
-      // The second payment is not read until the first has been written.
-      expect(markIntentSpy).toHaveBeenCalledTimes(1)
+      // Both in flight before either has been written.
+      expect(markIntentSpy).toHaveBeenCalledTimes(2)
 
       releaseFirst?.()
       await settled
 
-      expect(markIntentSpy).toHaveBeenCalledTimes(2)
+      expect(markIntentSpy.mock.calls[0][0].logIndex).toBe(1)
       expect(markIntentSpy.mock.calls[1][0].logIndex).toBe(2)
     })
 
