@@ -25,7 +25,7 @@ import {
   UsdcPaymentsDisabledError,
 } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
-import { config } from '../../config.js'
+import { config, isUsdcConfigured } from '../../config.js'
 import { randomBytes } from 'crypto'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from './accounts.js'
@@ -351,21 +351,29 @@ const createIntent = async (
   // path can be driven end to end in production. That is also the case where it
   // would be reached first, by whoever is verifying the path, with real money.
   //
-  // The same config key the watcher keys on (see getUsdcPaymentWatcher in
-  // paymentManager/chains.ts), so "can we quote it" and "will we see the
-  // payment" cannot disagree. Read directly rather than imported from there,
-  // because that module imports this one — the watcher calls
-  // markIntentAsConfirmed — and a cycle through a module that builds a viem
-  // client at load is not worth one boolean.
-  if (
-    paymentMethod === PaymentMethod.USDC_ETH &&
-    !config.ethereum.usdcReceiverAddress
-  ) {
+  // Requires the COMPLETE Ethereum configuration, which is what
+  // isUsdcConfigured means — not merely a receiver address. The
+  // watcher refuses to build on a partial configuration, but only the payment
+  // worker ever asks it to, so a half-configured deployment leaves this process
+  // quoting while that one crash-loops. Checking the same derived fact the
+  // watcher is built from is what stops the two from disagreeing.
+  //
+  // Read from config rather than imported from paymentManager/chains.ts because
+  // that module imports this one — the watcher calls markIntentAsConfirmed — and
+  // a cycle through a module that builds a viem client at load is not worth one
+  // boolean.
+  if (paymentMethod === PaymentMethod.USDC_ETH && !isUsdcConfigured()) {
     logger.error(
-      'Refusing USDC intent creation — no Ethereum receiver is configured, so ' +
-        'no payment for it could be observed',
+      'Refusing USDC intent creation — the Ethereum configuration is ' +
+        'incomplete, so no payment for it could be observed',
       {
         userPublicId: executor.publicId,
+        // Which half it is matters to whoever reads this: nothing set is a
+        // deployment that does not sell USDC, and a receiver without the rest is
+        // one that means to and cannot.
+        hasReceiver: Boolean(config.ethereum.usdcReceiverAddress),
+        hasEndpoint: Boolean(config.ethereum.rpcUrl),
+        hasTokenAddress: Boolean(config.ethereum.usdcTokenAddress),
       },
     )
     return err(
