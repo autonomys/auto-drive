@@ -230,7 +230,9 @@ export const config = {
     // reorg can still remove.
     confirmations: positiveIntEnv('ETH_CHAIN_CONFIRMATIONS', 6),
     // AutoDriveUSDCReceiver. Payments are watched here, and this is the address
-    // the frontend sends USDC to.
+    // the frontend sends USDC to. Setting it is what makes this deployment
+    // intend to accept USDC — see usdcConfigured below for what makes it able
+    // to.
     usdcReceiverAddress: process.env.ETH_USDC_RECEIVER_ADDRESS,
     // The ERC20 the receiver was deployed against. Checked against the `token`
     // field of every payment event before it is credited: the receiver only
@@ -449,3 +451,33 @@ export const config = {
       .map((domain) => domain.toLowerCase()),
   },
 }
+
+/**
+ * Whether USDC payments can be handled end to end: quoted, and then observed
+ * when they arrive.
+ *
+ * All three Ethereum keys, not just the receiver, and that distinction is the
+ * whole point of this predicate. The payment watcher refuses to build on a
+ * partial configuration — but only the process that owns payments ever asks it
+ * to, since `start:fe:api` never calls paymentManager.start(). So in the split
+ * topology a half-configured deployment leaves the API serving happily while the
+ * worker crash-loops, and the API would quote a binding USDC amount that nothing
+ * is watching for. That is the exact failure the quote-side guard exists to
+ * prevent, so the guard has to test the same thing the watcher is built from.
+ *
+ * Defined here, next to the keys, so createIntent and getUsdcPaymentWatcher
+ * cannot drift apart on what "configured" means. They still respond differently,
+ * and should: the API refuses to quote — killing it over a payments variable
+ * would take uploads and downloads with it — while the payment worker dies
+ * loudly naming what is missing.
+ *
+ * A function rather than a field so it reads the live values: tests set these
+ * keys after this module has loaded, and a snapshot would answer for the
+ * environment instead of for the configuration.
+ */
+export const isUsdcConfigured = () =>
+  Boolean(
+    config.ethereum.rpcUrl &&
+      config.ethereum.usdcReceiverAddress &&
+      config.ethereum.usdcTokenAddress,
+  )

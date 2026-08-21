@@ -79,24 +79,27 @@ describe('IntentsUseCases', () => {
   // flag is opened here and the gate itself is tested separately.
   const usdcFlag = config.featureFlags.flags.payWithUsdc
   const usdcFlagDefault = usdcFlag.active
-  // A deployment that accepts USDC, which now takes a configured receiver as
-  // well as an open flag: createIntent refuses to quote an asset whose payments
-  // nothing would be watching for. .env.test sets no ETH_* keys, so every USDC
-  // case has to say so.
-  const usdcReceiverDefault = config.ethereum.usdcReceiverAddress
+  // A deployment that accepts USDC, which now takes a complete Ethereum
+  // configuration as well as an open flag: createIntent refuses to quote an
+  // asset whose payments nothing would be watching for. .env.test sets no ETH_*
+  // keys, so every USDC case has to say so.
+  const ethereumDefaults = { ...config.ethereum }
 
   beforeEach(() => {
     jest.clearAllMocks()
     jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({ price: 1, pricePerGB: 1073741824 })
     usdcFlag.active = true
+    config.ethereum.rpcUrl = 'http://example.org'
     config.ethereum.usdcReceiverAddress =
       '0x1111111111111111111111111111111111111111'
+    config.ethereum.usdcTokenAddress =
+      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
   })
 
   afterEach(() => {
     jest.restoreAllMocks()
     usdcFlag.active = usdcFlagDefault
-    config.ethereum.usdcReceiverAddress = usdcReceiverDefault
+    Object.assign(config.ethereum, ethereumDefaults)
   })
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -349,7 +352,7 @@ describe('IntentsUseCases', () => {
     expect(createSpy).not.toHaveBeenCalled()
   })
 
-  it('createIntent refuses USDC when no receiver is configured, admin or not', async () => {
+  it('createIntent refuses USDC when Ethereum is not configured, admin or not', async () => {
     // The gap this closes: the flag's admin exemption exists so the path can be
     // driven end to end in production, which means an admin is the FIRST person
     // to reach it — with real money. On a deployment with no Ethereum receiver
@@ -357,7 +360,9 @@ describe('IntentsUseCases', () => {
     // nothing observes: no confirmation, no credits, and no mispayment row
     // either, because nothing is reading that chain to file one.
     usdcFlag.active = false
+    config.ethereum.rpcUrl = undefined
     config.ethereum.usdcReceiverAddress = undefined
+    config.ethereum.usdcTokenAddress = undefined
 
     const createSpy = jest.spyOn(intentsRepository, 'createIntent')
     const oracleSpy = jest.spyOn(priceOracle, 'getPrice')
@@ -377,6 +382,31 @@ describe('IntentsUseCases', () => {
       expect(res.error).toBeInstanceOf(UsdcPaymentsDisabledError)
     }
     // Refused before anything is spent or written: no rate read, no row.
+    expect(oracleSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent refuses USDC on a half-configured deployment', async () => {
+    // The receiver alone is not enough, and this is the case that reaches
+    // production: the watcher throws on a partial configuration, but only the
+    // payment worker ever builds it. `start:fe:api` does not, so the API would
+    // keep serving — and quoting — while the worker crash-loops on the missing
+    // variable. A binding quote with nobody watching, which is what the guard
+    // exists to prevent.
+    config.ethereum.usdcTokenAddress = undefined
+
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+    const oracleSpy = jest.spyOn(priceOracle, 'getPrice')
+
+    const res = await IntentsUseCases.createIntent(orgUser, {
+      paymentMethod: PaymentMethod.USDC_ETH,
+      requestedBytes: 1024n,
+    })
+
+    expect(res.isErr()).toBe(true)
+    if (res.isErr()) {
+      expect(res.error).toBeInstanceOf(UsdcPaymentsDisabledError)
+    }
     expect(oracleSpy).not.toHaveBeenCalled()
     expect(createSpy).not.toHaveBeenCalled()
   })
