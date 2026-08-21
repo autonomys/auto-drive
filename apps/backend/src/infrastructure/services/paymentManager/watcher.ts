@@ -119,6 +119,28 @@ export const createPaymentWatcher = <
     transport: http(chain.rpcUrl),
   })
 
+  // Transactions currently being watched, so three callers cannot process one
+  // transaction at the same time.
+  //
+  // Three paths reach watchTransaction independently: the contract-event
+  // subscription, the watch-intent-tx task, and the startup sweep. Two of them
+  // arriving together — a redelivered task landing while the sweep re-watches
+  // the same row, which is the normal shape of a worker restart — means two
+  // markIntentAsConfirmed calls for the SAME payment, with the same hash and the
+  // same log index. One wins the conditional PENDING -> CONFIRMED update and the
+  // other is filed as ALREADY_SETTLED: a second transfer reported to an admin
+  // that never happened, in a queue whose entries mean "reconcile this money".
+  //
+  // Collapsing them here is the cheap half of the fix. It cannot cover two
+  // processes, but there is exactly one payment worker, and the sequential case
+  // is already correct — the second call sees a settled intent with a matching
+  // hash, amount and asset, and is recognised as re-delivery.
+  //
+  // Distinct payments are unaffected: this is keyed by transaction, and two
+  // payments inside one transaction are two logs of a single call, which still
+  // run concurrently below.
+  const inFlight = new Map<string, Promise<void>>()
+
   // Receives a tx hash and watches for the deposit event
   // Marks the intent as confirmed if the deposit event is found
   const watchTransaction = async (txHash: string) => {
@@ -126,6 +148,20 @@ export const createPaymentWatcher = <
       throw new Error('Invalid tx hash')
     }
 
+    const already = inFlight.get(txHash)
+    if (already) {
+      logger.info('Already watching this transaction — joining it', { txHash })
+      return already
+    }
+
+    const settling = settleTransaction(txHash).finally(() => {
+      inFlight.delete(txHash)
+    })
+    inFlight.set(txHash, settling)
+    return settling
+  }
+
+  const settleTransaction = async (txHash: string) => {
     logger.info('Watching transaction', {
       txHash,
     })
@@ -182,7 +218,11 @@ export const createPaymentWatcher = <
           await IntentsUseCases.recordRefusedPayment({
             intentId: read.refused.intentId,
             reason: IntentMispaymentReason.UNRECOGNISED_TOKEN,
-            expectedPaymentMethod: chain.paymentMethod,
+            // No expectedPaymentMethod. The column means what the named intent
+            // was denominated in, and this path has not looked the intent up —
+            // filling it with the chain's own asset would state as fact
+            // something nobody checked. The reason says what happened; the hash
+            // and the payer say where to look.
             fromAddress: read.refused.fromAddress,
             txHash,
             logIndex: log.logIndex,
@@ -303,7 +343,44 @@ export const createPaymentWatcher = <
   const _verifyConfiguration = async () => {
     if (!chain.verifyConfiguration) return
 
-    let verdict: Awaited<ReturnType<NonNullable<typeof chain.verifyConfiguration>>>
+    // Is there a contract there at all?
+    //
+    // Asked first because the check below reads a function off the receiver, and
+    // a receiver address pointing at an EOA, at the token contract, or at nothing
+    // makes that read THROW — which is indistinguishable, to the catch below,
+    // from the RPC being down. So the single most likely misconfiguration would
+    // be the one reported as "could not verify" and never escalated.
+    //
+    // Empty code is not a transient condition, so it is escalated like any other
+    // mismatch. A failure to READ the code is transient and falls through to the
+    // same tolerant path as everything else.
+    try {
+      const code = await watcher._viemClient.getCode({
+        address: chain.contractAddress,
+      })
+      if (!code || code === '0x') {
+        logger.error(
+          'No contract is deployed at the configured payment address — payments will NOT be observed',
+          { chain: chain.name, contractAddress: chain.contractAddress },
+        )
+        await slackNotifier.send({
+          title: `:rotating_light: ${chain.name} payment watcher is misconfigured — payments will not be observed`,
+          details:
+            `No contract code at ${chain.contractAddress}. The watcher is ` +
+            'subscribed to an address that cannot emit payment events.',
+        })
+        return
+      }
+    } catch (error) {
+      logger.warn(
+        'Could not read the payment contract code — continuing to the token check',
+        { chain: chain.name, error },
+      )
+    }
+
+    let verdict: Awaited<
+      ReturnType<NonNullable<typeof chain.verifyConfiguration>>
+    >
     try {
       verdict = await chain.verifyConfiguration(
         watcher._viemClient as PublicClient,

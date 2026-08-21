@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals'
 import { intentsRepository } from '../../../src/infrastructure/repositories/users/intents.js'
 import { Intent, IntentStatus, PaymentMethod } from '@auto-drive/models'
 import { dbMigration } from '../../utils/dbMigrate.js'
+import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 
 // Exercises the payment-asset columns added by 20260616000000-intent-payment-fields
 // together with the repository read/write mapping. Runs against the migrated
@@ -250,18 +251,47 @@ describe('Intents Repository — payment fields', () => {
   })
 
   it('sweeps rows written before payment_method existed as AI3', async () => {
-    // The column is NOT NULL with an 'ai3_native' default, so a row created
-    // without one is indistinguishable from an explicit AI3 row — which is what
-    // makes the default the thing that keeps legacy intents recoverable.
-    const created = await intentsRepository.createIntent({
-      ...baseIntent('sweep-legacy'),
-      txHash: '0xlegacyhash',
-    })
-    expect(created.paymentMethod).toBe(PaymentMethod.AI3_NATIVE)
+    // Inserted with raw SQL that omits payment_method, because that is the only
+    // way to reach the case this is about. createIntent always passes
+    // `intent.paymentMethod ?? AI3_NATIVE`, so going through the repository
+    // would exercise the JS fallback and leave the column's own
+    // `DEFAULT 'ai3_native'` untested — the migration could drop it and this
+    // test would still pass. It is the default that makes rows written before
+    // the column existed recoverable, so the default is what gets asserted.
+    const db = await getDatabase()
+    await db.query(
+      `INSERT INTO intents (id, user_public_id, status, shannons_per_byte, expires_at, tx_hash)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        'sweep-legacy',
+        'user-sweep-legacy',
+        IntentStatus.PENDING,
+        '1000',
+        new Date('2030-01-01T00:00:00Z'),
+        '0xlegacyhash',
+      ],
+    )
+
+    const fetched = await intentsRepository.getById('sweep-legacy')
+    expect(fetched?.paymentMethod).toBe(PaymentMethod.AI3_NATIVE)
 
     const ai3 = await intentsRepository.getPendingWithTxHash(
       PaymentMethod.AI3_NATIVE,
     )
     expect(ai3.map((i) => i.id)).toContain('sweep-legacy')
+  })
+
+  it('reads a NULL tx_hash as absent, not as null', async () => {
+    // The idempotency guard in markIntentAsConfirmed exempts rows with no
+    // recorded hash by testing `txHash !== undefined`. A NULL column arriving as
+    // `null` passes that test, so every replay of a row settled before
+    // confirmations recorded a hash was filed as a second payment.
+    const created = await intentsRepository.createIntent(
+      baseIntent('null-tx-hash'),
+    )
+    expect(created.txHash).toBeUndefined()
+
+    const fetched = await intentsRepository.getById('null-tx-hash')
+    expect(fetched?.txHash).toBeUndefined()
   })
 })

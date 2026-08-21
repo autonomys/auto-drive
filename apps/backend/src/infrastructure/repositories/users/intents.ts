@@ -26,7 +26,13 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
     id: row.id,
     userPublicId: row.user_public_id,
     status: row.status,
-    txHash: row.tx_hash,
+    // `?? undefined`, like fromAddress and expiresAt below, and not merely for
+    // consistency: the idempotency guard in markIntentAsConfirmed exempts rows
+    // with no recorded hash by testing `intent.txHash !== undefined`, and a NULL
+    // column arriving as `null` fails that test — so every replay of a row
+    // settled before confirmations recorded a hash was filed as a second
+    // payment. The comment there described the exemption; this makes it real.
+    txHash: row.tx_hash ?? undefined,
     paymentAmount: row.payment_amount
       ? BigInt(row.payment_amount).valueOf()
       : undefined,
