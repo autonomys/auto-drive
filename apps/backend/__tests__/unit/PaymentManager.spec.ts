@@ -858,10 +858,12 @@ describe('PaymentManager', () => {
       // Filed all the same. The transfer happened, and refusing it settles
       // nothing on chain — an admin needs a row, not a log line. No amount: it
       // is denominated in a token we cannot name, and token_amount means USDC.
+      // No expectedPaymentMethod: that column means what the named intent was
+      // denominated in, and this path never looked the intent up. Filling it
+      // with the chain's own asset would state as fact something nobody checked.
       expect(recordSpy).toHaveBeenCalledWith({
         intentId: '0xintent-dai',
         reason: IntentMispaymentReason.UNRECOGNISED_TOKEN,
-        expectedPaymentMethod: PaymentMethod.USDC_ETH,
         fromAddress: '0xPayerWallet',
         txHash,
         logIndex: 0,
@@ -1367,24 +1369,43 @@ describe('PaymentManager', () => {
       _resetUsdcPaymentWatcher()
     })
 
-    it('treats a whitespace-padded receiver address as not configured', () => {
+    it('recovers a whitespace-padded address instead of discarding it', () => {
       // The value that made this worth guarding: secrets mounted from files, and
       // hand-edited .env values, routinely carry a trailing newline. viem's
-      // getAddress THROWS on it, so a truthiness check would have called this
-      // configured — the API would quote USDC while the payment worker
-      // crash-looped on the address.
+      // getAddress THROWS on that, so before trimming a padded address was
+      // truthy-but-unusable — the API would quote USDC while the payment worker
+      // crash-looped on the very same string.
+      //
+      // Trimmed rather than rejected, because the operator did set it correctly;
+      // the newline is the file format's, not theirs.
       expect(
         addressEnv(
           'ETH_USDC_RECEIVER_ADDRESS',
           '0x1111111111111111111111111111111111111111 ',
         ),
-      ).toBeUndefined()
+      ).toBe('0x1111111111111111111111111111111111111111')
       expect(
         addressEnv(
           'ETH_USDC_RECEIVER_ADDRESS',
-          ' 0x1111111111111111111111111111111111111111',
+          ' 0x1111111111111111111111111111111111111111\n',
         ),
       ).toBe('0x1111111111111111111111111111111111111111')
+      // And nothing is filed as invalid for a value that was only padded.
+      expect(invalidAddressEnvironmentVariables()).not.toContain(
+        'ETH_USDC_RECEIVER_ADDRESS',
+      )
+    })
+
+    it('treats an empty or whitespace-only address as simply unset', () => {
+      // Not an error worth naming: an empty variable is how a deployment says it
+      // does not accept USDC, and a template that leaves `ETH_USDC_RECEIVER_ADDRESS=`
+      // in place says the same thing.
+      expect(addressEnv('ETH_USDC_RECEIVER_ADDRESS', '')).toBeUndefined()
+      expect(addressEnv('ETH_USDC_RECEIVER_ADDRESS', '   ')).toBeUndefined()
+      expect(addressEnv('ETH_USDC_RECEIVER_ADDRESS', undefined)).toBeUndefined()
+      expect(invalidAddressEnvironmentVariables()).not.toContain(
+        'ETH_USDC_RECEIVER_ADDRESS',
+      )
     })
 
     it('treats a truncated or unprefixed address as not configured', () => {
