@@ -213,4 +213,55 @@ describe('Intents Repository — payment fields', () => {
 
     expect(ids.sort()).toEqual(['exp-stranded', 'exp-unpaid'])
   })
+  // -------------------------------------------------------------------------
+  // getPendingWithTxHash — the startup sweep, one chain at a time
+  // -------------------------------------------------------------------------
+
+  it('returns only the pending rows of the payment method asked for', async () => {
+    await intentsRepository.createIntent({
+      ...baseIntent('sweep-ai3'),
+      txHash: '0xai3hash',
+    })
+    await intentsRepository.createIntent({
+      ...baseIntent('sweep-usdc'),
+      paymentMethod: PaymentMethod.USDC_ETH,
+      txHash: '0xethhash',
+    })
+    // No hash: not orphaned, nothing to look up.
+    await intentsRepository.createIntent(baseIntent('sweep-no-hash'))
+
+    const ai3 = await intentsRepository.getPendingWithTxHash(
+      PaymentMethod.AI3_NATIVE,
+    )
+    const usdc = await intentsRepository.getPendingWithTxHash(
+      PaymentMethod.USDC_ETH,
+    )
+
+    // Each watcher can only resolve hashes from its own chain, so the sweep is
+    // scoped the same way. Crossing them does not error — it waits out a
+    // receipt timeout per row — which is why this is a filter and not a hint.
+    // Containment rather than equality: earlier tests in this file leave their
+    // own pending rows behind, and what matters here is that neither chain sees
+    // the other's.
+    expect(ai3.map((i) => i.id)).toContain('sweep-ai3')
+    expect(ai3.map((i) => i.id)).not.toContain('sweep-usdc')
+    expect(usdc.map((i) => i.id)).toEqual(['sweep-usdc'])
+    expect(ai3.map((i) => i.id)).not.toContain('sweep-no-hash')
+  })
+
+  it('sweeps rows written before payment_method existed as AI3', async () => {
+    // The column is NOT NULL with an 'ai3_native' default, so a row created
+    // without one is indistinguishable from an explicit AI3 row — which is what
+    // makes the default the thing that keeps legacy intents recoverable.
+    const created = await intentsRepository.createIntent({
+      ...baseIntent('sweep-legacy'),
+      txHash: '0xlegacyhash',
+    })
+    expect(created.paymentMethod).toBe(PaymentMethod.AI3_NATIVE)
+
+    const ai3 = await intentsRepository.getPendingWithTxHash(
+      PaymentMethod.AI3_NATIVE,
+    )
+    expect(ai3.map((i) => i.id)).toContain('sweep-legacy')
+  })
 })

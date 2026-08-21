@@ -7,11 +7,30 @@ import {
   beforeEach,
   afterEach,
 } from '@jest/globals'
-import { paymentManager } from '../../src/infrastructure/services/paymentManager/index.js'
+import {
+  ai3Chain,
+  ai3PaymentWatcher,
+  confirmedIntentsPoller,
+  createPaymentWatcher,
+  createUsdcChain,
+  paymentManager,
+} from '../../src/infrastructure/services/paymentManager/index.js'
+import { PaymentMethod } from '@auto-drive/models'
 import { IntentsUseCases } from '../../src/core/users/intents.js'
 import { ok, err } from 'neverthrow'
 import { config } from '../../src/config.js'
+import { getAddress } from 'viem'
 import { ObjectNotFoundError } from '../../src/errors/index.js'
+
+// The real AI3 chain definition with a recognisable contract address, so the
+// address-filtering tests read against a fixed value instead of mutating global
+// config. Everything else — the ABI, the event name, the receipt.from mapping —
+// is the definition the deployment actually runs.
+const TEST_CONTRACT_ADDRESS = '0xContractAddress'
+const watcher = createPaymentWatcher({
+  ...ai3Chain,
+  contractAddress: TEST_CONTRACT_ADDRESS,
+})
 
 describe('PaymentManager', () => {
   beforeEach(() => {
@@ -20,6 +39,10 @@ describe('PaymentManager', () => {
   })
 
   afterEach(() => {
+    // Stop what the start() tests started. Without this the confirmed-intent
+    // poller's own double-start guard would make every start() test after the
+    // first one a no-op.
+    paymentManager.stop()
     jest.runOnlyPendingTimers()
     jest.useRealTimers()
     jest.restoreAllMocks()
@@ -28,14 +51,14 @@ describe('PaymentManager', () => {
   describe('watchTransaction', () => {
     it('should reject invalid tx hash without 0x prefix', async () => {
       await expect(
-        paymentManager.watchTransaction('invalidhash'),
+        watcher.watchTransaction('invalidhash'),
       ).rejects.toThrow('Invalid tx hash')
     })
 
     it('should call viemClient.waitForTransactionReceipt with correct params', async () => {
       const txHash = '0xabc123'
       const waitForReceiptSpy = jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [],
         } as any)
@@ -44,7 +67,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       expect(waitForReceiptSpy).toHaveBeenCalledWith({
         hash: txHash,
@@ -58,10 +81,8 @@ describe('PaymentManager', () => {
       const paymentAmount = 100n
       const fromAddress = '0xSenderWallet'
 
-      config.paymentManager.contractAddress = '0xContractAddress'
-
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           from: fromAddress,
           logs: [
@@ -79,7 +100,7 @@ describe('PaymentManager', () => {
           ],
         } as any)
 
-      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+      jest.spyOn(watcher, '_parseEventLogs').mockReturnValue([
         {
           address: '0xContractAddress',
           args: { intentId, paymentAmount },
@@ -92,7 +113,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       // The function should process the logs and attempt to mark intents,
       // passing fromAddress captured from receipt.from and the tx hash, which is
@@ -117,16 +138,14 @@ describe('PaymentManager', () => {
       const txHash = '0xtwopayments'
       const intentId = '0xintent-double'
 
-      config.paymentManager.contractAddress = '0xContractAddress'
-
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           from: '0xSenderWallet',
           logs: [],
         } as any)
 
-      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+      jest.spyOn(watcher, '_parseEventLogs').mockReturnValue([
         {
           address: '0xContractAddress',
           args: { intentId, paymentAmount: 100n },
@@ -145,7 +164,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       expect(markIntentSpy).toHaveBeenCalledTimes(2)
       expect(markIntentSpy).toHaveBeenNthCalledWith(1, {
@@ -168,7 +187,7 @@ describe('PaymentManager', () => {
       const txHash = '0xabc789'
 
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -189,7 +208,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       // Should not mark intent because address doesn't match
       expect(markIntentSpy).not.toHaveBeenCalled()
@@ -199,7 +218,7 @@ describe('PaymentManager', () => {
       const txHash = '0xerror'
 
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [],
         } as any)
@@ -210,7 +229,7 @@ describe('PaymentManager', () => {
 
       // Should not throw, error should be logged
       await expect(
-        paymentManager.watchTransaction(txHash),
+        watcher.watchTransaction(txHash),
       ).resolves.not.toThrow()
     })
 
@@ -219,10 +238,8 @@ describe('PaymentManager', () => {
       const intentId1 = '0xintent1'
       const intentId2 = '0xintent2'
 
-      config.paymentManager.contractAddress = '0xContractAddress'
-
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -250,7 +267,7 @@ describe('PaymentManager', () => {
           ],
         } as any)
 
-      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+      jest.spyOn(watcher, '_parseEventLogs').mockReturnValue([
         {
           address: '0xContractAddress',
           args: { intentId: intentId1, paymentAmount: 100n },
@@ -270,7 +287,7 @@ describe('PaymentManager', () => {
           err(new ObjectNotFoundError('Second intent error')),
         )
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       expect(markIntentSpy).toHaveBeenCalledTimes(2)
     })
@@ -278,10 +295,13 @@ describe('PaymentManager', () => {
     it('should handle case insensitive contract address comparison', async () => {
       const txHash = '0xcasetest'
 
-      config.paymentManager.contractAddress = '0xCONTRACTADDRESS'
+      const upperCaseWatcher = createPaymentWatcher({
+        ...ai3Chain,
+        contractAddress: '0xCONTRACTADDRESS',
+      })
 
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(upperCaseWatcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -298,7 +318,7 @@ describe('PaymentManager', () => {
           ],
         } as any)
 
-      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+      jest.spyOn(upperCaseWatcher, '_parseEventLogs').mockReturnValue([
         {
           address: '0xcontractaddress',
           args: { intentId: '0xtest', paymentAmount: 100n },
@@ -310,7 +330,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await upperCaseWatcher.watchTransaction(txHash)
 
       // Should match because comparison is case-insensitive
       expect(markIntentSpy).toHaveBeenCalled()
@@ -331,10 +351,10 @@ describe('PaymentManager', () => {
       ] as any[]
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       // Should call watchTransaction for each log's transaction hash
       expect(watchTransactionSpy).toHaveBeenCalledTimes(2)
@@ -351,10 +371,10 @@ describe('PaymentManager', () => {
       ] as any[]
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       // Should not call watchTransaction for null transactionHash
       expect(watchTransactionSpy).not.toHaveBeenCalled()
@@ -364,10 +384,10 @@ describe('PaymentManager', () => {
       const logs: any[] = []
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       expect(watchTransactionSpy).not.toHaveBeenCalled()
     })
@@ -389,10 +409,10 @@ describe('PaymentManager', () => {
       ] as any[]
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       // Should only call watchTransaction for non-null hashes
       expect(watchTransactionSpy).toHaveBeenCalledTimes(2)
@@ -409,11 +429,11 @@ describe('PaymentManager', () => {
       ] as any[]
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockRejectedValue(new Error('Transaction watch failed'))
 
       // safeCallback catches errors, so this should not throw
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       // Flush microtasks instead of waiting on timers (fake timers active)
       await Promise.resolve()
@@ -429,7 +449,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'getConfirmedIntents')
         .mockResolvedValue([])
 
-      await paymentManager._checkConfirmedIntents()
+      await confirmedIntentsPoller._checkConfirmedIntents()
 
       expect(getConfirmedSpy).toHaveBeenCalled()
     })
@@ -456,7 +476,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'onConfirmedIntent')
         .mockResolvedValue(ok(undefined))
 
-      await paymentManager._checkConfirmedIntents()
+      await confirmedIntentsPoller._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledTimes(2)
       expect(onConfirmedSpy).toHaveBeenCalledWith('0xintent1')
@@ -482,7 +502,7 @@ describe('PaymentManager', () => {
 
       // Should not throw, error should be logged
       await expect(
-        paymentManager._checkConfirmedIntents(),
+        confirmedIntentsPoller._checkConfirmedIntents(),
       ).resolves.not.toThrow()
 
       expect(onConfirmedSpy).toHaveBeenCalled()
@@ -505,7 +525,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'onConfirmedIntent')
         .mockResolvedValue(ok(undefined))
 
-      await paymentManager._checkConfirmedIntents()
+      await confirmedIntentsPoller._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledWith('0xintentsuccess')
     })
@@ -539,7 +559,7 @@ describe('PaymentManager', () => {
         .mockResolvedValueOnce(err(new Error('Processing error')))
         .mockResolvedValueOnce(ok(undefined))
 
-      await paymentManager._checkConfirmedIntents()
+      await confirmedIntentsPoller._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledTimes(3)
     })
@@ -568,7 +588,7 @@ describe('PaymentManager', () => {
         .mockResolvedValueOnce(ok(undefined))
 
       await expect(
-        paymentManager._checkConfirmedIntents(),
+        confirmedIntentsPoller._checkConfirmedIntents(),
       ).resolves.not.toThrow()
 
       // All three attempted, and specifically the one AFTER the thrower.
@@ -582,8 +602,9 @@ describe('PaymentManager', () => {
       const setIntervalSpy = jest.spyOn(global, 'setInterval')
 
       jest
-        .spyOn(paymentManager._viemClient, 'watchContractEvent')
-        .mockImplementation(() => Promise.resolve() as any)
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
+        // Returns the unwatch function, like the real one: stop() calls it.
+        .mockImplementation(() => jest.fn())
 
       paymentManager.start()
 
@@ -597,16 +618,16 @@ describe('PaymentManager', () => {
 
     it('should pass onLogs callback to watchContractEvent', () => {
       const onLogsSpy = jest
-        .spyOn(paymentManager, '_onLogs')
+        .spyOn(ai3PaymentWatcher, '_onLogs')
         .mockImplementation(() => Promise.resolve() as any)
 
       const watchContractEventSpy = jest
-        .spyOn(paymentManager._viemClient, 'watchContractEvent')
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
         .mockImplementation((params: any) => {
           // Trigger the onLogs callback
           params.onLogs([])
 
-          return Promise.resolve() as any
+          return jest.fn()
         })
 
       jest.spyOn(global, 'setInterval').mockImplementation(() => 1 as any)
@@ -621,8 +642,9 @@ describe('PaymentManager', () => {
 
     it('should configure watchContractEvent with correct parameters', () => {
       const watchContractEventSpy = jest
-        .spyOn(paymentManager._viemClient, 'watchContractEvent')
-        .mockImplementation(() => Promise.resolve() as any)
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
+        // Returns the unwatch function, like the real one: stop() calls it.
+        .mockImplementation(() => jest.fn())
 
       jest.spyOn(global, 'setInterval').mockImplementation(() => 1 as any)
 
@@ -643,8 +665,9 @@ describe('PaymentManager', () => {
       const setIntervalSpy = jest.spyOn(global, 'setInterval')
 
       jest
-        .spyOn(paymentManager._viemClient, 'watchContractEvent')
-        .mockImplementation(() => Promise.resolve() as any)
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
+        // Returns the unwatch function, like the real one: stop() calls it.
+        .mockImplementation(() => jest.fn())
 
       const originalCheckInterval = config.paymentManager.checkInterval
       config.paymentManager.checkInterval = 15000
@@ -655,6 +678,300 @@ describe('PaymentManager', () => {
 
       // Restore original value
       config.paymentManager.checkInterval = originalCheckInterval
+      setIntervalSpy.mockRestore()
+    })
+  })
+  // -------------------------------------------------------------------------
+  // Ethereum / USDC instance
+  // -------------------------------------------------------------------------
+
+  describe('usdc watcher', () => {
+    const RECEIVER = '0x1111111111111111111111111111111111111111'
+    const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+    const DAI = '0x6b175474e89094c44da98b954eedeac495271d0f'
+
+    const usdcWatcher = createPaymentWatcher(
+      createUsdcChain('http://example.org', RECEIVER, USDC),
+    )
+
+    const receiptWithLog = (txHash: string) =>
+      ({
+        // The relayer, deliberately different from the payer below: an ERC20
+        // transfer can be submitted by someone other than whoever paid.
+        from: '0xRelayerWallet',
+        logs: [
+          {
+            address: RECEIVER,
+            data: '0x',
+            topics: [],
+            blockHash: '0x',
+            blockNumber: 123n,
+            logIndex: 0,
+            transactionHash: txHash,
+            transactionIndex: 0,
+            removed: false,
+          },
+        ],
+      }) as any
+
+    it('credits the token amount and the event payer, not receipt.from', async () => {
+      const txHash = '0xusdcpayment'
+      const intentId = '0xintent-usdc'
+
+      jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue(receiptWithLog(txHash))
+
+      jest.spyOn(usdcWatcher, '_parseEventLogs').mockReturnValue([
+        {
+          address: RECEIVER,
+          args: {
+            intentId,
+            token: USDC,
+            amount: 5_250_000n,
+            payer: '0xPayerWallet',
+          },
+          eventName: 'IntentTokenPaymentReceived',
+          logIndex: 3,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      // tokenAmount, not paymentAmount: the columns are denominated in
+      // different assets, and the asset-mismatch guard in markIntentAsConfirmed
+      // is what tells them apart. fromAddress is the event's payer — refunding
+      // receipt.from would pay back a relayer who sent nothing.
+      expect(markIntentSpy).toHaveBeenCalledTimes(1)
+      expect(markIntentSpy).toHaveBeenCalledWith({
+        intentId,
+        tokenAmount: 5_250_000n,
+        fromAddress: '0xPayerWallet',
+        txHash,
+        logIndex: 3,
+      })
+      expect(markIntentSpy.mock.calls[0][0]).not.toHaveProperty('paymentAmount')
+    })
+
+    it('refuses a payment in a token this receiver was not configured for', async () => {
+      const txHash = '0xwrongtoken'
+
+      jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue(receiptWithLog(txHash))
+
+      jest.spyOn(usdcWatcher, '_parseEventLogs').mockReturnValue([
+        {
+          address: RECEIVER,
+          args: {
+            intentId: '0xintent-dai',
+            token: DAI,
+            amount: 5_000_000_000_000_000_000n,
+            payer: '0xPayerWallet',
+          },
+          eventName: 'IntentTokenPaymentReceived',
+          logIndex: 0,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      // Not credited: every number downstream assumes 6 decimals, so an
+      // 18-decimal token would read as a payment 10^12 times the one that
+      // arrived, against a quote denominated in dollars.
+      expect(markIntentSpy).not.toHaveBeenCalled()
+    })
+
+    it('compares the token address case-insensitively', async () => {
+      const txHash = '0xchecksum'
+
+      jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue(receiptWithLog(txHash))
+
+      jest.spyOn(usdcWatcher, '_parseEventLogs').mockReturnValue([
+        {
+          address: RECEIVER,
+          args: {
+            intentId: '0xintent-checksum',
+            // Checksummed, where the configured value was all lowercase. An
+            // operator pasting either form out of a block explorer must not
+            // turn every payment into an ignored event.
+            token: getAddress(USDC),
+            amount: 1_000_000n,
+            payer: '0xPayerWallet',
+          },
+          eventName: 'IntentTokenPaymentReceived',
+          logIndex: 0,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      expect(markIntentSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores an event from a contract that is not the receiver', async () => {
+      const txHash = '0xotherContract'
+
+      jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue(receiptWithLog(txHash))
+
+      jest.spyOn(usdcWatcher, '_parseEventLogs').mockReturnValue([
+        {
+          address: '0x2222222222222222222222222222222222222222',
+          args: {
+            intentId: '0xintent-elsewhere',
+            token: USDC,
+            amount: 1_000_000n,
+            payer: '0xPayerWallet',
+          },
+          eventName: 'IntentTokenPaymentReceived',
+          logIndex: 0,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      expect(markIntentSpy).not.toHaveBeenCalled()
+    })
+
+    it('waits for the Ethereum confirmation count', async () => {
+      const txHash = '0xconfirmations'
+
+      const waitSpy = jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue({ from: '0xRelayer', logs: [] } as any)
+
+      jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      expect(waitSpy).toHaveBeenCalledWith({
+        hash: txHash,
+        confirmations: config.ethereum.confirmations,
+      })
+    })
+  })
+
+  describe('startup recovery', () => {
+    it('sweeps only the AI3 chain rows', async () => {
+      const getPendingSpy = jest
+        .spyOn(IntentsUseCases, 'getPendingWithTxHash')
+        .mockResolvedValue([])
+
+      await watcher._recoverOrphanedTransactions()
+
+      // Scoped to this watcher's asset. Handed an Ethereum hash, the Auto EVM
+      // client does not fail — it waits out its receipt timeout — so an
+      // unfiltered sweep would spend its startup window on rows it cannot see.
+      expect(getPendingSpy).toHaveBeenCalledWith(PaymentMethod.AI3_NATIVE)
+    })
+
+    it('sweeps only the USDC chain rows', async () => {
+      const usdcWatcher = createPaymentWatcher(
+        createUsdcChain(
+          'http://example.org',
+          '0x1111111111111111111111111111111111111111',
+          '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+        ),
+      )
+
+      const getPendingSpy = jest
+        .spyOn(IntentsUseCases, 'getPendingWithTxHash')
+        .mockResolvedValue([])
+
+      await usdcWatcher._recoverOrphanedTransactions()
+
+      expect(getPendingSpy).toHaveBeenCalledWith(PaymentMethod.USDC_ETH)
+    })
+
+    it('re-watches every orphan it finds', async () => {
+      jest.spyOn(IntentsUseCases, 'getPendingWithTxHash').mockResolvedValue([
+        { id: 'intent-1', txHash: '0xorphan1' },
+        { id: 'intent-2', txHash: '0xorphan2' },
+        // No hash: nothing to look up, and not an error.
+        { id: 'intent-3' },
+      ] as any)
+
+      const watchSpy = jest
+        .spyOn(watcher, 'watchTransaction')
+        .mockResolvedValue(undefined)
+
+      await watcher._recoverOrphanedTransactions()
+
+      expect(watchSpy).toHaveBeenCalledTimes(2)
+      expect(watchSpy).toHaveBeenCalledWith('0xorphan1')
+      expect(watchSpy).toHaveBeenCalledWith('0xorphan2')
+    })
+  })
+
+  describe('watchTransaction routing', () => {
+    it('sends an AI3 hash to the Auto EVM watcher', async () => {
+      const ai3Spy = jest
+        .spyOn(ai3PaymentWatcher, 'watchTransaction')
+        .mockResolvedValue(undefined)
+
+      await paymentManager.watchTransaction('0xai3', PaymentMethod.AI3_NATIVE)
+
+      expect(ai3Spy).toHaveBeenCalledWith('0xai3')
+    })
+
+    it('defaults to the Auto EVM watcher when no method is given', async () => {
+      const ai3Spy = jest
+        .spyOn(ai3PaymentWatcher, 'watchTransaction')
+        .mockResolvedValue(undefined)
+
+      // A watch-intent-tx task queued before the second chain existed carries no
+      // payment method, and every one of them is AI3.
+      await paymentManager.watchTransaction('0xlegacy')
+
+      expect(ai3Spy).toHaveBeenCalledWith('0xlegacy')
+    })
+
+    it('refuses a USDC hash when Ethereum is not configured', async () => {
+      // .env.test sets none of the three Ethereum variables, so this deployment
+      // has no USDC watcher. Throwing keeps the task on its retry path and then
+      // in the error queue, which is where a payment nobody is watching for
+      // belongs — the alternative is watching an Ethereum hash on Auto EVM.
+      await expect(
+        paymentManager.watchTransaction('0xusdc', PaymentMethod.USDC_ETH),
+      ).rejects.toThrow('no Ethereum USDC configuration')
+    })
+  })
+
+  describe('confirmedIntentsPoller', () => {
+    it('does not start a second interval', () => {
+      const setIntervalSpy = jest.spyOn(global, 'setInterval')
+
+      confirmedIntentsPoller.start()
+      confirmedIntentsPoller.start()
+
+      // Two loops would both read the same freshly CONFIRMED row and both grant
+      // its credits: onConfirmedIntent checks for COMPLETED and then writes,
+      // with no lock between the two.
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1)
+
+      confirmedIntentsPoller.stop()
       setIntervalSpy.mockRestore()
     })
   })

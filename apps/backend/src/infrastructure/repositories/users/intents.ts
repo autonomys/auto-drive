@@ -260,19 +260,32 @@ const expireIntentIfPending = async (intentId: string): Promise<boolean> => {
   return (result.rowCount ?? 0) > 0
 }
 
-// Returns PENDING intents that already have an on-chain tx_hash.
+// Returns PENDING intents that already have an on-chain tx_hash, for one
+// payment method.
 // These are intents where the user submitted a transaction but the payment
 // manager did not process the confirmation event — typically because the
 // service was restarted or the EVM RPC was temporarily unavailable.
 // Used by the startup recovery sweep so that no paid transaction is silently
 // abandoned across a service restart.
-const getPendingWithTxHash = async (): Promise<Intent[]> => {
+//
+// The payment method is required rather than optional because each chain's
+// watcher can only resolve its own hashes: handed an Ethereum hash, the Auto EVM
+// client does not fail, it waits out its receipt timeout. An unfiltered version
+// of this query would therefore be correct for neither caller, so there is no
+// safe default to offer.
+//
+// payment_method is NOT NULL with an 'ai3_native' default, so every row written
+// before the column existed is returned by the AI3 sweep.
+const getPendingWithTxHash = async (
+  paymentMethod: PaymentMethod,
+): Promise<Intent[]> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
     `SELECT * FROM intents
      WHERE status = $1
-       AND tx_hash IS NOT NULL`,
-    [IntentStatus.PENDING],
+       AND tx_hash IS NOT NULL
+       AND payment_method = $2`,
+    [IntentStatus.PENDING, paymentMethod],
   )
   return mapRows(result.rows)
 }
