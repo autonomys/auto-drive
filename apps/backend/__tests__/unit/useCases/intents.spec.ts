@@ -1768,10 +1768,15 @@ describe('IntentsUseCases', () => {
     // already resolved.
     expect(res.isOk()).toBe(true)
     expect(setSpy).toHaveBeenCalled()
-    // Nothing rewrites the row from the stale snapshot, and no pointless watch
-    // task is queued for an intent that is already settled.
+    // Nothing rewrites the row from the stale snapshot.
     expect(updateSpy).not.toHaveBeenCalled()
-    expect(publishSpy).not.toHaveBeenCalled()
+    // But the transaction is still watched. This is exactly when watching matters:
+    // a hash submitted for an intent that is already settled describes a second
+    // payment, and markIntentAsConfirmed files it. Skipping the publish would drop
+    // the only path by which that payment is ever seen.
+    expect(publishSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'watch-intent-tx' }),
+    )
   })
 
   it('triggerWatchIntent should forbid when user mismatches', async () => {

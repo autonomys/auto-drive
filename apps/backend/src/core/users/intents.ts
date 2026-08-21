@@ -603,17 +603,25 @@ const triggerWatchIntent = async ({
   const claimed = await intentsRepository.setTxHashIfPending(intentId, txHash)
 
   if (!claimed) {
-    // Settled (or expired) while we were deciding. Nothing to watch and nothing to
-    // correct: the confirmation path records the transaction that actually paid,
-    // which is the one worth having. ok() because the caller asked us to watch a
-    // payment for an intent that is already resolved, which is not an error.
+    // The intent left PENDING between the read above and this write, so the hash
+    // was not recorded. Not an error, and not a reason to stop: the column and the
+    // watch are separate concerns.
     logger.info(
       'triggerWatchIntent: intent left PENDING before the hash was recorded',
       { intentId, txHash },
     )
-    return ok()
   }
 
+  // Published either way, including when the claim failed.
+  //
+  // Writing the hash is the part that could revert a confirmation; watching the
+  // transaction is what observes the payment, and that is worth doing precisely
+  // when the intent is no longer PENDING. A caller submitting a hash for an intent
+  // that is already settled is describing a second payment, and one for an intent
+  // that just expired is describing a payment that arrived too late — both of
+  // which markIntentAsConfirmed records rather than discards. Skipping the publish
+  // would remove the only path by which either is ever seen, which is a worse
+  // outcome than the stale write this function used to do.
   EventRouter.publish({
     id: 'watch-intent-tx',
     retriesLeft: MAX_RETRIES,
