@@ -340,6 +340,42 @@ const createIntent = async (
   // Admins are exempt by construction (see featureFlags/isActive), which is what
   // makes the flag safe to leave off — the path stays exercisable in production
   // while it is shut to everyone else.
+  // Before the flag, and not subject to the admin exemption: a deployment with
+  // no USDC receiver configured has nothing watching Ethereum, so a quote issued
+  // here is a binding amount whose payment would be observed by nobody — no
+  // confirmation, no credits, and no mispayment row either, because nothing is
+  // reading the chain to file one. The intent would simply expire while the
+  // user's USDC sat in a contract this deployment never looks at.
+  //
+  // Reachable exactly through the admin exemption below, which exists so the
+  // path can be driven end to end in production. That is also the case where it
+  // would be reached first, by whoever is verifying the path, with real money.
+  //
+  // The same config key the watcher keys on (see getUsdcPaymentWatcher in
+  // paymentManager/chains.ts), so "can we quote it" and "will we see the
+  // payment" cannot disagree. Read directly rather than imported from there,
+  // because that module imports this one — the watcher calls
+  // markIntentAsConfirmed — and a cycle through a module that builds a viem
+  // client at load is not worth one boolean.
+  if (
+    paymentMethod === PaymentMethod.USDC_ETH &&
+    !config.ethereum.usdcReceiverAddress
+  ) {
+    logger.error(
+      'Refusing USDC intent creation — no Ethereum receiver is configured, so ' +
+        'no payment for it could be observed',
+      {
+        userPublicId: executor.publicId,
+      },
+    )
+    return err(
+      new UsdcPaymentsDisabledError(
+        'Paying in USDC is not available on this deployment. Pay in AI3 ' +
+          'instead, or omit paymentMethod to default to it.',
+      ),
+    )
+  }
+
   if (
     paymentMethod === PaymentMethod.USDC_ETH &&
     !FeatureFlagsUseCases.isFlagActive('payWithUsdc', executor)
@@ -1398,6 +1434,11 @@ const getPendingWithTxHash = async (
 
 export const IntentsUseCases = {
   createIntent,
+  // Exported for the payment watcher, which can refuse a payment before this
+  // module ever sees it: an event naming a token the receiver was not
+  // configured for has no amount markIntentAsConfirmed could accept, but the
+  // transfer still happened and still needs to be findable.
+  recordRefusedPayment: recordMispayment,
   parseRequestedBytes,
   parsePaymentMethod,
   getIntent,

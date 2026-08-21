@@ -193,8 +193,13 @@ export const config = {
     url: env('EVM_CHAIN_ENDPOINT'),
     contractAddress: getAddress(env('EVM_CHAIN_CONTRACT_ADDRESS')),
     chainId: Number(env('EVM_CHAIN_ID', '870')),
-    confirmations: Number(env('EVM_CHAIN_CONFIRMATIONS', '6')),
-    checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
+    // positiveIntEnv for the same reason as the Ethereum key below: '0' is a
+    // truthy string, so `Number(env(..., '6'))` would hand viem 0 and confirm a
+    // payment from a receipt with no confirmations. Pre-existing; fixed here
+    // because the two chains now share one watcher and should not differ in how
+    // safely they read the same setting.
+    confirmations: positiveIntEnv('EVM_CHAIN_CONFIRMATIONS', 6),
+    checkInterval: positiveIntEnv('EVM_CHAIN_CHECK_INTERVAL', 30000),
     priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
   // Ethereum mainnet. Distinct from `paymentManager.url`, which points at Auto
@@ -210,15 +215,20 @@ export const config = {
   // read as "no payments arriving" rather than "not configured".
   ethereum: {
     rpcUrl: process.env.ETH_CHAIN_ENDPOINT,
-    // Informational, and served to the frontend so a wallet can be asked to
-    // switch networks. 1 = Ethereum mainnet; 11155111 = Sepolia for testing.
-    chainId: Number(env('ETH_CHAIN_ID', '1')),
     // Blocks that must build on the payment before it is credited. Ethereum is
     // post-Merge, so 2-3 blocks is already economically final and 6 is
     // conservative — but it is the same default as Auto EVM, which keeps one
     // fewer number in the operator's head. ~12s a block, so 6 is ~72s of extra
     // latency on a purchase, which the polling loop makes invisible anyway.
-    confirmations: Number(env('ETH_CHAIN_CONFIRMATIONS', '6')),
+    //
+    // positiveIntEnv, not Number(env(...)): `env` only falls back on a FALSY
+    // string, so '0' passes through as 0 — and viem resolves
+    // waitForTransactionReceipt immediately whenever confirmations <= 1, so a
+    // typo'd 0 (or a non-numeric value, via NaN, which fails every `> 1` guard
+    // the same way) would credit a payment from a receipt with no confirmations
+    // at all. On Ethereum that is credits granted for a transfer a one-block
+    // reorg can still remove.
+    confirmations: positiveIntEnv('ETH_CHAIN_CONFIRMATIONS', 6),
     // AutoDriveUSDCReceiver. Payments are watched here, and this is the address
     // the frontend sends USDC to.
     usdcReceiverAddress: process.env.ETH_USDC_RECEIVER_ADDRESS,

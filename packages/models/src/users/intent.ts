@@ -144,6 +144,15 @@ export enum IntentMispaymentReason {
   // so there is no rate left to convert it at. The intent is untouched and stays
   // EXPIRED; this row is the only record that money showed up for it.
   INTENT_EXPIRED = "intent_expired",
+  // The payment named a token the receiver was not configured for. Only
+  // reachable when USDC_TOKEN_ADDRESS disagrees with the contract that is
+  // actually deployed, since the receiver's token is immutable — so it means
+  // every payment to that receiver is being refused, not just this one. Filed
+  // without an amount on purpose: the value is denominated in a token we cannot
+  // name, and putting it in a column that means 6-decimal USDC would be a
+  // worse record than none. The hash, the log index and the payer are what find
+  // the transfer again.
+  UNRECOGNISED_TOKEN = "unrecognised_token",
   // The payment was accepted and confirmed, then could not be turned into
   // storage: too small to buy a single byte, missing one of its conversion
   // inputs, or confirmed with no recorded amount at all. The intent is FAILED and

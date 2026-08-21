@@ -6,13 +6,15 @@ import {
   Log,
   ParseEventLogsParameters,
   ParseEventLogsReturnType,
+  PublicClient,
   TransactionReceipt,
   parseEventLogs as viemParseEventLogs,
 } from 'viem'
-import { PaymentMethod } from '@auto-drive/models'
+import { IntentMispaymentReason, PaymentMethod } from '@auto-drive/models'
 import { createLogger } from '../../drivers/logger.js'
 import { IntentsUseCases } from '../../../core/users/intents.js'
 import { safeCallback } from '../../../shared/utils/safe.js'
+import { slackNotifier } from '../slack/index.js'
 
 /**
  * A payment event, read in the terms of the asset it arrived in.
@@ -37,15 +39,20 @@ export type ParsedPayment = {
 /**
  * Reading one log either yields a payment or it does not.
  *
- * `ignored` exists so a chain can refuse an event it does not recognise —
- * today, a payment in an ERC20 the receiver was not deployed against — while
- * leaving the logging to the watcher. A `null` return would say the same thing
- * without saying why, and "why" is the whole content of the log line an operator
- * needs to see.
+ * `ignored` carries the reason so the watcher can log it, and `refused` so the
+ * transfer can still be filed for admin review. It deliberately does not carry
+ * an amount: the only way to reach this branch is an event whose asset we cannot
+ * name, and writing an unknown token's base units into a column documented as
+ * 6-decimal USDC would make the record worse than the absence of one. The hash,
+ * the log index and the payer are what find the money again.
  */
 export type PaymentRead =
   | { kind: 'payment'; payment: ParsedPayment }
-  | { kind: 'ignored'; reason: string }
+  | {
+      kind: 'ignored'
+      reason: string
+      refused: { intentId: string; fromAddress?: string }
+    }
 
 /**
  * Everything the watcher needs to know about one chain.
@@ -70,12 +77,25 @@ export type PaymentChain<
   rpcUrl: string
   contractAddress: `0x${string}`
   confirmations: number
+  // How long to wait for a receipt before giving up on one attempt. Sized per
+  // chain because it has to cover inclusion plus `confirmations` blocks: on
+  // Ethereum, viem's 180s default is roughly the confirmation wait alone, so a
+  // transaction that takes two minutes to be mined would time out, retry, and
+  // eventually raise a payment-failed alert for a payment that was fine.
+  receiptTimeoutMs: number
   abi: abi
   eventName: eventName
   toPayment: (
     log: ParseEventLogsReturnType<abi, eventName, true>[number],
     receipt: TransactionReceipt,
   ) => PaymentRead
+  // Optional one-time check that this deployment's configuration agrees with
+  // what is actually deployed at `contractAddress`. Run at startup, off the
+  // critical path; see `start()` for why a failure to run it is not the same as
+  // a failure of it.
+  verifyConfiguration?: (
+    client: PublicClient,
+  ) => Promise<{ ok: true } | { ok: false; problem: string }>
 }
 
 /**
@@ -112,6 +132,7 @@ export const createPaymentWatcher = <
     const receipt = await watcher._viemClient.waitForTransactionReceipt({
       hash: txHash as `0x${string}`,
       confirmations: chain.confirmations,
+      timeout: chain.receiptTimeoutMs,
     })
 
     // Filter logs to only include the deposit event
@@ -131,45 +152,57 @@ export const createPaymentWatcher = <
       logs,
     })
 
-    const results = await Promise.all(
-      logs.map(async (log) => {
-        const read = chain.toPayment(log, receipt)
-        if (read.kind === 'ignored') {
-          // Not a failure to retry and not a mispayment we can file: an event
-          // this watcher cannot read in the asset it expects names no amount it
-          // could record. Loud, because the only way to get here is a
-          // configuration or deployment mismatch.
-          logger.error('Ignoring an unrecognised payment event', {
-            txHash,
-            logIndex: log.logIndex,
-            reason: read.reason,
-          })
-          return null
-        }
+    // Sequentially, one payment at a time. Both receivers are callable from a
+    // contract, so one transaction can carry two payments for the same intent —
+    // and markIntentAsConfirmed is a read-then-write on the intent's status.
+    // Run concurrently, both calls read PENDING, both take the settle path, and
+    // the second write overwrites the first's amount with neither recorded as a
+    // second payment. The whole point of threading logIndex is that both halves
+    // get filed; that only holds if the first one has landed before the second
+    // is read.
+    for (const log of logs) {
+      const read = chain.toPayment(log, receipt)
 
-        return IntentsUseCases.markIntentAsConfirmed({
-          ...read.payment,
-          // Passed for the refusal paths: a payment we decline to attach is
-          // recorded in intent_mispayments, and the hash is the only field that
-          // finds it again on a block explorer.
+      if (read.kind === 'ignored') {
+        // Loud, because the only way to get here is a configuration or
+        // deployment mismatch — and filed, because the transfer happened and a
+        // log line is not something an admin can query. The intent stays PENDING
+        // and expires on its own schedule.
+        logger.error('Ignoring an unrecognised payment event', {
           txHash,
-          // One transaction can carry two payments for the same intent — the
-          // receivers are callable from a contract, and this maps over every
-          // matching log. The hash alone would make the two indistinguishable,
-          // so recording the second would collapse into the first and the queue
-          // would report one payment when two arrived.
+          logIndex: log.logIndex,
+          reason: read.reason,
+        })
+        await IntentsUseCases.recordRefusedPayment({
+          intentId: read.refused.intentId,
+          reason: IntentMispaymentReason.UNRECOGNISED_TOKEN,
+          expectedPaymentMethod: chain.paymentMethod,
+          fromAddress: read.refused.fromAddress,
+          txHash,
           logIndex: log.logIndex,
         })
-      }),
-    )
+        continue
+      }
 
-    results.forEach((result) => {
-      if (result?.isErr()) {
+      const result = await IntentsUseCases.markIntentAsConfirmed({
+        ...read.payment,
+        // Passed for the refusal paths: a payment we decline to attach is
+        // recorded in intent_mispayments, and the hash is the only field that
+        // finds it again on a block explorer.
+        txHash,
+        // One transaction can carry two payments for the same intent. The hash
+        // alone would make the two indistinguishable, so recording the second
+        // would collapse into the first and the queue would report one payment
+        // when two arrived.
+        logIndex: log.logIndex,
+      })
+
+      if (result.isErr()) {
         logger.error('Error marking intent as confirmed', {
           error: result.error,
         })
       }
-    })
+    }
   }
 
   const onLogs = safeCallback((logs: Log[]) => {
@@ -215,9 +248,9 @@ export const createPaymentWatcher = <
   //
   // Scoped to this watcher's payment method. Sweeping every chain's rows would
   // hand each watcher hashes from the other chain, where they resolve to a
-  // 180-second receipt timeout per row rather than to an error — so a USDC
-  // payment would be reported as an AI3 RPC failure, and the sweep that exists
-  // to rescue paid intents would spend its startup window on rows it cannot see.
+  // receipt timeout per row rather than to an error — so a USDC payment would be
+  // reported as an AI3 RPC failure, and the sweep that exists to rescue paid
+  // intents would spend its startup window on rows it cannot see.
   const _recoverOrphanedTransactions = async () => {
     const pending = await IntentsUseCases.getPendingWithTxHash(
       chain.paymentMethod,
@@ -252,6 +285,44 @@ export const createPaymentWatcher = <
     )
   }
 
+  // Ask the chain whether this deployment is configured for the contract that
+  // is actually deployed.
+  //
+  // Separated from `start()` because the two failures are not the same: a check
+  // that CANNOT RUN (RPC down at boot) says nothing and must not stop a watcher
+  // from starting, while a check that RUNS AND FAILS means every payment this
+  // watcher sees will be discarded. Only the second is escalated.
+  const _verifyConfiguration = async () => {
+    if (!chain.verifyConfiguration) return
+
+    let verdict: Awaited<ReturnType<NonNullable<typeof chain.verifyConfiguration>>>
+    try {
+      verdict = await chain.verifyConfiguration(
+        watcher._viemClient as PublicClient,
+      )
+    } catch (error) {
+      logger.warn(
+        'Could not verify the payment contract configuration — continuing',
+        { chain: chain.name, error },
+      )
+      return
+    }
+
+    if (!verdict.ok) {
+      // Escalated rather than logged, and not turned into a shutdown: stopping
+      // would swap a stream of filed refusals for silence, and the watcher is
+      // still the only thing recording that money arrived at all.
+      logger.error(
+        'Payment contract configuration does not match what is deployed — payments will NOT be credited',
+        { chain: chain.name, problem: verdict.problem },
+      )
+      await slackNotifier.send({
+        title: `:rotating_light: ${chain.name} payment watcher is misconfigured — payments will not be credited`,
+        details: `contract: ${chain.contractAddress}\n${verdict.problem}`,
+      })
+    }
+  }
+
   const start = () => {
     if (unwatchContractEvent) {
       // A second subscription would process every event twice and leak the
@@ -268,8 +339,9 @@ export const createPaymentWatcher = <
       confirmations: chain.confirmations,
     })
 
-    // Run the recovery sweep asynchronously so it does not block startup.
-    // Errors inside the sweep are caught per-intent and logged individually.
+    // Both run asynchronously so they do not block startup. Errors inside the
+    // sweep are caught per-intent and logged individually.
+    safeCallback(watcher._verifyConfiguration)()
     safeCallback(watcher._recoverOrphanedTransactions)()
 
     unwatchContractEvent = watcher._viemClient.watchContractEvent({
@@ -277,6 +349,17 @@ export const createPaymentWatcher = <
       address: chain.contractAddress,
       eventName: chain.eventName,
       onLogs: watcher._onLogs,
+      // viem swallows poll failures into this callback, so without one a bad
+      // endpoint, an expired filter or a rate-limited provider yields zero logs
+      // and zero log lines — indefinitely, and indistinguishable from a chain
+      // nobody is paying on. The primary observation channel for real money must
+      // not be able to fail quietly.
+      onError: (error) => {
+        logger.error('Payment event subscription error', {
+          chain: chain.name,
+          error,
+        })
+      },
     })
   }
 
@@ -295,11 +378,10 @@ export const createPaymentWatcher = <
     stop,
     _onLogs: onLogs,
     _recoverOrphanedTransactions,
+    _verifyConfiguration,
     _viemClient: viemClient,
     _parseEventLogs: parseEventLogs,
   }
 
   return watcher
 }
-
-export type PaymentWatcher = ReturnType<typeof createPaymentWatcher>

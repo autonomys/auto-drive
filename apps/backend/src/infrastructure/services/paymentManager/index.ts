@@ -1,6 +1,6 @@
 import { PaymentMethod } from '@auto-drive/models'
 import { createLogger } from '../../drivers/logger.js'
-import { ai3PaymentWatcher, usdcPaymentWatcher } from './chains.js'
+import { ai3PaymentWatcher, getUsdcPaymentWatcher } from './chains.js'
 import { confirmedIntentsPoller } from './confirmedIntents.js'
 
 const logger = createLogger('PaymentManager')
@@ -18,17 +18,18 @@ const watchTransaction = async (
   paymentMethod: PaymentMethod = PaymentMethod.AI3_NATIVE,
 ) => {
   if (paymentMethod === PaymentMethod.USDC_ETH) {
-    if (!usdcPaymentWatcher) {
-      // Reachable one way: a USDC intent was created by a deployment that had
-      // Ethereum configured, and the process now handling its watch request does
-      // not. Throwing keeps the task on its retry path and then in the error
-      // queue, which is where a payment nobody is watching for belongs.
+    // Throws on an incomplete configuration, which is the point: it lands on the
+    // task's retry path and then in the error queue, with the missing variable
+    // named. The null case is the deliberate one — a USDC intent exists but this
+    // deployment does not accept USDC — and it belongs in the same place.
+    const usdcWatcher = getUsdcPaymentWatcher()
+    if (!usdcWatcher) {
       throw new Error(
         `Cannot watch USDC transaction ${txHash}: this deployment has no ` +
           'Ethereum USDC configuration',
       )
     }
-    return usdcPaymentWatcher.watchTransaction(txHash)
+    return usdcWatcher.watchTransaction(txHash)
   }
 
   return ai3PaymentWatcher.watchTransaction(txHash)
@@ -43,20 +44,32 @@ const watchTransaction = async (
  * confirmedIntents.ts — so this is called from frontendWorker (split topology)
  * and from the all-in-one frontend server, and from nowhere else. `start:fe:api`
  * deliberately does not: it would put a second poller behind every API replica.
+ *
+ * Resolving the USDC watcher here is what makes a broken payments configuration
+ * fatal in the process that owns payments, and harmless in the ones that merely
+ * import this module.
  */
 const start = () => {
+  const usdcWatcher = getUsdcPaymentWatcher()
+
   logger.info('Starting payment manager', {
-    watchers: usdcPaymentWatcher ? ['ai3', 'usdc'] : ['ai3'],
+    watchers: usdcWatcher ? ['ai3', 'usdc'] : ['ai3'],
   })
 
   confirmedIntentsPoller.start()
   ai3PaymentWatcher.start()
-  usdcPaymentWatcher?.start()
+  usdcWatcher?.start()
 }
 
 const stop = () => {
   logger.info('Stopping payment manager')
-  usdcPaymentWatcher?.stop()
+  // Not resolved here: stopping a watcher that was never started is a no-op, and
+  // a stop path that can throw on configuration would fail a shutdown.
+  try {
+    getUsdcPaymentWatcher()?.stop()
+  } catch {
+    // Nothing was started, so there is nothing to stop.
+  }
   ai3PaymentWatcher.stop()
   confirmedIntentsPoller.stop()
 }
@@ -71,13 +84,9 @@ export {
   ai3Chain,
   ai3PaymentWatcher,
   createUsdcChain,
-  usdcPaymentWatcher,
+  getUsdcPaymentWatcher,
+  _resetUsdcPaymentWatcher,
 } from './chains.js'
 export { confirmedIntentsPoller } from './confirmedIntents.js'
 export { createPaymentWatcher } from './watcher.js'
-export type {
-  PaymentChain,
-  PaymentRead,
-  ParsedPayment,
-  PaymentWatcher,
-} from './watcher.js'
+export type { PaymentChain, PaymentRead, ParsedPayment } from './watcher.js'
