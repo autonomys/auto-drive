@@ -28,8 +28,8 @@ export const usePaymentIntent = () => {
   const MINIMUM_CONFIRMATIONS = 6;
 
   const paymentIntent = useCallback(
-    async (amount: bigint) => {
-      const intentId: string = await api.createIntent();
+    async (amount: bigint, requestedBytes?: bigint) => {
+      const intentId: string = await api.createIntent(requestedBytes);
 
       return {
         abi: paymentReceiverAbi,

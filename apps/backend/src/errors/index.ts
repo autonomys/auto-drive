@@ -76,6 +76,32 @@ export class ForbiddenError extends HttpError {
   }
 }
 
+// 403 Forbidden — the requested purchase would push the account past its
+// per-user credit cap.
+//
+// A subclass rather than a bare ForbiddenError for two reasons: callers can tell
+// "no credit headroom" apart from every other 403 without string-matching a
+// message, and the machine-readable code travels with the error instead of
+// having to be re-attached at each call site that might raise it.
+export class CreditCapExceededError extends ForbiddenError {
+  static readonly code = 'CREDIT_CAP_EXCEEDED'
+  constructor(message: string) {
+    super(message)
+    this.name = 'CreditCapExceededError'
+  }
+
+  // Mirrors the { error: <code>, message: <human-readable> } shape the intents
+  // controller already uses for GOOGLE_ACCOUNT_REQUIRED, so a client can branch
+  // on `error` and surface `message` verbatim. Overriding here rather than
+  // special-casing in the controller means no call site can forget the code.
+  override handleResponse(res: Response) {
+    res.status(this.statusCode).json({
+      error: CreditCapExceededError.code,
+      message: this.message,
+    })
+  }
+}
+
 export class NotFoundError extends HttpError {
   static readonly statusCode = 404
   constructor(message: string) {

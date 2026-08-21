@@ -1,14 +1,24 @@
-import { Intent, IntentStatus, User, UserRole } from '@auto-drive/models'
+import {
+  Intent,
+  IntentStatus,
+  PaymentMethod,
+  User,
+  UserRole,
+  UserWithOrganization,
+} from '@auto-drive/models'
 import { intentsRepository } from '../../infrastructure/repositories/users/intents.js'
+import { purchasedCreditsRepository } from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../infrastructure/eventRouter/tasks.js'
 import {
+  BadRequestError,
   ConflictError,
+  CreditCapExceededError,
   ForbiddenError,
   GoneError,
   ObjectNotFoundError,
 } from '../../errors/index.js'
-import { err, ok } from 'neverthrow'
+import { err, ok, Result } from 'neverthrow'
 import { config } from '../../config.js'
 import { randomBytes } from 'crypto'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
@@ -68,7 +78,202 @@ const isIntentExpired = (intent: Intent): boolean => {
   return intent.expiresAt < new Date()
 }
 
-const createIntent = async (executor: User): Promise<Intent> => {
+// Decimal digits only. BigInt() on its own is far more permissive than we want
+// here — it accepts hex ('0x10'), binary and octal literals, surrounding
+// whitespace and a leading '+', and quietly turns '' into 0n — so the shape is
+// checked before conversion rather than inferred from whether it threw.
+const DECIMAL_DIGITS = /^\d+$/
+
+/**
+ * Parse the wire form of `requestedBytes` into a bigint.
+ *
+ * Absent (or an explicit null) means "no size given", which is a legitimate
+ * request on the AI3 path: the create endpoint must keep accepting the body-less
+ * calls the frontend makes today. It will not be legitimate on the USDC path,
+ * where the size is what the charge is computed FROM: the oracle now reports a
+ * size-independent VWAP of realized fills (#746, landed in #807), so it prices a
+ * byte and the intent has to say how many. That path therefore has to require a
+ * size — a check for the caller rather than for this parser, whose job ends at
+ * the wire shape.
+ *
+ * A decimal string is the canonical form. Every other size on an intent
+ * (shannonsPerByte, paymentAmount) already crosses the wire as a string, and a
+ * string keeps working unchanged if the per-user cap ever moves past 2^53. A
+ * JSON number is also accepted, since callers reach for one naturally, but only
+ * while it is a safe integer — so no lossy float can enter the byte path, and a
+ * caller who needs a bigger value is told to send a string instead of silently
+ * having it rounded.
+ *
+ * Shape only. Range (positive, within the cap) is enforced in createIntent so
+ * that a caller reaching the use case directly is covered by the same rules.
+ */
+const parseRequestedBytes = (
+  raw: unknown,
+): Result<bigint | undefined, BadRequestError> => {
+  if (raw === undefined || raw === null) {
+    return ok(undefined)
+  }
+  if (typeof raw === 'bigint') {
+    return ok(raw)
+  }
+  if (typeof raw === 'number') {
+    if (!Number.isSafeInteger(raw)) {
+      return err(
+        new BadRequestError(
+          `Invalid requestedBytes: ${raw} is not a whole number of bytes ` +
+            'exactly representable as a JSON number — send larger values as a ' +
+            'decimal string',
+        ),
+      )
+    }
+    return ok(BigInt(raw))
+  }
+  if (typeof raw === 'string' && DECIMAL_DIGITS.test(raw)) {
+    return ok(BigInt(raw))
+  }
+  return err(
+    new BadRequestError(
+      'Invalid requestedBytes: expected a whole number of bytes as a decimal ' +
+        `string (got ${JSON.stringify(raw)})`,
+    ),
+  )
+}
+
+// Reject a purchase that cannot fit under the per-user credit cap, before the
+// user has been asked to pay anything.
+//
+// THIS IS A FAST-FAIL, NOT A RESERVATION. Nothing is held: two concurrent
+// intents for the same account can both pass here and both be created, and the
+// sum of their sizes may exceed the cap. That is accepted. The authoritative
+// check remains createPurchasedCreditWithCapCheck, which re-reads the balance
+// inside a pg_advisory_xact_lock when credits are actually granted. All this
+// does is spare the common case — one user asking for more than can ever fit —
+// an irreversible on-chain payment followed by an OVER_CAP admin refund.
+//
+// Deliberately not made atomic and deliberately not a hold: a reservation needs
+// an expiry sweep, release-on-failure, and its own contention story, which is a
+// much larger design than the problem here warrants.
+//
+// It also does not bound what the user ends up with. Credits follow the amount
+// actually paid, not requestedBytes, so paying more than quoted grants more than
+// was checked here — proportionally more, on either payment method, because an
+// intent locks a single scalar rate (shannonsPerByte, and on the USDC path the
+// effective rate #747 persists) and nothing on it varies with the size paid for.
+// That drift is a deliberate accepted cost of letting any payment amount settle
+// an intent, and it is the authoritative check that bounds it: re-measuring the
+// real balance under the advisory lock, an overpayment can walk an account up to
+// the cap but never past it. The excess lands as OVER_CAP for admin review,
+// which is the same place an unchecked purchase would have landed.
+//
+// Measures exactly what the authoritative check measures — SUM of
+// upload_bytes_remaining over active, unexpired rows — by going through
+// getRemainingCredits, whose query is that same aggregate. Any divergence
+// between the two would surface as a pre-check that waves through purchases the
+// real check then rejects, which is the failure mode this exists to prevent.
+const checkCapHeadroom = async (
+  executor: UserWithOrganization,
+  requestedBytes: bigint,
+): Promise<Result<void, CreditCapExceededError>> => {
+  const cap = config.credits.maxBytesPerUser
+  const account = await AccountsUseCases.getOrCreateAccount(executor)
+  const { uploadBytesRemaining } =
+    await purchasedCreditsRepository.getRemainingCredits(account.id)
+
+  // `>` mirrors the authoritative check, so a purchase that lands exactly on the
+  // cap is allowed by both. A stricter comparison here would reject purchases
+  // the real check would have granted.
+  if (uploadBytesRemaining + requestedBytes > cap) {
+    // Clamped because an account can already sit above the cap if the cap was
+    // lowered after credits were granted; a negative headroom would be nonsense
+    // to show a user.
+    const headroom =
+      uploadBytesRemaining >= cap ? 0n : cap - uploadBytesRemaining
+    logger.info(
+      'Rejecting intent creation — would exceed per-user credit cap',
+      {
+        accountId: account.id,
+        requestedBytes: requestedBytes.toString(),
+        uploadBytesRemaining: uploadBytesRemaining.toString(),
+        cap: cap.toString(),
+      },
+    )
+    return err(
+      new CreditCapExceededError(
+        `Purchase of ${requestedBytes} bytes would exceed the per-user credit ` +
+          `cap of ${cap} bytes: the account already holds ` +
+          `${uploadBytesRemaining} bytes, leaving ${headroom} available`,
+      ),
+    )
+  }
+
+  return ok(undefined)
+}
+
+const createIntent = async (
+  executor: UserWithOrganization,
+  requestedBytes?: bigint,
+  paymentMethod: PaymentMethod = PaymentMethod.AI3_NATIVE,
+): Promise<Result<Intent, BadRequestError | CreditCapExceededError>> => {
+  // The USDC path cannot price a purchase without knowing its size, so the size
+  // is required there and optional on AI3.
+  //
+  // Not a stylistic asymmetry — the two paths owe different things at creation.
+  // An AI3 intent locks a per-byte rate and lets whatever arrives on-chain
+  // settle it, so it can be created without anyone having decided how much to
+  // buy. A USDC intent has to name a number the user is asked to transfer, and
+  // that number is the oracle's rate times the size: the rate prices ONE BYTE
+  // (a VWAP of realized fills, size-independent since #807), so without a size
+  // there is no amount to charge and nothing to put in quoted_token_amount.
+  //
+  // Enforced here rather than by making the field required on the endpoint,
+  // because `POST /intents` is a documented API-key flow for third-party
+  // integrators (see featureFlags.hasGoogleAuth) and every one of them is on
+  // AI3 today. Requiring it outright would break them to close a hole that only
+  // exists on a path they cannot reach.
+  if (
+    paymentMethod === PaymentMethod.USDC_ETH &&
+    requestedBytes === undefined
+  ) {
+    return err(
+      new BadRequestError(
+        'requestedBytes is required when paying in USDC: the amount charged ' +
+          'is the per-byte rate times the purchase size, so there is nothing ' +
+          'to quote without it',
+      ),
+    )
+  }
+
+  // Validate and cap-check before getPrice(): that call goes over a WebSocket to
+  // the consensus chain, and a request that is already invalid should not pay
+  // for it.
+  if (requestedBytes !== undefined) {
+    if (requestedBytes <= 0n) {
+      return err(
+        new BadRequestError(
+          `Invalid requestedBytes: ${requestedBytes} — must be a positive ` +
+            'number of bytes',
+        ),
+      )
+    }
+    // A single purchase larger than the whole cap can never be granted, whatever
+    // the account balance is. Failing it as a malformed request is both clearer
+    // than a headroom message and cheaper — it skips the account and balance
+    // reads below.
+    if (requestedBytes > config.credits.maxBytesPerUser) {
+      return err(
+        new BadRequestError(
+          `Invalid requestedBytes: ${requestedBytes} exceeds the maximum ` +
+            `${config.credits.maxBytesPerUser} bytes purchasable per account`,
+        ),
+      )
+    }
+
+    const headroom = await checkCapHeadroom(executor, requestedBytes)
+    if (headroom.isErr()) {
+      return err(headroom.error)
+    }
+  }
+
   const { price } = await IntentsUseCases.getPrice()
 
   const expiresAt = new Date(
@@ -79,12 +284,17 @@ const createIntent = async (executor: User): Promise<Intent> => {
     id: randomBytes32(),
     userPublicId: executor.publicId,
     status: IntentStatus.PENDING,
+    paymentMethod,
     paymentAmount: undefined,
     shannonsPerByte: BigInt(price),
+    // requestedBytes is deliberately not persisted. It exists to gate creation
+    // against the cap, and nothing downstream reads it: credits are derived from
+    // paymentAmount / shannonsPerByte, so a stored copy would be a number that
+    // looks like a balance, never agrees with one, and has no reader.
     expiresAt,
   })
 
-  return intent
+  return ok(intent)
 }
 
 const getIntent = async (user: User, id: string) => {
@@ -388,6 +598,7 @@ const getPendingWithTxHash = async (): Promise<Intent[]> => {
 
 export const IntentsUseCases = {
   createIntent,
+  parseRequestedBytes,
   getIntent,
   updateIntent,
   triggerWatchIntent,

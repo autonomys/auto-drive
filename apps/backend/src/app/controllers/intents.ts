@@ -2,15 +2,29 @@ import { Router } from 'express'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { IntentsUseCases } from '../../core/users/intents.js'
-import {
-  handleInternalError,
-  handleInternalErrorResult,
-} from '../../shared/utils/neverthrow.js'
+import { handleInternalErrorResult } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 import { config } from '../../config.js'
 import { hasGoogleAuth } from '../../core/featureFlags/index.js'
+import { Intent } from '@auto-drive/models'
 
 export const intentsController = Router()
+
+// res.json() throws on a raw BigInt, so every bigint field has to be
+// stringified before an intent is sent. Doing it in one place rather than at
+// each response site: the fields are spread wholesale, so a field added to
+// Intent and forgotten here does not fail at compile time — it throws at
+// runtime, on the first request for a row that happens to have it set. The
+// token_* fields are currently always unset, which is the only reason listing
+// them per-endpoint has not broken yet.
+const serializeIntent = (intent: Intent) => ({
+  ...intent,
+  shannonsPerByte: intent.shannonsPerByte.toString(),
+  paymentAmount: intent.paymentAmount?.toString(),
+  tokenAmount: intent.tokenAmount?.toString(),
+  quotedTokenAmount: intent.quotedTokenAmount?.toString(),
+  usdRateAtCreation: intent.usdRateAtCreation?.toString(),
+})
 
 // ---------------------------------------------------------------------------
 // POST /intents/
@@ -43,20 +57,30 @@ intentsController.post(
       return
     }
 
-    const result = await handleInternalError(
-      IntentsUseCases.createIntent(user),
+    // Optional: a request with no body at all is valid and behaves as it always
+    // has (no size recorded, no cap pre-check). `req.body` is `{}` under
+    // express.json() for a body-less request, but stays optional-chained so a
+    // route mounted without the parser cannot throw here.
+    const requestedBytes = IntentsUseCases.parseRequestedBytes(
+      req.body?.requestedBytes,
+    )
+    if (requestedBytes.isErr()) {
+      handleError(requestedBytes.error, res)
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      IntentsUseCases.createIntent(user, requestedBytes.value),
       'Failed to create intent',
     )
     if (result.isErr()) {
+      // CreditCapExceededError carries its own { error: 'CREDIT_CAP_EXCEEDED',
+      // message } response shape, so the generic path emits it correctly.
       handleError(result.error, res)
       return
     }
 
-    res.status(200).json({
-      ...result.value,
-      shannonsPerByte: result.value.shannonsPerByte.toString(),
-      paymentAmount: result.value.paymentAmount?.toString(),
-    })
+    res.status(200).json(serializeIntent(result.value))
   }),
 )
 
@@ -88,13 +112,7 @@ intentsController.get(
       return
     }
 
-    res.status(200).json(
-      result.value.map((intent) => ({
-        ...intent,
-        shannonsPerByte: intent.shannonsPerByte.toString(),
-        paymentAmount: intent.paymentAmount?.toString(),
-      })),
-    )
+    res.status(200).json(result.value.map(serializeIntent))
   }),
 )
 
@@ -119,11 +137,7 @@ intentsController.get(
       return
     }
 
-    res.status(200).json({
-      ...result.value,
-      paymentAmount: result.value.paymentAmount?.toString(),
-      shannonsPerByte: result.value.shannonsPerByte.toString(),
-    })
+    res.status(200).json(serializeIntent(result.value))
   }),
 )
 

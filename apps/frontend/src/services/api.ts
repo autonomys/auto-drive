@@ -117,7 +117,7 @@ export const createApiService = ({
   apiBaseUrl: string;
   downloadApiUrl: string;
 }) => ({
-  createIntent: async (): Promise<string> => {
+  createIntent: async (requestedBytes?: bigint): Promise<string> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -133,11 +133,50 @@ export const createApiService = ({
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
       },
-      body: JSON.stringify({ expiresAt }),
+      // As a decimal string: JSON.stringify cannot serialize a BigInt, and the
+      // backend takes the string form as canonical anyway.
+      body: JSON.stringify({
+        expiresAt,
+        ...(requestedBytes !== undefined && {
+          requestedBytes: requestedBytes.toString(),
+        }),
+      }),
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      // The cap rejection is the one failure here a user can act on, and it
+      // names the cap and their balance. Surfacing statusText instead would
+      // turn "you have 2 GiB of room left" into "Forbidden".
+      //
+      // Two body shapes, because the backend has two. Errors carrying a
+      // machine-readable code send { error: CODE, message }, and that `message`
+      // is written to be read by whoever is buying. The HttpError default sends
+      // { error: <the message> } with no `message` key at all.
+      //
+      // So `message` is taken at any status, and `error` only below 500. On a
+      // 5xx the plain shape is not a sentence about the request — it is a raw
+      // exception, because handleInternalErrorResult builds the body as
+      // `Failed to create intent: ${e.message}`. Passing that through puts
+      // `connect ECONNREFUSED 10.0.3.7:9944` under the Send button whenever the
+      // consensus WebSocket is down.
+      //
+      // Gating on the status alone would fail in the other direction. No 5xx
+      // this endpoint returns today carries a `message` — but the USDC quote
+      // path stacked on this branch adds one, a 503 carrying
+      // PRICE_ORACLE_UNAVAILABLE whose message is exactly what the user needs
+      // ("the rate is unavailable, try again" rather than "Service
+      // Unavailable"). Keying on which field is present rather than on the
+      // status is what makes that arrive correctly without a second change
+      // here. The status only decides whether the `error` fallback is safe.
+      const detail = await response
+        .json()
+        .then((body: { message?: string; error?: string }) =>
+          response.status < 500 ? (body?.message ?? body?.error) : body?.message,
+        )
+        .catch(() => undefined);
+      throw new Error(
+        detail ?? `Network response was not ok: ${response.statusText}`,
+      );
     }
 
     const intent = (await response.json()) as { id: string };
