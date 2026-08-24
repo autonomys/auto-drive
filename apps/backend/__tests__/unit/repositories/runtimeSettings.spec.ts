@@ -97,6 +97,73 @@ describe('Runtime settings repository', () => {
     expect(setting?.ageMs).toBeLessThan(5_000)
   })
 
+  it('reads several keys in one round trip, positionally', async () => {
+    // The composite gate reads three keys on every quote and every /features
+    // call. Positional rather than keyed, so a caller destructures in the order
+    // it asked and a missing row is a null in place rather than a shifted array.
+    const [manual, treasury, missing] = await runtimeSettingsRepository.getMany([
+      RuntimeSettingKey.UsdcManualGate,
+      RuntimeSettingKey.UsdcTreasury,
+      RuntimeSettingKey.UsdcOracle,
+    ])
+
+    expect(manual?.value).toEqual({ enabled: false })
+    expect(treasury?.value).toEqual(
+      expect.objectContaining({ paused: false }),
+    )
+    expect(missing).toBeNull()
+  })
+
+  it('carries the same age arithmetic through getMany', async () => {
+    const [one] = await runtimeSettingsRepository.getMany([
+      RuntimeSettingKey.UsdcManualGate,
+    ])
+    expect(one?.ageMs).toBeGreaterThanOrEqual(0)
+    expect(one?.ageMs).toBeLessThan(60_000)
+  })
+
+  it('returns nothing for an empty key list without querying', async () => {
+    expect(await runtimeSettingsRepository.getMany([])).toEqual([])
+  })
+
+  it('keeps an append-only trail of human changes', async () => {
+    await runtimeSettingsRepository.set(
+      RuntimeSettingKey.UsdcManualGate,
+      { enabled: true },
+      'admin-3',
+    )
+
+    const trail = await runtimeSettingsRepository.getAuditTrail(
+      RuntimeSettingKey.UsdcManualGate,
+    )
+
+    // `updated_by` on the setting says who has it set NOW; the question after an
+    // incident is who turned it off on Tuesday, and that answer must not be
+    // overwritten by the next flip.
+    expect(trail.length).toBeGreaterThanOrEqual(3)
+    expect(trail[0].updatedBy).toBe('admin-3')
+    expect(trail[0].value).toEqual({ enabled: true })
+    // Newest first, so the history reads the way an incident review does.
+    expect(trail[0].createdAt.getTime()).toBeGreaterThanOrEqual(
+      trail[1].createdAt.getTime(),
+    )
+  })
+
+  it('does not record machine writes', async () => {
+    await runtimeSettingsRepository.set(
+      RuntimeSettingKey.UsdcTreasury,
+      { balanceBaseUnits: '2000000', paused: false, addresses: [] },
+      null,
+    )
+
+    // 288 treasury polls a day would bury the handful of rows anyone reads.
+    expect(
+      await runtimeSettingsRepository.getAuditTrail(
+        RuntimeSettingKey.UsdcTreasury,
+      ),
+    ).toEqual([])
+  })
+
   it('ages a stale row in milliseconds', async () => {
     // Backdate the row rather than waiting: the fail-closed rule turns on this
     // number crossing a 15-minute threshold, and a test that sleeps for it is a

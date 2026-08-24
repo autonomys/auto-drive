@@ -12,7 +12,10 @@ import {
   UserRole,
   type User,
 } from '@auto-drive/models'
-import { UsdcPaymentsUseCases } from '../../../src/core/payments/usdc.js'
+import {
+  UsdcPaymentsUseCases,
+  _resetThresholds,
+} from '../../../src/core/payments/usdc.js'
 import {
   RuntimeSettingKey,
   runtimeSettingsRepository,
@@ -20,10 +23,8 @@ import {
 } from '../../../src/infrastructure/repositories/runtimeSettings.js'
 import { slackNotifier } from '../../../src/infrastructure/services/slack/index.js'
 import { priceOracle } from '../../../src/infrastructure/services/priceOracle/index.js'
-import { OracleUnavailableError } from '../../../src/infrastructure/services/priceOracle/types.js'
 import { config } from '../../../src/config.js'
 import { ForbiddenError } from '../../../src/errors/index.js'
-import { err, ok } from 'neverthrow'
 
 const makeUser = (role: UserRole = UserRole.User): User =>
   ({
@@ -59,17 +60,38 @@ describe('UsdcPaymentsUseCases', () => {
   const enabledByDefault = config.usdcPayments.enabledByDefault
 
   // Reads are routed per key: almost every case cares about one gate and needs
-  // the other to be out of the way.
+  // the others out of the way. Both accessors are stubbed because the composite
+  // reads all three keys in one round trip while the per-gate accessors (used by
+  // the status endpoint) read one at a time.
   const mockSettings = (
     settings: Partial<Record<string, RuntimeSetting<unknown> | null>>,
-  ) =>
-    jest
+  ) => {
+    const get = jest
       .spyOn(runtimeSettingsRepository, 'get')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .mockImplementation(async (key: string) => (settings[key] ?? null) as any)
+    jest
+      .spyOn(runtimeSettingsRepository, 'getMany')
+      .mockImplementation(async (keys: string[]) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        keys.map((key) => (settings[key] ?? null) as any),
+      )
+    return get
+  }
+
+  // A healthy oracle reading, so a case about the balance is not silently
+  // decided by the oracle conjunct behind it.
+  const HEALTHY_ORACLE = setting({
+    healthy: true,
+    reason: null,
+    servingStale: false,
+    usdPerAi3: '6400000000000000',
+    window: null,
+  })
 
   beforeEach(() => {
     jest.clearAllMocks()
+    _resetThresholds()
     // A complete Ethereum configuration: .env.test sets none of these, and
     // without them every case would stop at NOT_CONFIGURED.
     config.ethereum.rpcUrl = 'http://example.org'
@@ -83,6 +105,7 @@ describe('UsdcPaymentsUseCases', () => {
 
   afterEach(() => {
     jest.restoreAllMocks()
+    _resetThresholds()
     Object.assign(config.ethereum, ethereumDefaults)
     config.usdcPayments.enabledByDefault = enabledByDefault
   })
@@ -100,6 +123,7 @@ describe('UsdcPaymentsUseCases', () => {
           'admin-1',
         ),
         [RuntimeSettingKey.UsdcTreasury]: FRESH_OPEN_TREASURY,
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
       })
 
       expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
@@ -127,6 +151,7 @@ describe('UsdcPaymentsUseCases', () => {
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
         [RuntimeSettingKey.UsdcTreasury]: FRESH_OPEN_TREASURY,
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
       })
 
       expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
@@ -143,6 +168,7 @@ describe('UsdcPaymentsUseCases', () => {
           'admin-1',
         ),
         [RuntimeSettingKey.UsdcTreasury]: FRESH_OPEN_TREASURY,
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
       })
 
       expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
@@ -157,6 +183,7 @@ describe('UsdcPaymentsUseCases', () => {
       // one that will still be closed after the other is fixed.
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: false }),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
         [RuntimeSettingKey.UsdcTreasury]: setting({
           balanceBaseUnits: '9999000000',
           paused: true,
@@ -173,6 +200,7 @@ describe('UsdcPaymentsUseCases', () => {
     it('reports TREASURY_CAP when the poller has paused the gate', async () => {
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
         [RuntimeSettingKey.UsdcTreasury]: setting({
           balanceBaseUnits: '2014000000',
           paused: true,
@@ -193,6 +221,7 @@ describe('UsdcPaymentsUseCases', () => {
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
         [RuntimeSettingKey.UsdcTreasury]: null,
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
       })
 
       expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
@@ -204,6 +233,7 @@ describe('UsdcPaymentsUseCases', () => {
     it('fails closed when the last reading is older than the stale window', async () => {
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
         [RuntimeSettingKey.UsdcTreasury]: setting(
           { balanceBaseUnits: '1', paused: false, addresses: [] },
           config.usdcPayments.balanceMaxStaleMs + 1,
@@ -222,6 +252,7 @@ describe('UsdcPaymentsUseCases', () => {
     it('accepts a reading exactly on the stale boundary', async () => {
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
         [RuntimeSettingKey.UsdcTreasury]: setting(
           { balanceBaseUnits: '1', paused: false, addresses: [] },
           config.usdcPayments.balanceMaxStaleMs,
@@ -238,6 +269,7 @@ describe('UsdcPaymentsUseCases', () => {
       // USDC. The other means the worker cannot reach Ethereum.
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
         [RuntimeSettingKey.UsdcTreasury]: setting(
           { balanceBaseUnits: '9999000000', paused: true, addresses: [] },
           config.usdcPayments.balanceMaxStaleMs * 2,
@@ -258,6 +290,7 @@ describe('UsdcPaymentsUseCases', () => {
           enabled: 'yes',
         } as unknown as { enabled: boolean }),
         [RuntimeSettingKey.UsdcTreasury]: FRESH_OPEN_TREASURY,
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
       })
 
       expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
@@ -393,24 +426,6 @@ describe('UsdcPaymentsUseCases', () => {
   // ──────────────────────────────────────────────────────────────────────────
 
   describe('getStatus', () => {
-    beforeEach(() => {
-      jest.spyOn(priceOracle, 'getPrice').mockResolvedValue(
-        ok({
-          usdPerAi3: 6_400_000_000_000_000n,
-          asOf: new Date('2026-08-24T00:00:00Z'),
-          fromCache: false,
-          stale: false,
-        }),
-      )
-      jest.spyOn(priceOracle, 'getHealth').mockReturnValue({
-        lastSuccessAt: new Date('2026-08-24T00:00:00Z'),
-        lastFailureAt: null,
-        lastFailureReason: null,
-        window: null,
-        servingStale: false,
-      })
-    })
-
     it('refuses a non-admin', async () => {
       const result = await UsdcPaymentsUseCases.getStatus(plainUser)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
@@ -423,6 +438,7 @@ describe('UsdcPaymentsUseCases', () => {
           60_000,
           'admin-7',
         ),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
         [RuntimeSettingKey.UsdcTreasury]: setting(
           {
             balanceBaseUnits: '1500000000',
@@ -451,6 +467,7 @@ describe('UsdcPaymentsUseCases', () => {
     it('reports a negative headroom once the cap is exceeded', async () => {
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
         [RuntimeSettingKey.UsdcTreasury]: setting({
           balanceBaseUnits: '2014000000',
           paused: true,
@@ -469,6 +486,7 @@ describe('UsdcPaymentsUseCases', () => {
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
         [RuntimeSettingKey.UsdcTreasury]: null,
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
       })
 
       const status = (
@@ -488,41 +506,165 @@ describe('UsdcPaymentsUseCases', () => {
       ])
     })
 
-    it('reports the oracle as unhealthy with the guard that fired', async () => {
+    it('reports the oracle refusal the poller recorded', async () => {
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
         [RuntimeSettingKey.UsdcTreasury]: FRESH_OPEN_TREASURY,
+        [RuntimeSettingKey.UsdcOracle]: setting({
+          healthy: false,
+          reason: 'thin-liquidity',
+          servingStale: false,
+          usdPerAi3: null,
+          window: null,
+        }),
       })
-      jest
-        .spyOn(priceOracle, 'getPrice')
-        .mockResolvedValue(
-          err(new OracleUnavailableError('pool is empty', 'thin-liquidity')),
-        )
 
       const status = (
         await UsdcPaymentsUseCases.getStatus(admin)
       )._unsafeUnwrap()
 
       expect(status.oracle.healthy).toBe(false)
-      expect(status.oracle.currentFailureReason).toBe('thin-liquidity')
-      // And the composite stays OPEN: the oracle is a quote-time veto, not an
-      // availability gate. /features must not shut the path because one replica
-      // could not read the subgraph.
-      expect(status.availability).toEqual({ open: true })
+      expect(status.oracle.reason).toBe('thin-liquidity')
+      // And the composite is closed on it: a path whose every quote would 503
+      // must not be advertised as open.
+      expect(status.availability).toEqual({
+        open: false,
+        closedReason: UsdcClosedReason.ORACLE_UNAVAILABLE,
+      })
     })
 
-    it('forces a rate read so the health it reports was observed here', async () => {
+    it('reads no rate of its own', async () => {
       mockSettings({
         [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
         [RuntimeSettingKey.UsdcTreasury]: FRESH_OPEN_TREASURY,
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
       })
       const priceSpy = jest.spyOn(priceOracle, 'getPrice')
 
-      await UsdcPaymentsUseCases.getStatus(admin)
+      const status = (
+        await UsdcPaymentsUseCases.getStatus(admin)
+      )._unsafeUnwrap()
 
-      // Health is per-process in-memory state: a replica that has never quoted
-      // would otherwise report an empty record as though it were an observation.
-      expect(priceSpy).toHaveBeenCalledTimes(1)
+      // Every figure comes from the rows the gates are evaluated from, so the
+      // dashboard cannot disagree with the refusal a user just got — and an
+      // admin refreshing a page cannot spend on The Graph.
+      expect(priceSpy).not.toHaveBeenCalled()
+      expect(status.oracle.usdPerAi3).toBe('6400000000000000')
+    })
+
+    it('says the rate is unknown rather than broken when nothing has polled', async () => {
+      mockSettings({
+        [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcTreasury]: FRESH_OPEN_TREASURY,
+        [RuntimeSettingKey.UsdcOracle]: null,
+      })
+
+      const status = (
+        await UsdcPaymentsUseCases.getStatus(admin)
+      )._unsafeUnwrap()
+
+      expect(status.oracle.stale).toBe(true)
+      expect(status.oracle.healthy).toBe(false)
+      expect(status.oracle.reason).toBeNull()
+      expect(status.availability).toEqual({
+        open: false,
+        closedReason: UsdcClosedReason.ORACLE_UNAVAILABLE,
+      })
+    })
+
+    it('renders rather than 500s when the address configuration is unusable', async () => {
+      // The page an operator opens to find out why the path is shut must not be
+      // the page that breaks on the reason.
+      config.usdcPayments.treasuryAddresses = ['not-an-address']
+      mockSettings({
+        [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcTreasury]: null,
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
+      })
+
+      const status = (
+        await UsdcPaymentsUseCases.getStatus(admin)
+      )._unsafeUnwrap()
+
+      expect(status.treasury.addressError).toContain('USDC_TREASURY_ADDRESSES')
+      expect(status.treasury.addresses).toEqual([])
+      config.usdcPayments.treasuryAddresses = []
+    })
+  })
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Unreadable rows: the direction of the failure is the point
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('malformed snapshots', () => {
+    it('fails CLOSED on a treasury row with no `paused` field', async () => {
+      // A truthiness test on untyped jsonb would read this as "not paused" and
+      // OPEN the money gate — the one direction this module must never go. Rows
+      // are hand-editable during an incident and their shape changes across
+      // releases.
+      mockSettings({
+        [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
+        [RuntimeSettingKey.UsdcTreasury]: setting({
+          balanceBaseUnits: '1000000',
+        } as never),
+      })
+
+      expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
+        open: false,
+        closedReason: UsdcClosedReason.BALANCE_UNKNOWN,
+      })
+    })
+
+    it('fails closed on a non-numeric balance', async () => {
+      mockSettings({
+        [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
+        [RuntimeSettingKey.UsdcTreasury]: setting({
+          balanceBaseUnits: 'lots',
+          paused: false,
+          addresses: [],
+        } as never),
+      })
+
+      expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
+        open: false,
+        closedReason: UsdcClosedReason.BALANCE_UNKNOWN,
+      })
+    })
+
+    it('does not 500 the status endpoint on a malformed balance', async () => {
+      // The same bad row used to reach BigInt() and take the diagnostic page
+      // down with it.
+      mockSettings({
+        [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
+        [RuntimeSettingKey.UsdcTreasury]: setting({
+          balanceBaseUnits: 'lots',
+          paused: false,
+          addresses: [],
+        } as never),
+      })
+
+      const status = (
+        await UsdcPaymentsUseCases.getStatus(admin)
+      )._unsafeUnwrap()
+      expect(status.treasury.balanceBaseUnits).toBeNull()
+      expect(status.treasury.paused).toBe(true)
+      expect(status.treasury.stale).toBe(true)
+    })
+
+    it('fails closed on an unreadable oracle row', async () => {
+      mockSettings({
+        [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }),
+        [RuntimeSettingKey.UsdcTreasury]: FRESH_OPEN_TREASURY,
+        [RuntimeSettingKey.UsdcOracle]: setting({ rate: 'fine' } as never),
+      })
+
+      expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
+        open: false,
+        closedReason: UsdcClosedReason.ORACLE_UNAVAILABLE,
+      })
     })
   })
 
@@ -537,23 +679,55 @@ describe('UsdcPaymentsUseCases', () => {
       config.usdcPayments.treasuryAddresses = [...configuredDefaults]
     })
 
-    it('defaults to the receiver', () => {
+    it('watches the receiver when nothing else is configured', () => {
       config.usdcPayments.treasuryAddresses = []
       expect(UsdcPaymentsUseCases.treasuryAddresses()).toEqual([
         '0x1111111111111111111111111111111111111111',
       ])
     })
 
-    it('checksums and de-duplicates the configured list', () => {
-      // The same account written two ways must not have its balance counted
-      // twice against the cap.
+    it('always includes the receiver, even when a list is configured', () => {
+      // The failure this prevents: reading the variable the obvious way and
+      // setting it to the sweep destination alone would stop counting the
+      // address payments actually land in, so the cap would never bind.
       config.usdcPayments.treasuryAddresses = [
         '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-        '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
       ]
       expect(UsdcPaymentsUseCases.treasuryAddresses()).toEqual([
         '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+        '0x1111111111111111111111111111111111111111',
       ])
+    })
+
+    it('accepts an all-uppercase address', () => {
+      // viem's isAddress rejects this under its default strict:true, and a
+      // dropped address counts as a ZERO balance — so the cap would be measured
+      // over the rest and the treasury could hold arbitrarily more than
+      // configured. getAddress accepts every casing a valid address can take.
+      config.usdcPayments.treasuryAddresses = [
+        '0xA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48',
+      ]
+      expect(UsdcPaymentsUseCases.treasuryAddresses()).toContain(
+        '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+      )
+    })
+
+    it('de-duplicates the receiver written a second way', () => {
+      config.usdcPayments.treasuryAddresses = [
+        '0x1111111111111111111111111111111111111111',
+      ]
+      expect(UsdcPaymentsUseCases.treasuryAddresses()).toEqual([
+        '0x1111111111111111111111111111111111111111',
+      ])
+    })
+
+    it('throws on an unusable entry rather than dropping it', () => {
+      // Dropping it would shrink the sum silently. Throwing closes the gate,
+      // which is the safe direction and the loud one.
+      config.usdcPayments.treasuryAddresses = ['0xnope']
+      expect(() => UsdcPaymentsUseCases.treasuryAddresses()).toThrow(
+        'USDC_TREASURY_ADDRESSES',
+      )
     })
 
     it('is empty when nothing is configured and there is no receiver', () => {

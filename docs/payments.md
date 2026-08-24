@@ -380,6 +380,97 @@ The payment system requires the following environment variables:
 | `CREDITS_PRICE_MULTIPLIER`   | Multiplier applied to base transaction byte fee  |
 | `RPC_ENDPOINT`               | WebSocket endpoint for Autonomys consensus chain |
 
+USDC payments add their own variables. `apps/backend/.env.sample` carries the
+full commentary; the ones an operator reaches for are:
+
+| Variable | Description |
+| --- | --- |
+| `ETH_CHAIN_ENDPOINT` | Ethereum mainnet RPC (distinct from Auto-EVM above) |
+| `ETH_USDC_RECEIVER_ADDRESS` | AutoDriveUSDCReceiver — setting it is what makes a deployment accept USDC |
+| `USDC_TOKEN_ADDRESS` | The ERC20 the receiver was deployed against |
+| `ETH_CHAIN_CONFIRMATIONS` | Blocks required before a USDC payment is credited (default 6) |
+| `USDC_PAYMENTS_ENABLED` | Manual gate's value **until the first admin flip only** |
+| `USDC_TREASURY_PAUSE_THRESHOLD` | FX-exposure cap, in whole USDC (default 2000) |
+| `USDC_TREASURY_RESUME_THRESHOLD` | Where the cap reopens; defaults to the pause threshold |
+| `USDC_TREASURY_ADDRESSES` | Extra addresses summed against the cap; the receiver is always included |
+| `USDC_TREASURY_BALANCE_CHECK_INTERVAL_MS` | Gate refresh cadence (default 300000) |
+| `USDC_TREASURY_BALANCE_MAX_STALE_MS` | Beyond this with no successful refresh, the path fails closed (default 900000) |
+| `GRAPH_SUBGRAPH_URL` / `GRAPH_API_KEY` | The rate source; see the oracle section of `.env.sample` |
+
+## USDC payments: the gates and how to shut them
+
+USDC purchases are gated by four facts, all reported by
+`GET /payments/usdc/status` (admin only) and on the admin credits page:
+
+| Gate | Closes when | Reopens |
+| --- | --- | --- |
+| Configuration | `ETH_CHAIN_ENDPOINT`, `ETH_USDC_RECEIVER_ADDRESS` or `USDC_TOKEN_ADDRESS` is unset | Set all three and restart |
+| Manual switch | An admin turns it off | **Only an admin.** Nothing automatic reopens it |
+| Treasury cap | Un-converted USDC reaches `USDC_TREASURY_PAUSE_THRESHOLD` | By itself, once the balance falls below `USDC_TREASURY_RESUME_THRESHOLD` |
+| Price oracle | No trustworthy AI3/USD rate (see the oracle's own guards) | By itself, on the next poll that gets a rate |
+
+All four gate **creating** a USDC intent, and nothing else. A payment that has
+already arrived is always confirmed and always credited, and an intent quoted
+while the gates were open stays payable for the rest of its ten-minute lock.
+
+### Turning USDC payments off
+
+Normal path: the admin credits page, "Disable USDC". It takes effect on the next
+quote — no redeploy, no restart — and posts to the Slack alert channel with the
+name of whoever flipped it.
+
+If the dashboard or the frontend is unavailable:
+
+```bash
+curl -X POST https://<api-host>/payments/usdc/disable \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "X-Auth-Provider: $ADMIN_AUTH_PROVIDER"
+```
+
+If the API itself is unavailable, write the row directly — the gate is read from
+the database on every quote, so this is equivalent:
+
+```sql
+INSERT INTO runtime_settings (key, value, updated_by, updated_at)
+VALUES ('payments.usdc.manual_gate', '{"enabled": false}', '<your-public-id>', NOW())
+ON CONFLICT (key) DO UPDATE
+  SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW();
+```
+
+`USDC_PAYMENTS_ENABLED` is **not** the live switch. It is the value used only
+until the first admin flip; after that the stored row wins and the variable is
+inert. The status endpoint says which is in force (`manualGate.source` is
+`env_default` or `admin`), and `runtime_settings_audit` holds the history of who
+changed it.
+
+### Rejecting payments that are already in flight
+
+The backend gates cannot do this, by design. The hard stop is `pause()` on
+`AutoDriveUSDCReceiver`, called by the contract owner — it makes the receiver
+reject incoming transfers, so a user who has approved and is mid-transaction
+fails on chain rather than being credited.
+
+This is **manual escalation only**. It is deliberately not wired to the treasury
+cap or to the kill switch: an automatic `pause()` would strand users who have an
+approval in flight for a condition that clears itself in five minutes.
+
+### Treasury conversion
+
+USDC accumulates in the receiver and is converted to AI3 **by hand** (see the
+epic's treasury-ops step). The cap is what makes that safe: it bounds how much
+un-hedged USDC can ever be exposed to the AI3/USD rate moving between purchase
+and conversion.
+
+Watch `usdc_treasury` in Victoria (`balance_base_units`, `headroom_base_units`,
+`paused`, `stale`) rather than waiting for the auto-pause alert — the alert fires
+when the cap has already been reached. A `stale` series, or one that goes flat,
+means the payment worker has stopped refreshing the gates and USDC purchases are
+closed.
+
+Sweeping to an address outside `USDC_TREASURY_ADDRESSES` reopens the gate, which
+is only correct if the sweep means conversion is imminent. To keep swept but
+unconverted USDC counted against the cap, add the destination to that variable.
+
 ## Security Considerations
 
 1. **Intent Ownership**: Intents are tied to the authenticated user and cannot be accessed by others

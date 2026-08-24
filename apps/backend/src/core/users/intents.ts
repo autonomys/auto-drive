@@ -421,7 +421,9 @@ const createIntent = async (
   if (paymentMethod === PaymentMethod.USDC_ETH) {
     const availability = await UsdcPaymentsUseCases.getAvailability()
     if (!availability.open) {
-      const reason = availability.closedReason!
+      // No non-null assertion: UsdcAvailability is a discriminated union, so a
+      // closed result carries its reason by construction.
+      const reason = availability.closedReason
       logger.info('Rejecting USDC intent creation — the path is closed', {
         userPublicId: executor.publicId,
         reason,

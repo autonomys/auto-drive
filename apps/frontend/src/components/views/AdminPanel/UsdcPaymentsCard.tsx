@@ -1,8 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@auto-drive/ui';
 import {
+  formatUsdcBaseUnits,
+  USD_RATE_SCALE,
   UsdcClosedReason,
   UsdcManualGateSource,
   type UsdcPaymentsStatus,
@@ -11,16 +14,20 @@ import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
 import { useNetwork } from '../../../contexts/network';
 import { formatDate } from '../../../utils/time';
 
-// USDC base units (6 decimals) as a figure a human reads under pressure.
-// Truncated rather than rounded, so a displayed balance is never above the one
-// actually held.
-const formatUsdc = (baseUnits: string | null): string => {
-  if (baseUnits === null) return '—';
-  const negative = baseUnits.startsWith('-');
-  const digits = (negative ? baseUnits.slice(1) : baseUnits).padStart(7, '0');
-  const whole = digits.slice(0, -6).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  const cents = digits.slice(-6, -4);
-  return `${negative ? '-' : ''}${whole}.${cents}`;
+// One formatter, shared with the backend's alerts through @auto-drive/models:
+// two renderings of the same money figure are two things that must agree.
+const usdc = (baseUnits: string | null): string =>
+  baseUnits === null ? '—' : formatUsdcBaseUnits(baseUnits);
+
+// The oracle's rate is scaled by 1e18. Four decimals, because AI3 trades in
+// fractions of a cent and the figure exists to answer "is this sane".
+const usdPerAi3 = (scaled: string): string => {
+  // BigInt(...) rather than a bigint literal: this app targets below ES2020.
+  const tenThousand = BigInt(10000);
+  const value = BigInt(scaled);
+  const whole = value / USD_RATE_SCALE;
+  const fraction = ((value % USD_RATE_SCALE) * tenThousand) / USD_RATE_SCALE;
+  return `$${whole}.${fraction.toString().padStart(4, '0')}`;
 };
 
 const formatAge = (ageMs: number | null): string => {
@@ -33,19 +40,13 @@ const formatAge = (ageMs: number | null): string => {
 };
 
 // Every gate reads the same three ways, so they render the same three ways.
-// "Why is the USDC path shut" should be answerable from one glance, which is the
-// whole reason all three are shown even when only one is closed.
+// "Why is the USDC path shut" should be answerable at a glance, which is the
+// whole reason all of them are shown even when only one is closed.
 type GateTone = 'open' | 'closed' | 'unknown';
 
 const TONE = {
-  open: {
-    Icon: CheckCircle2,
-    className: 'text-green-600 dark:text-green-400',
-  },
-  closed: {
-    Icon: XCircle,
-    className: 'text-red-600 dark:text-red-400',
-  },
+  open: { Icon: CheckCircle2, className: 'text-green-600 dark:text-green-400' },
+  closed: { Icon: XCircle, className: 'text-red-600 dark:text-red-400' },
   unknown: {
     Icon: AlertTriangle,
     className: 'text-amber-600 dark:text-amber-400',
@@ -85,21 +86,24 @@ const CLOSED_REASON_LABEL: Record<UsdcClosedReason, string> = {
   [UsdcClosedReason.MANUAL_OFF]: 'switched off by an admin',
   [UsdcClosedReason.TREASURY_CAP]: 'treasury cap reached',
   [UsdcClosedReason.BALANCE_UNKNOWN]: 'treasury balance unknown',
+  [UsdcClosedReason.ORACLE_UNAVAILABLE]: 'no AI3/USD rate',
 };
 
 /**
  * The state of the USDC payment path, and the switch that closes it.
  *
- * Shows all three gates rather than a single red dot: a closed payment path must
- * never be a mystery, and "auto-paused: 2,014.00 USDC held, cap 2,000.00" is a
- * sentence an operator can act on.
+ * Shows every gate rather than a single red dot: a closed payment path must never
+ * be a mystery, and "auto-paused: 2,014.00 USDC held, cap 2,000.00" is a sentence
+ * an operator can act on.
  *
- * The manual switch latches — nothing automatic reopens it — so the button says
- * what it will do, not what the state is.
+ * Enabling asks for confirmation and disabling does not — one click reopens the
+ * money path, and the asymmetry is deliberate: an incident control must never be
+ * slower than the incident.
  */
 export const UsdcPaymentsCard = () => {
   const { api } = useNetwork();
   const queryClient = useQueryClient();
+  const [confirmingEnable, setConfirmingEnable] = useState(false);
 
   const {
     data: status,
@@ -109,19 +113,21 @@ export const UsdcPaymentsCard = () => {
   } = useQuery<UsdcPaymentsStatus>({
     queryKey: ['adminUsdcPaymentsStatus'],
     queryFn: () => api.getUsdcPaymentsStatus(),
-    // Short: the balance gate moves on its own, and a stale reading of a kill
-    // switch is the one thing this card must not show.
-    staleTime: 15_000,
-    refetchInterval: 30_000,
+    // Aligned with the backend's own rate cache (ORACLE_CACHE_TTL_MS, 60s):
+    // polling faster only re-renders the same answer.
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 
-  const { mutate: setEnabled, isPending } = useMutation<
-    unknown,
-    Error,
-    boolean
-  >({
+  const {
+    mutate: setEnabled,
+    isPending,
+    error: mutationError,
+    reset: resetMutation,
+  } = useMutation<unknown, Error, boolean>({
     mutationFn: (enabled: boolean) => api.setUsdcPayments(enabled),
     onSuccess: () => {
+      setConfirmingEnable(false);
       void queryClient.invalidateQueries({
         queryKey: ['adminUsdcPaymentsStatus'],
       });
@@ -148,6 +154,19 @@ export const UsdcPaymentsCard = () => {
 
   const { availability, configured, manualGate, treasury, oracle } = status;
 
+  const onToggle = () => {
+    resetMutation();
+    if (manualGate.enabled) {
+      setEnabled(false);
+      return;
+    }
+    if (!confirmingEnable) {
+      setConfirmingEnable(true);
+      return;
+    }
+    setEnabled(true);
+  };
+
   return (
     <div className='rounded-lg border border-border bg-card p-4'>
       <div className='flex items-start justify-between gap-4'>
@@ -165,11 +184,7 @@ export const UsdcPaymentsCard = () => {
             >
               {availability.open
                 ? 'accepting'
-                : `closed — ${
-                    availability.closedReason
-                      ? CLOSED_REASON_LABEL[availability.closedReason]
-                      : 'unknown reason'
-                  }`}
+                : `closed — ${CLOSED_REASON_LABEL[availability.closedReason]}`}
             </span>
             {isFetching && (
               <RefreshCw className='h-3 w-3 animate-spin text-muted-foreground' />
@@ -180,13 +195,36 @@ export const UsdcPaymentsCard = () => {
             and any payment that arrives is still credited.
           </p>
         </div>
-        <Button
-          variant={manualGate.enabled ? 'destructive' : 'primary'}
-          disabled={isPending || !configured}
-          onClick={() => setEnabled(!manualGate.enabled)}
-        >
-          {manualGate.enabled ? 'Disable USDC' : 'Enable USDC'}
-        </Button>
+        <div className='flex flex-col items-end gap-1'>
+          <Button
+            variant={manualGate.enabled ? 'destructive' : 'primary'}
+            disabled={isPending || !configured}
+            onClick={onToggle}
+          >
+            {isPending
+              ? 'Saving…'
+              : manualGate.enabled
+                ? 'Disable USDC'
+                : confirmingEnable
+                  ? 'Confirm enable'
+                  : 'Enable USDC'}
+          </Button>
+          {confirmingEnable && !manualGate.enabled && !isPending && (
+            <button
+              className='text-xs text-muted-foreground underline'
+              onClick={() => setConfirmingEnable(false)}
+            >
+              cancel
+            </button>
+          )}
+          {/* A kill switch that fails quietly is worse than no kill switch: the
+              admin walks away believing the path is shut. */}
+          {mutationError && (
+            <p className='max-w-[16rem] text-right text-xs text-red-600 dark:text-red-400'>
+              Change failed — the gate is unchanged. {mutationError.message}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className='mt-3'>
@@ -210,61 +248,62 @@ export const UsdcPaymentsCard = () => {
           label='Treasury cap'
           tone={treasury.stale ? 'unknown' : treasury.paused ? 'closed' : 'open'}
           headline={
-            treasury.stale
-              ? 'Balance unknown — failing closed'
-              : treasury.paused
-                ? `Auto-paused: ${formatUsdc(
-                    treasury.balanceBaseUnits,
-                  )} USDC held, cap ${formatUsdc(
-                    treasury.pauseThresholdBaseUnits,
-                  )}`
-                : `${formatUsdc(
-                    treasury.balanceBaseUnits,
-                  )} USDC held, ${formatUsdc(
-                    treasury.headroomBaseUnits,
-                  )} of headroom`
+            treasury.addressError
+              ? 'Address configuration unusable — failing closed'
+              : treasury.stale
+                ? 'Balance unknown — failing closed'
+                : treasury.paused
+                  ? `Auto-paused: ${usdc(
+                      treasury.balanceBaseUnits,
+                    )} USDC held, cap ${usdc(treasury.pauseThresholdBaseUnits)}`
+                  : `${usdc(treasury.balanceBaseUnits)} USDC held, ${usdc(
+                      treasury.headroomBaseUnits,
+                    )} of headroom`
           }
           detail={
-            treasury.stale
-              ? `Last read ${formatAge(treasury.ageMs)}${
-                  treasury.checkedAt ? '' : ' — nothing has polled yet'
-                }. Checked every ${Math.round(
-                  treasury.checkIntervalMs / 60_000,
-                )} min; unknown for more than ${Math.round(
-                  treasury.maxStaleMs / 60_000,
-                )} min refuses new intents. Check the payment worker.`
-              : `Read ${formatAge(treasury.ageMs)}. Resumes below ${formatUsdc(
-                  treasury.resumeThresholdBaseUnits,
-                )}. Watching ${treasury.addresses.length} address${
-                  treasury.addresses.length === 1 ? '' : 'es'
-                }.`
+            treasury.addressError
+              ? treasury.addressError
+              : treasury.stale
+                ? `Last read ${formatAge(treasury.ageMs)}${
+                    treasury.checkedAt ? '' : ' — nothing has polled yet'
+                  }. Refreshed every ${Math.round(
+                    treasury.checkIntervalMs / 60_000,
+                  )} min; unknown for more than ${Math.round(
+                    treasury.maxStaleMs / 60_000,
+                  )} min refuses new intents. Check the payment worker.`
+                : `Read ${formatAge(treasury.ageMs)}. Resumes below ${usdc(
+                    treasury.resumeThresholdBaseUnits,
+                  )}. Watching ${treasury.addresses.length} address${
+                    treasury.addresses.length === 1 ? '' : 'es'
+                  }.`
           }
         />
 
         <GateRow
           label='Price oracle'
-          tone={oracle.healthy ? (oracle.servingStale ? 'unknown' : 'open') : 'closed'}
+          tone={oracle.stale ? 'unknown' : oracle.healthy ? 'open' : 'closed'}
           headline={
-            oracle.healthy
-              ? oracle.servingStale
-                ? 'Serving the last good rate'
-                : 'Quoting'
-              : `Refusing to quote — ${oracle.currentFailureReason ?? 'unknown'}`
+            oracle.stale
+              ? 'Rate unknown — failing closed'
+              : oracle.healthy
+                ? `Quoting at ${
+                    oracle.usdPerAi3 ? usdPerAi3(oracle.usdPerAi3) : '—'
+                  } per AI3${oracle.servingStale ? ' (last good rate)' : ''}`
+                : `Refusing to quote — ${oracle.reason ?? 'unknown'}`
           }
           detail={
             oracle.window
               ? `${oracle.window.sampleCount} swaps (${oracle.window.buyCount} buy / ` +
                 `${oracle.window.sellCount} sell), ` +
-                `${formatUsdc(oracle.window.oneSidedVolumeUsdc)} USDC one-sided ` +
-                `volume, pool holds ${formatUsdc(oracle.window.poolUsdcDepth)} ` +
-                `USDC. Newest fill ${formatDate(oracle.window.newestSwapAt)}.`
-              : oracle.lastFailureReason
-                ? `Last failure: ${oracle.lastFailureReason}${
-                    oracle.lastFailureAt
-                      ? ` at ${formatDate(oracle.lastFailureAt)}`
-                      : ''
-                  }. No successful read yet.`
-                : 'No rate read yet.'
+                `${usdc(oracle.window.oneSidedVolumeUsdc)} USDC one-sided volume, ` +
+                `pool holds ${usdc(oracle.window.poolUsdcDepth)} USDC. Newest ` +
+                `fill ${formatDate(
+                  oracle.window.newestSwapAt,
+                )}. Read ${formatAge(oracle.ageMs)}.`
+              : oracle.stale
+                ? 'The rate is only re-read while the manual switch is on, so ' +
+                  'this stays unknown for up to one refresh after enabling.'
+                : `Read ${formatAge(oracle.ageMs)}. No usable swap window.`
           }
         />
 

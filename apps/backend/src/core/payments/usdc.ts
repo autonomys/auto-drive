@@ -1,5 +1,7 @@
 import { err, ok, Result } from 'neverthrow'
 import {
+  formatUsdcBaseUnits,
+  USDC_DECIMALS,
   User,
   UsdcAvailability,
   UsdcClosedReason,
@@ -14,28 +16,26 @@ import {
   RuntimeSettingKey,
   runtimeSettingsRepository,
 } from '../../infrastructure/repositories/runtimeSettings.js'
-import { priceOracle } from '../../infrastructure/services/priceOracle/index.js'
 // A pure string→bigint parser that happens to live with the oracle, which is
 // the only other place that has to read a decimal out of the environment
 // without going through a float. Imported rather than restated: two parsers for
 // one job on a money path is two things that must agree.
 import { parseDecimalToScaledBigint } from '../../infrastructure/services/priceOracle/quote.js'
 import { slackNotifier } from '../../infrastructure/services/slack/index.js'
-import { formatUsdcBaseUnits, USDC_DECIMALS } from '../../shared/utils/index.js'
 import { isAdmin } from '../featureFlags/index.js'
 
 const logger = createLogger('core:payments:usdc')
 
 /**
- * The USDC payment gates: an admin kill switch and a treasury-exposure cap.
+ * The USDC payment gates: an admin kill switch, a treasury-exposure cap, and the
+ * price oracle's health.
  *
- * Both are DB-backed rather than in-memory, and that is the load-bearing
- * decision in this module. The process that POLLS the treasury balance is the
- * payment worker (`paymentManager.start()` runs in exactly one process), and the
- * process that QUOTES is a frontend API replica, which never calls it. An
- * in-memory gate would therefore be read as "unknown" by every process that
- * matters, fail closed, and USDC would never sell in the topology production
- * actually runs.
+ * All three are read from the database rather than from memory, and that is the
+ * load-bearing decision in this module. The process that OBSERVES (the payment
+ * worker: `paymentManager.start()` runs in exactly one process) is never the
+ * process that QUOTES (a frontend API replica, which never calls it). In-memory
+ * gates would therefore be read as "unknown" by every process that matters, fail
+ * closed, and USDC would never sell in the topology production actually runs.
  *
  * So: one writer, N readers, one durable answer — and `GET /payments/usdc/status`
  * gives the same answer whichever process serves it.
@@ -50,8 +50,7 @@ const logger = createLogger('core:payments:usdc')
 
 // Thresholds are configured in whole USDC because that is how a human reasons
 // about an exposure cap, and compared in base units because that is what
-// `balanceOf` returns. Converted once, here, so a malformed value fails at
-// import naming the variable rather than as a BigInt(NaN) somewhere in a poll.
+// `balanceOf` returns.
 const parseUsdc = (raw: string, name: string): bigint => {
   try {
     return parseDecimalToScaledBigint(raw, USDC_DECIMALS)
@@ -63,60 +62,118 @@ const parseUsdc = (raw: string, name: string): bigint => {
   }
 }
 
-export const pauseThresholdBaseUnits = parseUsdc(
-  config.usdcPayments.pauseThresholdUsdc,
-  'USDC_TREASURY_PAUSE_THRESHOLD',
-)
+export type Thresholds = { pause: bigint; resume: bigint }
 
-export const resumeThresholdBaseUnits =
-  config.usdcPayments.resumeThresholdUsdc === undefined
-    ? pauseThresholdBaseUnits
-    : parseUsdc(
-        config.usdcPayments.resumeThresholdUsdc,
-        'USDC_TREASURY_RESUME_THRESHOLD',
-      )
+let thresholds: Thresholds | null = null
 
-// Checked against each other because getting them the wrong way round produces
-// a gate that oscillates rather than one that refuses: above `resume` it pauses,
-// below `pause` it resumes, and a balance between the two does both on
-// alternating polls — a flapping payment path and an alert every five minutes.
-if (resumeThresholdBaseUnits > pauseThresholdBaseUnits) {
-  throw new Error(
-    `USDC_TREASURY_RESUME_THRESHOLD (${config.usdcPayments.resumeThresholdUsdc}) ` +
-      'must be <= USDC_TREASURY_PAUSE_THRESHOLD ' +
-      `(${config.usdcPayments.pauseThresholdUsdc}) — a resume threshold above ` +
-      'the pause threshold makes the gate flap on every poll',
+/**
+ * The cap and the resume line, in base units, parsed once on first use.
+ *
+ * Deliberately NOT parsed at import. This module is reachable from every backend
+ * entrypoint — the download API and the publish worker pull it in through
+ * `core/users/intents.ts` and through the feature-flag overlay — so an
+ * import-time throw would turn a typo in a payments-only variable into a crash
+ * loop for downloads and on-chain publishing. Exactly the failure #816 had to fix
+ * in `paymentManager/chains.ts`, for the same reason.
+ *
+ * The fail-fast this gives up is bought back where it belongs: the treasury job's
+ * `start()` calls this eagerly, so the process that owns payments still refuses
+ * to run on a configuration it cannot parse.
+ */
+export const getThresholds = (): Thresholds => {
+  if (thresholds) {
+    return thresholds
+  }
+
+  const pause = parseUsdc(
+    config.usdcPayments.pauseThresholdUsdc,
+    'USDC_TREASURY_PAUSE_THRESHOLD',
   )
+  const resume =
+    config.usdcPayments.resumeThresholdUsdc === undefined
+      ? pause
+      : parseUsdc(
+          config.usdcPayments.resumeThresholdUsdc,
+          'USDC_TREASURY_RESUME_THRESHOLD',
+        )
+
+  // Checked against each other because getting them the wrong way round
+  // produces a gate that oscillates rather than one that refuses: above
+  // `resume` it pauses, below `pause` it resumes, and a balance between the two
+  // does both on alternating polls — a flapping payment path and an alert every
+  // five minutes.
+  if (resume > pause) {
+    throw new Error(
+      `USDC_TREASURY_RESUME_THRESHOLD (${config.usdcPayments.resumeThresholdUsdc}) ` +
+        'must be <= USDC_TREASURY_PAUSE_THRESHOLD ' +
+        `(${config.usdcPayments.pauseThresholdUsdc}) — a resume threshold above ` +
+        'the pause threshold makes the gate flap on every poll',
+    )
+  }
+
+  thresholds = { pause, resume }
+  return thresholds
+}
+
+// Tests only: drops the memo so a case can re-parse under different thresholds.
+export const _resetThresholds = () => {
+  thresholds = null
 }
 
 /**
  * The addresses whose USDC balances are summed against the cap.
  *
- * Defaults to the receiver alone. Resolved here rather than in `config` because
- * the default is another config value, and the config object cannot read itself
- * while it is being built.
+ * The receiver is ALWAYS included, unioned with whatever is configured. It is
+ * where payments land, so a configuration that omitted it would measure the cap
+ * over addresses the money never reaches and the gate would never bind —
+ * reachable by reading `USDC_TREASURY_ADDRESSES` the obvious way and setting it
+ * to the sweep destination alone.
  *
- * Checksummed so a lowercase address pasted out of a block explorer names the
- * same account as the receiver does, and de-duplicated so listing the receiver
- * explicitly alongside the default cannot count its balance twice.
+ * Resolved here rather than in `config` because the receiver is another config
+ * value, and the config object cannot read itself while it is being built.
+ *
+ * Normalised through `getAddress`, which accepts any casing a valid address can
+ * be written in — including all-uppercase, which viem's `isAddress` rejects under
+ * its default `strict: true`. That distinction matters here: a dropped address
+ * counts as a ZERO balance, so silently discarding one measures the cap over the
+ * rest and lets the treasury hold arbitrarily more un-hedged USDC than
+ * configured. An unusable entry therefore THROWS, and the poller turns that into
+ * a closed gate rather than a smaller sum.
+ *
+ * @throws if any configured entry is not a usable address.
  */
 export const treasuryAddresses = (): string[] => {
   const configured = config.usdcPayments.treasuryAddresses
-  const addresses =
-    configured.length > 0
-      ? configured
-      : config.ethereum.usdcReceiverAddress
-        ? [config.ethereum.usdcReceiverAddress]
-        : []
+  const receiver = config.ethereum.usdcReceiverAddress
 
-  return [...new Set(addresses.map((address) => getAddress(address)))]
+  const normalised = [...configured, ...(receiver ? [receiver] : [])].map(
+    (address) => {
+      try {
+        return getAddress(address.trim())
+      } catch {
+        throw new Error(
+          `Invalid address in USDC_TREASURY_ADDRESSES: "${address}". Every ` +
+            'entry must be a usable Ethereum address — an unreadable one would ' +
+            'count as a zero balance and let the treasury exceed its cap.',
+        )
+      }
+    },
+  )
+
+  // De-duplicated so listing the receiver explicitly alongside the default
+  // cannot count its balance twice.
+  return [...new Set(normalised)]
 }
 
-// What the poller writes. `paused` is stored rather than derived from the
-// balance on read because the resume threshold makes the gate hysteretic: a
-// balance between resume and pause keeps whatever the gate already was, which
-// is not a function of the balance alone. The poller is the single writer and so
-// the only thing that can see the previous state.
+/**
+ * What the poller writes about the treasury.
+ *
+ * `paused` is stored rather than derived from the balance on read because the
+ * resume threshold makes the gate hysteretic: a balance between resume and pause
+ * keeps whatever the gate already was, which is not a function of the balance
+ * alone. The poller is the single writer and so the only thing that can see the
+ * previous state.
+ */
 export type TreasurySnapshot = {
   balanceBaseUnits: string
   paused: boolean
@@ -126,6 +183,36 @@ export type TreasurySnapshot = {
   addresses: string[]
 }
 
+/**
+ * What the poller writes about the oracle.
+ *
+ * The oracle is the third gate, and its health cannot be read where it is
+ * needed: `priceOracle.getHealth()` is per-process in-memory state, so an API
+ * replica that has never quoted knows nothing about it. Persisting it from the
+ * one process that polls is the same trick the balance gate uses, and it is what
+ * lets `/features` stop advertising a path on which every quote 503s.
+ *
+ * Amounts are strings because this is jsonb and they are bigints.
+ */
+export type OracleSnapshot = {
+  healthy: boolean
+  // OracleUnavailableReason when unhealthy; null when the rate read succeeded.
+  reason: string | null
+  // Serving a last-good rate rather than a fresh one. Healthy, but worth showing.
+  servingStale: boolean
+  usdPerAi3: string | null
+  window: {
+    sampleCount: number
+    buyCount: number
+    sellCount: number
+    volumeUsdc: string
+    oneSidedVolumeUsdc: string
+    poolUsdcDepth: string
+    newestSwapAt: string
+    oldestSwapAt: string
+  } | null
+}
+
 type ManualGateSetting = { enabled: boolean }
 
 export type ManualGateState = {
@@ -133,6 +220,39 @@ export type ManualGateState = {
   source: UsdcManualGateSource
   updatedBy: string | null
   updatedAt: Date | null
+}
+
+/**
+ * A stored snapshot is untyped JSON, so it is validated before it is believed.
+ *
+ * Not defensive habit — the direction of the failure is the point. A row missing
+ * `paused` would read as "not paused" under a truthiness test and OPEN the money
+ * gate, which is the one direction this module must never go. Rows are
+ * hand-editable in an incident and their shape will change across releases, so
+ * anything unrecognised is treated as no reading at all: BALANCE_UNKNOWN, which
+ * fails closed.
+ */
+const DECIMAL_DIGITS = /^\d+$/
+
+const isTreasurySnapshot = (value: unknown): value is TreasurySnapshot => {
+  const snapshot = value as TreasurySnapshot | null
+  return Boolean(
+    snapshot &&
+      typeof snapshot === 'object' &&
+      typeof snapshot.paused === 'boolean' &&
+      typeof snapshot.balanceBaseUnits === 'string' &&
+      DECIMAL_DIGITS.test(snapshot.balanceBaseUnits) &&
+      Array.isArray(snapshot.addresses),
+  )
+}
+
+const isOracleSnapshot = (value: unknown): value is OracleSnapshot => {
+  const snapshot = value as OracleSnapshot | null
+  return Boolean(
+    snapshot &&
+      typeof snapshot === 'object' &&
+      typeof snapshot.healthy === 'boolean',
+  )
 }
 
 /**
@@ -171,9 +291,16 @@ const getManualGate = async (): Promise<ManualGateState> => {
 
 export type TreasuryState = {
   snapshot: TreasurySnapshot | null
-  // Missing, or older than the max-stale window. Both mean the same thing to a
-  // caller — the balance is not known well enough to sell against — but the
-  // dashboard tells them apart via `checkedAt`.
+  // Missing, unreadable, or older than the max-stale window. All three mean the
+  // same thing to a caller — the balance is not known well enough to sell
+  // against — but the dashboard tells them apart via `checkedAt`.
+  stale: boolean
+  checkedAt: Date | null
+  ageMs: number | null
+}
+
+export type OracleState = {
+  snapshot: OracleSnapshot | null
   stale: boolean
   checkedAt: Date | null
   ageMs: number | null
@@ -187,13 +314,27 @@ export type TreasuryState = {
  * closed. Had a failure refreshed the timestamp, "unknown" would be unreachable
  * and the fail-closed rule would be dead code.
  */
-const getTreasuryState = async (): Promise<TreasuryState> => {
-  const setting = await runtimeSettingsRepository.get<TreasurySnapshot>(
-    RuntimeSettingKey.UsdcTreasury,
-  )
-
+const readTreasury = (
+  setting: Awaited<
+    ReturnType<typeof runtimeSettingsRepository.get<unknown>>
+  > | null,
+): TreasuryState => {
   if (!setting) {
     return { snapshot: null, stale: true, checkedAt: null, ageMs: null }
+  }
+
+  if (!isTreasurySnapshot(setting.value)) {
+    logger.error(
+      'Unreadable treasury snapshot in runtime_settings — treating the balance ' +
+        'as unknown, which closes the USDC path',
+      { value: setting.value },
+    )
+    return {
+      snapshot: null,
+      stale: true,
+      checkedAt: setting.updatedAt,
+      ageMs: setting.ageMs,
+    }
   }
 
   return {
@@ -204,46 +345,112 @@ const getTreasuryState = async (): Promise<TreasuryState> => {
   }
 }
 
+const readOracle = (
+  setting: Awaited<
+    ReturnType<typeof runtimeSettingsRepository.get<unknown>>
+  > | null,
+): OracleState => {
+  if (!setting) {
+    return { snapshot: null, stale: true, checkedAt: null, ageMs: null }
+  }
+
+  if (!isOracleSnapshot(setting.value)) {
+    logger.error(
+      'Unreadable oracle snapshot in runtime_settings — treating the rate as ' +
+        'unavailable, which closes the USDC path',
+      { value: setting.value },
+    )
+    return {
+      snapshot: null,
+      stale: true,
+      checkedAt: setting.updatedAt,
+      ageMs: setting.ageMs,
+    }
+  }
+
+  return {
+    snapshot: setting.value,
+    // Same window as the balance: both rows are written by the same poll, so one
+    // clock and one staleness rule covers them.
+    stale: setting.ageMs > config.usdcPayments.balanceMaxStaleMs,
+    checkedAt: setting.updatedAt,
+    ageMs: setting.ageMs,
+  }
+}
+
+const getTreasuryState = async (): Promise<TreasuryState> =>
+  readTreasury(
+    await runtimeSettingsRepository.get<unknown>(RuntimeSettingKey.UsdcTreasury),
+  )
+
+const getOracleState = async (): Promise<OracleState> =>
+  readOracle(
+    await runtimeSettingsRepository.get<unknown>(RuntimeSettingKey.UsdcOracle),
+  )
+
 /**
  * Whether this deployment is selling storage for USDC right now.
  *
- * The one implementation of the composite. `createIntent` and `/features` both
- * call it, because two evaluations of the same question that can disagree is a
- * UI offering a path the backend then refuses — the failure the feature-flag
- * module already warns about, on the path where it costs money.
+ * The one implementation of the composite, and the whole of the epic's
+ * invariant:
+ *
+ *   accepting USDC ⇔ configured ∧ manualEnabled ∧ ¬balancePaused ∧ oracleHealthy
+ *
+ * `createIntent` and `/features` both call it, because two evaluations of the
+ * same question that can disagree is a UI offering a path the backend then
+ * refuses — the failure the feature-flag module already warns about, on the path
+ * where it costs money.
  *
  * Reasons are checked cheapest and most structural first, and the first that
- * applies is the one reported.
+ * applies is the one reported: an operator's next action differs for each, and
+ * the earlier ones survive fixing the later ones.
  *
- * The oracle is deliberately absent. Its health is per-process in-memory state,
- * so a replica that has never quoted cannot report on it honestly, and making
- * the public /features endpoint consult it would put a per-query-billed subgraph
- * call behind an unauthenticated route. It stays a refusal at quote time, inside
- * createIntent, which is where the rate is actually needed.
+ * The oracle conjunct is read from the poller's snapshot rather than from
+ * `priceOracle.getHealth()`, which is per-process memory: a replica that has
+ * never quoted would otherwise report health it has not observed. It is still
+ * enforced independently at quote time, where the rate is actually needed — this
+ * gate exists so the path is not ADVERTISED while every quote would 503.
  */
 const getAvailability = async (): Promise<UsdcAvailability> => {
   if (!isUsdcConfigured()) {
     return { open: false, closedReason: UsdcClosedReason.NOT_CONFIGURED }
   }
 
-  const [manualGate, treasury] = await Promise.all([
-    getManualGate(),
-    getTreasuryState(),
+  const [manual, treasury, oracle] = await runtimeSettingsRepository.getMany([
+    RuntimeSettingKey.UsdcManualGate,
+    RuntimeSettingKey.UsdcTreasury,
+    RuntimeSettingKey.UsdcOracle,
   ])
 
-  if (!manualGate.enabled) {
+  const manualEnabled = manual
+    ? (manual.value as ManualGateSetting | null)?.enabled === true
+    : config.usdcPayments.enabledByDefault
+
+  if (!manualEnabled) {
     return { open: false, closedReason: UsdcClosedReason.MANUAL_OFF }
   }
 
   // Unknown before paused: the two produce the same refusal but a very
   // different operator response — one is "convert some USDC", the other is
   // "the payment worker cannot reach Ethereum".
-  if (treasury.stale || !treasury.snapshot) {
+  const treasuryState = readTreasury(treasury)
+  if (treasuryState.stale || !treasuryState.snapshot) {
     return { open: false, closedReason: UsdcClosedReason.BALANCE_UNKNOWN }
   }
 
-  if (treasury.snapshot.paused) {
+  if (treasuryState.snapshot.paused) {
     return { open: false, closedReason: UsdcClosedReason.TREASURY_CAP }
+  }
+
+  // Last, because it is the gate most likely to clear on its own and the one an
+  // operator can do least about.
+  const oracleState = readOracle(oracle)
+  if (
+    oracleState.stale ||
+    !oracleState.snapshot ||
+    !oracleState.snapshot.healthy
+  ) {
+    return { open: false, closedReason: UsdcClosedReason.ORACLE_UNAVAILABLE }
   }
 
   return { open: true }
@@ -253,9 +460,7 @@ const getAvailability = async (): Promise<UsdcAvailability> => {
  * Set the manual gate, returning whether that changed anything.
  *
  * Idempotent, and only a real transition alerts: a dashboard toggle that posts
- * to Slack on every click is a dashboard that gets its channel muted. The
- * previous value comes back from the write itself rather than from a separate
- * read, so two concurrent flips cannot both report themselves as the change.
+ * to Slack on every click is a dashboard that gets its channel muted.
  */
 const setManualGate = async (
   executor: User,
@@ -314,11 +519,10 @@ const setManualGate = async (
 /**
  * Everything the admin dashboard needs to explain the state of the USDC path.
  *
- * Calls the oracle before reporting its health, and that is deliberate: health
- * is per-process state, so a replica that has never quoted would otherwise
- * report an empty record as though it were an observation. Admin-only and behind
- * the oracle's own TTL cache, so the Graph spend is a dashboard refresh at most
- * once a minute.
+ * Every figure comes from the same rows the gates are evaluated from, so the
+ * dashboard cannot disagree with the refusal a user just got. Nothing here reads
+ * a chain or a subgraph: the oracle's health is the poller's snapshot, with its
+ * age, rather than a live read this process would then be the only witness to.
  */
 const getStatus = async (
   executor: User,
@@ -327,17 +531,28 @@ const getStatus = async (
     return err(new ForbiddenError('Admin access required'))
   }
 
-  const [availability, manualGate, treasury, rate] = await Promise.all([
+  const [availability, manualGate, treasury, oracle] = await Promise.all([
     getAvailability(),
     getManualGate(),
     getTreasuryState(),
-    priceOracle.getPrice(),
+    getOracleState(),
   ])
-  const health = priceOracle.getHealth()
 
   const balance = treasury.snapshot
     ? BigInt(treasury.snapshot.balanceBaseUnits)
     : null
+  const { pause, resume } = getThresholds()
+
+  // The configured set, for a dashboard that has to say what WOULD be watched
+  // when nothing has been polled yet. Throws on an unusable configuration, which
+  // is a state this endpoint must still render rather than 500 on.
+  let configuredAddresses: string[] = []
+  let addressError: string | null = null
+  try {
+    configuredAddresses = treasuryAddresses()
+  } catch (error) {
+    addressError = error instanceof Error ? error.message : String(error)
+  }
 
   return ok({
     availability,
@@ -352,40 +567,31 @@ const getStatus = async (
       balanceBaseUnits: balance?.toString() ?? null,
       // Negative once the cap is exceeded, which is the number an operator
       // wants: "how much over am I" is the conversion size.
-      headroomBaseUnits:
-        balance === null ? null : (pauseThresholdBaseUnits - balance).toString(),
+      headroomBaseUnits: balance === null ? null : (pause - balance).toString(),
       // With no usable reading this is the fail-closed default rather than an
       // observation, which is what `stale` next to it says.
       paused: treasury.stale ? true : (treasury.snapshot?.paused ?? true),
       stale: treasury.stale,
       checkedAt: treasury.checkedAt?.toISOString() ?? null,
       ageMs: treasury.ageMs,
-      pauseThresholdBaseUnits: pauseThresholdBaseUnits.toString(),
-      resumeThresholdBaseUnits: resumeThresholdBaseUnits.toString(),
+      pauseThresholdBaseUnits: pause.toString(),
+      resumeThresholdBaseUnits: resume.toString(),
       maxStaleMs: config.usdcPayments.balanceMaxStaleMs,
       checkIntervalMs: config.usdcPayments.balanceCheckIntervalMs,
-      addresses: treasury.snapshot?.addresses ?? treasuryAddresses(),
+      addresses: treasury.snapshot?.addresses ?? configuredAddresses,
+      addressError,
     },
     oracle: {
-      healthy: rate.isOk(),
-      currentFailureReason: rate.isErr() ? rate.error.reason : null,
-      lastFailureReason: health.lastFailureReason,
-      lastFailureAt: health.lastFailureAt?.toISOString() ?? null,
-      lastSuccessAt: health.lastSuccessAt?.toISOString() ?? null,
-      servingStale: health.servingStale,
-      window: health.window
-        ? {
-            usdPerAi3: health.window.usdPerAi3.toString(),
-            sampleCount: health.window.sampleCount,
-            buyCount: health.window.buyCount,
-            sellCount: health.window.sellCount,
-            volumeUsdc: health.window.volumeUsdc.toString(),
-            oneSidedVolumeUsdc: health.window.oneSidedVolumeUsdc.toString(),
-            poolUsdcDepth: health.window.poolUsdcDepth.toString(),
-            newestSwapAt: new Date(health.window.newestSwapMs).toISOString(),
-            oldestSwapAt: new Date(health.window.oldestSwapMs).toISOString(),
-          }
-        : null,
+      // Unknown fails closed here too, and says so rather than claiming the
+      // oracle is broken: nothing has polled, which is a different problem.
+      healthy: Boolean(oracle.snapshot?.healthy) && !oracle.stale,
+      reason: oracle.snapshot?.reason ?? null,
+      servingStale: Boolean(oracle.snapshot?.servingStale),
+      usdPerAi3: oracle.snapshot?.usdPerAi3 ?? null,
+      stale: oracle.stale,
+      checkedAt: oracle.checkedAt?.toISOString() ?? null,
+      ageMs: oracle.ageMs,
+      window: oracle.snapshot?.window ?? null,
     },
   })
 }
@@ -405,10 +611,12 @@ const describeClosedReason = (reason: UsdcClosedReason): string => {
     case UsdcClosedReason.TREASURY_CAP:
       return (
         'the treasury is holding at or above its cap of un-converted USDC ' +
-        `(${formatUsdcBaseUnits(pauseThresholdBaseUnits)})`
+        `(${formatUsdcBaseUnits(getThresholds().pause)})`
       )
     case UsdcClosedReason.BALANCE_UNKNOWN:
       return 'the treasury balance has not been read recently enough to trust'
+    case UsdcClosedReason.ORACLE_UNAVAILABLE:
+      return 'the AI3/USD rate cannot be established right now'
   }
 }
 
@@ -416,10 +624,10 @@ export const UsdcPaymentsUseCases = {
   getAvailability,
   getManualGate,
   getTreasuryState,
+  getOracleState,
   setManualGate,
   getStatus,
   describeClosedReason,
   treasuryAddresses,
-  pauseThresholdBaseUnits,
-  resumeThresholdBaseUnits,
+  getThresholds,
 }

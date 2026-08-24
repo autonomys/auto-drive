@@ -52,29 +52,23 @@ export const addressEnv = (
 }
 
 /**
- * A comma-separated list of addresses, each validated as `addressEnv` does.
+ * A comma-separated list of raw address strings, trimmed, empties dropped.
  *
- * Unusable entries are DROPPED rather than failing the list, which is the same
- * choice `addressEnv` makes and for the same reason — the variable is named at
- * startup instead. It matters more here: the list is what the treasury cap is
- * measured over, so a dropped entry means a balance counted as zero. That is the
- * conservative direction (it under-reports the treasury and so keeps the gate
- * open, rather than pausing on a number nobody can explain) which is exactly why
- * the name has to reach a log line — see invalidAddressEnvironmentVariables.
+ * Deliberately NOT validated here, unlike `addressEnv`. Its consumer — the
+ * treasury cap — measures a SUM, so a dropped entry counts as a zero balance and
+ * silently lets the treasury hold more un-hedged USDC than configured. Validation
+ * therefore belongs where an unusable entry can be turned into a closed gate
+ * rather than a smaller number: see `treasuryAddresses` in core/payments/usdc.ts.
+ *
+ * `isAddress` would also be the wrong test here: it defaults to `strict: true`,
+ * which rejects an all-uppercase address that `getAddress` accepts and that any
+ * block explorer will happily hand an operator.
  */
-export const addressListEnv = (name: string, raw?: string): string[] => {
-  return (raw ?? '')
+export const rawListEnv = (raw?: string): string[] =>
+  (raw ?? '')
     .split(',')
     .map((value) => value.trim())
     .filter((value) => value)
-    .filter((value) => {
-      if (isAddress(value)) {
-        return true
-      }
-      invalidAddressEnvVars.push(name)
-      return false
-    })
-}
 
 export const config = {
   postgres: {
@@ -324,18 +318,16 @@ export const config = {
     // Defaults to off, deliberately: a deployment that has just learned how to
     // quote USDC should not begin selling it because a variable was left unset.
     enabledByDefault: optionalBoolEnvironmentVariable('USDC_PAYMENTS_ENABLED'),
-    // Addresses whose USDC balances are summed and compared against the cap.
-    // Empty means "the receiver", resolved by the consumer — this object cannot
-    // read `config.ethereum` while it is still being built.
+    // EXTRA addresses whose USDC balances are summed against the cap. The
+    // receiver is always counted whether it appears here or not — it is where
+    // payments land, so a list that replaced it would measure the cap over
+    // addresses the money never reaches.
     //
     // Configurable because a sweep is part of the manual conversion flow: moving
-    // USDC to an address OUTSIDE this set reopens the gate, which is right only
+    // USDC to an address outside this set reopens the gate, which is right only
     // if sweeping implies the conversion is imminent. Add the destination here to
     // keep swept-but-unconverted USDC counted against the cap.
-    treasuryAddresses: addressListEnv(
-      'USDC_TREASURY_ADDRESSES',
-      process.env.USDC_TREASURY_ADDRESSES,
-    ),
+    treasuryAddresses: rawListEnv(process.env.USDC_TREASURY_ADDRESSES),
     // The FX-exposure limit, in whole USDC. At or above this the gate closes
     // itself; it is what makes manual conversion safe to run, and what means
     // nobody has to watch a balance.
@@ -559,6 +551,15 @@ export const config = {
       // yet, so a quote issued today is one the backend cannot settle.
       //
       // Admins are exempt whatever this says — see featureFlags/isActive.
+      //
+      // AUDIENCE ONLY. This flag answers "may this caller pay in USDC", and that
+      // is all it answers at `isFlagActive` and at `featureFlagMiddleware`.
+      // Whether the DEPLOYMENT is selling USDC is a separate question with its
+      // own gates (an admin kill switch, the treasury cap, the oracle) which
+      // exempt nobody — see core/payments/usdc.ts. The public /features endpoint
+      // reports the CONJUNCTION under this key, plus availability on its own
+      // under `usdcAvailable`, so a client cannot be shown a path the backend
+      // would refuse; every other reader gets audience only.
       payWithUsdc: {
         active: optionalBoolEnvironmentVariable('PAY_WITH_USDC_ACTIVE'),
       } as FeatureFlag,
@@ -607,7 +608,10 @@ export const config = {
  * manager's start(), so the process that owns payments says so at boot.
  */
 export const invalidAddressEnvironmentVariables = () => [
-  ...invalidAddressEnvVars,
+  // De-duplicated: a variable holding several unusable values is one
+  // misconfiguration, not three, and a log line that repeats the same name reads
+  // like more than one problem.
+  ...new Set(invalidAddressEnvVars),
 ]
 
 export const isUsdcConfigured = () =>

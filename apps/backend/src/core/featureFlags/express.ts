@@ -2,7 +2,8 @@ import { NextFunction, Request, Response } from 'express'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { FeatureFlagsUseCases } from './index.js'
 import { UsdcPaymentsUseCases } from '../payments/usdc.js'
-import { config } from '../../config.js'
+import { UsdcAvailability } from '@auto-drive/models'
+import { config, isUsdcConfigured } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('core:featureFlags:express')
@@ -16,6 +17,11 @@ export type FeatureFlagKey = keyof typeof config.featureFlags.flags
 // failure.  If the request includes credentials but auth fails (e.g. the
 // auth service is unreachable, or the API key is invalid), the middleware
 // lets the auth error surface rather than hiding the route behind a 404.
+// AUDIENCE ONLY for payWithUsdc: this asks whether the caller may use the
+// feature, not whether the deployment is currently selling it. The USDC
+// availability gates (admin kill switch, treasury cap, oracle) are enforced in
+// `createIntent` and reported by /features — do not gate a USDC route on this
+// alone and assume the path is open.
 export const featureFlagMiddleware =
   (key: FeatureFlagKey) =>
   async (req: Request, res: Response, next: NextFunction) => {
@@ -55,33 +61,86 @@ export const featureFlagMiddleware =
   }
 
 /**
- * Narrow `payWithUsdc` from "may this caller pay in USDC" to "and is this
- * deployment selling it right now".
+ * A short process-local memo of the composite gate, for /features only.
  *
- * The flag on its own answers the audience question, and admins are exempt from
- * it. But the endpoint's whole job is to tell the client which paths are open,
- * and offering a method the backend then refuses is the exact failure
- * `isFlagActive` exists to prevent — so what /features reports has to be the
- * same conjunction createIntent evaluates. Both call
- * UsdcPaymentsUseCases.getAvailability(), which is why they cannot drift.
- *
- * Notably this makes an admin on a deployment with no Ethereum configuration
- * read `false`, where the exemption alone said `true` and the quote then 403'd.
- *
- * One indexed read, and only when the flag survived the audience check: the
- * closed path costs nothing, and the open one is a page load against a table
- * with two rows. Uncached deliberately — a kill switch whose effect waits out a
- * TTL is not the control an incident needs.
+ * `createIntent` always reads fresh — that is the path where a stale "open"
+ * would let a purchase through a gate an admin has just closed. /features only
+ * decides whether a button renders, and it is called on every page load by two
+ * API tiers, so a few seconds of shared answer removes almost all of the load
+ * for a delay nobody can perceive during an incident: the quote still refuses
+ * instantly.
  */
-const withUsdcAvailability = async (
-  flags: Record<string, boolean>,
-): Promise<Record<string, boolean>> => {
-  if (!flags.payWithUsdc) {
-    return flags
+const AVAILABILITY_TTL_MS = 5_000
+let cachedAvailability: { value: UsdcAvailability; expiresAt: number } | null =
+  null
+
+const availabilityForFeatures = async (): Promise<UsdcAvailability> => {
+  const now = Date.now()
+  if (cachedAvailability && cachedAvailability.expiresAt > now) {
+    return cachedAvailability.value
   }
 
-  const availability = await UsdcPaymentsUseCases.getAvailability()
-  return { ...flags, payWithUsdc: availability.open }
+  const value = await UsdcPaymentsUseCases.getAvailability()
+  cachedAvailability = { value, expiresAt: now + AVAILABILITY_TTL_MS }
+  return value
+}
+
+/**
+ * Add the deployment's USDC availability to the flags a client is told about.
+ *
+ * Two keys, because they answer two questions and one boolean cannot:
+ *
+ *   payWithUsdc    — audience AND availability: "should this caller be offered
+ *                    the USDC option right now". Narrowed here so a client
+ *                    cannot render a path the backend would refuse, which is the
+ *                    failure `isFlagActive` exists to prevent. Note that every
+ *                    OTHER reader of this flag (`isFlagActive`,
+ *                    `featureFlagMiddleware`) gets audience only.
+ *   usdcAvailable  — availability alone. Lets a dashboard distinguish "not your
+ *                    audience" from "the deployment is not selling", which a
+ *                    single false conflates — and it is the honest answer for an
+ *                    admin, who is exempt from the audience gate but not from
+ *                    these.
+ *
+ * Both come from `UsdcPaymentsUseCases.getAvailability`, the same function
+ * `createIntent` calls, so the advertisement and the refusal cannot drift.
+ *
+ * Fails CLOSED and never throws. This endpoint could not touch the database
+ * before this existed, it is mounted on the download API as well as the frontend
+ * one, and its route handler has no async error boundary — so an unhandled
+ * rejection here (the migration not yet applied, a connection-pool timeout) would
+ * take down downloads and S3 over a payments read. `createIntent` enforces the
+ * gate independently, so advertising `false` on a failed read costs a hidden
+ * button and nothing else.
+ */
+export const withUsdcAvailability = async (
+  flags: Record<string, boolean>,
+): Promise<Record<string, boolean>> => {
+  // The cheapest possible answer for the deployments that do not sell USDC: no
+  // query, no cache entry, and one fewer place that can fail.
+  if (!isUsdcConfigured()) {
+    return { ...flags, payWithUsdc: false, usdcAvailable: false }
+  }
+
+  try {
+    const availability = await availabilityForFeatures()
+    return {
+      ...flags,
+      payWithUsdc: flags.payWithUsdc && availability.open,
+      usdcAvailable: availability.open,
+    }
+  } catch (error) {
+    logger.error(
+      error,
+      'Could not read USDC availability; advertising the path as closed',
+    )
+    return { ...flags, payWithUsdc: false, usdcAvailable: false }
+  }
+}
+
+// Tests only: drops the /features memo so a case can change the gate and see it.
+export const _resetAvailabilityCache = () => {
+  cachedAvailability = null
 }
 
 // Returns feature flags for the current request.  Used by the public
@@ -96,7 +155,9 @@ export const getFeatureFlags = async (req: Request, res: Response) => {
         return
       }
 
-      return withUsdcAvailability(FeatureFlagsUseCases.get(user))
+      // `return await`, not `return`: a bare return would hand the promise back
+      // out of the try and the catch below could never see its rejection.
+      return await withUsdcAvailability(FeatureFlagsUseCases.get(user))
     } catch (error) {
       logger.warn(error, 'Auth failed in getFeatureFlags, falling back to unauthenticated flags')
       // Auth failure — fall through to unauthenticated flags

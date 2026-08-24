@@ -77,10 +77,10 @@
     // unknown, and therefore closed, in every process that quotes.
     //
     // A no-op when this deployment has no USDC configuration.
-    const { usdcTreasuryBalanceJob } = await import(
-      '../../infrastructure/services/usdcTreasuryBalanceJob.js'
+    const { usdcGatesJob } = await import(
+      '../../infrastructure/services/usdcGatesJob.js'
     )
-    usdcTreasuryBalanceJob.start()
+    usdcGatesJob.start()
 
     const { creditExpiryJob } = await import(
       '../../infrastructure/services/creditExpiryJob.js'
@@ -130,10 +130,10 @@
       migrationRecoveryJob.stop()
     }
     paymentManager.stop()
-    const { usdcTreasuryBalanceJob } = await import(
-      '../../infrastructure/services/usdcTreasuryBalanceJob.js'
+    const { usdcGatesJob } = await import(
+      '../../infrastructure/services/usdcGatesJob.js'
     )
-    usdcTreasuryBalanceJob.stop()
+    usdcGatesJob.stop()
     const { creditExpiryJob } = await import(
       '../../infrastructure/services/creditExpiryJob.js'
     )

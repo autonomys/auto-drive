@@ -2,19 +2,20 @@
  * Whether this deployment is currently selling storage for USDC, and if not,
  * why not.
  *
- * Three independent facts decide it, and they are deliberately not collapsed
- * into one boolean anywhere but at the very end:
+ * Four independent facts decide it, and they are deliberately not collapsed into
+ * one boolean anywhere but at the very end:
  *
  *   - configuration — does this deployment have an Ethereum receiver at all
  *   - the manual gate — a DB-backed admin switch, flipped without a redeploy
  *   - the balance gate — the treasury's un-converted USDC against its cap
+ *   - the oracle — can an AI3/USD rate be established at all
  *
- * The price oracle is the fourth conjunct in the epic's statement of this
- * invariant, and it is deliberately NOT here: its health is per-process
- * in-memory state, so a replica that has never quoted cannot report on it
- * honestly, and consulting it from the public /features endpoint would put a
- * per-query-billed subgraph call behind an unauthenticated route. It stays what
- * it already is — a refusal at quote time, inside createIntent.
+ * The oracle's health is per-process in-memory state inside the price oracle, so
+ * it is not readable where it is needed: an API replica that has never quoted
+ * knows nothing about it. The one process that polls the treasury therefore
+ * records it alongside the balance, and every reader gets the same durable
+ * answer. It remains enforced independently at quote time — this conjunct exists
+ * so the path is not ADVERTISED while every quote would 503.
  */
 
 /**
@@ -41,17 +42,51 @@ export enum UsdcClosedReason {
   // cannot reach Ethereum. Fails closed — an RPC outage must not become a way
   // to keep selling past the cap.
   BALANCE_UNKNOWN = "balance_unknown",
+  // No trustworthy AI3/USD rate: the subgraph is unreachable, or one of the
+  // oracle's own guards (thin liquidity, a stale window, a moved market) refuses
+  // to price against what it can see. Also covers "nothing has polled the rate
+  // yet", which fails closed for the same reason an unknown balance does.
+  ORACLE_UNAVAILABLE = "oracle_unavailable",
 }
 
 /**
  * The composite answer, as the intent path and /features read it.
  *
- * `open` is the conjunction; `closedReason` says which gate closed it and is
- * undefined exactly when `open` is true.
+ * A discriminated union rather than `{ open: boolean; closedReason?: ... }`, so
+ * "there is a reason exactly when the path is closed" is a compiler guarantee
+ * instead of a comment — and so no caller needs a non-null assertion to read the
+ * reason out of a closed result.
  */
-export type UsdcAvailability = {
-  open: boolean;
-  closedReason?: UsdcClosedReason;
+export type UsdcAvailability =
+  | { open: true }
+  | { open: false; closedReason: UsdcClosedReason };
+
+/** USDC base units per whole USDC. */
+export const USDC_DECIMALS = 6;
+
+/**
+ * Render a USDC base-unit amount as a human figure ("2,014.00").
+ *
+ * For operator-facing text only — Slack alerts and the admin dashboard — where
+ * "2014000000" is a number nobody reads correctly under pressure. Two decimals
+ * because the remaining four are never what a treasury decision turns on;
+ * truncated rather than rounded, so a displayed figure is never above the
+ * balance actually held.
+ *
+ * Lives here, in the shared package, because both the backend's alerts and the
+ * frontend's dashboard render the same figures — and a money path with two
+ * formatters is two things that must agree.
+ */
+export const formatUsdcBaseUnits = (baseUnits: bigint | string): string => {
+  const value = typeof baseUnits === "bigint" ? baseUnits : BigInt(baseUnits);
+  const scale = 10n ** BigInt(USDC_DECIMALS);
+  const negative = value < 0n;
+  const absolute = negative ? -value : value;
+  const cents = (absolute % scale) / 10n ** BigInt(USDC_DECIMALS - 2);
+  const grouped = (absolute / scale)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${negative ? "-" : ""}${grouped}.${cents.toString().padStart(2, "0")}`;
 };
 
 /** Where the manual gate's current value comes from. */
@@ -98,24 +133,30 @@ export type UsdcPaymentsStatus = {
     resumeThresholdBaseUnits: string;
     maxStaleMs: number;
     checkIntervalMs: number;
-    // The addresses whose balances are summed. The receiver by default; a sweep
-    // to an address outside this set reopens the gate.
+    // The addresses whose balances are summed. Always includes the receiver; a
+    // sweep to an address outside this set reopens the gate.
     addresses: string[];
+    // Set when USDC_TREASURY_ADDRESSES holds something unusable, which closes
+    // the gate rather than shrinking the sum. Null when the configuration parses.
+    addressError: string | null;
   };
-  // Read from the process serving this request, which is why the request forces
-  // a rate read first: reporting health nobody in this process has observed is
-  // worse than reporting none.
+  // The poller's last rate read, not a live one taken to answer this request:
+  // health observed by the process that owns it, aged like the balance beside it.
   oracle: {
+    // False when unhealthy AND when unknown — `stale` tells those apart.
     healthy: boolean;
-    // OracleUnavailableReason, when the last attempt failed.
-    currentFailureReason: string | null;
-    lastFailureReason: string | null;
-    lastFailureAt: string | null;
-    lastSuccessAt: string | null;
+    // OracleUnavailableReason when the read failed; null when it succeeded.
+    reason: string | null;
+    // The rate came from the last-good fallback rather than a fresh read.
     servingStale: boolean;
-    // The window behind the last successful read, when there was one.
+    // Scaled by USD_RATE_SCALE (1e18), as everywhere else.
+    usdPerAi3: string | null;
+    // No reading, or one too old to trust — which closes the path.
+    stale: boolean;
+    checkedAt: string | null;
+    ageMs: number | null;
+    // The swap window behind the rate, when there was one.
     window: {
-      usdPerAi3: string;
       sampleCount: number;
       buyCount: number;
       sellCount: number;

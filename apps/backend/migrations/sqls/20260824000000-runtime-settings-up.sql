@@ -46,3 +46,28 @@ CREATE TABLE IF NOT EXISTS runtime_settings (
   -- comparison worth making.
   updated_at timestamptz NOT NULL DEFAULT NOW()
 );
+
+-- Append-only history of who changed which setting, and when.
+--
+-- `runtime_settings.updated_by` answers only "who has it set now" — the next
+-- flip overwrites it. The question asked after an incident is "who turned USDC
+-- payments off on Tuesday, and when did it come back", and for a money-path kill
+-- switch the answer should not live solely in a Slack channel and a log line,
+-- both of which are under a retention policy.
+--
+-- Machine writes are deliberately NOT recorded: 288 treasury-balance polls a day
+-- would bury the handful of rows anyone ever reads. The balance's own history is
+-- a metrics series, not an audit trail.
+CREATE TABLE IF NOT EXISTS runtime_settings_audit (
+  id bigserial PRIMARY KEY,
+  key text NOT NULL,
+  value jsonb NOT NULL,
+  -- NOT NULL, unlike runtime_settings.updated_by: a row here always has a person
+  -- behind it, because that is the only kind of change worth keeping.
+  updated_by text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT NOW()
+);
+
+-- The only query: one key's history, newest first.
+CREATE INDEX IF NOT EXISTS runtime_settings_audit_key_id_idx
+  ON runtime_settings_audit (key, id DESC);

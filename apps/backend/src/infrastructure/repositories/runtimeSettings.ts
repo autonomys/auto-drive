@@ -1,4 +1,7 @@
 import { getDatabase } from '../drivers/pg.js'
+import { createLogger } from '../drivers/logger.js'
+
+const logger = createLogger('repositories:runtimeSettings')
 
 /**
  * Operational state that must change without a redeploy.
@@ -14,6 +17,10 @@ export const RuntimeSettingKey = {
   // {"balanceBaseUnits": string, "paused": bool, "addresses": string[]} — the
   // treasury balance poller's last SUCCESSFUL reading and the gate it derived.
   UsdcTreasury: 'payments.usdc.treasury',
+  // {"healthy": bool, "reason": string|null, ...} — the same poller's last rate
+  // read. Persisted for the same reason the balance is: the process that can
+  // observe oracle health is not the process that quotes.
+  UsdcOracle: 'payments.usdc.oracle',
 } as const
 
 export type RuntimeSettingKey =
@@ -70,13 +77,56 @@ const get = async <T>(
 }
 
 /**
+ * Several settings in one round trip, in the order the keys were given.
+ *
+ * The composite USDC gate reads three keys on every quote and on every
+ * /features call — the hottest path this feature has, on two API tiers. Three
+ * queries where one will do is three times the latency and three times the
+ * connection-pool pressure for one answer.
+ */
+const getMany = async (
+  keys: RuntimeSettingKey[],
+): Promise<(RuntimeSetting<unknown> | null)[]> => {
+  if (keys.length === 0) {
+    return []
+  }
+
+  const db = await getDatabase()
+  const result = await db.query<DBRow & { key: string }>(
+    `SELECT key, value, updated_by, updated_at, ${AGE_MS}
+     FROM runtime_settings WHERE key = ANY($1)`,
+    [keys],
+  )
+
+  const byKey = new Map(result.rows.map((row) => [row.key, row]))
+  // Positional rather than keyed, so a caller destructures in the order it asked
+  // and a missing row is a null in place rather than a shifted array.
+  return keys.map((key) => {
+    const row = byKey.get(key)
+    return row ? mapRow<unknown>(row) : null
+  })
+}
+
+/**
  * Write a setting and return what it held BEFORE the write.
  *
  * The previous value is returned rather than discarded because every caller here
  * needs to tell a change from a no-op: a re-clicked admin toggle must not post a
- * Slack alert, and the balance poller must only alert on a transition. Doing it
- * in one statement — rather than a read followed by a write — keeps two
- * concurrent flips from both reporting themselves as the change.
+ * Slack alert, and the balance poller must only alert on a transition. One
+ * statement rather than a read followed by a write, so the pair cannot be
+ * interleaved by anything in this process.
+ *
+ * It does NOT serialise concurrent writers, and the difference is worth stating
+ * because it looks like it should. Under READ COMMITTED the `previous` CTE reads
+ * the statement's snapshot, so a writer that blocks on `ON CONFLICT` still
+ * reports the value it saw at the start rather than the one it waited for. Two
+ * simultaneous admin flips can therefore both report themselves as the change
+ * (two alerts), and two simultaneous FIRST writes can both compare against the
+ * environment default (so a closing flip may report no change and post no
+ * alert). The stored value is always one of the two writes and the audit row
+ * below records both, so this is a reporting limit, not a correctness one — and
+ * two admins flipping one switch in the same millisecond is not the failure mode
+ * worth a lock on this path.
  *
  * `updatedBy` is the admin's public id for a human flip and null for a machine
  * write. The null is a record, not a gap.
@@ -107,13 +157,65 @@ const set = async <T>(
     [key, JSON.stringify(value), updatedBy],
   )
 
+  // Append-only history, written after the fact rather than as part of the
+  // statement above.
+  //
+  // `runtime_settings.updated_by` only ever answers "who has it set now" — the
+  // next flip overwrites it. For a money-path kill switch the question asked
+  // after an incident is "who turned it off, and when", and the only other
+  // records of that are a Slack message and a log line, both of which live under
+  // a retention policy rather than in the database.
+  //
+  // Best-effort on purpose: losing the history must not fail the flip that is
+  // trying to stop USDC sales. Machine writes are excluded — 288 treasury polls
+  // a day would bury the handful of rows anyone reads.
+  if (updatedBy !== null) {
+    try {
+      await db.query(
+        `INSERT INTO runtime_settings_audit (key, value, updated_by)
+         VALUES ($1, $2::jsonb, $3)`,
+        [key, JSON.stringify(value), updatedBy],
+      )
+    } catch (error) {
+      logger.error(error, 'Failed to record a runtime-setting change')
+    }
+  }
+
   // A first write has no previous row: the CTE is empty, so every RETURNING
   // subquery is NULL.
   const row = result.rows[0]
   return row && row.value !== null ? mapRow<T>(row) : null
 }
 
+/**
+ * Every recorded change to one key, newest first. Admin-facing history.
+ */
+const getAuditTrail = async (
+  key: RuntimeSettingKey,
+  limit = 50,
+): Promise<
+  { value: unknown; updatedBy: string; createdAt: Date }[]
+> => {
+  const db = await getDatabase()
+  const result = await db.query<{
+    value: unknown
+    updated_by: string
+    created_at: Date
+  }>(
+    `SELECT value, updated_by, created_at FROM runtime_settings_audit
+     WHERE key = $1 ORDER BY id DESC LIMIT $2`,
+    [key, limit],
+  )
+  return result.rows.map((row) => ({
+    value: row.value,
+    updatedBy: row.updated_by,
+    createdAt: row.created_at,
+  }))
+}
+
 export const runtimeSettingsRepository = {
   get,
+  getMany,
   set,
+  getAuditTrail,
 }

@@ -26,9 +26,9 @@
 
     // The all-in-one server is both the API and the worker, so it owns the
     // treasury poller too. A no-op without a USDC configuration.
-    const { usdcTreasuryBalanceJob } = await import(
-      '../../infrastructure/services/usdcTreasuryBalanceJob.js'
+    const { usdcGatesJob } = await import(
+      '../../infrastructure/services/usdcGatesJob.js'
     )
-    usdcTreasuryBalanceJob.start()
+    usdcGatesJob.start()
   }
 })()
