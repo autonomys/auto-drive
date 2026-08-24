@@ -53,7 +53,8 @@ describe('handleS3Auth', () => {
     expect(await handleS3Auth(reqWith(), res)).toBeNull()
     expect(state.status).toBe(403)
     expect(codeOf(state.body)).toBe('AccessDenied')
-    expect(state.headers.get('content-type')).toBe('application/xml')
+    // toContain, not toBe: Express's res.send appends '; charset=utf-8'.
+    expect(state.headers.get('content-type')).toContain('application/xml')
   })
 
   it('answers an unparsable Authorization header with 400 AuthorizationHeaderMalformed', async () => {
@@ -158,5 +159,32 @@ describe('AuthManager.getUserFromAccessToken failure classification', () => {
     expect(error).toBeInstanceOf(AuthLookupError)
     expect(error.isCredentialFailure).toBe(false)
     expect(error.upstreamStatus).toBeUndefined()
+  })
+
+  it.each([408, 425, 429])(
+    'classifies %i as a service failure, not a bad credential',
+    async (status) => {
+      global.fetch = (async () =>
+        new globalThis.Response('slow down', { status })) as typeof fetch
+
+      const error = await lookup()
+      // The service declined to do the work; the key itself was never judged.
+      // Reporting these as a rejection tells a client its working key is dead.
+      expect(error.isCredentialFailure).toBe(false)
+      expect(error.upstreamStatus).toBe(status)
+    },
+  )
+
+  it('classifies an unreadable 200 body as a service failure', async () => {
+    global.fetch = (async () =>
+      new globalThis.Response('<html>gateway error</html>', {
+        status: 200,
+      })) as typeof fetch
+
+    const error = await lookup()
+    // A bare SyntaxError here would be read as a bad credential by every caller,
+    // since they key off AuthLookupError.
+    expect(error).toBeInstanceOf(AuthLookupError)
+    expect(error.isCredentialFailure).toBe(false)
   })
 })

@@ -1,5 +1,8 @@
 import { NextFunction, Request, Response } from 'express'
-import { handleAuth } from '../../infrastructure/services/auth/express.js'
+import {
+  handleAuth,
+  tryAuthenticate,
+} from '../../infrastructure/services/auth/express.js'
 import { FeatureFlagsUseCases } from './index.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
@@ -56,21 +59,20 @@ export const featureFlagMiddleware =
 // Returns feature flags for the current request.  Used by the public
 // /features endpoint.  On auth failure it falls back to unauthenticated
 // flags so the endpoint always returns a result.
-export const getFeatureFlags = async (req: Request, res: Response) => {
-  // If is authenticated, get the user from the request
+//
+// tryAuthenticate, not handleAuth: handleAuth answers the request itself (401,
+// or 503 when the auth service is unreachable), which would make the endpoint
+// fail on a stale token instead of degrading to the unauthenticated flags it
+// promises. A credential that cannot be resolved is simply no credential here.
+export const getFeatureFlags = async (req: Request) => {
   if (req.headers.authorization) {
-    try {
-      const user = await handleAuth(req, res)
-      if (!user) {
-        return
-      }
-
-      return FeatureFlagsUseCases.get(user)
-    } catch (error) {
-      logger.warn(error, 'Auth failed in getFeatureFlags, falling back to unauthenticated flags')
-      // Auth failure — fall through to unauthenticated flags
-      return FeatureFlagsUseCases.get(null)
+    const user = await tryAuthenticate(req)
+    if (!user) {
+      logger.debug(
+        'Could not resolve the request credentials; serving unauthenticated flags',
+      )
     }
+    return FeatureFlagsUseCases.get(user)
   }
 
   return FeatureFlagsUseCases.get(null)

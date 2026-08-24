@@ -1,5 +1,5 @@
 import { S3UseCases } from '../../../core/s3/index.js'
-import { handleError, ForbiddenError } from '../../../errors/index.js'
+import { HttpError, ForbiddenError } from '../../../errors/index.js'
 import {
   UploadCompletionInProgressError,
   UploadPartsChangedError,
@@ -150,9 +150,19 @@ const getObjectMetadata = (req: Request): S3ObjectMetadata | null => {
   // read it back from there. It cannot be forged: a client-sent header only ever
   // lands in req.headers, never in the WeakMap. The req.headers fallback just
   // catches an 'identity' encoding the middleware intentionally leaves in place.
-  const contentEncoding =
+  // aws-chunked is excluded: it is AWS transfer framing (the middleware leaves
+  // it on the headers for exactly that reason), never a description of the
+  // stored bytes. Echoing it back as the object's Content-Encoding would
+  // advertise an encoding untied to the body — the same class of false encoding
+  // header this API exists to avoid.
+  const rawContentEncoding =
     headerString(req.headers['content-encoding']) ??
     stashedContentEncoding.get(req)
+  const contentEncoding =
+    rawContentEncoding &&
+    rawContentEncoding.toLowerCase().includes('aws-chunked')
+      ? undefined
+      : rawContentEncoding
   if (contentEncoding) metadata.contentEncoding = contentEncoding
 
   const userMetadata: Record<string, string> = {}
@@ -207,6 +217,93 @@ const rejectIfUserMetadataTooLarge = (
   sendXML(res.status(400), 'Error', {
     Code: 'MetadataTooLarge',
     Message: 'Your metadata headers exceed the maximum allowed metadata size.',
+  })
+  return true
+}
+
+/**
+ * The S3 error Code to report for a given HTTP status.
+ *
+ * Keyed on status rather than on error class so an HttpError added anywhere in
+ * the core still lands on a sensible code instead of silently becoming a 500.
+ * PaymentRequired and UnavailableForLegalReasons have no S3 equivalent — they
+ * describe Auto Drive's credit and moderation rules — so they keep an honest
+ * non-standard code rather than being flattened into AccessDenied. 404 is absent
+ * on purpose: what was not found depends on the operation, so its code is the
+ * caller's to name.
+ */
+const S3_ERROR_CODE_BY_STATUS: Record<number, string> = {
+  400: 'InvalidRequest',
+  402: 'PaymentRequired',
+  403: 'AccessDenied',
+  406: 'InvalidRequest',
+  409: 'OperationAborted',
+  410: 'NoSuchKey',
+  413: 'EntityTooLarge',
+  451: 'UnavailableForLegalReasons',
+  501: 'NotImplemented',
+  503: 'ServiceUnavailable',
+}
+
+/**
+ * Answer a failed S3 operation in the S3 protocol: an <Error> document carrying
+ * an S3 Code, at the error's own status.
+ *
+ * Not the shared handleError, which renders JSON. An S3 SDK cannot map a JSON
+ * body to a typed error, so the client sees only an opaque failure — the same
+ * problem a rejected API key had before it was answered as 403
+ * InvalidAccessKeyId, and the reason every other error on this controller is
+ * already written as XML by hand.
+ *
+ * notFoundCode names what was missing, since 404 covers two different things
+ * here: an object key (NoSuchKey) and a multipart upload id (NoSuchUpload).
+ */
+const handleS3Error = (
+  error: Error,
+  res: Response,
+  notFoundCode: 'NoSuchKey' | 'NoSuchUpload' = 'NoSuchKey',
+) => {
+  const status = error instanceof HttpError ? error.statusCode : 500
+  const code =
+    status === 404
+      ? notFoundCode
+      : (S3_ERROR_CODE_BY_STATUS[status] ?? 'InternalError')
+  if (status >= 500) logger.error(error, 'S3 request failed')
+  sendXML(res.status(status), 'Error', { Code: code, Message: error.message })
+}
+
+/**
+ * Refuse a Range the object cannot satisfy, the way S3 does: 416 InvalidRange
+ * with a `Content-Range: bytes * /<size>` telling the client the real size.
+ *
+ * The download use case clamps only the range's END against the object size
+ * (getCalculatedResultingByteRange), so a start past the last byte survives as
+ * an inverted range — `bytes 100-69/70` with a Content-Length of -30, and a body
+ * that cannot match it. Checking the start here is what keeps every downstream
+ * range calculation (this file's and the shared helper's) working on a range
+ * that is known to fit.
+ *
+ * A missing stored size is refused for the same reason: with no size, no range
+ * can be honestly described, and answering with an unlabelled partial body would
+ * let the client read a slice as the whole object.
+ *
+ * Returns true once a response has been sent.
+ */
+const rejectIfRangeNotSatisfiable = (
+  req: Request,
+  res: Response,
+  byteRange: ByteRange | undefined,
+  size: bigint | undefined,
+): boolean => {
+  if (!byteRange) return false
+  if (size != null && byteRange[0] < Number(size)) return false
+
+  res.setHeader('Content-Range', `bytes */${size ?? 0}`)
+  sendXML(res.status(416), 'Error', {
+    Code: 'InvalidRange',
+    Message: 'The requested range is not satisfiable',
+    RangeRequested: req.headers['range'] ?? '',
+    ActualObjectSize: (size ?? BigInt(0)).toString(),
   })
   return true
 }
@@ -283,7 +380,9 @@ export const applyVerbatimBodyHeaders = (
   res.removeHeader('Content-Encoding')
 
   if (metadata.size == null) {
-    // Unknown stored size: a range can't be described, so don't offer ranges.
+    // Unknown stored size: nothing to advertise, so rely on chunked encoding and
+    // don't offer ranges. A ranged request never reaches here —
+    // rejectIfRangeNotSatisfiable has already answered it 416.
     res.setHeader('Accept-Ranges', 'none')
     return
   }
@@ -457,7 +556,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   })
 
   if (downloadResult.isErr()) {
-    handleError(downloadResult.error, res)
+    handleS3Error(downloadResult.error, res)
     return
   }
   const {
@@ -471,12 +570,17 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     objectMetadata,
   } = downloadResult.value
 
+  if (rejectIfRangeNotSatisfiable(req, res, byteRange, metadata.size)) return
+
+  // The helper's shouldDecompressBody is deliberately unused: it asks the caller
+  // to inflate an internally-compressed body, which is right for the
+  // browser-facing download API and wrong here — S3 returns the stored bytes,
+  // and the ETag is their MD5. applyVerbatimBodyHeaders below re-describes the
+  // response accordingly.
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
-  // Restore the verbatim-body headers the generic helper rewrites for
-  // internally-compressed objects (see above).
   applyVerbatimBodyHeaders(res, metadata, resultingByteRange)
   // Override the generic headers with the stored S3 metadata (verbatim
   // Content-Type, Cache-Control, x-amz-meta-*, …) — must run after the helpers
@@ -521,7 +625,7 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   })
 
   if (downloadResult.isErr()) {
-    handleError(downloadResult.error, res)
+    handleS3Error(downloadResult.error, res)
     return
   }
   const {
@@ -534,12 +638,17 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     objectMetadata,
   } = downloadResult.value
 
+  if (rejectIfRangeNotSatisfiable(req, res, byteRange, metadata.size)) return
+
+  // The helper's shouldDecompressBody is deliberately unused: it asks the caller
+  // to inflate an internally-compressed body, which is right for the
+  // browser-facing download API and wrong here — S3 returns the stored bytes,
+  // and the ETag is their MD5. applyVerbatimBodyHeaders below re-describes the
+  // response accordingly.
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
-  // Restore the verbatim-body headers the generic helper rewrites for
-  // internally-compressed objects (see above).
   applyVerbatimBodyHeaders(res, metadata, resultingByteRange)
   // Override the generic headers with the stored S3 metadata (verbatim
   // Content-Type, Cache-Control, x-amz-meta-*, …) — must run after the helpers
@@ -558,10 +667,13 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   // Echo the client mtime so tools (e.g. rclone) read back what they wrote.
   if (mtime) res.set('x-amz-meta-mtime', mtime)
 
-  // 200, not 204: HeadObject returns the headers GET would send (Content-Length,
-  // Content-Type, …) with an empty body. A 204 is defined as bodiless, so Node
-  // strips those content headers.
-  res.status(200).end()
+  // end() without a status: HeadObject returns the headers GET would send
+  // (Content-Length, Content-Type, …) with an empty body, and Express's default
+  // 200 is already that. Setting 200 explicitly used to overwrite the 206 a
+  // ranged HEAD had just set, so the reply came back "whole object" while
+  // carrying a range-sized Content-Length. (Never 204 — that status is defined
+  // as bodiless, so Node strips the content headers this response exists for.)
+  res.end()
 }
 
 // ── Versioning + Object Lock (honest WORM) ─────────────────────────────────
@@ -696,7 +808,7 @@ export const createMultipartUploadHandler = async (
   })
 
   if (result.isErr()) {
-    handleError(result.error, res)
+    handleS3Error(result.error, res, 'NoSuchUpload')
     return
   }
 
@@ -717,16 +829,23 @@ export const uploadPartHandler = async (req: Request, res: Response) => {
       uploadId,
       partNumber,
     )
-    return handleError(
-      new Error('Missing required parameters: uploadId and partNumber'),
-      res,
-    )
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message: 'The uploadId and partNumber query parameters are required.',
+    })
+    return
   }
 
   const parsedPartNumber = parseInt(partNumber as string)
   if (isNaN(parsedPartNumber)) {
     logger.error('Invalid partNumber: %s', partNumber)
-    return handleError(new Error('Invalid partNumber'), res)
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message: 'The partNumber query parameter must be an integer.',
+      ArgumentName: 'partNumber',
+      ArgumentValue: String(partNumber),
+    })
+    return
   }
 
   logger.info('Uploading part %s of %s', parsedPartNumber, uploadId)
@@ -740,7 +859,7 @@ export const uploadPartHandler = async (req: Request, res: Response) => {
   })
 
   if (result.isErr()) {
-    handleError(result.error, res)
+    handleS3Error(result.error, res, 'NoSuchUpload')
     return
   }
 
@@ -826,7 +945,7 @@ export const completeMultipartUploadHandler = async (
   }
 
   if (result.isErr()) {
-    handleError(result.error, res)
+    handleS3Error(result.error, res, 'NoSuchUpload')
     return
   }
 
@@ -1038,7 +1157,7 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   })
 
   if (result.isErr()) {
-    handleError(result.error, res)
+    handleS3Error(result.error, res)
     return
   }
 
@@ -1063,7 +1182,7 @@ export const deleteObjectHandler = async (req: Request, res: Response) => {
   // The underlying bytes are never removed from the Autonomys DSN.
   const result = await S3UseCases.deleteObject(user, bucket, key)
   if (result.isErr()) {
-    handleError(result.error, res)
+    handleS3Error(result.error, res)
     return
   }
   const { deleteMarker, versionId } = result.value

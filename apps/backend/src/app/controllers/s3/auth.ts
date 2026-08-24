@@ -71,7 +71,11 @@ export const handleS3Auth = async (
       })
       return null
     }
-    logger.info('Rejected S3 request with an invalid API key')
+    logger.info(
+      error,
+      'Rejected an S3 request with an unusable API key (keyPrefix=%s)',
+      apiKey.slice(0, 6),
+    )
     sendXML(res.status(403), 'Error', {
       Code: 'InvalidAccessKeyId',
       Message: 'The Access Key Id you provided does not exist in our records.',

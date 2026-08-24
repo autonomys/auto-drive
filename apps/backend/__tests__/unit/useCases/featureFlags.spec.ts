@@ -2,6 +2,12 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 import { FeatureFlagsUseCases, hasGoogleAuth } from '../../../src/core/featureFlags/index.js'
 import { config } from '../../../src/config.js'
 import type { User } from '@auto-drive/models'
+import type { Request } from 'express'
+import { getFeatureFlags } from '../../../src/core/featureFlags/express.js'
+import {
+  AuthLookupError,
+  AuthManager,
+} from '../../../src/infrastructure/services/auth/index.js'
 
 // Minimal User factory — only fields relevant to feature flag checks.
 const makeUser = (
@@ -376,5 +382,64 @@ describe('FeatureFlagsUseCases.get — non-buyCredits flags', () => {
       taskManager: { active: false, staffOnly: true },
     }
     expect(FeatureFlagsUseCases.get(null).taskManager).toBe(false)
+  })
+})
+
+// ── The /features endpoint always answers ─────────────────────────────────
+// getFeatureFlags is the public /features handler. It resolves credentials with
+// tryAuthenticate, NOT handleAuth: handleAuth answers the request itself (401,
+// or 503 when the auth service is unreachable), which would make a stale token
+// break the endpoint instead of degrading it to the unauthenticated flags it
+// promises.
+describe('getFeatureFlags degrades instead of failing', () => {
+  const originalFlags = config.featureFlags.flags
+
+  beforeEach(() => {
+    config.featureFlags.flags = {
+      ...originalFlags,
+      taskManager: { active: true, staffOnly: false },
+    }
+  })
+
+  afterEach(() => {
+    config.featureFlags.flags = originalFlags
+    jest.restoreAllMocks()
+  })
+
+  const reqWithToken = () =>
+    ({
+      headers: { authorization: 'Bearer stale', 'x-auth-provider': 'apikey' },
+    }) as unknown as Request
+
+  it('serves unauthenticated flags when the credential is refused', async () => {
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockRejectedValue(new AuthLookupError('rejected', true, 401) as never)
+
+    const flags = await getFeatureFlags(reqWithToken())
+    expect(flags).toEqual(FeatureFlagsUseCases.get(null))
+  })
+
+  it('serves unauthenticated flags when the auth service is unreachable', async () => {
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockRejectedValue(new AuthLookupError('down', false) as never)
+
+    // Previously a 503 here left the frontend with no flags at all.
+    const flags = await getFeatureFlags(reqWithToken())
+    expect(flags).toEqual(FeatureFlagsUseCases.get(null))
+  })
+
+  it('uses the resolved user when the credential is good', async () => {
+    const user = makeUser({
+      oauthProvider: 'google',
+      oauthUsername: 'someone@example.com',
+    })
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(user as never)
+
+    const flags = await getFeatureFlags(reqWithToken())
+    expect(flags).toEqual(FeatureFlagsUseCases.get(user))
   })
 })

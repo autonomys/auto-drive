@@ -95,6 +95,11 @@ describe('AWS S3 - SDK', () => {
   const Key = 'test.txt'
   const Body = Buffer.from('Hello, world!')
 
+  // Raw-fetch probes need a SigV4-shaped Authorization header; AuthManager is
+  // mocked, so only the Credential's shape matters.
+  const PROBE_AUTH =
+    'AWS4-HMAC-SHA256 Credential=probekey/20200101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=0'
+
   it('should upload an object', async () => {
     const command = new PutObjectCommand({
       Bucket,
@@ -1472,6 +1477,58 @@ describe('AWS S3 - SDK', () => {
     }, 15_000)
   })
 
+  // A Range the object cannot satisfy, and the ranged HEAD whose 206 used to be
+  // overwritten on the way out.
+  describe('Range handling', () => {
+    const RKey = 'range-test/seventy.bin'
+    const RBody = Buffer.alloc(70, 0x41)
+
+    it('stores the fixture', async () => {
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: RKey, Body: RBody }),
+      )
+    }, 15_000)
+
+    it('answers a range starting past the object with 416 InvalidRange', async () => {
+      // The download use case clamps only the range END, so this used to survive
+      // as `Content-Range: bytes 100-69/70` with a Content-Length of -30.
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=100-' },
+      })
+      expect(res.status).toBe(416)
+      expect(res.headers.get('content-range')).toBe('bytes */70')
+      const body = await res.text()
+      expect(body).toContain('<Code>InvalidRange</Code>')
+      expect(body).toContain('<ActualObjectSize>70</ActualObjectSize>')
+    }, 15_000)
+
+    it('answers a ranged HeadObject with 206 and a matching Content-Length', async () => {
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        method: 'HEAD',
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=0-9' },
+      })
+      // A trailing res.status(200) used to overwrite the 206, so the reply said
+      // "whole object" while carrying a 10-byte Content-Length.
+      expect(res.status).toBe(206)
+      expect(res.headers.get('content-range')).toBe('bytes 0-9/70')
+      expect(res.headers.get('content-length')).toBe('10')
+    }, 15_000)
+
+    it('rejects a non-numeric partNumber with 400 InvalidArgument', async () => {
+      // A client mistake, previously answered with a 500 JSON body.
+      const res = await fetch(
+        `${BASE_PATH}/s3/range-test/part.bin?uploadId=nope&partNumber=abc`,
+        {
+          method: 'PUT',
+          headers: { Authorization: PROBE_AUTH },
+          body: 'x',
+        },
+      )
+      expect(res.status).toBe(400)
+      expect(await res.text()).toContain('<Code>InvalidArgument</Code>')
+    }, 15_000)
+  })
+
   // An authentication failure has to be an S3 protocol error. A rejected API key
   // used to reach Express's default handler as an HTML 500 — and 5xx is in every
   // S3 client's and rclone's retryable set, so a credential that can never work
@@ -1749,10 +1806,13 @@ describe('AWS S3 - SDK', () => {
   describe('Missing keys', () => {
     const MissingKey = 'this-key-was-never-uploaded-' + Date.now() + '.txt'
 
-    it('GetObject on a missing key should return 404', async () => {
+    it('GetObject on a missing key should return 404 NoSuchKey', async () => {
       const command = new GetObjectCommand({ Bucket, Key: MissingKey })
+      // name comes from the <Code> in the body; a JSON error would leave the SDK
+      // with an opaque failure it cannot map to NoSuchKey.
       await expect(s3Client.send(command)).rejects.toMatchObject({
         $metadata: { httpStatusCode: 404 },
+        name: 'NoSuchKey',
       })
     })
 
@@ -1761,6 +1821,15 @@ describe('AWS S3 - SDK', () => {
       await expect(s3Client.send(command)).rejects.toMatchObject({
         $metadata: { httpStatusCode: 404 },
       })
+    })
+
+    it('answers a missing key with a parsable XML error document', async () => {
+      const res = await fetch(`${BASE_PATH}/s3/default/${MissingKey}`, {
+        headers: { Authorization: PROBE_AUTH },
+      })
+      expect(res.status).toBe(404)
+      expect(res.headers.get('content-type')).toContain('application/xml')
+      expect(await res.text()).toContain('<Code>NoSuchKey</Code>')
     })
   })
 

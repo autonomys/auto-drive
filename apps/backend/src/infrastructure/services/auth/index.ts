@@ -6,10 +6,11 @@ import { DeletionRequest, UserWithOrganization } from '@auto-drive/models'
  *
  * `isCredentialFailure` separates the two cases a caller must answer
  * differently, because they call for opposite client behaviour:
- *  - true  — the auth service answered, and answered 4xx: the credential is
- *            wrong or revoked. Permanent; retrying it can never succeed.
- *  - false — the auth service could not answer (5xx, timeout, DNS/connect
- *            failure). Transient; the same credential may work moments later.
+ *  - true  — the auth service judged the credential and refused it. Permanent;
+ *            retrying it can never succeed.
+ *  - false — the auth service never judged it (it was overloaded, timed out,
+ *            failed, or could not be reached). Transient; the same credential
+ *            may work moments later.
  *
  * Collapsing the two (the previous behaviour: one bare Error for both) forces
  * every caller to answer 500, which S3 clients and rclone classify as
@@ -26,6 +27,19 @@ export class AuthLookupError extends Error {
     this.name = 'AuthLookupError'
   }
 }
+
+/**
+ * The statuses that are a verdict on the credential itself. The auth service
+ * answers 401 for a token or API key it cannot resolve
+ * (handleAuthIgnoreOnboarding in apps/auth), and 403/404 are the other two ways
+ * it can refuse a caller it did resolve.
+ *
+ * Deliberately NOT "any 4xx": 408, 425 and 429 all mean the service declined to
+ * do the work this time, so reporting them as a bad credential would tell a
+ * client its working key is dead — the exact failure this class exists to
+ * prevent, just moved one status along.
+ */
+const CREDENTIAL_REJECTION_STATUSES = new Set([401, 403, 404])
 
 const getUserFromAccessToken = async (
   provider: string,
@@ -49,15 +63,26 @@ const getUserFromAccessToken = async (
   }
 
   if (!response.ok) {
-    // 4xx is a verdict on the credential; anything else is the service failing.
     throw new AuthLookupError(
       `Auth service rejected the token lookup (status=${response.status})`,
-      response.status >= 400 && response.status < 500,
+      CREDENTIAL_REJECTION_STATUSES.has(response.status),
       response.status,
     )
   }
 
-  return response.json()
+  try {
+    return await response.json()
+  } catch (error) {
+    // A 200 whose body is not the user (an HTML error page from a proxy, a reset
+    // mid-body). The credential was never judged, so this must not be reported
+    // as a rejection — a bare SyntaxError here would be, since callers key off
+    // AuthLookupError.
+    throw new AuthLookupError(
+      `Auth service returned an unreadable user: ${(error as Error).message}`,
+      false,
+      response.status,
+    )
+  }
 }
 
 const getUserFromPublicId = async (
