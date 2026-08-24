@@ -4,7 +4,7 @@ import {
   UploadCompletionInProgressError,
   UploadPartsChangedError,
 } from '../../../core/uploads/errors.js'
-import { handleS3Auth } from '../../../infrastructure/services/auth/s3.js'
+import { handleS3Auth } from './auth.js'
 import {
   getByteRange,
   handleDownloadResponseHeaders,

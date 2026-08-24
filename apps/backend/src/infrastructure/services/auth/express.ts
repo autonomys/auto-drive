@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { UserWithOrganization } from '@auto-drive/models'
-import { AuthManager } from './index.js'
+import { AuthLookupError, AuthManager } from './index.js'
 import { config } from '../../../config.js'
 
 export const handleAuth = async (
@@ -23,7 +23,26 @@ export const handleAuth = async (
     return null
   }
 
-  const user = await AuthManager.getUserFromAccessToken(provider, accessToken)
+  // A failed lookup must be answered here. Letting it throw reaches Express's
+  // default error handler, which answers an HTML 500 — a retryable status for a
+  // credential that will never work.
+  let user: UserWithOrganization
+  try {
+    user = await AuthManager.getUserFromAccessToken(provider, accessToken)
+  } catch (error) {
+    if (error instanceof AuthLookupError && !error.isCredentialFailure) {
+      // The auth service is down, not the credential. 503 so a client backs off
+      // and retries rather than treating its token as invalid.
+      res.status(503).json({
+        error: 'Authentication service unavailable',
+      })
+      return null
+    }
+    res.status(401).json({
+      error: 'Failed to authenticate user',
+    })
+    return null
+  }
 
   if (!user) {
     res.status(401).json({

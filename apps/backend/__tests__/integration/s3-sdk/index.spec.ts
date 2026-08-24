@@ -27,7 +27,10 @@ import {
   unmockMethods,
 } from '../../utils/mocks.js'
 import { jest } from '@jest/globals'
-import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
+import {
+  AuthLookupError,
+  AuthManager,
+} from '../../../src/infrastructure/services/auth/index.js'
 import { config } from '../../../src/config.js'
 import { AccountsUseCases } from '../../../src/core/index.js'
 
@@ -1397,6 +1400,46 @@ describe('AWS S3 - SDK', () => {
         new HeadObjectCommand({ Bucket, Key: Dst }),
       )
       expect(head.ContentEncoding).toBe('br')
+    })
+  })
+
+  // An authentication failure has to be an S3 protocol error. A rejected API key
+  // used to reach Express's default handler as an HTML 500 — and 5xx is in every
+  // S3 client's and rclone's retryable set, so a credential that can never work
+  // was retried with backoff instead of failing immediately.
+  describe('Authentication failures are S3 XML errors', () => {
+    const AUTH =
+      'AWS4-HMAC-SHA256 Credential=authtestkey/20200101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=deadbeef'
+
+    const probe = (headers: Record<string, string> = {}) =>
+      fetch(`${BASE_PATH}/s3/auth-test/probe.txt`, { method: 'GET', headers })
+
+    it('answers an unsigned request with 403 AccessDenied XML', async () => {
+      const res = await probe()
+      expect(res.status).toBe(403)
+      expect(res.headers.get('content-type')).toContain('application/xml')
+      expect(await res.text()).toContain('<Code>AccessDenied</Code>')
+    })
+
+    it('answers a rejected API key with 403 InvalidAccessKeyId, not a 5xx', async () => {
+      jest
+        .spyOn(AuthManager, 'getUserFromAccessToken')
+        .mockRejectedValueOnce(new AuthLookupError('rejected', true, 401))
+
+      const res = await probe({ Authorization: AUTH })
+      expect(res.status).toBe(403)
+      expect(await res.text()).toContain('<Code>InvalidAccessKeyId</Code>')
+    })
+
+    it('answers an unavailable auth service with a retryable 503', async () => {
+      jest
+        .spyOn(AuthManager, 'getUserFromAccessToken')
+        .mockRejectedValueOnce(new AuthLookupError('unreachable', false))
+
+      const res = await probe({ Authorization: AUTH })
+      // The one failure a client SHOULD retry.
+      expect(res.status).toBe(503)
+      expect(await res.text()).toContain('<Code>ServiceUnavailable</Code>')
     })
   })
 

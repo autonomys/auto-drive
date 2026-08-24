@@ -1,19 +1,60 @@
 import { config } from '../../../config.js'
 import { DeletionRequest, UserWithOrganization } from '@auto-drive/models'
 
+/**
+ * A token lookup against the auth service did not yield a user.
+ *
+ * `isCredentialFailure` separates the two cases a caller must answer
+ * differently, because they call for opposite client behaviour:
+ *  - true  — the auth service answered, and answered 4xx: the credential is
+ *            wrong or revoked. Permanent; retrying it can never succeed.
+ *  - false — the auth service could not answer (5xx, timeout, DNS/connect
+ *            failure). Transient; the same credential may work moments later.
+ *
+ * Collapsing the two (the previous behaviour: one bare Error for both) forces
+ * every caller to answer 500, which S3 clients and rclone classify as
+ * retryable — so a permanently-bad API key is retried with backoff instead of
+ * failing fast.
+ */
+export class AuthLookupError extends Error {
+  constructor(
+    message: string,
+    public readonly isCredentialFailure: boolean,
+    public readonly upstreamStatus?: number,
+  ) {
+    super(message)
+    this.name = 'AuthLookupError'
+  }
+}
+
 const getUserFromAccessToken = async (
   provider: string,
   accessToken: string,
 ): Promise<UserWithOrganization> => {
-  const response = await fetch(`${config.authService.url}/users/@me`, {
-    headers: {
-      'x-auth-provider': provider,
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
+  let response: Response
+  try {
+    response = await fetch(`${config.authService.url}/users/@me`, {
+      headers: {
+        'x-auth-provider': provider,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+  } catch (error) {
+    // Transport-level failure: the service was never reached, so nothing is
+    // known about the credential.
+    throw new AuthLookupError(
+      `Auth service unreachable: ${(error as Error).message}`,
+      false,
+    )
+  }
 
   if (!response.ok) {
-    throw new Error('Failed to fetch user')
+    // 4xx is a verdict on the credential; anything else is the service failing.
+    throw new AuthLookupError(
+      `Auth service rejected the token lookup (status=${response.status})`,
+      response.status >= 400 && response.status < 500,
+      response.status,
+    )
   }
 
   return response.json()
