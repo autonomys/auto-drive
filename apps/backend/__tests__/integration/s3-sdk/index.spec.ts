@@ -127,7 +127,7 @@ describe('AWS S3 - SDK', () => {
     const command = new GetObjectCommand({
       Bucket,
       Key,
-      Range: 'bytes 0-9',
+      Range: 'bytes=0-9',
     })
 
     const result = await s3Client.send(command)
@@ -1514,6 +1514,66 @@ describe('AWS S3 - SDK', () => {
       expect(res.headers.get('content-length')).toBe('10')
     }, 15_000)
 
+    it('serves a suffix range as the LAST bytes, not the first', async () => {
+      // bytes=-10 on 70 bytes of 0x41 must be bytes 60-69. The shared parser read
+      // this as [0, 10] and handed back the head of the object with a
+      // Content-Range that claimed exactly that — a trailer reader would take it.
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=-10' },
+      })
+      expect(res.status).toBe(206)
+      expect(res.headers.get('content-range')).toBe('bytes 60-69/70')
+      expect(res.headers.get('content-length')).toBe('10')
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(
+        RBody.subarray(60, 70),
+      )
+    }, 15_000)
+
+    it('clamps a suffix longer than the object to the whole object', async () => {
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=-500' },
+      })
+      expect(res.status).toBe(206)
+      expect(res.headers.get('content-range')).toBe('bytes 0-69/70')
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(RBody)
+    }, 15_000)
+
+    it.each(['bytes=0-9, 20-29', 'bytes=0-abc'])(
+      'ignores %s and serves the whole object',
+      async (range) => {
+        // These used to yield `Content-Range: bytes 0-NaN/70` and a NaN
+        // Content-Length, so the client hung or aborted on a length mismatch.
+        const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+          headers: { Authorization: PROBE_AUTH, Range: range },
+        })
+        expect(res.status).toBe(200)
+        expect(res.headers.get('content-length')).toBe('70')
+        expect(res.headers.get('content-range')).toBeNull()
+        expect(Buffer.from(await res.arrayBuffer())).toEqual(RBody)
+      },
+      15_000,
+    )
+
+    it.each(['0', '-1', '10001', '1abc'])(
+      'rejects partNumber=%s with 400 InvalidArgument',
+      async (partNumber) => {
+        // partNumber=0 became a -1 internal index that uploadChunk dropped, so
+        // the part's bytes were lost while the handler answered 200 with an ETag
+        // that CompleteMultipartUpload then folded into the composite.
+        const res = await fetch(
+          `${BASE_PATH}/s3/range-test/part.bin?uploadId=nope&partNumber=${partNumber}`,
+          {
+            method: 'PUT',
+            headers: { Authorization: PROBE_AUTH },
+            body: 'x',
+          },
+        )
+        expect(res.status).toBe(400)
+        expect(await res.text()).toContain('<Code>InvalidArgument</Code>')
+      },
+      15_000,
+    )
+
     it('rejects a non-numeric partNumber with 400 InvalidArgument', async () => {
       // A client mistake, previously answered with a 500 JSON body.
       const res = await fetch(
@@ -1526,6 +1586,29 @@ describe('AWS S3 - SDK', () => {
       )
       expect(res.status).toBe(400)
       expect(await res.text()).toContain('<Code>InvalidArgument</Code>')
+    }, 15_000)
+  })
+
+  // Failures that never reach a handler: body-parser rejects the request first,
+  // and Express's default handler would answer HTML — retryable to every S3
+  // client. The router-level error handler renders them as <Error> documents.
+  describe('Pre-handler failures are S3 XML errors', () => {
+    it('answers an undecodable body encoding with 501 NotImplemented', async () => {
+      // A client using chunked SigV4 sends Content-Encoding: aws-chunked, whose
+      // framing this API does not decode. Previously an HTML 415.
+      const res = await fetch(`${BASE_PATH}/s3/encoding-test/chunked.bin`, {
+        method: 'PUT',
+        headers: {
+          Authorization: PROBE_AUTH,
+          'Content-Encoding': 'aws-chunked',
+        },
+        body: 'x',
+      })
+      expect(res.status).toBe(501)
+      expect(res.headers.get('content-type')).toContain('application/xml')
+      const body = await res.text()
+      expect(body).toContain('<Code>NotImplemented</Code>')
+      expect(body).toContain('aws-chunked')
     }, 15_000)
   })
 

@@ -31,15 +31,46 @@ export class AuthLookupError extends Error {
 /**
  * The statuses that are a verdict on the credential itself. The auth service
  * answers 401 for a token or API key it cannot resolve
- * (handleAuthIgnoreOnboarding in apps/auth), and 403/404 are the other two ways
- * it can refuse a caller it did resolve.
+ * (handleAuthIgnoreOnboarding in apps/auth); 403 is the other way it can refuse
+ * a caller it did resolve.
  *
- * Deliberately NOT "any 4xx": 408, 425 and 429 all mean the service declined to
- * do the work this time, so reporting them as a bad credential would tell a
- * client its working key is dead — the exact failure this class exists to
+ * Deliberately NOT "any 4xx". 408, 425 and 429 mean the service declined to do
+ * the work this time, and 404 is what a proxy or ingress answers when the URL
+ * itself is wrong — a stale deploy or a renamed route would otherwise report
+ * every working key as permanently dead, the exact failure this class exists to
  * prevent, just moved one status along.
  */
-const CREDENTIAL_REJECTION_STATUSES = new Set([401, 403, 404])
+const CREDENTIAL_REJECTION_STATUSES = new Set([401, 403])
+
+/**
+ * How long to wait for the auth service before treating it as unavailable.
+ *
+ * Without this, the common outage shape — a service that accepts the connection
+ * and then hangs — never produces an error at all: the request holds a worker
+ * slot until the client itself gives up, and the retryable 503 path below is
+ * unreachable. The timeout turns that hang into an AbortError, which the catch
+ * classifies as a service failure.
+ */
+const AUTH_LOOKUP_TIMEOUT_MS = 10_000
+
+export type AuthFailureKind = 'rejected' | 'unavailable'
+
+/**
+ * How to answer a failed token lookup: was the credential refused, or could the
+ * question not be answered?
+ *
+ * Anything that is not an AuthLookupError is a fault in THIS service — a
+ * TypeError, a refactor that throws something new — not a verdict on the
+ * credential. Those are 'unavailable' so they surface as a 5xx an operator will
+ * see, rather than a 403 that blames the caller and fires no alert.
+ *
+ * Shared so the S3 and REST adapters cannot drift on whether a given failure is
+ * worth retrying; each one only decides how to render the answer.
+ */
+export const classifyAuthFailure = (error: unknown): AuthFailureKind =>
+  error instanceof AuthLookupError && error.isCredentialFailure
+    ? 'rejected'
+    : 'unavailable'
 
 const getUserFromAccessToken = async (
   provider: string,
@@ -52,10 +83,11 @@ const getUserFromAccessToken = async (
         'x-auth-provider': provider,
         Authorization: `Bearer ${accessToken}`,
       },
+      signal: AbortSignal.timeout(AUTH_LOOKUP_TIMEOUT_MS),
     })
   } catch (error) {
-    // Transport-level failure: the service was never reached, so nothing is
-    // known about the credential.
+    // Transport-level failure or the timeout above: the service never answered,
+    // so nothing is known about the credential.
     throw new AuthLookupError(
       `Auth service unreachable: ${(error as Error).message}`,
       false,

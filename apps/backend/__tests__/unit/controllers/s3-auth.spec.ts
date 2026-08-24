@@ -88,15 +88,17 @@ describe('handleS3Auth', () => {
     expect(codeOf(state.body)).toBe('ServiceUnavailable')
   })
 
-  it('treats an unexpected lookup failure as a credential failure, not a retry', async () => {
+  it('reports an unexpected lookup failure as a 5xx, not a bad key', async () => {
     const { res, state } = stubRes()
     jest
       .spyOn(AuthManager, 'getUserFromAccessToken')
       .mockRejectedValue(new Error('boom') as never)
 
+    // A fault in this service is not a verdict on the credential. Answering 403
+    // would blame the caller, fire no alert, and send them rotating good keys.
     expect(await handleS3Auth(reqWith(VALID_HEADER), res)).toBeNull()
-    expect(state.status).toBe(403)
-    expect(codeOf(state.body)).toBe('InvalidAccessKeyId')
+    expect(state.status).toBe(503)
+    expect(codeOf(state.body)).toBe('ServiceUnavailable')
   })
 
   it('returns the user and writes nothing when the key is good', async () => {
@@ -159,6 +161,17 @@ describe('AuthManager.getUserFromAccessToken failure classification', () => {
     expect(error).toBeInstanceOf(AuthLookupError)
     expect(error.isCredentialFailure).toBe(false)
     expect(error.upstreamStatus).toBeUndefined()
+  })
+
+  it('classifies a 404 as a service failure — a wrong URL, not a wrong key', async () => {
+    global.fetch = (async () =>
+      new globalThis.Response('not found', { status: 404 })) as typeof fetch
+
+    // apps/auth never answers 404 for a credential; a proxy or a stale deploy
+    // does, and every key would otherwise be reported permanently dead.
+    const error = await lookup()
+    expect(error.isCredentialFailure).toBe(false)
+    expect(error.upstreamStatus).toBe(404)
   })
 
   it.each([408, 425, 429])(

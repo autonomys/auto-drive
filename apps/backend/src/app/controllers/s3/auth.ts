@@ -1,8 +1,8 @@
 import { Request, Response } from 'express'
 import { UserWithOrganization } from '@auto-drive/models'
 import {
-  AuthLookupError,
   AuthManager,
+  classifyAuthFailure,
 } from '../../../infrastructure/services/auth/index.js'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { sendXML } from './utils.js'
@@ -60,10 +60,12 @@ export const handleS3Auth = async (
   try {
     user = await AuthManager.getUserFromAccessToken('apikey', apiKey)
   } catch (error) {
-    if (error instanceof AuthLookupError && !error.isCredentialFailure) {
-      // The auth service is unavailable — the one case where a retry is the
-      // right client behaviour, so say so with a retryable S3 code.
-      logger.error('Auth service unavailable during S3 auth', error)
+    if (classifyAuthFailure(error) === 'unavailable') {
+      // The credential was never judged — the auth service is down, or this
+      // service has a bug. The one case where a retry is the right client
+      // behaviour, so say so with a retryable S3 code (and a 5xx an operator
+      // will see, rather than a 403 that blames the caller).
+      logger.error(error, 'Auth service could not answer an S3 token lookup')
       sendXML(res.status(503), 'Error', {
         Code: 'ServiceUnavailable',
         Message:
@@ -71,10 +73,12 @@ export const handleS3Auth = async (
       })
       return null
     }
+    // Message first: debug-level only substitutes %s when the first argument is
+    // a string, so the error rides along as a trailing object.
     logger.info(
-      error,
       'Rejected an S3 request with an unusable API key (keyPrefix=%s)',
       apiKey.slice(0, 6),
+      error,
     )
     sendXML(res.status(403), 'Error', {
       Code: 'InvalidAccessKeyId',

@@ -8,17 +8,16 @@ import { handleS3Auth } from './auth.js'
 import {
   ByteRange,
   DownloadMetadata,
-  getByteRange,
   handleDownloadResponseHeaders,
   handleS3DownloadResponseHeaders,
 } from '@autonomys/file-server'
 import { pipeline } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
-import { Request, Response } from 'express'
+import { NextFunction, Request, Response } from 'express'
 import { encodeS3Key, planListingEncoding, sendXML } from './utils.js'
 import js2xmlparser from 'js2xmlparser'
 import { XMLParser } from 'fast-xml-parser'
-import { UploadOptions } from '@auto-drive/models'
+import { UploadOptions, UserWithOrganization } from '@auto-drive/models'
 import {
   CompressionAlgorithm,
   EncryptionAlgorithm,
@@ -150,19 +149,20 @@ const getObjectMetadata = (req: Request): S3ObjectMetadata | null => {
   // read it back from there. It cannot be forged: a client-sent header only ever
   // lands in req.headers, never in the WeakMap. The req.headers fallback just
   // catches an 'identity' encoding the middleware intentionally leaves in place.
-  // aws-chunked is excluded: it is AWS transfer framing (the middleware leaves
-  // it on the headers for exactly that reason), never a description of the
-  // stored bytes. Echoing it back as the object's Content-Encoding would
-  // advertise an encoding untied to the body — the same class of false encoding
-  // header this API exists to avoid.
+  // The aws-chunked token is dropped, and only that token: it is AWS transfer
+  // framing (the middleware leaves it on the headers for exactly that reason),
+  // never a description of the stored bytes, so echoing it back as the object's
+  // Content-Encoding would advertise an encoding untied to the body. A composite
+  // 'aws-chunked,gzip' keeps its gzip — discarding the whole value would lose
+  // the client's real encoding along with the framing.
   const rawContentEncoding =
     headerString(req.headers['content-encoding']) ??
     stashedContentEncoding.get(req)
-  const contentEncoding =
-    rawContentEncoding &&
-    rawContentEncoding.toLowerCase().includes('aws-chunked')
-      ? undefined
-      : rawContentEncoding
+  const contentEncoding = rawContentEncoding
+    ?.split(',')
+    .map((token) => token.trim())
+    .filter((token) => token.toLowerCase() !== 'aws-chunked')
+    .join(', ')
   if (contentEncoding) metadata.contentEncoding = contentEncoding
 
   const userMetadata: Record<string, string> = {}
@@ -240,6 +240,7 @@ const S3_ERROR_CODE_BY_STATUS: Record<number, string> = {
   409: 'OperationAborted',
   410: 'NoSuchKey',
   413: 'EntityTooLarge',
+  415: 'InvalidRequest',
   451: 'UnavailableForLegalReasons',
   501: 'NotImplemented',
   503: 'ServiceUnavailable',
@@ -268,8 +269,87 @@ const handleS3Error = (
     status === 404
       ? notFoundCode
       : (S3_ERROR_CODE_BY_STATUS[status] ?? 'InternalError')
-  if (status >= 500) logger.error(error, 'S3 request failed')
+  if (status >= 500) {
+    // A 5xx message is a fixed string: an unexpected error's own message can
+    // carry a pg detail, a path, or an internal id, and the shared handleError
+    // this replaced masked exactly that. The detail belongs in the log.
+    logger.error(error, 'S3 request failed')
+    sendXML(res.status(status), 'Error', {
+      Code: code,
+      Message: 'We encountered an internal error. Please try again.',
+    })
+    return
+  }
   sendXML(res.status(status), 'Error', { Code: code, Message: error.message })
+}
+
+/**
+ * A single byte-range request, as written by the client.
+ *
+ * 'offset' is `bytes=<start>-<end?>`; 'suffix' is `bytes=-<length>`, the LAST
+ * `length` bytes, which cannot be turned into offsets until the object's size is
+ * known.
+ */
+export type S3RangeSpec =
+  | { kind: 'offset'; start: number; end?: number }
+  | { kind: 'suffix'; length: number }
+
+// The separator is '=' per RFC 7233. A single space is also accepted because the
+// parser this replaces read the header by slicing six characters ('bytes '), so
+// `bytes 0-9` has always worked here; tightening it would change behaviour for
+// any caller relying on that rather than fix a defect.
+const SINGLE_BYTE_RANGE = /^bytes[= ](\d*)-(\d*)$/i
+
+/**
+ * Parse a Range header strictly, and IGNORE anything that isn't one satisfiable
+ * shape — which is what RFC 7233 requires of a malformed Range and what S3 does
+ * with a multi-range request: serve the whole object.
+ *
+ * Not the shared getByteRange: it runs Number() over whatever sits either side
+ * of the first '-' with no NaN guard, so `bytes=0-9, 20-29` (a real client
+ * shape) parses to [0, NaN] and `bytes=-500` — the last 500 bytes — parses to
+ * [0, 500], i.e. the FIRST 501. Both then flow into Content-Range and
+ * Content-Length: the first advertises `bytes 0-NaN/70` with a NaN length, the
+ * second hands a trailer reader the head of the file and calls it the trailer.
+ * Suffix ranges are how Parquet, ORC, ZIP and media clients read footers, so
+ * getting them wrong is silent, plausible, wrong data.
+ */
+export const parseS3Range = (req: Request): S3RangeSpec | undefined => {
+  const header = req.headers['range']
+  if (typeof header !== 'string') return undefined
+
+  const match = SINGLE_BYTE_RANGE.exec(header.trim())
+  if (!match) return undefined
+  const [, rawStart, rawEnd] = match
+
+  // `bytes=-N`: the last N bytes. `bytes=-` matches neither form.
+  if (rawStart === '') {
+    if (rawEnd === '') return undefined
+    return { kind: 'suffix', length: Number(rawEnd) }
+  }
+
+  const start = Number(rawStart)
+  if (rawEnd === '') return { kind: 'offset', start }
+
+  const end = Number(rawEnd)
+  // An inverted range is not satisfiable and not a valid Range: ignore it rather
+  // than answer 416, per RFC 7233.
+  if (end < start) return undefined
+  return { kind: 'offset', start, end }
+}
+
+/**
+ * Turn a suffix range into absolute offsets now that the size is known, or
+ * report that no such range exists.
+ */
+export const resolveSuffixRange = (
+  length: number,
+  size: bigint,
+): ByteRange | 'unsatisfiable' => {
+  const total = Number(size)
+  // Zero bytes of a suffix, or any suffix of an empty object, names nothing.
+  if (length === 0 || total === 0) return 'unsatisfiable'
+  return [Math.max(0, total - length), total - 1]
 }
 
 /**
@@ -289,6 +369,20 @@ const handleS3Error = (
  *
  * Returns true once a response has been sent.
  */
+const sendRangeNotSatisfiable = (
+  req: Request,
+  res: Response,
+  size: bigint | undefined,
+) => {
+  res.setHeader('Content-Range', `bytes */${size ?? 0}`)
+  sendXML(res.status(416), 'Error', {
+    Code: 'InvalidRange',
+    Message: 'The requested range is not satisfiable',
+    RangeRequested: req.headers['range'] ?? '',
+    ActualObjectSize: (size ?? BigInt(0)).toString(),
+  })
+}
+
 const rejectIfRangeNotSatisfiable = (
   req: Request,
   res: Response,
@@ -298,14 +392,52 @@ const rejectIfRangeNotSatisfiable = (
   if (!byteRange) return false
   if (size != null && byteRange[0] < Number(size)) return false
 
-  res.setHeader('Content-Range', `bytes */${size ?? 0}`)
-  sendXML(res.status(416), 'Error', {
-    Code: 'InvalidRange',
-    Message: 'The requested range is not satisfiable',
-    RangeRequested: req.headers['range'] ?? '',
-    ActualObjectSize: (size ?? BigInt(0)).toString(),
-  })
+  sendRangeNotSatisfiable(req, res, size)
   return true
+}
+
+/**
+ * Resolve the request's Range into the absolute offsets the download is prepared
+ * with.
+ *
+ * An 'offset' range needs nothing up front: the size only arrives with the
+ * download, and rejectIfRangeNotSatisfiable checks the start against it before a
+ * single header is written. A 'suffix' range does need it — `bytes=-500` names
+ * nothing until the size is known, yet the range has to be baked into the
+ * download options before the download is prepared. So it costs one extra
+ * metadata read (no bytes are fetched until startDownload()), confined to the
+ * requests that actually need it.
+ *
+ * Returns the range to read with, or null once a response has been sent.
+ */
+const resolveRequestedRange = async (
+  req: Request,
+  res: Response,
+  user: UserWithOrganization,
+  target: { Bucket: string; Key: string; VersionId?: string },
+  spec: S3RangeSpec | undefined,
+): Promise<{ byteRange: ByteRange | undefined } | null> => {
+  if (spec === undefined) return { byteRange: undefined }
+  if (spec.kind === 'offset') {
+    // An open-ended range keeps its undefined end: the download use case clamps
+    // it to the last byte once it knows the size.
+    return { byteRange: [spec.start, spec.end] }
+  }
+
+  const probe = await S3UseCases.getObject(user, target)
+  if (probe.isErr()) {
+    handleS3Error(probe.error, res)
+    return null
+  }
+
+  const size = probe.value.metadata.size
+  const resolved =
+    size == null ? 'unsatisfiable' : resolveSuffixRange(spec.length, size)
+  if (resolved === 'unsatisfiable') {
+    sendRangeNotSatisfiable(req, res, size)
+    return null
+  }
+  return { byteRange: resolved }
 }
 
 /**
@@ -466,6 +598,10 @@ const buildObjectLocation = (
   return `${proto}://${host}${prefix}/${bucket}/${key}`
 }
 
+// The inclusive part-number range S3 defines for a multipart upload.
+const MIN_PART_NUMBER = 1
+const MAX_PART_NUMBER = 10_000
+
 /** Thrown when a CompleteMultipartUpload body is not valid per the S3 spec. */
 export class MalformedMultipartError extends Error {}
 
@@ -547,12 +683,24 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   if (!user) return
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
-  const byteRange = getByteRange(req)
-  const downloadResult = await S3UseCases.getObject(user, {
+  const target = {
     Key: key,
-    Range: byteRange,
     Bucket: bucket,
     VersionId: getVersionId(req),
+  }
+  const resolvedRange = await resolveRequestedRange(
+    req,
+    res,
+    user,
+    target,
+    parseS3Range(req),
+  )
+  if (!resolvedRange) return
+  const { byteRange } = resolvedRange
+
+  const downloadResult = await S3UseCases.getObject(user, {
+    ...target,
+    Range: byteRange,
   })
 
   if (downloadResult.isErr()) {
@@ -602,10 +750,12 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   pipeline(await startDownload(), res, (err: Error | null) => {
     if (err) {
       if (res.headersSent) return
-      logger.error('Error streaming data', err)
-      res.status(500).json({
-        error: 'Failed to stream data',
-        details: err.message,
+      logger.error(err, 'Error streaming an S3 object body')
+      // XML, and no err.message: the same reasons as handleS3Error — an SDK
+      // cannot type a JSON body, and the message is a DSN/gateway internal.
+      sendXML(res.status(500), 'Error', {
+        Code: 'InternalError',
+        Message: 'We encountered an internal error. Please try again.',
       })
     }
   })
@@ -616,12 +766,24 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   if (!user) return
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
-  const byteRange = getByteRange(req)
-  const downloadResult = await S3UseCases.getObject(user, {
+  const target = {
     Key: key,
-    Range: byteRange,
     Bucket: bucket,
     VersionId: getVersionId(req),
+  }
+  const resolvedRange = await resolveRequestedRange(
+    req,
+    res,
+    user,
+    target,
+    parseS3Range(req),
+  )
+  if (!resolvedRange) return
+  const { byteRange } = resolvedRange
+
+  const downloadResult = await S3UseCases.getObject(user, {
+    ...target,
+    Range: byteRange,
   })
 
   if (downloadResult.isErr()) {
@@ -808,7 +970,7 @@ export const createMultipartUploadHandler = async (
   })
 
   if (result.isErr()) {
-    handleS3Error(result.error, res, 'NoSuchUpload')
+    handleS3Error(result.error, res)
     return
   }
 
@@ -836,12 +998,24 @@ export const uploadPartHandler = async (req: Request, res: Response) => {
     return
   }
 
-  const parsedPartNumber = parseInt(partNumber as string)
-  if (isNaN(parsedPartNumber)) {
+  // S3 part numbers are 1..10000, and the bound is load-bearing, not cosmetic:
+  // uploadPart subtracts one for the 0-indexed internal part, so partNumber=0
+  // becomes -1, which uploadChunk reads as "already processed" and drops. The
+  // handler would then answer 200 with an ETag over bytes that were never
+  // stored, and CompleteMultipartUpload would fold that ETag into the composite
+  // — a complete object, by its own checksum, missing a part.
+  // Number (not parseInt) so '1abc' and a repeated ?partNumber= are rejected
+  // rather than truncated to something plausible.
+  const parsedPartNumber = Number(partNumber)
+  if (
+    !Number.isInteger(parsedPartNumber) ||
+    parsedPartNumber < MIN_PART_NUMBER ||
+    parsedPartNumber > MAX_PART_NUMBER
+  ) {
     logger.error('Invalid partNumber: %s', partNumber)
     sendXML(res.status(400), 'Error', {
       Code: 'InvalidArgument',
-      Message: 'The partNumber query parameter must be an integer.',
+      Message: `The partNumber query parameter must be an integer between ${MIN_PART_NUMBER} and ${MAX_PART_NUMBER}.`,
       ArgumentName: 'partNumber',
       ArgumentValue: String(partNumber),
     })
@@ -1321,6 +1495,55 @@ export const abortMultipartUploadHandler = async (
 
   // S3 AbortMultipartUpload responds 204 No Content.
   res.status(204).end()
+}
+
+/**
+ * Render ANY error escaping the S3 router as an S3 <Error> document.
+ *
+ * The per-handler mapping above only covers failures a handler returns. Plenty
+ * never reach one: body-parser rejects an over-limit body (413) or a
+ * Content-Encoding it cannot inflate (415) before the handler runs, and a throw
+ * from a use case goes to asyncSafeHandler, which calls next(err) — Express's
+ * default handler then answers an HTML 500, retryable to every S3 client and
+ * rclone. Registering this last on the router covers all of them in one place
+ * instead of one call site at a time.
+ *
+ * `encoding.unsupported` is called out because it has a real cause: a client
+ * using chunked SigV4 sends `Content-Encoding: aws-chunked`, whose framing this
+ * API does not decode. 501 NotImplemented says that, where 415 only says the
+ * request was refused.
+ */
+export const s3ErrorHandler = (
+  err: Error & { status?: number; statusCode?: number; type?: string },
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  // Mid-stream failures can't be re-answered; let Express destroy the socket.
+  if (res.headersSent) return next(err)
+
+  if (err.type === 'encoding.unsupported') {
+    logger.warn(err, 'Refused an S3 request with an undecodable body encoding')
+    sendXML(res.status(501), 'Error', {
+      Code: 'NotImplemented',
+      Message:
+        'The Content-Encoding of this request body is not supported. Disable chunked/aws-chunked payload signing and send the body unencoded.',
+    })
+    return
+  }
+
+  const status = Number(err.statusCode ?? err.status ?? 500)
+  const code = S3_ERROR_CODE_BY_STATUS[status] ?? 'InternalError'
+  if (status >= 500) {
+    logger.error(err, 'Unhandled error on the S3 API')
+    sendXML(res.status(status), 'Error', {
+      Code: code,
+      Message: 'We encountered an internal error. Please try again.',
+    })
+    return
+  }
+  logger.warn(err, 'S3 request refused before it reached a handler')
+  sendXML(res.status(status), 'Error', { Code: code, Message: err.message })
 }
 
 export const notImplementedHandler = async (_req: Request, res: Response) => {

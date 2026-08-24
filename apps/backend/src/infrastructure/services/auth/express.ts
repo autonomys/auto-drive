@@ -1,10 +1,23 @@
 import { Request, Response } from 'express'
 import { UserWithOrganization } from '@auto-drive/models'
-import { AuthLookupError, AuthManager } from './index.js'
+import { AuthManager, classifyAuthFailure } from './index.js'
 import { config } from '../../../config.js'
 import { createLogger } from '../../drivers/logger.js'
 
 const logger = createLogger('services:auth:express')
+
+/**
+ * The credentials on a request: the bearer token and the provider that issued
+ * it. Null when either is absent, which is "no credentials", never a rejection.
+ */
+const readCredentials = (
+  req: Request,
+): { accessToken: string; provider: string } | null => {
+  const accessToken = req.headers.authorization?.split(' ')[1]
+  const provider = req.headers['x-auth-provider']
+  if (!accessToken || typeof provider !== 'string') return null
+  return { accessToken, provider }
+}
 
 /**
  * Resolve the request's credentials to a user WITHOUT writing a response.
@@ -18,12 +31,14 @@ const logger = createLogger('services:auth:express')
 export const tryAuthenticate = async (
   req: Request,
 ): Promise<UserWithOrganization | null> => {
-  const accessToken = req.headers.authorization?.split(' ')[1]
-  const provider = req.headers['x-auth-provider']
-  if (!accessToken || typeof provider !== 'string') return null
+  const credentials = readCredentials(req)
+  if (!credentials) return null
 
   try {
-    return await AuthManager.getUserFromAccessToken(provider, accessToken)
+    return await AuthManager.getUserFromAccessToken(
+      credentials.provider,
+      credentials.accessToken,
+    )
   } catch (error) {
     logger.warn(error, 'Token lookup failed')
     return null
@@ -34,16 +49,8 @@ export const handleAuth = async (
   req: Request,
   res: Response,
 ): Promise<UserWithOrganization | null> => {
-  const accessToken = req.headers.authorization?.split(' ')[1]
-  if (!accessToken) {
-    res.status(401).json({
-      error: 'Missing or invalid access token',
-    })
-    return null
-  }
-
-  const provider = req.headers['x-auth-provider']
-  if (typeof provider !== 'string') {
+  const credentials = readCredentials(req)
+  if (!credentials) {
     res.status(401).json({
       error: 'Missing or invalid access token',
     })
@@ -55,11 +62,15 @@ export const handleAuth = async (
   // credential that will never work.
   let user: UserWithOrganization
   try {
-    user = await AuthManager.getUserFromAccessToken(provider, accessToken)
+    user = await AuthManager.getUserFromAccessToken(
+      credentials.provider,
+      credentials.accessToken,
+    )
   } catch (error) {
-    if (error instanceof AuthLookupError && !error.isCredentialFailure) {
-      // The auth service is down, not the credential. 503 so a client backs off
-      // and retries rather than treating its token as invalid.
+    if (classifyAuthFailure(error) === 'unavailable') {
+      // The question could not be answered — the auth service is down, or this
+      // service has a bug. Either way the credential was never judged, so 503
+      // lets a client back off and retry instead of discarding a working token.
       logger.error(error, 'Auth service could not answer a token lookup')
       res.status(503).json({
         error: 'Authentication service unavailable',
