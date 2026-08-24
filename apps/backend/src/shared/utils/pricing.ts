@@ -84,3 +84,22 @@ export const applyMarginPercent = (amount: bigint, percent: number): bigint => {
   // exact margined value.
   return (numerator + BASIS_POINTS - 1n) / BASIS_POINTS
 }
+
+/**
+ * Render a USDC base-unit amount as a human figure ("2,014.00").
+ *
+ * For operator-facing text only — Slack alerts and the admin dashboard — where
+ * "2014000000" is a number nobody reads correctly under pressure. Two decimals
+ * because the remaining four are never what a treasury decision turns on;
+ * truncated rather than rounded, so a displayed figure is never above the
+ * balance actually held.
+ */
+export const formatUsdcBaseUnits = (baseUnits: bigint): string => {
+  const scale = 10n ** BigInt(USDC_DECIMALS)
+  const negative = baseUnits < 0n
+  const absolute = negative ? -baseUnits : baseUnits
+  const whole = absolute / scale
+  const cents = (absolute % scale) / 10n ** BigInt(USDC_DECIMALS - 2)
+  const grouped = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return `${negative ? '-' : ''}${grouped}.${cents.toString().padStart(2, '0')}`
+}

@@ -51,6 +51,31 @@ export const addressEnv = (
   return trimmed
 }
 
+/**
+ * A comma-separated list of addresses, each validated as `addressEnv` does.
+ *
+ * Unusable entries are DROPPED rather than failing the list, which is the same
+ * choice `addressEnv` makes and for the same reason — the variable is named at
+ * startup instead. It matters more here: the list is what the treasury cap is
+ * measured over, so a dropped entry means a balance counted as zero. That is the
+ * conservative direction (it under-reports the treasury and so keeps the gate
+ * open, rather than pausing on a number nobody can explain) which is exactly why
+ * the name has to reach a log line — see invalidAddressEnvironmentVariables.
+ */
+export const addressListEnv = (name: string, raw?: string): string[] => {
+  return (raw ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value)
+    .filter((value) => {
+      if (isAddress(value)) {
+        return true
+      }
+      invalidAddressEnvVars.push(name)
+      return false
+    })
+}
+
 export const config = {
   postgres: {
     url: env('DATABASE_URL'),
@@ -279,6 +304,65 @@ export const config = {
     usdcTokenAddress: addressEnv(
       'USDC_TOKEN_ADDRESS',
       process.env.USDC_TOKEN_ADDRESS,
+    ),
+  },
+  // The two gates that decide whether this deployment is selling storage for
+  // USDC right now — as opposed to `featureFlags.flags.payWithUsdc`, which
+  // decides WHO may pay in it. Availability and audience are different
+  // questions, and conflating them is how an admin exemption (which exists so
+  // the path can be driven in production) ends up walking through an incident
+  // control.
+  //
+  // Both gates live in the database, not here: one is flipped by an admin during
+  // an incident, and the other is written by a poller in a different process from
+  // the one that quotes. See core/payments/usdc.ts.
+  usdcPayments: {
+    // The manual gate's value ONLY UNTIL an admin first flips it. After that the
+    // stored row wins and this variable is inert — say so in .env.sample, or
+    // someone will change it in production and watch nothing happen.
+    //
+    // Defaults to off, deliberately: a deployment that has just learned how to
+    // quote USDC should not begin selling it because a variable was left unset.
+    enabledByDefault: optionalBoolEnvironmentVariable('USDC_PAYMENTS_ENABLED'),
+    // Addresses whose USDC balances are summed and compared against the cap.
+    // Empty means "the receiver", resolved by the consumer — this object cannot
+    // read `config.ethereum` while it is still being built.
+    //
+    // Configurable because a sweep is part of the manual conversion flow: moving
+    // USDC to an address OUTSIDE this set reopens the gate, which is right only
+    // if sweeping implies the conversion is imminent. Add the destination here to
+    // keep swept-but-unconverted USDC counted against the cap.
+    treasuryAddresses: addressListEnv(
+      'USDC_TREASURY_ADDRESSES',
+      process.env.USDC_TREASURY_ADDRESSES,
+    ),
+    // The FX-exposure limit, in whole USDC. At or above this the gate closes
+    // itself; it is what makes manual conversion safe to run, and what means
+    // nobody has to watch a balance.
+    //
+    // Kept as a raw string and parsed to 6-decimal base units once, in the
+    // consumer, exactly as the oracle's USD bounds are: parsing the decimal
+    // string directly avoids Number.toString()'s exponential notation and lets
+    // the failure name the variable.
+    pauseThresholdUsdc: env('USDC_TREASURY_PAUSE_THRESHOLD', '2000'),
+    // Where the gate reopens. Defaults to the pause threshold (no hysteresis).
+    // Set it lower to stop a balance sitting exactly on the line from flapping
+    // the gate — and therefore the alerts — on every poll.
+    resumeThresholdUsdc: process.env.USDC_TREASURY_RESUME_THRESHOLD,
+    balanceCheckIntervalMs: positiveIntEnv(
+      'USDC_TREASURY_BALANCE_CHECK_INTERVAL_MS',
+      300_000,
+    ),
+    // How old the last successful reading may be before the balance counts as
+    // unknown — and unknown fails closed, because an Ethereum outage must not
+    // become a way to keep selling past the cap.
+    //
+    // Three poll intervals: a single failed poll (a rate limit, a restart) is
+    // absorbed, three in a row is a fault. A failed poll deliberately writes
+    // nothing, so this window is measured against the last SUCCESS.
+    balanceMaxStaleMs: positiveIntEnv(
+      'USDC_TREASURY_BALANCE_MAX_STALE_MS',
+      900_000,
     ),
   },
   priceOracle: {

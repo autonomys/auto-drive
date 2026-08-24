@@ -14,6 +14,8 @@ import {
   TouStatus,
   TouVersion,
   TouVersionWithStats,
+  UsdcAvailability,
+  UsdcPaymentsStatus,
 } from '@auto-drive/models';
 
 // Wire-format of GET /credits/summary (bigint fields serialised as strings)
@@ -1371,6 +1373,79 @@ export const createApiService = ({
     return response.json() as Promise<{
       refundedCount: number;
       alreadyRefundedCount: number;
+    }>;
+  },
+
+  // ── USDC payment gates (admin) ─────────────────────────────────────────
+  // Every gate on the USDC path plus the oracle's health. Not cached on the
+  // server: a kill switch whose state waits out a TTL is not the control an
+  // incident needs.
+  getUsdcPaymentsStatus: async (): Promise<UsdcPaymentsStatus> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/payments/usdc/status`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get USDC payment status: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<UsdcPaymentsStatus>;
+  },
+
+  // Flip the manual gate. `changed` is false when the gate already held this
+  // value, which is also when no Slack alert was posted. `availability` is the
+  // composite AFTER the flip — enabling the switch does not open the path if the
+  // treasury is over its cap.
+  setUsdcPayments: async (
+    enabled: boolean,
+  ): Promise<{
+    enabled: boolean;
+    changed: boolean;
+    availability: UsdcAvailability;
+  }> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/payments/usdc/${enabled ? 'enable' : 'disable'}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const message = await response
+        .json()
+        .then((body) => body?.error as string | undefined)
+        .catch(() => undefined);
+      throw new Error(
+        message ??
+          `Failed to ${enabled ? 'enable' : 'disable'} USDC payments: ${
+            response.statusText
+          }`,
+      );
+    }
+
+    return response.json() as Promise<{
+      enabled: boolean;
+      changed: boolean;
+      availability: UsdcAvailability;
     }>;
   },
 });

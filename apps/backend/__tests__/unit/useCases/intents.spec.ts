@@ -5,6 +5,7 @@ import { purchasedCreditsRepository } from '../../../src/infrastructure/reposito
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { config } from '../../../src/config.js'
+import { UsdcPaymentsUseCases } from '../../../src/core/payments/usdc.js'
 import {
   BadRequestError,
   ConflictError,
@@ -22,6 +23,7 @@ import {
   IntentMispaymentReason,
   IntentStatus,
   PaymentMethod,
+  UsdcClosedReason,
   UserRole,
   type Account,
   type Intent,
@@ -94,6 +96,13 @@ describe('IntentsUseCases', () => {
       '0x1111111111111111111111111111111111111111'
     config.ethereum.usdcTokenAddress =
       '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+    // The availability gates (#811) read the database. Almost every case below
+    // is about what a quote contains rather than whether the deployment is
+    // selling, so the path is held open here and the gates are exercised in
+    // their own block further down.
+    jest
+      .spyOn(UsdcPaymentsUseCases, 'getAvailability')
+      .mockResolvedValue({ open: true })
   })
 
   afterEach(() => {
@@ -435,6 +444,117 @@ describe('IntentsUseCases', () => {
     expect(createSpy.mock.calls[0][0].quotedTokenAmount).toBe(
       expectedCharge(1000n),
     )
+  })
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // The availability gates (#811): the manual kill switch and the treasury cap
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('createIntent refuses USDC when an admin has closed the manual gate', async () => {
+    jest.spyOn(UsdcPaymentsUseCases, 'getAvailability').mockResolvedValue({
+      open: false,
+      closedReason: UsdcClosedReason.MANUAL_OFF,
+    })
+    const oracleSpy = jest.spyOn(priceOracle, 'getPrice')
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    const error = result._unsafeUnwrapErr()
+    // 503, not the flag's 403: the closure is transient — an admin reopens the
+    // switch — and a 403 tells the frontend to hide the option for good.
+    expect(error).toBeInstanceOf(ServiceUnavailableError)
+    expect((error as ServiceUnavailableError).statusCode).toBe(503)
+    expect(oracleSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent refuses USDC to an ADMIN when the manual gate is closed', async () => {
+    // The gap this closes: the flag's admin exemption exists so the path can be
+    // driven in production, and bolting the kill switch onto the same predicate
+    // would let an admin walk straight through the incident control. Availability
+    // exempts nobody.
+    jest.spyOn(UsdcPaymentsUseCases, 'getAvailability').mockResolvedValue({
+      open: false,
+      closedReason: UsdcClosedReason.MANUAL_OFF,
+    })
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+
+    const admin = {
+      ...orgUser,
+      role: UserRole.Admin,
+    } as unknown as UserWithOrganization
+
+    const result = await IntentsUseCases.createIntent(admin, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ServiceUnavailableError)
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent refuses USDC when the treasury is over its cap', async () => {
+    jest.spyOn(UsdcPaymentsUseCases, 'getAvailability').mockResolvedValue({
+      open: false,
+      closedReason: UsdcClosedReason.TREASURY_CAP,
+    })
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    const error = result._unsafeUnwrapErr()
+    expect(error).toBeInstanceOf(ServiceUnavailableError)
+    // The message names the gate, because "temporarily unavailable" with no
+    // reason is what makes support tickets.
+    expect(error.message).toContain('cap')
+  })
+
+  it('createIntent refuses USDC when the treasury balance is unknown', async () => {
+    jest.spyOn(UsdcPaymentsUseCases, 'getAvailability').mockResolvedValue({
+      open: false,
+      closedReason: UsdcClosedReason.BALANCE_UNKNOWN,
+    })
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ServiceUnavailableError)
+  })
+
+  it('createIntent checks the flag before the gates, and reads no gate when it fails', async () => {
+    // A caller who could never use the asset is turned away without a query.
+    usdcFlag.active = false
+    const availabilitySpy = jest.spyOn(UsdcPaymentsUseCases, 'getAvailability')
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(UsdcPaymentsDisabledError)
+    expect(availabilitySpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent does not consult the gates on the AI3 path', async () => {
+    // The gates are the USDC path's, and the AI3 flow must not gain a database
+    // read — nor a way to be shut — because of them.
+    const availabilitySpy = jest.spyOn(UsdcPaymentsUseCases, 'getAvailability')
+    jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+
+    const result = await IntentsUseCases.createIntent(orgUser)
+
+    expect(result.isOk()).toBe(true)
+    expect(availabilitySpy).not.toHaveBeenCalled()
   })
 
   it('createIntent is unaffected by the USDC flag on the AI3 path', async () => {

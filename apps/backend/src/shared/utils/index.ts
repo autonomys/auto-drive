@@ -7,5 +7,6 @@ export {
   AI3_DECIMALS,
   USDC_DECIMALS,
   USDC_CONVERSION_FACTOR,
+  formatUsdcBaseUnits,
 } from './pricing.js'
 export { startShutdownWatchdog, shutdownStep } from './shutdown.js'

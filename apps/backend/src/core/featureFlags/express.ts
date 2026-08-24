@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { FeatureFlagsUseCases } from './index.js'
+import { UsdcPaymentsUseCases } from '../payments/usdc.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 
@@ -53,6 +54,36 @@ export const featureFlagMiddleware =
     }
   }
 
+/**
+ * Narrow `payWithUsdc` from "may this caller pay in USDC" to "and is this
+ * deployment selling it right now".
+ *
+ * The flag on its own answers the audience question, and admins are exempt from
+ * it. But the endpoint's whole job is to tell the client which paths are open,
+ * and offering a method the backend then refuses is the exact failure
+ * `isFlagActive` exists to prevent — so what /features reports has to be the
+ * same conjunction createIntent evaluates. Both call
+ * UsdcPaymentsUseCases.getAvailability(), which is why they cannot drift.
+ *
+ * Notably this makes an admin on a deployment with no Ethereum configuration
+ * read `false`, where the exemption alone said `true` and the quote then 403'd.
+ *
+ * One indexed read, and only when the flag survived the audience check: the
+ * closed path costs nothing, and the open one is a page load against a table
+ * with two rows. Uncached deliberately — a kill switch whose effect waits out a
+ * TTL is not the control an incident needs.
+ */
+const withUsdcAvailability = async (
+  flags: Record<string, boolean>,
+): Promise<Record<string, boolean>> => {
+  if (!flags.payWithUsdc) {
+    return flags
+  }
+
+  const availability = await UsdcPaymentsUseCases.getAvailability()
+  return { ...flags, payWithUsdc: availability.open }
+}
+
 // Returns feature flags for the current request.  Used by the public
 // /features endpoint.  On auth failure it falls back to unauthenticated
 // flags so the endpoint always returns a result.
@@ -65,13 +96,13 @@ export const getFeatureFlags = async (req: Request, res: Response) => {
         return
       }
 
-      return FeatureFlagsUseCases.get(user)
+      return withUsdcAvailability(FeatureFlagsUseCases.get(user))
     } catch (error) {
       logger.warn(error, 'Auth failed in getFeatureFlags, falling back to unauthenticated flags')
       // Auth failure — fall through to unauthenticated flags
-      return FeatureFlagsUseCases.get(null)
+      return withUsdcAvailability(FeatureFlagsUseCases.get(null))
     }
   }
 
-  return FeatureFlagsUseCases.get(null)
+  return withUsdcAvailability(FeatureFlagsUseCases.get(null))
 }
