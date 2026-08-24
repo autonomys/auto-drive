@@ -6,6 +6,8 @@ import {
 } from '../../../core/uploads/errors.js'
 import { handleS3Auth } from './auth.js'
 import {
+  ByteRange,
+  DownloadMetadata,
   getByteRange,
   handleDownloadResponseHeaders,
   handleS3DownloadResponseHeaders,
@@ -218,7 +220,6 @@ const rejectIfUserMetadataTooLarge = (
 const applyStoredMetadataHeaders = (
   res: Response,
   metadata: S3ObjectMetadata | null,
-  { isCompressed }: { isCompressed: boolean },
 ) => {
   if (!metadata) return
   if (metadata.contentType) res.setHeader('Content-Type', metadata.contentType)
@@ -228,16 +229,76 @@ const applyStoredMetadataHeaders = (
     res.setHeader('Content-Language', metadata.contentLanguage)
   if (metadata.contentDisposition)
     res.setHeader('Content-Disposition', metadata.contentDisposition)
-  // Only surface a stored Content-Encoding when Auto Drive isn't managing the
-  // wire encoding itself: for internally-compressed objects the download helper
-  // owns Content-Encoding (deflate on the wire, or server-side inflate), and
-  // emitting the client's stored value too would double-advertise the encoding.
-  if (metadata.contentEncoding && !isCompressed)
+  // The stored Content-Encoding is always echoed. Nothing else on this path may
+  // set the header: applyVerbatimBodyHeaders strips the `deflate` the shared
+  // download helper adds for internally-compressed objects, so the client's own
+  // value is the only encoding the response can ever advertise, and it describes
+  // the bytes actually sent.
+  if (metadata.contentEncoding)
     res.setHeader('Content-Encoding', metadata.contentEncoding)
   if (metadata.userMetadata) {
     for (const [key, value] of Object.entries(metadata.userMetadata)) {
       res.setHeader(`x-amz-meta-${key}`, value)
     }
+  }
+}
+
+/**
+ * Re-assert the one invariant of the S3 read path: the response body is the
+ * STORED bytes, verbatim.
+ *
+ * handleDownloadResponseHeaders is written for the browser-facing download API,
+ * where an internally-compressed object (x-amz-meta-compression) is either
+ * shipped as `Content-Encoding: deflate` for the browser to inflate, or inflated
+ * server-side. Neither describes S3: this layer pipes what
+ * `startDownload()` yields straight to the wire, the stored MD5 (the ETag) is
+ * over those same bytes, and metadata.size counts them.
+ *
+ * Left uncorrected, that helper's compressed branch produces four defects on an
+ * internally-compressed object, none of them true of the body being sent:
+ *  - `Content-Encoding: deflate`, an encoding the client never stored. Any hop
+ *    or client that honours it inflates the body, and the bytes delivered then
+ *    no longer match the ETag. (This is the origin-side twin of the Cloudflare
+ *    transform in #814 — the same corruption, triggered by our own header.)
+ *  - no Content-Length, so HeadObject reports no size and rclone's size check
+ *    fails.
+ *  - `Accept-Ranges: none`, so ranged reads are refused.
+ *  - worst: a range request is answered 200 with no Content-Range while the body
+ *    IS the requested slice, so the client reads a partial object as the whole
+ *    one.
+ *
+ * Only the compressed branch is repaired here; on every other object the helper
+ * already computes exactly these values. Must run BEFORE
+ * applyStoredMetadataHeaders, which re-emits the client's own stored
+ * Content-Encoding after this strips the synthesised one.
+ */
+export const applyVerbatimBodyHeaders = (
+  res: Response,
+  metadata: DownloadMetadata,
+  byteRange: ByteRange | undefined,
+) => {
+  if (metadata.type !== 'file' || !metadata.isCompressed) return
+
+  // The wire body is never re-encoded, so no transfer encoding is ours to claim.
+  res.removeHeader('Content-Encoding')
+
+  if (metadata.size == null) {
+    // Unknown stored size: a range can't be described, so don't offer ranges.
+    res.setHeader('Accept-Ranges', 'none')
+    return
+  }
+
+  res.setHeader('Accept-Ranges', 'bytes')
+  if (byteRange) {
+    const upperBound = byteRange[1] ?? Number(metadata.size) - 1
+    res.status(206)
+    res.setHeader(
+      'Content-Range',
+      `bytes ${byteRange[0]}-${upperBound}/${metadata.size}`,
+    )
+    res.setHeader('Content-Length', (upperBound - byteRange[0] + 1).toString())
+  } else {
+    res.setHeader('Content-Length', metadata.size.toString())
   }
 }
 
@@ -414,12 +475,13 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
+  // Restore the verbatim-body headers the generic helper rewrites for
+  // internally-compressed objects (see above).
+  applyVerbatimBodyHeaders(res, metadata, resultingByteRange)
   // Override the generic headers with the stored S3 metadata (verbatim
   // Content-Type, Cache-Control, x-amz-meta-*, …) — must run after the helpers
   // above so it wins.
-  applyStoredMetadataHeaders(res, objectMetadata, {
-    isCompressed: metadata.isCompressed,
-  })
+  applyStoredMetadataHeaders(res, objectMetadata)
 
   // ETag: set to the MD5 for objects uploaded after this feature was introduced.
   // Legacy objects (md5 = null in the DB) do not get an ETag header — the CID
@@ -476,12 +538,13 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     byteRange: resultingByteRange,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
+  // Restore the verbatim-body headers the generic helper rewrites for
+  // internally-compressed objects (see above).
+  applyVerbatimBodyHeaders(res, metadata, resultingByteRange)
   // Override the generic headers with the stored S3 metadata (verbatim
   // Content-Type, Cache-Control, x-amz-meta-*, …) — must run after the helpers
   // above so it wins.
-  applyStoredMetadataHeaders(res, objectMetadata, {
-    isCompressed: metadata.isCompressed,
-  })
+  applyStoredMetadataHeaders(res, objectMetadata)
 
   // ETag: set to the MD5 for objects uploaded after this feature was introduced.
   // Legacy objects (md5 = null in the DB) do not get an ETag header — the CID

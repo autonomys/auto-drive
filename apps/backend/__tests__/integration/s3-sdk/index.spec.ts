@@ -1,4 +1,5 @@
-import { gzipSync, gunzipSync } from 'zlib'
+import { gzipSync, gunzipSync, deflateSync, inflateSync } from 'zlib'
+import { createHash } from 'crypto'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   AbortMultipartUploadCommand,
@@ -1401,6 +1402,74 @@ describe('AWS S3 - SDK', () => {
       )
       expect(head.ContentEncoding).toBe('br')
     })
+  })
+
+  // Issue #814, acceptance criterion 5. An object carrying Auto Drive's own
+  // compression flag (x-amz-meta-compression) has to round-trip like any other:
+  // the S3 read path ships the STORED bytes, the ETag is their MD5, and every
+  // header must describe those same bytes. The shared download helper instead
+  // describes a body re-encoded for a browser, which is what these assertions
+  // pin down.
+  describe('Internally-compressed objects (x-amz-meta-compression)', () => {
+    const CKey = 'compression-test/payload.bin'
+    const Plain = Buffer.from('a payload worth compressing. '.repeat(8))
+    // The stored bytes are a real zlib stream, so the flag survives the upload
+    // (auto-dag-data drops a ZLIB flag whose first chunk isn't actually zlib).
+    const Stored = deflateSync(Plain)
+    const storedMd5 = createHash('md5').update(Stored).digest('hex')
+
+    it('stores the object with the compression flag set', async () => {
+      const res = await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: CKey,
+          Body: Stored,
+          Metadata: { compression: 'ZLIB' },
+        }),
+      )
+      // The ETag is the MD5 of what the client sent — the stored bytes.
+      expect(res.ETag).toBe(`"${storedMd5}"`)
+    }, 15_000)
+
+    it('HeadObject reports the stored size and offers ranges', async () => {
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: CKey }),
+      )
+      expect(head.ContentLength).toBe(Stored.length)
+      expect(head.AcceptRanges).toBe('bytes')
+      // Nothing re-encodes the body, so no Content-Encoding is ours to claim:
+      // a `deflate` label here would have any hop that honours it inflate the
+      // body, and the delivered bytes would stop matching the ETag.
+      expect(head.ContentEncoding).toBeUndefined()
+      // The compression flag itself still round-trips.
+      expect(head.Metadata?.compression).toBe('ZLIB')
+      expect(head.ETag).toBe(`"${storedMd5}"`)
+    }, 15_000)
+
+    it('GetObject returns the stored bytes verbatim, matching the ETag', async () => {
+      const get = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: CKey }),
+      )
+      expect(get.ContentEncoding).toBeUndefined()
+      expect(get.ContentLength).toBe(Stored.length)
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      expect(body.equals(Stored)).toBe(true)
+      expect(createHash('md5').update(body).digest('hex')).toBe(storedMd5)
+      // Still the exact zlib stream that was uploaded.
+      expect(inflateSync(body).equals(Plain)).toBe(true)
+    }, 15_000)
+
+    it('answers a range request with 206 and the matching slice', async () => {
+      const get = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: CKey, Range: 'bytes=0-9' }),
+      )
+      // This used to come back 200 with no Content-Range while the body was the
+      // slice, so a client read 10 bytes as the whole object.
+      expect(get.$metadata.httpStatusCode).toBe(206)
+      expect(get.ContentRange).toBe(`bytes 0-9/${Stored.length}`)
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      expect(body.equals(Stored.subarray(0, 10))).toBe(true)
+    }, 15_000)
   })
 
   // An authentication failure has to be an S3 protocol error. A rejected API key
