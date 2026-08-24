@@ -593,6 +593,103 @@ describe('UsdcPaymentsUseCases', () => {
   })
 
   // ──────────────────────────────────────────────────────────────────────────
+  // Thresholds
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('getThresholds', () => {
+    const usdcDefaults = { ...config.usdcPayments }
+
+    afterEach(() => {
+      Object.assign(config.usdcPayments, usdcDefaults)
+      _resetThresholds()
+    })
+
+    it('treats an EMPTY resume threshold as unset, not as a parse error', async () => {
+      // The failure this pins: `.env.sample` ships USDC_TREASURY_RESUME_THRESHOLD
+      // with an empty value, and dotenv parses `KEY=` to '' — which is not
+      // undefined. Parsed, that empty string fails, the gates job refuses to
+      // start, and USDC stays permanently closed on any deployment that
+      // configured itself the documented way. Config normalises it to undefined;
+      // this asserts the behaviour that depends on it.
+      config.usdcPayments.resumeThresholdUsdc = undefined
+      _resetThresholds()
+
+      const { pause, resume } = UsdcPaymentsUseCases.getThresholds()
+      expect(resume).toBe(pause)
+    })
+
+    it('parses a configured resume threshold below the cap', () => {
+      config.usdcPayments.pauseThresholdUsdc = '2000'
+      config.usdcPayments.resumeThresholdUsdc = '1500'
+      _resetThresholds()
+
+      const { pause, resume } = UsdcPaymentsUseCases.getThresholds()
+      expect(pause).toBe(2_000_000_000n)
+      expect(resume).toBe(1_500_000_000n)
+    })
+
+    it('refuses a resume threshold above the cap', () => {
+      config.usdcPayments.pauseThresholdUsdc = '1000'
+      config.usdcPayments.resumeThresholdUsdc = '2000'
+      _resetThresholds()
+
+      // Not merely wrong: above resume it pauses and below pause it resumes, so
+      // a balance between the two flips the gate on every poll.
+      expect(() => UsdcPaymentsUseCases.getThresholds()).toThrow(
+        'must be <= USDC_TREASURY_PAUSE_THRESHOLD',
+      )
+    })
+
+    it('names the variable when a threshold cannot be parsed', () => {
+      config.usdcPayments.pauseThresholdUsdc = '2,000'
+      _resetThresholds()
+
+      expect(() => UsdcPaymentsUseCases.getThresholds()).toThrow(
+        'USDC_TREASURY_PAUSE_THRESHOLD',
+      )
+    })
+
+    it('renders the status page rather than 500ing on an unparseable cap', async () => {
+      // A malformed threshold already stops the poller, so the path is shut —
+      // and this is the page an operator opens to find out why. It must not be
+      // the page that breaks, or the kill switch goes off the screen with it.
+      config.usdcPayments.pauseThresholdUsdc = '2,000'
+      _resetThresholds()
+      mockSettings({
+        [RuntimeSettingKey.UsdcManualGate]: setting({ enabled: true }, 0, 'a-1'),
+        [RuntimeSettingKey.UsdcTreasury]: FRESH_OPEN_TREASURY,
+        [RuntimeSettingKey.UsdcOracle]: HEALTHY_ORACLE,
+      })
+
+      const status = (
+        await UsdcPaymentsUseCases.getStatus(admin)
+      )._unsafeUnwrap()
+
+      expect(status.treasury.thresholdError).toContain(
+        'USDC_TREASURY_PAUSE_THRESHOLD',
+      )
+      expect(status.treasury.pauseThresholdBaseUnits).toBeNull()
+      expect(status.treasury.headroomBaseUnits).toBeNull()
+      // The switch and its audit trail still render — that is the point.
+      expect(status.manualGate.enabled).toBe(true)
+      expect(status.manualGate.updatedBy).toBe('a-1')
+    })
+
+    it('describes a capped treasury without the figure when the cap is unreadable', () => {
+      // This sentence reaches a user, inside a 503. An unparseable cap must not
+      // turn a refusal into an exception.
+      config.usdcPayments.pauseThresholdUsdc = '2,000'
+      _resetThresholds()
+
+      expect(() =>
+        UsdcPaymentsUseCases.describeClosedReason(
+          UsdcClosedReason.TREASURY_CAP,
+        ),
+      ).not.toThrow()
+    })
+  })
+
+  // ──────────────────────────────────────────────────────────────────────────
   // Unreadable rows: the direction of the failure is the point
   // ──────────────────────────────────────────────────────────────────────────
 

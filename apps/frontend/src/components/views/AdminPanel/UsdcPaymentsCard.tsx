@@ -246,36 +246,49 @@ export const UsdcPaymentsCard = () => {
 
         <GateRow
           label='Treasury cap'
-          tone={treasury.stale ? 'unknown' : treasury.paused ? 'closed' : 'open'}
+          tone={
+            treasury.thresholdError || treasury.addressError || treasury.stale
+              ? 'unknown'
+              : treasury.paused
+                ? 'closed'
+                : 'open'
+          }
           headline={
-            treasury.addressError
-              ? 'Address configuration unusable — failing closed'
-              : treasury.stale
-                ? 'Balance unknown — failing closed'
-                : treasury.paused
-                  ? `Auto-paused: ${usdc(
-                      treasury.balanceBaseUnits,
-                    )} USDC held, cap ${usdc(treasury.pauseThresholdBaseUnits)}`
-                  : `${usdc(treasury.balanceBaseUnits)} USDC held, ${usdc(
-                      treasury.headroomBaseUnits,
-                    )} of headroom`
+            treasury.thresholdError
+              ? 'Cap configuration unusable — failing closed'
+              : treasury.addressError
+                ? 'Address configuration unusable — failing closed'
+                : treasury.stale
+                  ? 'Balance unknown — failing closed'
+                  : treasury.paused
+                    ? `Auto-paused: ${usdc(
+                        treasury.balanceBaseUnits,
+                      )} USDC held, cap ${usdc(
+                        treasury.pauseThresholdBaseUnits,
+                      )}`
+                    : `${usdc(treasury.balanceBaseUnits)} USDC held, ${usdc(
+                        treasury.headroomBaseUnits,
+                      )} of headroom`
           }
           detail={
-            treasury.addressError
-              ? treasury.addressError
-              : treasury.stale
-                ? `Last read ${formatAge(treasury.ageMs)}${
-                    treasury.checkedAt ? '' : ' — nothing has polled yet'
-                  }. Refreshed every ${Math.round(
-                    treasury.checkIntervalMs / 60_000,
-                  )} min; unknown for more than ${Math.round(
-                    treasury.maxStaleMs / 60_000,
-                  )} min refuses new intents. Check the payment worker.`
-                : `Read ${formatAge(treasury.ageMs)}. Resumes below ${usdc(
-                    treasury.resumeThresholdBaseUnits,
-                  )}. Watching ${treasury.addresses.length} address${
-                    treasury.addresses.length === 1 ? '' : 'es'
-                  }.`
+            // The configuration errors come first: both stop the poller, so the
+            // balance below them would be stale for a reason the operator cannot
+            // guess from "unknown".
+            treasury.thresholdError ||
+            treasury.addressError ||
+            (treasury.stale
+              ? `Last read ${formatAge(treasury.ageMs)}${
+                  treasury.checkedAt ? '' : ' — nothing has polled yet'
+                }. Refreshed every ${Math.round(
+                  treasury.checkIntervalMs / 60_000,
+                )} min; unknown for more than ${Math.round(
+                  treasury.maxStaleMs / 60_000,
+                )} min refuses new intents. Check the payment worker.`
+              : `Read ${formatAge(treasury.ageMs)}. Resumes below ${usdc(
+                  treasury.resumeThresholdBaseUnits,
+                )}. Watching ${treasury.addresses.length} address${
+                  treasury.addresses.length === 1 ? '' : 'es'
+                }.`)
           }
         />
 

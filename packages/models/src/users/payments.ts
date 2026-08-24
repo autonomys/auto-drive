@@ -129,8 +129,9 @@ export type UsdcPaymentsStatus = {
     stale: boolean;
     checkedAt: string | null;
     ageMs: number | null;
-    pauseThresholdBaseUnits: string;
-    resumeThresholdBaseUnits: string;
+    // Null when the configured thresholds cannot be parsed — see thresholdError.
+    pauseThresholdBaseUnits: string | null;
+    resumeThresholdBaseUnits: string | null;
     maxStaleMs: number;
     checkIntervalMs: number;
     // The addresses whose balances are summed. Always includes the receiver; a
@@ -139,6 +140,10 @@ export type UsdcPaymentsStatus = {
     // Set when USDC_TREASURY_ADDRESSES holds something unusable, which closes
     // the gate rather than shrinking the sum. Null when the configuration parses.
     addressError: string | null;
+    // Set when the cap or the resume threshold cannot be parsed. The gates job
+    // refuses to poll on either, so the path stays closed until it is fixed and
+    // the payment worker restarted.
+    thresholdError: string | null;
   };
   // The poller's last rate read, not a live one taken to answer this request:
   // health observed by the process that owns it, aged like the balance beside it.

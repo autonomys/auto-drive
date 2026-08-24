@@ -64,6 +64,18 @@ export const addressEnv = (
  * which rejects an all-uppercase address that `getAddress` accepts and that any
  * block explorer will happily hand an operator.
  */
+/**
+ * An optional string variable, trimmed, where empty means "not set".
+ *
+ * The distinction dotenv erases: `KEY=` in a .env file parses to `''`, not
+ * undefined, so a consumer testing `!== undefined` treats a key the operator
+ * left blank as configured and hands the empty string to a parser. Every
+ * `.env.sample` entry ships blank, so that is the normal shape of a deployment
+ * configured the documented way.
+ */
+export const optionalTrimmedEnv = (raw?: string): string | undefined =>
+  raw?.trim() || undefined
+
 export const rawListEnv = (raw?: string): string[] =>
   (raw ?? '')
     .split(',')
@@ -340,7 +352,18 @@ export const config = {
     // Where the gate reopens. Defaults to the pause threshold (no hysteresis).
     // Set it lower to stop a balance sitting exactly on the line from flapping
     // the gate — and therefore the alerts — on every poll.
-    resumeThresholdUsdc: process.env.USDC_TREASURY_RESUME_THRESHOLD,
+    //
+    // `|| undefined` because "present" and "usable" have to be the same question
+    // here, and dotenv makes them different: `.env.sample` ships this key with an
+    // empty value, and `KEY=` parses to `''`, which is not undefined. Left as-is
+    // that empty string would reach the parser, fail it, and stop the gates job
+    // from starting at all — so copying the sample file, the documented way to
+    // configure a deployment, would leave USDC permanently closed with only an
+    // alert to say why. Trimmed for the same reason `addressEnv` is: these values
+    // arrive from mounted secrets as often as from a shell.
+    resumeThresholdUsdc: optionalTrimmedEnv(
+      process.env.USDC_TREASURY_RESUME_THRESHOLD,
+    ),
     balanceCheckIntervalMs: positiveIntEnv(
       'USDC_TREASURY_BALANCE_CHECK_INTERVAL_MS',
       300_000,

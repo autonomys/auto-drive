@@ -541,11 +541,22 @@ const getStatus = async (
   const balance = treasury.snapshot
     ? BigInt(treasury.snapshot.balanceBaseUnits)
     : null
-  const { pause, resume } = getThresholds()
+
+  // Both of these throw on an unusable configuration, and this endpoint is
+  // exactly where that must not happen: a malformed threshold already stops the
+  // gates job from polling, so the path is shut — and the page an operator opens
+  // to find out WHY would be the page that 500s, taking the kill switch itself
+  // off the screen with it. The error is data here, not an exception.
+  let thresholds: Thresholds | null = null
+  let thresholdError: string | null = null
+  try {
+    thresholds = getThresholds()
+  } catch (error) {
+    thresholdError = error instanceof Error ? error.message : String(error)
+  }
 
   // The configured set, for a dashboard that has to say what WOULD be watched
-  // when nothing has been polled yet. Throws on an unusable configuration, which
-  // is a state this endpoint must still render rather than 500 on.
+  // when nothing has been polled yet.
   let configuredAddresses: string[] = []
   let addressError: string | null = null
   try {
@@ -567,15 +578,21 @@ const getStatus = async (
       balanceBaseUnits: balance?.toString() ?? null,
       // Negative once the cap is exceeded, which is the number an operator
       // wants: "how much over am I" is the conversion size.
-      headroomBaseUnits: balance === null ? null : (pause - balance).toString(),
+      headroomBaseUnits:
+        balance === null || !thresholds
+          ? null
+          : (thresholds.pause - balance).toString(),
       // With no usable reading this is the fail-closed default rather than an
       // observation, which is what `stale` next to it says.
       paused: treasury.stale ? true : (treasury.snapshot?.paused ?? true),
       stale: treasury.stale,
       checkedAt: treasury.checkedAt?.toISOString() ?? null,
       ageMs: treasury.ageMs,
-      pauseThresholdBaseUnits: pause.toString(),
-      resumeThresholdBaseUnits: resume.toString(),
+      pauseThresholdBaseUnits: thresholds?.pause.toString() ?? null,
+      resumeThresholdBaseUnits: thresholds?.resume.toString() ?? null,
+      // Set when the cap itself is unreadable. The gates job refuses to poll on
+      // this, so the path is closed until it is fixed and the worker restarted.
+      thresholdError,
       maxStaleMs: config.usdcPayments.balanceMaxStaleMs,
       checkIntervalMs: config.usdcPayments.balanceCheckIntervalMs,
       addresses: treasury.snapshot?.addresses ?? configuredAddresses,
@@ -608,11 +625,21 @@ const describeClosedReason = (reason: UsdcClosedReason): string => {
       return 'this deployment has no complete Ethereum USDC configuration'
     case UsdcClosedReason.MANUAL_OFF:
       return 'an admin has USDC payments switched off'
-    case UsdcClosedReason.TREASURY_CAP:
+    case UsdcClosedReason.TREASURY_CAP: {
+      // Named with the figure when it can be read, and without it when it
+      // cannot: this sentence goes into a 503 a user sees, and an unparseable
+      // cap must not turn a refusal into an exception.
+      let cap: string | null = null
+      try {
+        cap = formatUsdcBaseUnits(getThresholds().pause)
+      } catch {
+        cap = null
+      }
       return (
-        'the treasury is holding at or above its cap of un-converted USDC ' +
-        `(${formatUsdcBaseUnits(getThresholds().pause)})`
+        'the treasury is holding at or above its cap of un-converted USDC' +
+        (cap ? ` (${cap})` : '')
       )
+    }
     case UsdcClosedReason.BALANCE_UNKNOWN:
       return 'the treasury balance has not been read recently enough to trust'
     case UsdcClosedReason.ORACLE_UNAVAILABLE:
