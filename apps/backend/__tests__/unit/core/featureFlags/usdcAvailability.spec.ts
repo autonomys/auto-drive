@@ -11,10 +11,7 @@ import {
   UserRole,
   type UserWithOrganization,
 } from '@auto-drive/models'
-import {
-  withUsdcAvailability,
-  _resetAvailabilityCache,
-} from '../../../../src/core/featureFlags/express.js'
+import { withUsdcAvailability } from '../../../../src/core/featureFlags/express.js'
 import { FeatureFlagsUseCases } from '../../../../src/core/featureFlags/index.js'
 import { UsdcPaymentsUseCases } from '../../../../src/core/payments/usdc.js'
 import { config } from '../../../../src/config.js'
@@ -61,7 +58,6 @@ describe('/features — USDC availability', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    _resetAvailabilityCache()
     config.ethereum.rpcUrl = 'http://example.org'
     config.ethereum.usdcReceiverAddress =
       '0x1111111111111111111111111111111111111111'
@@ -72,7 +68,6 @@ describe('/features — USDC availability', () => {
 
   afterEach(() => {
     jest.restoreAllMocks()
-    _resetAvailabilityCache()
     Object.assign(config.ethereum, ethereumDefaults)
     usdcFlag.active = usdcFlagDefault
   })
@@ -130,9 +125,9 @@ describe('/features — USDC availability', () => {
   it('still answers usdcAvailable for a caller outside the audience', async () => {
     // Deliberate: the two keys answer two questions, and short-circuiting the
     // read when the audience check fails would make `usdcAvailable` mean "you
-    // may pay" all over again. The 5s memo is what keeps that affordable on a
-    // public endpoint — a deployment with no USDC configuration still reads
-    // nothing at all (next case).
+    // may pay" all over again. A deployment with no USDC configuration still
+    // reads nothing at all (next case), which is where the saving that matters
+    // is.
     usdcFlag.active = false
     const spy = availability(true)
 
@@ -173,26 +168,26 @@ describe('/features — USDC availability', () => {
     expect(flags.taskManager).toBeDefined()
   })
 
-  it('serves repeated calls from a short-lived memo', async () => {
+  it('reads the gate live on every call', async () => {
     const spy = availability(true)
 
     await withUsdcAvailability(flagsFor(UserRole.User))
     await withUsdcAvailability(flagsFor(UserRole.User))
-    await withUsdcAvailability(flagsFor(UserRole.User))
 
-    // /features is called on every page load by two API tiers; the quote path
-    // reads fresh, which is where a stale "open" would actually cost something.
-    expect(spy).toHaveBeenCalledTimes(1)
+    // Uncached deliberately: a kill switch whose effect waits out a TTL is not
+    // the control an incident needs. Two indexed reads against two single-row
+    // tables is not a cost worth a cache — the earlier attempt at one needed a
+    // test-only reset hook and made every gate-flipping test reset it first.
+    expect(spy).toHaveBeenCalledTimes(2)
   })
 
-  it('picks up a flipped gate once the memo expires', async () => {
+  it('picks up a flipped gate immediately', async () => {
     availability(true)
     expect(
       (await withUsdcAvailability(flagsFor(UserRole.User))).payWithUsdc,
     ).toBe(true)
 
     availability(false, UsdcClosedReason.MANUAL_OFF)
-    _resetAvailabilityCache()
 
     expect(
       (await withUsdcAvailability(flagsFor(UserRole.User))).payWithUsdc,

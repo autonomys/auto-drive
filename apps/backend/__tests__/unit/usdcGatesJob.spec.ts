@@ -15,10 +15,7 @@ import {
   UsdcPaymentsUseCases,
   _resetThresholds,
 } from '../../src/core/payments/usdc.js'
-import {
-  RuntimeSettingKey,
-  runtimeSettingsRepository,
-} from '../../src/infrastructure/repositories/runtimeSettings.js'
+import { usdcPaymentStateRepository } from '../../src/infrastructure/repositories/usdcPaymentState.js'
 import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
 import { priceOracle } from '../../src/infrastructure/services/priceOracle/index.js'
 import { OracleUnavailableError } from '../../src/infrastructure/services/priceOracle/types.js'
@@ -129,35 +126,66 @@ describe('USDC gates job', () => {
             ),
       )
 
-  // What the poller finds already stored for the treasury. `stale` is the fact
-  // that decides whether it counts as previous state for ALERTING.
-  const mockPreviousTreasury = (
-    snapshot: { balanceBaseUnits: string; paused: boolean } | null,
-    stale = false,
-  ) =>
-    jest.spyOn(UsdcPaymentsUseCases, 'getTreasuryState').mockResolvedValue({
-      snapshot: snapshot ? { ...snapshot, addresses: [RECEIVER] } : null,
-      stale,
-      checkedAt: snapshot ? new Date(Date.now() - 60_000) : null,
-      ageMs: snapshot ? 60_000 : null,
-    })
+  // What the poller finds already stored. The age is the fact that decides
+  // whether it counts as previous state for ALERTING — a stale reading still
+  // breaks a hysteresis tie, but nobody could have seen the gate meanwhile.
+  const STALE_MS = 3_600_000
 
-  const mockPreviousOracle = (healthy: boolean | null, stale = false) =>
-    jest.spyOn(UsdcPaymentsUseCases, 'getOracleState').mockResolvedValue({
-      snapshot:
-        healthy === null
-          ? null
-          : {
-              healthy,
-              reason: healthy ? null : 'thin-liquidity',
-              servingStale: false,
-              usdPerAi3: healthy ? '6400000000000000' : null,
-              window: null,
-            },
-      stale,
-      checkedAt: healthy === null ? null : new Date(),
-      ageMs: healthy === null ? null : 0,
-    })
+  let previousTreasury: {
+    balanceBaseUnits: bigint
+    paused: boolean
+    addresses: string[]
+    checkedAt: Date
+    ageMs: number
+  } | null = null
+  let previousOracle: {
+    healthy: boolean
+    reason: string | null
+    servingStale: boolean
+    usdPerAi3: bigint | null
+    window: null
+    checkedAt: Date
+    ageMs: number
+  } | null = null
+
+  const applyReadings = () =>
+    jest
+      .spyOn(usdcPaymentStateRepository, 'getReadings')
+      .mockResolvedValue({ treasury: previousTreasury, oracle: previousOracle })
+
+  const mockPreviousTreasury = (
+    reading: { balanceBaseUnits: string; paused: boolean } | null,
+    stale = false,
+  ) => {
+    const ageMs = stale ? STALE_MS : 60_000
+    previousTreasury = reading
+      ? {
+          balanceBaseUnits: BigInt(reading.balanceBaseUnits),
+          paused: reading.paused,
+          addresses: [RECEIVER],
+          checkedAt: new Date(Date.now() - ageMs),
+          ageMs,
+        }
+      : null
+    return applyReadings()
+  }
+
+  const mockPreviousOracle = (healthy: boolean | null, stale = false) => {
+    const ageMs = stale ? STALE_MS : 0
+    previousOracle =
+      healthy === null
+        ? null
+        : {
+            healthy,
+            reason: healthy ? null : 'thin-liquidity',
+            servingStale: false,
+            usdPerAi3: healthy ? 6_400_000_000_000_000n : null,
+            window: null,
+            checkedAt: new Date(Date.now() - ageMs),
+            ageMs,
+          }
+    return applyReadings()
+  }
 
   const mockManualGate = (enabled: boolean) =>
     jest.spyOn(UsdcPaymentsUseCases, 'getManualGate').mockResolvedValue({
@@ -173,7 +201,12 @@ describe('USDC gates job', () => {
       .mockReturnValue(addresses)
 
   let slackSpy: jest.SpiedFunction<typeof slackNotifier.send>
-  let setSpy: jest.SpiedFunction<typeof runtimeSettingsRepository.set>
+  let setSpy: jest.SpiedFunction<
+    typeof usdcPaymentStateRepository.saveTreasuryReading
+  >
+  let oracleWriteSpy: jest.SpiedFunction<
+    typeof usdcPaymentStateRepository.saveOracleReading
+  >
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -183,9 +216,15 @@ describe('USDC gates job', () => {
     _resetThresholds()
     usdcGatesJob._resetAlertState()
     slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+    previousTreasury = null
+    previousOracle = null
+    applyReadings()
     setSpy = jest
-      .spyOn(runtimeSettingsRepository, 'set')
-      .mockResolvedValue(null)
+      .spyOn(usdcPaymentStateRepository, 'saveTreasuryReading')
+      .mockResolvedValue()
+    oracleWriteSpy = jest
+      .spyOn(usdcPaymentStateRepository, 'saveOracleReading')
+      .mockResolvedValue()
     jest.spyOn(usdcGatesJob._internal, 'sendMetric').mockResolvedValue()
     // The oracle half is exercised in its own block; keep it out of the way and
     // closed by default so a balance case cannot depend on it.
@@ -217,19 +256,13 @@ describe('USDC gates job', () => {
 
     await usdcGatesJob._runCheck()
 
-    expect(setSpy).toHaveBeenCalledWith(
-      RuntimeSettingKey.UsdcTreasury,
-      {
-        balanceBaseUnits: (150n * USDC).toString(),
-        paused: false,
-        // Recorded with the reading: "paused at 2,014" means something else if
-        // it was counting two addresses.
-        addresses: [RECEIVER, SECOND_ADDRESS],
-      },
-      // No admin behind this write. The null IS the audit record — and the
-      // manual gate's row never carries one.
-      null,
-    )
+    expect(setSpy).toHaveBeenCalledWith({
+      balanceBaseUnits: 150n * USDC,
+      paused: false,
+      // Recorded with the reading: "paused at 2,014" means something else if it
+      // was counting two addresses.
+      addresses: [RECEIVER, SECOND_ADDRESS],
+    })
   })
 
   it('pauses at the cap and alerts once, not on every poll', async () => {
@@ -240,9 +273,7 @@ describe('USDC gates job', () => {
     await usdcGatesJob._runCheck()
 
     expect(setSpy).toHaveBeenCalledWith(
-      RuntimeSettingKey.UsdcTreasury,
       expect.objectContaining({ paused: true }),
-      null,
     )
     expect(slackSpy).toHaveBeenCalledTimes(1)
     expect(slackSpy.mock.calls[0][0].title).toContain('auto-paused')
@@ -335,9 +366,7 @@ describe('USDC gates job', () => {
     await usdcGatesJob._runCheck()
 
     expect(setSpy).toHaveBeenCalledWith(
-      RuntimeSettingKey.UsdcTreasury,
       expect.objectContaining({ paused: false }),
-      null,
     )
   })
 
@@ -355,9 +384,7 @@ describe('USDC gates job', () => {
     // Still paused: a conversion has to bring the balance under the resume line,
     // which is what stops the gate flapping around the cap.
     expect(setSpy).toHaveBeenCalledWith(
-      RuntimeSettingKey.UsdcTreasury,
       expect.objectContaining({ paused: true }),
-      null,
     )
     expect(slackSpy).not.toHaveBeenCalled()
   })
@@ -374,9 +401,7 @@ describe('USDC gates job', () => {
     await usdcGatesJob._runCheck()
 
     expect(setSpy).toHaveBeenCalledWith(
-      RuntimeSettingKey.UsdcTreasury,
       expect.objectContaining({ paused: true }),
-      null,
     )
   })
 
@@ -478,19 +503,20 @@ describe('USDC gates job', () => {
     ])
   })
 
-  it('never writes the manual gate key', async () => {
-    // The latching invariant, mechanically: the automatic writer has no path to
-    // the human switch. The tempting refactor — one shared `paused` boolean —
-    // destroys it silently.
+  it('cannot touch the manual switch', async () => {
+    // The latching invariant. It is now structural — the switch is a different
+    // table and this module never imports a writer for it — so this asserts the
+    // shape of the collaboration rather than a value: the only writes a poll
+    // makes are readings.
     mockBalances([1n * USDC])
     watching([RECEIVER])
     mockPreviousTreasury(null)
+    const switchSpy = jest.spyOn(usdcPaymentStateRepository, 'setSwitch')
 
     await usdcGatesJob._runCheck()
 
-    expect(
-      setSpy.mock.calls.map((call) => call[0]),
-    ).not.toContain(RuntimeSettingKey.UsdcManualGate)
+    expect(switchSpy).not.toHaveBeenCalled()
+    expect(setSpy).toHaveBeenCalledTimes(1)
   })
 
   // ── metrics ───────────────────────────────────────────────────────────────
@@ -555,14 +581,12 @@ describe('USDC gates job', () => {
 
     await usdcGatesJob._runCheck()
 
-    expect(setSpy).toHaveBeenCalledWith(
-      RuntimeSettingKey.UsdcOracle,
+    expect(oracleWriteSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         healthy: true,
         reason: null,
-        usdPerAi3: '6400000000000000',
+        usdPerAi3: 6_400_000_000_000_000n,
       }),
-      null,
     )
   })
 
@@ -579,10 +603,8 @@ describe('USDC gates job', () => {
 
     await usdcGatesJob._runCheck()
 
-    expect(setSpy).toHaveBeenCalledWith(
-      RuntimeSettingKey.UsdcOracle,
+    expect(oracleWriteSpy).toHaveBeenCalledWith(
       expect.objectContaining({ healthy: false, reason: 'thin-liquidity' }),
-      null,
     )
     expect(
       slackSpy.mock.calls.some((call) =>
@@ -642,7 +664,7 @@ describe('USDC gates job', () => {
 
   it('does not start without a USDC configuration', () => {
     config.ethereum.usdcReceiverAddress = undefined
-    const stateSpy = jest.spyOn(UsdcPaymentsUseCases, 'getTreasuryState')
+    const stateSpy = jest.spyOn(usdcPaymentStateRepository, 'getReadings')
 
     usdcGatesJob.start()
 

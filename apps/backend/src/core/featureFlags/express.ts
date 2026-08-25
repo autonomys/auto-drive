@@ -2,7 +2,6 @@ import { NextFunction, Request, Response } from 'express'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { FeatureFlagsUseCases } from './index.js'
 import { UsdcPaymentsUseCases } from '../payments/usdc.js'
-import { UsdcAvailability } from '@auto-drive/models'
 import { config, isUsdcConfigured } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 
@@ -61,31 +60,6 @@ export const featureFlagMiddleware =
   }
 
 /**
- * A short process-local memo of the composite gate, for /features only.
- *
- * `createIntent` always reads fresh — that is the path where a stale "open"
- * would let a purchase through a gate an admin has just closed. /features only
- * decides whether a button renders, and it is called on every page load by two
- * API tiers, so a few seconds of shared answer removes almost all of the load
- * for a delay nobody can perceive during an incident: the quote still refuses
- * instantly.
- */
-const AVAILABILITY_TTL_MS = 5_000
-let cachedAvailability: { value: UsdcAvailability; expiresAt: number } | null =
-  null
-
-const availabilityForFeatures = async (): Promise<UsdcAvailability> => {
-  const now = Date.now()
-  if (cachedAvailability && cachedAvailability.expiresAt > now) {
-    return cachedAvailability.value
-  }
-
-  const value = await UsdcPaymentsUseCases.getAvailability()
-  cachedAvailability = { value, expiresAt: now + AVAILABILITY_TTL_MS }
-  return value
-}
-
-/**
  * Add the deployment's USDC availability to the flags a client is told about.
  *
  * Two keys, because they answer two questions and one boolean cannot:
@@ -103,7 +77,8 @@ const availabilityForFeatures = async (): Promise<UsdcAvailability> => {
  *                    these.
  *
  * Both come from `UsdcPaymentsUseCases.getAvailability`, the same function
- * `createIntent` calls, so the advertisement and the refusal cannot drift.
+ * `createIntent` calls, so the advertisement and the refusal cannot drift — and
+ * with no cache in between, they cannot lag it either.
  *
  * Fails CLOSED and never throws. This endpoint could not touch the database
  * before this existed, it is mounted on the download API as well as the frontend
@@ -123,7 +98,7 @@ export const withUsdcAvailability = async (
   }
 
   try {
-    const availability = await availabilityForFeatures()
+    const availability = await UsdcPaymentsUseCases.getAvailability()
     return {
       ...flags,
       payWithUsdc: flags.payWithUsdc && availability.open,
@@ -136,11 +111,6 @@ export const withUsdcAvailability = async (
     )
     return { ...flags, payWithUsdc: false, usdcAvailable: false }
   }
-}
-
-// Tests only: drops the /features memo so a case can change the gate and see it.
-export const _resetAvailabilityCache = () => {
-  cachedAvailability = null
 }
 
 // Returns feature flags for the current request.  Used by the public
@@ -161,9 +131,9 @@ export const getFeatureFlags = async (req: Request, res: Response) => {
     } catch (error) {
       logger.warn(error, 'Auth failed in getFeatureFlags, falling back to unauthenticated flags')
       // Auth failure — fall through to unauthenticated flags
-      return withUsdcAvailability(FeatureFlagsUseCases.get(null))
+      return await withUsdcAvailability(FeatureFlagsUseCases.get(null))
     }
   }
 
-  return withUsdcAvailability(FeatureFlagsUseCases.get(null))
+  return await withUsdcAvailability(FeatureFlagsUseCases.get(null))
 }

@@ -13,9 +13,11 @@ import { config, isUsdcConfigured } from '../../config.js'
 import { ForbiddenError } from '../../errors/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import {
-  RuntimeSettingKey,
-  runtimeSettingsRepository,
-} from '../../infrastructure/repositories/runtimeSettings.js'
+  usdcPaymentStateRepository,
+  type GateReadings,
+  type OracleReading,
+  type TreasuryReading,
+} from '../../infrastructure/repositories/usdcPaymentState.js'
 // A pure string→bigint parser that happens to live with the oracle, which is
 // the only other place that has to read a decimal out of the environment
 // without going through a float. Imported rather than restated: two parsers for
@@ -31,11 +33,11 @@ const logger = createLogger('core:payments:usdc')
  * price oracle's health.
  *
  * All three are read from the database rather than from memory, and that is the
- * load-bearing decision in this module. The process that OBSERVES (the payment
- * worker: `paymentManager.start()` runs in exactly one process) is never the
- * process that QUOTES (a frontend API replica, which never calls it). In-memory
- * gates would therefore be read as "unknown" by every process that matters, fail
- * closed, and USDC would never sell in the topology production actually runs.
+ * load-bearing decision here. The process that OBSERVES (the payment worker:
+ * `paymentManager.start()` runs in exactly one process) is never the process that
+ * QUOTES (a frontend API replica, which never calls it). In-memory gates would
+ * therefore be read as "unknown" by every process that matters, fail closed, and
+ * USDC would never sell in the topology production actually runs.
  *
  * So: one writer, N readers, one durable answer — and `GET /payments/usdc/status`
  * gives the same answer whichever process serves it.
@@ -76,7 +78,7 @@ let thresholds: Thresholds | null = null
  * loop for downloads and on-chain publishing. Exactly the failure #816 had to fix
  * in `paymentManager/chains.ts`, for the same reason.
  *
- * The fail-fast this gives up is bought back where it belongs: the treasury job's
+ * The fail-fast this gives up is bought back where it belongs: the gates job's
  * `start()` calls this eagerly, so the process that owns payments still refuses
  * to run on a configuration it cannot parse.
  */
@@ -165,56 +167,6 @@ export const treasuryAddresses = (): string[] => {
   return [...new Set(normalised)]
 }
 
-/**
- * What the poller writes about the treasury.
- *
- * `paused` is stored rather than derived from the balance on read because the
- * resume threshold makes the gate hysteretic: a balance between resume and pause
- * keeps whatever the gate already was, which is not a function of the balance
- * alone. The poller is the single writer and so the only thing that can see the
- * previous state.
- */
-export type TreasurySnapshot = {
-  balanceBaseUnits: string
-  paused: boolean
-  // The addresses that were summed for this reading. Recorded so a snapshot can
-  // be read against a configuration that has since changed — "paused at 2,014"
-  // means something different if it was counting two addresses.
-  addresses: string[]
-}
-
-/**
- * What the poller writes about the oracle.
- *
- * The oracle is the third gate, and its health cannot be read where it is
- * needed: `priceOracle.getHealth()` is per-process in-memory state, so an API
- * replica that has never quoted knows nothing about it. Persisting it from the
- * one process that polls is the same trick the balance gate uses, and it is what
- * lets `/features` stop advertising a path on which every quote 503s.
- *
- * Amounts are strings because this is jsonb and they are bigints.
- */
-export type OracleSnapshot = {
-  healthy: boolean
-  // OracleUnavailableReason when unhealthy; null when the rate read succeeded.
-  reason: string | null
-  // Serving a last-good rate rather than a fresh one. Healthy, but worth showing.
-  servingStale: boolean
-  usdPerAi3: string | null
-  window: {
-    sampleCount: number
-    buyCount: number
-    sellCount: number
-    volumeUsdc: string
-    oneSidedVolumeUsdc: string
-    poolUsdcDepth: string
-    newestSwapAt: string
-    oldestSwapAt: string
-  } | null
-}
-
-type ManualGateSetting = { enabled: boolean }
-
 export type ManualGateState = {
   enabled: boolean
   source: UsdcManualGateSource
@@ -223,170 +175,41 @@ export type ManualGateState = {
 }
 
 /**
- * A stored snapshot is untyped JSON, so it is validated before it is believed.
- *
- * Not defensive habit — the direction of the failure is the point. A row missing
- * `paused` would read as "not paused" under a truthiness test and OPEN the money
- * gate, which is the one direction this module must never go. Rows are
- * hand-editable in an incident and their shape will change across releases, so
- * anything unrecognised is treated as no reading at all: BALANCE_UNKNOWN, which
- * fails closed.
- */
-const DECIMAL_DIGITS = /^\d+$/
-
-const isTreasurySnapshot = (value: unknown): value is TreasurySnapshot => {
-  const snapshot = value as TreasurySnapshot | null
-  return Boolean(
-    snapshot &&
-      typeof snapshot === 'object' &&
-      typeof snapshot.paused === 'boolean' &&
-      typeof snapshot.balanceBaseUnits === 'string' &&
-      DECIMAL_DIGITS.test(snapshot.balanceBaseUnits) &&
-      Array.isArray(snapshot.addresses),
-  )
-}
-
-const isOracleSnapshot = (value: unknown): value is OracleSnapshot => {
-  const snapshot = value as OracleSnapshot | null
-  return Boolean(
-    snapshot &&
-      typeof snapshot === 'object' &&
-      typeof snapshot.healthy === 'boolean',
-  )
-}
-
-/**
  * The manual gate, and where its value came from.
  *
- * An absent row is not "off" — it is "never set", and the value is then
- * `USDC_PAYMENTS_ENABLED`. Deliberately NOT seeded into the table at boot: every
- * replica would race to write it, and a "boot default" that stops mattering
- * after the first boot is a variable nobody can reason about. The first admin
- * flip writes the row, and from then on the row wins and the environment
- * variable is inert — which is why the source is reported to the dashboard.
+ * No history means the switch has never been flipped, and the value is then
+ * `USDC_PAYMENTS_ENABLED`. The first flip writes a row and from then on the row
+ * wins and the environment variable is inert — which is why the source is
+ * reported to the dashboard: otherwise someone changes the variable in
+ * production and watches nothing happen.
  */
 const getManualGate = async (): Promise<ManualGateState> => {
-  const setting = await runtimeSettingsRepository.get<ManualGateSetting>(
-    RuntimeSettingKey.UsdcManualGate,
-  )
+  const entry = await usdcPaymentStateRepository.getSwitch()
 
-  if (!setting) {
-    return {
-      enabled: config.usdcPayments.enabledByDefault,
-      source: UsdcManualGateSource.ENV_DEFAULT,
-      updatedBy: null,
-      updatedAt: null,
-    }
-  }
-
-  return {
-    // Defensive `=== true`: the value is JSON from the database, and anything
-    // other than a literal true on a payment gate reads as off.
-    enabled: setting.value?.enabled === true,
-    source: UsdcManualGateSource.ADMIN,
-    updatedBy: setting.updatedBy,
-    updatedAt: setting.updatedAt,
-  }
-}
-
-export type TreasuryState = {
-  snapshot: TreasurySnapshot | null
-  // Missing, unreadable, or older than the max-stale window. All three mean the
-  // same thing to a caller — the balance is not known well enough to sell
-  // against — but the dashboard tells them apart via `checkedAt`.
-  stale: boolean
-  checkedAt: Date | null
-  ageMs: number | null
-}
-
-export type OracleState = {
-  snapshot: OracleSnapshot | null
-  stale: boolean
-  checkedAt: Date | null
-  ageMs: number | null
+  return entry
+    ? {
+        enabled: entry.enabled,
+        source: UsdcManualGateSource.ADMIN,
+        updatedBy: entry.setBy,
+        updatedAt: entry.setAt,
+      }
+    : {
+        enabled: config.usdcPayments.enabledByDefault,
+        source: UsdcManualGateSource.ENV_DEFAULT,
+        updatedBy: null,
+        updatedAt: null,
+      }
 }
 
 /**
- * The last successful treasury reading, and whether it is still usable.
+ * A reading is usable when it exists and is recent enough to sell against.
  *
- * A failed poll deliberately writes nothing, so the row's age IS the outage
- * signal: past `balanceMaxStaleMs` the balance is unknown and the gate fails
- * closed. Had a failure refreshed the timestamp, "unknown" would be unreachable
- * and the fail-closed rule would be dead code.
+ * A failed poll writes nothing, so age IS the outage signal: past
+ * `balanceMaxStaleMs` the fact is unknown and the gate fails closed. One window
+ * covers both readings because one poll writes both.
  */
-const readTreasury = (
-  setting: Awaited<
-    ReturnType<typeof runtimeSettingsRepository.get<unknown>>
-  > | null,
-): TreasuryState => {
-  if (!setting) {
-    return { snapshot: null, stale: true, checkedAt: null, ageMs: null }
-  }
-
-  if (!isTreasurySnapshot(setting.value)) {
-    logger.error(
-      'Unreadable treasury snapshot in runtime_settings — treating the balance ' +
-        'as unknown, which closes the USDC path',
-      { value: setting.value },
-    )
-    return {
-      snapshot: null,
-      stale: true,
-      checkedAt: setting.updatedAt,
-      ageMs: setting.ageMs,
-    }
-  }
-
-  return {
-    snapshot: setting.value,
-    stale: setting.ageMs > config.usdcPayments.balanceMaxStaleMs,
-    checkedAt: setting.updatedAt,
-    ageMs: setting.ageMs,
-  }
-}
-
-const readOracle = (
-  setting: Awaited<
-    ReturnType<typeof runtimeSettingsRepository.get<unknown>>
-  > | null,
-): OracleState => {
-  if (!setting) {
-    return { snapshot: null, stale: true, checkedAt: null, ageMs: null }
-  }
-
-  if (!isOracleSnapshot(setting.value)) {
-    logger.error(
-      'Unreadable oracle snapshot in runtime_settings — treating the rate as ' +
-        'unavailable, which closes the USDC path',
-      { value: setting.value },
-    )
-    return {
-      snapshot: null,
-      stale: true,
-      checkedAt: setting.updatedAt,
-      ageMs: setting.ageMs,
-    }
-  }
-
-  return {
-    snapshot: setting.value,
-    // Same window as the balance: both rows are written by the same poll, so one
-    // clock and one staleness rule covers them.
-    stale: setting.ageMs > config.usdcPayments.balanceMaxStaleMs,
-    checkedAt: setting.updatedAt,
-    ageMs: setting.ageMs,
-  }
-}
-
-const getTreasuryState = async (): Promise<TreasuryState> =>
-  readTreasury(
-    await runtimeSettingsRepository.get<unknown>(RuntimeSettingKey.UsdcTreasury),
-  )
-
-const getOracleState = async (): Promise<OracleState> =>
-  readOracle(
-    await runtimeSettingsRepository.get<unknown>(RuntimeSettingKey.UsdcOracle),
-  )
+const isFresh = (reading: { ageMs: number } | null): boolean =>
+  reading !== null && reading.ageMs <= config.usdcPayments.balanceMaxStaleMs
 
 /**
  * Whether this deployment is selling storage for USDC right now.
@@ -405,10 +228,10 @@ const getOracleState = async (): Promise<OracleState> =>
  * applies is the one reported: an operator's next action differs for each, and
  * the earlier ones survive fixing the later ones.
  *
- * The oracle conjunct is read from the poller's snapshot rather than from
+ * The oracle conjunct comes from the poller's reading rather than from
  * `priceOracle.getHealth()`, which is per-process memory: a replica that has
- * never quoted would otherwise report health it has not observed. It is still
- * enforced independently at quote time, where the rate is actually needed — this
+ * never quoted would otherwise report health it has not observed. The rate is
+ * still checked independently at quote time, where it is actually needed — this
  * gate exists so the path is not ADVERTISED while every quote would 503.
  */
 const getAvailability = async (): Promise<UsdcAvailability> => {
@@ -416,40 +239,32 @@ const getAvailability = async (): Promise<UsdcAvailability> => {
     return { open: false, closedReason: UsdcClosedReason.NOT_CONFIGURED }
   }
 
-  const [manual, treasury, oracle] = await runtimeSettingsRepository.getMany([
-    RuntimeSettingKey.UsdcManualGate,
-    RuntimeSettingKey.UsdcTreasury,
-    RuntimeSettingKey.UsdcOracle,
+  // Two indexed reads against two tiny tables, run together. Uncached
+  // deliberately: a kill switch whose effect waits out a TTL is not the control
+  // an incident needs.
+  const [manual, readings] = await Promise.all([
+    getManualGate(),
+    usdcPaymentStateRepository.getReadings(),
   ])
 
-  const manualEnabled = manual
-    ? (manual.value as ManualGateSetting | null)?.enabled === true
-    : config.usdcPayments.enabledByDefault
-
-  if (!manualEnabled) {
+  if (!manual.enabled) {
     return { open: false, closedReason: UsdcClosedReason.MANUAL_OFF }
   }
 
   // Unknown before paused: the two produce the same refusal but a very
   // different operator response — one is "convert some USDC", the other is
   // "the payment worker cannot reach Ethereum".
-  const treasuryState = readTreasury(treasury)
-  if (treasuryState.stale || !treasuryState.snapshot) {
+  if (!isFresh(readings.treasury)) {
     return { open: false, closedReason: UsdcClosedReason.BALANCE_UNKNOWN }
   }
 
-  if (treasuryState.snapshot.paused) {
+  if (readings.treasury!.paused) {
     return { open: false, closedReason: UsdcClosedReason.TREASURY_CAP }
   }
 
   // Last, because it is the gate most likely to clear on its own and the one an
   // operator can do least about.
-  const oracleState = readOracle(oracle)
-  if (
-    oracleState.stale ||
-    !oracleState.snapshot ||
-    !oracleState.snapshot.healthy
-  ) {
+  if (!isFresh(readings.oracle) || !readings.oracle!.healthy) {
     return { open: false, closedReason: UsdcClosedReason.ORACLE_UNAVAILABLE }
   }
 
@@ -474,18 +289,14 @@ const setManualGate = async (
     return err(new ForbiddenError('Admin access required'))
   }
 
-  const previous = await runtimeSettingsRepository.set<ManualGateSetting>(
-    RuntimeSettingKey.UsdcManualGate,
-    { enabled },
+  const previous = await usdcPaymentStateRepository.setSwitch(
+    enabled,
     executor.publicId,
   )
 
-  // No previous row means the gate was running on the environment default, and
+  // No previous entry means the gate was running on the environment default, and
   // whether that counts as a change is exactly what it said.
-  const previousEnabled =
-    previous === null
-      ? config.usdcPayments.enabledByDefault
-      : previous.value?.enabled === true
+  const previousEnabled = previous?.enabled ?? config.usdcPayments.enabledByDefault
 
   if (previousEnabled === enabled) {
     logger.info('USDC manual gate re-affirmed with no change', {
@@ -521,7 +332,7 @@ const setManualGate = async (
  *
  * Every figure comes from the same rows the gates are evaluated from, so the
  * dashboard cannot disagree with the refusal a user just got. Nothing here reads
- * a chain or a subgraph: the oracle's health is the poller's snapshot, with its
+ * a chain or a subgraph: the oracle's health is the poller's reading, with its
  * age, rather than a live read this process would then be the only witness to.
  */
 const getStatus = async (
@@ -531,32 +342,26 @@ const getStatus = async (
     return err(new ForbiddenError('Admin access required'))
   }
 
-  const [availability, manualGate, treasury, oracle] = await Promise.all([
+  const [availability, manualGate, readings] = await Promise.all([
     getAvailability(),
     getManualGate(),
-    getTreasuryState(),
-    getOracleState(),
+    usdcPaymentStateRepository.getReadings(),
   ])
-
-  const balance = treasury.snapshot
-    ? BigInt(treasury.snapshot.balanceBaseUnits)
-    : null
+  const { treasury, oracle } = readings
 
   // Both of these throw on an unusable configuration, and this endpoint is
   // exactly where that must not happen: a malformed threshold already stops the
   // gates job from polling, so the path is shut — and the page an operator opens
   // to find out WHY would be the page that 500s, taking the kill switch itself
   // off the screen with it. The error is data here, not an exception.
-  let thresholds: Thresholds | null = null
+  let limits: Thresholds | null = null
   let thresholdError: string | null = null
   try {
-    thresholds = getThresholds()
+    limits = getThresholds()
   } catch (error) {
     thresholdError = error instanceof Error ? error.message : String(error)
   }
 
-  // The configured set, for a dashboard that has to say what WOULD be watched
-  // when nothing has been polled yet.
   let configuredAddresses: string[] = []
   let addressError: string | null = null
   try {
@@ -564,6 +369,9 @@ const getStatus = async (
   } catch (error) {
     addressError = error instanceof Error ? error.message : String(error)
   }
+
+  const treasuryStale = !isFresh(treasury)
+  const oracleStale = !isFresh(oracle)
 
   return ok({
     availability,
@@ -575,40 +383,38 @@ const getStatus = async (
       updatedAt: manualGate.updatedAt?.toISOString() ?? null,
     },
     treasury: {
-      balanceBaseUnits: balance?.toString() ?? null,
+      balanceBaseUnits: treasury?.balanceBaseUnits.toString() ?? null,
       // Negative once the cap is exceeded, which is the number an operator
       // wants: "how much over am I" is the conversion size.
       headroomBaseUnits:
-        balance === null || !thresholds
-          ? null
-          : (thresholds.pause - balance).toString(),
+        treasury && limits
+          ? (limits.pause - treasury.balanceBaseUnits).toString()
+          : null,
       // With no usable reading this is the fail-closed default rather than an
       // observation, which is what `stale` next to it says.
-      paused: treasury.stale ? true : (treasury.snapshot?.paused ?? true),
-      stale: treasury.stale,
-      checkedAt: treasury.checkedAt?.toISOString() ?? null,
-      ageMs: treasury.ageMs,
-      pauseThresholdBaseUnits: thresholds?.pause.toString() ?? null,
-      resumeThresholdBaseUnits: thresholds?.resume.toString() ?? null,
-      // Set when the cap itself is unreadable. The gates job refuses to poll on
-      // this, so the path is closed until it is fixed and the worker restarted.
+      paused: treasuryStale ? true : treasury!.paused,
+      stale: treasuryStale,
+      checkedAt: treasury?.checkedAt.toISOString() ?? null,
+      ageMs: treasury?.ageMs ?? null,
+      pauseThresholdBaseUnits: limits?.pause.toString() ?? null,
+      resumeThresholdBaseUnits: limits?.resume.toString() ?? null,
       thresholdError,
       maxStaleMs: config.usdcPayments.balanceMaxStaleMs,
       checkIntervalMs: config.usdcPayments.balanceCheckIntervalMs,
-      addresses: treasury.snapshot?.addresses ?? configuredAddresses,
+      addresses: treasury?.addresses ?? configuredAddresses,
       addressError,
     },
     oracle: {
       // Unknown fails closed here too, and says so rather than claiming the
       // oracle is broken: nothing has polled, which is a different problem.
-      healthy: Boolean(oracle.snapshot?.healthy) && !oracle.stale,
-      reason: oracle.snapshot?.reason ?? null,
-      servingStale: Boolean(oracle.snapshot?.servingStale),
-      usdPerAi3: oracle.snapshot?.usdPerAi3 ?? null,
-      stale: oracle.stale,
-      checkedAt: oracle.checkedAt?.toISOString() ?? null,
-      ageMs: oracle.ageMs,
-      window: oracle.snapshot?.window ?? null,
+      healthy: !oracleStale && oracle!.healthy,
+      reason: oracle?.reason ?? null,
+      servingStale: oracle?.servingStale ?? false,
+      usdPerAi3: oracle?.usdPerAi3?.toString() ?? null,
+      stale: oracleStale,
+      checkedAt: oracle?.checkedAt.toISOString() ?? null,
+      ageMs: oracle?.ageMs ?? null,
+      window: oracle?.window ?? null,
     },
   })
 }
@@ -650,11 +456,13 @@ const describeClosedReason = (reason: UsdcClosedReason): string => {
 export const UsdcPaymentsUseCases = {
   getAvailability,
   getManualGate,
-  getTreasuryState,
-  getOracleState,
+  getReadings: () => usdcPaymentStateRepository.getReadings(),
   setManualGate,
   getStatus,
   describeClosedReason,
   treasuryAddresses,
   getThresholds,
+  isFresh,
 }
+
+export type { GateReadings, OracleReading, TreasuryReading }

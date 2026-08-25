@@ -427,21 +427,29 @@ curl -X POST https://<api-host>/payments/usdc/disable \
   -H "X-Auth-Provider: $ADMIN_AUTH_PROVIDER"
 ```
 
-If the API itself is unavailable, write the row directly — the gate is read from
+If the API itself is unavailable, append the row directly — the gate is read from
 the database on every quote, so this is equivalent:
 
 ```sql
-INSERT INTO runtime_settings (key, value, updated_by, updated_at)
-VALUES ('payments.usdc.manual_gate', '{"enabled": false}', '<your-public-id>', NOW())
-ON CONFLICT (key) DO UPDATE
-  SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW();
+INSERT INTO usdc_payment_switch (enabled, set_by)
+VALUES (false, '<your-public-id>');
 ```
 
+The switch is an append-only log: the newest row is the current value, so a flip
+is always an INSERT and never an UPDATE. That also means the table is its own
+audit trail — `SELECT enabled, set_by, created_at FROM usdc_payment_switch ORDER
+BY id DESC` is the history of who changed it and when.
+
 `USDC_PAYMENTS_ENABLED` is **not** the live switch. It is the value used only
-until the first admin flip; after that the stored row wins and the variable is
-inert. The status endpoint says which is in force (`manualGate.source` is
-`env_default` or `admin`), and `runtime_settings_audit` holds the history of who
-changed it.
+until the first flip; after that the newest row wins and the variable is inert.
+The status endpoint says which is in force (`manualGate.source` is `env_default`
+or `admin`).
+
+The treasury and oracle readings live in `usdc_gate_readings` (one row, written
+only by the payment worker). Do not hand-edit it to force the path open: the
+gates fail closed on a reading older than `USDC_TREASURY_BALANCE_MAX_STALE_MS`,
+and CHECK constraints reject a half-written reading — so the only way to reopen
+the path is a worker that can actually read the balance and a rate.
 
 ### Rejecting payments that are already in flight
 

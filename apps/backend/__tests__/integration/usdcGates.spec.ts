@@ -17,19 +17,11 @@ import { IntentsUseCases } from '../../src/core/users/intents.js'
 import {
   UsdcPaymentsUseCases,
   _resetThresholds,
-  type OracleSnapshot,
-  type TreasurySnapshot,
 } from '../../src/core/payments/usdc.js'
-import {
-  withUsdcAvailability,
-  _resetAvailabilityCache,
-} from '../../src/core/featureFlags/express.js'
+import { withUsdcAvailability } from '../../src/core/featureFlags/express.js'
 import { FeatureFlagsUseCases } from '../../src/core/featureFlags/index.js'
 import { usdcGatesJob } from '../../src/infrastructure/services/usdcGatesJob.js'
-import {
-  RuntimeSettingKey,
-  runtimeSettingsRepository,
-} from '../../src/infrastructure/repositories/runtimeSettings.js'
+import { usdcPaymentStateRepository } from '../../src/infrastructure/repositories/usdcPaymentState.js'
 import { intentsRepository } from '../../src/infrastructure/repositories/users/intents.js'
 import { AccountsUseCases } from '../../src/core/users/accounts.js'
 import { purchasedCreditsRepository } from '../../src/infrastructure/repositories/users/purchasedCredits.js'
@@ -38,6 +30,7 @@ import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
 import { ServiceUnavailableError } from '../../src/errors/index.js'
 import { config } from '../../src/config.js'
 import { dbMigration } from '../utils/dbMigrate.js'
+import { getDatabase } from '../../src/infrastructure/drivers/pg.js'
 import { ok } from 'neverthrow'
 
 // The gates end to end, against the migrated database.
@@ -86,7 +79,6 @@ describe('USDC gates (integration)', () => {
   beforeEach(async () => {
     jest.restoreAllMocks()
     _resetThresholds()
-    _resetAvailabilityCache()
     usdcGatesJob._resetAlertState()
 
     config.ethereum.rpcUrl = 'http://example.org'
@@ -140,22 +132,10 @@ describe('USDC gates (integration)', () => {
       }),
     )
 
-    // A clean slate for both gate rows, so ordering between cases cannot matter.
-    await runtimeSettingsRepository.set<TreasurySnapshot | null>(
-      RuntimeSettingKey.UsdcTreasury,
-      null as never,
-      null,
-    )
-    await runtimeSettingsRepository.set<OracleSnapshot | null>(
-      RuntimeSettingKey.UsdcOracle,
-      null as never,
-      null,
-    )
-    await runtimeSettingsRepository.set(
-      RuntimeSettingKey.UsdcManualGate,
-      { enabled: false },
-      'reset',
-    )
+    // A clean slate for both tables, so ordering between cases cannot matter.
+    const db = await getDatabase()
+    await db.query('DELETE FROM usdc_gate_readings')
+    await db.query('DELETE FROM usdc_payment_switch')
   })
 
   const buy = () =>
@@ -198,7 +178,6 @@ describe('USDC gates (integration)', () => {
     expect(intent.quotedTokenAmount).toBeGreaterThan(0n)
 
     // And what the client is told matches what it just got.
-    _resetAvailabilityCache()
     const flags = await withUsdcAvailability(FeatureFlagsUseCases.get(buyer))
     expect(flags.payWithUsdc).toBe(true)
     expect(flags.usdcAvailable).toBe(true)
@@ -217,11 +196,7 @@ describe('USDC gates (integration)', () => {
     expect(refused.isErr()).toBe(true)
     expect(refused._unsafeUnwrapErr().message).toContain('cap')
 
-    // The advertisement lags the refusal by the /features memo — up to five
-    // seconds, deliberately, because that endpoint is called on every page load
-    // and the quote above already refused instantly. Reset it here rather than
-    // sleep, so the trade-off is visible in the test instead of hidden by it.
-    _resetAvailabilityCache()
+    // No cache in between, so the advertisement cannot lag the refusal.
     const flags = await withUsdcAvailability(FeatureFlagsUseCases.get(buyer))
     expect(flags.payWithUsdc).toBe(false)
 
@@ -248,31 +223,27 @@ describe('USDC gates (integration)', () => {
     expect(gate.updatedBy).toBe('admin-int-1')
   })
 
-  it('records who flipped the switch, in an append-only trail', async () => {
+  it('keeps the history of who flipped the switch, and when', async () => {
     await UsdcPaymentsUseCases.setManualGate(admin, true)
     await UsdcPaymentsUseCases.setManualGate(admin, false)
 
-    const trail = await runtimeSettingsRepository.getAuditTrail(
-      RuntimeSettingKey.UsdcManualGate,
-    )
-    // `updated_by` on the setting itself only ever says who has it set NOW; the
-    // question after an incident is who turned it off, and when.
-    expect(trail.length).toBeGreaterThanOrEqual(2)
-    expect(trail[0]).toEqual(
-      expect.objectContaining({ updatedBy: 'admin-int-1' }),
-    )
-    expect(trail[0].value).toEqual({ enabled: false })
-    expect(trail[1].value).toEqual({ enabled: true })
+    const history = await usdcPaymentStateRepository.getSwitchHistory()
+    // The switch's table IS its audit trail — the current value and the history
+    // are the same fact, so there is no second table to keep in step and no flip
+    // that a later one can overwrite.
+    expect(history.map((entry) => [entry.enabled, entry.setBy])).toEqual([
+      [false, 'admin-int-1'],
+      [true, 'admin-int-1'],
+    ])
   })
 
-  it('does not record the poller in the audit trail', async () => {
+  it('records nothing in that history when the poller runs', async () => {
+    await UsdcPaymentsUseCases.setManualGate(admin, true)
     await poll(10n * USDC)
 
-    const trail = await runtimeSettingsRepository.getAuditTrail(
-      RuntimeSettingKey.UsdcTreasury,
-    )
-    // 288 machine writes a day would bury the handful of rows anyone reads.
-    expect(trail).toEqual([])
+    // 288 machine writes a day would bury the handful of entries anyone reads —
+    // and structurally the poller cannot write this table at all.
+    expect(await usdcPaymentStateRepository.getSwitchHistory()).toHaveLength(1)
   })
 
   it('never lets a stale reading keep the path open', async () => {
@@ -280,14 +251,12 @@ describe('USDC gates (integration)', () => {
     await poll(10n * USDC)
     expect((await buy()).isOk()).toBe(true)
 
-    // Age the rows past the max-stale window, exactly as an outage would.
-    const db = await (
-      await import('../../src/infrastructure/drivers/pg.js')
-    ).getDatabase()
+    // Age both readings past the max-stale window, exactly as an outage would.
+    const db = await getDatabase()
     await db.query(
-      `UPDATE runtime_settings SET updated_at = NOW() - interval '2 hours'
-       WHERE key = ANY($1)`,
-      [[RuntimeSettingKey.UsdcTreasury, RuntimeSettingKey.UsdcOracle]],
+      `UPDATE usdc_gate_readings SET
+         treasury_checked_at = NOW() - interval '2 hours',
+         oracle_checked_at = NOW() - interval '2 hours'`,
     )
 
     const refused = await buy()

@@ -1,17 +1,10 @@
 import { createPublicClient, http, PublicClient } from 'viem'
 import { formatUsdcBaseUnits } from '@auto-drive/models'
 import { config, isUsdcConfigured } from '../../config.js'
-import {
-  OracleSnapshot,
-  TreasurySnapshot,
-  UsdcPaymentsUseCases,
-} from '../../core/payments/usdc.js'
+import { UsdcPaymentsUseCases } from '../../core/payments/usdc.js'
 import { createLogger } from '../drivers/logger.js'
 import { sendMetricToVictoria } from '../drivers/vmetrics.js'
-import {
-  RuntimeSettingKey,
-  runtimeSettingsRepository,
-} from '../repositories/runtimeSettings.js'
+import { usdcPaymentStateRepository } from '../repositories/usdcPaymentState.js'
 import { priceOracle } from './priceOracle/index.js'
 import { safeCallback } from '../../shared/utils/safe.js'
 import { slackNotifier } from './slack/index.js'
@@ -231,12 +224,12 @@ const refreshOracle = async (): Promise<void> => {
   const rate = await internal.readRate()
   const health = priceOracle.getHealth()
 
-  const snapshot: OracleSnapshot = rate.isOk()
+  const reading = rate.isOk()
     ? {
         healthy: true,
         reason: null,
         servingStale: rate.value.stale,
-        usdPerAi3: rate.value.usdPerAi3.toString(),
+        usdPerAi3: rate.value.usdPerAi3,
         window: health.window
           ? {
               sampleCount: health.window.sampleCount,
@@ -258,33 +251,31 @@ const refreshOracle = async (): Promise<void> => {
         window: null,
       }
 
-  const previous = await UsdcPaymentsUseCases.getOracleState()
-  await runtimeSettingsRepository.set<OracleSnapshot>(
-    RuntimeSettingKey.UsdcOracle,
-    snapshot,
-    null,
-  )
+  const previous = (await usdcPaymentStateRepository.getReadings()).oracle
+  await usdcPaymentStateRepository.saveOracleReading(reading)
 
-  // Transition only, and only for a state that was previously observed — same
-  // rule as the balance, and for the same reason. A refusing oracle is the normal
-  // state of a pool with no liquidity, so alerting per poll would post ~288 times
-  // a day.
-  const wasHealthy = previous.stale ? null : (previous.snapshot?.healthy ?? null)
-  if (wasHealthy === snapshot.healthy) {
+  // Transition only, and only against a reading recent enough to have been
+  // believed — same rule as the balance, and for the same reason. A refusing
+  // oracle is the normal state of a pool with no liquidity, so alerting per poll
+  // would post ~288 times a day.
+  const wasHealthy = UsdcPaymentsUseCases.isFresh(previous)
+    ? previous!.healthy
+    : null
+  if (wasHealthy === reading.healthy) {
     return
   }
-  if (wasHealthy === null && snapshot.healthy) {
+  if (wasHealthy === null && reading.healthy) {
     return
   }
 
-  await (snapshot.healthy
+  await (reading.healthy
     ? alert(
         ':white_check_mark: USDC price oracle recovered',
         'A rate can be established again, so USDC intents may be quoted.',
       )
     : alert(
         ':warning: USDC price oracle unavailable — USDC payments closed',
-        `The oracle refused to price (${snapshot.reason}). No new USDC intents ` +
+        `The oracle refused to price (${reading.reason}). No new USDC intents ` +
           'will be quoted until a rate can be established. Intents already ' +
           'quoted stay payable, and any payment that arrives is still credited.',
       ))
@@ -315,7 +306,7 @@ const runCheck = async (): Promise<void> => {
   }
 
   const manualGate = await UsdcPaymentsUseCases.getManualGate()
-  const previous = await UsdcPaymentsUseCases.getTreasuryState()
+  const previous = (await usdcPaymentStateRepository.getReadings()).treasury
 
   // The previous gate is read even from a STALE row. The balance behind it may be
   // long out of date, but the decision it recorded is still the last decision
@@ -323,7 +314,7 @@ const runCheck = async (): Promise<void> => {
   // balance is by definition not decisive. Ignoring it there would mean a restart
   // with a mid-band balance latches the gate shut until a conversion crosses the
   // resume line, which is an outage with no cause an operator can find.
-  const previouslyPaused = previous.snapshot?.paused ?? null
+  const previouslyPaused = previous?.paused ?? null
 
   let balances: bigint[]
   try {
@@ -336,12 +327,12 @@ const runCheck = async (): Promise<void> => {
     // fail-closed state — would be unreachable.
     logger.error(error, 'Failed to read the treasury USDC balance')
 
-    if ((!previous.snapshot || previous.stale) && !unknownAlerted) {
+    if (!UsdcPaymentsUseCases.isFresh(previous) && !unknownAlerted) {
       const sent = await alert(
         ':rotating_light: USDC treasury balance unknown — failing closed',
-        (previous.checkedAt
+        (previous
           ? `Last successful reading ${Math.round(
-              (previous.ageMs ?? 0) / 60_000,
+              previous.ageMs / 60_000,
             )} minutes ago (${previous.checkedAt.toISOString()}).`
           : 'No successful reading since this worker started.') +
           `\nThe balance has not been read within ${Math.round(
@@ -362,21 +353,14 @@ const runCheck = async (): Promise<void> => {
   const balance = balances.reduce((sum, value) => sum + value, 0n)
   const paused = decidePaused(balance, previouslyPaused)
 
-  const snapshot: TreasurySnapshot = {
-    balanceBaseUnits: balance.toString(),
+  await usdcPaymentStateRepository.saveTreasuryReading({
+    balanceBaseUnits: balance,
     paused,
     addresses,
-  }
-  await runtimeSettingsRepository.set<TreasurySnapshot>(
-    RuntimeSettingKey.UsdcTreasury,
-    snapshot,
-    // No admin behind this write. The null is the audit record: this row was
-    // set by a machine, and the manual gate's row never is.
-    null,
-  )
+  })
 
   logger.debug('Treasury balance polled', {
-    balanceBaseUnits: snapshot.balanceBaseUnits,
+    balanceBaseUnits: balance.toString(),
     paused,
     addresses,
   })
@@ -386,7 +370,7 @@ const runCheck = async (): Promise<void> => {
     // A stale previous reading is previous state for hysteresis but NOT for
     // alerting: after an outage, saying "auto-paused" again is the honest
     // report, since nobody could have known the gate's state meanwhile.
-    previous.stale ? null : previouslyPaused,
+    UsdcPaymentsUseCases.isFresh(previous) ? previouslyPaused : null,
     describeBalance(balance, paused),
   )
   await publishMetrics(balance, paused, false, addresses.length)
