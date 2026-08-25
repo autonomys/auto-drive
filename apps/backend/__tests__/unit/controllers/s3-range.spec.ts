@@ -1,9 +1,15 @@
-import { describe, it, expect } from '@jest/globals'
-import type { Request } from 'express'
+import { describe, it, expect, jest, afterEach } from '@jest/globals'
+import type { Request, Response } from 'express'
+import { Readable } from 'stream'
+import { ok } from 'neverthrow'
 import {
+  headObjectHandler,
   parseS3Range,
   resolveSuffixRange,
 } from '../../../src/app/controllers/s3/s3.js'
+import { S3UseCases } from '../../../src/core/s3/index.js'
+import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
+import { createMockUser } from '../../utils/mocks.js'
 
 // S3 reads parse their own Range header. The shared getByteRange splits on the
 // first '-' and runs Number() over both halves with no NaN guard, which turns
@@ -90,5 +96,139 @@ describe('resolveSuffixRange', () => {
   it('refuses a zero-length suffix and any suffix of an empty object', () => {
     expect(resolveSuffixRange(0, BigInt(70))).toBe('unsatisfiable')
     expect(resolveSuffixRange(10, BigInt(0))).toBe('unsatisfiable')
+  })
+})
+
+// A suffix range is the one shape that has to measure the object before it can
+// name any bytes, so it reads twice: once for the size, once for the body. The
+// two reads have to land on the SAME object. Resolving `bytes=-10` against a
+// 70-byte version and then reading `bucket/key` afresh lets a PutObject in
+// between answer the request out of new content, using offsets sized for the old
+// — a 206 carrying the new ETag and version id over the wrong ten bytes, which
+// is exactly the silent, plausible, wrong data the strict parser exists to stop.
+describe('a suffix range pins the body to the version it measured', () => {
+  const VALID_AUTH =
+    'AWS4-HMAC-SHA256 Credential=e046e71c8dc3459c8da189e62418203a/20260821/us-west-2/s3/aws4_request, SignedHeaders=host, Signature=0'
+
+  const OLD_CID = 'bafyOldVersion'
+  const NEW_CID = 'bafyNewVersion'
+
+  /** Minimal Response stand-in: the handler only has to reach its second read. */
+  const stubRes = () => {
+    const headers = new Map<string, string>()
+    const res = {
+      set: (name: string, value: string) => {
+        headers.set(name.toLowerCase(), value)
+        return res
+      },
+      setHeader: (name: string, value: string) => {
+        headers.set(name.toLowerCase(), value)
+        return res
+      },
+      removeHeader: (name: string) => {
+        headers.delete(name.toLowerCase())
+      },
+      status: () => res,
+      send: () => res,
+      end: () => res,
+    }
+    return { res: res as unknown as Response, headers }
+  }
+
+  const headRequest = (range: string) =>
+    ({
+      headers: { authorization: VALID_AUTH, range },
+      params: { key: 'a-bucket/a-key' },
+      query: {},
+    }) as unknown as Request
+
+  /** A GetObject result for a 70-byte object stored under `cid`. */
+  const objectOf = (cid: string) => ({
+    metadata: {
+      name: 'blob.bin',
+      type: 'file',
+      mimeType: 'application/octet-stream',
+      size: BigInt(70),
+      isCompressed: false,
+      isEncrypted: false,
+    },
+    startDownload: async () => Readable.from([]),
+    byteRange: [60, 69],
+    cid,
+    etag: `"${cid}-md5"`,
+    lastModified: new Date(0),
+    mtime: null,
+    objectMetadata: null,
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('reads the body at the versionId the size came from', async () => {
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(createMockUser() as never)
+    // The overwrite lands between the two reads: an unpinned second lookup
+    // resolves the key to NEW_CID.
+    const getObject = jest
+      .spyOn(S3UseCases, 'getObject')
+      .mockResolvedValueOnce(ok(objectOf(OLD_CID)) as never)
+      .mockResolvedValueOnce(ok(objectOf(NEW_CID)) as never)
+
+    const { res } = stubRes()
+    await headObjectHandler(headRequest('bytes=-10'), res)
+
+    expect(getObject).toHaveBeenCalledTimes(2)
+    // The probe reads the current version; nothing to pin to yet.
+    expect(getObject.mock.calls[0][1]).toMatchObject({
+      Bucket: 'a-bucket',
+      Key: 'a-key',
+      VersionId: undefined,
+    })
+    // The body read is pinned, so the offsets computed from the measured size
+    // are applied to the object they were measured on.
+    expect(getObject.mock.calls[1][1]).toMatchObject({
+      Bucket: 'a-bucket',
+      Key: 'a-key',
+      VersionId: OLD_CID,
+      Range: [60, 69],
+    })
+  })
+
+  it('leaves an offset range on a single unpinned read', async () => {
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(createMockUser() as never)
+    const getObject = jest
+      .spyOn(S3UseCases, 'getObject')
+      .mockResolvedValue(ok(objectOf(NEW_CID)) as never)
+
+    const { res } = stubRes()
+    await headObjectHandler(headRequest('bytes=0-9'), res)
+
+    // An offset range names its bytes without knowing the size, so it never
+    // measures first and has no earlier version to be torn from.
+    expect(getObject).toHaveBeenCalledTimes(1)
+    expect(getObject.mock.calls[0][1]).toMatchObject({ VersionId: undefined })
+  })
+
+  it('keeps the client\'s own ?versionId when it asks for a suffix of it', async () => {
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue(createMockUser() as never)
+    const getObject = jest
+      .spyOn(S3UseCases, 'getObject')
+      .mockResolvedValue(ok(objectOf(OLD_CID)) as never)
+
+    const req = headRequest('bytes=-10')
+    ;(req.query as Record<string, string>).versionId = OLD_CID
+    const { res } = stubRes()
+    await headObjectHandler(req, res)
+
+    // Both reads name the version the client asked for: it cannot be overwritten
+    // under them, so the pin is the same value they already sent.
+    expect(getObject.mock.calls[0][1]).toMatchObject({ VersionId: OLD_CID })
+    expect(getObject.mock.calls[1][1]).toMatchObject({ VersionId: OLD_CID })
   })
 })

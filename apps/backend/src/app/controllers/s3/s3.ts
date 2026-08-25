@@ -397,6 +397,19 @@ const rejectIfRangeNotSatisfiable = (
 }
 
 /**
+ * The absolute offsets a download is prepared with, plus the version they were
+ * computed against when that took a separate read.
+ */
+type ResolvedRange = {
+  byteRange: ByteRange | undefined
+  /**
+   * Set only for a resolved suffix range: the versionId (CID) of the object the
+   * size was measured on, which the body then has to be read from.
+   */
+  versionId?: string
+}
+
+/**
  * Resolve the request's Range into the absolute offsets the download is prepared
  * with.
  *
@@ -416,7 +429,7 @@ const resolveRequestedRange = async (
   user: UserWithOrganization,
   target: { Bucket: string; Key: string; VersionId?: string },
   spec: S3RangeSpec | undefined,
-): Promise<{ byteRange: ByteRange | undefined } | null> => {
+): Promise<ResolvedRange | null> => {
   if (spec === undefined) return { byteRange: undefined }
   if (spec.kind === 'offset') {
     // An open-ended range keeps its undefined end: the download use case clamps
@@ -437,7 +450,16 @@ const resolveRequestedRange = async (
     sendRangeNotSatisfiable(req, res, size)
     return null
   }
-  return { byteRange: resolved }
+  // Pin the body to the version the size was just measured on. Without it the
+  // offsets derived from THIS size are replayed against whatever bucket/key
+  // resolves to on the second lookup, and a PutObject landing in between makes
+  // that a different object: the client gets a 206 for "the last N bytes" that
+  // is a slice sized for the old content, cut out of the new one, carrying the
+  // new ETag and x-amz-version-id beside it — a torn read that looks coherent.
+  // The pin always resolves: createMapping appends the version row in the same
+  // statement that advances the current-version pointer, and the table was
+  // backfilled for every mapping that predates it.
+  return { byteRange: resolved, versionId: probe.value.cid }
 }
 
 /**
@@ -696,10 +718,14 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     parseS3Range(req),
   )
   if (!resolvedRange) return
-  const { byteRange } = resolvedRange
+  const { byteRange, versionId } = resolvedRange
 
   const downloadResult = await S3UseCases.getObject(user, {
     ...target,
+    // versionId is set only by a resolved suffix range, and then it IS the
+    // version this request already committed to; otherwise the client's own
+    // ?versionId (or the current version) stands.
+    VersionId: versionId ?? target.VersionId,
     Range: byteRange,
   })
 
@@ -779,10 +805,14 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     parseS3Range(req),
   )
   if (!resolvedRange) return
-  const { byteRange } = resolvedRange
+  const { byteRange, versionId } = resolvedRange
 
   const downloadResult = await S3UseCases.getObject(user, {
     ...target,
+    // versionId is set only by a resolved suffix range, and then it IS the
+    // version this request already committed to; otherwise the client's own
+    // ?versionId (or the current version) stands.
+    VersionId: versionId ?? target.VersionId,
     Range: byteRange,
   })
 
