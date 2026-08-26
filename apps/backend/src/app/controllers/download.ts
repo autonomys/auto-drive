@@ -16,7 +16,7 @@ import {
   getByteRange,
   handleDownloadResponseHeaders,
 } from '@autonomys/file-server'
-import { handleError } from '../../errors/index.js'
+import { handleError, ChunkNotFoundError } from '../../errors/index.js'
 import {
   handleInternalError,
   handleInternalErrorResult,
@@ -158,6 +158,12 @@ downloadController.get(
       const { byteRange: resultingByteRange, startDownload } =
         downloadResult.value
 
+      // Resolve the stream before staging any response header. The chunk
+      // resolution behind it can fail, and once headers are staged and the body
+      // has started the only way to signal that is a stream reset the client
+      // cannot interpret (issue #815).
+      const sourceStream = await startDownload()
+
       // For media files needing decompression, we handle byte ranges ourselves after decompression
       const effectiveByteRange = needsDecompression
         ? requestedByteRange
@@ -177,8 +183,6 @@ downloadController.get(
       // so we override it here.
       const callerHandlesDecompression = req.query.ignoreEncoding === 'true'
       const actuallyDecompress = shouldDecompressBody && !callerHandlesDecompression
-
-      const sourceStream = await startDownload()
 
       if (actuallyDecompress) {
         // Decompress zlib/deflate compressed content.
@@ -295,6 +299,17 @@ downloadController.get(
         })
       }
     } catch (error: unknown) {
+      // Raised by the eager first-batch resolution above, before any header was
+      // staged, so a real status is still possible.
+      if (error instanceof ChunkNotFoundError && !res.headersSent) {
+        logger.warn(
+          'Object is momentarily unresolvable (cid=%s, chunkCid=%s)',
+          req.params.cid,
+          error.cid,
+        )
+        handleError(error, res)
+        return
+      }
       if (error instanceof TimeoutError) {
         logger.warn('Gateway timeout while retrieving cid=%s: %s', req.params.cid, error.message)
         if (!res.headersSent) {

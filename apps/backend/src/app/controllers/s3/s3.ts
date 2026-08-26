@@ -1,5 +1,9 @@
 import { S3UseCases } from '../../../core/s3/index.js'
-import { handleError, ForbiddenError } from '../../../errors/index.js'
+import {
+  handleError,
+  ForbiddenError,
+  ChunkNotFoundError,
+} from '../../../errors/index.js'
 import {
   UploadCompletionInProgressError,
   UploadPartsChangedError,
@@ -10,7 +14,7 @@ import {
   handleDownloadResponseHeaders,
   handleS3DownloadResponseHeaders,
 } from '@autonomys/file-server'
-import { pipeline } from 'stream'
+import { pipeline, Readable } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { Request, Response } from 'express'
 import { encodeS3Key, planListingEncoding, sendXML } from './utils.js'
@@ -410,6 +414,33 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     objectMetadata,
   } = downloadResult.value
 
+  // Start the download BEFORE any response header is staged. composeNodes...
+  // resolves the first batch of chunks eagerly, so an object that cannot be
+  // served fails here — while a real status code and an S3 error body are still
+  // possible. Once headers are staged and the first byte is written the only
+  // remaining signal is an HTTP/2 stream reset, which carries no status and no
+  // error body (issue #815).
+  let stream: Readable
+  try {
+    stream = await startDownload()
+  } catch (error) {
+    if (error instanceof ChunkNotFoundError) {
+      logger.warn(
+        'Object is momentarily unresolvable, answering SlowDown (cid=%s, chunkCid=%s)',
+        cid,
+        error.cid,
+      )
+      // 503 SlowDown, not 500: retryable and recognised as such by every S3
+      // client, which is the whole point of answering before the body starts.
+      sendXML(res.status(503), 'Error', {
+        Code: 'SlowDown',
+        Message: 'The object is temporarily unavailable. Please retry.',
+      })
+      return
+    }
+    throw error
+  }
+
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
   })
@@ -433,13 +464,15 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   // Echo the client mtime so tools (e.g. rclone) read back what they wrote.
   if (mtime) res.set('x-amz-meta-mtime', mtime)
 
-  pipeline(await startDownload(), res, (err: Error | null) => {
+  pipeline(stream, res, (err: Error | null) => {
     if (err) {
       if (res.headersSent) return
-      logger.error('Error streaming data', err)
-      res.status(500).json({
-        error: 'Failed to stream data',
-        details: err.message,
+      logger.error('Error streaming data (cid=%s)', cid, err)
+      // An S3 client cannot parse a JSON body; if this is still reachable it
+      // must at least be reachable as S3.
+      sendXML(res.status(500), 'Error', {
+        Code: 'InternalError',
+        Message: err.message,
       })
     }
   })

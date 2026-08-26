@@ -22,10 +22,16 @@ import {
   ObjectMappingListEntry,
   TransactionResult,
 } from '@auto-drive/models'
-import { mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
+import {
+  createMockUser,
+  mockRabbitPublish,
+  unmockMethods,
+} from '../../utils/mocks.js'
 import { jest } from '@jest/globals'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
+import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/index.js'
+import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { MAX_RETRIES } from '../../../src/infrastructure/eventRouter/tasks.js'
 
 describe('Nodes', () => {
@@ -238,17 +244,30 @@ describe('Nodes', () => {
     const cid = cidOfNode(node)
     const cidString = cidToString(cid)
 
-    // Mock BlockstoreUseCases.getNode to return the node
-    const getNodeSpy = jest
-      .spyOn(BlockstoreUseCases, 'getNode')
-      .mockResolvedValue(Buffer.from(encodeNode(node)))
+    // Written to a real blockstore row rather than mocked. getChunkData used to
+    // read `nodes` and then call BlockstoreUseCases.getNode as a second query;
+    // it now resolves both tables in one statement, so mocking that function
+    // would assert a code path that no longer exists while proving nothing about
+    // the fallback itself (issue #815).
+    const upload = await UploadsUseCases.createFileUpload(
+      createMockUser(),
+      `${text}.txt`,
+      'text/plain',
+      null,
+    )
+    await blockstoreRepository.addBlockstoreEntry(
+      upload.id,
+      cidString,
+      MetadataType.FileChunk,
+      BigInt(text.length),
+      Buffer.from(encodeNode(node)),
+    )
+
+    expect(await nodesRepository.getNode(cidString)).toBeUndefined()
 
     const chunkData = await NodesUseCases.getChunkData(cidString)
-    expect(getNodeSpy).toHaveBeenCalledWith(cidString)
     expect(chunkData).toBeDefined()
     expect(chunkData?.toString()).toBe(text)
-
-    getNodeSpy.mockRestore()
   })
 
   it('should return undefined when chunk data is not found', async () => {

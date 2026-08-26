@@ -18,17 +18,35 @@ export const composeNodesDataAsFileReadable = async ({
   chunks: string[]
   concurrentChunks: number
 }): Promise<Readable> => {
-  logger.debug('retrieveAndReassembleFile called (cid=%s)', chunks[0])
+  logger.debug('retrieveAndReassembleFile called (firstChunkCid=%s)', chunks[0])
   if (chunks.length === 1) {
-    const chunkData = await fetcher.fetchNode(chunks[0])
-    if (!chunkData) {
-      throw new Error(`Chunk not found: cid=${chunks[0]}`)
-    }
-
-    return Readable.from(chunkData)
+    return Readable.from(await fetcher.fetchNode(chunks[0]))
   }
 
+  // Resolve the first batch eagerly, BEFORE the Readable is handed back.
+  //
+  // Callers pipe this straight into the response, which commits 200 + headers on
+  // the first write; from that point a failure can only be signalled by
+  // resetting the stream, and the client sees `INTERNAL_ERROR; received from
+  // peer` with no status, no S3 error body, and no way to tell "retry me" from
+  // "permanently broken" (issue #815). Resolving the first batch here means an
+  // object that cannot be served at all fails while the caller can still turn it
+  // into a real HTTP status.
+  //
+  // It bounds the exposure rather than removing it: chunks beyond the first
+  // batch are still fetched mid-stream. What made those fail was the read/commit
+  // straddle in the chunk lookup, and that is closed at the source in
+  // nodesRepository.resolveEncodedNodes; what remains is a node genuinely absent
+  // from both tables, which no amount of pre-checking can serve. Validating every
+  // CID up front was the alternative — rejected because a 1 GiB object carries
+  // ~16k chunk CIDs and would pay that on every uncached download to narrow an
+  // already-closed window.
+  const firstBatch = await fetcher.fetchNodes(
+    chunks.slice(0, concurrentChunks),
+  )
+
   let currentIndex = 0
+  let pending: Buffer[] = firstBatch
   const readable = new Readable({
     async read() {
       if (currentIndex >= chunks.length) {
@@ -36,34 +54,21 @@ export const composeNodesDataAsFileReadable = async ({
         return
       }
 
-      const endIndex = currentIndex + concurrentChunks
-      const chunksToDownload = chunks.slice(currentIndex, endIndex)
-
       try {
-        const chunkedData = await Promise.all(
-          chunksToDownload.map((chunk) => fetcher.fetchNode(chunk)),
-        )
-
-        if (chunkedData.some((e) => e === undefined)) {
-          const notFoundChunkIndex = chunkedData.findIndex(
-            (e) => e === undefined,
+        if (pending.length === 0) {
+          pending = await fetcher.fetchNodes(
+            chunks.slice(currentIndex, currentIndex + concurrentChunks),
           )
-          this.destroy(
-            new Error(
-              `Chunk not found: cid=${chunksToDownload[notFoundChunkIndex]}`,
-            ),
-          )
-          return
         }
 
-        for (const data of chunkedData) {
+        while (pending.length > 0) {
+          const data = pending.shift()!
           currentIndex++
           if (!this.push(data)) {
             return
           }
         }
       } catch (err) {
-        console.log('Error', err)
         this.destroy(err instanceof Error ? err : new Error(String(err)))
       }
     },
@@ -72,7 +77,7 @@ export const composeNodesDataAsFileReadable = async ({
   // Ensure any emitted errors are observed by a listener to avoid unhandled error
   handleReadableError(
     readable,
-    'composeNodesDataAsFileReadable error cid=%s',
+    'composeNodesDataAsFileReadable error (firstChunkCid=%s)',
     chunks[0],
   )
 

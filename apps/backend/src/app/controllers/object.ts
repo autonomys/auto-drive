@@ -9,7 +9,7 @@ import {
   handleInternalError,
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
-import { handleError } from '../../errors/index.js'
+import { handleError, ChunkNotFoundError } from '../../errors/index.js'
 import { sendMetricToVictoria } from '../../infrastructure/drivers/vmetrics.js'
 import { config } from '../../config.js'
 
@@ -396,14 +396,33 @@ objectController.get(
       return
     }
 
+    // Resolve the stream before staging headers, so an unresolvable object
+    // yields a real status instead of a mid-stream reset (see issue #815 and
+    // the S3 GetObject handler, which does the same).
+    let stream
+    try {
+      stream = await startDownload()
+    } catch (error) {
+      if (error instanceof ChunkNotFoundError) {
+        logger.warn(
+          'Published object is momentarily unresolvable (id=%s, chunkCid=%s)',
+          id,
+          error.cid,
+        )
+        handleError(error, res)
+        return
+      }
+      throw error
+    }
+
     handleDownloadResponseHeaders(req, res, metadata, {
       byteRange: resultingByteRange,
     })
 
-    pipeline(await startDownload(), res, (err) => {
+    pipeline(stream, res, (err) => {
       if (err) {
         if (res.headersSent) return
-        logger.error('Error streaming data:', err)
+        logger.error('Error streaming data (id=%s)', id, err)
         res.status(500).json({
           error: 'Failed to stream data',
           details: err.message,
