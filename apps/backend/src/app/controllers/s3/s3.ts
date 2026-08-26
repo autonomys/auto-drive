@@ -417,23 +417,33 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   // Start the download BEFORE any response header is staged. composeNodes...
   // resolves the first batch of chunks eagerly, so an object that cannot be
   // served fails here — while a real status code and an S3 error body are still
-  // possible. Once headers are staged and the first byte is written the only
-  // remaining signal is an HTTP/2 stream reset, which carries no status and no
-  // error body (issue #815).
+  // possible.
+  //
+  // Once the body has started there is no good signal left, and it is worse than
+  // a reset: downloadService forks the source stream for caching, and
+  // stream-fork's Fork implements _final but not _destroy, so a source error
+  // propagates to neither fork. The response STALLS until an infrastructure
+  // timeout rather than erroring. That is why answering before the first write
+  // matters, and it bounds — but does not close — issue #815's second acceptance
+  // criterion.
   let stream: Readable
   try {
     stream = await startDownload()
   } catch (error) {
     if (error instanceof ChunkNotFoundError) {
       logger.warn(
-        'Object is momentarily unresolvable, answering SlowDown (cid=%s, chunkCid=%s)',
+        'Object is momentarily unresolvable, answering ServiceUnavailable (cid=%s, chunkCid=%s)',
         cid,
         error.cid,
       )
-      // 503 SlowDown, not 500: retryable and recognised as such by every S3
-      // client, which is the whole point of answering before the body starts.
+      // ServiceUnavailable, not SlowDown. Both are 503 and both are retryable,
+      // but SlowDown is specifically a THROTTLING signal: the AWS SDK v3
+      // adaptive retry mode shrinks its client-wide rate-limit token bucket when
+      // it sees one, so a single object sitting in its migration window would
+      // slow down every unrelated transfer that client has in flight. Nothing is
+      // being throttled here — one object is briefly unservable.
       sendXML(res.status(503), 'Error', {
-        Code: 'SlowDown',
+        Code: 'ServiceUnavailable',
         Message: 'The object is temporarily unavailable. Please retry.',
       })
       return

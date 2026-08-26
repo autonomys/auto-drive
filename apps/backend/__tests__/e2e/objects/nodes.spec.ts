@@ -29,7 +29,6 @@ import {
 } from '../../utils/mocks.js'
 import { jest } from '@jest/globals'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
-import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
 import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/index.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { MAX_RETRIES } from '../../../src/infrastructure/eventRouter/tasks.js'
@@ -274,15 +273,10 @@ describe('Nodes', () => {
     const nonExistentCid =
       'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi'
 
-    // Mock BlockstoreUseCases.getNode to return undefined
-    const getNodeSpy = jest
-      .spyOn(BlockstoreUseCases, 'getNode')
-      .mockResolvedValue(undefined)
-
+    // No mock: resolution reads both tables in one statement, so a CID absent
+    // from each simply does not come back.
     const chunkData = await NodesUseCases.getChunkData(nonExistentCid)
     expect(chunkData).toBeUndefined()
-
-    getNodeSpy.mockRestore()
   })
 
   it('should save multiple nodes', async () => {

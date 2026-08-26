@@ -99,14 +99,26 @@ const downloadObjectByUser = async (
         cid,
         reader.oauthUserId,
       )
+      // Resolve the stream BEFORE charging. registerInteraction books the full
+      // object size against the reader's quota and throws PaymentRequiredError
+      // once the free tier is exhausted, so charging first means a download that
+      // never delivers a byte is still paid for.
+      //
+      // That was survivable while an unservable object failed slowly, mid-stream,
+      // seconds in. It is not now: resolution failures surface in milliseconds as
+      // an explicitly retryable 503, so a client's retry budget buys many more
+      // attempts in the same wall-clock, each one booking the full size. A reader
+      // hitting an object during its migration window could burn its way to a
+      // 402 lockout on an object it never received. On /:id/public the charge
+      // lands on the PUBLISHER's account and any anonymous visitor can drive it.
+      const download = await downloadService.download(cid, options)
+
       await AccountsUseCases.registerInteraction(
         reader,
         InteractionType.Download,
         totalSize,
         cid,
       )
-
-      const download = await downloadService.download(cid, options)
 
       return download
     },

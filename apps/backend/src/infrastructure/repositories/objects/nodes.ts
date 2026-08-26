@@ -94,9 +94,7 @@ const getNode = async (cid: string) => {
  *
  * One statement takes one snapshot, so the two sides are read as of the same
  * instant and the straddle is unrepresentable rather than merely unlikely.
- * Ordering the union by `source` prefers the durable `nodes` copy; DISTINCT ON
- * collapses the duplicate blockstore rows a file with repeated identical chunks
- * legitimately stores.
+ * Ordering the union by `source` prefers the durable `nodes` copy.
  *
  * Rows in `nodes` whose `encoded_node` was stripped by archival
  * (removeNodeDataByRootCid) are excluded, so an archived object falls through to
@@ -109,6 +107,18 @@ const resolveEncodedNodes = async (
 
   const db = await getDatabase()
 
+  // Both the input list and the blockstore side are de-duplicated BEFORE any
+  // payload is read, which is not cosmetic. A file may legitimately repeat a
+  // chunk — a sparse file, a zero-padded disk image, a padded archive — and
+  // `metadata.chunks` carries one entry per occurrence, so a 100-CID batch can
+  // be 100 copies of one CID. Left alone, the blockstore arm would then match
+  // every stored row for that CID and run encode() over each 64 KiB payload
+  // (inflating it ~1.35x) only for the outer DISTINCT ON to throw all but one
+  // away. On a 1 GiB zero-file that is gigabytes of base64 materialised and
+  // sorted per batch. DISTINCT ON alone hides duplicates in the output; it does
+  // not avoid paying for them.
+  const distinctCids = [...new Set(cids)]
+
   const result = await db.query<{ cid: string; encoded_node: string }>({
     text: `SELECT DISTINCT ON (cid) cid, encoded_node
            FROM (
@@ -116,12 +126,12 @@ const resolveEncodedNodes = async (
              FROM nodes
              WHERE cid = ANY($1) AND encoded_node IS NOT NULL
              UNION ALL
-             SELECT cid, encode(data, 'base64') AS encoded_node, 1 AS source
+             SELECT DISTINCT ON (cid) cid, encode(data, 'base64') AS encoded_node, 1 AS source
              FROM uploads.blockstore
              WHERE cid = ANY($1)
            ) resolved
            ORDER BY cid, source`,
-    values: [cids],
+    values: [distinctCids],
   })
 
   return new Map(result.rows.map((row) => [row.cid, row.encoded_node]))

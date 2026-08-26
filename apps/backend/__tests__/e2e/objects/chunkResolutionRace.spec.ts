@@ -1,6 +1,13 @@
 import { jest } from '@jest/globals'
 import { v4 } from 'uuid'
 import { randomBytes } from 'crypto'
+import {
+  cidToString,
+  createSingleFileIpldNode,
+  cidOfNode,
+  encodeNode,
+  MetadataType,
+} from '@autonomys/auto-dag-data'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   createMockUser,
@@ -9,28 +16,31 @@ import {
 } from '../../utils/mocks.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { NodesUseCases } from '../../../src/core/objects/nodes.js'
-import { FilesUseCases } from '../../../src/core/objects/files/index.js'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { nodesRepository } from '../../../src/infrastructure/repositories/index.js'
 import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/index.js'
-import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
+import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 
 jest.setTimeout(300_000)
 
 /**
- * Issue #815 — an object was unreadable while its blockstore->nodes migration
- * was in flight, failing mid-stream with `Chunk not found`.
+ * Issue #815 — reads of a just-uploaded object failed mid-stream with
+ * `Chunk not found` while its blockstore->nodes migration was in flight.
  *
- * The cause was not that the migration consumed the blockstore as it went (it
- * does not — see 'migration leaves the blockstore intact'). It was that chunk
- * resolution read `nodes` and `uploads.blockstore` in two separate statements.
- * Under READ COMMITTED each statement takes its own snapshot, so a reader could
- * miss a CID in `nodes` before the migration's INSERTs committed and miss it
- * again in the blockstore after removeUploadArtifacts' DELETE committed —
- * resolving neither copy of a node that was continuously present in one table
- * or the other.
+ * The cause was that chunk resolution read `nodes` and `uploads.blockstore` in
+ * TWO statements. Under READ COMMITTED each takes its own snapshot, so a reader
+ * could miss a CID in the first (before the migration's INSERTs committed) and
+ * miss it again in the second (after the cleanup's DELETE committed) — never
+ * seeing a node that was continuously present in one table or the other.
+ *
+ * The property that fixes it is exactly "one statement", so that is what these
+ * tests assert. An earlier version of this file tried to provoke the race with
+ * injected sleeps instead; every one of those tests passed against a
+ * deliberately reintroduced two-statement resolution, because the window they
+ * were trying to hit is sub-millisecond on a local database. Timing cannot prove
+ * the absence of a race. The statement count can.
  */
-describe('chunk resolution during migration (issue #815)', () => {
+describe('chunk resolution (issue #815)', () => {
   const user = createMockUser()
 
   beforeAll(async () => {
@@ -52,7 +62,7 @@ describe('chunk resolution during migration (issue #815)', () => {
     )
     await UploadsUseCases.uploadChunk(user, created.id, 0, content)
     const cid = await UploadsUseCases.completeUpload(user, created.id)
-    return { uploadId: created.id, cid, content }
+    return { uploadId: created.id, cid }
   }
 
   const chunkCidsOf = async (cid: string): Promise<string[]> => {
@@ -63,15 +73,147 @@ describe('chunk resolution during migration (issue #815)', () => {
     return value.chunks.map((chunk) => chunk.cid)
   }
 
+  /** Count SQL round trips made while `fn` runs. */
+  const countQueries = async <T>(
+    fn: () => Promise<T>,
+  ): Promise<{ result: T; queries: number }> => {
+    const db = await getDatabase()
+    const spy = jest.spyOn(db, 'query')
+    const before = spy.mock.calls.length
+    try {
+      const result = await fn()
+      return { result, queries: spy.mock.calls.length - before }
+    } finally {
+      spy.mockRestore()
+    }
+  }
+
+  // THE regression test. Two statements are what made the bug possible, so a
+  // resolution that costs more than one statement is the bug, whether or not a
+  // race happens to reproduce on this machine today.
+  it('resolves any number of chunks in exactly one statement', async () => {
+    const { cid } = await upload(randomBytes(4 * 1024 * 1024))
+    const chunks = await chunkCidsOf(cid)
+    expect(chunks.length).toBeGreaterThan(10)
+
+    // Un-migrated: every chunk lives in the blockstore, none in `nodes`. This is
+    // the shape that used to need a second statement.
+    expect(await nodesRepository.getNode(chunks[0])).toBeUndefined()
+
+    const { result, queries } = await countQueries(() =>
+      NodesUseCases.getChunksData(chunks),
+    )
+
+    expect(result.size).toBe(chunks.length)
+    expect(queries).toBe(1)
+  })
+
+  it('resolves a single chunk in one statement, from either table', async () => {
+    const { uploadId, cid } = await upload(randomBytes(512 * 1024))
+    const [chunk] = await chunkCidsOf(cid)
+
+    const fromBlockstore = await countQueries(() =>
+      NodesUseCases.getChunkData(chunk),
+    )
+    expect(fromBlockstore.result).toBeDefined()
+    expect(fromBlockstore.queries).toBe(1)
+
+    await UploadsUseCases.processMigration(uploadId)
+    expect((await blockstoreRepository.getBlockstoreEntries(uploadId)).length).toBe(0)
+
+    const fromNodes = await countQueries(() => NodesUseCases.getChunkData(chunk))
+    expect(fromNodes.result).toBeDefined()
+    expect(fromNodes.queries).toBe(1)
+  })
+
+  // Precedence and the NULL filter are the two things the single statement has
+  // to get right, and neither is observable through the normal write path
+  // (content addressing makes both copies byte-identical). Written directly so
+  // the two sources are distinguishable.
+  describe('resolution precedence', () => {
+    const seed = async (
+      nodesEncoded: string | null,
+      blockstorePayload: Buffer | null,
+    ) => {
+      const text = `precedence-${v4()}`
+      const node = createSingleFileIpldNode(Buffer.from(text), text)
+      const cidString = cidToString(cidOfNode(node))
+      const db = await getDatabase()
+
+      if (nodesEncoded !== null) {
+        await db.query(
+          'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $1, $1, $2, $3)',
+          [cidString, MetadataType.FileChunk, nodesEncoded],
+        )
+      }
+      if (blockstorePayload !== null) {
+        const created = await UploadsUseCases.createFileUpload(
+          user,
+          `${text}.bin`,
+          'application/octet-stream',
+          null,
+        )
+        await blockstoreRepository.addBlockstoreEntry(
+          created.id,
+          cidString,
+          MetadataType.FileChunk,
+          BigInt(blockstorePayload.length),
+          blockstorePayload,
+        )
+      }
+      return cidString
+    }
+
+    const encodedFor = (text: string) =>
+      Buffer.from(
+        encodeNode(createSingleFileIpldNode(Buffer.from(text), text)),
+      )
+
+    it('prefers the durable nodes row over a blockstore row', async () => {
+      const cid = await seed(
+        encodedFor('from-nodes').toString('base64'),
+        encodedFor('from-blockstore'),
+      )
+      // `nodes` is source 0 and must win. If the ORDER BY were reversed, a
+      // pre-cleanup blockstore copy would shadow the committed row.
+      expect((await NodesUseCases.getChunkData(cid))?.toString()).toBe(
+        'from-nodes',
+      )
+    })
+
+    it('falls through to the blockstore when the nodes row was stripped', async () => {
+      const cid = await seed(null, encodedFor('from-blockstore'))
+      const db = await getDatabase()
+      // Archival NULLs encoded_node in place (removeNodeDataByRootCid). Without
+      // the IS NOT NULL filter this row wins as source 0 and resolves to
+      // nothing, even though a usable copy exists.
+      await db.query(
+        'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $1, $1, $2, NULL)',
+        [cid, MetadataType.FileChunk],
+      )
+      expect((await NodesUseCases.getChunkData(cid))?.toString()).toBe(
+        'from-blockstore',
+      )
+    })
+
+    it('does not resolve a chunk that is in neither table', async () => {
+      const absent = cidToString(
+        cidOfNode(createSingleFileIpldNode(Buffer.from('absent'), 'absent')),
+      )
+      expect(await NodesUseCases.getChunkData(absent)).toBeUndefined()
+    })
+  })
+
+  // Characterisation, not regression: the issue asserted that the migration
+  // "consumes" blockstore entries as it goes, which is what made a reader-side
+  // fix look unnecessary. It does not — every row survives until cleanup — and
+  // that is why one snapshot over both tables can always resolve.
   it('migration leaves the blockstore intact until it has finished', async () => {
-    // Large enough to span more than one BATCH_SIZE=100 insert, so the
-    // observation below is made *between* batches and not just at the end.
     const { uploadId } = await upload(randomBytes(12 * 1024 * 1024))
     const before =
       await blockstoreRepository.getBlockstoreEntriesWithoutData(uploadId)
     expect(before.length).toBeGreaterThan(1)
 
-    // Observe the blockstore after every batch insert, not just at the end.
     const realSaveNodes = nodesRepository.saveNodes.bind(nodesRepository)
     const perBatch: number[] = []
     const spy = jest.spyOn(nodesRepository, 'saveNodes')
@@ -91,82 +233,6 @@ describe('chunk resolution during migration (issue #815)', () => {
     for (const remaining of perBatch) expect(remaining).toBe(before.length)
   })
 
-  it('resolves a chunk whose migration commits between the two lookups', async () => {
-    const { uploadId, cid } = await upload(randomBytes(1024 * 1024))
-    const chunks = await chunkCidsOf(cid)
-    const target = chunks[chunks.length - 1]
-
-    // Not migrated yet: resolvable only from the blockstore.
-    expect(await nodesRepository.getNode(target)).toBeUndefined()
-    expect(await NodesUseCases.getChunkData(target)).toBeDefined()
-
-    // Drive the exact production interleaving: the whole migration (node
-    // INSERTs *and* the blockstore cleanup) commits while a reader is partway
-    // through resolving this chunk. Before the fix this returned undefined and
-    // surfaced as `Chunk not found` mid-stream.
-    let migrated = false
-    const realResolve =
-      nodesRepository.resolveEncodedNodes.bind(nodesRepository)
-    const spy = jest.spyOn(nodesRepository, 'resolveEncodedNodes')
-    spy.mockImplementation(async (cids) => {
-      if (!migrated && cids.includes(target)) {
-        migrated = true
-        await UploadsUseCases.processMigration(uploadId)
-      }
-      return realResolve(cids)
-    })
-
-    const chunkData = await NodesUseCases.getChunkData(target)
-    spy.mockRestore()
-
-    expect(migrated).toBe(true)
-    expect(chunkData).toBeDefined()
-  })
-
-  it('serves a full object read concurrently with its own migration', async () => {
-    const SIZE = 12 * 1024 * 1024
-    const attempts = 3
-
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const { uploadId, cid, content } = await upload(randomBytes(SIZE))
-      const metadata = await ObjectUseCases.getMetadata(cid)
-      if (metadata.isErr()) throw new Error('no metadata')
-
-      const stream = await FilesUseCases.retrieveFullFile(metadata.value)
-
-      // Model production pool queueing. The composer fetches chunks 100 at a
-      // time against a pg.Pool with the default max of 10 connections, so a
-      // resolution could lag far behind the reader that issued it. Locally
-      // every statement is sub-millisecond, which is too fast to land in the
-      // window unaided; this delay stands in for that queueing. Nothing about
-      // the resolution logic under test is mocked.
-      const realGetNode = BlockstoreUseCases.getNode
-      const slow = jest.spyOn(BlockstoreUseCases, 'getNode')
-      slow.mockImplementation(async (c: string) => {
-        await new Promise((resolve) => setTimeout(resolve, 150))
-        return realGetNode(c)
-      })
-
-      const migration = UploadsUseCases.processMigration(uploadId)
-
-      let received = 0
-      let streamError: Error | undefined
-      try {
-        for await (const buf of stream) {
-          received += (buf as Buffer).length
-          await new Promise((resolve) => setTimeout(resolve, 1))
-        }
-      } catch (error) {
-        streamError = error as Error
-      }
-      await migration
-      slow.mockRestore()
-
-      expect(streamError).toBeUndefined()
-      expect(received).toBe(content.length)
-    }
-  })
-
   it('keeps an already-migrated object readable while the same root re-migrates', async () => {
     const content = randomBytes(8 * 1024 * 1024)
     const name = `race-dup-${v4()}.bin`
@@ -177,11 +243,10 @@ describe('chunk resolution during migration (issue #815)', () => {
     const chunks = await chunkCidsOf(first.cid)
     const target = chunks[chunks.length - 1]
     expect(await NodesUseCases.getChunkData(target)).toBeDefined()
-    expect((await blockstoreRepository.getNodesByCid(target)).length).toBe(0)
 
-    // Same name and bytes -> same root CID, new upload, its own blockstore.
-    // Its migration opens with `DELETE FROM nodes WHERE root_cid = R`, which
-    // removes the first upload's rows.
+    // Same name and bytes -> same root CID. Its migration opens with
+    // `DELETE FROM nodes WHERE root_cid = R`, removing the first upload's rows
+    // while it re-inserts them.
     const second = await upload(content, name)
     expect(second.cid).toBe(first.cid)
 
@@ -194,7 +259,6 @@ describe('chunk resolution during migration (issue #815)', () => {
           unresolvable++
         }
         samples++
-        await new Promise((resolve) => setTimeout(resolve, 5))
       }
     })()
 
@@ -202,7 +266,7 @@ describe('chunk resolution during migration (issue #815)', () => {
     polling = false
     await poller
 
-    expect(samples).toBeGreaterThan(10)
+    expect(samples).toBeGreaterThan(100)
     expect(unresolvable).toBe(0)
   })
 })

@@ -26,21 +26,24 @@ export const composeNodesDataAsFileReadable = async ({
   // Resolve the first batch eagerly, BEFORE the Readable is handed back.
   //
   // Callers pipe this straight into the response, which commits 200 + headers on
-  // the first write; from that point a failure can only be signalled by
-  // resetting the stream, and the client sees `INTERNAL_ERROR; received from
-  // peer` with no status, no S3 error body, and no way to tell "retry me" from
-  // "permanently broken" (issue #815). Resolving the first batch here means an
-  // object that cannot be served at all fails while the caller can still turn it
-  // into a real HTTP status.
+  // the first write. After that a failure is not merely hard to report, it is
+  // invisible: downloadService forks this stream for caching, and stream-fork's
+  // Fork implements _final but not _destroy, so an error here reaches neither
+  // fork and the response hangs until an infrastructure timeout — which is what
+  // the client eventually sees as `INTERNAL_ERROR; received from peer`, with no
+  // status and no S3 error body (issue #815). Resolving the first batch here
+  // means an object that cannot be served at all fails while the caller can
+  // still turn it into a real HTTP status.
   //
   // It bounds the exposure rather than removing it: chunks beyond the first
   // batch are still fetched mid-stream. What made those fail was the read/commit
   // straddle in the chunk lookup, and that is closed at the source in
   // nodesRepository.resolveEncodedNodes; what remains is a node genuinely absent
   // from both tables, which no amount of pre-checking can serve. Validating every
-  // CID up front was the alternative — rejected because a 1 GiB object carries
-  // ~16k chunk CIDs and would pay that on every uncached download to narrow an
-  // already-closed window.
+  // CID up front was the alternative — rejected because it is not a fix either
+  // (validation is one more set of statements at one more time, so a CID checked
+  // at t0 can still be gone at t2) and a 1 GiB object carries ~16k chunk CIDs to
+  // check on every uncached download.
   const firstBatch = await fetcher.fetchNodes(
     chunks.slice(0, concurrentChunks),
   )

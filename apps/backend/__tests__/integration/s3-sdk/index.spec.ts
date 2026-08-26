@@ -1945,13 +1945,15 @@ describe('AWS S3 - SDK', () => {
   })
 
   // Issue #815: an unresolvable chunk used to be discovered only after 200 +
-  // headers had been sent, leaving an HTTP/2 stream reset as the only way to
-  // signal it. The client saw `INTERNAL_ERROR; received from peer` — no status,
-  // no S3 error body, no way to tell "retry me" from "permanently broken".
+  // headers had been sent. Worse than a reset — downloadService forks the stream
+  // for caching and stream-fork does not propagate destroy, so the response
+  // simply stalled until an infrastructure timeout, which the client reports as
+  // `INTERNAL_ERROR; received from peer`: no status, no S3 error body, no way to
+  // tell "retry me" from "permanently broken".
   describe('an object whose chunk cannot be resolved', () => {
     const UnresolvableKey = 'unresolvable-chunk.bin'
 
-    it('answers 503 SlowDown with an S3 error body, not a stream reset', async () => {
+    it('answers 503 ServiceUnavailable with an S3 error body, not a stall', async () => {
       // Big enough to be chunked, so this exercises the batch resolution path.
       const body = randomBytes(256 * 1024)
       const put = await s3Client.send(
@@ -1986,9 +1988,11 @@ describe('AWS S3 - SDK', () => {
       await expect(
         s3Client.send(new GetObjectCommand({ Bucket, Key: UnresolvableKey })),
       ).rejects.toMatchObject({
-        // A parseable, retryable S3 error — the point of the fix.
+        // A parseable, retryable S3 error — the point of the fix. Not SlowDown:
+        // that is a throttling signal and the AWS SDK's adaptive retry mode would
+        // shrink its client-wide rate limiter over one unservable object.
         $metadata: { httpStatusCode: 503 },
-        Code: 'SlowDown',
+        Code: 'ServiceUnavailable',
       })
     }, 30_000)
   })
