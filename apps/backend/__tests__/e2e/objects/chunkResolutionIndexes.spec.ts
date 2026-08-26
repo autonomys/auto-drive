@@ -7,7 +7,13 @@ import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 
 jest.setTimeout(300_000)
 
-describe('explain', () => {
+/**
+ * The single-statement chunk resolution added for issue #815 filters
+ * uploads.blockstore on `cid` alone. Every pre-existing index on that table
+ * leads with upload_id, so without blockstore_cid_index the predicate has no
+ * index it can use at all.
+ */
+describe('chunk resolution index coverage', () => {
   beforeAll(async () => {
     mockRabbitPublish()
     await dbMigration.up()
@@ -47,7 +53,6 @@ describe('explain', () => {
       `SELECT indexname FROM pg_indexes
        WHERE schemaname = 'uploads' AND tablename = 'blockstore'`,
     )
-    console.log('INDEXES: %s', indexes.rows.map((r) => r.indexname).join(', '))
     expect(indexes.rows.map((r) => r.indexname)).toContain('blockstore_cid_index')
 
     // Whether the planner PICKS an index here depends on table size — at test
@@ -62,13 +67,23 @@ describe('explain', () => {
     try {
       await client.query('BEGIN')
       await client.query('SET LOCAL enable_seqscan = off')
+      // The statement below must stay in step with resolveEncodedNodes; an
+      // EXPLAIN of a hand-written stand-in would keep passing after the real
+      // query changed shape.
       const { rows } = await client.query(
         `EXPLAIN (COSTS OFF)
-         SELECT cid, encode(data,'base64') FROM uploads.blockstore WHERE cid = ANY($1)`,
+         SELECT DISTINCT ON (cid) cid, encoded_node
+         FROM (
+           SELECT cid, encoded_node, 0 AS source
+           FROM nodes WHERE cid = ANY($1) AND encoded_node IS NOT NULL
+           UNION ALL
+           SELECT DISTINCT ON (cid) cid, encode(data, 'base64') AS encoded_node, 1 AS source
+           FROM uploads.blockstore WHERE cid = ANY($1)
+         ) resolved
+         ORDER BY cid, source`,
         [realCids],
       )
       const plan = rows.map((r: { [k: string]: string }) => r['QUERY PLAN']).join('\n')
-      console.log('PLAN:\n' + plan)
       expect(plan).toMatch(/blockstore_cid_index/)
       await client.query('ROLLBACK')
     } finally {
