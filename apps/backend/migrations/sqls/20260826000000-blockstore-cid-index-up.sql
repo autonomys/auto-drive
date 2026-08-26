@@ -1,0 +1,28 @@
+-- Chunk resolution looks a CID up in `nodes` and falls back to the upload
+-- blockstore, and since issue #815 it does both in a single statement whose
+-- blockstore side filters on `cid` alone.
+--
+-- Every existing index on uploads.blockstore leads with upload_id
+-- (blockstore_upload_id_cid_index, and blockstore_root_node_unique_idx which is
+-- additionally partial on the root node types), so a cid-only lookup can use
+-- none of them and falls back to a sequential scan.
+--
+-- Not a new cost — the per-chunk getNodesByCid this replaced scanned the same
+-- way, once per chunk rather than once per batch — but it now sits on the hot
+-- path of every uncached download. It matters most in exactly the situation that
+-- makes an incident worse: the table normally holds only in-flight uploads
+-- (removeUploadArtifacts deletes each upload's rows once it migrates), so it is
+-- small, but a backlog of uploads stuck in `migrating` inflates it without bound
+-- and would put a full scan of every stuck upload's 64 KiB payloads in front of
+-- every download.
+--
+-- Deliberately NOT CONCURRENTLY: db-migrate runs each migration inside a
+-- transaction, and CREATE INDEX CONCURRENTLY cannot run in one. The plain form
+-- takes a SHARE lock that blocks writes to uploads.blockstore (i.e. uploads in
+-- progress) while it builds. That is acceptable precisely because the table is
+-- transient rather than cumulative — it is sized by concurrent uploads, not by
+-- everything ever stored. If this is ever applied while a large migration
+-- backlog is outstanding, drain the backlog first or build the index by hand
+-- with CONCURRENTLY outside the migration runner.
+CREATE INDEX IF NOT EXISTS blockstore_cid_index
+  ON uploads.blockstore USING btree (cid);
