@@ -99,26 +99,59 @@ const downloadObjectByUser = async (
         cid,
         reader.oauthUserId,
       )
-      // Resolve the stream BEFORE charging. registerInteraction books the full
-      // object size against the reader's quota and throws PaymentRequiredError
-      // once the free tier is exhausted, so charging first means a download that
-      // never delivers a byte is still paid for.
+      // Charge AFTER the object is known to be servable, but refuse an
+      // unaffordable download BEFORE building a stream for it.
       //
-      // That was survivable while an unservable object failed slowly, mid-stream,
-      // seconds in. It is not now: resolution failures surface in milliseconds as
-      // an explicitly retryable 503, so a client's retry budget buys many more
-      // attempts in the same wall-clock, each one booking the full size. A reader
-      // hitting an object during its migration window could burn its way to a
-      // 402 lockout on an object it never received. On /:id/public the charge
-      // lands on the PUBLISHER's account and any anonymous visitor can drive it.
+      // registerInteraction books the full object size and throws
+      // PaymentRequiredError once the free tier is exhausted. Charging before
+      // resolution meant a download that never delivered a byte was still paid
+      // for — survivable while an unservable object failed slowly and
+      // mid-stream, but not now that resolution failures surface in
+      // milliseconds as an explicitly retryable 503: a client's retry budget
+      // then buys many more attempts, each booking the full size, and a reader
+      // could burn its way to a 402 lockout on an object it never received. On
+      // /:id/public that charge lands on the PUBLISHER's account and any
+      // anonymous visitor can drive it.
+      //
+      // Simply swapping the two is not enough. downloadService.download forks
+      // the source stream for caching before it returns, so a throw after it
+      // abandons a paused source, a paused fork and an open cache write, with
+      // no handle left to close them — and the out-of-credits path is exactly
+      // where a client retries hardest. Hence the read-only check first: the
+      // ordinary insufficient-credits case never constructs a stream at all.
+      const availableCredits =
+        await AccountsUseCases.getPendingCreditsByUserAndType(
+          reader,
+          InteractionType.Download,
+        )
+      if (BigInt(availableCredits) < totalSize) {
+        throw new PaymentRequiredError('Insufficient credits to process download')
+      }
+
       const download = await downloadService.download(cid, options)
 
-      await AccountsUseCases.registerInteraction(
-        reader,
-        InteractionType.Download,
-        totalSize,
-        cid,
-      )
+      // The check above is not a lock, so a concurrent download can still
+      // consume the budget in between. That leaves the stream already built, so
+      // tear it down rather than leaking it — this is the narrow race, not the
+      // common path.
+      try {
+        await AccountsUseCases.registerInteraction(
+          reader,
+          InteractionType.Download,
+          totalSize,
+          cid,
+        )
+      } catch (error) {
+        // Drain it, do not destroy it. stream-fork's Fork writes to every branch
+        // on each chunk and does not check whether one has gone away, so
+        // destroying this fork makes the next write throw `Cannot call write
+        // after a stream was destroyed` from inside the Fork, where nothing is
+        // listening. Draining lets the source and the cache branches run to
+        // completion and end normally, which is what actually releases them.
+        download.on('error', () => {})
+        download.resume()
+        throw error
+      }
 
       return download
     },
