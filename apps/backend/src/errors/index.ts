@@ -137,6 +137,28 @@ export class GoneError extends HttpError {
   }
 }
 
+/**
+ * A chunk of an object could not be resolved from either `nodes` or the upload
+ * blockstore.
+ *
+ * 503, not 404: the object's metadata exists and its chunk list is intact, so
+ * this is "cannot serve right now", not "does not exist". Answering 404 would
+ * tell an S3 client the key is gone and invite it to re-upload. Typed (rather
+ * than a bare Error) so the download paths can turn it into a real status code
+ * before the response body is committed, instead of resetting a stream that has
+ * already sent 200 + headers — the failure mode issue #815 describes as
+ * uninterpretable by any client.
+ */
+export class ChunkNotFoundError extends HttpError {
+  static readonly statusCode = 503
+  public readonly cid: string
+  constructor(cid: string) {
+    super(ChunkNotFoundError.statusCode, `Chunk not found: cid=${cid}`)
+    this.name = 'ChunkNotFoundError'
+    this.cid = cid
+  }
+}
+
 export const handleError = (error: Error, res: Response) => {
   if (error instanceof HttpError) {
     error.handleResponse(res)

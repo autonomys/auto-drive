@@ -1,4 +1,5 @@
 import { gzipSync, gunzipSync } from 'zlib'
+import { randomBytes } from 'crypto'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   AbortMultipartUploadCommand,
@@ -29,7 +30,8 @@ import {
 import { jest } from '@jest/globals'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { config } from '../../../src/config.js'
-import { AccountsUseCases } from '../../../src/core/index.js'
+import { AccountsUseCases, ObjectUseCases } from '../../../src/core/index.js'
+import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 
 /** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
 const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
@@ -1940,5 +1942,58 @@ describe('AWS S3 - SDK', () => {
         'B owns a different thing',
       )
     })
+  })
+
+  // Issue #815: an unresolvable chunk used to be discovered only after 200 +
+  // headers had been sent. Worse than a reset — downloadService forks the stream
+  // for caching and stream-fork does not propagate destroy, so the response
+  // simply stalled until an infrastructure timeout, which the client reports as
+  // `INTERNAL_ERROR; received from peer`: no status, no S3 error body, no way to
+  // tell "retry me" from "permanently broken".
+  describe('an object whose chunk cannot be resolved', () => {
+    const UnresolvableKey = 'unresolvable-chunk.bin'
+
+    it('answers 503 ServiceUnavailable with an S3 error body, not a stall', async () => {
+      // Big enough to be chunked, so this exercises the batch resolution path.
+      const body = randomBytes(256 * 1024)
+      const put = await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: UnresolvableKey, Body: body }),
+      )
+      expect(put.ETag).toMatch(MD5_ETAG_RE)
+
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: UnresolvableKey }),
+      )
+      const objectCid = head.Metadata?.cid as string
+      expect(objectCid).toBeDefined()
+
+      const metadata = await ObjectUseCases.getMetadata(objectCid)
+      if (metadata.isErr()) throw new Error('no metadata')
+      const value = metadata.value
+      if (value.type !== 'file') throw new Error('not a file')
+      expect(value.chunks.length).toBeGreaterThan(1)
+
+      // Make one chunk genuinely unresolvable. The migration has not run (the
+      // task queue is mocked), so the blockstore is the only copy; dropping it
+      // leaves the CID in neither table, which is what a real unservable object
+      // looks like once the read race is closed.
+      const doomed = value.chunks[value.chunks.length - 1].cid
+      const db = await getDatabase()
+      const deleted = await db.query(
+        'DELETE FROM uploads.blockstore WHERE cid = $1',
+        [doomed],
+      )
+      expect(deleted.rowCount).toBeGreaterThan(0)
+
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: UnresolvableKey })),
+      ).rejects.toMatchObject({
+        // A parseable, retryable S3 error — the point of the fix. Not SlowDown:
+        // that is a throttling signal and the AWS SDK's adaptive retry mode would
+        // shrink its client-wide rate limiter over one unservable object.
+        $metadata: { httpStatusCode: 503 },
+        Code: 'ServiceUnavailable',
+      })
+    }, 30_000)
   })
 })

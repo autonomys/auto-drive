@@ -79,6 +79,64 @@ const getNode = async (cid: string) => {
     .then((e) => (e.rows.length > 0 ? e.rows[0] : undefined))
 }
 
+/**
+ * Resolve the encoded bytes for a set of CIDs from `nodes`, falling back to
+ * `uploads.blockstore`, in ONE statement.
+ *
+ * The single statement is the point, not an optimisation. Resolving the two
+ * tables with two separate queries is not safe under READ COMMITTED: each
+ * statement takes its own snapshot, so a reader can miss a CID in `nodes`
+ * (before the migration's INSERTs commit) and then miss it again in
+ * `uploads.blockstore` (after removeUploadArtifacts' DELETE commits) — seeing
+ * neither copy of a node that was continuously present in one table or the
+ * other. That is issue #815: a mid-stream `Chunk not found` on an object whose
+ * data was never actually missing, measured at ~4% of production migrations.
+ *
+ * One statement takes one snapshot, so the two sides are read as of the same
+ * instant and the straddle is unrepresentable rather than merely unlikely.
+ * Ordering the union by `source` prefers the durable `nodes` copy.
+ *
+ * Rows in `nodes` whose `encoded_node` was stripped by archival
+ * (removeNodeDataByRootCid) are excluded, so an archived object falls through to
+ * the blockstore rather than resolving to NULL bytes.
+ */
+const resolveEncodedNodes = async (
+  cids: string[],
+): Promise<Map<string, string>> => {
+  if (cids.length === 0) return new Map()
+
+  const db = await getDatabase()
+
+  // Both the input list and the blockstore side are de-duplicated BEFORE any
+  // payload is read, which is not cosmetic. A file may legitimately repeat a
+  // chunk — a sparse file, a zero-padded disk image, a padded archive — and
+  // `metadata.chunks` carries one entry per occurrence, so a 100-CID batch can
+  // be 100 copies of one CID. Left alone, the blockstore arm would then match
+  // every stored row for that CID and run encode() over each 64 KiB payload
+  // (inflating it ~1.35x) only for the outer DISTINCT ON to throw all but one
+  // away. On a 1 GiB zero-file that is gigabytes of base64 materialised and
+  // sorted per batch. DISTINCT ON alone hides duplicates in the output; it does
+  // not avoid paying for them.
+  const distinctCids = [...new Set(cids)]
+
+  const result = await db.query<{ cid: string; encoded_node: string }>({
+    text: `SELECT DISTINCT ON (cid) cid, encoded_node
+           FROM (
+             SELECT cid, encoded_node, 0 AS source
+             FROM nodes
+             WHERE cid = ANY($1) AND encoded_node IS NOT NULL
+             UNION ALL
+             SELECT DISTINCT ON (cid) cid, encode(data, 'base64') AS encoded_node, 1 AS source
+             FROM uploads.blockstore
+             WHERE cid = ANY($1)
+           ) resolved
+           ORDER BY cid, source`,
+    values: [distinctCids],
+  })
+
+  return new Map(result.rows.map((row) => [row.cid, row.encoded_node]))
+}
+
 const getNodesByHeadCid = async (headCid: string) => {
   const db = await getDatabase()
 
@@ -542,6 +600,7 @@ const getUnrecoverablePublishingRootCids = async (
 
 export const nodesRepository = {
   getNode,
+  resolveEncodedNodes,
   getNodeCount,
   saveNode,
   saveNodes,

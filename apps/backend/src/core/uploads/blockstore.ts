@@ -243,25 +243,10 @@ const processFolderUpload = async (upload: FolderUpload): Promise<CID> => {
   return cid
 }
 
-const getNode = async (cid: string): Promise<Buffer | undefined> => {
-  logger.trace('getNode invoked (cid=%s)', cid)
-  const nodes = await blockstoreRepository.getNodesByCid(cid)
-  if (nodes.length === 0) {
-    return undefined
-  }
-
-  logger.trace('getNode retrieved %d nodes', nodes.length)
-
-  const node = nodes[0]
-
-  return Buffer.from(node.data)
-}
-
 export const BlockstoreUseCases = {
   getFileUploadIdCID,
   getFolderUploadIdCID,
   getUploadCID,
   getChunksByNodeType,
   processFolderUpload,
-  getNode,
 }

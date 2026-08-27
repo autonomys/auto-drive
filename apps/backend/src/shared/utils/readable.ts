@@ -14,7 +14,15 @@ export const handleReadableError = (
 ) => {
   if (stream instanceof Readable) {
     stream.on('error', (error) => {
-      logger.warn(error as Error, message, ...params)
+      // Message first, error LAST. This logger is debug-level, not pino: its
+      // formatter treats a leading Error as the message itself and then appends
+      // the real format string verbatim, so `warn(error, 'cid=%s', cid)` emitted
+      // a literal `%s` next to an unlabelled CID. Diagnosing issue #815 cost
+      // real time to that — the CID in those lines is the object's first chunk,
+      // not the chunk that failed, and the `%s` made the two easy to conflate.
+      // With the string first the placeholders substitute, and a trailing Error
+      // is still picked up and attached as the structured `err` field.
+      logger.warn(message, ...params, error)
     })
   }
   return stream
