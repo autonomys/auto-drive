@@ -27,7 +27,10 @@ import { AccountsUseCases } from '../../src/core/users/accounts.js'
 import { purchasedCreditsRepository } from '../../src/infrastructure/repositories/users/purchasedCredits.js'
 import { priceOracle } from '../../src/infrastructure/services/priceOracle/index.js'
 import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
-import { ServiceUnavailableError } from '../../src/errors/index.js'
+import {
+  ServiceUnavailableError,
+  UsdcUnavailableError,
+} from '../../src/errors/index.js'
 import { config } from '../../src/config.js'
 import { dbMigration } from '../utils/dbMigrate.js'
 import { getDatabase } from '../../src/infrastructure/drivers/pg.js'
@@ -194,7 +197,14 @@ describe('USDC gates (integration)', () => {
 
     const refused = await buy()
     expect(refused.isErr()).toBe(true)
-    expect(refused._unsafeUnwrapErr().message).toContain('cap')
+    // The refusal reaches the buyer with a code and a generic sentence, NOT with
+    // the gate that closed. The treasury's balance and its cap are the
+    // deployment's business: they are in the log line beside this refusal and on
+    // the admin dashboard, and putting them in a 503 published them to anyone who
+    // clicked Buy. See UsdcUnavailableError.
+    expect(refused._unsafeUnwrapErr()).toBeInstanceOf(UsdcUnavailableError)
+    expect(refused._unsafeUnwrapErr().message).not.toContain('cap')
+    expect(refused._unsafeUnwrapErr().message).toContain('Pay in AI3')
 
     // No cache in between, so the advertisement cannot lag the refusal.
     const flags = await withUsdcAvailability(FeatureFlagsUseCases.get(buyer))

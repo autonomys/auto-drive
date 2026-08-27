@@ -24,6 +24,7 @@ import {
   QuoteFailedError,
   ServiceUnavailableError,
   UsdcPaymentsDisabledError,
+  UsdcUnavailableError,
 } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 import { config, isUsdcConfigured } from '../../config.js'
@@ -424,9 +425,15 @@ const createIntent = async (
       // No non-null assertion: UsdcAvailability is a discriminated union, so a
       // closed result carries its reason by construction.
       const reason = availability.closedReason
+      // The reason is logged in full — including the treasury figure, via
+      // describeClosedReason — and NOT returned. Whoever is buying can act on
+      // "USDC is off right now, pay in AI3"; they can do nothing with "the
+      // treasury is holding 2,014.00 of un-converted USDC", which is an
+      // operational fact belonging to this log line and the admin dashboard.
       logger.info('Rejecting USDC intent creation — the path is closed', {
         userPublicId: executor.publicId,
         reason,
+        detail: UsdcPaymentsUseCases.describeClosedReason(reason),
       })
       // NOT_CONFIGURED is unreachable here — the guard above already returned
       // for it, with a message that says what an operator has to set. Kept as a
@@ -439,13 +446,12 @@ const createIntent = async (
           ),
         )
       }
-      return err(
-        new ServiceUnavailableError(
-          'Paying in USDC is temporarily unavailable: ' +
-            `${UsdcPaymentsUseCases.describeClosedReason(reason)}. Pay in AI3 ` +
-            'instead, or try again later.',
-        ),
-      )
+      // UsdcUnavailableError, not a bare ServiceUnavailableError: this refusal
+      // has to reach the purchase flow as a code it can branch on (fall back to
+      // AI3) plus a sentence it can render, and the base 503 carries neither —
+      // it serialises with no `message` key, which the client reads as a raw
+      // exception and replaces with "Service Unavailable".
+      return err(new UsdcUnavailableError())
     }
   }
 

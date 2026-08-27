@@ -173,6 +173,49 @@ export class ServiceUnavailableError extends HttpError {
   }
 }
 
+// 503 Service Unavailable — paying in USDC is temporarily closed.
+//
+// A distinct class from UsdcPaymentsDisabledError (403), and the status is the
+// whole point. That one says "not for you, on this deployment", so a client
+// should stop offering the option. This one says "not right now": an admin
+// reopens the switch, a manual conversion brings the treasury back under its
+// cap, the oracle recovers — so a client should offer AI3 and try again later.
+//
+// A subclass rather than a bare ServiceUnavailableError for one concrete reason:
+// the base class serialises as `{ error: <the message> }` with no `message` key,
+// and the frontend deliberately reads ONLY `message` on a 5xx, because a plain
+// 5xx body there is a raw exception string rather than a sentence for a buyer
+// (see createIntent in apps/frontend/src/services/api.ts). So a bare 503 arrives
+// as "Network response was not ok: Service Unavailable" — precisely the generic
+// failure this refusal exists to replace.
+//
+// The message is deliberately generic, unlike the one logged beside it. Which
+// gate closed — the treasury holding 2,014 USDC against a 2,000 cap, the
+// oracle's window gone thin — is an operational fact that belongs in the log and
+// on the admin dashboard, both of which already carry it. A buyer's only useful
+// next step is AI3 or later, and neither changes with the reason.
+export class UsdcUnavailableError extends ServiceUnavailableError {
+  static readonly code = 'USDC_PAYMENTS_UNAVAILABLE'
+
+  constructor(
+    message = 'Paying in USDC is temporarily unavailable. Pay in AI3 instead, ' +
+      'or try again later.',
+  ) {
+    super(message)
+    this.name = 'UsdcUnavailableError'
+  }
+
+  // Mirrors the { error: <code>, message: <human-readable> } shape the intents
+  // controller already uses, so a client branches on `error` — here, to fall
+  // back to AI3 — and can surface `message` verbatim.
+  override handleResponse(res: Response) {
+    res.status(this.statusCode).json({
+      error: UsdcUnavailableError.code,
+      message: this.message,
+    })
+  }
+}
+
 // Why a USDC quote could not be produced.
 //
 // The oracle refuses for a dozen distinct reasons (see OracleUnavailableReason)

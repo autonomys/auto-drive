@@ -17,6 +17,7 @@ import {
   QuoteFailedError,
   ServiceUnavailableError,
   UsdcPaymentsDisabledError,
+  UsdcUnavailableError,
 } from '../../../src/errors/index.js'
 import { intentMispaymentsRepository } from '../../../src/infrastructure/repositories/users/intentMispayments.js'
 import {
@@ -41,6 +42,29 @@ import {
   ai3ShannonsToUsdcBaseUnits,
   applyMarginPercent,
 } from '../../../src/shared/utils/index.js'
+
+/**
+ * The two things a caller actually receives from an HttpError: the status and the
+ * body. Asserted through handleResponse rather than by reading fields off the
+ * class, because the SHAPE is the contract — the frontend reads `message` on a
+ * 5xx and nothing else, so a body without that key is indistinguishable from a
+ * raw exception however well-formed the error object is.
+ */
+const mockResponse = () => {
+  const res = {
+    statusCode: 0,
+    body: undefined as unknown,
+    status(code: number) {
+      res.statusCode = code
+      return res
+    },
+    json(payload: unknown) {
+      res.body = payload
+      return res
+    },
+  }
+  return res
+}
 
 describe('IntentsUseCases', () => {
   const now = new Date()
@@ -467,9 +491,39 @@ describe('IntentsUseCases', () => {
     // 503, not the flag's 403: the closure is transient — an admin reopens the
     // switch — and a 403 tells the frontend to hide the option for good.
     expect(error).toBeInstanceOf(ServiceUnavailableError)
+    expect(error).toBeInstanceOf(UsdcUnavailableError)
     expect((error as ServiceUnavailableError).statusCode).toBe(503)
     expect(oracleSpy).not.toHaveBeenCalled()
     expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent carries a code the purchase flow can fall back on', async () => {
+    // Not merely a 503. The base ServiceUnavailableError serialises as
+    // `{ error: <the message> }` with no `message` key, and the frontend reads
+    // only `message` on a 5xx — so a bare 503 reaches whoever is buying as
+    // "Service Unavailable", which is exactly the generic failure this refusal
+    // is supposed to replace. The code is what lets the client offer AI3 without
+    // matching on the sentence it renders.
+    jest.spyOn(UsdcPaymentsUseCases, 'getAvailability').mockResolvedValue({
+      open: false,
+      closedReason: UsdcClosedReason.TREASURY_CAP,
+    })
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    const res = mockResponse()
+    ;(result._unsafeUnwrapErr() as UsdcUnavailableError).handleResponse(
+      res as never,
+    )
+
+    expect(res.statusCode).toBe(503)
+    expect(res.body).toEqual({
+      error: 'USDC_PAYMENTS_UNAVAILABLE',
+      message: expect.stringContaining('Pay in AI3'),
+    })
   })
 
   it('createIntent refuses USDC to an ADMIN when the manual gate is closed', async () => {
@@ -510,9 +564,18 @@ describe('IntentsUseCases', () => {
 
     const error = result._unsafeUnwrapErr()
     expect(error).toBeInstanceOf(ServiceUnavailableError)
-    // The message names the gate, because "temporarily unavailable" with no
-    // reason is what makes support tickets.
-    expect(error.message).toContain('cap')
+    // The message does NOT name the gate, and this is a deliberate reversal of
+    // what #818 shipped. That version interpolated describeClosedReason, which
+    // put "the treasury is holding at or above its cap of un-converted USDC
+    // (2,000.00)" in front of anyone who clicked Buy — publishing the treasury's
+    // position and its limit to the internet, in a sentence whose only actionable
+    // half is "pay in AI3".
+    //
+    // The reason still exists in three places that want it: the log line beside
+    // this refusal, `GET /payments/usdc/status`, and the admin dashboard card.
+    expect(error.message).not.toContain('cap')
+    expect(error.message).not.toContain('treasury')
+    expect(error.message).toContain('Pay in AI3')
   })
 
   it('createIntent refuses USDC when the treasury balance is unknown', async () => {
