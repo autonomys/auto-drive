@@ -1538,6 +1538,20 @@ describe('AWS S3 - SDK', () => {
       expect(Buffer.from(await res.arrayBuffer())).toEqual(RBody)
     }, 15_000)
 
+    it('refuses a zero-length suffix with 416 and the real size', async () => {
+      // bytes=-0 is syntactically valid and names no bytes: S3 answers 416 with
+      // the object's size, not an empty 206. The use case resolves this against
+      // the cid it read, so the size reported is the one the bytes came from.
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=-0' },
+      })
+      expect(res.status).toBe(416)
+      expect(res.headers.get('content-range')).toBe('bytes */70')
+      const body = await res.text()
+      expect(body).toContain('<Code>InvalidRange</Code>')
+      expect(body).toContain('<ActualObjectSize>70</ActualObjectSize>')
+    }, 15_000)
+
     it.each(['bytes=0-9, 20-29', 'bytes=0-abc'])(
       'ignores %s and serves the whole object',
       async (range) => {

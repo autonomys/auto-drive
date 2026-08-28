@@ -1,5 +1,9 @@
 import { S3UseCases } from '../../../core/s3/index.js'
-import { HttpError, ForbiddenError } from '../../../errors/index.js'
+import {
+  HttpError,
+  ForbiddenError,
+  RangeNotSatisfiableError,
+} from '../../../errors/index.js'
 import {
   UploadCompletionInProgressError,
   UploadPartsChangedError,
@@ -17,7 +21,7 @@ import { NextFunction, Request, Response } from 'express'
 import { encodeS3Key, planListingEncoding, sendXML } from './utils.js'
 import js2xmlparser from 'js2xmlparser'
 import { XMLParser } from 'fast-xml-parser'
-import { UploadOptions, UserWithOrganization } from '@auto-drive/models'
+import { UploadOptions } from '@auto-drive/models'
 import {
   CompressionAlgorithm,
   EncryptionAlgorithm,
@@ -241,6 +245,7 @@ const S3_ERROR_CODE_BY_STATUS: Record<number, string> = {
   410: 'NoSuchKey',
   413: 'EntityTooLarge',
   415: 'InvalidRequest',
+  416: 'InvalidRange',
   451: 'UnavailableForLegalReasons',
   501: 'NotImplemented',
   503: 'ServiceUnavailable',
@@ -287,8 +292,9 @@ const handleS3Error = (
  * A single byte-range request, as written by the client.
  *
  * 'offset' is `bytes=<start>-<end?>`; 'suffix' is `bytes=-<length>`, the LAST
- * `length` bytes, which cannot be turned into offsets until the object's size is
- * known.
+ * `length` bytes, which names no bytes until the object's size is known — so it
+ * travels to the use case as SuffixLength and is resolved against the cid being
+ * read, never against a size fetched separately.
  */
 export type S3RangeSpec =
   | { kind: 'offset'; start: number; end?: number }
@@ -339,36 +345,21 @@ export const parseS3Range = (req: Request): S3RangeSpec | undefined => {
 }
 
 /**
- * Turn a suffix range into absolute offsets now that the size is known, or
- * report that no such range exists.
+ * The range parameters a parsed Range contributes to a GetObject call.
+ *
+ * An offset range goes as Range and is checked against the size on the way back
+ * out; a suffix range goes as SuffixLength for the use case to resolve against
+ * the cid it settles on. Only one is ever set.
  */
-export const resolveSuffixRange = (
-  length: number,
-  size: bigint,
-): ByteRange | 'unsatisfiable' => {
-  const total = Number(size)
-  // Zero bytes of a suffix, or any suffix of an empty object, names nothing.
-  if (length === 0 || total === 0) return 'unsatisfiable'
-  return [Math.max(0, total - length), total - 1]
+export const rangeParams = (
+  spec: S3RangeSpec | undefined,
+): { Range?: ByteRange; SuffixLength?: number } => {
+  if (spec === undefined) return {}
+  return spec.kind === 'offset'
+    ? { Range: [spec.start, spec.end] }
+    : { SuffixLength: spec.length }
 }
 
-/**
- * Refuse a Range the object cannot satisfy, the way S3 does: 416 InvalidRange
- * with a `Content-Range: bytes * /<size>` telling the client the real size.
- *
- * The download use case clamps only the range's END against the object size
- * (getCalculatedResultingByteRange), so a start past the last byte survives as
- * an inverted range — `bytes 100-69/70` with a Content-Length of -30, and a body
- * that cannot match it. Checking the start here is what keeps every downstream
- * range calculation (this file's and the shared helper's) working on a range
- * that is known to fit.
- *
- * A missing stored size is refused for the same reason: with no size, no range
- * can be honestly described, and answering with an unlabelled partial body would
- * let the client read a slice as the whole object.
- *
- * Returns true once a response has been sent.
- */
 const sendRangeNotSatisfiable = (
   req: Request,
   res: Response,
@@ -383,6 +374,20 @@ const sendRangeNotSatisfiable = (
   })
 }
 
+/**
+ * Answer a GET/HEAD failure. Split from handleS3Error because a 416 is the one
+ * failure that has to describe the object it refused: the use case resolves a
+ * suffix range against the cid it settled on and reports the size it could not
+ * satisfy, and that size is what tells the client what to ask for instead.
+ */
+const handleReadError = (req: Request, res: Response, error: Error) => {
+  if (error instanceof RangeNotSatisfiableError) {
+    sendRangeNotSatisfiable(req, res, error.objectSize)
+    return
+  }
+  handleS3Error(error, res)
+}
+
 const rejectIfRangeNotSatisfiable = (
   req: Request,
   res: Response,
@@ -394,72 +399,6 @@ const rejectIfRangeNotSatisfiable = (
 
   sendRangeNotSatisfiable(req, res, size)
   return true
-}
-
-/**
- * The absolute offsets a download is prepared with, plus the version they were
- * computed against when that took a separate read.
- */
-type ResolvedRange = {
-  byteRange: ByteRange | undefined
-  /**
-   * Set only for a resolved suffix range: the versionId (CID) of the object the
-   * size was measured on, which the body then has to be read from.
-   */
-  versionId?: string
-}
-
-/**
- * Resolve the request's Range into the absolute offsets the download is prepared
- * with.
- *
- * An 'offset' range needs nothing up front: the size only arrives with the
- * download, and rejectIfRangeNotSatisfiable checks the start against it before a
- * single header is written. A 'suffix' range does need it — `bytes=-500` names
- * nothing until the size is known, yet the range has to be baked into the
- * download options before the download is prepared. So it costs one extra
- * metadata read (no bytes are fetched until startDownload()), confined to the
- * requests that actually need it.
- *
- * Returns the range to read with, or null once a response has been sent.
- */
-const resolveRequestedRange = async (
-  req: Request,
-  res: Response,
-  user: UserWithOrganization,
-  target: { Bucket: string; Key: string; VersionId?: string },
-  spec: S3RangeSpec | undefined,
-): Promise<ResolvedRange | null> => {
-  if (spec === undefined) return { byteRange: undefined }
-  if (spec.kind === 'offset') {
-    // An open-ended range keeps its undefined end: the download use case clamps
-    // it to the last byte once it knows the size.
-    return { byteRange: [spec.start, spec.end] }
-  }
-
-  const probe = await S3UseCases.getObject(user, target)
-  if (probe.isErr()) {
-    handleS3Error(probe.error, res)
-    return null
-  }
-
-  const size = probe.value.metadata.size
-  const resolved =
-    size == null ? 'unsatisfiable' : resolveSuffixRange(spec.length, size)
-  if (resolved === 'unsatisfiable') {
-    sendRangeNotSatisfiable(req, res, size)
-    return null
-  }
-  // Pin the body to the version the size was just measured on. Without it the
-  // offsets derived from THIS size are replayed against whatever bucket/key
-  // resolves to on the second lookup, and a PutObject landing in between makes
-  // that a different object: the client gets a 206 for "the last N bytes" that
-  // is a slice sized for the old content, cut out of the new one, carrying the
-  // new ETag and x-amz-version-id beside it — a torn read that looks coherent.
-  // The pin always resolves: createMapping appends the version row in the same
-  // statement that advances the current-version pointer, and the table was
-  // backfilled for every mapping that predates it.
-  return { byteRange: resolved, versionId: probe.value.cid }
 }
 
 /**
@@ -705,32 +644,16 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   if (!user) return
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
-  const target = {
+  const params = {
     Key: key,
     Bucket: bucket,
     VersionId: getVersionId(req),
+    ...rangeParams(parseS3Range(req)),
   }
-  const resolvedRange = await resolveRequestedRange(
-    req,
-    res,
-    user,
-    target,
-    parseS3Range(req),
-  )
-  if (!resolvedRange) return
-  const { byteRange, versionId } = resolvedRange
-
-  const downloadResult = await S3UseCases.getObject(user, {
-    ...target,
-    // versionId is set only by a resolved suffix range, and then it IS the
-    // version this request already committed to; otherwise the client's own
-    // ?versionId (or the current version) stands.
-    VersionId: versionId ?? target.VersionId,
-    Range: byteRange,
-  })
+  const downloadResult = await S3UseCases.getObject(user, params)
 
   if (downloadResult.isErr()) {
-    handleS3Error(downloadResult.error, res)
+    handleReadError(req, res, downloadResult.error)
     return
   }
   const {
@@ -744,7 +667,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
     objectMetadata,
   } = downloadResult.value
 
-  if (rejectIfRangeNotSatisfiable(req, res, byteRange, metadata.size)) return
+  if (rejectIfRangeNotSatisfiable(req, res, params.Range, metadata.size)) return
 
   // The helper's shouldDecompressBody is deliberately unused: it asks the caller
   // to inflate an internally-compressed body, which is right for the
@@ -792,32 +715,16 @@ export const headObjectHandler = async (req: Request, res: Response) => {
   if (!user) return
 
   const { bucket, key } = parseBucketAndKey(req.params.key)
-  const target = {
+  const params = {
     Key: key,
     Bucket: bucket,
     VersionId: getVersionId(req),
+    ...rangeParams(parseS3Range(req)),
   }
-  const resolvedRange = await resolveRequestedRange(
-    req,
-    res,
-    user,
-    target,
-    parseS3Range(req),
-  )
-  if (!resolvedRange) return
-  const { byteRange, versionId } = resolvedRange
-
-  const downloadResult = await S3UseCases.getObject(user, {
-    ...target,
-    // versionId is set only by a resolved suffix range, and then it IS the
-    // version this request already committed to; otherwise the client's own
-    // ?versionId (or the current version) stands.
-    VersionId: versionId ?? target.VersionId,
-    Range: byteRange,
-  })
+  const downloadResult = await S3UseCases.getObject(user, params)
 
   if (downloadResult.isErr()) {
-    handleS3Error(downloadResult.error, res)
+    handleReadError(req, res, downloadResult.error)
     return
   }
   const {
@@ -830,7 +737,7 @@ export const headObjectHandler = async (req: Request, res: Response) => {
     objectMetadata,
   } = downloadResult.value
 
-  if (rejectIfRangeNotSatisfiable(req, res, byteRange, metadata.size)) return
+  if (rejectIfRangeNotSatisfiable(req, res, params.Range, metadata.size)) return
 
   // The helper's shouldDecompressBody is deliberately unused: it asks the caller
   // to inflate an internally-compressed body, which is right for the
