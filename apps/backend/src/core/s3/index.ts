@@ -285,8 +285,9 @@ const getObject = async (
   // mapping.updatedAt: a BEFORE UPDATE trigger bumps updated_at on soft-delete
   // and Trash restore (which write no new version), so it would drift after a
   // restore and disagree with GET/HEAD ?versionId and ListObjectVersions, which
-  // read object_versions.created_at. Mirrors getObjectWriteTime; falls back to
-  // updatedAt for legacy rows with no version history.
+  // read object_versions.created_at. Mirrors getObjectWriteTime, including its
+  // fallback for a current cid with no version row — see the note there for the
+  // one window that produces those.
   const currentVersion = await s3ObjectMappingsRepository.findVersionByCid(
     user.oauthProvider,
     user.oauthUserId,
@@ -881,8 +882,17 @@ const objectExists = async (
 // updated_at: a soft-delete or Trash restore (restoreMappingsByCid) bumps
 // updated_at to now WITHOUT writing a new version, which would drift the
 // RetainUntilDate to the restore instant. The version row's created_at is stamped
-// once at write and never moves. Fall back to updated_at only for legacy objects
-// with no version row (pre-#781 data the backfill didn't cover).
+// once at write and never moves.
+//
+// The fallback to updated_at is for a mapping whose CURRENT cid has no version
+// row. The #781 backfill covered every mapping that existed (no WHERE clause),
+// and createMapping — the only writer of object_mappings.cid — appends the
+// version row in the same statement, so the only way to reach it is a write
+// served by pre-#781 code after the backfill's snapshot, i.e. an old pod during
+// a rolling deploy. Rare, but not impossible, so no read may depend on the row
+// being there. (Older versions of a key are a different matter: the backfill
+// reconstructed one row per mapping, its current cid only, so history genuinely
+// starts at #781.)
 const getObjectWriteTime = async (
   user: UserWithOrganization,
   bucket: string,
