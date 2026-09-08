@@ -1406,12 +1406,15 @@ export const createApiService = ({
   // value, which is also when no Slack alert was posted. `availability` is the
   // composite AFTER the flip — enabling the switch does not open the path if the
   // treasury is over its cap.
+  //
+  // Optional: the flip is the result, the re-read is a convenience, and the
+  // server omits the composite rather than failing a flip that already happened.
   setUsdcPayments: async (
     enabled: boolean,
   ): Promise<{
     enabled: boolean;
     changed: boolean;
-    availability: UsdcAvailability;
+    availability?: UsdcAvailability;
   }> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
@@ -1445,7 +1448,7 @@ export const createApiService = ({
     return response.json() as Promise<{
       enabled: boolean;
       changed: boolean;
-      availability: UsdcAvailability;
+      availability?: UsdcAvailability;
     }>;
   },
 });

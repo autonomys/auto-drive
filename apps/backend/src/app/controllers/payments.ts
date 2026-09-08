@@ -1,9 +1,13 @@
 import { Router } from 'express'
+import type { UsdcAvailability } from '@auto-drive/models'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { UsdcPaymentsUseCases } from '../../core/payments/usdc.js'
 import { handleInternalErrorResult } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
+import { createLogger } from '../../infrastructure/drivers/logger.js'
+
+const logger = createLogger('controllers:payments')
 
 export const paymentsController = Router()
 
@@ -77,7 +81,26 @@ const setGate = (enabled: boolean) =>
     // does not open the path if the treasury is over its cap or the balance is
     // unknown, and an admin who clicks "enable" is owed that answer immediately
     // rather than from the next dashboard refresh.
-    const availability = await UsdcPaymentsUseCases.getAvailability()
+    //
+    // Caught, because the flip has ALREADY happened and already alerted by this
+    // point. Letting this read escape would hand asyncSafeHandler a 500 and the
+    // card would render "Change failed — the gate is unchanged" over a gate that
+    // did change: the exact hazard the comment beside that message warns about,
+    // inverted, on the control an incident reaches for. An admin told the
+    // disable failed may escalate to `pause()` on the receiver for nothing.
+    //
+    // The re-read is a convenience; the flip is the result. So the answer
+    // degrades to omitting `availability` and the dashboard falls back to its
+    // next refresh.
+    let availability: UsdcAvailability | undefined
+    try {
+      availability = await UsdcPaymentsUseCases.getAvailability()
+    } catch (error) {
+      logger.warn(
+        'USDC gate flipped, but the composite could not be re-read',
+        { enabled, error },
+      )
+    }
 
     res.status(200).json({
       enabled,
