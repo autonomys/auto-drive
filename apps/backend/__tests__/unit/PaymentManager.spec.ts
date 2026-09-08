@@ -84,6 +84,7 @@ describe('PaymentManager', () => {
           address: '0xContractAddress',
           args: { intentId, paymentAmount },
           eventName: 'IntentPaymentReceived',
+          logIndex: 0,
         },
       ] as any)
 
@@ -94,12 +95,72 @@ describe('PaymentManager', () => {
       await paymentManager.watchTransaction(txHash)
 
       // The function should process the logs and attempt to mark intents,
-      // passing fromAddress captured from receipt.from.
+      // passing fromAddress captured from receipt.from and the tx hash, which is
+      // what a refused payment is recorded against for admin review, plus the
+      // log index that separates two payments sharing that hash.
       expect(markIntentSpy).toHaveBeenCalledTimes(1)
       expect(markIntentSpy).toHaveBeenCalledWith({
         intentId,
         paymentAmount,
         fromAddress,
+        txHash,
+        logIndex: 0,
+      })
+    })
+
+    it('threads a distinct log index for two payments in one transaction', async () => {
+      // payIntent(bytes32) is payable and callable from a contract, so one
+      // transaction can emit the event twice for the same intent id with
+      // different values. The hash is identical for both, so the log index is
+      // the only thing that stops the second refusal from being filed as a
+      // replay of the first — which would report one payment when two arrived.
+      const txHash = '0xtwopayments'
+      const intentId = '0xintent-double'
+
+      config.paymentManager.contractAddress = '0xContractAddress'
+
+      jest
+        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue({
+          from: '0xSenderWallet',
+          logs: [],
+        } as any)
+
+      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+        {
+          address: '0xContractAddress',
+          args: { intentId, paymentAmount: 100n },
+          eventName: 'IntentPaymentReceived',
+          logIndex: 4,
+        },
+        {
+          address: '0xContractAddress',
+          args: { intentId, paymentAmount: 250n },
+          eventName: 'IntentPaymentReceived',
+          logIndex: 9,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await paymentManager.watchTransaction(txHash)
+
+      expect(markIntentSpy).toHaveBeenCalledTimes(2)
+      expect(markIntentSpy).toHaveBeenNthCalledWith(1, {
+        intentId,
+        paymentAmount: 100n,
+        fromAddress: '0xSenderWallet',
+        txHash,
+        logIndex: 4,
+      })
+      expect(markIntentSpy).toHaveBeenNthCalledWith(2, {
+        intentId,
+        paymentAmount: 250n,
+        fromAddress: '0xSenderWallet',
+        txHash,
+        logIndex: 9,
       })
     })
 
@@ -481,6 +542,38 @@ describe('PaymentManager', () => {
       await paymentManager._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledTimes(3)
+    })
+
+    // The case the two tests above do not cover: they return errors, and a
+    // returned error was always handled. A THROWN one used to escape the loop
+    // and abandon every intent behind it — users who paid correctly, skipped,
+    // every tick, for as long as the poison row sat in the batch.
+    it('should keep processing the batch when one intent throws', async () => {
+      const intents = [
+        { id: '0xbefore', userPublicId: 'user1', status: 'CONFIRMED' },
+        { id: '0xpoison', userPublicId: 'user2', status: 'CONFIRMED' },
+        { id: '0xafter', userPublicId: 'user3', status: 'CONFIRMED' },
+      ] as any[]
+
+      jest
+        .spyOn(IntentsUseCases, 'getConfirmedIntents')
+        .mockResolvedValue(intents)
+
+      const onConfirmedSpy = jest
+        .spyOn(IntentsUseCases, 'onConfirmedIntent')
+        .mockResolvedValueOnce(ok(undefined))
+        // What a zero shannonsPerByte produces: BigInt division by zero throws
+        // a RangeError rather than returning an err().
+        .mockRejectedValueOnce(new RangeError('Division by zero'))
+        .mockResolvedValueOnce(ok(undefined))
+
+      await expect(
+        paymentManager._checkConfirmedIntents(),
+      ).resolves.not.toThrow()
+
+      // All three attempted, and specifically the one AFTER the thrower.
+      expect(onConfirmedSpy).toHaveBeenCalledTimes(3)
+      expect(onConfirmedSpy).toHaveBeenCalledWith('0xafter')
     })
   })
 

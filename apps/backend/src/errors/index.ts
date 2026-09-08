@@ -137,6 +137,93 @@ export class GoneError extends HttpError {
   }
 }
 
+// 403 Forbidden — paying in USDC is not open to this caller.
+//
+// A subclass rather than a bare ForbiddenError for the same reason as
+// CreditCapExceededError: a client has to be able to tell "this asset is not
+// available to you" apart from "you need a Google account" without matching on
+// prose, and the code travels with the error rather than being re-attached at
+// each call site.
+export class UsdcPaymentsDisabledError extends ForbiddenError {
+  static readonly code = 'USDC_PAYMENTS_DISABLED'
+  constructor(message: string) {
+    super(message)
+    this.name = 'UsdcPaymentsDisabledError'
+  }
+
+  override handleResponse(res: Response) {
+    res.status(this.statusCode).json({
+      error: UsdcPaymentsDisabledError.code,
+      message: this.message,
+    })
+  }
+}
+
+// 503 Service Unavailable — a dependency we need was unreachable, or the data it
+// returned was not trustworthy enough to act on.
+//
+// Deliberately not 500: nothing is wrong with the request, the condition is
+// usually transient, and a client should be told to retry rather than to change
+// what it asked for.
+export class ServiceUnavailableError extends HttpError {
+  static readonly statusCode = 503
+  constructor(message: string) {
+    super(ServiceUnavailableError.statusCode, message)
+    this.name = 'ServiceUnavailableError'
+  }
+}
+
+// Why a USDC quote could not be produced.
+//
+// The oracle refuses for a dozen distinct reasons (see OracleUnavailableReason)
+// and they collapse into two facts a buyer can act on: the market has re-priced
+// past the window the average is built from, or we could not obtain a rate we
+// trust. Both are our problem and both are retryable, so both are 503s — the
+// cause still travels as a code, because "the market moved" and "the source is
+// down" call for different words on a screen and different alerts behind it.
+//
+// There is deliberately no code here for "ask for less". The rate is one
+// size-independent average of realized fills, so no oracle failure is about the
+// requested size, and a code the mapping cannot produce is a promise to clients
+// we would not keep.
+export enum QuoteErrorCode {
+  // We could not read a trustworthy rate, or what we read failed its guards.
+  ORACLE_UNAVAILABLE = 'PRICE_ORACLE_UNAVAILABLE',
+  // The market has re-priced past the window the average is built from, so the
+  // rate describes a regime that has already been left.
+  PRICE_UNSTABLE = 'PRICE_UNSTABLE',
+}
+
+// A quote failure, carrying the machine-readable cause.
+//
+// Extends ServiceUnavailableError rather than taking a status: every quote
+// failure is a 503, so the status belongs in the type rather than at each
+// construction site where it could be passed inconsistently.
+//
+// One class parameterised by cause rather than one subclass per code: the
+// mapping from oracle reason to code is a small table, far easier to review as a
+// table than as near-identical class bodies, and the response shape is identical
+// across all of them regardless.
+export class QuoteFailedError extends ServiceUnavailableError {
+  public readonly code: QuoteErrorCode
+
+  constructor(code: QuoteErrorCode, message: string) {
+    super(message)
+    this.name = 'QuoteFailedError'
+    this.code = code
+  }
+
+  // Mirrors the { error: <code>, message: <human-readable> } shape the intents
+  // controller already uses for GOOGLE_ACCOUNT_REQUIRED and CREDIT_CAP_EXCEEDED,
+  // so a client branches on `error` and can surface `message` verbatim.
+  override handleResponse(res: Response) {
+    res.status(this.statusCode).json({
+      error: this.code,
+      message: this.message,
+    })
+  }
+}
+
 export const handleError = (error: Error, res: Response) => {
   if (error instanceof HttpError) {
     error.handleResponse(res)

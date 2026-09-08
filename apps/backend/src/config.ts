@@ -314,6 +314,23 @@ export const config = {
     // After this window the intent is treated as expired and all operations on
     // it are rejected.  Default: 10 minutes.
     intentExpiryMinutes: Number(env('INTENT_EXPIRY_MINUTES', '10')),
+    // Grace period (in minutes past expires_at) after which a PENDING intent is
+    // expired even though it carries a tx_hash.
+    //
+    // A tx_hash used to exempt a row from expiry unconditionally, on the
+    // assumption that it means "actively being watched and will resolve". A
+    // refused payment is a standing counterexample: the watcher declines it, the
+    // row stays PENDING forever, getIntent keeps advertising it as payable long
+    // past its price-lock window, and the startup sweep re-watches it on every
+    // restart. So is any hash that never confirms at all.
+    //
+    // 24 hours by default: long enough that a genuinely pending transaction has
+    // either confirmed or been dropped by the mempool, so the common slow-
+    // confirmation case still settles normally, and short enough that a stranded
+    // row is reclaimed within a day rather than never. A payment that confirms
+    // after the window is recorded as a mispayment instead of granted — the
+    // price lock it was quoted under is long gone by then.
+    intentTxGraceMinutes: Number(env('INTENT_TX_GRACE_MINUTES', '1440')),
     // Margin (in percent) added on top of the raw oracle-derived USD cost when
     // quoting a USDC payment. The stored usdRateAtCreation stays the raw market
     // rate; only the amount the user pays includes this margin. Applied in
@@ -372,6 +389,18 @@ export const config = {
       buyCredits: {
         active: optionalBoolEnvironmentVariable('BUY_CREDITS_ACTIVE'),
         staffOnly: optionalBoolEnvironmentVariable('BUY_CREDITS_STAFF_ONLY'),
+      } as FeatureFlag,
+      // Pay-with-USDC. Gates the USDC branch of intent creation only; the AI3
+      // path is unaffected and `buyCredits` still gates the endpoint itself.
+      //
+      // Off by default, and deliberately so for longer than the quote code
+      // takes to land: creating a USDC intent hands the user a binding amount
+      // to transfer, and nothing observes an IntentTokenPaymentReceived event
+      // yet, so a quote issued today is one the backend cannot settle.
+      //
+      // Admins are exempt whatever this says — see featureFlags/isActive.
+      payWithUsdc: {
+        active: optionalBoolEnvironmentVariable('PAY_WITH_USDC_ACTIVE'),
       } as FeatureFlag,
     },
     allowlistedUsernames: env('STAFF_USERNAME_ALLOWLIST', '<none>')

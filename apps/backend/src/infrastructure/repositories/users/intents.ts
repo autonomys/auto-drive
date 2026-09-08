@@ -15,6 +15,9 @@ type DBIntent = {
   // Token-payment columns: populated for USDC_ETH intents, NULL for AI3_NATIVE.
   token_amount: string | null
   quoted_token_amount: string | null
+  // The AI3 amount the quote was priced for. With quoted_token_amount this is
+  // the effective rate the confirmation path converts at.
+  quoted_ai3_shannons: string | null
   usd_rate_at_creation: string | null
 }
 
@@ -37,6 +40,9 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
     quotedTokenAmount: row.quoted_token_amount
       ? BigInt(row.quoted_token_amount).valueOf()
       : undefined,
+    quotedAi3Shannons: row.quoted_ai3_shannons
+      ? BigInt(row.quoted_ai3_shannons).valueOf()
+      : undefined,
     usdRateAtCreation: row.usd_rate_at_creation
       ? BigInt(row.usd_rate_at_creation).valueOf()
       : undefined,
@@ -58,8 +64,8 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
     `INSERT INTO intents
        (id, user_public_id, status, tx_hash, payment_amount, shannons_per_byte,
         expires_at, payment_method, token_amount, quoted_token_amount,
-        usd_rate_at_creation)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        quoted_ai3_shannons, usd_rate_at_creation)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       intent.id,
@@ -74,6 +80,7 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
       intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
       intent.tokenAmount?.toString() ?? null,
       intent.quotedTokenAmount?.toString() ?? null,
+      intent.quotedAi3Shannons?.toString() ?? null,
       intent.usdRateAtCreation?.toString() ?? null,
     ],
   )
@@ -87,8 +94,9 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
      SET status = $1, user_public_id = $2, tx_hash = $3,
          payment_amount = $4, shannons_per_byte = $5, expires_at = $6,
          from_address = $7, payment_method = $8, token_amount = $9,
-         quoted_token_amount = $10, usd_rate_at_creation = $11
-     WHERE id = $12
+         quoted_token_amount = $10, quoted_ai3_shannons = $11,
+         usd_rate_at_creation = $12
+     WHERE id = $13
      RETURNING *`,
     [
       intent.status,
@@ -105,11 +113,91 @@ const updateIntent = async (intent: Intent): Promise<Intent> => {
       intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
       intent.tokenAmount?.toString() ?? null,
       intent.quotedTokenAmount?.toString() ?? null,
+      intent.quotedAi3Shannons?.toString() ?? null,
       intent.usdRateAtCreation?.toString() ?? null,
       intent.id,
     ],
   )
   return mapRows(result.rows)[0]
+}
+
+/**
+ * Move a PENDING intent to CONFIRMED, only if it is still PENDING. Returns the
+ * updated row, or null if the status had already moved on.
+ *
+ * Conditional for the same reason expireIntentIfPending is: markIntentAsConfirmed
+ * reads the intent, decides, and writes, and watchTransaction issues one call per
+ * parsed log inside a Promise.all. Two payments for the same intent in one
+ * transaction therefore both read PENDING before either writes, and an
+ * unconditional UPDATE by id let the second overwrite the first — one amount
+ * credited, the other gone, and neither call able to tell that it had raced.
+ * Losing this UPDATE is how the caller learns to file the payment instead.
+ *
+ * Sets only the confirmation columns, rather than rewriting the row from a
+ * snapshot the way updateIntent does. The quote columns are what credits are
+ * derived from, and a stale snapshot must not be able to null them.
+ */
+const confirmIntentIfPending = async ({
+  id,
+  paymentAmount,
+  tokenAmount,
+  fromAddress,
+  txHash,
+}: {
+  id: string
+  paymentAmount?: bigint
+  tokenAmount?: bigint
+  fromAddress?: string
+  txHash?: string
+}): Promise<Intent | null> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    `UPDATE intents
+        SET status = $2,
+            payment_amount = COALESCE($3::numeric, payment_amount),
+            token_amount = COALESCE($4::numeric, token_amount),
+            from_address = COALESCE($5::text, from_address),
+            tx_hash = COALESCE($6::text, tx_hash)
+      WHERE id = $1
+        AND status = $7
+      RETURNING *`,
+    [
+      id,
+      IntentStatus.CONFIRMED,
+      paymentAmount?.toString() ?? null,
+      tokenAmount?.toString() ?? null,
+      fromAddress ?? null,
+      txHash ?? null,
+      IntentStatus.PENDING,
+    ],
+  )
+  return mapRows(result.rows)[0] ?? null
+}
+
+/**
+ * Record the transaction a user says they paid with, only while the intent is
+ * still PENDING. Returns false if the status had already moved on.
+ *
+ * Conditional, and touching one column, for the same reason confirmIntentIfPending
+ * is: triggerWatchIntent reads the intent through getIntent and then wrote the
+ * whole row back from that snapshot. A confirmation landing in between was undone
+ * by it — status reverted to PENDING and payment_amount nulled — so a payment that
+ * had already been credited became uncredited, and stayed that way until a restart
+ * re-watched the row.
+ */
+const setTxHashIfPending = async (
+  intentId: string,
+  txHash: string,
+): Promise<boolean> => {
+  const db = await getDatabase()
+  const result = await db.query(
+    `UPDATE intents
+        SET tx_hash = $2
+      WHERE id = $1
+        AND status = $3`,
+    [intentId, txHash, IntentStatus.PENDING],
+  )
+  return (result.rowCount ?? 0) > 0
 }
 
 const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
@@ -121,19 +209,37 @@ const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
   return mapRows(result.rows)
 }
 
-// Returns PENDING intents whose expires_at has passed and that have no
-// tx_hash — i.e. no on-chain transaction was submitted yet. Intents with a
-// tx_hash are actively being watched and must not be expired by cleanup;
-// their resolution comes from the on-chain watcher (markIntentAsConfirmed).
-const getExpiredPendingIntents = async (): Promise<Intent[]> => {
+// Returns PENDING intents whose price-lock window has passed and that cleanup
+// should reclaim.
+//
+// Two cases, because a tx_hash means two different things depending on how long
+// ago it was written:
+//
+//   • No tx_hash: no transaction was ever submitted. Expired as soon as
+//     expires_at passes, as before.
+//   • A tx_hash older than expires_at + graceMinutes: a hash that is not going
+//     to resolve. The exclusion this replaces assumed a tx_hash means "actively
+//     being watched and will resolve"; a payment the watcher refused is a
+//     standing counterexample, and so is a transaction that never confirms. Left
+//     out, those rows can reach neither EXPIRED nor CONFIRMED: getIntent keeps
+//     serving them as payable indefinitely past their price lock, and the startup
+//     sweep re-watches them on every restart.
+//
+// A hash inside the grace window is still exempt, so the ordinary
+// slow-confirmation case resolves through markIntentAsConfirmed untouched.
+const getExpiredPendingIntents = async (
+  graceMinutes: number,
+): Promise<Intent[]> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
     `SELECT * FROM intents
      WHERE status = $1
        AND expires_at IS NOT NULL
-       AND expires_at < NOW()
-       AND tx_hash IS NULL`,
-    [IntentStatus.PENDING],
+       AND (
+         (tx_hash IS NULL AND expires_at < NOW())
+         OR expires_at < NOW() - ($2::text || ' minutes')::interval
+       )`,
+    [IntentStatus.PENDING, graceMinutes],
   )
   return mapRows(result.rows)
 }
@@ -186,6 +292,8 @@ export const intentsRepository = {
   getById,
   createIntent,
   updateIntent,
+  confirmIntentIfPending,
+  setTxHashIfPending,
   getByStatus,
   getExpiredPendingIntents,
   expireIntentIfPending,

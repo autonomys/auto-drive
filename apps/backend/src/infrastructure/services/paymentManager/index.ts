@@ -61,6 +61,16 @@ const watchTransaction = async (txHash: string) => {
         // receipt.from is the EVM wallet address that submitted the tx.
         // Stored so admins can identify the payer and process refunds.
         fromAddress: receipt.from,
+        // Passed for the refusal paths: a payment we decline to attach is
+        // recorded in intent_mispayments, and the hash is the only field that
+        // finds it again on a block explorer.
+        txHash,
+        // One transaction can carry two payments for the same intent — the
+        // receivers are callable from a contract, and this maps over every
+        // matching log. The hash alone would make the two indistinguishable, so
+        // recording the second would collapse into the first and the queue would
+        // report one payment when two arrived.
+        logIndex: log.logIndex,
       })
     }),
   )
@@ -81,15 +91,34 @@ const _checkConfirmedIntents = async () => {
     intents: intents.map((intent) => intent.id),
   })
   for (const intent of intents) {
-    const result = await IntentsUseCases.onConfirmedIntent(intent.id)
+    // Per-intent, because `result.isErr()` only catches what onConfirmedIntent
+    // RETURNS. A thrown exception escapes this loop entirely and is swallowed by
+    // the safeCallback wrapping the interval, so one bad row stops every intent
+    // behind it in the batch from being credited — and since the batch is
+    // re-fetched each tick, it stops them forever, from users who paid
+    // correctly, with nothing terminal written anywhere to show why.
+    //
+    // getIntentCredits dividing by a zero shannonsPerByte is the known way in
+    // (guarded there too), but the point of this catch is the ones that are not
+    // known: an intent that cannot be processed must cost its own turn, never
+    // the queue's.
+    try {
+      const result = await IntentsUseCases.onConfirmedIntent(intent.id)
 
-    if (result.isErr()) {
-      logger.error('Error on confirmed intent', {
-        error: result.error,
-      })
-    } else {
-      logger.info('Marked intent as confirmed', {
+      if (result.isErr()) {
+        logger.error('Error on confirmed intent', {
+          intentId: intent.id,
+          error: result.error,
+        })
+      } else {
+        logger.info('Marked intent as confirmed', {
+          intentId: intent.id,
+        })
+      }
+    } catch (error) {
+      logger.error('Unhandled error on confirmed intent — skipping it', {
         intentId: intent.id,
+        error,
       })
     }
   }
