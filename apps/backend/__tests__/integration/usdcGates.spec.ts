@@ -297,6 +297,29 @@ describe('USDC gates (integration)', () => {
     const stored = await intentsRepository.getById(intent.id)
     expect(stored?.status).toBe(IntentStatus.CONFIRMED)
     expect(stored?.tokenAmount).toBe(intent.quotedTokenAmount)
+
+    // CONFIRMED is not the acceptance criterion — #752 calls a paid-while-paused
+    // intent "the failure that costs real money", and what costs money is
+    // credits not being granted. Confirmation only records what arrived; the
+    // grant happens when the polling loop reaches the intent, so drive that too
+    // and assert the money side rather than the status.
+    const addCredits = jest
+      .spyOn(AccountsUseCases, 'addCreditsToAccount')
+      .mockResolvedValue(ok(undefined) as never)
+
+    const pending = await IntentsUseCases.getConfirmedIntents()
+    expect(pending.map((row) => row.id)).toContain(intent.id)
+
+    const credited = await IntentsUseCases.onConfirmedIntent(intent.id)
+    expect(credited.isOk()).toBe(true)
+
+    expect(addCredits).toHaveBeenCalledTimes(1)
+    const [publicId, creditBytes] = addCredits.mock.calls[0]
+    expect(publicId).toBe(buyer.publicId)
+    expect(creditBytes).toBeGreaterThan(0n)
+
+    const settled = await intentsRepository.getById(intent.id)
+    expect(settled?.status).toBe(IntentStatus.COMPLETED)
   })
 
   afterAll(() => {
