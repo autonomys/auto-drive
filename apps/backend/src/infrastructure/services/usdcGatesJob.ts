@@ -207,12 +207,24 @@ const publishMetrics = async (
   // climbing, and "the poller stopped writing" is only visible as a series going
   // flat — nothing else notices a dead worker except an operator opening the
   // admin card.
+  //
+  // The two amount fields are OMITTED when the balance could not be read, not
+  // zeroed. Zero is a claim — "the treasury holds nothing, and there is no
+  // headroom" — and it is the claim that fires a headroom alert during what is
+  // actually an Ethereum outage. docs/payments.md points operators at exactly
+  // these series, so the wrong value here becomes the wrong page. Omitting them
+  // is also what gives the paragraph above its behaviour: the amounts go flat
+  // when nobody can read them, while `stale` and `paused` keep reporting.
   await internal.sendMetric({
     measurement: 'usdc_treasury',
     tags: { environment: config.monitoring.metricEnvironmentTag },
     fields: {
-      balance_base_units: balance === null ? 0 : balance,
-      headroom_base_units: balance === null ? 0 : pause - balance,
+      ...(balance === null
+        ? {}
+        : {
+            balance_base_units: balance,
+            headroom_base_units: pause - balance,
+          }),
       cap_base_units: pause,
       paused: paused ? 1 : 0,
       stale: stale ? 1 : 0,

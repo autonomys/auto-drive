@@ -574,9 +574,19 @@ describe('USDC gates job', () => {
 
     expect(metricSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        fields: expect.objectContaining({ stale: 1 }),
+        fields: expect.objectContaining({ stale: 1, paused: 1 }),
       }),
     )
+
+    // The amounts are absent rather than zero. Publishing 0 headroom during an
+    // RPC outage would fire a headroom alert saying the treasury is at its cap,
+    // which is the opposite of what happened — and docs/payments.md points
+    // operators at this exact series.
+    const failed = metricSpy.mock.calls[0][0].fields
+    expect(failed).not.toHaveProperty('balance_base_units')
+    expect(failed).not.toHaveProperty('headroom_base_units')
+    // The fields that are still knowable keep reporting.
+    expect(failed).toHaveProperty('cap_base_units')
   })
 
   // ── the oracle gate ───────────────────────────────────────────────────────
