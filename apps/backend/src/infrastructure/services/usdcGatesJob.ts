@@ -90,10 +90,22 @@ const internal = {
  * whole point of having two thresholds — a balance sitting exactly on one line
  * would otherwise flip the gate, and post an alert, on every poll.
  *
- * With no previous state at all a balance inside the band fails closed. "No
- * evidence the cap was respected" is not the same as "the cap is respected", and
- * this is the direction where being wrong costs an unquoted purchase rather than
- * un-hedged USDC.
+ * With no previous state at all, the band does not apply and the balance is
+ * judged against `pause` alone — so a mid-band first reading opens. That is not
+ * a softening of the cap: `pause` is the cap, the balance is under it, and
+ * hysteresis exists to damp TRANSITIONS, of which a first reading has none.
+ *
+ * Failing closed here would be defensible on its own, and it was what this did.
+ * What made it wrong is that the guess is persisted: `runCheck` writes this
+ * result to `usdc_gate_readings`, so the next poll reads its own fail-closed
+ * guess back as an observation and the band holds it there. Inside the band that
+ * is self-perpetuating rather than merely conservative — the only exits are a
+ * conversion below `resume` or an operator setting `resume = pause` — and the
+ * alert that goes with it says "cap reached" for a balance under the cap.
+ *
+ * A missing row is reachable in practice: this feature's own down migration
+ * drops `usdc_gate_readings`, so a rollback and re-apply with a mid-band balance
+ * lands exactly here.
  */
 export const decidePaused = (
   balance: bigint,
@@ -111,7 +123,10 @@ export const decidePaused = (
   if (balance < resume) {
     return false
   }
-  return previouslyPaused ?? true
+  // Written as the `pause` comparison rather than a bare `false` so the rule is
+  // legible where it is made: with nothing to damp, the gate is whatever the cap
+  // says, and the cap has already been checked above.
+  return previouslyPaused ?? balance >= pause
 }
 
 const describeBalance = (balance: bigint, paused: boolean) => {

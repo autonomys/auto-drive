@@ -64,12 +64,13 @@ describe('decidePaused', () => {
     expect(decidePaused(PAUSE - 1n, false, PAUSE, RESUME)).toBe(false)
   })
 
-  it('fails closed inside the band with no previous state', () => {
-    // No row at all. "No evidence the cap was respected" is not "the cap is
-    // respected", and being wrong this way costs an unquoted purchase rather
-    // than un-hedged USDC.
-    expect(decidePaused(RESUME, null, PAUSE, RESUME)).toBe(true)
-    expect(decidePaused(PAUSE - 1n, null, PAUSE, RESUME)).toBe(true)
+  it('judges the band against the cap alone with no previous state', () => {
+    // No row at all, so there is no transition to damp and the band does not
+    // apply: the balance is under the cap, so the gate is open. Failing closed
+    // here reads as the safer choice but is not, because runCheck PERSISTS the
+    // answer — see the two-poll test below.
+    expect(decidePaused(RESUME, null, PAUSE, RESUME)).toBe(false)
+    expect(decidePaused(PAUSE - 1n, null, PAUSE, RESUME)).toBe(false)
   })
 
   it('needs no previous state outside the band', () => {
@@ -389,20 +390,43 @@ describe('USDC gates job', () => {
     expect(slackSpy).not.toHaveBeenCalled()
   })
 
-  it('fails a mid-band balance closed when there is no previous row at all', async () => {
+  it('does not latch a mid-band balance shut when there is no previous row', async () => {
+    // The unrecoverable state this replaces: with no row, a mid-band balance
+    // failed closed, that guess was WRITTEN, and the next poll read it back as
+    // an observation the band then preserved. Three polls in a row and the gate
+    // was shut for good, with an alert naming a cap the balance was under.
+    //
+    // Reachable rather than theoretical: this feature's down migration drops
+    // usdc_gate_readings, so a rollback and re-apply mid-band lands here.
     config.usdcPayments.pauseThresholdUsdc = '2000'
     config.usdcPayments.resumeThresholdUsdc = '1500'
     _resetThresholds()
 
-    mockBalances([1600n * USDC])
+    mockBalances([1600n * USDC, 1600n * USDC])
     watching([RECEIVER])
     mockPreviousTreasury(null)
 
     await usdcGatesJob._runCheck()
 
     expect(setSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ paused: true }),
+      expect.objectContaining({ paused: false }),
     )
+
+    // Feed the first poll's own write back in, which is what the repository
+    // does. Under the old rule this is where the guess became permanent.
+    const written = setSpy.mock.calls[0][0] as { paused: boolean }
+    mockPreviousTreasury({
+      balanceBaseUnits: '1600000000',
+      paused: written.paused,
+    })
+
+    await usdcGatesJob._runCheck()
+
+    expect(setSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ paused: false }),
+    )
+    // And no alert claiming a cap that a 1,600 balance has not reached.
+    expect(slackSpy).not.toHaveBeenCalled()
   })
 
   // ── failure handling ──────────────────────────────────────────────────────
