@@ -1,4 +1,5 @@
-import { gzipSync, gunzipSync } from 'zlib'
+import { gzipSync, gunzipSync, deflateSync, inflateSync } from 'zlib'
+import { createHash } from 'crypto'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   AbortMultipartUploadCommand,
@@ -27,7 +28,10 @@ import {
   unmockMethods,
 } from '../../utils/mocks.js'
 import { jest } from '@jest/globals'
-import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
+import {
+  AuthLookupError,
+  AuthManager,
+} from '../../../src/infrastructure/services/auth/index.js'
 import { config } from '../../../src/config.js'
 import { AccountsUseCases } from '../../../src/core/index.js'
 
@@ -91,6 +95,11 @@ describe('AWS S3 - SDK', () => {
   const Key = 'test.txt'
   const Body = Buffer.from('Hello, world!')
 
+  // Raw-fetch probes need a SigV4-shaped Authorization header; AuthManager is
+  // mocked, so only the Credential's shape matters.
+  const PROBE_AUTH =
+    'AWS4-HMAC-SHA256 Credential=probekey/20200101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=0'
+
   it('should upload an object', async () => {
     const command = new PutObjectCommand({
       Bucket,
@@ -118,7 +127,7 @@ describe('AWS S3 - SDK', () => {
     const command = new GetObjectCommand({
       Bucket,
       Key,
-      Range: 'bytes 0-9',
+      Range: 'bytes=0-9',
     })
 
     const result = await s3Client.send(command)
@@ -1400,6 +1409,263 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  // Issue #814, acceptance criterion 5. An object carrying Auto Drive's own
+  // compression flag (x-amz-meta-compression) has to round-trip like any other:
+  // the S3 read path ships the STORED bytes, the ETag is their MD5, and every
+  // header must describe those same bytes. The shared download helper instead
+  // describes a body re-encoded for a browser, which is what these assertions
+  // pin down.
+  describe('Internally-compressed objects (x-amz-meta-compression)', () => {
+    const CKey = 'compression-test/payload.bin'
+    const Plain = Buffer.from('a payload worth compressing. '.repeat(8))
+    // The stored bytes are a real zlib stream, so the flag survives the upload
+    // (auto-dag-data drops a ZLIB flag whose first chunk isn't actually zlib).
+    const Stored = deflateSync(Plain)
+    const storedMd5 = createHash('md5').update(Stored).digest('hex')
+
+    it('stores the object with the compression flag set', async () => {
+      const res = await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: CKey,
+          Body: Stored,
+          Metadata: { compression: 'ZLIB' },
+        }),
+      )
+      // The ETag is the MD5 of what the client sent — the stored bytes.
+      expect(res.ETag).toBe(`"${storedMd5}"`)
+    }, 15_000)
+
+    it('HeadObject reports the stored size and offers ranges', async () => {
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: CKey }),
+      )
+      expect(head.ContentLength).toBe(Stored.length)
+      expect(head.AcceptRanges).toBe('bytes')
+      // Nothing re-encodes the body, so no Content-Encoding is ours to claim:
+      // a `deflate` label here would have any hop that honours it inflate the
+      // body, and the delivered bytes would stop matching the ETag.
+      expect(head.ContentEncoding).toBeUndefined()
+      // The compression flag itself still round-trips.
+      expect(head.Metadata?.compression).toBe('ZLIB')
+      expect(head.ETag).toBe(`"${storedMd5}"`)
+    }, 15_000)
+
+    it('GetObject returns the stored bytes verbatim, matching the ETag', async () => {
+      const get = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: CKey }),
+      )
+      expect(get.ContentEncoding).toBeUndefined()
+      expect(get.ContentLength).toBe(Stored.length)
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      expect(body.equals(Stored)).toBe(true)
+      expect(createHash('md5').update(body).digest('hex')).toBe(storedMd5)
+      // Still the exact zlib stream that was uploaded.
+      expect(inflateSync(body).equals(Plain)).toBe(true)
+    }, 15_000)
+
+    it('answers a range request with 206 and the matching slice', async () => {
+      const get = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: CKey, Range: 'bytes=0-9' }),
+      )
+      // This used to come back 200 with no Content-Range while the body was the
+      // slice, so a client read 10 bytes as the whole object.
+      expect(get.$metadata.httpStatusCode).toBe(206)
+      expect(get.ContentRange).toBe(`bytes 0-9/${Stored.length}`)
+      const body = Buffer.from(await get.Body!.transformToByteArray())
+      expect(body.equals(Stored.subarray(0, 10))).toBe(true)
+    }, 15_000)
+  })
+
+  // A Range the object cannot satisfy, and the ranged HEAD whose 206 used to be
+  // overwritten on the way out.
+  describe('Range handling', () => {
+    const RKey = 'range-test/seventy.bin'
+    const RBody = Buffer.alloc(70, 0x41)
+
+    it('stores the fixture', async () => {
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: RKey, Body: RBody }),
+      )
+    }, 15_000)
+
+    it('answers a range starting past the object with 416 InvalidRange', async () => {
+      // The download use case clamps only the range END, so this used to survive
+      // as `Content-Range: bytes 100-69/70` with a Content-Length of -30.
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=100-' },
+      })
+      expect(res.status).toBe(416)
+      expect(res.headers.get('content-range')).toBe('bytes */70')
+      const body = await res.text()
+      expect(body).toContain('<Code>InvalidRange</Code>')
+      expect(body).toContain('<ActualObjectSize>70</ActualObjectSize>')
+    }, 15_000)
+
+    it('answers a ranged HeadObject with 206 and a matching Content-Length', async () => {
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        method: 'HEAD',
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=0-9' },
+      })
+      // A trailing res.status(200) used to overwrite the 206, so the reply said
+      // "whole object" while carrying a 10-byte Content-Length.
+      expect(res.status).toBe(206)
+      expect(res.headers.get('content-range')).toBe('bytes 0-9/70')
+      expect(res.headers.get('content-length')).toBe('10')
+    }, 15_000)
+
+    it('serves a suffix range as the LAST bytes, not the first', async () => {
+      // bytes=-10 on 70 bytes of 0x41 must be bytes 60-69. The shared parser read
+      // this as [0, 10] and handed back the head of the object with a
+      // Content-Range that claimed exactly that — a trailer reader would take it.
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=-10' },
+      })
+      expect(res.status).toBe(206)
+      expect(res.headers.get('content-range')).toBe('bytes 60-69/70')
+      expect(res.headers.get('content-length')).toBe('10')
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(
+        RBody.subarray(60, 70),
+      )
+    }, 15_000)
+
+    it('clamps a suffix longer than the object to the whole object', async () => {
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=-500' },
+      })
+      expect(res.status).toBe(206)
+      expect(res.headers.get('content-range')).toBe('bytes 0-69/70')
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(RBody)
+    }, 15_000)
+
+    it('refuses a zero-length suffix with 416 and the real size', async () => {
+      // bytes=-0 is syntactically valid and names no bytes: S3 answers 416 with
+      // the object's size, not an empty 206. The use case resolves this against
+      // the cid it read, so the size reported is the one the bytes came from.
+      const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+        headers: { Authorization: PROBE_AUTH, Range: 'bytes=-0' },
+      })
+      expect(res.status).toBe(416)
+      expect(res.headers.get('content-range')).toBe('bytes */70')
+      const body = await res.text()
+      expect(body).toContain('<Code>InvalidRange</Code>')
+      expect(body).toContain('<ActualObjectSize>70</ActualObjectSize>')
+    }, 15_000)
+
+    it.each(['bytes=0-9, 20-29', 'bytes=0-abc'])(
+      'ignores %s and serves the whole object',
+      async (range) => {
+        // These used to yield `Content-Range: bytes 0-NaN/70` and a NaN
+        // Content-Length, so the client hung or aborted on a length mismatch.
+        const res = await fetch(`${BASE_PATH}/s3/${RKey}`, {
+          headers: { Authorization: PROBE_AUTH, Range: range },
+        })
+        expect(res.status).toBe(200)
+        expect(res.headers.get('content-length')).toBe('70')
+        expect(res.headers.get('content-range')).toBeNull()
+        expect(Buffer.from(await res.arrayBuffer())).toEqual(RBody)
+      },
+      15_000,
+    )
+
+    it.each(['0', '-1', '10001', '1abc'])(
+      'rejects partNumber=%s with 400 InvalidArgument',
+      async (partNumber) => {
+        // partNumber=0 became a -1 internal index that uploadChunk dropped, so
+        // the part's bytes were lost while the handler answered 200 with an ETag
+        // that CompleteMultipartUpload then folded into the composite.
+        const res = await fetch(
+          `${BASE_PATH}/s3/range-test/part.bin?uploadId=nope&partNumber=${partNumber}`,
+          {
+            method: 'PUT',
+            headers: { Authorization: PROBE_AUTH },
+            body: 'x',
+          },
+        )
+        expect(res.status).toBe(400)
+        expect(await res.text()).toContain('<Code>InvalidArgument</Code>')
+      },
+      15_000,
+    )
+
+    it('rejects a non-numeric partNumber with 400 InvalidArgument', async () => {
+      // A client mistake, previously answered with a 500 JSON body.
+      const res = await fetch(
+        `${BASE_PATH}/s3/range-test/part.bin?uploadId=nope&partNumber=abc`,
+        {
+          method: 'PUT',
+          headers: { Authorization: PROBE_AUTH },
+          body: 'x',
+        },
+      )
+      expect(res.status).toBe(400)
+      expect(await res.text()).toContain('<Code>InvalidArgument</Code>')
+    }, 15_000)
+  })
+
+  // Failures that never reach a handler: body-parser rejects the request first,
+  // and Express's default handler would answer HTML — retryable to every S3
+  // client. The router-level error handler renders them as <Error> documents.
+  describe('Pre-handler failures are S3 XML errors', () => {
+    it('answers an undecodable body encoding with 501 NotImplemented', async () => {
+      // A client using chunked SigV4 sends Content-Encoding: aws-chunked, whose
+      // framing this API does not decode. Previously an HTML 415.
+      const res = await fetch(`${BASE_PATH}/s3/encoding-test/chunked.bin`, {
+        method: 'PUT',
+        headers: {
+          Authorization: PROBE_AUTH,
+          'Content-Encoding': 'aws-chunked',
+        },
+        body: 'x',
+      })
+      expect(res.status).toBe(501)
+      expect(res.headers.get('content-type')).toContain('application/xml')
+      const body = await res.text()
+      expect(body).toContain('<Code>NotImplemented</Code>')
+      expect(body).toContain('aws-chunked')
+    }, 15_000)
+  })
+
+  // An authentication failure has to be an S3 protocol error. A rejected API key
+  // used to reach Express's default handler as an HTML 500 — and 5xx is in every
+  // S3 client's and rclone's retryable set, so a credential that can never work
+  // was retried with backoff instead of failing immediately.
+  describe('Authentication failures are S3 XML errors', () => {
+    const AUTH =
+      'AWS4-HMAC-SHA256 Credential=authtestkey/20200101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=deadbeef'
+
+    const probe = (headers: Record<string, string> = {}) =>
+      fetch(`${BASE_PATH}/s3/auth-test/probe.txt`, { method: 'GET', headers })
+
+    it('answers an unsigned request with 403 AccessDenied XML', async () => {
+      const res = await probe()
+      expect(res.status).toBe(403)
+      expect(res.headers.get('content-type')).toContain('application/xml')
+      expect(await res.text()).toContain('<Code>AccessDenied</Code>')
+    })
+
+    it('answers a rejected API key with 403 InvalidAccessKeyId, not a 5xx', async () => {
+      jest
+        .spyOn(AuthManager, 'getUserFromAccessToken')
+        .mockRejectedValueOnce(new AuthLookupError('rejected', true, 401))
+
+      const res = await probe({ Authorization: AUTH })
+      expect(res.status).toBe(403)
+      expect(await res.text()).toContain('<Code>InvalidAccessKeyId</Code>')
+    })
+
+    it('answers an unavailable auth service with a retryable 503', async () => {
+      jest
+        .spyOn(AuthManager, 'getUserFromAccessToken')
+        .mockRejectedValueOnce(new AuthLookupError('unreachable', false))
+
+      const res = await probe({ Authorization: AUTH })
+      // The one failure a client SHOULD retry.
+      expect(res.status).toBe(503)
+      expect(await res.text()).toContain('<Code>ServiceUnavailable</Code>')
+    })
+  })
+
   // Versioned-WORM (issue #781): versioning is always on, versionId = the
   // content CID, DeleteObject writes a delete marker (hides the key, keeps
   // history), and destroying a specific version is refused. Object Lock is
@@ -1637,10 +1903,13 @@ describe('AWS S3 - SDK', () => {
   describe('Missing keys', () => {
     const MissingKey = 'this-key-was-never-uploaded-' + Date.now() + '.txt'
 
-    it('GetObject on a missing key should return 404', async () => {
+    it('GetObject on a missing key should return 404 NoSuchKey', async () => {
       const command = new GetObjectCommand({ Bucket, Key: MissingKey })
+      // name comes from the <Code> in the body; a JSON error would leave the SDK
+      // with an opaque failure it cannot map to NoSuchKey.
       await expect(s3Client.send(command)).rejects.toMatchObject({
         $metadata: { httpStatusCode: 404 },
+        name: 'NoSuchKey',
       })
     })
 
@@ -1649,6 +1918,15 @@ describe('AWS S3 - SDK', () => {
       await expect(s3Client.send(command)).rejects.toMatchObject({
         $metadata: { httpStatusCode: 404 },
       })
+    })
+
+    it('answers a missing key with a parsable XML error document', async () => {
+      const res = await fetch(`${BASE_PATH}/s3/default/${MissingKey}`, {
+        headers: { Authorization: PROBE_AUTH },
+      })
+      expect(res.status).toBe(404)
+      expect(res.headers.get('content-type')).toContain('application/xml')
+      expect(await res.text()).toContain('<Code>NoSuchKey</Code>')
     })
   })
 

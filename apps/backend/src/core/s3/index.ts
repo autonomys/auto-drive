@@ -2,7 +2,11 @@ import { s3ObjectMappingsRepository } from '../../infrastructure/repositories/in
 import { DownloadUseCase } from '../downloads/index.js'
 import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
-import { ForbiddenError, ObjectNotFoundError } from '../../errors/index.js'
+import {
+  ForbiddenError,
+  ObjectNotFoundError,
+  RangeNotSatisfiableError,
+} from '../../errors/index.js'
 import {
   CompleteMultipartUploadCommandParams,
   CompleteMultipartUploadCommandResult,
@@ -16,6 +20,7 @@ import {
   UploadPartCommandResult,
 } from '@auto-drive/s3'
 import {
+  ByteRange,
   computeListObjectsDbLimit,
   finalizeListObjects,
   formatETag,
@@ -153,12 +158,79 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
 /** GetObject params extended with an optional versionId (the CID of a specific
  *  version). Kept local — versioning is an Autonomys extension over the shared
  *  DTO, and versionId maps to the content CID. */
-type GetObjectParams = GetObjectCommandParams & { VersionId?: string }
+type GetObjectParams = GetObjectCommandParams & {
+  VersionId?: string
+  /**
+   * A suffix range — `bytes=-N`, the LAST N bytes — resolved here rather than by
+   * the caller.
+   *
+   * It has to be resolved where the object is chosen, because it means nothing
+   * until the size is known and the size is a property of the specific content
+   * being read. A caller that fetched the size in one lookup and then asked for
+   * the key again would be describing one object and reading another: a
+   * PutObject landing in between makes the second lookup a different CID, and the
+   * offsets computed from the old size get cut out of the new content and shipped
+   * as a 206 with the new ETag beside them — a torn read that looks coherent to
+   * the client.
+   *
+   * Resolving against the cid this call already settled on closes that: the
+   * content address IS the identity, so the size measured and the bytes returned
+   * cannot belong to different objects.
+   */
+  SuffixLength?: number
+}
+
+/**
+ * Turn a suffix range into absolute offsets against the content at `cid`, or
+ * refuse it.
+ *
+ * A zero-length suffix, or any suffix of an empty object, names no bytes: S3
+ * answers 416 rather than an empty 206. A suffix longer than the object clamps to
+ * the whole object, which is what RFC 7233 requires.
+ */
+const resolveSuffixLength = async (
+  cid: string,
+  suffixLength: number,
+): Promise<
+  Result<ByteRange, ObjectNotFoundError | RangeNotSatisfiableError>
+> => {
+  const metadataResult = await ObjectUseCases.getMetadata(cid)
+  if (metadataResult.isErr()) return err(metadataResult.error)
+
+  const total = Number(metadataResult.value.totalSize)
+  if (suffixLength === 0 || total === 0) {
+    return err(
+      new RangeNotSatisfiableError(
+        'The requested range is not satisfiable',
+        BigInt(total),
+      ),
+    )
+  }
+  return ok([Math.max(0, total - suffixLength), total - 1])
+}
+
+/**
+ * The byte range to read `cid` with: an offset range passes straight through (it
+ * names its bytes without needing the size, and the HTTP layer refuses a start
+ * past the last byte once the download reports it), a suffix range is resolved
+ * against this cid's size, and no range stays undefined.
+ */
+const resolveRequestedByteRange = async (
+  cid: string,
+  params: GetObjectParams,
+): Promise<
+  Result<ByteRange | undefined, ObjectNotFoundError | RangeNotSatisfiableError>
+> =>
+  params.SuffixLength === undefined
+    ? ok(params.Range)
+    : resolveSuffixLength(cid, params.SuffixLength)
 
 const getObject = async (
   user: UserWithOrganization,
   params: GetObjectParams,
-): Promise<Result<GetObjectUseCaseResult, ObjectNotFoundError>> => {
+): Promise<
+  Result<GetObjectUseCaseResult, ObjectNotFoundError | RangeNotSatisfiableError>
+> => {
   // Versioned read (GET/HEAD ?versionId=<cid>): fetch the specific version's
   // content by CID rather than the current pointer. The version must belong to
   // this key in the caller's namespace; the download itself still runs the
@@ -179,9 +251,12 @@ const getObject = async (
         ),
       )
     }
+    const versionedRange = await resolveRequestedByteRange(version.cid, params)
+    if (versionedRange.isErr()) return err(versionedRange.error)
+
     const versionedDownload = await DownloadUseCase.downloadObjectByAnonymous(
       version.cid,
-      { byteRange: params.Range },
+      { byteRange: versionedRange.value },
     )
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (versionedDownload as any).map((dl: GetObjectCommandResult) => ({
@@ -210,8 +285,9 @@ const getObject = async (
   // mapping.updatedAt: a BEFORE UPDATE trigger bumps updated_at on soft-delete
   // and Trash restore (which write no new version), so it would drift after a
   // restore and disagree with GET/HEAD ?versionId and ListObjectVersions, which
-  // read object_versions.created_at. Mirrors getObjectWriteTime; falls back to
-  // updatedAt for legacy rows with no version history.
+  // read object_versions.created_at. Mirrors getObjectWriteTime, including its
+  // fallback for a current cid with no version row — see the note there for the
+  // one window that produces those.
   const currentVersion = await s3ObjectMappingsRepository.findVersionByCid(
     user.oauthProvider,
     user.oauthUserId,
@@ -221,9 +297,12 @@ const getObject = async (
   )
   const lastModified = currentVersion?.createdAt ?? mapping.updatedAt
 
+  const byteRange = await resolveRequestedByteRange(mapping.cid, params)
+  if (byteRange.isErr()) return err(byteRange.error)
+
   const downloadResult = await DownloadUseCase.downloadObjectByAnonymous(
     mapping.cid,
-    { byteRange: params.Range },
+    { byteRange: byteRange.value },
   )
 
   // Use .map() to attach cid/etag to the ok value and propagate any error
@@ -803,8 +882,17 @@ const objectExists = async (
 // updated_at: a soft-delete or Trash restore (restoreMappingsByCid) bumps
 // updated_at to now WITHOUT writing a new version, which would drift the
 // RetainUntilDate to the restore instant. The version row's created_at is stamped
-// once at write and never moves. Fall back to updated_at only for legacy objects
-// with no version row (pre-#781 data the backfill didn't cover).
+// once at write and never moves.
+//
+// The fallback to updated_at is for a mapping whose CURRENT cid has no version
+// row. The #781 backfill covered every mapping that existed (no WHERE clause),
+// and createMapping — the only writer of object_mappings.cid — appends the
+// version row in the same statement, so the only way to reach it is a write
+// served by pre-#781 code after the backfill's snapshot, i.e. an old pod during
+// a rolling deploy. Rare, but not impossible, so no read may depend on the row
+// being there. (Older versions of a key are a different matter: the backfill
+// reconstructed one row per mapping, its current cid only, so history genuinely
+// starts at #781.)
 const getObjectWriteTime = async (
   user: UserWithOrganization,
   bucket: string,

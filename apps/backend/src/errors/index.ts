@@ -28,6 +28,22 @@ export class ObjectNotFoundError extends HttpError {
   }
 }
 
+/**
+ * A Range the object cannot satisfy → 416. Carries the object's real size so the
+ * caller can answer with the `Content-Range: bytes * /<size>` S3 requires, which
+ * is how a client learns what range it should have asked for.
+ */
+export class RangeNotSatisfiableError extends HttpError {
+  static readonly statusCode = 416
+  constructor(
+    message: string,
+    public readonly objectSize: bigint,
+  ) {
+    super(RangeNotSatisfiableError.statusCode, message)
+    this.name = 'RangeNotSatisfiableError'
+  }
+}
+
 export class InternalError extends HttpError {
   static readonly statusCode = 500
   constructor(message: string) {
