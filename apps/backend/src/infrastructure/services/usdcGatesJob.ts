@@ -31,7 +31,7 @@ const erc20BalanceAbi = [
  * conversion; capping how much can ever be at risk is what makes manual
  * conversion safe to run, and what means nobody has to watch a balance.
  *
- * Both facts are written to `runtime_settings` rather than held in memory,
+ * Both facts are written to `usdc_gate_readings` rather than held in memory,
  * because the process that can observe them is not the process that quotes: an
  * API replica has no poller and would read every gate as unknown. Runs in
  * exactly one process — beside the payment watchers, started by `frontendWorker`

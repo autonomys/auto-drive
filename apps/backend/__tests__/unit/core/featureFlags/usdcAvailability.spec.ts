@@ -157,7 +157,7 @@ describe('/features — USDC availability', () => {
     // process and take downloads and S3 with it, over a payments read.
     jest
       .spyOn(UsdcPaymentsUseCases, 'getAvailability')
-      .mockRejectedValue(new Error('relation "runtime_settings" does not exist'))
+      .mockRejectedValue(new Error('relation "usdc_gate_readings" does not exist'))
 
     const flags = await withUsdcAvailability(flagsFor(UserRole.User))
 
