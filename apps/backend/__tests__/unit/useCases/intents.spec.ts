@@ -1389,6 +1389,39 @@ describe('IntentsUseCases', () => {
     expect(recordSpy).not.toHaveBeenCalled()
   })
 
+  it('markIntentAsConfirmed reads a replay spelled in another case as the same transaction', async () => {
+    // A transaction hash has no checksum encoding, so the same 32 bytes can be
+    // written two ways. A row whose hash was stored mixed-case — anything written
+    // before the controller normalised its input — would otherwise have every
+    // recovery sweep of it read as a DIFFERENT transaction, filing a second
+    // payment that never arrived into the queue an admin reconciles money from.
+    const intent: Intent = {
+      id: '0xusdc-replay-case',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      tokenAmount: 1_050_000n,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+      txHash: '0xSETTLED-HERE'.toUpperCase(),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+      txHash: '0xSETTLED-HERE'.toLowerCase(),
+      logIndex: 0,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
   it('markIntentAsConfirmed files a second transfer paying the same quote twice', async () => {
     // The likely double-pay: the user does not see the first confirm and pays the
     // same quote again. Same amount, different transaction — the guard used to

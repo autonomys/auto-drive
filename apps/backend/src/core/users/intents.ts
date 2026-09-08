@@ -758,7 +758,11 @@ const amountInIntentAsset = (
  *     nothing when someone pays the same amount twice.
  *   • A different transaction. Proof when the intent carries a hash; rows
  *     settled before confirmations recorded one have none, and comparing against
- *     NULL would call every replay of those a second payment.
+ *     NULL would call every replay of those a second payment. Compared without
+ *     regard to case: a hash carries no checksum encoding, so the same 32 bytes
+ *     can be spelled two ways, and a row whose hash was stored before the watch
+ *     endpoint normalised its input would otherwise read as a different
+ *     transaction on every replay.
  *
  * Absent evidence is never treated as evidence, so the answer errs toward
  * silence. The one case that costs: two payments of the same value inside a
@@ -785,7 +789,7 @@ const isRedeliveryOfSettlingPayment = (
   const differentTransaction =
     incoming.txHash !== undefined &&
     settled.txHash !== undefined &&
-    settled.txHash !== incoming.txHash
+    settled.txHash.toLowerCase() !== incoming.txHash.toLowerCase()
 
   return !(differentAsset || differentAmount || differentTransaction)
 }

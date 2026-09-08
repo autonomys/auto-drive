@@ -1,6 +1,8 @@
 import { PaymentMethod } from '@auto-drive/models'
-import { invalidAddressEnvironmentVariables } from '../../../config.js'
+import { invalidEnvironmentVariables } from '../../../config.js'
 import { createLogger } from '../../drivers/logger.js'
+import { safeCallback } from '../../../shared/utils/safe.js'
+import { slackNotifier } from '../slack/index.js'
 import { ai3PaymentWatcher, getUsdcPaymentWatcher } from './chains.js'
 import { confirmedIntentsPoller } from './confirmedIntents.js'
 
@@ -51,16 +53,33 @@ const watchTransaction = async (
  * import this module.
  */
 const start = () => {
-  // Said once, by the process that would have used them. An address variable set
-  // to something unusable is discarded at config load, which makes the
-  // deployment behave as though USDC were switched off — safe, but baffling to
-  // debug from the outside ("I set the receiver and it still refuses to quote").
-  const invalid = invalidAddressEnvironmentVariables()
+  // Said once, by the process that would have used them. An address or endpoint
+  // variable set to something unusable is discarded at config load, which makes
+  // the deployment behave as though USDC were switched off — safe, but baffling
+  // to debug from the outside ("I set the receiver and it still refuses to
+  // quote").
+  //
+  // Escalated as well as logged, on this PR's own argument for alerting on a
+  // token mismatch: logger.error has no route to anyone, only *-errors queue
+  // tasks reach Slack, and a boot line nobody reads is the same as silence. An
+  // operator who meant to accept USDC and does not is worth one message. Not
+  // fatal, though — the deployment is running correctly, just not selling USDC,
+  // and the AI3 flow has no stake in any of these variables.
+  const invalid = invalidEnvironmentVariables()
   if (invalid.length > 0) {
     logger.error(
-      'Ignoring address environment variables that are not valid addresses',
+      'Ignoring environment variables that are not valid addresses or URLs',
       { variables: invalid },
     )
+    safeCallback(() =>
+      slackNotifier.send({
+        title:
+          ':warning: USDC payment configuration was discarded — this deployment will not quote or watch USDC',
+        details:
+          `Set to something that is not a valid address or URL: ${invalid.join(', ')}. ` +
+          'Addresses must be 20-byte hex with a 0x prefix; endpoints must be http or https URLs.',
+      }),
+    )()
   }
 
   const usdcWatcher = getUsdcPaymentWatcher()

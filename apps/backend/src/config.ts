@@ -32,9 +32,9 @@ const FIVE_GiB = 1024 ** 3 * 5
  *
  * Returns undefined for anything unusable, which reads to every consumer as
  * "not set". The variable is named in a log line at startup rather than
- * swallowed silently — see invalidAddressEnvironmentVariables below.
+ * swallowed silently — see invalidEnvironmentVariables below.
  */
-const invalidAddressEnvVars: string[] = []
+const invalidEnvVars: string[] = []
 
 export const addressEnv = (
   name: string,
@@ -45,7 +45,48 @@ export const addressEnv = (
     return undefined
   }
   if (!isAddress(trimmed)) {
-    invalidAddressEnvVars.push(name)
+    invalidEnvVars.push(name)
+    return undefined
+  }
+  return trimmed
+}
+
+/**
+ * An optional endpoint variable, trimmed and validated the same way.
+ *
+ * Needed for the same reason as addressEnv, and it was the gap between them:
+ * isUsdcConfigured decides whether createIntent will quote in USDC, and it
+ * tested this value for truthiness alone. So `changeme`, a host with no scheme,
+ * or a value that is nothing but whitespace read as configured — the API issued
+ * a binding USDC quote while the watcher built on the same string failed every
+ * request against it. That is precisely the outcome the configured /
+ * not-configured split exists to prevent: a quoted USDC intent nobody is
+ * watching for. The other two USDC keys were validated; this one was not.
+ *
+ * A trailing newline is deliberately NOT what this catches — WHATWG URL parsing
+ * strips leading and trailing whitespace and removes tabs and newlines outright,
+ * so a mounted secret ending in "\n" already reached the RPC fine. It is the
+ * values that are not URLs at all that a truthiness check let through.
+ *
+ * The protocol is checked and not merely the parse, because parsing is looser
+ * than it looks: `rpc.example.com:8545` — a host and port pasted without a
+ * scheme, the likeliest of these mistakes — parses happily, as a URL whose
+ * protocol is `rpc.example.com:`. viem's http transport POSTs, so http and https
+ * are the only two that can work.
+ */
+export const urlEnv = (name: string, raw?: string): string | undefined => {
+  const trimmed = raw?.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      invalidEnvVars.push(name)
+      return undefined
+    }
+  } catch {
+    invalidEnvVars.push(name)
     return undefined
   }
   return trimmed
@@ -248,7 +289,7 @@ export const config = {
   // a live payment watcher at a contract nobody deployed, and the failure would
   // read as "no payments arriving" rather than "not configured".
   ethereum: {
-    rpcUrl: process.env.ETH_CHAIN_ENDPOINT,
+    rpcUrl: urlEnv('ETH_CHAIN_ENDPOINT', process.env.ETH_CHAIN_ENDPOINT),
     // Blocks that must build on the payment before it is credited. Ethereum is
     // post-Merge, so 2-3 blocks is already economically final and 6 is
     // conservative — but it is the same default as Auto EVM, which keeps one
@@ -515,16 +556,17 @@ export const config = {
  * environment instead of for the configuration.
  */
 /**
- * Names any address variable that was set to something unusable.
+ * Names any address or endpoint variable that was set to something unusable.
  *
- * Discarding an invalid address makes the deployment behave as though USDC
- * were switched off, which is the safe outcome but a confusing one to debug —
- * "I set the receiver and it still refuses to quote". Called from the payment
- * manager's start(), so the process that owns payments says so at boot.
+ * Discarding an invalid value makes the deployment behave as though USDC were
+ * switched off, which is the safe outcome but a confusing one to debug — "I set
+ * the receiver and it still refuses to quote". Called from the payment manager's
+ * start(), so the process that owns payments says so at boot, and escalated
+ * there rather than only logged: this file's own argument for alerting on a
+ * token mismatch is that logger.error has no route to anyone, and an operator
+ * who meant to turn USDC on and did not is in the same position.
  */
-export const invalidAddressEnvironmentVariables = () => [
-  ...invalidAddressEnvVars,
-]
+export const invalidEnvironmentVariables = () => [...invalidEnvVars]
 
 export const isUsdcConfigured = () =>
   Boolean(
