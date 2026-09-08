@@ -52,6 +52,18 @@ export const addressEnv = (
 }
 
 /**
+ * An optional string variable, trimmed, where empty means "not set".
+ *
+ * The distinction dotenv erases: `KEY=` in a .env file parses to `''`, not
+ * undefined, so a consumer testing `!== undefined` treats a key the operator
+ * left blank as configured and hands the empty string to a parser. Every
+ * `.env.sample` entry ships blank, so that is the normal shape of a deployment
+ * configured the documented way.
+ */
+export const optionalTrimmedEnv = (raw?: string): string | undefined =>
+  raw?.trim() || undefined
+
+/**
  * A comma-separated list of raw address strings, trimmed, empties dropped.
  *
  * Deliberately NOT validated here, unlike `addressEnv`. Its consumer — the
@@ -64,18 +76,6 @@ export const addressEnv = (
  * which rejects an all-uppercase address that `getAddress` accepts and that any
  * block explorer will happily hand an operator.
  */
-/**
- * An optional string variable, trimmed, where empty means "not set".
- *
- * The distinction dotenv erases: `KEY=` in a .env file parses to `''`, not
- * undefined, so a consumer testing `!== undefined` treats a key the operator
- * left blank as configured and hands the empty string to a parser. Every
- * `.env.sample` entry ships blank, so that is the normal shape of a deployment
- * configured the documented way.
- */
-export const optionalTrimmedEnv = (raw?: string): string | undefined =>
-  raw?.trim() || undefined
-
 export const rawListEnv = (raw?: string): string[] =>
   (raw ?? '')
     .split(',')
