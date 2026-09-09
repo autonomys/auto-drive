@@ -294,15 +294,30 @@ export const UsdcPaymentsCard = () => {
 
         <GateRow
           label='Price oracle'
-          tone={oracle.stale ? 'unknown' : oracle.healthy ? 'open' : 'closed'}
+          // servingStale reads as closed, matching the gate: a last-good rate
+          // is the WORKER's in-memory fallback, and an API replica that never
+          // reached the subgraph has no such fallback of its own. Showing this
+          // green while the composite says closed would send an operator
+          // looking for a gate that is already telling them the answer.
+          tone={
+            oracle.stale
+              ? 'unknown'
+              : oracle.healthy && !oracle.servingStale
+                ? 'open'
+                : 'closed'
+          }
           headline={
             oracle.stale
               ? 'Rate unknown — failing closed'
-              : oracle.healthy
-                ? `Quoting at ${
-                    oracle.usdPerAi3 ? usdPerAi3(oracle.usdPerAi3) : '—'
-                  } per AI3${oracle.servingStale ? ' (last good rate)' : ''}`
-                : `Refusing to quote — ${oracle.reason ?? 'unknown'}`
+              : !oracle.healthy
+                ? `Refusing to quote — ${oracle.reason ?? 'unknown'}`
+                : oracle.servingStale
+                  ? `Last good rate only (${
+                      oracle.usdPerAi3 ? usdPerAi3(oracle.usdPerAi3) : '—'
+                    } per AI3) — not quoting`
+                  : `Quoting at ${
+                      oracle.usdPerAi3 ? usdPerAi3(oracle.usdPerAi3) : '—'
+                    } per AI3`
           }
           detail={
             oracle.window

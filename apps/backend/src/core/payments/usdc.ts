@@ -264,7 +264,25 @@ const getAvailability = async (): Promise<UsdcAvailability> => {
 
   // Last, because it is the gate most likely to clear on its own and the one an
   // operator can do least about.
-  if (!isFresh(readings.oracle) || !readings.oracle!.healthy) {
+  //
+  // `servingStale` counts as unhealthy HERE while staying true in the row, and
+  // the distinction is the same one the paragraph above draws. A stale reading
+  // means the poller could not reach the subgraph and answered from its own
+  // in-memory `lastGood` — which is per-process memory, exactly what this gate
+  // was written not to trust. The row records what the poller observed; the gate
+  // decides what may be advertised, and those are different questions.
+  //
+  // What goes wrong otherwise: the poller has a warm `lastGood` and reports
+  // healthy, so /features advertises USDC — but an API replica started during
+  // the outage has an empty cache of its own, and `createIntent` calls
+  // `priceOracle.getPrice()` directly, which errs for it. The path is advertised
+  // while every quote from that replica 503s, which is the one outcome this
+  // composite exists to prevent.
+  if (
+    !isFresh(readings.oracle) ||
+    !readings.oracle!.healthy ||
+    readings.oracle!.servingStale
+  ) {
     return { open: false, closedReason: UsdcClosedReason.ORACLE_UNAVAILABLE }
   }
 

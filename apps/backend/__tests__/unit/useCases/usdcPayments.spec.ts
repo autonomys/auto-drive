@@ -58,10 +58,10 @@ const treasuryReading = (
   ageMs,
 })
 
-const oracleReading = (healthy: boolean, ageMs = 0) => ({
+const oracleReading = (healthy: boolean, ageMs = 0, servingStale = false) => ({
   healthy,
   reason: healthy ? null : 'thin-liquidity',
-  servingStale: false,
+  servingStale,
   usdPerAi3: healthy ? 6_400_000_000_000_000n : null,
   window: null,
   checkedAt: new Date(Date.now() - ageMs),
@@ -284,6 +284,30 @@ describe('UsdcPaymentsUseCases', () => {
       expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
         open: false,
         closedReason: UsdcClosedReason.ORACLE_UNAVAILABLE,
+      })
+    })
+
+    it('fails closed when the poller could only serve its last good rate', async () => {
+      // A FRESH row, and healthy — but the poller reached that verdict from its
+      // own in-memory fallback rather than from the subgraph. That fallback is
+      // per-process: an API replica started during the outage has none, and
+      // createIntent calls priceOracle.getPrice() directly, so it would 503 on
+      // a path this gate had advertised as open.
+      allOpen({ oracle: oracleReading(true, 0, true) })
+
+      expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
+        open: false,
+        closedReason: UsdcClosedReason.ORACLE_UNAVAILABLE,
+      })
+    })
+
+    it('opens on a rate the poller actually read', async () => {
+      // The other half: servingStale false is the live read, and it opens. The
+      // check above must not have closed the ordinary case with it.
+      allOpen({ oracle: oracleReading(true, 0, false) })
+
+      expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
+        open: true,
       })
     })
   })
