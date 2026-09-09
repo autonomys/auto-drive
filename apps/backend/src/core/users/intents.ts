@@ -778,6 +778,78 @@ const recordMispayment = async (
   }
 }
 
+/**
+ * The amount denominated in the asset an intent is quoted in. A well-formed
+ * payment for that intent fills exactly that column, so an undefined result
+ * means the payment arrived in the other asset.
+ */
+const amountInIntentAsset = (
+  paymentMethod: PaymentMethod | undefined,
+  amounts: { paymentAmount?: bigint; tokenAmount?: bigint },
+): bigint | undefined =>
+  paymentMethod === PaymentMethod.USDC_ETH
+    ? amounts.tokenAmount
+    : amounts.paymentAmount
+
+/**
+ * Is this confirmation another delivery of the payment that settled the intent,
+ * or a second payment that arrived for it?
+ *
+ * The question has to be asked twice — once by the idempotency guard, once by a
+ * payment that lost the conditional transition — and both need the same answer,
+ * because they are the same event reached at different moments. Every log is
+ * delivered several times over: paymentManager.start() runs in the frontend API
+ * and the frontend worker, each with its own watchContractEvent over the
+ * contract, and the queued watch-intent-tx task calls watchTransaction again.
+ * Whether a duplicate arrives after the settling write commits (the guard) or
+ * races it (the transition) is a matter of scheduling, not of what happened on
+ * chain, so the two must not disagree.
+ *
+ * Answered by looking for evidence of a DIFFERENT payment, and calling it
+ * re-delivery only when there is none:
+ *
+ *   • The other asset. Unambiguous — the payment that settled the intent had to
+ *     be in the asset the intent was quoted in to have settled it at all.
+ *   • A different amount. Available on every row and proof outright, but says
+ *     nothing when someone pays the same amount twice.
+ *   • A different transaction. Proof when the intent carries a hash; rows
+ *     settled before confirmations recorded one have none, and comparing against
+ *     NULL would call every replay of those a second payment. Compared without
+ *     regard to case: a hash carries no checksum encoding, so the same 32 bytes
+ *     can be spelled two ways, and a row whose hash was stored before the watch
+ *     endpoint normalised its input would otherwise read as a different
+ *     transaction on every replay.
+ *
+ * Absent evidence is never treated as evidence, so the answer errs toward
+ * silence. The one case that costs: two payments of the same value inside a
+ * single transaction agree on all three signals and are absorbed. That needs a
+ * caller invoking the receiver twice for one intent id at one amount — the
+ * receivers are callable from a contract, so it is constructible, but no
+ * ordinary flow produces it, and separating it would mean persisting the
+ * settling log index on the intent. Deliberately not paid for here.
+ */
+const isRedeliveryOfSettlingPayment = (
+  settled: Intent,
+  incoming: {
+    paymentAmount?: bigint
+    tokenAmount?: bigint
+    txHash?: string
+  },
+): boolean => {
+  const settledAmount = amountInIntentAsset(settled.paymentMethod, settled)
+  const incomingAmount = amountInIntentAsset(settled.paymentMethod, incoming)
+
+  const differentAsset = incomingAmount === undefined
+  const differentAmount =
+    incomingAmount !== undefined && incomingAmount !== settledAmount
+  const differentTransaction =
+    incoming.txHash !== undefined &&
+    settled.txHash !== undefined &&
+    settled.txHash.toLowerCase() !== incoming.txHash.toLowerCase()
+
+  return !(differentAsset || differentAmount || differentTransaction)
+}
+
 const markIntentAsConfirmed = async ({
   intentId,
   paymentAmount,
@@ -860,41 +932,23 @@ const markIntentAsConfirmed = async ({
     // processed". Two transfers is not an exotic mistake: a user who does not see
     // the first confirm pays the same quote again.
     //
-    // Two signals, because neither alone is sound. A differing tx hash proves a
-    // different transaction, but only when the intent carries one — rows settled
-    // before confirmations began recording the hash have none, and comparing
-    // against NULL would file every replay of those as a second payment. A
-    // differing amount proves a different payment outright, and is available on
-    // every row, but says nothing when someone pays the same amount twice.
-    //
-    // A payment in the other asset is a third signal, and an unambiguous one.
-    //
-    // None of them separates two logs of the same value inside one transaction,
-    // where the hash matches and the amounts agree. That case does not reach here:
-    // both arrive while the intent is still PENDING, and the conditional
-    // transition below is what tells them apart — whichever loses the UPDATE is
-    // filed by that path rather than this one.
-    const settledAmount =
-      intent.paymentMethod === PaymentMethod.USDC_ETH
-        ? intent.tokenAmount
-        : intent.paymentAmount
-    const incomingAmount =
-      intent.paymentMethod === PaymentMethod.USDC_ETH
-        ? tokenAmount
-        : paymentAmount
-    const differentTransaction =
-      txHash !== undefined &&
-      intent.txHash !== undefined &&
-      intent.txHash !== txHash
-    const differentAmount =
-      incomingAmount !== undefined && incomingAmount !== settledAmount
-    // The payment is denominated in the other asset, so it cannot be re-delivery
-    // of the one that settled this intent — that one had to be in the asset the
-    // intent was quoted in to have settled it at all. One of the two amounts is
-    // always present by the guard at the top of this function.
-    const differentAsset = incomingAmount === undefined
+    // isRedeliveryOfSettlingPayment is the whole answer, and the same call the
+    // lost-transition path below makes. Sequential or raced is a matter of when
+    // the duplicate arrived, not of what arrived, so the two paths must not
+    // disagree about it.
+    const settledAmount = amountInIntentAsset(intent.paymentMethod, intent)
+    const incomingAmount = amountInIntentAsset(intent.paymentMethod, {
+      paymentAmount,
+      tokenAmount,
+    })
 
-    if (differentTransaction || differentAmount || differentAsset) {
+    if (
+      !isRedeliveryOfSettlingPayment(intent, {
+        paymentAmount,
+        tokenAmount,
+        txHash,
+      })
+    ) {
       logger.warn(
         'markIntentAsConfirmed: a second payment arrived for a settled intent — recording it',
         {
@@ -904,6 +958,7 @@ const markIntentAsConfirmed = async ({
           settledAmount: settledAmount?.toString(),
           received: incomingAmount?.toString(),
           txHash,
+          logIndex,
         },
       )
       await recordMispayment({
@@ -1051,17 +1106,58 @@ const markIntentAsConfirmed = async ({
   })
 
   // Lost the transition: something else moved the intent out of PENDING between
-  // the read above and this write. Filed the same way as the guard above, reached
-  // a different way. Nothing is retried and nothing is overwritten.
+  // the read above and this write. Nothing is retried and nothing is overwritten
+  // — the only question left is what this call is holding.
   if (!confirmed) {
-    // Read the row back before naming a reason. Another payment winning the race
-    // is the expected case, but it is not the only writer competing for PENDING:
-    // expireIntentIfPending takes the same status, so a sweep firing in this
-    // window leaves an intent that expired with nothing credited. Calling that
-    // ALREADY_SETTLED would tell whoever works the queue there was a double
-    // payment to reconcile, when in fact the money simply arrived too late — a
-    // different situation with a different resolution.
+    // Read the row back, and let it answer that. Losing the UPDATE says only that
+    // this call did not settle the intent; it says nothing about whether the
+    // money it carries is money the intent has not seen, and the three outcomes
+    // want three different things done.
+    //
+    // Nothing settled it. expireIntentIfPending competes for the same PENDING
+    // status, so a sweep firing in this window leaves an intent that expired with
+    // nothing credited. Calling that ALREADY_SETTLED would tell whoever works the
+    // queue to reconcile a double payment that never happened, when the money
+    // simply arrived too late.
+    //
+    // Another payment settled it. The real double-payment case: two transfers
+    // reached one intent, one is credited, and this one cannot be added to a
+    // terminal row. File it — that row is the only thing pointing at the money.
+    //
+    // THIS payment settled it, delivered twice. The common case, and the reason
+    // the read-back exists. Every log is delivered by several callers —
+    // paymentManager.start() runs in both the frontend API and the frontend
+    // worker, each with its own watchContractEvent, and the queued
+    // watch-intent-tx task calls watchTransaction again — with the same intent
+    // id, hash and amount, unserialised. One wins here and the others land in
+    // this branch. Filing them reports a second payment for money that arrived
+    // once, on the most-travelled path there is, and the (tx_hash, log_index)
+    // dedup cannot suppress it because the winner files nothing to collide with.
+    // The comparison is the same one the settled guard above makes, against the
+    // row as it now stands.
     const current = await intentsRepository.getById(intentId)
+
+    if (
+      current &&
+      current.status !== IntentStatus.EXPIRED &&
+      isRedeliveryOfSettlingPayment(current, {
+        paymentAmount,
+        tokenAmount,
+        txHash,
+      })
+    ) {
+      logger.info(
+        'markIntentAsConfirmed: another delivery of the payment that just settled this intent — skipping',
+        {
+          intentId,
+          currentStatus: current.status,
+          txHash,
+          logIndex,
+        },
+      )
+      return ok(current)
+    }
+
     const reason =
       current?.status === IntentStatus.EXPIRED
         ? IntentMispaymentReason.INTENT_EXPIRED
@@ -1073,6 +1169,7 @@ const markIntentAsConfirmed = async ({
         intentId,
         currentStatus: current?.status,
         reason,
+        settledTxHash: current?.txHash,
         received: (tokenAmount ?? paymentAmount)?.toString(),
         txHash,
         logIndex,

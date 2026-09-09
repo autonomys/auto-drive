@@ -24,7 +24,8 @@ import { ok, err } from 'neverthrow'
 import {
   addressEnv,
   config,
-  invalidAddressEnvironmentVariables,
+  invalidEnvironmentVariables,
+  urlEnv,
 } from '../../src/config.js'
 import { getAddress } from 'viem'
 import { ObjectNotFoundError } from '../../src/errors/index.js'
@@ -43,6 +44,14 @@ describe('PaymentManager', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     jest.useFakeTimers()
+    // Every start() kicks off the orphan sweep, which reads PENDING intents
+    // straight from pg. The container these tests run against has no schema, so
+    // the real call raises `relation "intents" does not exist` — swallowed by
+    // safeCallback, and printed after the suite has already reported green.
+    // Harmless, but a unit test should not be reaching the database at all, and
+    // a per-block mock would leave whichever block anyone adds next doing it.
+    // The startup-recovery cases spy over this with rows of their own.
+    jest.spyOn(IntentsUseCases, 'getPendingWithTxHash').mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -1071,6 +1080,14 @@ describe('PaymentManager', () => {
     const RECEIVER = '0x1111111111111111111111111111111111111111'
     const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
     const DAI = '0x6b175474e89094c44da98b954eedeac495271d0f'
+    // Any non-empty code answers the "is a contract deployed here" question.
+    // _verifyConfiguration asks it BEFORE the token check, so a case that mocks
+    // only readContract is not testing what its name says: the unmocked getCode
+    // POSTs to the chain's real endpoint, fails, and falls through the tolerant
+    // catch — so the case covers "code read failed, then token disagrees" rather
+    // than "the contract is there and its token disagrees", and drags a live
+    // network round-trip into a unit test on the way.
+    const DEPLOYED_CODE = '0x60806040'
 
     it('escalates a token address that disagrees with the deployed receiver', async () => {
       const watcherUnderTest = createPaymentWatcher(
@@ -1080,6 +1097,9 @@ describe('PaymentManager', () => {
       // The receiver's token is immutable, so this is not one bad payment — it
       // is every payment to that contract being refused, and the only symptom
       // otherwise is silence.
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockResolvedValue(DEPLOYED_CODE as any)
       jest
         .spyOn(watcherUnderTest._viemClient, 'readContract')
         .mockResolvedValue(DAI as any)
@@ -1096,6 +1116,9 @@ describe('PaymentManager', () => {
         createUsdcChain('http://example.org', RECEIVER, USDC),
       )
 
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockResolvedValue(DEPLOYED_CODE as any)
       jest
         .spyOn(watcherUnderTest._viemClient, 'readContract')
         .mockResolvedValue(getAddress(USDC) as any)
@@ -1114,6 +1137,9 @@ describe('PaymentManager', () => {
       // An RPC that is down at boot says nothing about the configuration.
       // Treating it as a mismatch would page someone for an outage that fixes
       // itself, and treating it as a pass is exactly what it is: unknown.
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockResolvedValue(DEPLOYED_CODE as any)
       jest
         .spyOn(watcherUnderTest._viemClient, 'readContract')
         .mockRejectedValue(new Error('connect ECONNREFUSED'))
@@ -1293,6 +1319,41 @@ describe('PaymentManager', () => {
       expect(waitSpy).toHaveBeenCalledTimes(2)
     })
 
+    it('collapses two spellings of one transaction hash', async () => {
+      // A hash carries no checksum encoding, so wallets emit lowercase and viem
+      // hands the subscription lowercase — but a hand-rolled API client can post
+      // `0xAB…` for the very same transaction, and that spelling is what the task
+      // and the startup sweep then carry. Keyed on the raw string, those are two
+      // entries: two concurrent settlements of one payment, the loser of which is
+      // filed as an ALREADY_SETTLED mispayment for a transfer that never happened.
+      const lower = '0xabcdef'
+      const upper = '0xABCDEF'
+
+      let releaseReceipt: ((value: unknown) => void) | undefined
+      const receipt = new Promise((resolve) => {
+        releaseReceipt = resolve
+      })
+      const waitSpy = jest
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
+        .mockImplementation(() => receipt as any)
+
+      jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      const first = watcher.watchTransaction(upper)
+      const second = watcher.watchTransaction(lower)
+
+      expect(waitSpy).toHaveBeenCalledTimes(1)
+      // The hash is passed on as it arrived, not lower-cased: the replay guard
+      // compares it against intents.tx_hash, and rewriting it here would make a
+      // sweep of a row stored mixed-case look like a different transaction.
+      expect(waitSpy.mock.calls[0][0].hash).toBe(upper)
+
+      releaseReceipt?.({ from: '0xSender', logs: [] })
+      await Promise.all([first, second])
+    })
+
     it('does not strand a failed transaction in the in-flight set', async () => {
       const txHash = '0xfailing'
 
@@ -1391,7 +1452,7 @@ describe('PaymentManager', () => {
         ),
       ).toBe('0x1111111111111111111111111111111111111111')
       // And nothing is filed as invalid for a value that was only padded.
-      expect(invalidAddressEnvironmentVariables()).not.toContain(
+      expect(invalidEnvironmentVariables()).not.toContain(
         'ETH_USDC_RECEIVER_ADDRESS',
       )
     })
@@ -1403,7 +1464,7 @@ describe('PaymentManager', () => {
       expect(addressEnv('ETH_USDC_RECEIVER_ADDRESS', '')).toBeUndefined()
       expect(addressEnv('ETH_USDC_RECEIVER_ADDRESS', '   ')).toBeUndefined()
       expect(addressEnv('ETH_USDC_RECEIVER_ADDRESS', undefined)).toBeUndefined()
-      expect(invalidAddressEnvironmentVariables()).not.toContain(
+      expect(invalidEnvironmentVariables()).not.toContain(
         'ETH_USDC_RECEIVER_ADDRESS',
       )
     })
@@ -1425,7 +1486,50 @@ describe('PaymentManager', () => {
 
     it('names every variable it discarded', () => {
       addressEnv('SOME_ADDRESS_VAR', 'not-an-address')
-      expect(invalidAddressEnvironmentVariables()).toContain('SOME_ADDRESS_VAR')
+      expect(invalidEnvironmentVariables()).toContain('SOME_ADDRESS_VAR')
+    })
+  })
+
+  describe('endpoint configuration', () => {
+    it('recovers a whitespace-padded endpoint instead of discarding it', () => {
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', ' https://eth.example/rpc \n')).toBe(
+        'https://eth.example/rpc',
+      )
+      expect(invalidEnvironmentVariables()).not.toContain('ETH_CHAIN_ENDPOINT')
+    })
+
+    it('treats an empty or whitespace-only endpoint as simply unset', () => {
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', '')).toBeUndefined()
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', '   ')).toBeUndefined()
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', undefined)).toBeUndefined()
+      expect(invalidEnvironmentVariables()).not.toContain('ETH_CHAIN_ENDPOINT')
+    })
+
+    it('discards a value that is not a URL at all', () => {
+      // The case a truthiness check let through, and the reason this helper
+      // exists: isUsdcConfigured tested this variable for truthiness only, so a
+      // placeholder left in a template made the API quote a binding USDC amount
+      // while the watcher built on the same string failed every request.
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', 'changeme')).toBeUndefined()
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', 'eth.example.com')).toBeUndefined()
+    })
+
+    it('discards a host and port pasted without a scheme', () => {
+      // Parses — as a URL whose protocol is `rpc.example.com:` — which is why the
+      // protocol is checked rather than the parse alone.
+      expect(
+        urlEnv('ETH_CHAIN_ENDPOINT', 'rpc.example.com:8545'),
+      ).toBeUndefined()
+    })
+
+    it('discards a scheme the RPC transport cannot POST over', () => {
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', 'ws://eth.example/rpc')).toBeUndefined()
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', 'file:///etc/passwd')).toBeUndefined()
+    })
+
+    it('names every endpoint variable it discarded', () => {
+      urlEnv('SOME_URL_VAR', 'not-a-url')
+      expect(invalidEnvironmentVariables()).toContain('SOME_URL_VAR')
     })
   })
 })

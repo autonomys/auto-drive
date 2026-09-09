@@ -1037,9 +1037,13 @@ describe('IntentsUseCases', () => {
     // watchTransaction calls this once per parsed log inside a Promise.all, so two
     // payments for one intent in a single transaction both read PENDING before
     // either writes. An unconditional write let the second overwrite the first:
-    // one amount credited, the other gone, and nothing filed either way. Same
-    // amounts on purpose — the three-signal check above cannot separate those, and
-    // the conditional transition is what does.
+    // one amount credited, the other gone, and nothing filed either way.
+    //
+    // Different amounts, because that is what makes the second payment provable.
+    // The intent records the hash and the amount that settled it, so a second log
+    // of the SAME value in the same transaction matches on both and is read as
+    // re-delivery — see the concurrent-delivery test below for why that reading
+    // has to be the default.
     let row: Intent = {
       id: '0xone-tx-two-logs',
       userPublicId: user.publicId,
@@ -1076,7 +1080,7 @@ describe('IntentsUseCases', () => {
       }),
       IntentsUseCases.markIntentAsConfirmed({
         intentId: row.id,
-        paymentAmount: 100n,
+        paymentAmount: 250n,
         txHash: '0xonetx',
         logIndex: 1,
       }),
@@ -1091,9 +1095,97 @@ describe('IntentsUseCases', () => {
       expect.objectContaining({
         intentId: row.id,
         reason: IntentMispaymentReason.ALREADY_SETTLED,
-        paymentAmount: 100n,
       }),
     )
+  })
+
+  it('markIntentAsConfirmed files nothing when one log is delivered twice at once', async () => {
+    // The routine case, not an exotic one. Every log is delivered by several
+    // callers — paymentManager.start() runs in the frontend API and the frontend
+    // worker, each with its own watchContractEvent, and the queued watch-intent-tx
+    // task calls watchTransaction again — with the same intent id, hash, index and
+    // amount, unserialised across processes. One wins the transition and the rest
+    // lose it.
+    //
+    // Losing it is not evidence of a second payment. Filing the losers would put
+    // an already_settled row against money that arrived exactly once, on the most
+    // travelled path there is, and the (tx_hash, log_index) dedup cannot suppress
+    // it because the winner files nothing to collide with.
+    let row: Intent = {
+      id: '0xone-log-many-callers',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+    }
+    jest
+      .spyOn(intentsRepository, 'getById')
+      .mockImplementation(async () => ({ ...row }))
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async (args) => {
+        if (row.status !== IntentStatus.PENDING) return null
+        row = {
+          ...row,
+          status: IntentStatus.CONFIRMED,
+          paymentAmount: args.paymentAmount,
+          txHash: args.txHash,
+        }
+        return { ...row }
+      })
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const oneDelivery = () =>
+      IntentsUseCases.markIntentAsConfirmed({
+        intentId: row.id,
+        paymentAmount: 100n,
+        fromAddress: '0xpayer',
+        txHash: '0xtx',
+        logIndex: 0,
+      })
+    const results = await Promise.all([
+      oneDelivery(),
+      oneDelivery(),
+      oneDelivery(),
+    ])
+
+    // All three raced for the transition, one credited the payment, and none of
+    // them called it a double payment.
+    expect(confirmSpy).toHaveBeenCalledTimes(3)
+    expect(row.status).toBe(IntentStatus.CONFIRMED)
+    expect(row.paymentAmount).toBe(100n)
+    expect(recordSpy).not.toHaveBeenCalled()
+    results.forEach((result) => expect(result.isOk()).toBe(true))
+  })
+
+  it('markIntentAsConfirmed re-delivered after the intent completed stays silent', async () => {
+    // The same duplicate delivery arriving late enough to meet the idempotency
+    // guard instead of the transition. Sequential or raced is a matter of
+    // scheduling, not of what arrived on chain, so the two paths have to agree.
+    const intent: Intent = {
+      id: '0xcompleted-redelivery',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+      paymentAmount: 100n,
+      txHash: '0xtx',
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 100n,
+      fromAddress: '0xpayer',
+      txHash: '0xtx',
+      logIndex: 0,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(recordSpy).not.toHaveBeenCalled()
   })
 
   it('markIntentAsConfirmed does not call a lost expiry race a double payment', async () => {
@@ -1472,6 +1564,39 @@ describe('IntentsUseCases', () => {
       intentId: intent.id,
       tokenAmount: 1_050_000n,
       txHash: '0xsettled-here',
+      logIndex: 0,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
+  it('markIntentAsConfirmed reads a replay spelled in another case as the same transaction', async () => {
+    // A transaction hash has no checksum encoding, so the same 32 bytes can be
+    // written two ways. A row whose hash was stored mixed-case — anything written
+    // before the controller normalised its input — would otherwise have every
+    // recovery sweep of it read as a DIFFERENT transaction, filing a second
+    // payment that never arrived into the queue an admin reconciles money from.
+    const intent: Intent = {
+      id: '0xusdc-replay-case',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      tokenAmount: 1_050_000n,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+      txHash: '0xSETTLED-HERE'.toUpperCase(),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+      txHash: '0xSETTLED-HERE'.toLowerCase(),
       logIndex: 0,
     })
 

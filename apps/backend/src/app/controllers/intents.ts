@@ -214,13 +214,35 @@ intentsController.post(
       return
     }
 
-    const txHash = req.body.txHash
-    if (typeof txHash !== 'string') {
+    const rawTxHash = req.body.txHash
+    if (typeof rawTxHash !== 'string') {
       res.status(400).json({
         error: 'Missing or invalid field: txHash',
       })
       return
     }
+
+    // Lower-cased here, at the boundary, because everything downstream compares
+    // this string byte for byte and nothing else normalises it.
+    //
+    // A transaction hash carries no checksum encoding, so wallets emit lowercase
+    // and viem hands the event subscription lowercase — but a hand-rolled API
+    // client is free to post `0xAB12…` for the very same transaction. That value
+    // is then stored in `intents.tx_hash` and travels on the watch task, and the
+    // three consequences are all silent:
+    //
+    //   • the watcher's inFlight map is keyed by hash, so the mixed-case task and
+    //     the lowercase event are two entries — two concurrent settlements of one
+    //     transaction, one of which is filed as an ALREADY_SETTLED mispayment
+    //     telling an admin to reconcile a second transfer that never happened;
+    //   • markIntentAsConfirmed's replay guard tests `intent.txHash !== txHash`,
+    //     so a later replay of that row reads as a different transaction;
+    //   • intent_mispayments is unique on (tx_hash, log_index), which two spellings
+    //     of one hash do not collide on.
+    //
+    // Trimmed for the same reason the address variables are: a value pasted out
+    // of a block explorer arrives with whitespace more often than not.
+    const txHash = rawTxHash.trim().toLowerCase()
 
     const result = await handleInternalErrorResult(
       IntentsUseCases.triggerWatchIntent({

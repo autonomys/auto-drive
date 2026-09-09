@@ -139,6 +139,13 @@ export const createPaymentWatcher = <
   // Distinct payments are unaffected: this is keyed by transaction, and two
   // payments inside one transaction are two logs of a single call, which still
   // run concurrently below.
+  //
+  // Keyed on the LOWER-CASED hash, because the three feeders do not agree on
+  // case. viem hands the subscription a lowercase transactionHash; the task and
+  // the sweep carry whatever was written to intents.tx_hash. The controller now
+  // normalises what it accepts, so new rows agree — but rows already stored, and
+  // any caller that reaches this function another way, still do not, and one
+  // transaction under two spellings defeats the whole point of this map.
   const inFlight = new Map<string, Promise<void>>()
 
   // Receives a tx hash and watches for the deposit event
@@ -148,16 +155,24 @@ export const createPaymentWatcher = <
       throw new Error('Invalid tx hash')
     }
 
-    const already = inFlight.get(txHash)
+    // The key is normalised; the hash itself is passed on untouched. Rewriting
+    // it here would be the wrong fix: markIntentAsConfirmed compares the incoming
+    // hash against intents.tx_hash to recognise a replay, so handing it a
+    // lower-cased hash for a row stored mixed-case would turn every recovery
+    // sweep of that row into a filed second payment. That comparison is made
+    // case-insensitive at its own site instead.
+    const key = txHash.toLowerCase()
+
+    const already = inFlight.get(key)
     if (already) {
       logger.info('Already watching this transaction — joining it', { txHash })
       return already
     }
 
     const settling = settleTransaction(txHash).finally(() => {
-      inFlight.delete(txHash)
+      inFlight.delete(key)
     })
-    inFlight.set(txHash, settling)
+    inFlight.set(key, settling)
     return settling
   }
 

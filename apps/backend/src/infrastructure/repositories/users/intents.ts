@@ -5,8 +5,14 @@ type DBIntent = {
   id: string
   user_public_id: string
   status: IntentStatus
-  tx_hash: string
-  payment_amount: string
+  // Both NULLABLE in the DB (see 20250915125036-payments-up.sql), and typed that
+  // way so the compiler keeps the coalescing below load-bearing. Declared as
+  // plain `string` they were a lie the mapper could not see through: that is how
+  // `txHash: row.tx_hash` type-checked while shipping `null`, which failed the
+  // `intent.txHash !== undefined` replay exemption and filed every replay of a
+  // hashless settled intent as a second payment.
+  tx_hash: string | null
+  payment_amount: string | null
   shannons_per_byte: string
   expires_at: Date | null
   from_address: string | null
