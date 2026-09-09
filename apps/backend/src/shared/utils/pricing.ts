@@ -84,3 +84,4 @@ export const applyMarginPercent = (amount: bigint, percent: number): bigint => {
   // exact margined value.
   return (numerator + BASIS_POINTS - 1n) / BASIS_POINTS
 }
+

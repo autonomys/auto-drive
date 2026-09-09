@@ -28,6 +28,7 @@ import type {
 } from '../../../services/api';
 import Link from 'next/link';
 import { CopiableText } from '../../atoms/CopiableText';
+import { UsdcPaymentsCard } from './UsdcPaymentsCard';
 
 // ---------------------------------------------------------------------------
 // Economics summary card
@@ -512,6 +513,11 @@ export const AdminCredits = () => {
           <RefreshCw className='ml-auto h-4 w-4 animate-spin text-muted-foreground' />
         )}
       </div>
+
+      {/* USDC payment gates: the kill switch and the treasury cap. First,
+          because "can users buy right now" precedes any accounting of what they
+          bought. */}
+      <UsdcPaymentsCard />
 
       {/* Economics summary */}
       <div>

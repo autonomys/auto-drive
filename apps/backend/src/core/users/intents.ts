@@ -3,6 +3,7 @@ import {
   IntentMispaymentReason,
   IntentStatus,
   PaymentMethod,
+  UsdcClosedReason,
   User,
   UserRole,
   UserWithOrganization,
@@ -23,6 +24,7 @@ import {
   QuoteFailedError,
   ServiceUnavailableError,
   UsdcPaymentsDisabledError,
+  UsdcUnavailableError,
 } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 import { config, isUsdcConfigured } from '../../config.js'
@@ -30,6 +32,7 @@ import { randomBytes } from 'crypto'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from './accounts.js'
 import { FeatureFlagsUseCases } from '../featureFlags/index.js'
+import { UsdcPaymentsUseCases } from '../payments/usdc.js'
 import { transactionByteFee } from '@autonomys/auto-consensus'
 import { ApiPromise, WsProvider } from '@polkadot/api'
 import { priceOracle } from '../../infrastructure/services/priceOracle/index.js'
@@ -397,6 +400,59 @@ const createIntent = async (
           'or omit paymentMethod to default to it.',
       ),
     )
+  }
+
+  // Is this DEPLOYMENT selling USDC right now?
+  //
+  // A different question from the flag above, and deliberately not merged with
+  // it. The flag is an audience gate — who may pay in USDC — and admins are
+  // exempt from it so the path can be driven in production. These are
+  // availability gates: an admin kill switch and the treasury's exposure cap,
+  // and NOBODY is exempt from them. A kill switch an admin walks through is not
+  // a kill switch, and the cap that bounds un-hedged USDC does not care who is
+  // buying.
+  //
+  // After the flag rather than before it, so a caller who could never use the
+  // path is told that first and a DB read is not spent on them.
+  //
+  // 503 rather than the flag's 403: both closures here are transient — an admin
+  // reopens the switch, a conversion brings the balance back under the cap — and
+  // a 403 tells the frontend to hide the option for good. Same shape as the
+  // oracle's refusal below, which is what the purchase flow already handles.
+  if (paymentMethod === PaymentMethod.USDC_ETH) {
+    const availability = await UsdcPaymentsUseCases.getAvailability()
+    if (!availability.open) {
+      // No non-null assertion: UsdcAvailability is a discriminated union, so a
+      // closed result carries its reason by construction.
+      const reason = availability.closedReason
+      // The reason is logged in full — including the treasury figure, via
+      // describeClosedReason — and NOT returned. Whoever is buying can act on
+      // "USDC is off right now, pay in AI3"; they can do nothing with "the
+      // treasury is holding 2,014.00 of un-converted USDC", which is an
+      // operational fact belonging to this log line and the admin dashboard.
+      logger.info('Rejecting USDC intent creation — the path is closed', {
+        userPublicId: executor.publicId,
+        reason,
+        detail: UsdcPaymentsUseCases.describeClosedReason(reason),
+      })
+      // NOT_CONFIGURED is unreachable here — the guard above already returned
+      // for it, with a message that says what an operator has to set. Kept as a
+      // 403 for the same reason it is one there: nothing about it is transient.
+      if (reason === UsdcClosedReason.NOT_CONFIGURED) {
+        return err(
+          new UsdcPaymentsDisabledError(
+            'Paying in USDC is not available on this deployment. Pay in AI3 ' +
+              'instead, or omit paymentMethod to default to it.',
+          ),
+        )
+      }
+      // UsdcUnavailableError, not a bare ServiceUnavailableError: this refusal
+      // has to reach the purchase flow as a code it can branch on (fall back to
+      // AI3) plus a sentence it can render, and the base 503 carries neither —
+      // it serialises with no `message` key, which the client reads as a raw
+      // exception and replaces with "Service Unavailable".
+      return err(new UsdcUnavailableError())
+    }
   }
 
   // The USDC path cannot price a purchase without knowing its size, so the size

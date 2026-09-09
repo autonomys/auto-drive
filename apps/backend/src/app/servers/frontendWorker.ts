@@ -71,6 +71,17 @@
   ) {
     paymentManager.start()
 
+    // Beside the payment watchers, and for the same reason they are here: one
+    // process. It is the single writer of the treasury balance gate, which every
+    // API replica then READS from the database — an in-memory gate would be
+    // unknown, and therefore closed, in every process that quotes.
+    //
+    // A no-op when this deployment has no USDC configuration.
+    const { usdcGatesJob } = await import(
+      '../../infrastructure/services/usdcGatesJob.js'
+    )
+    usdcGatesJob.start()
+
     const { creditExpiryJob } = await import(
       '../../infrastructure/services/creditExpiryJob.js'
     )
@@ -119,6 +130,10 @@
       migrationRecoveryJob.stop()
     }
     paymentManager.stop()
+    const { usdcGatesJob } = await import(
+      '../../infrastructure/services/usdcGatesJob.js'
+    )
+    usdcGatesJob.stop()
     const { creditExpiryJob } = await import(
       '../../infrastructure/services/creditExpiryJob.js'
     )

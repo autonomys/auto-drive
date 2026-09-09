@@ -92,6 +92,37 @@ export const urlEnv = (name: string, raw?: string): string | undefined => {
   return trimmed
 }
 
+/**
+ * An optional string variable, trimmed, where empty means "not set".
+ *
+ * The distinction dotenv erases: `KEY=` in a .env file parses to `''`, not
+ * undefined, so a consumer testing `!== undefined` treats a key the operator
+ * left blank as configured and hands the empty string to a parser. Every
+ * `.env.sample` entry ships blank, so that is the normal shape of a deployment
+ * configured the documented way.
+ */
+export const optionalTrimmedEnv = (raw?: string): string | undefined =>
+  raw?.trim() || undefined
+
+/**
+ * A comma-separated list of raw address strings, trimmed, empties dropped.
+ *
+ * Deliberately NOT validated here, unlike `addressEnv`. Its consumer — the
+ * treasury cap — measures a SUM, so a dropped entry counts as a zero balance and
+ * silently lets the treasury hold more un-hedged USDC than configured. Validation
+ * therefore belongs where an unusable entry can be turned into a closed gate
+ * rather than a smaller number: see `treasuryAddresses` in core/payments/usdc.ts.
+ *
+ * `isAddress` would also be the wrong test here: it defaults to `strict: true`,
+ * which rejects an all-uppercase address that `getAddress` accepts and that any
+ * block explorer will happily hand an operator.
+ */
+export const rawListEnv = (raw?: string): string[] =>
+  (raw ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value)
+
 export const config = {
   postgres: {
     url: env('DATABASE_URL'),
@@ -322,6 +353,74 @@ export const config = {
       process.env.USDC_TOKEN_ADDRESS,
     ),
   },
+  // The two gates that decide whether this deployment is selling storage for
+  // USDC right now — as opposed to `featureFlags.flags.payWithUsdc`, which
+  // decides WHO may pay in it. Availability and audience are different
+  // questions, and conflating them is how an admin exemption (which exists so
+  // the path can be driven in production) ends up walking through an incident
+  // control.
+  //
+  // Both gates live in the database, not here: one is flipped by an admin during
+  // an incident, and the other is written by a poller in a different process from
+  // the one that quotes. See core/payments/usdc.ts.
+  usdcPayments: {
+    // The manual gate's value ONLY UNTIL an admin first flips it. After that the
+    // stored row wins and this variable is inert — say so in .env.sample, or
+    // someone will change it in production and watch nothing happen.
+    //
+    // Defaults to off, deliberately: a deployment that has just learned how to
+    // quote USDC should not begin selling it because a variable was left unset.
+    enabledByDefault: optionalBoolEnvironmentVariable('USDC_PAYMENTS_ENABLED'),
+    // EXTRA addresses whose USDC balances are summed against the cap. The
+    // receiver is always counted whether it appears here or not — it is where
+    // payments land, so a list that replaced it would measure the cap over
+    // addresses the money never reaches.
+    //
+    // Configurable because a sweep is part of the manual conversion flow: moving
+    // USDC to an address outside this set reopens the gate, which is right only
+    // if sweeping implies the conversion is imminent. Add the destination here to
+    // keep swept-but-unconverted USDC counted against the cap.
+    treasuryAddresses: rawListEnv(process.env.USDC_TREASURY_ADDRESSES),
+    // The FX-exposure limit, in whole USDC. At or above this the gate closes
+    // itself; it is what makes manual conversion safe to run, and what means
+    // nobody has to watch a balance.
+    //
+    // Kept as a raw string and parsed to 6-decimal base units once, in the
+    // consumer, exactly as the oracle's USD bounds are: parsing the decimal
+    // string directly avoids Number.toString()'s exponential notation and lets
+    // the failure name the variable.
+    pauseThresholdUsdc: env('USDC_TREASURY_PAUSE_THRESHOLD', '2000'),
+    // Where the gate reopens. Defaults to the pause threshold (no hysteresis).
+    // Set it lower to stop a balance sitting exactly on the line from flapping
+    // the gate — and therefore the alerts — on every poll.
+    //
+    // `|| undefined` because "present" and "usable" have to be the same question
+    // here, and dotenv makes them different: `.env.sample` ships this key with an
+    // empty value, and `KEY=` parses to `''`, which is not undefined. Left as-is
+    // that empty string would reach the parser, fail it, and stop the gates job
+    // from starting at all — so copying the sample file, the documented way to
+    // configure a deployment, would leave USDC permanently closed with only an
+    // alert to say why. Trimmed for the same reason `addressEnv` is: these values
+    // arrive from mounted secrets as often as from a shell.
+    resumeThresholdUsdc: optionalTrimmedEnv(
+      process.env.USDC_TREASURY_RESUME_THRESHOLD,
+    ),
+    balanceCheckIntervalMs: positiveIntEnv(
+      'USDC_TREASURY_BALANCE_CHECK_INTERVAL_MS',
+      300_000,
+    ),
+    // How old the last successful reading may be before the balance counts as
+    // unknown — and unknown fails closed, because an Ethereum outage must not
+    // become a way to keep selling past the cap.
+    //
+    // Three poll intervals: a single failed poll (a rate limit, a restart) is
+    // absorbed, three in a row is a fault. A failed poll deliberately writes
+    // nothing, so this window is measured against the last SUCCESS.
+    balanceMaxStaleMs: positiveIntEnv(
+      'USDC_TREASURY_BALANCE_MAX_STALE_MS',
+      900_000,
+    ),
+  },
   priceOracle: {
     // AI3/USD price oracle: the volume-weighted average of the Uniswap WAI3/USDC
     // pool's most recent swaps, read from the pool's published subgraph through
@@ -516,6 +615,15 @@ export const config = {
       // yet, so a quote issued today is one the backend cannot settle.
       //
       // Admins are exempt whatever this says — see featureFlags/isActive.
+      //
+      // AUDIENCE ONLY. This flag answers "may this caller pay in USDC", and that
+      // is all it answers at `isFlagActive` and at `featureFlagMiddleware`.
+      // Whether the DEPLOYMENT is selling USDC is a separate question with its
+      // own gates (an admin kill switch, the treasury cap, the oracle) which
+      // exempt nobody — see core/payments/usdc.ts. The public /features endpoint
+      // reports the CONJUNCTION under this key, plus availability on its own
+      // under `usdcAvailable`, so a client cannot be shown a path the backend
+      // would refuse; every other reader gets audience only.
       payWithUsdc: {
         active: optionalBoolEnvironmentVariable('PAY_WITH_USDC_ACTIVE'),
       } as FeatureFlag,

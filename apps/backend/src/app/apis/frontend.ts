@@ -12,6 +12,7 @@ import { docsController } from '../controllers/docs.js'
 import { intentsController } from '../controllers/intents.js'
 import { creditsController } from '../controllers/credits.js'
 import { bannersController } from '../controllers/banners.js'
+import { paymentsController } from '../controllers/payments.js'
 import { touController } from '../controllers/tou.js'
 import { deletionController } from '../controllers/deletion.js'
 import { featuresController } from '../controllers/features.js'
@@ -95,6 +96,11 @@ const createServer = async () => {
   app.use('/intents', featureFlagMiddleware('buyCredits'), intentsController)
   app.use('/credits', featureFlagMiddleware('buyCredits'), creditsController)
   app.use('/banners', bannersController)
+  // Deliberately NOT behind featureFlagMiddleware('buyCredits'): these are the
+  // admin controls for the USDC path, and hiding them behind the flag that gates
+  // buying would make the kill switch unreachable exactly when purchases are
+  // switched off. Authorisation is per-route and admin-only.
+  app.use('/payments', paymentsController)
   app.use('/tou', touController)
   app.use('/deletion', deletionController)
   app.use('/features', featuresController)
