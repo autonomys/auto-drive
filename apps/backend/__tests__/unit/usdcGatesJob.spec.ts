@@ -591,6 +591,43 @@ describe('USDC gates job', () => {
 
   // ── the oracle gate ───────────────────────────────────────────────────────
 
+  it('refreshes the oracle even when the balance half throws', async () => {
+    // The two gates are independent facts, and a fault in one must not age the
+    // other's row out. Before they were isolated, a failed write here abandoned
+    // the rest of the poll: three in a row and the composite reported
+    // ORACLE_UNAVAILABLE over a fault that had nothing to do with the oracle.
+    mockBalances([1n * USDC])
+    watching([RECEIVER])
+    mockPreviousTreasury(null)
+    mockManualGate(true)
+    mockRate(true)
+    mockPreviousOracle(null)
+    setSpy.mockRejectedValue(new Error('pool timeout'))
+
+    await usdcGatesJob._runCheck()
+
+    expect(oracleWriteSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ healthy: true }),
+    )
+  })
+
+  it('still polls the balance when the oracle half throws', async () => {
+    mockBalances([1n * USDC])
+    watching([RECEIVER])
+    mockPreviousTreasury(null)
+    mockManualGate(true)
+    mockPreviousOracle(null)
+    jest
+      .spyOn(usdcGatesJob._internal, 'readRate')
+      .mockRejectedValue(new Error('subgraph down'))
+
+    await usdcGatesJob._runCheck()
+
+    expect(setSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ paused: false }),
+    )
+  })
+
   it('does not read the rate while the manual gate is closed', async () => {
     // MANUAL_OFF is reported first, so the rate would change no decision — and
     // every read is a billed subgraph query.

@@ -308,7 +308,7 @@ const refreshOracle = async (): Promise<void> => {
       ))
 }
 
-const runCheck = async (): Promise<void> => {
+const runBalanceCheck = async (): Promise<void> => {
   let addresses: string[]
   try {
     addresses = UsdcPaymentsUseCases.treasuryAddresses()
@@ -332,7 +332,6 @@ const runCheck = async (): Promise<void> => {
     return
   }
 
-  const manualGate = await UsdcPaymentsUseCases.getManualGate()
   const previous = (await usdcPaymentStateRepository.getReadings()).treasury
 
   // The previous gate is read even from a STALE row. The balance behind it may be
@@ -401,9 +400,42 @@ const runCheck = async (): Promise<void> => {
     describeBalance(balance, paused),
   )
   await publishMetrics(balance, paused, false, addresses.length)
+}
 
-  if (manualGate.enabled) {
+/**
+ * One poll: the balance gate, then the oracle gate.
+ *
+ * The two are isolated from each other because they are independent facts with
+ * independent failure modes, and until they were, they shared one: anything that
+ * threw in the balance half — a transient write to usdc_gate_readings is the
+ * realistic one — abandoned the rest of runCheck and the oracle row was never
+ * refreshed. Three of those in a row and the oracle reading ages past
+ * USDC_TREASURY_BALANCE_MAX_STALE_MS, so the composite reports
+ * ORACLE_UNAVAILABLE and the path closes over a fault that had nothing to do
+ * with the oracle, naming the wrong gate to whoever is looking.
+ *
+ * Each half logs its own failure and neither can take the other down. The gates
+ * still fail closed on their own terms: a half that threw wrote nothing, and its
+ * row ages out exactly as a failed read is supposed to.
+ */
+const runCheck = async (): Promise<void> => {
+  try {
+    await runBalanceCheck()
+  } catch (error) {
+    logger.error(error, 'The treasury balance gate failed to refresh')
+  }
+
+  try {
+    // The manual gate is read here rather than at the top because only this half
+    // needs it — see refreshOracle for why a closed switch skips the rate read.
+    // A failure reading it therefore costs the oracle refresh and nothing else.
+    const manualGate = await UsdcPaymentsUseCases.getManualGate()
+    if (!manualGate.enabled) {
+      return
+    }
     await refreshOracle()
+  } catch (error) {
+    logger.error(error, 'The price oracle gate failed to refresh')
   }
 }
 
