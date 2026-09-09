@@ -6,7 +6,7 @@ import {
   env,
   positiveIntEnv,
 } from './shared/utils/misc.js'
-import { getAddress } from 'viem'
+import { getAddress, isAddress } from 'viem'
 
 const DEFAULT_MEMORY_CACHE_MAX_SIZE = BigInt(1024 ** 3) // 1GB
 
@@ -16,6 +16,81 @@ const DEFAULT_CACHE_TTL = 0 // No TTL
 const ONE_MiB = 1024 ** 2
 const ONE_HUNDRED_MiB = ONE_MiB * 100
 const FIVE_GiB = 1024 ** 3 * 5
+
+/**
+ * An optional address variable, trimmed and validated.
+ *
+ * Trimmed because these values arrive from files far more often than from a
+ * shell: a Kubernetes secret mounted as a file, a Parameter Store value, a
+ * hand-edited .env — all of them routinely carry a trailing newline or space.
+ * Validated because "present" and "usable" have to be the same question here.
+ * The payment watcher normalises addresses through viem's getAddress, which
+ * THROWS on whitespace, on a truncated hex string, and on a missing 0x
+ * prefix — so a truthiness check would call such a value configured while the
+ * watcher refused to build on it, and the whole point of the
+ * configured/not-configured split is that quoting and watching agree.
+ *
+ * Returns undefined for anything unusable, which reads to every consumer as
+ * "not set". The variable is named in a log line at startup rather than
+ * swallowed silently — see invalidEnvironmentVariables below.
+ */
+const invalidEnvVars: string[] = []
+
+export const addressEnv = (
+  name: string,
+  raw?: string,
+): string | undefined => {
+  const trimmed = raw?.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  if (!isAddress(trimmed)) {
+    invalidEnvVars.push(name)
+    return undefined
+  }
+  return trimmed
+}
+
+/**
+ * An optional endpoint variable, trimmed and validated the same way.
+ *
+ * Needed for the same reason as addressEnv, and it was the gap between them:
+ * isUsdcConfigured decides whether createIntent will quote in USDC, and it
+ * tested this value for truthiness alone. So `changeme`, a host with no scheme,
+ * or a value that is nothing but whitespace read as configured — the API issued
+ * a binding USDC quote while the watcher built on the same string failed every
+ * request against it. That is precisely the outcome the configured /
+ * not-configured split exists to prevent: a quoted USDC intent nobody is
+ * watching for. The other two USDC keys were validated; this one was not.
+ *
+ * A trailing newline is deliberately NOT what this catches — WHATWG URL parsing
+ * strips leading and trailing whitespace and removes tabs and newlines outright,
+ * so a mounted secret ending in "\n" already reached the RPC fine. It is the
+ * values that are not URLs at all that a truthiness check let through.
+ *
+ * The protocol is checked and not merely the parse, because parsing is looser
+ * than it looks: `rpc.example.com:8545` — a host and port pasted without a
+ * scheme, the likeliest of these mistakes — parses happily, as a URL whose
+ * protocol is `rpc.example.com:`. viem's http transport POSTs, so http and https
+ * are the only two that can work.
+ */
+export const urlEnv = (name: string, raw?: string): string | undefined => {
+  const trimmed = raw?.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      invalidEnvVars.push(name)
+      return undefined
+    }
+  } catch {
+    invalidEnvVars.push(name)
+    return undefined
+  }
+  return trimmed
+}
 
 export const config = {
   postgres: {
@@ -193,8 +268,13 @@ export const config = {
     url: env('EVM_CHAIN_ENDPOINT'),
     contractAddress: getAddress(env('EVM_CHAIN_CONTRACT_ADDRESS')),
     chainId: Number(env('EVM_CHAIN_ID', '870')),
-    confirmations: Number(env('EVM_CHAIN_CONFIRMATIONS', '6')),
-    checkInterval: Number(env('EVM_CHAIN_CHECK_INTERVAL', '30000')),
+    // positiveIntEnv for the same reason as the Ethereum key below: '0' is a
+    // truthy string, so `Number(env(..., '6'))` would hand viem 0 and confirm a
+    // payment from a receipt with no confirmations. Pre-existing; fixed here
+    // because the two chains now share one watcher and should not differ in how
+    // safely they read the same setting.
+    confirmations: positiveIntEnv('EVM_CHAIN_CONFIRMATIONS', 6),
+    checkInterval: positiveIntEnv('EVM_CHAIN_CHECK_INTERVAL', 30000),
     priceMultiplier: Number(env('CREDITS_PRICE_MULTIPLIER', '5.00')),
   },
   // Ethereum mainnet. Distinct from `paymentManager.url`, which points at Auto
@@ -202,8 +282,45 @@ export const config = {
   // Read directly (not via `env`) so it stays optional: a deployment that does
   // not quote in USDC boots without it, and the consumer fails fast naming this
   // variable the first time it is needed.
+  //
+  // The three USDC keys are all-or-nothing rather than individually defaulted,
+  // and the watcher enforces that at startup (see paymentManager/chains.ts). A
+  // default receiver address would be worse than a missing one: it would point
+  // a live payment watcher at a contract nobody deployed, and the failure would
+  // read as "no payments arriving" rather than "not configured".
   ethereum: {
-    rpcUrl: process.env.ETH_CHAIN_ENDPOINT,
+    rpcUrl: urlEnv('ETH_CHAIN_ENDPOINT', process.env.ETH_CHAIN_ENDPOINT),
+    // Blocks that must build on the payment before it is credited. Ethereum is
+    // post-Merge, so 2-3 blocks is already economically final and 6 is
+    // conservative — but it is the same default as Auto EVM, which keeps one
+    // fewer number in the operator's head. ~12s a block, so 6 is ~72s of extra
+    // latency on a purchase, which the polling loop makes invisible anyway.
+    //
+    // positiveIntEnv, not Number(env(...)): `env` only falls back on a FALSY
+    // string, so '0' passes through as 0 — and viem resolves
+    // waitForTransactionReceipt immediately whenever confirmations <= 1, so a
+    // typo'd 0 (or a non-numeric value, via NaN, which fails every `> 1` guard
+    // the same way) would credit a payment from a receipt with no confirmations
+    // at all. On Ethereum that is credits granted for a transfer a one-block
+    // reorg can still remove.
+    confirmations: positiveIntEnv('ETH_CHAIN_CONFIRMATIONS', 6),
+    // AutoDriveUSDCReceiver. Payments are watched here, and this is the address
+    // the frontend sends USDC to. Setting it to a VALID address is what makes
+    // this deployment accept USDC — see isUsdcConfigured below.
+    usdcReceiverAddress: addressEnv(
+      'ETH_USDC_RECEIVER_ADDRESS',
+      process.env.ETH_USDC_RECEIVER_ADDRESS,
+    ),
+    // The ERC20 the receiver was deployed against. Checked against the `token`
+    // field of every payment event before it is credited: the receiver only
+    // ever transfers its own configured token, so a mismatch means the address
+    // below and the deployed contract disagree — and crediting on the strength
+    // of a 6-decimal assumption that no longer holds would grant storage for a
+    // token nobody was quoted in.
+    usdcTokenAddress: addressEnv(
+      'USDC_TOKEN_ADDRESS',
+      process.env.USDC_TOKEN_ADDRESS,
+    ),
   },
   priceOracle: {
     // AI3/USD price oracle: the volume-weighted average of the Uniswap WAI3/USDC
@@ -414,3 +531,46 @@ export const config = {
       .map((domain) => domain.toLowerCase()),
   },
 }
+
+/**
+ * Whether USDC payments can be handled end to end: quoted, and then observed
+ * when they arrive.
+ *
+ * All three Ethereum keys, not just the receiver, and that distinction is the
+ * whole point of this predicate. The payment watcher refuses to build on a
+ * partial configuration — but only the process that owns payments ever asks it
+ * to, since `start:fe:api` never calls paymentManager.start(). So in the split
+ * topology a half-configured deployment leaves the API serving happily while the
+ * worker crash-loops, and the API would quote a binding USDC amount that nothing
+ * is watching for. That is the exact failure the quote-side guard exists to
+ * prevent, so the guard has to test the same thing the watcher is built from.
+ *
+ * Defined here, next to the keys, so createIntent and getUsdcPaymentWatcher
+ * cannot drift apart on what "configured" means. They still respond differently,
+ * and should: the API refuses to quote — killing it over a payments variable
+ * would take uploads and downloads with it — while the payment worker dies
+ * loudly naming what is missing.
+ *
+ * A function rather than a field so it reads the live values: tests set these
+ * keys after this module has loaded, and a snapshot would answer for the
+ * environment instead of for the configuration.
+ */
+/**
+ * Names any address or endpoint variable that was set to something unusable.
+ *
+ * Discarding an invalid value makes the deployment behave as though USDC were
+ * switched off, which is the safe outcome but a confusing one to debug — "I set
+ * the receiver and it still refuses to quote". Called from the payment manager's
+ * start(), so the process that owns payments says so at boot, and escalated
+ * there rather than only logged: this file's own argument for alerting on a
+ * token mismatch is that logger.error has no route to anyone, and an operator
+ * who meant to turn USDC on and did not is in the same position.
+ */
+export const invalidEnvironmentVariables = () => [...invalidEnvVars]
+
+export const isUsdcConfigured = () =>
+  Boolean(
+    config.ethereum.rpcUrl &&
+      config.ethereum.usdcReceiverAddress &&
+      config.ethereum.usdcTokenAddress,
+  )

@@ -25,7 +25,7 @@ import {
   UsdcPaymentsDisabledError,
 } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
-import { config } from '../../config.js'
+import { config, isUsdcConfigured } from '../../config.js'
 import { randomBytes } from 'crypto'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from './accounts.js'
@@ -340,6 +340,50 @@ const createIntent = async (
   // Admins are exempt by construction (see featureFlags/isActive), which is what
   // makes the flag safe to leave off — the path stays exercisable in production
   // while it is shut to everyone else.
+  // Before the flag, and not subject to the admin exemption: a deployment with
+  // no USDC receiver configured has nothing watching Ethereum, so a quote issued
+  // here is a binding amount whose payment would be observed by nobody — no
+  // confirmation, no credits, and no mispayment row either, because nothing is
+  // reading the chain to file one. The intent would simply expire while the
+  // user's USDC sat in a contract this deployment never looks at.
+  //
+  // Reachable exactly through the admin exemption below, which exists so the
+  // path can be driven end to end in production. That is also the case where it
+  // would be reached first, by whoever is verifying the path, with real money.
+  //
+  // Requires the COMPLETE Ethereum configuration, which is what
+  // isUsdcConfigured means — not merely a receiver address. The
+  // watcher refuses to build on a partial configuration, but only the payment
+  // worker ever asks it to, so a half-configured deployment leaves this process
+  // quoting while that one crash-loops. Checking the same derived fact the
+  // watcher is built from is what stops the two from disagreeing.
+  //
+  // Read from config rather than imported from paymentManager/chains.ts because
+  // that module imports this one — the watcher calls markIntentAsConfirmed — and
+  // a cycle through a module that builds a viem client at load is not worth one
+  // boolean.
+  if (paymentMethod === PaymentMethod.USDC_ETH && !isUsdcConfigured()) {
+    logger.error(
+      'Refusing USDC intent creation — the Ethereum configuration is ' +
+        'incomplete, so no payment for it could be observed',
+      {
+        userPublicId: executor.publicId,
+        // Which half it is matters to whoever reads this: nothing set is a
+        // deployment that does not sell USDC, and a receiver without the rest is
+        // one that means to and cannot.
+        hasReceiver: Boolean(config.ethereum.usdcReceiverAddress),
+        hasEndpoint: Boolean(config.ethereum.rpcUrl),
+        hasTokenAddress: Boolean(config.ethereum.usdcTokenAddress),
+      },
+    )
+    return err(
+      new UsdcPaymentsDisabledError(
+        'Paying in USDC is not available on this deployment. Pay in AI3 ' +
+          'instead, or omit paymentMethod to default to it.',
+      ),
+    )
+  }
+
   if (
     paymentMethod === PaymentMethod.USDC_ETH &&
     !FeatureFlagsUseCases.isFlagActive('payWithUsdc', executor)
@@ -627,6 +671,12 @@ const triggerWatchIntent = async ({
     retriesLeft: MAX_RETRIES,
     params: {
       txHash,
+      // Which chain to look this hash up on. The task carries it because the
+      // worker that handles it cannot derive it: a hash is the same 32 bytes on
+      // either chain, and by the time the task runs the intent may have been
+      // expired by the cleanup sweep. Sent even for AI3 so the routing decision
+      // is always a value rather than an absence.
+      paymentMethod: intent.paymentMethod ?? PaymentMethod.AI3_NATIVE,
     },
   })
 
@@ -708,7 +758,11 @@ const amountInIntentAsset = (
  *     nothing when someone pays the same amount twice.
  *   • A different transaction. Proof when the intent carries a hash; rows
  *     settled before confirmations recorded one have none, and comparing against
- *     NULL would call every replay of those a second payment.
+ *     NULL would call every replay of those a second payment. Compared without
+ *     regard to case: a hash carries no checksum encoding, so the same 32 bytes
+ *     can be spelled two ways, and a row whose hash was stored before the watch
+ *     endpoint normalised its input would otherwise read as a different
+ *     transaction on every replay.
  *
  * Absent evidence is never treated as evidence, so the answer errs toward
  * silence. The one case that costs: two payments of the same value inside a
@@ -735,7 +789,7 @@ const isRedeliveryOfSettlingPayment = (
   const differentTransaction =
     incoming.txHash !== undefined &&
     settled.txHash !== undefined &&
-    settled.txHash !== incoming.txHash
+    settled.txHash.toLowerCase() !== incoming.txHash.toLowerCase()
 
   return !(differentAsset || differentAmount || differentTransaction)
 }
@@ -1477,12 +1531,19 @@ const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
 // Returns PENDING intents that already have a tx_hash — used by the payment
 // manager startup sweep to re-watch transactions that were submitted but never
 // confirmed due to a service restart or RPC outage.
-const getPendingWithTxHash = async (): Promise<Intent[]> => {
-  return intentsRepository.getPendingWithTxHash()
+const getPendingWithTxHash = async (
+  paymentMethod: PaymentMethod,
+): Promise<Intent[]> => {
+  return intentsRepository.getPendingWithTxHash(paymentMethod)
 }
 
 export const IntentsUseCases = {
   createIntent,
+  // Exported for the payment watcher, which can refuse a payment before this
+  // module ever sees it: an event naming a token the receiver was not
+  // configured for has no amount markIntentAsConfirmed could accept, but the
+  // transfer still happened and still needs to be findable.
+  recordRefusedPayment: recordMispayment,
   parseRequestedBytes,
   parsePaymentMethod,
   getIntent,

@@ -5,8 +5,14 @@ type DBIntent = {
   id: string
   user_public_id: string
   status: IntentStatus
-  tx_hash: string
-  payment_amount: string
+  // Both NULLABLE in the DB (see 20250915125036-payments-up.sql), and typed that
+  // way so the compiler keeps the coalescing below load-bearing. Declared as
+  // plain `string` they were a lie the mapper could not see through: that is how
+  // `txHash: row.tx_hash` type-checked while shipping `null`, which failed the
+  // `intent.txHash !== undefined` replay exemption and filed every replay of a
+  // hashless settled intent as a second payment.
+  tx_hash: string | null
+  payment_amount: string | null
   shannons_per_byte: string
   expires_at: Date | null
   from_address: string | null
@@ -26,7 +32,13 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
     id: row.id,
     userPublicId: row.user_public_id,
     status: row.status,
-    txHash: row.tx_hash,
+    // `?? undefined`, like fromAddress and expiresAt below, and not merely for
+    // consistency: the idempotency guard in markIntentAsConfirmed exempts rows
+    // with no recorded hash by testing `intent.txHash !== undefined`, and a NULL
+    // column arriving as `null` fails that test — so every replay of a row
+    // settled before confirmations recorded a hash was filed as a second
+    // payment. The comment there described the exemption; this makes it real.
+    txHash: row.tx_hash ?? undefined,
     paymentAmount: row.payment_amount
       ? BigInt(row.payment_amount).valueOf()
       : undefined,
@@ -260,19 +272,32 @@ const expireIntentIfPending = async (intentId: string): Promise<boolean> => {
   return (result.rowCount ?? 0) > 0
 }
 
-// Returns PENDING intents that already have an on-chain tx_hash.
+// Returns PENDING intents that already have an on-chain tx_hash, for one
+// payment method.
 // These are intents where the user submitted a transaction but the payment
 // manager did not process the confirmation event — typically because the
 // service was restarted or the EVM RPC was temporarily unavailable.
 // Used by the startup recovery sweep so that no paid transaction is silently
 // abandoned across a service restart.
-const getPendingWithTxHash = async (): Promise<Intent[]> => {
+//
+// The payment method is required rather than optional because each chain's
+// watcher can only resolve its own hashes: handed an Ethereum hash, the Auto EVM
+// client does not fail, it waits out its receipt timeout. An unfiltered version
+// of this query would therefore be correct for neither caller, so there is no
+// safe default to offer.
+//
+// payment_method is NOT NULL with an 'ai3_native' default, so every row written
+// before the column existed is returned by the AI3 sweep.
+const getPendingWithTxHash = async (
+  paymentMethod: PaymentMethod,
+): Promise<Intent[]> => {
   const db = await getDatabase()
   const result = await db.query<DBIntent>(
     `SELECT * FROM intents
      WHERE status = $1
-       AND tx_hash IS NOT NULL`,
-    [IntentStatus.PENDING],
+       AND tx_hash IS NOT NULL
+       AND payment_method = $2`,
+    [IntentStatus.PENDING, paymentMethod],
   )
   return mapRows(result.rows)
 }

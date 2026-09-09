@@ -79,16 +79,27 @@ describe('IntentsUseCases', () => {
   // flag is opened here and the gate itself is tested separately.
   const usdcFlag = config.featureFlags.flags.payWithUsdc
   const usdcFlagDefault = usdcFlag.active
+  // A deployment that accepts USDC, which now takes a complete Ethereum
+  // configuration as well as an open flag: createIntent refuses to quote an
+  // asset whose payments nothing would be watching for. .env.test sets no ETH_*
+  // keys, so every USDC case has to say so.
+  const ethereumDefaults = { ...config.ethereum }
 
   beforeEach(() => {
     jest.clearAllMocks()
     jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({ price: 1, pricePerGB: 1073741824 })
     usdcFlag.active = true
+    config.ethereum.rpcUrl = 'http://example.org'
+    config.ethereum.usdcReceiverAddress =
+      '0x1111111111111111111111111111111111111111'
+    config.ethereum.usdcTokenAddress =
+      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
   })
 
   afterEach(() => {
     jest.restoreAllMocks()
     usdcFlag.active = usdcFlagDefault
+    Object.assign(config.ethereum, ethereumDefaults)
   })
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -338,6 +349,65 @@ describe('IntentsUseCases', () => {
     expect(accountSpy).not.toHaveBeenCalled()
     expect(priceSpy).not.toHaveBeenCalled()
     expect(rateSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent refuses USDC when Ethereum is not configured, admin or not', async () => {
+    // The gap this closes: the flag's admin exemption exists so the path can be
+    // driven end to end in production, which means an admin is the FIRST person
+    // to reach it — with real money. On a deployment with no Ethereum receiver
+    // there is no watcher, so the quote would be a binding amount whose payment
+    // nothing observes: no confirmation, no credits, and no mispayment row
+    // either, because nothing is reading that chain to file one.
+    usdcFlag.active = false
+    config.ethereum.rpcUrl = undefined
+    config.ethereum.usdcReceiverAddress = undefined
+    config.ethereum.usdcTokenAddress = undefined
+
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+    const oracleSpy = jest.spyOn(priceOracle, 'getPrice')
+
+    const admin = {
+      ...orgUser,
+      role: UserRole.Admin,
+    } as unknown as UserWithOrganization
+
+    const res = await IntentsUseCases.createIntent(admin, {
+      paymentMethod: PaymentMethod.USDC_ETH,
+      requestedBytes: 1024n,
+    })
+
+    expect(res.isErr()).toBe(true)
+    if (res.isErr()) {
+      expect(res.error).toBeInstanceOf(UsdcPaymentsDisabledError)
+    }
+    // Refused before anything is spent or written: no rate read, no row.
+    expect(oracleSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('createIntent refuses USDC on a half-configured deployment', async () => {
+    // The receiver alone is not enough, and this is the case that reaches
+    // production: the watcher throws on a partial configuration, but only the
+    // payment worker ever builds it. `start:fe:api` does not, so the API would
+    // keep serving — and quoting — while the worker crash-loops on the missing
+    // variable. A binding quote with nobody watching, which is what the guard
+    // exists to prevent.
+    config.ethereum.usdcTokenAddress = undefined
+
+    const createSpy = jest.spyOn(intentsRepository, 'createIntent')
+    const oracleSpy = jest.spyOn(priceOracle, 'getPrice')
+
+    const res = await IntentsUseCases.createIntent(orgUser, {
+      paymentMethod: PaymentMethod.USDC_ETH,
+      requestedBytes: 1024n,
+    })
+
+    expect(res.isErr()).toBe(true)
+    if (res.isErr()) {
+      expect(res.error).toBeInstanceOf(UsdcPaymentsDisabledError)
+    }
+    expect(oracleSpy).not.toHaveBeenCalled()
     expect(createSpy).not.toHaveBeenCalled()
   })
 
@@ -1319,6 +1389,39 @@ describe('IntentsUseCases', () => {
     expect(recordSpy).not.toHaveBeenCalled()
   })
 
+  it('markIntentAsConfirmed reads a replay spelled in another case as the same transaction', async () => {
+    // A transaction hash has no checksum encoding, so the same 32 bytes can be
+    // written two ways. A row whose hash was stored mixed-case — anything written
+    // before the controller normalised its input — would otherwise have every
+    // recovery sweep of it read as a DIFFERENT transaction, filing a second
+    // payment that never arrived into the queue an admin reconciles money from.
+    const intent: Intent = {
+      id: '0xusdc-replay-case',
+      userPublicId: user.publicId,
+      status: IntentStatus.COMPLETED,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      tokenAmount: 1_050_000n,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+      txHash: '0xSETTLED-HERE'.toUpperCase(),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const recordSpy = jest.spyOn(intentMispaymentsRepository, 'record')
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+      txHash: '0xSETTLED-HERE'.toLowerCase(),
+      logIndex: 0,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
   it('markIntentAsConfirmed files a second transfer paying the same quote twice', async () => {
     // The likely double-pay: the user does not see the first confirm and pays the
     // same quote again. Same amount, different transaction — the guard used to
@@ -1865,7 +1968,13 @@ describe('IntentsUseCases', () => {
     expect(res.isOk()).toBe(true)
     expect(setSpy).toHaveBeenCalledWith(intent.id, '0xhash')
     expect(publishSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'watch-intent-tx' }),
+      expect.objectContaining({
+        id: 'watch-intent-tx',
+        // The chain travels with the task. A hash is the same 32 bytes on
+        // either chain, so the worker that picks this up cannot derive it — and
+        // by then the intent may have been expired by the cleanup sweep.
+        params: { txHash: '0xhash', paymentMethod: PaymentMethod.AI3_NATIVE },
+      }),
     )
   })
 
@@ -1909,6 +2018,45 @@ describe('IntentsUseCases', () => {
     // the only path by which that payment is ever seen.
     expect(publishSpy).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'watch-intent-tx' }),
+    )
+  })
+
+  it('triggerWatchIntent tells the worker to watch Ethereum for a USDC intent', async () => {
+    const intent: Intent = {
+      id: '0x2-usdc',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      paymentMethod: PaymentMethod.USDC_ETH,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    // The row is claimed before anything is queued, so the task only exists for
+    // an intent that was still PENDING.
+    jest.spyOn(intentsRepository, 'setTxHashIfPending').mockResolvedValue(true)
+    const publishSpy = jest
+      .spyOn(EventRouter, 'publish')
+      .mockImplementation(() => Promise.resolve())
+
+    const res = await IntentsUseCases.triggerWatchIntent({
+      executor: user,
+      txHash: '0xethhash',
+      intentId: intent.id,
+    })
+
+    expect(res.isOk()).toBe(true)
+    // Routed to the Ethereum watcher. Sent to the Auto EVM one it would resolve
+    // to nothing at all: an unknown hash is not an error there, it is a receipt
+    // that never arrives, so the user's payment would sit unobserved until the
+    // next restart swept it up.
+    expect(publishSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'watch-intent-tx',
+        params: {
+          txHash: '0xethhash',
+          paymentMethod: PaymentMethod.USDC_ETH,
+        },
+      }),
     )
   })
 

@@ -7,19 +7,58 @@ import {
   beforeEach,
   afterEach,
 } from '@jest/globals'
-import { paymentManager } from '../../src/infrastructure/services/paymentManager/index.js'
+import {
+  _resetUsdcPaymentWatcher,
+  ai3Chain,
+  ai3PaymentWatcher,
+  confirmedIntentsPoller,
+  createPaymentWatcher,
+  createUsdcChain,
+  getUsdcPaymentWatcher,
+  paymentManager,
+} from '../../src/infrastructure/services/paymentManager/index.js'
+import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
+import { IntentMispaymentReason, PaymentMethod } from '@auto-drive/models'
 import { IntentsUseCases } from '../../src/core/users/intents.js'
 import { ok, err } from 'neverthrow'
-import { config } from '../../src/config.js'
+import {
+  addressEnv,
+  config,
+  invalidEnvironmentVariables,
+  urlEnv,
+} from '../../src/config.js'
+import { getAddress } from 'viem'
 import { ObjectNotFoundError } from '../../src/errors/index.js'
+
+// The real AI3 chain definition with a recognisable contract address, so the
+// address-filtering tests read against a fixed value instead of mutating global
+// config. Everything else — the ABI, the event name, the receipt.from mapping —
+// is the definition the deployment actually runs.
+const TEST_CONTRACT_ADDRESS = '0xContractAddress'
+const watcher = createPaymentWatcher({
+  ...ai3Chain,
+  contractAddress: TEST_CONTRACT_ADDRESS,
+})
 
 describe('PaymentManager', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     jest.useFakeTimers()
+    // Every start() kicks off the orphan sweep, which reads PENDING intents
+    // straight from pg. The container these tests run against has no schema, so
+    // the real call raises `relation "intents" does not exist` — swallowed by
+    // safeCallback, and printed after the suite has already reported green.
+    // Harmless, but a unit test should not be reaching the database at all, and
+    // a per-block mock would leave whichever block anyone adds next doing it.
+    // The startup-recovery cases spy over this with rows of their own.
+    jest.spyOn(IntentsUseCases, 'getPendingWithTxHash').mockResolvedValue([])
   })
 
   afterEach(() => {
+    // Stop what the start() tests started. Without this the confirmed-intent
+    // poller's own double-start guard would make every start() test after the
+    // first one a no-op.
+    paymentManager.stop()
     jest.runOnlyPendingTimers()
     jest.useRealTimers()
     jest.restoreAllMocks()
@@ -27,15 +66,15 @@ describe('PaymentManager', () => {
 
   describe('watchTransaction', () => {
     it('should reject invalid tx hash without 0x prefix', async () => {
-      await expect(
-        paymentManager.watchTransaction('invalidhash'),
-      ).rejects.toThrow('Invalid tx hash')
+      await expect(watcher.watchTransaction('invalidhash')).rejects.toThrow(
+        'Invalid tx hash',
+      )
     })
 
     it('should call viemClient.waitForTransactionReceipt with correct params', async () => {
       const txHash = '0xabc123'
       const waitForReceiptSpy = jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [],
         } as any)
@@ -44,11 +83,14 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       expect(waitForReceiptSpy).toHaveBeenCalledWith({
         hash: txHash,
         confirmations: 6,
+        // Bounded per chain: viem's own default is 180s, which on Ethereum is
+        // roughly the confirmation wait alone.
+        timeout: ai3Chain.receiptTimeoutMs,
       })
     })
 
@@ -58,10 +100,8 @@ describe('PaymentManager', () => {
       const paymentAmount = 100n
       const fromAddress = '0xSenderWallet'
 
-      config.paymentManager.contractAddress = '0xContractAddress'
-
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           from: fromAddress,
           logs: [
@@ -79,7 +119,7 @@ describe('PaymentManager', () => {
           ],
         } as any)
 
-      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+      jest.spyOn(watcher, '_parseEventLogs').mockReturnValue([
         {
           address: '0xContractAddress',
           args: { intentId, paymentAmount },
@@ -92,7 +132,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       // The function should process the logs and attempt to mark intents,
       // passing fromAddress captured from receipt.from and the tx hash, which is
@@ -117,16 +157,14 @@ describe('PaymentManager', () => {
       const txHash = '0xtwopayments'
       const intentId = '0xintent-double'
 
-      config.paymentManager.contractAddress = '0xContractAddress'
-
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           from: '0xSenderWallet',
           logs: [],
         } as any)
 
-      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+      jest.spyOn(watcher, '_parseEventLogs').mockReturnValue([
         {
           address: '0xContractAddress',
           args: { intentId, paymentAmount: 100n },
@@ -145,7 +183,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       expect(markIntentSpy).toHaveBeenCalledTimes(2)
       expect(markIntentSpy).toHaveBeenNthCalledWith(1, {
@@ -164,11 +202,66 @@ describe('PaymentManager', () => {
       })
     })
 
+    it('hands both payments in one transaction to the same PENDING row', async () => {
+      // markIntentAsConfirmed separates two payments by which call wins its
+      // conditional PENDING -> CONFIRMED update, so both have to reach it while
+      // the row is still PENDING. Awaiting the first before reading the second
+      // would send the second into the idempotency guard instead, where a
+      // matching hash, amount and asset read as re-delivery — and a real second
+      // transfer would be absorbed with nothing filed.
+      const txHash = '0xconcurrent'
+      const intentId = '0xintent-concurrent'
+
+      jest
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue({ from: '0xSenderWallet', logs: [] } as any)
+
+      jest.spyOn(watcher, '_parseEventLogs').mockReturnValue([
+        {
+          address: TEST_CONTRACT_ADDRESS,
+          args: { intentId, paymentAmount: 100n },
+          eventName: 'IntentPaymentReceived',
+          logIndex: 1,
+        },
+        {
+          address: TEST_CONTRACT_ADDRESS,
+          args: { intentId, paymentAmount: 100n },
+          eventName: 'IntentPaymentReceived',
+          logIndex: 2,
+        },
+      ] as any)
+
+      let releaseFirst: (() => void) | undefined
+      const firstLanded = new Promise<void>((resolve) => {
+        releaseFirst = resolve
+      })
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockImplementationOnce(async () => {
+          await firstLanded
+          return ok({} as any)
+        })
+        .mockImplementation(async () => ok({} as any))
+
+      const settled = watcher.watchTransaction(txHash)
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // Both in flight before either has been written.
+      expect(markIntentSpy).toHaveBeenCalledTimes(2)
+
+      releaseFirst?.()
+      await settled
+
+      expect(markIntentSpy.mock.calls[0][0].logIndex).toBe(1)
+      expect(markIntentSpy.mock.calls[1][0].logIndex).toBe(2)
+    })
+
     it('should filter logs by contract address', async () => {
       const txHash = '0xabc789'
 
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -189,7 +282,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       // Should not mark intent because address doesn't match
       expect(markIntentSpy).not.toHaveBeenCalled()
@@ -199,7 +292,7 @@ describe('PaymentManager', () => {
       const txHash = '0xerror'
 
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [],
         } as any)
@@ -209,9 +302,7 @@ describe('PaymentManager', () => {
         .mockResolvedValue(err(new ObjectNotFoundError('Intent error')))
 
       // Should not throw, error should be logged
-      await expect(
-        paymentManager.watchTransaction(txHash),
-      ).resolves.not.toThrow()
+      await expect(watcher.watchTransaction(txHash)).resolves.not.toThrow()
     })
 
     it('should handle multiple events with mixed success and error', async () => {
@@ -219,10 +310,8 @@ describe('PaymentManager', () => {
       const intentId1 = '0xintent1'
       const intentId2 = '0xintent2'
 
-      config.paymentManager.contractAddress = '0xContractAddress'
-
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -250,7 +339,7 @@ describe('PaymentManager', () => {
           ],
         } as any)
 
-      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+      jest.spyOn(watcher, '_parseEventLogs').mockReturnValue([
         {
           address: '0xContractAddress',
           args: { intentId: intentId1, paymentAmount: 100n },
@@ -270,7 +359,7 @@ describe('PaymentManager', () => {
           err(new ObjectNotFoundError('Second intent error')),
         )
 
-      await paymentManager.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
 
       expect(markIntentSpy).toHaveBeenCalledTimes(2)
     })
@@ -278,10 +367,13 @@ describe('PaymentManager', () => {
     it('should handle case insensitive contract address comparison', async () => {
       const txHash = '0xcasetest'
 
-      config.paymentManager.contractAddress = '0xCONTRACTADDRESS'
+      const upperCaseWatcher = createPaymentWatcher({
+        ...ai3Chain,
+        contractAddress: '0xCONTRACTADDRESS',
+      })
 
       jest
-        .spyOn(paymentManager._viemClient, 'waitForTransactionReceipt')
+        .spyOn(upperCaseWatcher._viemClient, 'waitForTransactionReceipt')
         .mockResolvedValue({
           logs: [
             {
@@ -298,7 +390,7 @@ describe('PaymentManager', () => {
           ],
         } as any)
 
-      jest.spyOn(paymentManager, '_parseEventLogs').mockReturnValue([
+      jest.spyOn(upperCaseWatcher, '_parseEventLogs').mockReturnValue([
         {
           address: '0xcontractaddress',
           args: { intentId: '0xtest', paymentAmount: 100n },
@@ -310,7 +402,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
         .mockResolvedValue(ok({} as any))
 
-      await paymentManager.watchTransaction(txHash)
+      await upperCaseWatcher.watchTransaction(txHash)
 
       // Should match because comparison is case-insensitive
       expect(markIntentSpy).toHaveBeenCalled()
@@ -331,10 +423,10 @@ describe('PaymentManager', () => {
       ] as any[]
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       // Should call watchTransaction for each log's transaction hash
       expect(watchTransactionSpy).toHaveBeenCalledTimes(2)
@@ -351,10 +443,10 @@ describe('PaymentManager', () => {
       ] as any[]
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       // Should not call watchTransaction for null transactionHash
       expect(watchTransactionSpy).not.toHaveBeenCalled()
@@ -364,10 +456,10 @@ describe('PaymentManager', () => {
       const logs: any[] = []
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       expect(watchTransactionSpy).not.toHaveBeenCalled()
     })
@@ -389,10 +481,10 @@ describe('PaymentManager', () => {
       ] as any[]
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       // Should only call watchTransaction for non-null hashes
       expect(watchTransactionSpy).toHaveBeenCalledTimes(2)
@@ -409,11 +501,11 @@ describe('PaymentManager', () => {
       ] as any[]
 
       const watchTransactionSpy = jest
-        .spyOn(paymentManager, 'watchTransaction')
+        .spyOn(watcher, 'watchTransaction')
         .mockRejectedValue(new Error('Transaction watch failed'))
 
       // safeCallback catches errors, so this should not throw
-      paymentManager._onLogs(logs)
+      watcher._onLogs(logs)
 
       // Flush microtasks instead of waiting on timers (fake timers active)
       await Promise.resolve()
@@ -429,7 +521,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'getConfirmedIntents')
         .mockResolvedValue([])
 
-      await paymentManager._checkConfirmedIntents()
+      await confirmedIntentsPoller._checkConfirmedIntents()
 
       expect(getConfirmedSpy).toHaveBeenCalled()
     })
@@ -456,7 +548,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'onConfirmedIntent')
         .mockResolvedValue(ok(undefined))
 
-      await paymentManager._checkConfirmedIntents()
+      await confirmedIntentsPoller._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledTimes(2)
       expect(onConfirmedSpy).toHaveBeenCalledWith('0xintent1')
@@ -482,7 +574,7 @@ describe('PaymentManager', () => {
 
       // Should not throw, error should be logged
       await expect(
-        paymentManager._checkConfirmedIntents(),
+        confirmedIntentsPoller._checkConfirmedIntents(),
       ).resolves.not.toThrow()
 
       expect(onConfirmedSpy).toHaveBeenCalled()
@@ -505,7 +597,7 @@ describe('PaymentManager', () => {
         .spyOn(IntentsUseCases, 'onConfirmedIntent')
         .mockResolvedValue(ok(undefined))
 
-      await paymentManager._checkConfirmedIntents()
+      await confirmedIntentsPoller._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledWith('0xintentsuccess')
     })
@@ -539,7 +631,7 @@ describe('PaymentManager', () => {
         .mockResolvedValueOnce(err(new Error('Processing error')))
         .mockResolvedValueOnce(ok(undefined))
 
-      await paymentManager._checkConfirmedIntents()
+      await confirmedIntentsPoller._checkConfirmedIntents()
 
       expect(onConfirmedSpy).toHaveBeenCalledTimes(3)
     })
@@ -568,7 +660,7 @@ describe('PaymentManager', () => {
         .mockResolvedValueOnce(ok(undefined))
 
       await expect(
-        paymentManager._checkConfirmedIntents(),
+        confirmedIntentsPoller._checkConfirmedIntents(),
       ).resolves.not.toThrow()
 
       // All three attempted, and specifically the one AFTER the thrower.
@@ -582,8 +674,9 @@ describe('PaymentManager', () => {
       const setIntervalSpy = jest.spyOn(global, 'setInterval')
 
       jest
-        .spyOn(paymentManager._viemClient, 'watchContractEvent')
-        .mockImplementation(() => Promise.resolve() as any)
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
+        // Returns the unwatch function, like the real one: stop() calls it.
+        .mockImplementation(() => jest.fn())
 
       paymentManager.start()
 
@@ -597,16 +690,16 @@ describe('PaymentManager', () => {
 
     it('should pass onLogs callback to watchContractEvent', () => {
       const onLogsSpy = jest
-        .spyOn(paymentManager, '_onLogs')
+        .spyOn(ai3PaymentWatcher, '_onLogs')
         .mockImplementation(() => Promise.resolve() as any)
 
       const watchContractEventSpy = jest
-        .spyOn(paymentManager._viemClient, 'watchContractEvent')
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
         .mockImplementation((params: any) => {
           // Trigger the onLogs callback
           params.onLogs([])
 
-          return Promise.resolve() as any
+          return jest.fn()
         })
 
       jest.spyOn(global, 'setInterval').mockImplementation(() => 1 as any)
@@ -621,8 +714,9 @@ describe('PaymentManager', () => {
 
     it('should configure watchContractEvent with correct parameters', () => {
       const watchContractEventSpy = jest
-        .spyOn(paymentManager._viemClient, 'watchContractEvent')
-        .mockImplementation(() => Promise.resolve() as any)
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
+        // Returns the unwatch function, like the real one: stop() calls it.
+        .mockImplementation(() => jest.fn())
 
       jest.spyOn(global, 'setInterval').mockImplementation(() => 1 as any)
 
@@ -643,8 +737,9 @@ describe('PaymentManager', () => {
       const setIntervalSpy = jest.spyOn(global, 'setInterval')
 
       jest
-        .spyOn(paymentManager._viemClient, 'watchContractEvent')
-        .mockImplementation(() => Promise.resolve() as any)
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
+        // Returns the unwatch function, like the real one: stop() calls it.
+        .mockImplementation(() => jest.fn())
 
       const originalCheckInterval = config.paymentManager.checkInterval
       config.paymentManager.checkInterval = 15000
@@ -656,6 +751,785 @@ describe('PaymentManager', () => {
       // Restore original value
       config.paymentManager.checkInterval = originalCheckInterval
       setIntervalSpy.mockRestore()
+    })
+  })
+  // -------------------------------------------------------------------------
+  // Ethereum / USDC instance
+  // -------------------------------------------------------------------------
+
+  describe('usdc watcher', () => {
+    const RECEIVER = '0x1111111111111111111111111111111111111111'
+    const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+    const DAI = '0x6b175474e89094c44da98b954eedeac495271d0f'
+
+    const usdcWatcher = createPaymentWatcher(
+      createUsdcChain('http://example.org', RECEIVER, USDC),
+    )
+
+    const receiptWithLog = (txHash: string) =>
+      ({
+        // The relayer, deliberately different from the payer below: an ERC20
+        // transfer can be submitted by someone other than whoever paid.
+        from: '0xRelayerWallet',
+        logs: [
+          {
+            address: RECEIVER,
+            data: '0x',
+            topics: [],
+            blockHash: '0x',
+            blockNumber: 123n,
+            logIndex: 0,
+            transactionHash: txHash,
+            transactionIndex: 0,
+            removed: false,
+          },
+        ],
+      }) as any
+
+    it('credits the token amount and the event payer, not receipt.from', async () => {
+      const txHash = '0xusdcpayment'
+      const intentId = '0xintent-usdc'
+
+      jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue(receiptWithLog(txHash))
+
+      jest.spyOn(usdcWatcher, '_parseEventLogs').mockReturnValue([
+        {
+          address: RECEIVER,
+          args: {
+            intentId,
+            token: USDC,
+            amount: 5_250_000n,
+            payer: '0xPayerWallet',
+          },
+          eventName: 'IntentTokenPaymentReceived',
+          logIndex: 3,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      // tokenAmount, not paymentAmount: the columns are denominated in
+      // different assets, and the asset-mismatch guard in markIntentAsConfirmed
+      // is what tells them apart. fromAddress is the event's payer — refunding
+      // receipt.from would pay back a relayer who sent nothing.
+      expect(markIntentSpy).toHaveBeenCalledTimes(1)
+      expect(markIntentSpy).toHaveBeenCalledWith({
+        intentId,
+        tokenAmount: 5_250_000n,
+        fromAddress: '0xPayerWallet',
+        txHash,
+        logIndex: 3,
+      })
+      expect(markIntentSpy.mock.calls[0][0]).not.toHaveProperty('paymentAmount')
+    })
+
+    it('refuses a payment in a token this receiver was not configured for', async () => {
+      const txHash = '0xwrongtoken'
+
+      jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue(receiptWithLog(txHash))
+
+      jest.spyOn(usdcWatcher, '_parseEventLogs').mockReturnValue([
+        {
+          address: RECEIVER,
+          args: {
+            intentId: '0xintent-dai',
+            token: DAI,
+            amount: 5_000_000_000_000_000_000n,
+            payer: '0xPayerWallet',
+          },
+          eventName: 'IntentTokenPaymentReceived',
+          logIndex: 0,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+      const recordSpy = jest
+        .spyOn(IntentsUseCases, 'recordRefusedPayment')
+        .mockResolvedValue(undefined)
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      // Not credited: every number downstream assumes 6 decimals, so an
+      // 18-decimal token would read as a payment 10^12 times the one that
+      // arrived, against a quote denominated in dollars.
+      expect(markIntentSpy).not.toHaveBeenCalled()
+
+      // Filed all the same. The transfer happened, and refusing it settles
+      // nothing on chain — an admin needs a row, not a log line. No amount: it
+      // is denominated in a token we cannot name, and token_amount means USDC.
+      // No expectedPaymentMethod: that column means what the named intent was
+      // denominated in, and this path never looked the intent up. Filling it
+      // with the chain's own asset would state as fact something nobody checked.
+      expect(recordSpy).toHaveBeenCalledWith({
+        intentId: '0xintent-dai',
+        reason: IntentMispaymentReason.UNRECOGNISED_TOKEN,
+        fromAddress: '0xPayerWallet',
+        txHash,
+        logIndex: 0,
+      })
+    })
+
+    it('compares the token address case-insensitively', async () => {
+      const txHash = '0xchecksum'
+
+      jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue(receiptWithLog(txHash))
+
+      jest.spyOn(usdcWatcher, '_parseEventLogs').mockReturnValue([
+        {
+          address: RECEIVER,
+          args: {
+            intentId: '0xintent-checksum',
+            // Checksummed, where the configured value was all lowercase. An
+            // operator pasting either form out of a block explorer must not
+            // turn every payment into an ignored event.
+            token: getAddress(USDC),
+            amount: 1_000_000n,
+            payer: '0xPayerWallet',
+          },
+          eventName: 'IntentTokenPaymentReceived',
+          logIndex: 0,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      expect(markIntentSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores an event from a contract that is not the receiver', async () => {
+      const txHash = '0xotherContract'
+
+      jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue(receiptWithLog(txHash))
+
+      jest.spyOn(usdcWatcher, '_parseEventLogs').mockReturnValue([
+        {
+          address: '0x2222222222222222222222222222222222222222',
+          args: {
+            intentId: '0xintent-elsewhere',
+            token: USDC,
+            amount: 1_000_000n,
+            payer: '0xPayerWallet',
+          },
+          eventName: 'IntentTokenPaymentReceived',
+          logIndex: 0,
+        },
+      ] as any)
+
+      const markIntentSpy = jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      expect(markIntentSpy).not.toHaveBeenCalled()
+    })
+
+    it('waits for the Ethereum confirmation count', async () => {
+      const txHash = '0xconfirmations'
+
+      const waitSpy = jest
+        .spyOn(usdcWatcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue({ from: '0xRelayer', logs: [] } as any)
+
+      jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await usdcWatcher.watchTransaction(txHash)
+
+      expect(waitSpy).toHaveBeenCalledWith({
+        hash: txHash,
+        // The literal, not config.ethereum.confirmations: both chains default to
+        // 6, so reading the value back from the same field the implementation
+        // read would pass even if createUsdcChain took the Auto EVM key.
+        confirmations: 6,
+        // Ethereum gets a longer budget than Auto EVM: 6 confirmations is ~72s
+        // of it, so viem's 180s default would time out a transaction that took
+        // two minutes to be included and raise a payment-failed alert for a
+        // payment that was fine.
+        timeout: usdcWatcher.chain.receiptTimeoutMs,
+      })
+      expect(usdcWatcher.chain.receiptTimeoutMs).toBeGreaterThan(
+        ai3Chain.receiptTimeoutMs,
+      )
+    })
+  })
+
+  describe('startup recovery', () => {
+    it('sweeps only the AI3 chain rows', async () => {
+      const getPendingSpy = jest
+        .spyOn(IntentsUseCases, 'getPendingWithTxHash')
+        .mockResolvedValue([])
+
+      await watcher._recoverOrphanedTransactions()
+
+      // Scoped to this watcher's asset. Handed an Ethereum hash, the Auto EVM
+      // client does not fail — it waits out its receipt timeout — so an
+      // unfiltered sweep would spend its startup window on rows it cannot see.
+      expect(getPendingSpy).toHaveBeenCalledWith(PaymentMethod.AI3_NATIVE)
+    })
+
+    it('sweeps only the USDC chain rows', async () => {
+      const usdcWatcher = createPaymentWatcher(
+        createUsdcChain(
+          'http://example.org',
+          '0x1111111111111111111111111111111111111111',
+          '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+        ),
+      )
+
+      const getPendingSpy = jest
+        .spyOn(IntentsUseCases, 'getPendingWithTxHash')
+        .mockResolvedValue([])
+
+      await usdcWatcher._recoverOrphanedTransactions()
+
+      expect(getPendingSpy).toHaveBeenCalledWith(PaymentMethod.USDC_ETH)
+    })
+
+    it('re-watches every orphan it finds', async () => {
+      jest.spyOn(IntentsUseCases, 'getPendingWithTxHash').mockResolvedValue([
+        { id: 'intent-1', txHash: '0xorphan1' },
+        { id: 'intent-2', txHash: '0xorphan2' },
+        // No hash: nothing to look up, and not an error.
+        { id: 'intent-3' },
+      ] as any)
+
+      const watchSpy = jest
+        .spyOn(watcher, 'watchTransaction')
+        .mockResolvedValue(undefined)
+
+      await watcher._recoverOrphanedTransactions()
+
+      expect(watchSpy).toHaveBeenCalledTimes(2)
+      expect(watchSpy).toHaveBeenCalledWith('0xorphan1')
+      expect(watchSpy).toHaveBeenCalledWith('0xorphan2')
+    })
+  })
+
+  describe('watchTransaction routing', () => {
+    it('sends an AI3 hash to the Auto EVM watcher', async () => {
+      const ai3Spy = jest
+        .spyOn(ai3PaymentWatcher, 'watchTransaction')
+        .mockResolvedValue(undefined)
+
+      await paymentManager.watchTransaction('0xai3', PaymentMethod.AI3_NATIVE)
+
+      expect(ai3Spy).toHaveBeenCalledWith('0xai3')
+    })
+
+    it('defaults to the Auto EVM watcher when no method is given', async () => {
+      const ai3Spy = jest
+        .spyOn(ai3PaymentWatcher, 'watchTransaction')
+        .mockResolvedValue(undefined)
+
+      // A watch-intent-tx task queued before the second chain existed carries no
+      // payment method, and every one of them is AI3.
+      await paymentManager.watchTransaction('0xlegacy')
+
+      expect(ai3Spy).toHaveBeenCalledWith('0xlegacy')
+    })
+
+    it('refuses a USDC hash when Ethereum is not configured', async () => {
+      // .env.test sets none of the three Ethereum variables, so this deployment
+      // has no USDC watcher. Throwing keeps the task on its retry path and then
+      // in the error queue, which is where a payment nobody is watching for
+      // belongs — the alternative is watching an Ethereum hash on Auto EVM.
+      await expect(
+        paymentManager.watchTransaction('0xusdc', PaymentMethod.USDC_ETH),
+      ).rejects.toThrow('no Ethereum USDC configuration')
+    })
+  })
+
+  describe('confirmedIntentsPoller', () => {
+    it('does not start a second interval', () => {
+      const setIntervalSpy = jest.spyOn(global, 'setInterval')
+
+      confirmedIntentsPoller.start()
+      confirmedIntentsPoller.start()
+
+      // Two loops would both read the same freshly CONFIRMED row and both grant
+      // its credits: onConfirmedIntent checks for COMPLETED and then writes,
+      // with no lock between the two.
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1)
+
+      confirmedIntentsPoller.stop()
+      setIntervalSpy.mockRestore()
+    })
+  })
+
+  describe('payment configuration verification', () => {
+    const RECEIVER = '0x1111111111111111111111111111111111111111'
+    const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+    const DAI = '0x6b175474e89094c44da98b954eedeac495271d0f'
+    // Any non-empty code answers the "is a contract deployed here" question.
+    // _verifyConfiguration asks it BEFORE the token check, so a case that mocks
+    // only readContract is not testing what its name says: the unmocked getCode
+    // POSTs to the chain's real endpoint, fails, and falls through the tolerant
+    // catch — so the case covers "code read failed, then token disagrees" rather
+    // than "the contract is there and its token disagrees", and drags a live
+    // network round-trip into a unit test on the way.
+    const DEPLOYED_CODE = '0x60806040'
+
+    it('escalates a token address that disagrees with the deployed receiver', async () => {
+      const watcherUnderTest = createPaymentWatcher(
+        createUsdcChain('http://example.org', RECEIVER, USDC),
+      )
+
+      // The receiver's token is immutable, so this is not one bad payment — it
+      // is every payment to that contract being refused, and the only symptom
+      // otherwise is silence.
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockResolvedValue(DEPLOYED_CODE as any)
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'readContract')
+        .mockResolvedValue(DAI as any)
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      await watcherUnderTest._verifyConfiguration()
+
+      expect(slackSpy).toHaveBeenCalledTimes(1)
+      expect(slackSpy.mock.calls[0][0].details).toContain(getAddress(DAI))
+    })
+
+    it('stays quiet when the configuration matches', async () => {
+      const watcherUnderTest = createPaymentWatcher(
+        createUsdcChain('http://example.org', RECEIVER, USDC),
+      )
+
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockResolvedValue(DEPLOYED_CODE as any)
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'readContract')
+        .mockResolvedValue(getAddress(USDC) as any)
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      await watcherUnderTest._verifyConfiguration()
+
+      expect(slackSpy).not.toHaveBeenCalled()
+    })
+
+    it('does not escalate when the check itself cannot run', async () => {
+      const watcherUnderTest = createPaymentWatcher(
+        createUsdcChain('http://example.org', RECEIVER, USDC),
+      )
+
+      // An RPC that is down at boot says nothing about the configuration.
+      // Treating it as a mismatch would page someone for an outage that fixes
+      // itself, and treating it as a pass is exactly what it is: unknown.
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockResolvedValue(DEPLOYED_CODE as any)
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'readContract')
+        .mockRejectedValue(new Error('connect ECONNREFUSED'))
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      await expect(
+        watcherUnderTest._verifyConfiguration(),
+      ).resolves.not.toThrow()
+      expect(slackSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('watcher lifecycle', () => {
+    it('subscribes once, however many times it is started', () => {
+      const unwatch = jest.fn()
+      const watchSpy = jest
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
+        .mockImplementation(() => unwatch)
+      jest.spyOn(global, 'setInterval').mockImplementation(() => 1 as any)
+
+      ai3PaymentWatcher.start()
+      ai3PaymentWatcher.start()
+
+      // A second subscription would process every event twice and leak the
+      // first unsubscribe, leaving a watcher stop() cannot turn off.
+      expect(watchSpy).toHaveBeenCalledTimes(1)
+
+      ai3PaymentWatcher.stop()
+      expect(unwatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('reports subscription failures instead of going quiet', () => {
+      let raise: ((error: Error) => void) | undefined
+      jest
+        .spyOn(ai3PaymentWatcher._viemClient, 'watchContractEvent')
+        .mockImplementation((params: any) => {
+          raise = params.onError
+          return jest.fn()
+        })
+      jest.spyOn(global, 'setInterval').mockImplementation(() => 1 as any)
+
+      ai3PaymentWatcher.start()
+
+      // viem swallows poll failures into onError. Without a handler a bad
+      // endpoint or a rate-limited provider yields zero logs and zero log
+      // lines, indefinitely — the primary observation channel for real money
+      // failing closed and mute.
+      expect(raise).toBeInstanceOf(Function)
+      expect(() => raise?.(new Error('filter not found'))).not.toThrow()
+    })
+  })
+
+  describe('usdc watcher configuration', () => {
+    const originalEthereum = { ...config.ethereum }
+
+    afterEach(() => {
+      Object.assign(config.ethereum, originalEthereum)
+      _resetUsdcPaymentWatcher()
+    })
+
+    it('has no watcher when no receiver is configured', () => {
+      expect(getUsdcPaymentWatcher()).toBeNull()
+    })
+
+    it('leaves an Ethereum endpoint on its own alone', () => {
+      // ETH_CHAIN_ENDPOINT has other readers — #811's treasury balance check,
+      // and the oracle before #807 — so a deployment can hold one for reasons
+      // that have nothing to do with payments. Failing a boot over it would
+      // take down downloads and publishing too, since both import this module.
+      config.ethereum.rpcUrl = 'http://example.org'
+
+      expect(getUsdcPaymentWatcher()).toBeNull()
+    })
+
+    it('refuses a receiver without the rest of its configuration', () => {
+      config.ethereum.usdcReceiverAddress =
+        '0x1111111111111111111111111111111111111111'
+      config.ethereum.rpcUrl = undefined
+      config.ethereum.usdcTokenAddress = undefined
+
+      // Loud, because a watcher that cannot see its receiver and a working
+      // watcher on a quiet day look identical from outside.
+      expect(() => getUsdcPaymentWatcher()).toThrow(
+        /ETH_CHAIN_ENDPOINT and USDC_TOKEN_ADDRESS are not/,
+      )
+    })
+
+    it('builds and memoises a watcher once fully configured', () => {
+      config.ethereum.rpcUrl = 'http://example.org'
+      config.ethereum.usdcReceiverAddress =
+        '0x1111111111111111111111111111111111111111'
+      config.ethereum.usdcTokenAddress =
+        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+
+      const first = getUsdcPaymentWatcher()
+      expect(first).not.toBeNull()
+      expect(first?.chain.paymentMethod).toBe(PaymentMethod.USDC_ETH)
+      // Checksummed on the way in, so a lowercase env value still matches the
+      // address the events carry.
+      expect(first?.chain.contractAddress).toBe(
+        getAddress('0x1111111111111111111111111111111111111111'),
+      )
+      expect(getUsdcPaymentWatcher()).toBe(first)
+    })
+
+    it('routes a USDC hash to the configured watcher', async () => {
+      config.ethereum.rpcUrl = 'http://example.org'
+      config.ethereum.usdcReceiverAddress =
+        '0x1111111111111111111111111111111111111111'
+      config.ethereum.usdcTokenAddress =
+        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+
+      const usdcWatcher = getUsdcPaymentWatcher()
+      const watchSpy = jest
+        .spyOn(usdcWatcher!, 'watchTransaction')
+        .mockResolvedValue(undefined)
+      const ai3Spy = jest
+        .spyOn(ai3PaymentWatcher, 'watchTransaction')
+        .mockResolvedValue(undefined)
+
+      await paymentManager.watchTransaction('0xusdc', PaymentMethod.USDC_ETH)
+
+      expect(watchSpy).toHaveBeenCalledWith('0xusdc')
+      expect(ai3Spy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('watchTransaction deduplication', () => {
+    it('joins a transaction that is already being watched', async () => {
+      // Three paths reach watchTransaction — the event subscription, the
+      // watch-intent-tx task, and the startup sweep. Two arriving together for
+      // one transaction used to mean two markIntentAsConfirmed calls for the SAME
+      // payment: one wins the conditional transition, the other is filed as
+      // ALREADY_SETTLED, and an admin is told to reconcile a second transfer that
+      // never happened.
+      const txHash = '0xdeduped'
+
+      let releaseReceipt: ((value: unknown) => void) | undefined
+      const receipt = new Promise((resolve) => {
+        releaseReceipt = resolve
+      })
+      const waitSpy = jest
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
+        .mockImplementation(() => receipt as any)
+
+      jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      const first = watcher.watchTransaction(txHash)
+      const second = watcher.watchTransaction(txHash)
+
+      // One receipt lookup, not two.
+      expect(waitSpy).toHaveBeenCalledTimes(1)
+
+      releaseReceipt?.({ from: '0xSender', logs: [] })
+      await Promise.all([first, second])
+    })
+
+    it('watches the same transaction again once the first has finished', async () => {
+      // Only concurrent calls collapse. A later re-delivery has to run, because
+      // by then the intent is settled and the guard recognises it as a replay —
+      // which is where a genuine second payment is told apart from this one.
+      const txHash = '0xsequential-dedupe'
+
+      const waitSpy = jest
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
+        .mockResolvedValue({ from: '0xSender', logs: [] } as any)
+
+      jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      await watcher.watchTransaction(txHash)
+      await watcher.watchTransaction(txHash)
+
+      expect(waitSpy).toHaveBeenCalledTimes(2)
+    })
+
+    it('collapses two spellings of one transaction hash', async () => {
+      // A hash carries no checksum encoding, so wallets emit lowercase and viem
+      // hands the subscription lowercase — but a hand-rolled API client can post
+      // `0xAB…` for the very same transaction, and that spelling is what the task
+      // and the startup sweep then carry. Keyed on the raw string, those are two
+      // entries: two concurrent settlements of one payment, the loser of which is
+      // filed as an ALREADY_SETTLED mispayment for a transfer that never happened.
+      const lower = '0xabcdef'
+      const upper = '0xABCDEF'
+
+      let releaseReceipt: ((value: unknown) => void) | undefined
+      const receipt = new Promise((resolve) => {
+        releaseReceipt = resolve
+      })
+      const waitSpy = jest
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
+        .mockImplementation(() => receipt as any)
+
+      jest
+        .spyOn(IntentsUseCases, 'markIntentAsConfirmed')
+        .mockResolvedValue(ok({} as any))
+
+      const first = watcher.watchTransaction(upper)
+      const second = watcher.watchTransaction(lower)
+
+      expect(waitSpy).toHaveBeenCalledTimes(1)
+      // The hash is passed on as it arrived, not lower-cased: the replay guard
+      // compares it against intents.tx_hash, and rewriting it here would make a
+      // sweep of a row stored mixed-case look like a different transaction.
+      expect(waitSpy.mock.calls[0][0].hash).toBe(upper)
+
+      releaseReceipt?.({ from: '0xSender', logs: [] })
+      await Promise.all([first, second])
+    })
+
+    it('does not strand a failed transaction in the in-flight set', async () => {
+      const txHash = '0xfailing'
+
+      const waitSpy = jest
+        .spyOn(watcher._viemClient, 'waitForTransactionReceipt')
+        .mockRejectedValue(new Error('receipt timeout'))
+
+      await expect(watcher.watchTransaction(txHash)).rejects.toThrow(
+        'receipt timeout',
+      )
+      // A rejection has to clear the entry, or the task's retry would join a
+      // promise that already failed and never look at the chain again.
+      await expect(watcher.watchTransaction(txHash)).rejects.toThrow(
+        'receipt timeout',
+      )
+      expect(waitSpy).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('payment address verification', () => {
+    const RECEIVER = '0x1111111111111111111111111111111111111111'
+    const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+
+    it('escalates an address with no contract behind it', async () => {
+      const watcherUnderTest = createPaymentWatcher(
+        createUsdcChain('http://example.org', RECEIVER, USDC),
+      )
+
+      // A receiver address pointing at an EOA, at the token contract, or at
+      // nothing makes the token() read throw — which would otherwise be filed as
+      // "could not verify, RPC problem" and never escalated, leaving the single
+      // most likely misconfiguration the one nobody is told about.
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockResolvedValue('0x' as any)
+      const readSpy = jest.spyOn(watcherUnderTest._viemClient, 'readContract')
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      await watcherUnderTest._verifyConfiguration()
+
+      expect(slackSpy).toHaveBeenCalledTimes(1)
+      expect(slackSpy.mock.calls[0][0].details).toContain(RECEIVER)
+      // No point asking a non-contract what token it accepts.
+      expect(readSpy).not.toHaveBeenCalled()
+    })
+
+    it('carries on to the token check when the code read fails', async () => {
+      const watcherUnderTest = createPaymentWatcher(
+        createUsdcChain('http://example.org', RECEIVER, USDC),
+      )
+
+      jest
+        .spyOn(watcherUnderTest._viemClient, 'getCode')
+        .mockRejectedValue(new Error('connect ECONNREFUSED'))
+      const readSpy = jest
+        .spyOn(watcherUnderTest._viemClient, 'readContract')
+        .mockResolvedValue(getAddress(USDC) as any)
+      const slackSpy = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      await watcherUnderTest._verifyConfiguration()
+
+      // An RPC that cannot answer says nothing about the configuration, either
+      // way — so it neither escalates nor skips the check it was leading up to.
+      expect(readSpy).toHaveBeenCalledTimes(1)
+      expect(slackSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('address configuration', () => {
+    const originalEthereum = { ...config.ethereum }
+
+    afterEach(() => {
+      Object.assign(config.ethereum, originalEthereum)
+      _resetUsdcPaymentWatcher()
+    })
+
+    it('recovers a whitespace-padded address instead of discarding it', () => {
+      // The value that made this worth guarding: secrets mounted from files, and
+      // hand-edited .env values, routinely carry a trailing newline. viem's
+      // getAddress THROWS on that, so before trimming a padded address was
+      // truthy-but-unusable — the API would quote USDC while the payment worker
+      // crash-looped on the very same string.
+      //
+      // Trimmed rather than rejected, because the operator did set it correctly;
+      // the newline is the file format's, not theirs.
+      expect(
+        addressEnv(
+          'ETH_USDC_RECEIVER_ADDRESS',
+          '0x1111111111111111111111111111111111111111 ',
+        ),
+      ).toBe('0x1111111111111111111111111111111111111111')
+      expect(
+        addressEnv(
+          'ETH_USDC_RECEIVER_ADDRESS',
+          ' 0x1111111111111111111111111111111111111111\n',
+        ),
+      ).toBe('0x1111111111111111111111111111111111111111')
+      // And nothing is filed as invalid for a value that was only padded.
+      expect(invalidEnvironmentVariables()).not.toContain(
+        'ETH_USDC_RECEIVER_ADDRESS',
+      )
+    })
+
+    it('treats an empty or whitespace-only address as simply unset', () => {
+      // Not an error worth naming: an empty variable is how a deployment says it
+      // does not accept USDC, and a template that leaves `ETH_USDC_RECEIVER_ADDRESS=`
+      // in place says the same thing.
+      expect(addressEnv('ETH_USDC_RECEIVER_ADDRESS', '')).toBeUndefined()
+      expect(addressEnv('ETH_USDC_RECEIVER_ADDRESS', '   ')).toBeUndefined()
+      expect(addressEnv('ETH_USDC_RECEIVER_ADDRESS', undefined)).toBeUndefined()
+      expect(invalidEnvironmentVariables()).not.toContain(
+        'ETH_USDC_RECEIVER_ADDRESS',
+      )
+    })
+
+    it('treats a truncated or unprefixed address as not configured', () => {
+      expect(
+        addressEnv(
+          'USDC_TOKEN_ADDRESS',
+          '0x111111111111111111111111111111111111111',
+        ),
+      ).toBeUndefined()
+      expect(
+        addressEnv(
+          'USDC_TOKEN_ADDRESS',
+          '1111111111111111111111111111111111111111',
+        ),
+      ).toBeUndefined()
+    })
+
+    it('names every variable it discarded', () => {
+      addressEnv('SOME_ADDRESS_VAR', 'not-an-address')
+      expect(invalidEnvironmentVariables()).toContain('SOME_ADDRESS_VAR')
+    })
+  })
+
+  describe('endpoint configuration', () => {
+    it('recovers a whitespace-padded endpoint instead of discarding it', () => {
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', ' https://eth.example/rpc \n')).toBe(
+        'https://eth.example/rpc',
+      )
+      expect(invalidEnvironmentVariables()).not.toContain('ETH_CHAIN_ENDPOINT')
+    })
+
+    it('treats an empty or whitespace-only endpoint as simply unset', () => {
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', '')).toBeUndefined()
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', '   ')).toBeUndefined()
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', undefined)).toBeUndefined()
+      expect(invalidEnvironmentVariables()).not.toContain('ETH_CHAIN_ENDPOINT')
+    })
+
+    it('discards a value that is not a URL at all', () => {
+      // The case a truthiness check let through, and the reason this helper
+      // exists: isUsdcConfigured tested this variable for truthiness only, so a
+      // placeholder left in a template made the API quote a binding USDC amount
+      // while the watcher built on the same string failed every request.
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', 'changeme')).toBeUndefined()
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', 'eth.example.com')).toBeUndefined()
+    })
+
+    it('discards a host and port pasted without a scheme', () => {
+      // Parses — as a URL whose protocol is `rpc.example.com:` — which is why the
+      // protocol is checked rather than the parse alone.
+      expect(
+        urlEnv('ETH_CHAIN_ENDPOINT', 'rpc.example.com:8545'),
+      ).toBeUndefined()
+    })
+
+    it('discards a scheme the RPC transport cannot POST over', () => {
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', 'ws://eth.example/rpc')).toBeUndefined()
+      expect(urlEnv('ETH_CHAIN_ENDPOINT', 'file:///etc/passwd')).toBeUndefined()
+    })
+
+    it('names every endpoint variable it discarded', () => {
+      urlEnv('SOME_URL_VAR', 'not-a-url')
+      expect(invalidEnvironmentVariables()).toContain('SOME_URL_VAR')
     })
   })
 })

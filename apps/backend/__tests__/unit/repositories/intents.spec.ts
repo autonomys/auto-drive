@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals'
 import { intentsRepository } from '../../../src/infrastructure/repositories/users/intents.js'
 import { Intent, IntentStatus, PaymentMethod } from '@auto-drive/models'
 import { dbMigration } from '../../utils/dbMigrate.js'
+import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 
 // Exercises the payment-asset columns added by 20260616000000-intent-payment-fields
 // together with the repository read/write mapping. Runs against the migrated
@@ -212,5 +213,85 @@ describe('Intents Repository — payment fields', () => {
       .filter((id) => id.startsWith('exp-'))
 
     expect(ids.sort()).toEqual(['exp-stranded', 'exp-unpaid'])
+  })
+  // -------------------------------------------------------------------------
+  // getPendingWithTxHash — the startup sweep, one chain at a time
+  // -------------------------------------------------------------------------
+
+  it('returns only the pending rows of the payment method asked for', async () => {
+    await intentsRepository.createIntent({
+      ...baseIntent('sweep-ai3'),
+      txHash: '0xai3hash',
+    })
+    await intentsRepository.createIntent({
+      ...baseIntent('sweep-usdc'),
+      paymentMethod: PaymentMethod.USDC_ETH,
+      txHash: '0xethhash',
+    })
+    // No hash: not orphaned, nothing to look up.
+    await intentsRepository.createIntent(baseIntent('sweep-no-hash'))
+
+    const ai3 = await intentsRepository.getPendingWithTxHash(
+      PaymentMethod.AI3_NATIVE,
+    )
+    const usdc = await intentsRepository.getPendingWithTxHash(
+      PaymentMethod.USDC_ETH,
+    )
+
+    // Each watcher can only resolve hashes from its own chain, so the sweep is
+    // scoped the same way. Crossing them does not error — it waits out a
+    // receipt timeout per row — which is why this is a filter and not a hint.
+    // Containment rather than equality: earlier tests in this file leave their
+    // own pending rows behind, and what matters here is that neither chain sees
+    // the other's.
+    expect(ai3.map((i) => i.id)).toContain('sweep-ai3')
+    expect(ai3.map((i) => i.id)).not.toContain('sweep-usdc')
+    expect(usdc.map((i) => i.id)).toEqual(['sweep-usdc'])
+    expect(ai3.map((i) => i.id)).not.toContain('sweep-no-hash')
+  })
+
+  it('sweeps rows written before payment_method existed as AI3', async () => {
+    // Inserted with raw SQL that omits payment_method, because that is the only
+    // way to reach the case this is about. createIntent always passes
+    // `intent.paymentMethod ?? AI3_NATIVE`, so going through the repository
+    // would exercise the JS fallback and leave the column's own
+    // `DEFAULT 'ai3_native'` untested — the migration could drop it and this
+    // test would still pass. It is the default that makes rows written before
+    // the column existed recoverable, so the default is what gets asserted.
+    const db = await getDatabase()
+    await db.query(
+      `INSERT INTO intents (id, user_public_id, status, shannons_per_byte, expires_at, tx_hash)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        'sweep-legacy',
+        'user-sweep-legacy',
+        IntentStatus.PENDING,
+        '1000',
+        new Date('2030-01-01T00:00:00Z'),
+        '0xlegacyhash',
+      ],
+    )
+
+    const fetched = await intentsRepository.getById('sweep-legacy')
+    expect(fetched?.paymentMethod).toBe(PaymentMethod.AI3_NATIVE)
+
+    const ai3 = await intentsRepository.getPendingWithTxHash(
+      PaymentMethod.AI3_NATIVE,
+    )
+    expect(ai3.map((i) => i.id)).toContain('sweep-legacy')
+  })
+
+  it('reads a NULL tx_hash as absent, not as null', async () => {
+    // The idempotency guard in markIntentAsConfirmed exempts rows with no
+    // recorded hash by testing `txHash !== undefined`. A NULL column arriving as
+    // `null` passes that test, so every replay of a row settled before
+    // confirmations recorded a hash was filed as a second payment.
+    const created = await intentsRepository.createIntent(
+      baseIntent('null-tx-hash'),
+    )
+    expect(created.txHash).toBeUndefined()
+
+    const fetched = await intentsRepository.getById('null-tx-hash')
+    expect(fetched?.txHash).toBeUndefined()
   })
 })
