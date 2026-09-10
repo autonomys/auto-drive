@@ -1,33 +1,44 @@
 /* eslint-disable camelcase */
 import { useQuery } from '@tanstack/react-query';
 import { useNetwork } from '../contexts/network';
-import { tokenPriceService } from '../services/coingecko';
 import { useCallback } from 'react';
-
-// This is longer because it's not a critical price & we're rate limited
-const REFRESH_INTERVAL_COINGECKO = 1000 * 60 * 60;
 
 const REFRESH_INTERVAL = 60 * 1000;
 
 const BYTES_PER_MiB = 1024 ** 2;
 
+/**
+ * Storage pricing, in AI3 and — when the market supports a rate — in USD.
+ *
+ * Both halves now come from one backend call. The USD rate used to be fetched
+ * straight from an exchange ticker in the browser; that market was suspended
+ * and the ticker kept returning a last-trade price of zero, which this hook
+ * cached for an hour and multiplied through every USD figure on the purchase
+ * screen. The backend reads the WAI3/USDC pool instead, through the oracle that
+ * already prices USDC purchases, and answers with no rate at all rather than a
+ * meaningless one.
+ *
+ * So the USD formatters return `null`, not `0`, when there is no rate. Zero is
+ * a price, and rendering it told users storage was free. Callers have to decide
+ * what to show for an absent estimate, which is the point.
+ */
 export const usePrices = () => {
   const { api } = useNetwork();
 
-  const { data: shannonsPerByte } = useQuery({
+  const { data: storagePrice } = useQuery({
     queryKey: ['price'],
-    queryFn: () => api.getCreditPrice().then((res) => res.price),
+    queryFn: () => api.getCreditPrice(),
     refetchInterval: REFRESH_INTERVAL,
     gcTime: REFRESH_INTERVAL * 2,
   });
 
-  const { data: usdPerAi3 } = useQuery({
-    queryKey: ['coingeckoPrice'],
-    queryFn: () => tokenPriceService.getPrice(),
-    refetchInterval: REFRESH_INTERVAL_COINGECKO,
-    gcTime: REFRESH_INTERVAL_COINGECKO * 2,
-    initialData: 0.052,
-  });
+  const shannonsPerByte = storagePrice?.price;
+  const usdPerAi3 = storagePrice?.usd?.usdPerAi3 ?? null;
+  // Surfaced so a UI can distinguish "no estimate" from "an estimate that
+  // stopped updating", and say which.
+  const usdRateStale = storagePrice?.usd?.stale ?? false;
+  const usdRateAsOf = storagePrice?.usd?.asOf ?? null;
+  const usdUnavailableReason = storagePrice?.usdUnavailableReason ?? null;
 
   const formatCreditsAsAi3 = useCallback(
     (credits: number) => {
@@ -41,15 +52,12 @@ export const usePrices = () => {
   );
 
   const formatCreditsAsUsd = useCallback(
-    (creditsInMb: number) => {
-      if (typeof shannonsPerByte === 'undefined') {
-        return 0;
+    (creditsInMb: number): number | null => {
+      if (typeof shannonsPerByte === 'undefined' || usdPerAi3 === null) {
+        return null;
       }
 
-      if (typeof usdPerAi3 === 'number') {
-        return formatCreditsAsAi3(creditsInMb) * usdPerAi3;
-      }
-      return 0;
+      return formatCreditsAsAi3(creditsInMb) * usdPerAi3;
     },
     [formatCreditsAsAi3, shannonsPerByte, usdPerAi3],
   );
@@ -65,9 +73,9 @@ export const usePrices = () => {
   );
 
   const formatCreditsInMbAsUsd = useCallback(
-    (creditsInMb: number) => {
-      if (typeof shannonsPerByte === 'undefined') {
-        return 0;
+    (creditsInMb: number): number | null => {
+      if (typeof shannonsPerByte === 'undefined' || usdPerAi3 === null) {
+        return null;
       }
       return formatCreditsInMbAsAi3(creditsInMb) * usdPerAi3;
     },
@@ -123,6 +131,9 @@ export const usePrices = () => {
   return {
     shannonsPerByte,
     usdPerAi3,
+    usdRateStale,
+    usdRateAsOf,
+    usdUnavailableReason,
     formatCreditsAsAi3,
     formatCreditsAsUsd,
     formatCreditsAsValue,

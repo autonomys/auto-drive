@@ -6,7 +6,7 @@ export const intents = {
       get: {
         summary: 'Intents - Get current storage price',
         description:
-          'Returns the current price per byte (in shannons) and price per GB (in AI3). This endpoint does not require authentication.',
+          'Returns the current price per byte (in shannons) and price per GB (in AI3), plus a USD conversion when one is available. This endpoint does not require authentication.',
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         security: [],
@@ -25,6 +25,38 @@ export const intents = {
                     pricePerGB: {
                       type: 'number',
                       description: 'Price per GB in AI3 tokens',
+                    },
+                    usd: {
+                      type: 'object',
+                      nullable: true,
+                      description:
+                        'USD conversion of the price above, or null when no trustworthy AI3/USD rate is available. The rate is the volume-weighted average of realized WAI3/USDC swaps, the same oracle that prices USDC purchases, and it fails closed — a thin market, a stalled indexer or a window the market has re-priced past all yield null rather than a number. It carries no quote margin, so it is an estimate of what storage costs and not a quote for what a USDC purchase would charge. Clients must handle null; do not substitute zero.',
+                      properties: {
+                        usdPerAi3: {
+                          type: 'number',
+                          description: 'USD per AI3, e.g. 0.00142',
+                        },
+                        pricePerGBUsd: {
+                          type: 'number',
+                          description: 'USD to store one GB',
+                        },
+                        asOf: {
+                          type: 'string',
+                          format: 'date-time',
+                          description: 'When the rate was read',
+                        },
+                        stale: {
+                          type: 'boolean',
+                          description:
+                            'The live read failed and this is the last-good rate. Usable as an estimate, but it stopped updating at `asOf`.',
+                        },
+                      },
+                    },
+                    usdUnavailableReason: {
+                      type: 'string',
+                      nullable: true,
+                      description:
+                        'Why the conversion was withheld when `usd` is null — usually the oracle guard that fired (e.g. `thin-liquidity`, `indexer-lag`, `market-moved`, `misconfigured`), or `internal` when the fault is ours rather than the market\'s. Null when `usd` is present. Intended for support and dashboards rather than UI logic.',
                     },
                   },
                 },

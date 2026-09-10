@@ -222,3 +222,47 @@ export type IntentCreation = z.infer<typeof intentCreationSchema>;
 export const intentWatchSchema = z.object({
   txHash: z.string(),
 });
+
+/**
+ * The USD half of `GET /intents/price`.
+ *
+ * Both figures are plain decimal numbers rather than the 1e18-scaled bigints
+ * used in quote math: this is a display estimate, and the wire format a browser
+ * reads should not need reconstructing before it can be rendered. The backend
+ * does the descaling in integer arithmetic so nothing is lost on the way out.
+ */
+export type StoragePriceUsd = {
+  // USD per AI3, e.g. 0.00142.
+  usdPerAi3: number;
+  // USD to store one GiB, i.e. the AI3 rate above applied to `pricePerGB`.
+  pricePerGBUsd: number;
+  // When the underlying rate was read, ISO-8601. Rendered as-is by the UI so a
+  // conversion can say how old it is rather than implying it is live.
+  asOf: string;
+  // The oracle's live read failed and this is its last-good value. Still worth
+  // showing for an estimate — but the UI should say so, because a rate that
+  // stopped updating during a move is wrong in a direction nobody can see.
+  stale: boolean;
+};
+
+/**
+ * What `GET /intents/price` serves.
+ *
+ * `usd` is nullable on purpose. The AI3/USD rate comes from a market oracle
+ * that fails closed, and when it refuses there is no honest USD figure to
+ * print. The feed this replaced did the opposite: an exchange suspended the AI3
+ * market, its ticker kept answering 200 with a last-trade price of zero, and
+ * the UI rendered "$0.00" as though storage had become free. A missing estimate
+ * is a worse UI than a live one and a far better one than a confident lie, so
+ * callers must handle null rather than defaulting it to a number.
+ */
+export type StoragePrice = {
+  // Shannons per byte, with the credits price multiplier already applied.
+  price: number;
+  // AI3 to store one GiB, derived from `price`.
+  pricePerGB: number;
+  usd: StoragePriceUsd | null;
+  // Which oracle guard closed the door, when `usd` is null — for support and
+  // dashboards, not for UI logic. Null whenever `usd` is present.
+  usdUnavailableReason: string | null;
+};

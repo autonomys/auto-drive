@@ -276,7 +276,9 @@ export const PurchaseStep2ConnectWallet = ({
                 label='USD Equivalent'
                 value={
                   <span>
-                    {usdAmount > 0 ? `$${usdAmount.toFixed(2)}` : '—'}
+                    {usdAmount !== null && usdAmount > 0
+                      ? `$${usdAmount.toFixed(2)}`
+                      : '—'}
                   </span>
                 }
               />

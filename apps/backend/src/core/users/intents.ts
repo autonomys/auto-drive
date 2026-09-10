@@ -3,7 +3,9 @@ import {
   IntentMispaymentReason,
   IntentStatus,
   PaymentMethod,
+  StoragePrice,
   UsdcClosedReason,
+  USD_RATE_SCALE,
   User,
   UserRole,
   UserWithOrganization,
@@ -1584,6 +1586,101 @@ const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
   }
 }
 
+// Descale a 1e18-scaled integer to a plain number for display.
+//
+// A rate above about $0.009 scales past 2^53, so `Number(scaled)` is already
+// approximate before the divide. That is fine here and the arithmetic says so:
+// a double carries ~15-16 significant digits, the oracle's configured bounds
+// admit nothing near that wide, and the result feeds a "≈ $1.72" on a purchase
+// screen. Rounding at the sixteenth digit cannot move a figure rendered to two.
+//
+// Worth stating because the obvious "safer" version is not safer. Dividing in
+// bigint first — scaling by 1e12, dividing, converting — truncates every rate
+// to twelve decimals, which is a LARGER error than the float rounding it was
+// meant to avoid, and it fails silently in the same direction every time. The
+// integer-only path belongs in the quote math, where exactness decides what
+// someone is charged; this number is never charged.
+const scaledToNumber = (scaled: bigint): number => Number(scaled) / 1e18
+
+/**
+ * The storage price, with its USD conversion when the market supports one.
+ *
+ * Two sources, deliberately kept apart. The AI3 figure is the consensus chain's
+ * own byte fee and is always available; the USD figure is the volume-weighted
+ * average of realized WAI3/USDC fills, read through the same oracle that prices
+ * USDC purchases, and is available only when that oracle is willing to speak.
+ *
+ * So a failure here degrades rather than propagates: `usd` goes null, the AI3
+ * price is served exactly as before, and the UI drops one line. The oracle is
+ * the right source precisely because it refuses — it already distinguishes a
+ * thin market, a stalled indexer and a re-priced window from a healthy read,
+ * and each of those is a case where a number would be worse than a blank.
+ *
+ * Distinct from `getPrice` rather than folded into it because `createIntent`
+ * calls that on the AI3 payment path, which has no business waiting on a
+ * subgraph round-trip to quote a price denominated in AI3.
+ *
+ * The rate served here carries no margin. USD_QUOTE_MARGIN exists to cover
+ * conversion slippage on money actually being collected; an estimate is not
+ * being collected, and padding it would quote users a worse price than the one
+ * they would pay.
+ */
+const getStoragePrice = async (): Promise<StoragePrice> => {
+  // Both reads start together — neither needs the other's answer, and the AI3
+  // half should not wait out a subgraph timeout to be served. The chain read
+  // goes through the exported object, matching `createIntent`: it is what lets
+  // a test replace it without standing up a Substrate node.
+  const [chain, rate] = await Promise.all([
+    IntentsUseCases.getPrice(),
+    priceOracle.getPrice(),
+  ])
+
+  if (rate.isErr()) {
+    logger.debug(
+      `Serving the storage price without a USD conversion: ${rate.error.reason}`,
+    )
+    return { ...chain, usd: null, usdUnavailableReason: rate.error.reason }
+  }
+
+  // A chain price that is not a safe integer would throw out of `BigInt` below
+  // and turn a display endpoint into a 500. `getPrice` floors a product of two
+  // numbers, so NaN and Infinity both reach here intact if the RPC or the
+  // multiplier ever misbehaves. Drop the conversion instead: the AI3 figure is
+  // this endpoint's actual job, and a caller that can already render a missing
+  // rate can render this one.
+  if (!Number.isSafeInteger(chain.price) || chain.price < 0) {
+    logger.warn(
+      `Cannot convert a chain price of ${chain.price} to USD; serving the ` +
+        'AI3 price alone',
+    )
+    // Reported as `internal` — borrowed from the oracle's vocabulary because
+    // it is the one reason there that already means "our own invariant gave
+    // way, read the logs" rather than anything about the market. Nothing about
+    // the oracle failed here; the chain price did.
+    return { ...chain, usd: null, usdUnavailableReason: 'internal' }
+  }
+
+  // USD per GiB, computed in bigint and converted once at the end.
+  //
+  // Not stylistic: at any realistic rate the shannons-per-GiB product is around
+  // 1e20, past 2^53, so multiplying those two numbers as floats would lose
+  // integer precision before the USD rate is even applied — and then round
+  // again on the way out. One conversion at the end beats two.
+  const shannonsPerGb = BigInt(chain.price) * BigInt(BYTES_PER_GB)
+  const usdPerGbScaled = (shannonsPerGb * rate.value.usdPerAi3) / USD_RATE_SCALE
+
+  return {
+    ...chain,
+    usd: {
+      usdPerAi3: scaledToNumber(rate.value.usdPerAi3),
+      pricePerGBUsd: scaledToNumber(usdPerGbScaled),
+      asOf: rate.value.asOf.toISOString(),
+      stale: rate.value.stale,
+    },
+    usdUnavailableReason: null,
+  }
+}
+
 // Returns PENDING intents that already have a tx_hash — used by the payment
 // manager startup sweep to re-watch transactions that were submitted but never
 // confirmed due to a service restart or RPC outage.
@@ -1614,5 +1711,6 @@ export const IntentsUseCases = {
   reprocessOverCapIntent,
   getIntentCredits,
   getPrice,
+  getStoragePrice,
   cleanupExpiredIntents,
 }

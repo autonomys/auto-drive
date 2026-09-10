@@ -128,6 +128,10 @@ export const PurchaseStep1SelectPackage = ({
             const overCap =
               p.id !== 'custom' && checkPackageOverCap(p.creditsInMB);
             const disabled = purchaseBlocked || overCap;
+            // Null whenever the oracle has no AI3/USD rate to convert at.
+            const usd = p.creditsInMB
+              ? formatCreditsInMbAsUsd(p.creditsInMB)
+              : null;
             return (
               <Card
                 key={p.id}
@@ -164,9 +168,13 @@ export const PurchaseStep1SelectPackage = ({
                       <div className='text-sm'>
                         {formatCreditsInMbAsAi3(p.creditsInMB).toFixed(2)} AI3
                       </div>
-                      <div className='text-xs text-muted-foreground'>
-                        ≈ ${formatCreditsInMbAsUsd(p.creditsInMB).toFixed(2)}
-                      </div>
+                      {/* Omitted entirely when there is no rate: an absent
+                          estimate is a gap, and "$0.00" was a claim. */}
+                      {usd !== null && (
+                        <div className='text-xs text-muted-foreground'>
+                          ≈ ${usd.toFixed(2)}
+                        </div>
+                      )}
                     </>
                   )}
 
