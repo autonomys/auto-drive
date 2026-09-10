@@ -1078,4 +1078,69 @@ describe('priceOracle.getDisplayPrice', () => {
     expect(spy).toHaveBeenCalledTimes(1)
     expect(a.isOk() && b.isOk() && c.isOk()).toBe(true)
   })
+
+  // ── Isolation from the strict profile's failure record ───────────────────
+  //
+  // The two profiles share one module and one logger, and must share nothing
+  // else. `unavailable()` writes the strict profile's failure state, so a
+  // display refusal routed through it would report a healthy charge-oracle as
+  // degraded and relabel its refusals — the failure Bugbot found on #823.
+
+  it('a display failure does not mark the strict profile as serving stale', async () => {
+    const spy = mockWindow()
+    // Strict succeeds and has a fresh last-good.
+    expect((await priceOracle.getPrice()).isOk()).toBe(true)
+    expect(priceOracle.getHealth().servingStale).toBe(false)
+
+    spy.mockRejectedValueOnce(new Error('gateway 503'))
+    expect((await priceOracle.getDisplayPrice()).isErr()).toBe(true)
+
+    // Nothing about the charge oracle changed.
+    expect(priceOracle.getHealth().servingStale).toBe(false)
+  })
+
+  it('a display failure does not overwrite the strict last-failure pair', async () => {
+    const spy = mockWindow((now) =>
+      windowAt(now, { samples: swapsAt(2, now - 60_000) }),
+    )
+    // Strict refuses: too few samples.
+    expect((await priceOracle.getPrice()).isErr()).toBe(true)
+    expect(priceOracle.getHealth().lastFailureReason).toBe(
+      'insufficient-samples',
+    )
+    const strictFailedAt = priceOracle.getHealth().lastFailureAt
+
+    jest.advanceTimersByTime(1000)
+    spy.mockRejectedValueOnce(new Error('gateway 503'))
+    expect((await priceOracle.getDisplayPrice()).isErr()).toBe(true)
+
+    // The dashboard must still be describing the guard that closed the CHARGE
+    // path, not one that closed an estimate.
+    expect(priceOracle.getHealth().lastFailureReason).toBe(
+      'insufficient-samples',
+    )
+    expect(priceOracle.getHealth().lastFailureAt).toEqual(strictFailedAt)
+  })
+
+  it('a display failure does not relabel a throttled strict refusal', async () => {
+    // The reason a throttled getPrice reports becomes the client-facing quote
+    // code (market-moved -> PRICE_UNSTABLE, everything else -> retryable), so
+    // an overwritten reason is a wrong answer to the caller, not just a wrong
+    // dashboard.
+    const spy = mockWindow((now) => ({
+      ...windowAt(now),
+      samples: liveDowntrendAt(now),
+    }))
+    const first = await priceOracle.getPrice()
+    expect(first._unsafeUnwrapErr().reason).toBe('market-moved')
+
+    spy.mockRejectedValueOnce(new Error('gateway 503'))
+    expect((await priceOracle.getDisplayPrice()).isErr()).toBe(true)
+
+    // Still inside the strict retry throttle, so this is served from
+    // currentFailureReason rather than a fresh read.
+    const throttled = await priceOracle.getPrice()
+    expect(throttled._unsafeUnwrapErr().reason).toBe('market-moved')
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
 })

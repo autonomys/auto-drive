@@ -147,6 +147,15 @@ let lastFailureReason: OracleUnavailableReason | null = null
 // oracle degraded right now", and only the second may be cleared by a success.
 let currentFailureReason: OracleUnavailableReason | null = null
 
+// A refusal on the STRICT path: recorded into the failure state `getHealth`
+// reports and a throttled `getPrice` reads its reason from.
+//
+// Only the strict path may write these. They answer "why is the CHARGE path
+// shut", and `currentFailureReason` is not merely displayed — a throttled
+// `getPrice` returns it as the refusal's reason, which `quoteErrorToHttpError`
+// turns into the client's error code. A display refusal writing here would
+// report a healthy charge-oracle as degraded on the dashboard and hand a
+// caller the wrong reason for a quote that failed for something else.
 const unavailable = (
   message: string,
   reason: OracleUnavailableReason,
@@ -155,6 +164,20 @@ const unavailable = (
   lastFailureReason = reason
   currentFailureReason = reason
   logger.warn(`Price oracle unavailable (${reason}): ${message}`)
+  return new OracleUnavailableError(message, reason)
+}
+
+// A refusal on the DISPLAY path: logged and returned, recorded nowhere shared.
+//
+// The display profile keeps its own `displayFailureReason` for its own retry
+// throttle, and that is the whole of the state it is entitled to. Everything
+// else about a display outage is visible in the endpoint's
+// `usdUnavailableReason` and in this log line.
+const displayUnavailable = (
+  message: string,
+  reason: OracleUnavailableReason,
+): OracleUnavailableError => {
+  logger.warn(`Display price unavailable (${reason}): ${message}`)
   return new OracleUnavailableError(message, reason)
 }
 
@@ -539,17 +562,17 @@ const buildDisplayWindow = async (): Promise<
     const message = error instanceof Error ? error.message : String(error)
     return err(
       error instanceof SubgraphConfigError
-        ? unavailable(
+        ? displayUnavailable(
             `the oracle is not configured to read this pool: ${message}`,
             'misconfigured',
           )
-        : unavailable(`could not read the subgraph: ${message}`, 'gateway'),
+        : displayUnavailable(`could not read the subgraph: ${message}`, 'gateway'),
     )
   }
 
   if (response.hasIndexingErrors) {
     return err(
-      unavailable(
+      displayUnavailable(
         'the subgraph reports indexing errors, so the swap history it served ' +
           'may be missing fills we cannot detect from here',
         'indexer-error',
@@ -566,7 +589,7 @@ const buildDisplayWindow = async (): Promise<
   ) {
     const lagMs = now - response.indexerTimestampMs
     return err(
-      unavailable(
+      displayUnavailable(
         `the indexer is ${Math.round(lagMs / 60_000)}min behind at block ` +
           `${response.indexerBlock}, past the display limit of ` +
           `${Math.round(config.priceOracle.display.maxIndexLagMs / 60_000)}min`,
@@ -586,7 +609,7 @@ const buildDisplayWindow = async (): Promise<
       config.priceOracle.display.windowAgeMs / 86_400_000,
     )
     return err(
-      unavailable(
+      displayUnavailable(
         `the pool filled ${inWindow.length} times in the last ${windowDays}d, ` +
           `below the display floor of ${config.priceOracle.display.minSamples}` +
           ' — there is no trade to estimate from',
@@ -618,7 +641,7 @@ const buildDisplayWindow = async (): Promise<
   const usdPerAi3 = volumeWeightedPrice(surviving)
   if (!isWithinBounds(usdPerAi3, minScaled, maxScaled)) {
     return err(
-      unavailable(
+      displayUnavailable(
         `the window averages ${usdPerAi3} (scaled 1e18), outside the ` +
           `configured bounds [${minScaled}, ${maxScaled}]`,
         'out-of-bounds',
@@ -836,7 +859,7 @@ const refreshDisplay = async (): Promise<
       'Price oracle: unexpected failure building the display window',
     )
     window = err(
-      unavailable(
+      displayUnavailable(
         'the oracle itself failed while building the display window ' +
           `(${message}) — this is a bug in the oracle, not a condition ` +
           'upstream',
