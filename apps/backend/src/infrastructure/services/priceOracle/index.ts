@@ -487,11 +487,167 @@ const buildWindow = async (): Promise<
   })
 }
 
+/**
+ * The DISPLAY window: the same pool, judged for an estimate rather than a
+ * charge.
+ *
+ * Deliberately a separate function rather than `buildWindow` with a profile
+ * argument. That function's guards are ordered, and the order is load-bearing —
+ * each comment there explains what the previous guard has already ruled out.
+ * Threading a flag through it would leave every one of those explanations
+ * conditionally true, and the path it protects is the one that decides what
+ * somebody pays. This duplicates a fetch and a handful of lines instead, and
+ * keeps the money path exactly as it was.
+ *
+ * What it keeps, and why only these:
+ *
+ *   - the sanity bounds, because a rate outside them is a bug in us, and
+ *     rendering it would be worse than rendering nothing;
+ *   - the indexer's own liveness and its indexing-error flag, because both say
+ *     the READ cannot be reasoned from, whatever it is for;
+ *   - a non-empty window, which is what "we have no estimate" actually means;
+ *   - the outlier trim, once there are enough fills for a median to mean
+ *     something, because one absurd print is as unwelcome in an estimate as in
+ *     a quote.
+ *
+ * What it drops, and why: pool depth, one-sided volume, window span and the
+ * newest-fill veto all exist to make manipulating the rate expensive. Nobody is
+ * charged from this number, so there is nothing here to buy. Truncation is not
+ * refused either — a full page is the NEWEST fills, which for an estimate is
+ * the good half of the window rather than a reason to withhold it.
+ */
+const buildDisplayWindow = async (): Promise<
+  Result<SwapWindow, OracleUnavailableError>
+> => {
+  const controller = new AbortController()
+  const now = Date.now()
+  let response: Awaited<ReturnType<typeof fetchRecentSwaps>>
+  try {
+    response = await withTimeout(
+      internal.fetchRecentSwaps(
+        {
+          sinceMs: now - config.priceOracle.display.windowAgeMs,
+          maxSamples: config.priceOracle.maxWindowSamples,
+        },
+        controller.signal,
+      ),
+      config.priceOracle.requestTimeoutMs,
+      'priceOracle:subgraph:display',
+      controller,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return err(
+      error instanceof SubgraphConfigError
+        ? unavailable(
+            `the oracle is not configured to read this pool: ${message}`,
+            'misconfigured',
+          )
+        : unavailable(`could not read the subgraph: ${message}`, 'gateway'),
+    )
+  }
+
+  if (response.hasIndexingErrors) {
+    return err(
+      unavailable(
+        'the subgraph reports indexing errors, so the swap history it served ' +
+          'may be missing fills we cannot detect from here',
+        'indexer-error',
+      ),
+    )
+  }
+
+  if (
+    !isFresh(
+      response.indexerTimestampMs,
+      now,
+      config.priceOracle.display.maxIndexLagMs,
+    )
+  ) {
+    const lagMs = now - response.indexerTimestampMs
+    return err(
+      unavailable(
+        `the indexer is ${Math.round(lagMs / 60_000)}min behind at block ` +
+          `${response.indexerBlock}, past the display limit of ` +
+          `${Math.round(config.priceOracle.display.maxIndexLagMs / 60_000)}min`,
+        'indexer-lag',
+      ),
+    )
+  }
+
+  // Re-applied against our own clock for the same reason the strict path does
+  // it: the bound is ours, and an overridden endpoint may honour the argument
+  // differently. It can only shrink the window.
+  const inWindow = response.samples.filter((sample) =>
+    isFresh(sample.timestampMs, now, config.priceOracle.display.windowAgeMs),
+  )
+  if (inWindow.length < config.priceOracle.display.minSamples) {
+    const windowDays = Math.round(
+      config.priceOracle.display.windowAgeMs / 86_400_000,
+    )
+    return err(
+      unavailable(
+        `the pool filled ${inWindow.length} times in the last ${windowDays}d, ` +
+          `below the display floor of ${config.priceOracle.display.minSamples}` +
+          ' — there is no trade to estimate from',
+        'insufficient-samples',
+      ),
+    )
+  }
+
+  // Trim only once a median means something. On two fills the median is their
+  // midpoint and both sit equally far from it, so the trim either keeps both or
+  // discards both — and discarding both would turn "the pool traded twice" into
+  // "we have no idea", which is exactly the outcome this profile exists to
+  // avoid. Below the threshold the window is averaged as it came.
+  const shouldTrim =
+    inWindow.length >= config.priceOracle.display.minSamplesToTrim
+  const { kept, dropped } = shouldTrim
+    ? trimOutliers(inWindow, maxSwapDeviationBps)
+    : { kept: inWindow, dropped: 0 }
+  // A trim that empties the window falls back to the untrimmed fills rather
+  // than refusing: every sample being an outlier against its own median is a
+  // statement about spread, not about absence, and the bounds guard below is
+  // what decides whether the result is printable.
+  const surviving = kept.length > 0 ? kept : inWindow
+
+  const newestSwapMs = Math.max(...surviving.map((s) => s.timestampMs))
+  const oldestSwapMs = Math.min(...surviving.map((s) => s.timestampMs))
+  const volumeUsdc = windowVolumeUsdc(surviving)
+
+  const usdPerAi3 = volumeWeightedPrice(surviving)
+  if (!isWithinBounds(usdPerAi3, minScaled, maxScaled)) {
+    return err(
+      unavailable(
+        `the window averages ${usdPerAi3} (scaled 1e18), outside the ` +
+          `configured bounds [${minScaled}, ${maxScaled}]`,
+        'out-of-bounds',
+      ),
+    )
+  }
+
+  return ok({
+    usdPerAi3,
+    sampleCount: surviving.length,
+    droppedOutliers: kept.length > 0 ? dropped : 0,
+    buyCount: surviving.filter((s) => s.direction === 'buy').length,
+    sellCount: surviving.filter((s) => s.direction === 'sell').length,
+    volumeUsdc,
+    oneSidedVolumeUsdc: oneSidedVolumeUsdc(surviving),
+    poolUsdcDepth: response.poolUsdcDepth,
+    newestSwapMs,
+    oldestSwapMs,
+    indexerBlock: response.indexerBlock,
+    indexerTimestampMs: response.indexerTimestampMs,
+  })
+}
+
 // Grouped so unit tests can spy on the collaborators (jest.spyOn), mirroring how
 // paymentManager exposes _viemClient. Not for use outside tests.
 const internal = {
   fetchRecentSwaps,
   buildWindow,
+  buildDisplayWindow,
 }
 
 // Serve the last good price as a stale fallback, or error if none is fresh
@@ -630,6 +786,128 @@ const getPrice = async (): Promise<
   }
 }
 
+// Display-profile singletons. Held apart from the strict ones on purpose: the
+// two profiles fail independently, and sharing either the cache or the retry
+// throttle would let one path's outage decide the other's behaviour.
+let displayCache: CacheEntry | null = null
+let displayLastGood: OraclePrice | null = null
+let displayNextAttemptAt = 0
+let displayInFlight: Promise<
+  Result<OraclePrice, OracleUnavailableError>
+> | null = null
+let displayFailureReason: OracleUnavailableReason | null = null
+
+// The display profile's last-good fallback. A day's grace rather than the
+// strict path's ten minutes — see `display.maxStaleMs`.
+const serveStaleDisplayOrError = (
+  failureReason: OracleUnavailableReason,
+): Result<OraclePrice, OracleUnavailableError> => {
+  if (
+    displayLastGood &&
+    Date.now() - displayLastGood.asOf.getTime() <
+      config.priceOracle.display.maxStaleMs
+  ) {
+    return ok({ ...displayLastGood, fromCache: false, stale: true })
+  }
+  return err(
+    new OracleUnavailableError(
+      'Display price unavailable: the recent-swap window could not be used ' +
+        `(${failureReason}), and no last-good estimate is within ` +
+        `${config.priceOracle.display.maxStaleMs}ms`,
+      failureReason,
+    ),
+  )
+}
+
+// Mirrors `refresh` for the display profile, including its containment of a
+// thrown invariant: the statistics it calls throw rather than returning a
+// Result, and an unhandled rejection here would reject every concurrent caller
+// sharing the in-flight promise.
+const refreshDisplay = async (): Promise<
+  Result<OraclePrice, OracleUnavailableError>
+> => {
+  let window: Awaited<ReturnType<typeof buildDisplayWindow>>
+  try {
+    window = await internal.buildDisplayWindow()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error(
+      error,
+      'Price oracle: unexpected failure building the display window',
+    )
+    window = err(
+      unavailable(
+        'the oracle itself failed while building the display window ' +
+          `(${message}) — this is a bug in the oracle, not a condition ` +
+          'upstream',
+        'internal',
+      ),
+    )
+  }
+  displayNextAttemptAt = Date.now() + config.priceOracle.display.cacheTtlMs
+
+  if (window.isErr()) {
+    displayFailureReason = window.error.reason
+    return serveStaleDisplayOrError(window.error.reason)
+  }
+
+  const value: OraclePrice = {
+    usdPerAi3: window.value.usdPerAi3,
+    asOf: new Date(),
+    fromCache: false,
+    stale: false,
+  }
+  displayCache = {
+    value,
+    expiresAt: Date.now() + config.priceOracle.display.cacheTtlMs,
+  }
+  displayLastGood = value
+  displayFailureReason = null
+  logger.debug(
+    `Price oracle refreshed DISPLAY AI3/USD=${window.value.usdPerAi3.toString()} ` +
+      `(scaled 1e18) from ${window.value.sampleCount} swaps`,
+  )
+  return ok(value)
+}
+
+/**
+ * Current AI3/USD price for DISPLAY, as USD-per-AI3 scaled by 1e18.
+ *
+ * Same pool and same arithmetic as `getPrice`, judged by the display profile
+ * (see `buildDisplayWindow` and `config.priceOracle.display`). Use it for any
+ * figure a person reads and nobody is charged from; use `getPrice` for
+ * anything that decides an amount of money.
+ *
+ * The two must never be swapped. Quoting a purchase from this one would charge
+ * against a rate no guard defends, and it would do so silently, because the
+ * number looks exactly like the strict one. That is the whole reason this is a
+ * separate function with a separate name rather than a boolean argument.
+ *
+ * Its own cache, its own last-good and its own retry throttle, so a failing
+ * display read cannot evict a good strict rate or throttle its refresh, and a
+ * healthy strict rate cannot mask a display outage.
+ */
+const getDisplayPrice = async (): Promise<
+  Result<OraclePrice, OracleUnavailableError>
+> => {
+  const now = Date.now()
+  if (displayCache && now < displayCache.expiresAt) {
+    return ok({ ...displayCache.value, fromCache: true })
+  }
+  if (now < displayNextAttemptAt) {
+    return serveStaleDisplayOrError(displayFailureReason ?? 'gateway')
+  }
+  if (displayInFlight) {
+    return displayInFlight
+  }
+  displayInFlight = refreshDisplay()
+  try {
+    return await displayInFlight
+  } finally {
+    displayInFlight = null
+  }
+}
+
 /**
  * What the oracle currently knows, for the admin dashboard and the treasury
  * report.
@@ -661,6 +939,11 @@ const reset = (): void => {
   lastGood = null
   nextAttemptAt = 0
   inFlight = null
+  displayCache = null
+  displayLastGood = null
+  displayNextAttemptAt = 0
+  displayInFlight = null
+  displayFailureReason = null
   lastWindow = null
   lastSuccessAt = null
   lastFailureAt = null
@@ -670,6 +953,7 @@ const reset = (): void => {
 
 export const priceOracle = {
   getPrice,
+  getDisplayPrice,
   getHealth,
   // Internal collaborators exposed for unit tests (spy/override), matching the
   // `_`-prefixed convention used by paymentManager.

@@ -6,7 +6,7 @@ export const intents = {
       get: {
         summary: 'Intents - Get current storage price',
         description:
-          'Returns the current price per byte (in shannons) and price per GB (in AI3), plus a USD conversion when one is available. This endpoint does not require authentication.',
+          'Returns the current price per byte (in shannons) and price per GB (in AI3), plus an estimated USD conversion when one is available. This endpoint does not require authentication.',
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         security: [],
@@ -30,7 +30,7 @@ export const intents = {
                       type: 'object',
                       nullable: true,
                       description:
-                        'USD conversion of the price above, or null when no trustworthy AI3/USD rate is available. The rate is the volume-weighted average of realized WAI3/USDC swaps, the same oracle that prices USDC purchases, and it fails closed — a thin market, a stalled indexer or a window the market has re-priced past all yield null rather than a number. It carries no quote margin, so it is an estimate of what storage costs and not a quote for what a USDC purchase would charge. Clients must handle null; do not substitute zero.',
+                        'USD conversion of the price above, or null when no AI3/USD rate is available. The rate is the volume-weighted average of realized WAI3/USDC swaps over the last 30 days. It is an ESTIMATE and must not be used to settle anything: it is read from the price oracle\'s display profile, which drops the anti-manipulation guards the USDC purchase path relies on (pool depth, traded volume, window span, the newest-fill veto) because nothing here is charged. It also carries no quote margin. For what a USDC purchase would actually cost, create an intent. Null is uncommon but reachable — an empty window, a stalled indexer, an unreachable gateway — so clients must handle it; do not substitute zero.',
                       properties: {
                         usdPerAi3: {
                           type: 'number',
@@ -56,7 +56,7 @@ export const intents = {
                       type: 'string',
                       nullable: true,
                       description:
-                        'Why the conversion was withheld when `usd` is null — usually the oracle guard that fired (e.g. `thin-liquidity`, `indexer-lag`, `market-moved`, `misconfigured`), or `internal` when the fault is ours rather than the market\'s. Null when `usd` is present. Intended for support and dashboards rather than UI logic.',
+                        'Why the conversion was withheld when `usd` is null: `insufficient-samples` (the pool has not traded inside the window), `indexer-lag` or `indexer-error` (the source cannot be reasoned from), `out-of-bounds` (the derived rate failed its sanity bounds), `gateway` (the subgraph was unreachable), `misconfigured` (this deployment has no credential for it), or `internal` (our bug). Null when `usd` is present. Intended for support and dashboards rather than UI logic.',
                     },
                   },
                 },

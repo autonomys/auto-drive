@@ -1607,14 +1607,20 @@ const scaledToNumber = (scaled: bigint): number => Number(scaled) / 1e18
  *
  * Two sources, deliberately kept apart. The AI3 figure is the consensus chain's
  * own byte fee and is always available; the USD figure is the volume-weighted
- * average of realized WAI3/USDC fills, read through the same oracle that prices
- * USDC purchases, and is available only when that oracle is willing to speak.
+ * average of realized WAI3/USDC fills, read from the same pool that prices USDC
+ * purchases but through the oracle's DISPLAY profile.
  *
- * So a failure here degrades rather than propagates: `usd` goes null, the AI3
- * price is served exactly as before, and the UI drops one line. The oracle is
- * the right source precisely because it refuses — it already distinguishes a
- * thin market, a stalled indexer and a re-priced window from a healthy read,
- * and each of those is a case where a number would be worse than a blank.
+ * The profile matters. The strict profile refuses whenever the pool is too thin
+ * to defend a rate against manipulation, which is the correct answer when the
+ * rate decides a charge and the wrong one here: nobody is billed from this
+ * number, so a manipulated rate buys an attacker a misleading label and nothing
+ * more. See `buildDisplayWindow` for exactly which guards that drops and which
+ * it keeps.
+ *
+ * A failure still degrades rather than propagating: `usd` goes null, the AI3
+ * price is served exactly as before, and the UI drops one line. Null is now
+ * rare rather than typical, but it is still reachable — an empty window, a
+ * stalled indexer, an unreachable gateway — so callers must handle it.
  *
  * Distinct from `getPrice` rather than folded into it because `createIntent`
  * calls that on the AI3 payment path, which has no business waiting on a
@@ -1632,7 +1638,11 @@ const getStoragePrice = async (): Promise<StoragePrice> => {
   // a test replace it without standing up a Substrate node.
   const [chain, rate] = await Promise.all([
     IntentsUseCases.getPrice(),
-    priceOracle.getPrice(),
+    // getDisplayPrice, NOT getPrice: this figure is read, never charged. The
+    // strict profile withholds a rate whenever the pool is too thin to defend
+    // one against manipulation, which on this pool is most weeks — it would
+    // have had nothing to show on 97 of the 113 days to 2026-09-10.
+    priceOracle.getDisplayPrice(),
   ])
 
   if (rate.isErr()) {

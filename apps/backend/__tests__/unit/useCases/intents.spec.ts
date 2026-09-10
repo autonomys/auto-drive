@@ -127,6 +127,13 @@ describe('IntentsUseCases', () => {
     jest
       .spyOn(UsdcPaymentsUseCases, 'getAvailability')
       .mockResolvedValue({ open: true })
+    // The display profile is stubbed here, not just in the getStoragePrice
+    // cases, because leaving it live is not a failing test — it is a passing
+    // one that quietly queries the billed gateway and prices itself off
+    // whatever the pool traded this week.
+    jest
+      .spyOn(priceOracle, 'getDisplayPrice')
+      .mockResolvedValue(ok(stubPrice()))
   })
 
   afterEach(() => {
@@ -348,6 +355,14 @@ describe('IntentsUseCases', () => {
   const mockPrice = (overrides: Partial<OraclePrice> = {}) =>
     jest
       .spyOn(priceOracle, 'getPrice')
+      .mockResolvedValue(ok(stubPrice(overrides)))
+
+  // The display profile, which is what getStoragePrice reads. Deliberately a
+  // separate helper from mockPrice: a test that stubs the wrong one is testing
+  // the wrong path, and the two names make that visible at the call site.
+  const mockDisplayPrice = (overrides: Partial<OraclePrice> = {}) =>
+    jest
+      .spyOn(priceOracle, 'getDisplayPrice')
       .mockResolvedValue(ok(stubPrice(overrides)))
 
   // The charge the code should arrive at, derived the same way production does.
@@ -2923,7 +2938,7 @@ describe('IntentsUseCases', () => {
 
   it('getStoragePrice converts the chain price at the oracle rate', async () => {
     mockChainPrice()
-    mockPrice()
+    mockDisplayPrice()
 
     const result = await IntentsUseCases.getStoragePrice()
 
@@ -2936,9 +2951,9 @@ describe('IntentsUseCases', () => {
   it('getStoragePrice serves the AI3 price unchanged when the oracle refuses', async () => {
     mockChainPrice()
     jest
-      .spyOn(priceOracle, 'getPrice')
+      .spyOn(priceOracle, 'getDisplayPrice')
       .mockResolvedValue(
-        err(new OracleUnavailableError('pool is dust', 'thin-liquidity')),
+        err(new OracleUnavailableError('nothing traded', 'insufficient-samples')),
       )
 
     const result = await IntentsUseCases.getStoragePrice()
@@ -2948,12 +2963,12 @@ describe('IntentsUseCases', () => {
     expect(result.price).toBe(REALISTIC_SHANNONS_PER_BYTE)
     expect(result.pricePerGB).toBeCloseTo(268.44, 2)
     expect(result.usd).toBeNull()
-    expect(result.usdUnavailableReason).toBe('thin-liquidity')
+    expect(result.usdUnavailableReason).toBe('insufficient-samples')
   })
 
   it('getStoragePrice reports a last-good rate as stale rather than hiding it', async () => {
     mockChainPrice()
-    mockPrice({ stale: true })
+    mockDisplayPrice({ stale: true })
 
     const result = await IntentsUseCases.getStoragePrice()
 
@@ -2969,7 +2984,7 @@ describe('IntentsUseCases', () => {
     // not exactly representable as a double. The descaled figure still has to
     // land on the right value — the rounding is far below the digits anyone
     // reads, and this pins that rather than leaving it as an assumption.
-    mockPrice({ usdPerAi3: 12_345_678_000_000_000_000n })
+    mockDisplayPrice({ usdPerAi3: 12_345_678_000_000_000_000n })
 
     const result = await IntentsUseCases.getStoragePrice()
 
@@ -2978,7 +2993,7 @@ describe('IntentsUseCases', () => {
 
   it('getStoragePrice does not pad the estimate with the quote margin', async () => {
     mockChainPrice()
-    mockPrice()
+    mockDisplayPrice()
 
     const result = await IntentsUseCases.getStoragePrice()
 
