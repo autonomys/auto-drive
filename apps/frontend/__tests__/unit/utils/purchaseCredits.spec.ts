@@ -6,7 +6,9 @@ import {
   sanitizeAmountInput,
   inputToMib,
   isCustomAmountOverCap,
+  readPaymentMethod,
 } from '../../../src/utils/purchaseCredits';
+import { PaymentMethod } from '@auto-drive/models';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -269,5 +271,46 @@ describe('isCustomAmountOverCap', () => {
     const fiveTbMib = 5 * 1024 * 1024;
     expect(isCustomAmountOverCap(fiveTbMib, cap)).toBe(false);
     expect(isCustomAmountOverCap(fiveTbMib + 1, cap)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readPaymentMethod
+// ---------------------------------------------------------------------------
+
+describe('readPaymentMethod', () => {
+  it('reads the USDC value', () => {
+    expect(readPaymentMethod('usdc_eth')).toBe(PaymentMethod.USDC_ETH);
+    expect(readPaymentMethod(PaymentMethod.USDC_ETH)).toBe(
+      PaymentMethod.USDC_ETH,
+    );
+  });
+
+  it('reads the AI3 value', () => {
+    expect(readPaymentMethod(PaymentMethod.AI3_NATIVE)).toBe(
+      PaymentMethod.AI3_NATIVE,
+    );
+  });
+
+  it('defaults an absent value to AI3', () => {
+    // Every purchase before USDC existed, and every deep link that does not
+    // mention a method.
+    expect(readPaymentMethod(undefined)).toBe(PaymentMethod.AI3_NATIVE);
+    expect(readPaymentMethod(null)).toBe(PaymentMethod.AI3_NATIVE);
+  });
+
+  it('defaults anything unrecognised to AI3, not to USDC', () => {
+    // The wizard's context is re-hydrated from the query string, so this is
+    // reachable with `?paymentMethod=usdc` — a plausible near-miss — or from a
+    // stale link written by a build that spelled it differently. Defaulting the
+    // other way would put a user into a USDC flow on a deployment that may not
+    // sell it, where the honest outcome is the AI3 screen they came for.
+    expect(readPaymentMethod('usdc')).toBe(PaymentMethod.AI3_NATIVE);
+    expect(readPaymentMethod('USDC_ETH')).toBe(PaymentMethod.AI3_NATIVE);
+    expect(readPaymentMethod('')).toBe(PaymentMethod.AI3_NATIVE);
+    expect(readPaymentMethod(42)).toBe(PaymentMethod.AI3_NATIVE);
+    expect(readPaymentMethod({ paymentMethod: 'usdc_eth' })).toBe(
+      PaymentMethod.AI3_NATIVE,
+    );
   });
 });

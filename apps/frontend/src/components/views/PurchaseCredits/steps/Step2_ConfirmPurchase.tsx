@@ -19,7 +19,11 @@ import {
   sanitizeAmountInput,
   inputToMib,
   isCustomAmountOverCap,
+  readPaymentMethod,
 } from '../../../../utils/purchaseCredits';
+import { PaymentMethod } from '@auto-drive/models';
+import { useUsdcAvailability } from '../../../../hooks/useUsdcAvailability';
+import { PaymentMethodSelector } from '../molecules/PaymentMethodSelector';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -39,6 +43,44 @@ export const PurchaseStep2ConnectWallet = ({
   const { formatCreditsInMbAsUsd, formatCreditsInMbAsAi3 } = usePrices();
 
   const isCustom = String(context.packageId ?? 'custom') === 'custom';
+
+  // -------------------------------------------------------------------------
+  // Payment method
+  // -------------------------------------------------------------------------
+
+  const {
+    isAvailable: usdcAvailable,
+    isLoading: usdcLoading,
+    chain: usdcChain,
+    isUnsupported: usdcUnsupported,
+  } = useUsdcAvailability();
+
+  // The URL is the source of truth here, as it is for the package and the size,
+  // so a refresh or a back-navigation keeps the choice. `readPaymentMethod`
+  // rejects anything that is not exactly the USDC value, because this arrives
+  // from the query string.
+  const paymentMethod = readPaymentMethod(context.paymentMethod);
+
+  // A method chosen while it was on offer and closed since — a gate flipped, or
+  // a deep link from a session where it was open. Corrected rather than
+  // preserved: the alternative is a screen that quotes USDC and a Pay button
+  // that 503s.
+  //
+  // Never while the answer is still loading. `isAvailable` is false during the
+  // in-flight window too, and treating that as "closed" would silently discard a
+  // perfectly valid USDC choice a fraction of a second after the page opened.
+  const usdcClosedAfterChoosing =
+    paymentMethod === PaymentMethod.USDC_ETH && !usdcLoading && !usdcAvailable;
+
+  const effectiveMethod = usdcClosedAfterChoosing
+    ? PaymentMethod.AI3_NATIVE
+    : paymentMethod;
+
+  useEffect(() => {
+    if (usdcClosedAfterChoosing) {
+      onContextChange({ paymentMethod: PaymentMethod.AI3_NATIVE });
+    }
+  }, [usdcClosedAfterChoosing, onContextChange]);
 
   const currentPurchasedBytes = useUserStore((s) =>
     s.creditSummary ? Number(s.creditSummary.uploadBytesRemaining) : 0,
@@ -147,6 +189,7 @@ export const PurchaseStep2ConnectWallet = ({
   const ai3Amount = formatCreditsInMbAsAi3(effectiveMib);
   const usdAmount = formatCreditsInMbAsUsd(effectiveMib);
   const afterPurchaseBytes = currentPurchasedBytes + effectiveMib * 1024 * 1024;
+  const isUsdc = effectiveMethod === PaymentMethod.USDC_ETH;
 
   const canConfirm = effectiveMib > 0 && !capExceeded;
 
@@ -261,6 +304,26 @@ export const PurchaseStep2ConnectWallet = ({
                 </div>
               )}
 
+              {/* How to pay. Absent entirely when AI3 is the only option. */}
+              <PaymentMethodSelector
+                value={effectiveMethod}
+                onChange={(method) => onContextChange({ paymentMethod: method })}
+                usdcAvailable={usdcAvailable}
+                usdcChainName={usdcChain?.name}
+                closedNotice={
+                  usdcClosedAfterChoosing
+                    ? usdcUnsupported
+                      ? // Not the same sentence as a closed gate, and not for
+                        // tidiness: that one clears on its own and is worth
+                        // waiting out, this one never does.
+                        'This version of the app cannot pay USDC on the ' +
+                        'network this deployment uses — you can pay with AI3.'
+                      : 'USDC payments are temporarily unavailable — you can ' +
+                        'pay with AI3.'
+                    : null
+                }
+              />
+
               {/* Price breakdown (read-only) */}
               <InfoRow
                 label='Storage Amount'
@@ -292,6 +355,19 @@ export const PurchaseStep2ConnectWallet = ({
                   accent
                 />
               </div>
+              {isUsdc && (
+                // The USD figure above is CoinGecko's, and the USDC charge is
+                // the backend's oracle rate plus a quote margin. They will not
+                // match, and the difference is not an error — so the number is
+                // named an estimate here and the binding one is quoted on the
+                // next step, where it is locked for ten minutes. Promising an
+                // exact amount this screen cannot compute would be worse than
+                // promising nothing.
+                <div className='text-xs text-muted-foreground'>
+                  Paying in USDC: the exact amount is quoted and locked on the
+                  next step. The figure above is an estimate.
+                </div>
+              )}
             </Section>
           </div>
         </div>
@@ -324,7 +400,16 @@ export const PurchaseStep2ConnectWallet = ({
                 <Button
                   disabled={!canConfirm}
                   onClick={() => {
-                    if (canConfirm) onNext({ sizeMB: effectiveMib });
+                    // The method travels forward explicitly rather than being
+                    // re-derived on the next step: `effectiveMethod` may differ
+                    // from what the URL says (a closed gate corrects it), and the
+                    // step that takes the money must act on the same value this
+                    // screen priced.
+                    if (canConfirm)
+                      onNext({
+                        sizeMB: effectiveMib,
+                        paymentMethod: effectiveMethod,
+                      });
                   }}
                   className='w-2/3'
                 >
@@ -332,8 +417,11 @@ export const PurchaseStep2ConnectWallet = ({
                 </Button>
               </div>
               <div className='text-xs text-muted-foreground'>
-                Next, you will connect your wallet to complete the AI3 token
-                transfer
+                {isUsdc
+                  ? 'Next, you will connect your wallet to approve and send the ' +
+                    'USDC transfer'
+                  : 'Next, you will connect your wallet to complete the AI3 ' +
+                    'token transfer'}
               </div>
             </div>
           </Section>

@@ -12,16 +12,37 @@ import { useNetwork } from '../../../../contexts/network';
 import { usePrices } from '../../../../hooks/usePrices';
 import { useTransactionConfirmation } from '../../../../hooks/useTransactionConfirmation';
 import { mibToBytes, normaliseMib } from '../../../../utils/credits';
+import { readPaymentMethod } from '../../../../utils/purchaseCredits';
+import { PaymentMethod } from '@auto-drive/models';
+import { UsdcTransferPanel } from './UsdcTransferPanel';
 
-export const PurchaseStep3TransferTokens = ({
-  onNext,
-  onBack,
-  context,
-}: {
+type TransferStepProps = {
   onNext: (data?: Record<string, unknown>) => void;
   onBack: () => void;
   context: Record<string, unknown>;
-}) => {
+};
+
+/**
+ * The payment step, dispatched by asset.
+ *
+ * Two panels rather than one with branches inside it. Paying in AI3 is a single
+ * native-value call on the connected chain; paying in USDC is a chain switch,
+ * an ERC20 approval and a contract call on another chain, with a price lock
+ * ticking through all three. Interleaving them would put every AI3 purchase —
+ * which is every purchase today — through code written for the other one.
+ *
+ * `readPaymentMethod` rather than a direct read, because `context` is
+ * re-hydrated from the query string and anything but the exact USDC value has to
+ * land on AI3.
+ */
+export const PurchaseStep3TransferTokens = (props: TransferStepProps) =>
+  readPaymentMethod(props.context.paymentMethod) === PaymentMethod.USDC_ETH ? (
+    <UsdcTransferPanel {...props} />
+  ) : (
+    <Ai3TransferPanel {...props} />
+  );
+
+const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
   void onBack;
   const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
@@ -45,6 +66,7 @@ export const PurchaseStep3TransferTokens = ({
     isBackendCompleted,
     isOverCap,
     isExpired,
+    lockLapsed,
     waitError,
   } = useTransactionConfirmation({
     txHash,
@@ -247,6 +269,22 @@ export const PurchaseStep3TransferTokens = ({
                   assistance.
                 </div>
               )}
+              {/* The lock lapsed and the outcome is still open. Reachable on
+                  AI3 too — an intent expires ten minutes after it is created,
+                  and a transfer signed near that edge confirms after it — and
+                  what settles it either way is the polling loop, which keeps
+                  running through the caution. */}
+              {lockLapsed &&
+                !isBackendCompleted &&
+                !isOverCap &&
+                !isExpired && (
+                  <div className='rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
+                    <strong>Price lock lapsed.</strong> This payment confirmed
+                    after the quote&apos;s price lock ran out, so we are still
+                    confirming that it was accepted. Keep this page open — if it
+                    is not credited shortly, contact support for assistance.
+                  </div>
+                )}
               {isExpired && (
                 <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
                   <strong>Payment expired.</strong> The payment window for this

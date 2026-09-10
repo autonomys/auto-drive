@@ -89,6 +89,19 @@ export type PaymentChain<
     log: ParseEventLogsReturnType<abi, eventName, true>[number],
     receipt: TransactionReceipt,
   ) => PaymentRead
+  // Optional pre-check: is this endpoint the chain this deployment SERVES?
+  //
+  // Returns false only when that has been verified wrong, in which case nothing
+  // below is worth running — on the wrong chain `contractAddress` holds either
+  // nothing or something unrelated, so a verdict from it is evidence of nothing.
+  // A check that could not RUN returns true, for the same reason the code read
+  // below tolerates its own failure: an RPC down at boot says nothing.
+  //
+  // A hook rather than an expected-id field because the decision has a consumer
+  // outside this watcher — a mismatch also has to stop the deployment SELLING
+  // (see usdcChainGuard), and one verdict with two readers beats two checks that
+  // can disagree.
+  verifyChain?: () => Promise<boolean>
   // Optional one-time check that this deployment's configuration agrees with
   // what is actually deployed at `contractAddress`. Run at startup, off the
   // critical path; see `start()` for why a failure to run it is not the same as
@@ -356,6 +369,16 @@ export const createPaymentWatcher = <
   // from starting, while a check that RUNS AND FAILS means every payment this
   // watcher sees will be discarded. Only the second is escalated.
   const _verifyConfiguration = async () => {
+    if (!chain.verifyChain && !chain.verifyConfiguration) return
+
+    // Is this endpoint the chain we think it is?
+    //
+    // First, because everything below reads state at an address, and on the
+    // wrong chain that address holds either nothing or something unrelated — so
+    // a passing token check there would be evidence of nothing at all. The hook
+    // owns the read, the escalation and the refusal that follows from it.
+    if (chain.verifyChain && !(await chain.verifyChain())) return
+
     if (!chain.verifyConfiguration) return
 
     // Is there a contract there at all?

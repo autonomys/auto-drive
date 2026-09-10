@@ -8,13 +8,19 @@ import {
   afterAll,
   beforeEach,
 } from '@jest/globals'
-import { UserRole, type UserWithOrganization } from '@auto-drive/models'
+import {
+  UsdcClosedReason,
+  UserRole,
+  type UserWithOrganization,
+} from '@auto-drive/models'
+import { getAddress } from 'viem'
 import { config } from '../../src/config.js'
 import { dbMigration } from '../utils/dbMigrate.js'
 import { getDatabase } from '../../src/infrastructure/drivers/pg.js'
 import { AuthManager } from '../../src/infrastructure/services/auth/index.js'
 import { UsdcPaymentsUseCases } from '../../src/core/payments/usdc.js'
 import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
+import { usdcChainGuard } from '../../src/infrastructure/services/paymentManager/usdcChainGuard.js'
 
 // The three payment routes over real HTTP, against the real frontend API.
 //
@@ -190,6 +196,74 @@ describe('USDC payment routes (integration)', () => {
 
     expect((await get('/payments/usdc/status', admin)).status).toBe(200)
     expect((await post('/payments/usdc/disable', admin)).status).toBe(200)
+  })
+
+  // ── the target, which every buyer reads ───────────────────────────────────
+
+  it('serves the payment target to any signed-in user', async () => {
+    // Not admin-only, unlike the three routes above: every buyer needs the
+    // chain, the receiver and the token before their wallet can be asked for
+    // anything, and all of it is public on-chain data.
+    const response = await get('/payments/usdc/target', buyer)
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      chainId: config.ethereum.chainId,
+      receiverAddress: getAddress(RECEIVER),
+      tokenAddress: getAddress(config.ethereum.usdcTokenAddress!),
+      tokenDecimals: 6,
+      confirmations: config.ethereum.confirmations,
+      settleGraceMs: config.paymentManager.checkInterval * 4,
+    })
+  })
+
+  it('refuses the target to a caller with no credentials', async () => {
+    expect((await get('/payments/usdc/target', null)).status).toBe(401)
+  })
+
+  it('still serves the target while every gate is shut', async () => {
+    // Deliberately NOT gated on availability. A buyer holding a quoted intent
+    // has ten minutes of lock left and owes the same contract, so losing the
+    // address the moment the treasury hits its cap would strand a purchase this
+    // backend would have credited.
+    await post('/payments/usdc/disable', admin)
+    await expect(UsdcPaymentsUseCases.getAvailability()).resolves.toMatchObject(
+      { open: false },
+    )
+
+    expect((await get('/payments/usdc/target', buyer)).status).toBe(200)
+  })
+
+  it('403s the target on a deployment with no Ethereum configuration', async () => {
+    // The same status and code createIntent returns for the same condition:
+    // nothing about it is transient, so a client should stop offering USDC
+    // rather than retry.
+    config.ethereum.usdcReceiverAddress = undefined
+
+    const response = await get('/payments/usdc/target', buyer)
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'USDC_PAYMENTS_DISABLED',
+    })
+  })
+
+  it('withholds the target when the endpoint is not the configured chain', async () => {
+    // The refusal the whole ETH_CHAIN_ID check exists for. Serving a chain id
+    // the watcher is not on sends a buyer's approval and payment to the
+    // receiver's address on a chain nothing here observes: no credits, and no
+    // mispayment row either. Detecting that and continuing to sell is not a
+    // fix, so the target goes away with it.
+    jest.spyOn(usdcChainGuard, 'isMismatched').mockReturnValue(true)
+
+    const response = await get('/payments/usdc/target', buyer)
+    expect(response.status).toBe(403)
+
+    // And the same verdict closes the path for quoting, with a reason an
+    // operator can act on.
+    await expect(UsdcPaymentsUseCases.getAvailability()).resolves.toEqual({
+      open: false,
+      closedReason: UsdcClosedReason.CHAIN_MISMATCH,
+    })
   })
 
   // ── the flip, and what it reports ─────────────────────────────────────────

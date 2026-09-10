@@ -36,10 +36,7 @@ const FIVE_GiB = 1024 ** 3 * 5
  */
 const invalidEnvVars: string[] = []
 
-export const addressEnv = (
-  name: string,
-  raw?: string,
-): string | undefined => {
+export const addressEnv = (name: string, raw?: string): string | undefined => {
   const trimmed = raw?.trim()
   if (!trimmed) {
     return undefined
@@ -150,7 +147,10 @@ export const config = {
     // of it. At 25 blocks * ~6s the confirmation phase alone is ~150s; the
     // 5-minute default leaves room for inclusion latency. Raise this if you
     // increase confirmationDepth or run under sustained heavy load.
-    transactionTimeoutMs: positiveIntEnv('CHAIN_TRANSACTION_TIMEOUT_MS', 300000),
+    transactionTimeoutMs: positiveIntEnv(
+      'CHAIN_TRANSACTION_TIMEOUT_MS',
+      300000,
+    ),
     // Safety-net cadence for the confirmation watch. Confirmation is normally
     // driven by a new-heads subscription, but a WebSocket reconnect can leave
     // that subscription silently dead while the chain keeps advancing — so
@@ -169,7 +169,10 @@ export const config = {
   },
   memoryDownloadCache: {
     maxCacheSize: Number(
-      env('MEMORY_DOWNLOAD_CACHE_MAX_SIZE', DEFAULT_MEMORY_CACHE_MAX_SIZE.toString()),
+      env(
+        'MEMORY_DOWNLOAD_CACHE_MAX_SIZE',
+        DEFAULT_MEMORY_CACHE_MAX_SIZE.toString(),
+      ),
     ),
   },
   objectMappingArchiver: {
@@ -207,7 +210,9 @@ export const config = {
     // this many blocks behind the chain head. At ~6s block time, 1000 blocks
     // ≈ 1.7 hours — generous enough to not interfere with slow-but-active
     // publishing, while catching genuinely stalled objects.
-    stalenessThresholdBlocks: Number(env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000')),
+    stalenessThresholdBlocks: Number(
+      env('PUBLISHING_RECOVERY_STALENESS_BLOCKS', '1000'),
+    ),
     // Skip a recovery cycle when publish-manager already holds more than this
     // many ready (not-yet-started) tasks. Recovery's output (publish-nodes)
     // lands on publish-manager, so an unchecked recovery would keep piling
@@ -215,7 +220,9 @@ export const config = {
     // stalled, growing the backlog without bound. A threshold (not > 0) is
     // deliberate: publish-manager legitimately holds a shallow backlog while
     // batches await confirmation, and that must not suppress recovery.
-    publishManagerBacklogLimit: Number(env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100')),
+    publishManagerBacklogLimit: Number(
+      env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100'),
+    ),
   },
   migrationRecovery: {
     intervalMs: Number(env('MIGRATION_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
@@ -248,9 +255,7 @@ export const config = {
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),
     token: env('FILES_GATEWAY_TOKEN'),
-    fetchTimeoutMs: Number(
-      env('FILES_GATEWAY_FETCH_TIMEOUT_MS', '60000'),
-    ),
+    fetchTimeoutMs: Number(env('FILES_GATEWAY_FETCH_TIMEOUT_MS', '60000')),
   },
   authService: {
     url: env('AUTH_SERVICE_URL', 'http://localhost:3030'),
@@ -321,6 +326,26 @@ export const config = {
   // read as "no payments arriving" rather than "not configured".
   ethereum: {
     rpcUrl: urlEnv('ETH_CHAIN_ENDPOINT', process.env.ETH_CHAIN_ENDPOINT),
+    // EIP-155 chain id of whatever ETH_CHAIN_ENDPOINT points at. Nothing on the
+    // backend needed this before: viem reads the id off the endpoint, and the
+    // watcher only ever filters logs from one address on one connection.
+    //
+    // The purchase flow does need it, and cannot derive it. A wallet has to be
+    // switched to a specific chain before it signs, and the client must not be
+    // the one guessing which: an approval and a payment sent to the receiver's
+    // address on the WRONG chain reach either nothing (no contract there, so the
+    // call is a no-op and the intent silently never settles) or, far worse, some
+    // unrelated contract that happens to occupy that address. So the deployment
+    // states it, `GET /payments/usdc/target` serves it, and the client obeys.
+    //
+    // Defaults to 1 — Ethereum mainnet — because that is what a production
+    // deployment of this feature is for, and a default is only safe here because
+    // it is CHECKED and ACTED ON: every process that can quote or serve a USDC
+    // purchase verifies this id against the endpoint at startup, and a mismatch
+    // shuts the USDC path (see usdcChainGuard.ts). A Sepolia deployment that
+    // forgets ETH_CHAIN_ID therefore stops selling USDC rather than quoting
+    // purchases the frontend would send to the wrong chain.
+    chainId: positiveIntEnv('ETH_CHAIN_ID', 1),
     // Blocks that must build on the payment before it is credited. Ethereum is
     // post-Merge, so 2-3 blocks is already economically final and 6 is
     // conservative — but it is the same default as Auto EVM, which keeps one
@@ -523,9 +548,13 @@ export const config = {
     // Maximum total purchased credit balance (in bytes) per account, summed
     // across all active purchased_credits rows.
     // Default: 100 GiB — matches the economic protection design document.
-    maxBytesPerUser: BigInt(env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3))),
+    maxBytesPerUser: BigInt(
+      env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3)),
+    ),
     // How often (in ms) the credit expiry background job runs.
-    expiryCheckIntervalMs: Number(env('CREDIT_EXPIRY_CHECK_INTERVAL', '3600000')),
+    expiryCheckIntervalMs: Number(
+      env('CREDIT_EXPIRY_CHECK_INTERVAL', '3600000'),
+    ),
     // Price-lock window: how many minutes a PENDING intent remains valid.
     // After this window the intent is treated as expired and all operations on
     // it are rejected.  Default: 10 minutes.

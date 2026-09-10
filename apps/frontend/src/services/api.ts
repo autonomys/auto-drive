@@ -10,12 +10,14 @@ import {
   ObjectInformation,
   DownloadStatus,
   Intent,
+  PaymentMethod,
   TouChangeType,
   TouStatus,
   TouVersion,
   TouVersionWithStats,
   UsdcAvailability,
   UsdcPaymentsStatus,
+  UsdcPaymentTarget,
 } from '@auto-drive/models';
 
 // Wire-format of GET /credits/summary (bigint fields serialised as strings)
@@ -100,6 +102,19 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /**
+     * The backend's machine-readable error code, when the body carried one.
+     *
+     * Present only for the errors that send `{ error: CODE, message }` —
+     * CREDIT_CAP_EXCEEDED, USDC_PAYMENTS_UNAVAILABLE, PRICE_ORACLE_UNAVAILABLE
+     * and friends. Undefined for the plain `{ error: <message> }` shape, whose
+     * `error` is prose and must never be mistaken for a code.
+     *
+     * Exists so a caller can BRANCH rather than match on prose: the purchase
+     * flow falls back to AI3 on a closed USDC path, and the wording of that
+     * sentence is not something a fallback should depend on.
+     */
+    public readonly code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -110,6 +125,89 @@ export interface UploadResponse {
   cid: string;
 }
 
+/**
+ * An intent as it comes back from `POST /intents`, with its bigints parsed.
+ *
+ * Only the fields the purchase flow uses. `quotedTokenAmount` is the whole
+ * reason this is an object rather than the id it used to be: a USDC purchase is
+ * a specific number of USDC base units that the backend computed and locked, and
+ * the client has no way to recompute it — the oracle rate and the margin both
+ * live server-side.
+ */
+export type CreatedIntent = {
+  id: string;
+  /**
+   * Present from the USDC path onward; absent on rows created before the column
+   * existed. Read it as AI3_NATIVE when missing, exactly as the backend does.
+   */
+  paymentMethod?: PaymentMethod;
+  /** The price lock. Null on intents created before expiry existed. */
+  expiresAt: Date | null;
+  /**
+   * USDC base units the buyer must transfer — the exact amount, margin included
+   * and rounded up. Null on the AI3 path, which locks a per-byte rate instead
+   * and settles against whatever arrives.
+   */
+  quotedTokenAmount: bigint | null;
+};
+
+/** Options for `createIntent`. */
+export type CreateIntentOptions = {
+  requestedBytes?: bigint;
+  /**
+   * Omitted means AI3, which is what the backend defaults to — so an
+   * option-less call behaves exactly as it always has.
+   */
+  paymentMethod?: PaymentMethod;
+};
+
+/**
+ * The error a failed API response should become.
+ *
+ * One reader for two body shapes, because the backend has two. Errors carrying
+ * a machine-readable code send `{ error: CODE, message }`, and that `message` is
+ * written to be read by whoever is buying. The HttpError default sends
+ * `{ error: <the message> }` with no `message` key at all.
+ *
+ * So `message` is taken at any status, and `error` only below 500. On a 5xx the
+ * plain shape is not a sentence about the request — it is a raw exception,
+ * because handleInternalErrorResult builds the body as
+ * `Failed to ...: ${e.message}`. Passing that through puts
+ * `connect ECONNREFUSED 10.0.3.7:9944` under the Send button whenever the
+ * consensus WebSocket is down.
+ *
+ * Gating on the status alone would fail in the other direction: a 503 carrying
+ * USDC_PAYMENTS_UNAVAILABLE or PRICE_ORACLE_UNAVAILABLE has a message that is
+ * exactly what the user needs. Keying on which field is PRESENT rather than on
+ * the status is what makes both arrive correctly.
+ *
+ * Shared rather than inlined per call site, so a caller that branches on `code`
+ * — the purchase flow falls back to AI3 on a closed USDC path — gets the same
+ * answer from every endpoint instead of only the ones that remembered to parse.
+ */
+const toApiError = async (
+  response: Response,
+  fallback: string,
+): Promise<ApiError> => {
+  const parsed = await response
+    .json()
+    .then((body: { message?: string; error?: string }) => ({
+      detail:
+        response.status < 500 ? (body?.message ?? body?.error) : body?.message,
+      // Only the coded shape has both keys, and only there is `error` a code
+      // rather than prose. Without this guard the plain shape's sentence would
+      // arrive as a `code`, and a caller branching on it would match nothing
+      // while looking like it might.
+      code:
+        body?.message !== undefined && body?.error !== undefined
+          ? body.error
+          : undefined,
+    }))
+    .catch(() => ({ detail: undefined, code: undefined }));
+
+  return new ApiError(response.status, parsed.detail ?? fallback, parsed.code);
+};
+
 export type Api = ReturnType<typeof createApiService>;
 
 export const createApiService = ({
@@ -119,7 +217,10 @@ export const createApiService = ({
   apiBaseUrl: string;
   downloadApiUrl: string;
 }) => ({
-  createIntent: async (requestedBytes?: bigint): Promise<string> => {
+  createIntent: async ({
+    requestedBytes,
+    paymentMethod,
+  }: CreateIntentOptions = {}): Promise<CreatedIntent> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -142,47 +243,77 @@ export const createApiService = ({
         ...(requestedBytes !== undefined && {
           requestedBytes: requestedBytes.toString(),
         }),
+        // Omitted rather than defaulted to AI3, so a body from this client is
+        // byte-for-byte what it has always been on the AI3 path.
+        ...(paymentMethod !== undefined && { paymentMethod }),
       }),
     });
 
     if (!response.ok) {
       // The cap rejection is the one failure here a user can act on, and it
-      // names the cap and their balance. Surfacing statusText instead would
-      // turn "you have 2 GiB of room left" into "Forbidden".
-      //
-      // Two body shapes, because the backend has two. Errors carrying a
-      // machine-readable code send { error: CODE, message }, and that `message`
-      // is written to be read by whoever is buying. The HttpError default sends
-      // { error: <the message> } with no `message` key at all.
-      //
-      // So `message` is taken at any status, and `error` only below 500. On a
-      // 5xx the plain shape is not a sentence about the request — it is a raw
-      // exception, because handleInternalErrorResult builds the body as
-      // `Failed to create intent: ${e.message}`. Passing that through puts
-      // `connect ECONNREFUSED 10.0.3.7:9944` under the Send button whenever the
-      // consensus WebSocket is down.
-      //
-      // Gating on the status alone would fail in the other direction. No 5xx
-      // this endpoint returns today carries a `message` — but the USDC quote
-      // path stacked on this branch adds one, a 503 carrying
-      // PRICE_ORACLE_UNAVAILABLE whose message is exactly what the user needs
-      // ("the rate is unavailable, try again" rather than "Service
-      // Unavailable"). Keying on which field is present rather than on the
-      // status is what makes that arrive correctly without a second change
-      // here. The status only decides whether the `error` fallback is safe.
-      const detail = await response
-        .json()
-        .then((body: { message?: string; error?: string }) =>
-          response.status < 500 ? (body?.message ?? body?.error) : body?.message,
-        )
-        .catch(() => undefined);
-      throw new Error(
-        detail ?? `Network response was not ok: ${response.statusText}`,
+      // names the cap and their balance. Surfacing statusText instead would turn
+      // "you have 2 GiB of room left" into "Forbidden". See toApiError for how
+      // the two body shapes are told apart.
+      throw await toApiError(
+        response,
+        `Network response was not ok: ${response.statusText}`,
       );
     }
 
-    const intent = (await response.json()) as { id: string };
-    return intent.id;
+    const intent = (await response.json()) as {
+      id: string;
+      paymentMethod?: PaymentMethod;
+      expiresAt?: string;
+      quotedTokenAmount?: string;
+    };
+    return {
+      id: intent.id,
+      paymentMethod: intent.paymentMethod,
+      // Parsed leniently on purpose. Every field but `id` is absent on some
+      // legitimate response — an AI3 intent has no quote, a pre-expiry row has
+      // no lock — and a strict parse would turn "this intent has no quote"
+      // into a thrown error on the path that was working before USDC existed.
+      expiresAt: intent.expiresAt ? new Date(intent.expiresAt) : null,
+      quotedTokenAmount:
+        intent.quotedTokenAmount !== undefined
+          ? BigInt(intent.quotedTokenAmount)
+          : null,
+    };
+  },
+  /**
+   * Where a USDC payment must be sent, as this deployment reports it.
+   *
+   * Fetched rather than compiled in: the chain and the receiver are the
+   * backend's environment, and a client that guessed would approve USDC to a
+   * contract on a chain nobody watches. See UsdcPaymentTarget.
+   *
+   * 403 (USDC_PAYMENTS_DISABLED) when the deployment has no Ethereum
+   * configuration at all, which is a normal state rather than a fault.
+   */
+  getUsdcPaymentTarget: async (): Promise<UsdcPaymentTarget> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/payments/usdc/target`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      // Through toApiError like every other call, so the 403's
+      // USDC_PAYMENTS_DISABLED code survives to whoever is deciding whether to
+      // offer the option at all.
+      throw await toApiError(
+        response,
+        `Failed to read the USDC payment target: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<UsdcPaymentTarget>;
   },
   watchIntent: async (intentId: string, txHash: string): Promise<void> => {
     const session = await getAuthSession();
@@ -201,7 +332,16 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      // ApiError rather than Error so the status survives. 410 is the one
+      // answer here a caller can act on: the backend refuses to record a hash
+      // against a lapsed lock (isIntentExpired). That is a CAUTION, not a
+      // verdict — the payment is usually still credited — so the USDC panel
+      // raises it at once rather than after six confirmations, and withdraws it
+      // on the first successful read of the intent.
+      throw await toApiError(
+        response,
+        `Network response was not ok: ${response.statusText}`,
+      );
     }
   },
   getIntent: async (intentId: string): Promise<Intent> => {
@@ -218,8 +358,11 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new ApiError(
-        response.status,
+      // Through toApiError like the rest: 410 is what the polling loop reads,
+      // and a code the backend may add later then survives without a second
+      // change here.
+      throw await toApiError(
+        response,
         `Network response was not ok: ${response.statusText}`,
       );
     }
@@ -495,7 +638,12 @@ export const createApiService = ({
       signal?: AbortSignal;
     },
   ): Promise<AsyncIterable<Buffer>> => {
-    const { password, skipDecryption, authMode = 'auto', signal } = options ?? {};
+    const {
+      password,
+      skipDecryption,
+      authMode = 'auto',
+      signal,
+    } = options ?? {};
     const session = await getAuthSession().catch(() => null);
 
     if (
@@ -527,10 +675,10 @@ export const createApiService = ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let metadata: any = null;
     if (!skipDecryption) {
-      const metadataRes = await api.sendAPIRequest(
-        `/objects/${cid}/metadata`,
-        { method: 'GET', signal },
-      );
+      const metadataRes = await api.sendAPIRequest(`/objects/${cid}/metadata`, {
+        method: 'GET',
+        signal,
+      });
       if (!metadataRes.ok) {
         throw new Error('Failed to retrieve file metadata');
       }
@@ -615,23 +763,18 @@ export const createApiService = ({
       throw new Error('No session');
     }
 
-    const response = await fetch(
-      `${apiBaseUrl}/banners/${bannerId}/interact`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.accessToken}`,
-          'X-Auth-Provider': session.authProvider,
-        },
-        body: JSON.stringify({ type }),
+    const response = await fetch(`${apiBaseUrl}/banners/${bannerId}/interact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
       },
-    );
+      body: JSON.stringify({ type }),
+    });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to interact with banner: ${response.statusText}`,
-      );
+      throw new Error(`Failed to interact with banner: ${response.statusText}`);
     }
   },
   // Admin banner methods
@@ -781,7 +924,9 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create async download: ${response.statusText}`);
+      throw new Error(
+        `Failed to create async download: ${response.statusText}`,
+      );
     }
   },
   dismissAsyncDownload: async (id: string): Promise<void> => {
@@ -1158,9 +1303,7 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to activate ToU version: ${response.statusText}`,
-      );
+      throw new Error(`Failed to activate ToU version: ${response.statusText}`);
     }
 
     return response.json() as Promise<TouVersion>;
@@ -1181,9 +1324,7 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to archive ToU version: ${response.statusText}`,
-      );
+      throw new Error(`Failed to archive ToU version: ${response.statusText}`);
     }
 
     return response.json() as Promise<TouVersion>;
@@ -1256,9 +1397,7 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to get deletion stats: ${response.statusText}`,
-      );
+      throw new Error(`Failed to get deletion stats: ${response.statusText}`);
     }
 
     return response.json();

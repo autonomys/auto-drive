@@ -7,6 +7,7 @@ import {
 import { config } from '../../../config.js'
 import { createLogger } from '../../drivers/logger.js'
 import { createPaymentWatcher, PaymentChain } from './watcher.js'
+import { usdcChainGuard } from './usdcChainGuard.js'
 
 const logger = createLogger('PaymentManager:chains')
 
@@ -138,6 +139,17 @@ export const createUsdcChain = (
         },
       }
     },
+    // ETH_CHAIN_ID against the endpoint. Set here and not on ai3Chain: this is
+    // the id the purchase flow is TOLD to switch a wallet to, so a wrong value
+    // costs a buyer their payment. Auto EVM has a configured id too
+    // (EVM_CHAIN_ID) and the same check would fit it, but turning it on would be
+    // a new production alert on a path this change is not otherwise touching.
+    //
+    // Delegated to usdcChainGuard rather than read here, because the same
+    // verdict has to stop `getAvailability` and `getPaymentTarget` — including
+    // in `start:fe:api`, which serves the target and runs no watcher at all.
+    verifyChain: async () =>
+      (await usdcChainGuard.verify()).state !== 'mismatch',
     verifyConfiguration: async (client) => {
       const deployedToken = await client.readContract({
         address: contractAddress,
@@ -235,6 +247,10 @@ export const getUsdcPaymentWatcher = () => {
   logger.info('Ethereum USDC payment watcher configured', {
     receiverAddress: usdcReceiverAddress,
     tokenAddress: usdcTokenAddress,
+    // The id the purchase flow will be told to switch wallets to. Logged beside
+    // the addresses because it is the one value here with no default worth
+    // trusting silently — verifyConfiguration checks it against the endpoint.
+    chainId: config.ethereum.chainId,
   })
 
   // Memoised only on success. A configuration that throws is re-derived on
