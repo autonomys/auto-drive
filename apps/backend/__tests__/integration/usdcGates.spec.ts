@@ -148,9 +148,7 @@ describe('USDC gates (integration)', () => {
     })
 
   const poll = async (balance: bigint) => {
-    jest
-      .spyOn(usdcGatesJob._internal, 'readBalance')
-      .mockResolvedValue(balance)
+    jest.spyOn(usdcGatesJob._internal, 'readBalance').mockResolvedValue(balance)
     await usdcGatesJob._runCheck()
   }
 
@@ -209,6 +207,17 @@ describe('USDC gates (integration)', () => {
     // No cache in between, so the advertisement cannot lag the refusal.
     const flags = await withUsdcAvailability(FeatureFlagsUseCases.get(buyer))
     expect(flags.payWithUsdc).toBe(false)
+
+    // The buyer is still told WHERE to pay, even now. A client holding an intent
+    // quoted a minute ago has nine minutes of lock left and the payment is owed
+    // to the same contract, so gating the target on availability would strand a
+    // purchase this backend would have credited.
+    expect(UsdcPaymentsUseCases.getPaymentTarget()).toEqual(
+      expect.objectContaining({
+        chainId: config.ethereum.chainId,
+        tokenDecimals: 6,
+      }),
+    )
 
     // ...and it reopens on its own once a conversion brings the balance down.
     await poll(10n * USDC)

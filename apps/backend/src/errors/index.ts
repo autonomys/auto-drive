@@ -4,18 +4,37 @@ export abstract class HttpError extends Error {
   public readonly statusCode: number
   public readonly statusText: string
   public readonly message: string
+  /**
+   * A machine-readable code, for the errors a client has to BRANCH on rather
+   * than merely render — a closed USDC path offers AI3, a credit cap offers a
+   * smaller purchase, and neither decision should depend on the wording of a
+   * sentence written for a human.
+   *
+   * Set it and the body becomes `{ error: <code>, message }`; leave it and the
+   * body stays `{ error: <the message> }`, which is what every uncoded error has
+   * always sent. Held on the base class rather than duplicated as an identical
+   * `handleResponse` override per subclass, which is what four of these had
+   * grown into — and which meant the SHAPE, the thing clients actually parse,
+   * was re-declared every time instead of being decided once.
+   */
+  protected readonly errorCode?: string
 
-  constructor(statusCode: number, message: string) {
+  constructor(statusCode: number, message: string, errorCode?: string) {
     super(message)
     this.statusCode = statusCode
     this.statusText = message
     this.message = message
+    this.errorCode = errorCode
   }
 
   handleResponse(res: Response) {
-    res.status(this.statusCode).json({
-      error: this.message,
-    })
+    res
+      .status(this.statusCode)
+      .json(
+        this.errorCode
+          ? { error: this.errorCode, message: this.message }
+          : { error: this.message },
+      )
   }
 }
 
@@ -70,8 +89,10 @@ export class PaymentRequiredError extends HttpError {
 
 export class ForbiddenError extends HttpError {
   static readonly statusCode = 403
-  constructor(message: string) {
-    super(ForbiddenError.statusCode, message)
+  // `errorCode` forwarded, not swallowed: the coded 403s below are subclasses of
+  // this one, and it is the only place they can reach HttpError from.
+  constructor(message: string, errorCode?: string) {
+    super(ForbiddenError.statusCode, message, errorCode)
     this.name = 'ForbiddenError'
   }
 }
@@ -86,19 +107,8 @@ export class ForbiddenError extends HttpError {
 export class CreditCapExceededError extends ForbiddenError {
   static readonly code = 'CREDIT_CAP_EXCEEDED'
   constructor(message: string) {
-    super(message)
+    super(message, CreditCapExceededError.code)
     this.name = 'CreditCapExceededError'
-  }
-
-  // Mirrors the { error: <code>, message: <human-readable> } shape the intents
-  // controller already uses for GOOGLE_ACCOUNT_REQUIRED, so a client can branch
-  // on `error` and surface `message` verbatim. Overriding here rather than
-  // special-casing in the controller means no call site can forget the code.
-  override handleResponse(res: Response) {
-    res.status(this.statusCode).json({
-      error: CreditCapExceededError.code,
-      message: this.message,
-    })
   }
 }
 
@@ -147,15 +157,8 @@ export class GoneError extends HttpError {
 export class UsdcPaymentsDisabledError extends ForbiddenError {
   static readonly code = 'USDC_PAYMENTS_DISABLED'
   constructor(message: string) {
-    super(message)
+    super(message, UsdcPaymentsDisabledError.code)
     this.name = 'UsdcPaymentsDisabledError'
-  }
-
-  override handleResponse(res: Response) {
-    res.status(this.statusCode).json({
-      error: UsdcPaymentsDisabledError.code,
-      message: this.message,
-    })
   }
 }
 
@@ -167,8 +170,9 @@ export class UsdcPaymentsDisabledError extends ForbiddenError {
 // what it asked for.
 export class ServiceUnavailableError extends HttpError {
   static readonly statusCode = 503
-  constructor(message: string) {
-    super(ServiceUnavailableError.statusCode, message)
+  // See ForbiddenError: the coded 503s below reach HttpError through here.
+  constructor(message: string, errorCode?: string) {
+    super(ServiceUnavailableError.statusCode, message, errorCode)
     this.name = 'ServiceUnavailableError'
   }
 }
@@ -201,18 +205,8 @@ export class UsdcUnavailableError extends ServiceUnavailableError {
     message = 'Paying in USDC is temporarily unavailable. Pay in AI3 instead, ' +
       'or try again later.',
   ) {
-    super(message)
+    super(message, UsdcUnavailableError.code)
     this.name = 'UsdcUnavailableError'
-  }
-
-  // Mirrors the { error: <code>, message: <human-readable> } shape the intents
-  // controller already uses, so a client branches on `error` — here, to fall
-  // back to AI3 — and can surface `message` verbatim.
-  override handleResponse(res: Response) {
-    res.status(this.statusCode).json({
-      error: UsdcUnavailableError.code,
-      message: this.message,
-    })
   }
 }
 
@@ -251,19 +245,9 @@ export class QuoteFailedError extends ServiceUnavailableError {
   public readonly code: QuoteErrorCode
 
   constructor(code: QuoteErrorCode, message: string) {
-    super(message)
+    super(message, code)
     this.name = 'QuoteFailedError'
     this.code = code
-  }
-
-  // Mirrors the { error: <code>, message: <human-readable> } shape the intents
-  // controller already uses for GOOGLE_ACCOUNT_REQUIRED and CREDIT_CAP_EXCEEDED,
-  // so a client branches on `error` and can surface `message` verbatim.
-  override handleResponse(res: Response) {
-    res.status(this.statusCode).json({
-      error: this.code,
-      message: this.message,
-    })
   }
 }
 

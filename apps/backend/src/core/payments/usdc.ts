@@ -7,9 +7,11 @@ import {
   UsdcClosedReason,
   UsdcManualGateSource,
   UsdcPaymentsStatus,
+  UsdcPaymentTarget,
 } from '@auto-drive/models'
 import { getAddress } from 'viem'
 import { config, isUsdcConfigured } from '../../config.js'
+import { usdcChainGuard } from '../../infrastructure/services/paymentManager/usdcChainGuard.js'
 import { ForbiddenError } from '../../errors/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import {
@@ -239,6 +241,16 @@ const getAvailability = async (): Promise<UsdcAvailability> => {
     return { open: false, closedReason: UsdcClosedReason.NOT_CONFIGURED }
   }
 
+  // Straight after "configured", because a deployment whose ETH_CHAIN_ID does
+  // not match its endpoint is configured wrongly rather than closed for
+  // business, and every gate below it would be measuring the wrong chain. Fails
+  // closed only once the mismatch has been VERIFIED — an unread check leaves
+  // this false, so an RPC outage does not become a payments outage. See
+  // usdcChainGuard.
+  if (usdcChainGuard.isMismatched()) {
+    return { open: false, closedReason: UsdcClosedReason.CHAIN_MISMATCH }
+  }
+
   // Two indexed reads against two tiny tables, run together. Uncached
   // deliberately: a kill switch whose effect waits out a TTL is not the control
   // an incident needs.
@@ -314,7 +326,8 @@ const setManualGate = async (
 
   // No previous entry means the gate was running on the environment default, and
   // whether that counts as a change is exactly what it said.
-  const previousEnabled = previous?.enabled ?? config.usdcPayments.enabledByDefault
+  const previousEnabled =
+    previous?.enabled ?? config.usdcPayments.enabledByDefault
 
   if (previousEnabled === enabled) {
     logger.info('USDC manual gate re-affirmed with no change', {
@@ -468,11 +481,81 @@ const describeClosedReason = (reason: UsdcClosedReason): string => {
       return 'the treasury balance has not been read recently enough to trust'
     case UsdcClosedReason.ORACLE_UNAVAILABLE:
       return 'the AI3/USD rate cannot be established right now'
+    case UsdcClosedReason.CHAIN_MISMATCH: {
+      const verdict = usdcChainGuard.getVerdict()
+      return (
+        'ETH_CHAIN_ID does not match the chain ETH_CHAIN_ENDPOINT is on' +
+        (verdict.state === 'mismatch'
+          ? ` (configured ${verdict.expected}, endpoint ${verdict.actual})`
+          : '')
+      )
+    }
+  }
+}
+
+/**
+ * Where a USDC payment must be sent, for the purchase flow to obey.
+ *
+ * Configuration only — deliberately NOT gated on the gates. "Where does this
+ * deployment take USDC" and "is it taking any right now" are different
+ * questions, `/features` already answers the second, and folding them together
+ * would mean a client that had the target in hand loses it the moment the
+ * treasury hits its cap — mid-flow, holding a quoted intent that is still
+ * perfectly payable for the rest of its lock.
+ *
+ * The single exception is a verified chain mismatch, below, where the target is
+ * not merely unavailable but WRONG.
+ *
+ * `null` rather than a throw when the deployment does not sell USDC: the
+ * controller turns that into the same 403 `createIntent` returns, and a
+ * deployment with no Ethereum configuration is a normal state, not an error.
+ *
+ * See UsdcPaymentTarget, and `docs/payments.md`, for why this is served at all.
+ */
+const getPaymentTarget = (): UsdcPaymentTarget | null => {
+  if (!isUsdcConfigured()) return null
+
+  // The one availability-shaped condition this DOES refuse on, and the exception
+  // proves the rule above. Every other closed gate leaves the target correct —
+  // the buyer still owes the same contract on the same chain — whereas a chain
+  // mismatch means the target itself is wrong, and serving it is how a buyer's
+  // USDC ends up approved on a chain nothing here watches. There is no quoted
+  // intent to strand either: `createIntent` refuses for the same reason.
+  if (usdcChainGuard.isMismatched()) return null
+
+  // Non-null assertions are safe under isUsdcConfigured, which is exactly the
+  // conjunction of these three being set.
+  return {
+    chainId: config.ethereum.chainId,
+    // Checksummed, because a wallet is about to be asked to approve a spender
+    // and every UI that shows an address alongside it will show the checksummed
+    // form. Two spellings of one address on the confirmation screen is how a
+    // careful user talks themselves out of a legitimate payment.
+    receiverAddress: getAddress(config.ethereum.usdcReceiverAddress!),
+    tokenAddress: getAddress(config.ethereum.usdcTokenAddress!),
+    // Not read from the token contract. The whole backend prices USDC as
+    // 6-decimal (see USDC_DECIMALS), and the watcher REFUSES a payment whose
+    // token is not the configured one precisely so that assumption cannot be
+    // violated — so reporting anything else here would advertise a purchase this
+    // deployment would then refuse to credit.
+    tokenDecimals: USDC_DECIMALS,
+    confirmations: config.ethereum.confirmations,
+    // How long the client should keep polling a 410 before calling a purchase
+    // lost. Derived here rather than kept as a frontend constant because it is
+    // a property of THIS backend's timing: `GET /intents/:id` answers 410 the
+    // moment `expires_at` passes, but credits are withheld only once
+    // `cleanupExpiredIntents` writes the EXPIRED column — so a payment sent just
+    // after the lock lapsed is normally credited by the poller below, four turns
+    // of which is a generous margin. A constant compiled into the client would
+    // silently start calling credited purchases lost the day an operator raised
+    // EVM_CHAIN_CHECK_INTERVAL.
+    settleGraceMs: config.paymentManager.checkInterval * 4,
   }
 }
 
 export const UsdcPaymentsUseCases = {
   getAvailability,
+  getPaymentTarget,
   getManualGate,
   getReadings: () => usdcPaymentStateRepository.getReadings(),
   setManualGate,

@@ -438,7 +438,15 @@ const createIntent = async (
       // NOT_CONFIGURED is unreachable here — the guard above already returned
       // for it, with a message that says what an operator has to set. Kept as a
       // 403 for the same reason it is one there: nothing about it is transient.
-      if (reason === UsdcClosedReason.NOT_CONFIGURED) {
+      //
+      // CHAIN_MISMATCH joins it, and the status is the point. A 503 tells the
+      // client to keep the option and retry; this one clears only when an
+      // operator fixes ETH_CHAIN_ID and restarts, so the honest answer is "not
+      // on this deployment" and the option should go away.
+      if (
+        reason === UsdcClosedReason.NOT_CONFIGURED ||
+        reason === UsdcClosedReason.CHAIN_MISMATCH
+      ) {
         return err(
           new UsdcPaymentsDisabledError(
             'Paying in USDC is not available on this deployment. Pay in AI3 ' +
@@ -472,7 +480,10 @@ const createIntent = async (
   // required on the endpoint, because `POST /intents` is a documented API-key
   // flow for third-party integrators (see featureFlags.hasGoogleAuth) and every
   // one of them is on AI3 today.
-  if (paymentMethod === PaymentMethod.USDC_ETH && requestedBytes === undefined) {
+  if (
+    paymentMethod === PaymentMethod.USDC_ETH &&
+    requestedBytes === undefined
+  ) {
     return err(
       new BadRequestError(
         'requestedBytes is required when paying in USDC: the amount charged ' +
@@ -972,10 +983,13 @@ const markIntentAsConfirmed = async ({
         logIndex,
       })
     } else {
-      logger.info('markIntentAsConfirmed: intent already processed — skipping', {
-        intentId,
-        currentStatus: intent.status,
-      })
+      logger.info(
+        'markIntentAsConfirmed: intent already processed — skipping',
+        {
+          intentId,
+          currentStatus: intent.status,
+        },
+      )
     }
 
     // ok() either way. The intent is settled and correct; nothing here is a
@@ -1553,17 +1567,15 @@ const cleanupExpiredIntents = async (): Promise<void> => {
   logger.info('Marking expired intents', { count: expired.length })
 
   const results = await Promise.all(
-    expired.map((intent) =>
-      intentsRepository.expireIntentIfPending(intent.id),
-    ),
+    expired.map((intent) => intentsRepository.expireIntentIfPending(intent.id)),
   )
 
   const actuallyExpired = results.filter(Boolean).length
   if (actuallyExpired < expired.length) {
-    logger.info(
-      'Some intents were not expired (status changed concurrently)',
-      { attempted: expired.length, expired: actuallyExpired },
-    )
+    logger.info('Some intents were not expired (status changed concurrently)', {
+      attempted: expired.length,
+      expired: actuallyExpired,
+    })
   }
 }
 
@@ -1580,7 +1592,8 @@ const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
 
   return {
     price,
-    pricePerGB: Math.round((price * BYTES_PER_GB) / SHANNONS_PER_AI3 * 100) / 100,
+    pricePerGB:
+      Math.round(((price * BYTES_PER_GB) / SHANNONS_PER_AI3) * 100) / 100,
   }
 }
 

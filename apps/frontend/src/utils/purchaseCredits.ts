@@ -10,6 +10,8 @@
  *   1 "TB" here = 1,024 GB = 1,048,576 MiB
  */
 
+import { PaymentMethod } from '@auto-drive/models';
+
 // ---------------------------------------------------------------------------
 // Unit definitions
 // ---------------------------------------------------------------------------
@@ -84,3 +86,26 @@ export const inputToMib = (value: string, unit: Unit): number => {
 // ---------------------------------------------------------------------------
 
 export { isMibOverCap as isCustomAmountOverCap } from './credits';
+
+// ---------------------------------------------------------------------------
+// Payment method
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the chosen payment method out of the wizard's context bag.
+ *
+ * Anything unrecognised — and anything at all that is not exactly the USDC
+ * value — reads as AI3. That is not defensive tidiness: the wizard's context is
+ * re-hydrated from the query string (see PurchaseCredits/index.tsx), so
+ * `?paymentMethod=usdc` or a stale link from a build that spelled it differently
+ * arrives here as an arbitrary string. Defaulting the wrong way would put a user
+ * into a USDC flow on a deployment that may not sell it, where the honest
+ * outcome is the AI3 screen they were always going to get.
+ *
+ * The comparison is against PaymentMethod.USDC_ETH rather than a literal so the
+ * wire value and this check cannot drift apart.
+ */
+export const readPaymentMethod = (value: unknown): PaymentMethod =>
+  value === PaymentMethod.USDC_ETH
+    ? PaymentMethod.USDC_ETH
+    : PaymentMethod.AI3_NATIVE;
