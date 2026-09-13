@@ -741,3 +741,406 @@ describe('priceOracle.getHealth', () => {
     expect(spy).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * The DISPLAY profile.
+ *
+ * These are mostly the mirror image of the strict cases above: each one takes a
+ * window the strict profile refuses and asserts the display profile serves it.
+ * That inversion IS the contract — if a case here ever starts refusing, the two
+ * profiles have collapsed back into one and the estimate goes blank again.
+ */
+describe('priceOracle.getDisplayPrice', () => {
+  const DISPLAY_TTL_MS = 300_000
+  const DISPLAY_MAX_STALE_MS = 86_400_000
+  const DISPLAY_WINDOW_AGE_MS = 2_592_000_000
+  const DISPLAY_MAX_INDEX_LAG_MS = 3_600_000
+
+  beforeEach(() => {
+    priceOracle._reset()
+    failOnUnstubbedFetch()
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+    jest.useRealTimers()
+  })
+
+  it('prices a window the strict profile rejects as too few samples', async () => {
+    // Two fills. The strict floor is 5, and this is the shape the live pool was
+    // actually in on 2026-09-10 — two fills in seven days.
+    mockWindow((now) => windowAt(now, { samples: swapsAt(2, now - 60_000) }))
+
+    expect((await priceOracle.getPrice()).isErr()).toBe(true)
+    priceOracle._reset()
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap().usdPerAi3).toBe(PRICE)
+  })
+
+  it('prices a single fill', async () => {
+    mockWindow((now) => windowAt(now, { samples: swapsAt(1, now - 60_000) }))
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap().usdPerAi3).toBe(PRICE)
+  })
+
+  it('prices a pool too shallow and too quiet for the strict floors', async () => {
+    // A dust window against an almost-empty pool: $2 of volume below the 1000
+    // USDC floor, and 5 USDC of depth below the 1000 USDC floor. Both legs are
+    // scaled together so the PRICE stays at 0.0064 and stays inside the sanity
+    // bounds — this case is about the depth and volume guards, and a fixture
+    // that also tripped the bounds would pass for the wrong reason.
+    const dust = (timestampMs: number) => ({
+      usdcAmount: 1_000_000n, // 1 USDC
+      ai3Amount: 156_250_000_000_000_000_000n, // 156.25 AI3 -> 0.0064 USD/AI3
+      direction: 'sell' as const,
+      timestampMs,
+    })
+    mockWindow((now) => ({
+      ...windowAt(now),
+      samples: [dust(now - 60_000), dust(now - 3_660_000)],
+      poolUsdcDepth: 5_000_000n,
+    }))
+
+    expect((await priceOracle.getPrice()).isErr()).toBe(true)
+    priceOracle._reset()
+
+    expect((await priceOracle.getDisplayPrice()).isOk()).toBe(true)
+  })
+
+  it('prices a burst that the strict span guard rejects', async () => {
+    // Six fills sharing one timestamp: zero span, which strict refuses as
+    // `narrow-window` because a burst is printable on demand.
+    mockWindow((now) => ({
+      ...windowAt(now),
+      samples: Array.from({ length: 6 }, () => ({
+        usdcAmount: USDC_PER_SWAP,
+        ai3Amount: AI3_PER_SWAP,
+        direction: 'sell' as const,
+        timestampMs: now - 60_000,
+      })),
+    }))
+
+    expect((await priceOracle.getPrice()).isErr()).toBe(true)
+    priceOracle._reset()
+
+    expect((await priceOracle.getDisplayPrice()).isOk()).toBe(true)
+  })
+
+  it('prices a market that has re-priced, where strict vetoes', async () => {
+    // The live downtrend: strict refuses this with `market-moved` because the
+    // newest fill is an outlier against the median of the rest. For an
+    // estimate the newest fill is the point, so it is served.
+    mockWindow((now) => ({ ...windowAt(now), samples: liveDowntrendAt(now) }))
+
+    expect((await priceOracle.getPrice()).isErr()).toBe(true)
+    priceOracle._reset()
+
+    expect((await priceOracle.getDisplayPrice()).isOk()).toBe(true)
+  })
+
+  it('serves a truncated page instead of refusing it', async () => {
+    // A full page is the NEWEST fills, which for an estimate is the good half
+    // of the window rather than a reason to withhold one.
+    mockWindow((now) =>
+      windowAt(now, {
+        samples: swapsAt(MAX_WINDOW_SAMPLES, now - 60_000),
+        truncated: true,
+      }),
+    )
+
+    expect((await priceOracle.getPrice()).isErr()).toBe(true)
+    priceOracle._reset()
+
+    expect((await priceOracle.getDisplayPrice()).isOk()).toBe(true)
+  })
+
+  it('reaches back further than the strict window', async () => {
+    // A fill three weeks old: outside strict's 7d window and its 24h freshness
+    // bound, inside display's 30d.
+    const age = 21 * 86_400_000
+    expect(age).toBeGreaterThan(MAX_WINDOW_AGE_MS)
+    expect(age).toBeGreaterThan(MAX_SWAP_AGE_MS)
+    expect(age).toBeLessThan(DISPLAY_WINDOW_AGE_MS)
+
+    mockWindow((now) => windowAt(now, { samples: swapsAt(3, now - age) }))
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isOk()).toBe(true)
+  })
+
+  // ── What it still refuses ────────────────────────────────────────────────
+
+  it('refuses an empty window', async () => {
+    mockWindow((now) => windowAt(now, { samples: [] }))
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr().reason).toBe('insufficient-samples')
+  })
+
+  it('refuses a window whose only fills are older than 30 days', async () => {
+    mockWindow((now) =>
+      windowAt(now, { samples: swapsAt(3, now - DISPLAY_WINDOW_AGE_MS - 1) }),
+    )
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr().reason).toBe('insufficient-samples')
+  })
+
+  it('refuses a rate outside the sanity bounds', async () => {
+    // A price is a bug in us, not a market condition, when it lands here —
+    // and rendering it would be worse than rendering nothing.
+    mockWindow((now) =>
+      windowAt(now, { samples: swapsAt(5, now - 60_000, 1n) }),
+    )
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr().reason).toBe('out-of-bounds')
+  })
+
+  it('refuses when the indexer is past the display lag bound', async () => {
+    mockWindow((now) =>
+      windowAt(now, {
+        indexerTimestampMs: now - DISPLAY_MAX_INDEX_LAG_MS - 1,
+      }),
+    )
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr().reason).toBe('indexer-lag')
+  })
+
+  it('tolerates lag the strict profile refuses', async () => {
+    // 30 minutes: past strict's 15-minute bound, inside display's hour.
+    mockWindow((now) =>
+      windowAt(now, { indexerTimestampMs: now - MAX_INDEX_LAG_MS - 1 }),
+    )
+
+    expect((await priceOracle.getPrice()).isErr()).toBe(true)
+    priceOracle._reset()
+
+    expect((await priceOracle.getDisplayPrice()).isOk()).toBe(true)
+  })
+
+  it('refuses when the subgraph reports indexing errors', async () => {
+    mockWindow((now) => windowAt(now, { hasIndexingErrors: true }))
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr().reason).toBe('indexer-error')
+  })
+
+  // ── Trim behaviour ───────────────────────────────────────────────────────
+
+  it('does not let the trim empty a small window', async () => {
+    // Two fills 60% apart. Each is an outlier against their midpoint, so a
+    // trim would discard both and turn "the pool traded twice" into "no idea".
+    mockWindow((now) => ({
+      ...windowAt(now),
+      samples: [
+        {
+          usdcAmount: 320_000_000n,
+          ai3Amount: AI3_PER_SWAP,
+          direction: 'sell' as const,
+          timestampMs: now - 60_000,
+        },
+        {
+          usdcAmount: 640_000_000n,
+          ai3Amount: AI3_PER_SWAP,
+          direction: 'sell' as const,
+          timestampMs: now - 120_000,
+        },
+      ],
+    }))
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isOk()).toBe(true)
+    // Volume-weighted across both: 960 USDC over 100k AI3 = 0.0096.
+    expect(result._unsafeUnwrap().usdPerAi3).toBe(9_600_000_000_000_000n)
+  })
+
+  it('still trims one absurd print out of a large window', async () => {
+    mockWindow((now) => ({
+      ...windowAt(now),
+      samples: [
+        // One fill at 100x the rest, which the trim must discard.
+        {
+          usdcAmount: USDC_PER_SWAP * 100n,
+          ai3Amount: AI3_PER_SWAP,
+          direction: 'sell' as const,
+          timestampMs: now - 60_000,
+        },
+        ...swapsAt(6, now - 120_000),
+      ],
+    }))
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isOk()).toBe(true)
+    expect(result._unsafeUnwrap().usdPerAi3).toBe(PRICE)
+  })
+
+  // ── Cache independence from the strict profile ───────────────────────────
+
+  it('caches on its own TTL', async () => {
+    const spy = mockWindow()
+
+    await priceOracle.getDisplayPrice()
+    jest.advanceTimersByTime(TTL_MS + 1)
+    const second = await priceOracle.getDisplayPrice()
+
+    // Past the STRICT ttl but inside the display one: still one upstream read.
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(second._unsafeUnwrap().fromCache).toBe(true)
+
+    jest.advanceTimersByTime(DISPLAY_TTL_MS + 1)
+    await priceOracle.getDisplayPrice()
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  it('serves a last-good estimate far longer than the strict path would', async () => {
+    const spy = mockWindow()
+    await priceOracle.getDisplayPrice()
+
+    jest.advanceTimersByTime(DISPLAY_TTL_MS + 1)
+    spy.mockRejectedValueOnce(new Error('gateway 503'))
+    const stale = await priceOracle.getDisplayPrice()
+
+    expect(stale.isOk()).toBe(true)
+    expect(stale._unsafeUnwrap().stale).toBe(true)
+
+    // Past the strict fallback window, still inside the display one.
+    expect(DISPLAY_MAX_STALE_MS).toBeGreaterThan(MAX_STALE_MS)
+  })
+
+  it('gives up once the last-good estimate ages out', async () => {
+    const spy = mockWindow()
+    await priceOracle.getDisplayPrice()
+
+    jest.advanceTimersByTime(DISPLAY_MAX_STALE_MS + 1)
+    spy.mockRejectedValue(new Error('gateway 503'))
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isErr()).toBe(true)
+  })
+
+  it('a display outage leaves the strict rate alone', async () => {
+    const spy = mockWindow()
+    await priceOracle.getPrice()
+    await priceOracle.getDisplayPrice()
+
+    // Display fails; strict is inside its TTL and must be untouched by it.
+    jest.advanceTimersByTime(DISPLAY_TTL_MS + 1)
+    spy.mockRejectedValueOnce(new Error('gateway 503'))
+    await priceOracle.getDisplayPrice()
+
+    const strict = await priceOracle.getPrice()
+    expect(strict.isOk()).toBe(true)
+    expect(strict._unsafeUnwrap().stale).toBe(false)
+  })
+
+  it('reports a config error as misconfigured, not as a gateway outage', async () => {
+    jest
+      .spyOn(priceOracle._internal, 'fetchRecentSwaps')
+      .mockRejectedValue(new SubgraphConfigError('no GRAPH_API_KEY'))
+
+    const result = await priceOracle.getDisplayPrice()
+
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr().reason).toBe('misconfigured')
+  })
+
+  it('collapses concurrent callers into one upstream read', async () => {
+    const spy = mockWindow()
+
+    const [a, b, c] = await Promise.all([
+      priceOracle.getDisplayPrice(),
+      priceOracle.getDisplayPrice(),
+      priceOracle.getDisplayPrice(),
+    ])
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(a.isOk() && b.isOk() && c.isOk()).toBe(true)
+  })
+
+  // ── Isolation from the strict profile's failure record ───────────────────
+  //
+  // The two profiles share one module and one logger, and must share nothing
+  // else. `unavailable()` writes the strict profile's failure state, so a
+  // display refusal routed through it would report a healthy charge-oracle as
+  // degraded and relabel its refusals — the failure Bugbot found on #823.
+
+  it('a display failure does not mark the strict profile as serving stale', async () => {
+    const spy = mockWindow()
+    // Strict succeeds and has a fresh last-good.
+    expect((await priceOracle.getPrice()).isOk()).toBe(true)
+    expect(priceOracle.getHealth().servingStale).toBe(false)
+
+    spy.mockRejectedValueOnce(new Error('gateway 503'))
+    expect((await priceOracle.getDisplayPrice()).isErr()).toBe(true)
+
+    // Nothing about the charge oracle changed.
+    expect(priceOracle.getHealth().servingStale).toBe(false)
+  })
+
+  it('a display failure does not overwrite the strict last-failure pair', async () => {
+    const spy = mockWindow((now) =>
+      windowAt(now, { samples: swapsAt(2, now - 60_000) }),
+    )
+    // Strict refuses: too few samples.
+    expect((await priceOracle.getPrice()).isErr()).toBe(true)
+    expect(priceOracle.getHealth().lastFailureReason).toBe(
+      'insufficient-samples',
+    )
+    const strictFailedAt = priceOracle.getHealth().lastFailureAt
+
+    jest.advanceTimersByTime(1000)
+    spy.mockRejectedValueOnce(new Error('gateway 503'))
+    expect((await priceOracle.getDisplayPrice()).isErr()).toBe(true)
+
+    // The dashboard must still be describing the guard that closed the CHARGE
+    // path, not one that closed an estimate.
+    expect(priceOracle.getHealth().lastFailureReason).toBe(
+      'insufficient-samples',
+    )
+    expect(priceOracle.getHealth().lastFailureAt).toEqual(strictFailedAt)
+  })
+
+  it('a display failure does not relabel a throttled strict refusal', async () => {
+    // The reason a throttled getPrice reports becomes the client-facing quote
+    // code (market-moved -> PRICE_UNSTABLE, everything else -> retryable), so
+    // an overwritten reason is a wrong answer to the caller, not just a wrong
+    // dashboard.
+    const spy = mockWindow((now) => ({
+      ...windowAt(now),
+      samples: liveDowntrendAt(now),
+    }))
+    const first = await priceOracle.getPrice()
+    expect(first._unsafeUnwrapErr().reason).toBe('market-moved')
+
+    spy.mockRejectedValueOnce(new Error('gateway 503'))
+    expect((await priceOracle.getDisplayPrice()).isErr()).toBe(true)
+
+    // Still inside the strict retry throttle, so this is served from
+    // currentFailureReason rather than a fresh read.
+    const throttled = await priceOracle.getPrice()
+    expect(throttled._unsafeUnwrapErr().reason).toBe('market-moved')
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+})
