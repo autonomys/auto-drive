@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 import {
+  canLeaveUsdcStep,
   evaluateUsdcActions,
   UsdcActionInputs,
 } from '../../../src/utils/usdcActions';
@@ -141,5 +142,53 @@ describe('evaluateUsdcActions', () => {
     // wizard, and conflating it with a missing value here would hide which
     // check refused.
     expect(evaluateUsdcActions({ ...OPEN, sizeMib: 0 }).canQuote).toBe(true);
+  });
+});
+
+describe('canLeaveUsdcStep', () => {
+  const BEFORE_PAYING = {
+    isBusy: false,
+    hasLivePayment: false,
+    confirmationStalled: false,
+  };
+
+  it('lets a buyer back out before any money moves', () => {
+    expect(canLeaveUsdcStep(BEFORE_PAYING)).toBe(true);
+  });
+
+  it('holds them while a wallet interaction is in flight', () => {
+    expect(canLeaveUsdcStep({ ...BEFORE_PAYING, isBusy: true })).toBe(false);
+  });
+
+  it('holds them while a payment made here is confirming', () => {
+    // This mount is the only thing holding that hash, and unmounting it takes
+    // the confirmation screen with it.
+    expect(canLeaveUsdcStep({ ...BEFORE_PAYING, hasLivePayment: true })).toBe(
+      false,
+    );
+  });
+
+  it('opens the exit once the confirmation has stalled', () => {
+    // The dead end this exists for: about twelve minutes of viem timeout and
+    // retries on a transaction that was never mined, with every exit shut.
+    expect(
+      canLeaveUsdcStep({
+        ...BEFORE_PAYING,
+        hasLivePayment: true,
+        confirmationStalled: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('still holds them while the wallet is working, stalled or not', () => {
+    // `isBusy` is about a prompt on screen, which a stalled receipt says
+    // nothing about.
+    expect(
+      canLeaveUsdcStep({
+        isBusy: true,
+        hasLivePayment: true,
+        confirmationStalled: true,
+      }),
+    ).toBe(false);
   });
 });

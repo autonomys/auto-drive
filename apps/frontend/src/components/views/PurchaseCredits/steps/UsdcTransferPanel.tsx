@@ -3,7 +3,7 @@
 import { Button } from '@auto-drive/ui';
 import { useAccount } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Hash } from 'viem';
 import { Check, Loader2 } from 'lucide-react';
 import { InfoRow } from '../atoms/InfoRow';
@@ -28,7 +28,10 @@ import {
   readUsdcResume,
   saveUsdcResume,
 } from '../../../../utils/usdcResume';
-import { evaluateUsdcActions } from '../../../../utils/usdcActions';
+import {
+  canLeaveUsdcStep,
+  evaluateUsdcActions,
+} from '../../../../utils/usdcActions';
 
 /** The visible sequence, so a buyer can see what they are being asked for. */
 const STEPS: { stage: UsdcPurchaseStage; label: string }[] = [
@@ -71,7 +74,7 @@ export const UsdcTransferPanel = ({
   // the confirmation screen surviving a reload: the ids below are the only
   // handle the UI has on a purchase the backend is already settling, and losing
   // them leaves a buyer with a debited wallet and a wizard back at step one.
-  const [resumed] = useState(() => readUsdcResume(sizeMib));
+  const [resumed, setResumed] = useState(() => readUsdcResume(sizeMib));
 
   const {
     stage,
@@ -103,7 +106,6 @@ export const UsdcTransferPanel = ({
   const activeIntentId = intent?.id ?? resumed?.intentId;
 
   const {
-    isWaitingReceipt,
     isConfirmed,
     currentConfs,
     isFullyConfirmed,
@@ -194,6 +196,22 @@ export const UsdcTransferPanel = ({
     });
   }, [api, payTxHash, intent?.id]);
 
+  // Latched, because `waitError` does not stay put and the exit it opens must.
+  //
+  // The receipt query holds no data, so react-query clears its error and returns
+  // to `pending` on every refetch — and with the client's defaults that is every
+  // window refocus, which is exactly what the notice below asks the buyer to do
+  // when it tells them to check a block explorer. Unlatched, the exit closes
+  // behind them for another round of viem's 180s timeout and three retries.
+  //
+  // Cleared only by the transaction actually being found, which is the one
+  // event that makes watching worth something again.
+  const [confirmationStalled, setConfirmationStalled] = useState(false);
+  useEffect(() => {
+    if (waitError) setConfirmationStalled(true);
+    else if (isConfirmed) setConfirmationStalled(false);
+  }, [waitError, isConfirmed]);
+
   // The lock lapsed somewhere and the outcome is still open.
   //
   // Either source counts, and the polling loop resolves both on the same
@@ -206,7 +224,11 @@ export const UsdcTransferPanel = ({
     ((registrationLockLapsed && !hasReadIntent) || lockLapsed) &&
     !isBackendCompleted &&
     !isOverCap &&
-    !isExpired;
+    !isExpired &&
+    // Not alongside the stall notice. Both are amber and their advice is
+    // opposite — "keep this page open" against "you can go back" — and a
+    // payment with no receipt at all is not one that is "still settling".
+    !confirmationStalled;
 
   const wrongChain =
     isConnected && target !== undefined && connectedChainId !== target.chainId;
@@ -239,6 +261,43 @@ export const UsdcTransferPanel = ({
     awaitingConfirmation,
     quoteStale,
   });
+
+  // The way out, and the only one this step has: see canLeaveUsdcStep.
+  const canGoBack = canLeaveUsdcStep({
+    isBusy,
+    // The LIVE hash, not `activeTxHash`. A resumed one is proof the record
+    // exists, and counting it made a reload a dead end. See canLeaveUsdcStep.
+    hasLivePayment: Boolean(payTxHash),
+    confirmationStalled,
+  });
+
+  /**
+   * Give up on a payment that is not arriving.
+   *
+   * Nothing else can retire one. Every `clearUsdcResume` trigger runs behind
+   * `isFullyConfirmed`, which a transaction that was never mined never reaches,
+   * so the record pins that purchase size for the rest of the tab session: going
+   * back only leads to the same dead hash re-attaching on the way in.
+   *
+   * Offered only once the confirmation has stalled, and deliberately as the
+   * buyer's decision rather than something done for them. The risk is real: a
+   * transaction written off as lost can still be mined, and is then either
+   * credited on its own while they pay again, or — if its lock lapsed first —
+   * filed as a mispayment for an admin. Which is why it takes twelve minutes of
+   * no receipt and an explicit click, with the hash on screen.
+   */
+  const discardStalledPayment = useCallback(() => {
+    clearUsdcResume();
+    setResumed(null);
+    // The latches too. Both outlive the hash that set them, and neither has any
+    // other way back: `registrationLockLapsed` is withdrawn only by a poll that
+    // needs `isFullyConfirmed`, which is exactly what never arrived. Left
+    // standing they would label the buyer's NEXT payment stalled from its first
+    // second, and file it under a price lock that lapsed on the last one.
+    setConfirmationStalled(false);
+    setRegistrationLockLapsed(false);
+    reset();
+  }, [reset]);
 
   const currentStep = stageIndex(stage);
 
@@ -383,12 +442,13 @@ export const UsdcTransferPanel = ({
                   AI3
                   panel avoids all of this by rendering no Back button at all
                   (`void onBack`); this one needs the affordance before the
-                  money moves and must not keep it afterwards. */}
-              <Button
-                variant='outline'
-                onClick={onBack}
-                disabled={isBusy || Boolean(activeTxHash)}
-              >
+                  money moves and must not keep it afterwards.
+
+                  With one exception, which is `canLeaveUsdcStep`: a payment
+                  whose confirmation has stalled outright. Watching it is no
+                  longer worth the dead end that closing every exit creates, and
+                  the stored record means leaving does not lose the hash. */}
+              <Button variant='outline' onClick={onBack} disabled={!canGoBack}>
                 Back
               </Button>
               {/* Two clicks, not one, and the gap between them is the point: a
@@ -460,13 +520,14 @@ export const UsdcTransferPanel = ({
                       'USDC has just closed for new purchases, but the price ' +
                       'you locked is still payable — you can send it now.'
                     : 'USDC payments are temporarily unavailable — you can pay with AI3.'}{' '}
-                {/* Offered only while there is nothing to abandon. A gate can
-                    close after a payment is already on chain, and that payment
-                    still settles — leaving the step then would lose the hash
-                    this screen is tracking it by. A live quote is worth keeping
-                    for the same reason: leaving discards a lock the buyer can
-                    still spend. */}
-                {!activeTxHash && !canPay && (
+                {/* Offered exactly where Back is, which is the point: a gate can
+                    close after a payment is on chain, and that payment still
+                    settles, so this must not invite a buyer away from a screen
+                    that is counting it. `canGoBack` also hides it mid-wallet-
+                    prompt, which the old `!activeTxHash` gate did not. A live
+                    quote is kept for its own reason: leaving discards a lock the
+                    buyer can still spend. */}
+                {canGoBack && !canPay && (
                   <button type='button' className='underline' onClick={onBack}>
                     Go back to change the payment method.
                   </button>
@@ -525,9 +586,15 @@ export const UsdcTransferPanel = ({
                 value={<span>{activeTxHash}</span>}
               />
               <div className='text-xs text-muted-foreground'>
-                {isWaitingReceipt
-                  ? 'Waiting for transaction to be included…'
-                  : 'Included'}
+                {/* On `isConfirmed`, not on `!isWaitingReceipt`: the loading
+                    flag is false in the error state too, so a receipt that
+                    never arrived printed "Included" directly above the notice
+                    saying it had not. */}
+                {isConfirmed
+                  ? 'Included'
+                  : confirmationStalled
+                    ? 'Not found on chain'
+                    : 'Waiting for transaction to be included…'}
               </div>
               {isConfirmed && (
                 <>
@@ -584,8 +651,28 @@ export const UsdcTransferPanel = ({
                   above.
                 </div>
               )}
-              {waitError && (
-                <div className='text-xs text-red-600'>{waitError.message}</div>
+              {/* viem's own message named a timeout and a retry count, which
+                  tells a buyer nothing they can act on. What they need is what
+                  is known — no receipt, the hash is still theirs — and the one
+                  decision only they can make. */}
+              {confirmationStalled && (
+                <div className='rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
+                  <strong>Still not confirmed.</strong> We could not reach a
+                  receipt for this transaction. It may still be pending — check
+                  the hash above in your wallet or on a block explorer, and keep
+                  it for support either way.
+                  <div className='mt-2'>
+                    <Button variant='outline' onClick={discardStalledPayment}>
+                      Discard and start over
+                    </Button>
+                  </div>
+                  <div className='mt-1 text-xs'>
+                    Only if your wallet shows it failed. One that lands later is
+                    normally still credited — so paying again would buy the
+                    credits twice — and if its price lock has lapsed by then, it
+                    needs support either way.
+                  </div>
+                </div>
               )}
               <div className='flex gap-3'>
                 <Button

@@ -126,7 +126,10 @@ export const PurchaseStep2ConnectWallet = ({
         // it is the purchase size rather than a seed for the input box, a
         // fractional or non-numeric one would reach `BigInt` in the cap check
         // and take the screen down with it.
-        return { title: 'Custom Amount', sizeMB: normaliseMib(context.sizeMB) ?? 0 };
+        return {
+          title: 'Custom Amount',
+          sizeMB: normaliseMib(context.sizeMB) ?? 0,
+        };
     }
   }, [context.packageId, context.sizeMB]);
 
@@ -215,7 +218,9 @@ export const PurchaseStep2ConnectWallet = ({
       // one, and this is the last place it could quietly become the size.
       const currentMib = customSizeMib;
       const newDisplay =
-        isFinite(currentMib) && currentMib > 0 ? mibToDisplay(currentMib, newUnit) : '';
+        isFinite(currentMib) && currentMib > 0
+          ? mibToDisplay(currentMib, newUnit)
+          : '';
       setAmountEdited(true);
       setUnit(newUnit);
       setInputValue(newDisplay);

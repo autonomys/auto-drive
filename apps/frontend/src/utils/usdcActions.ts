@@ -1,5 +1,6 @@
 /**
- * Which of the USDC panel's two buttons may be clicked.
+ * Which of the USDC panel's buttons may be clicked — its two actions here, and
+ * its one exit at the bottom of the file.
  *
  * Pure, and outside the component, for the same reason `intentPolling` is: this
  * is a decision about money rather than a render, and every defect found in the
@@ -88,3 +89,38 @@ export const evaluateUsdcActions = ({
     canPay: walletReady && awaitingConfirmation && !quoteStale,
   };
 };
+
+/**
+ * May the buyer leave this step?
+ *
+ * Its own function rather than a third key above, because it is not a decision
+ * about money — it is the one exit from a screen that closes every other one.
+ *
+ * `hasLivePayment` is a nudge rather than a guard, and worth being honest about:
+ * the panel writes the hash to `sessionStorage` in the effect that follows it,
+ * so leaving does not normally lose it — that write is allowed to fail silently,
+ * which is the one case it does. What it buys is that a buyer who has just paid
+ * stays on the screen counting the confirmations, instead of wandering off
+ * during the ~72s and returning to a wizard that looks like it forgot.
+ *
+ * A RESUMED hash — one this panel read back on mount — is not passed here at
+ * all. It is proof the record exists, so there is nothing left to nudge about,
+ * and treating it as live made a reload into a dead end: it was set before
+ * anything could stall, and shut every exit on a purchase nothing would resolve.
+ *
+ * `confirmationStalled` is the live half of that. viem gives up on a receipt
+ * after 180s and react-query retries three times, so a transaction that was
+ * never mined — dropped, replaced, underpriced — or an Ethereum RPC that is not
+ * answering pins this step for about twelve minutes. There is nothing left to
+ * watch by then.
+ */
+export const canLeaveUsdcStep = ({
+  isBusy,
+  hasLivePayment,
+  confirmationStalled,
+}: {
+  isBusy: boolean;
+  /** A payment was submitted in this mount — not one restored from storage. */
+  hasLivePayment: boolean;
+  confirmationStalled: boolean;
+}): boolean => !isBusy && (!hasLivePayment || confirmationStalled);
