@@ -9,11 +9,11 @@ import { CreditCurrentPrice } from '../CreditCurrentPrice';
 import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
 import { formatStorageSize } from '../../../../utils/number';
+import { normaliseMib } from '../../../../utils/credits';
 import { useUserStore } from '../../../../globalStates/user';
 import {
   UNITS,
   type Unit,
-  MIB_PER_UNIT,
   bestUnit,
   mibToDisplay,
   sanitizeAmountInput,
@@ -122,7 +122,11 @@ export const PurchaseStep2ConnectWallet = ({
       case 'ent':
         return { title: 'Enterprise', sizeMB: 102400 };
       default:
-        return { title: 'Custom Amount', sizeMB: (context.sizeMB as number) ?? 0 };
+        // Normalised, not cast. This arrives from the query string, and now that
+        // it is the purchase size rather than a seed for the input box, a
+        // fractional or non-numeric one would reach `BigInt` in the cap check
+        // and take the screen down with it.
+        return { title: 'Custom Amount', sizeMB: normaliseMib(context.sizeMB) ?? 0 };
     }
   }, [context.packageId, context.sizeMB]);
 
@@ -145,10 +149,24 @@ export const PurchaseStep2ConnectWallet = ({
     }
   }, [isCustom, sizeMB, inputValue]);
 
-  /** MiB value derived from the current input + unit. */
+  // Whether the buyer has touched the amount since this screen opened.
+  //
+  // It decides which of two values is the purchase size, and the difference is
+  // not cosmetic. `mibToDisplay` trims to four significant figures, so the
+  // string in the box is lossy: deriving the size back out of an UNTOUCHED box
+  // silently resizes the purchase. Arriving here with 20,000 MiB shows
+  // "19.53 GB" and confirms 19,999 — and 90% of custom sizes above 1 GB drift
+  // that way, which is every return to this step from the one after it.
+  //
+  // Nothing is lost by preferring the context: both handlers below already write
+  // the size they parsed into it, so it is the typed value the moment there is
+  // one.
+  const [amountEdited, setAmountEdited] = useState(false);
+
+  /** The purchase size: what the buyer typed, or what they arrived with. */
   const customSizeMib = useMemo(
-    () => inputToMib(inputValue, unit),
-    [inputValue, unit],
+    () => (amountEdited ? inputToMib(inputValue, unit) : sizeMB),
+    [amountEdited, inputValue, unit, sizeMB],
   );
 
   /** The effective MiB value for price calculations. */
@@ -178,6 +196,7 @@ export const PurchaseStep2ConnectWallet = ({
       // Allow only digits and a single decimal point — prevents leading zeros,
       // scientific notation ("1e5"), and negative values.
       const sanitised = sanitizeAmountInput(raw);
+      setAmountEdited(true);
       setInputValue(sanitised);
       onContextChange({ sizeMB: inputToMib(sanitised, unit) });
     },
@@ -186,18 +205,25 @@ export const PurchaseStep2ConnectWallet = ({
 
   const handleUnitChange = useCallback(
     (newUnit: Unit) => {
+      // Picking the unit already shown is not a change, and must not be treated
+      // as one. The display is rounded, so round-tripping the purchase through
+      // it would resize the purchase on a click that asked for nothing.
+      if (newUnit === unit) return;
       // Convert the current MiB value into the new unit to keep the
-      // displayed number consistent with the underlying purchase size.
-      const currentMib = parseFloat(inputValue) * MIB_PER_UNIT[unit];
+      // displayed number consistent with the underlying purchase size. From the
+      // size, not from the string that displays it: the string is the rounded
+      // one, and this is the last place it could quietly become the size.
+      const currentMib = customSizeMib;
       const newDisplay =
         isFinite(currentMib) && currentMib > 0 ? mibToDisplay(currentMib, newUnit) : '';
+      setAmountEdited(true);
       setUnit(newUnit);
       setInputValue(newDisplay);
       // Keep context.sizeMB in sync so Step 3 sees the correct value
       // even if the user navigates forward without re-typing.
       onContextChange({ sizeMB: inputToMib(newDisplay, newUnit) });
     },
-    [inputValue, unit, onContextChange],
+    [customSizeMib, unit, onContextChange],
   );
 
   // -------------------------------------------------------------------------
