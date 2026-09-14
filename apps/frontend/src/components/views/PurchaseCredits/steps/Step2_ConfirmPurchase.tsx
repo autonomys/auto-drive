@@ -76,11 +76,29 @@ export const PurchaseStep2ConnectWallet = ({
     ? PaymentMethod.AI3_NATIVE
     : paymentMethod;
 
+  // The same fact, latched — because the correction below erases its own cause.
+  // Writing AI3 into the context makes `usdcClosedAfterChoosing` false on the
+  // very next render, and with `usdcAvailable` false too the selector hits its
+  // own `if (!usdcAvailable && !closedNotice) return null`: the USDC button and
+  // the sentence explaining its absence both left the screen within a frame, so
+  // neither branch of the notice below was ever readable.
+  //
+  // The FACT and not the sentence, so the wording is still chosen at render:
+  // `usdcUnsupported` can resolve after the gate has already closed, and a
+  // frozen string would keep saying "temporarily" about something permanent.
+  //
+  // Cleared when USDC comes back, so a reopened gate does not leave a stale
+  // notice sitting under two live buttons.
+  const [usdcClosedOnMe, setUsdcClosedOnMe] = useState(false);
+
   useEffect(() => {
     if (usdcClosedAfterChoosing) {
+      setUsdcClosedOnMe(true);
       onContextChange({ paymentMethod: PaymentMethod.AI3_NATIVE });
+    } else if (usdcAvailable) {
+      setUsdcClosedOnMe(false);
     }
-  }, [usdcClosedAfterChoosing, onContextChange]);
+  }, [usdcClosedAfterChoosing, usdcAvailable, onContextChange]);
 
   const currentPurchasedBytes = useUserStore((s) =>
     s.creditSummary ? Number(s.creditSummary.uploadBytesRemaining) : 0,
@@ -311,7 +329,7 @@ export const PurchaseStep2ConnectWallet = ({
                 usdcAvailable={usdcAvailable}
                 usdcChainName={usdcChain?.name}
                 closedNotice={
-                  usdcClosedAfterChoosing
+                  usdcClosedOnMe
                     ? usdcUnsupported
                       ? // Not the same sentence as a closed gate, and not for
                         // tidiness: that one clears on its own and is worth
