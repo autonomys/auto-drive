@@ -96,7 +96,15 @@ const read = async (): Promise<Verdict> => {
     actual,
     problem,
   })
-  await slackNotifier.send({
+  // Alerted, NOT awaited. The verdict is what closes the path; the Slack post
+  // only tells someone about it. Awaiting it held `isMismatched()` at false for
+  // the whole round trip — up to the notifier's own 10s timeout, and longest
+  // against an unreachable webhook host — and during that window
+  // `getAvailability` reported the path open, `getPaymentTarget` served the
+  // wrong chain id and `createIntent` quoted. That is the misdirection this
+  // guard exists to refuse, so it must not be held open by its own alarm.
+  // `send` never throws (it returns false instead), so nothing needs the await.
+  void slackNotifier.send({
     title:
       ':rotating_light: USDC is on the wrong chain — purchases refused until ETH_CHAIN_ID and ETH_CHAIN_ENDPOINT agree',
     details: problem,

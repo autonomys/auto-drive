@@ -78,6 +78,29 @@ describe('usdcChainGuard', () => {
     expect(details.details).toContain('1')
   })
 
+  it('reaches the verdict without waiting for the alert to post', async () => {
+    // The alert reports the mismatch; the verdict is what refuses to sell. While
+    // the POST was awaited, `isMismatched()` stayed false for the whole round
+    // trip — bounded only by the notifier's 10s timeout — so `getPaymentTarget`
+    // served the wrong chain id and `createIntent` quoted, which is exactly the
+    // misdirection this guard exists to stop.
+    chainIdResponses.push(11155111)
+    let releaseSlack: () => void = () => {}
+    jest.spyOn(slackNotifier, 'send').mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        releaseSlack = () => resolve(true)
+      }),
+    )
+
+    await usdcChainGuard.verify()
+
+    // The webhook has not answered and will not until releaseSlack below.
+    expect(usdcChainGuard.isMismatched()).toBe(true)
+    expect(slackNotifier.send).toHaveBeenCalledTimes(1)
+
+    releaseSlack()
+  })
+
   it('does not fail closed when the check cannot run', async () => {
     // An RPC down at boot says nothing about the configuration. Treating it as
     // a mismatch turns an endpoint blip into a payments outage that outlives it.
