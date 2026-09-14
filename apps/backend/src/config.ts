@@ -532,6 +532,16 @@ export const config = {
      * with nothing in it. Those still refuse, and the endpoint still serves a
      * null rather than a guess.
      *
+     * Note what that list does NOT include: ORACLE_MAX_SWAP_AGE_MS, the strict
+     * profile's bound on the age of the newest fill, has no counterpart here.
+     * It is a fifth dropped guard and not merely a relaxed one. Nothing in this
+     * profile refuses a rate for being old, so anyone tuning the numbers below
+     * should read the window length as the ONLY thing bounding staleness. The
+     * endpoint compensates by publishing `usd.lastTradeAt` beside `usd.asOf`,
+     * which is what lets a client tell a month-old basis from a fresh one; if
+     * that field is ever dropped, this profile goes back to being able to
+     * present a month-old rate as current.
+     *
      * Sized from this pool's actual history. Over the 120 days to 2026-09-10 it
      * filled 103 times, and rolling 7-day windows cleared the strict floors in
      * 16 of 113 days — so the strict profile would have withheld an estimate
@@ -539,8 +549,16 @@ export const config = {
      * whenever the pool has traded at all in a month.
      */
     display: {
-      // The window fills are drawn from, and — since a window with nothing in
-      // it is the refusal — the freshness bound too. 30 days.
+      // The window fills are drawn from. 30 days.
+      //
+      // This is NOT a freshness bound, though it is the only thing resembling
+      // one on this path. An empty window is the refusal, but a window is not
+      // empty because its fills are old: with minSamples at 1, a single trade
+      // on day 1 satisfies this profile for the following 29 days, and the rate
+      // served on day 30 is that one trade. Lengthening this window therefore
+      // buys coverage by widening exactly that gap. What bounds the age of the
+      // newest fill in the strict profile is ORACLE_MAX_SWAP_AGE_MS, and it is
+      // deliberately absent here — see the note above.
       windowAgeMs: positiveIntEnv('ORACLE_DISPLAY_WINDOW_AGE_MS', 2592000000),
       // One fill in a month is a thin basis for an average and still a far
       // better answer than a blank. The strict floor of 5 is about making a

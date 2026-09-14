@@ -116,6 +116,7 @@ describe('USDC gates job', () => {
           ? ok({
               usdPerAi3: 6_400_000_000_000_000n,
               asOf: new Date('2026-08-24T00:00:00Z'),
+              newestSwapMs: new Date('2026-08-24T00:00:00Z').getTime(),
               fromCache: false,
               stale: false,
             })

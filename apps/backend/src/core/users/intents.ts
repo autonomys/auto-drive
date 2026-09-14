@@ -1685,6 +1685,11 @@ const getStoragePrice = async (): Promise<StoragePrice> => {
       usdPerAi3: scaledToNumber(rate.value.usdPerAi3),
       pricePerGBUsd: scaledToNumber(usdPerGbScaled),
       asOf: rate.value.asOf.toISOString(),
+      // Carried separately from `asOf` because the display profile has no
+      // freshness bound: a rate read a second ago may average a single fill
+      // from four weeks back, and `asOf` would call that current. This is the
+      // field a client has to read to qualify the figure.
+      lastTradeAt: new Date(rate.value.newestSwapMs).toISOString(),
       stale: rate.value.stale,
     },
     usdUnavailableReason: null,

@@ -347,6 +347,9 @@ describe('IntentsUseCases', () => {
   const stubPrice = (overrides: Partial<OraclePrice> = {}): OraclePrice => ({
     usdPerAi3: RATE,
     asOf: new Date(),
+    // Defaulted to "just now" so the ordinary case reads as a live market;
+    // the tests that care about an old basis override it explicitly.
+    newestSwapMs: Date.now(),
     fromCache: false,
     stale: false,
     ...overrides,
@@ -2989,6 +2992,31 @@ describe('IntentsUseCases', () => {
     const result = await IntentsUseCases.getStoragePrice()
 
     expect(result.usd?.usdPerAi3).toBeCloseTo(12.345678, 10)
+  })
+
+  it('getStoragePrice publishes when the pool last traded, not when we read it', async () => {
+    mockChainPrice()
+    // The case the display profile's dropped freshness bound makes ordinary: a
+    // rate read a moment ago whose entire basis is a fill from four weeks back.
+    // `asOf` describes our read and would call this current; only lastTradeAt
+    // says what it rests on.
+    const fourWeeksAgo = Date.now() - 28 * 86_400_000
+    mockDisplayPrice({ newestSwapMs: fourWeeksAgo, stale: false })
+
+    const result = await IntentsUseCases.getStoragePrice()
+
+    expect(result.usd?.lastTradeAt).toBe(new Date(fourWeeksAgo).toISOString())
+    // The two must be able to disagree — if lastTradeAt is ever derived from
+    // asOf, this is the assertion that notices.
+    expect(result.usd?.lastTradeAt).not.toBe(result.usd?.asOf)
+    expect(
+      new Date(result.usd!.asOf).getTime() -
+        new Date(result.usd!.lastTradeAt).getTime(),
+    ).toBeGreaterThan(27 * 86_400_000)
+    // And it is NOT reported stale: nothing failed. A client that reads only
+    // `stale` learns nothing about this rate's age, which is the whole reason
+    // the field exists.
+    expect(result.usd?.stale).toBe(false)
   })
 
   it('getStoragePrice does not pad the estimate with the quote margin', async () => {

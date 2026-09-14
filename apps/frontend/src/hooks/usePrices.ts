@@ -8,6 +8,17 @@ const REFRESH_INTERVAL = 60 * 1000;
 const BYTES_PER_MiB = 1024 ** 2;
 
 /**
+ * How old the pool's last fill may be before the estimate is labelled.
+ *
+ * 24h, matching the backend's ORACLE_MAX_SWAP_AGE_MS — the age at which the
+ * strict oracle stops believing a window describes a live market. The display
+ * profile that feeds this screen deliberately has no such bound, so the
+ * judgement has to happen somewhere, and here it only decides whether to add a
+ * caveat rather than whether to charge.
+ */
+const RATE_AGE_CAVEAT_MS = 24 * 60 * 60 * 1000;
+
+/**
  * Storage pricing, in AI3 and — when the market supports a rate — in USD.
  *
  * Both halves now come from one backend call. The USD rate used to be fetched
@@ -38,7 +49,29 @@ export const usePrices = () => {
   // stopped updating", and say which.
   const usdRateStale = storagePrice?.usd?.stale ?? false;
   const usdRateAsOf = storagePrice?.usd?.asOf ?? null;
+  // When the pool last traded, which is a different question from when we last
+  // read it. The backend's display oracle averages a 30-day window and accepts
+  // a single fill with no bound on its age, so `usdRateAsOf` can be seconds old
+  // while the trade underneath it is weeks old.
+  const usdRateLastTradeAt = storagePrice?.usd?.lastTradeAt ?? null;
   const usdUnavailableReason = storagePrice?.usdUnavailableReason ?? null;
+
+  /**
+   * Whether the estimate deserves a caveat next to it.
+   *
+   * Two independent ways to earn one, deliberately collapsed into a single
+   * boolean because they read identically to a user: the backend served its
+   * last-good rate after a failed read (`stale`), or the read succeeded but the
+   * market behind it has not moved in a day. A rate can be either without being
+   * the other — a live read of a quiet pool is not stale, and a stale read of a
+   * busy pool had a recent trade in it.
+   */
+  const usdRateOutdated =
+    usdPerAi3 !== null &&
+    (usdRateStale ||
+      (usdRateLastTradeAt !== null &&
+        Date.now() - new Date(usdRateLastTradeAt).getTime() >
+          RATE_AGE_CAVEAT_MS));
 
   const formatCreditsAsAi3 = useCallback(
     (credits: number) => {
@@ -133,6 +166,8 @@ export const usePrices = () => {
     usdPerAi3,
     usdRateStale,
     usdRateAsOf,
+    usdRateLastTradeAt,
+    usdRateOutdated,
     usdUnavailableReason,
     formatCreditsAsAi3,
     formatCreditsAsUsd,

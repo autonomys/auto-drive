@@ -2,6 +2,7 @@
 
 import { Button, Card, cn } from '@auto-drive/ui';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
+import { UsdEstimateNote } from '../UsdEstimateNote';
 import { usePrices } from '../../../../hooks/usePrices';
 import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 import { useUserStore } from '../../../../globalStates/user';
@@ -219,6 +220,11 @@ export const PurchaseStep1SelectPackage = ({
             );
           })}
         </div>
+
+        {/* One note for the whole grid rather than a marker per card: the rate
+            is a single fact and every "≈ $" above is the same conversion of
+            it. Renders nothing when the estimate is live. */}
+        <UsdEstimateNote className='mt-3' />
 
         <div className='mt-8 rounded-xl border bg-muted/30 p-6'>
           <div className='mb-4 text-lg font-semibold'>How it works</div>

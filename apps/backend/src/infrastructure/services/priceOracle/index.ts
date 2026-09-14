@@ -538,6 +538,18 @@ const buildWindow = async (): Promise<
  * charged from this number, so there is nothing here to buy. Truncation is not
  * refused either — a full page is the NEWEST fills, which for an estimate is
  * the good half of the window rather than a reason to withhold it.
+ *
+ * And one it drops for a different reason, called out separately because it is
+ * the one with no manipulation argument behind it: ORACLE_MAX_SWAP_AGE_MS, the
+ * strict profile's refusal of a window whose newest fill is stale. Applying it
+ * here would undo the point of the 30-day window — a pool that trades a few
+ * times a month would fail a 24h freshness bound most days, which is the
+ * blankness this profile exists to avoid. The cost is real and is paid, not
+ * argued away: with `minSamples` at 1 this window can average a single fill
+ * from four weeks ago and hand it back with a fresh `asOf` and `stale: false`.
+ * `newestSwapMs` is carried out to the caller for exactly that reason, and
+ * surfaces on the endpoint as `usd.lastTradeAt`. The guard is dropped; the
+ * FACT it was reading is not.
  */
 const buildDisplayWindow = async (): Promise<
   Result<SwapWindow, OracleUnavailableError>
@@ -745,6 +757,7 @@ const refresh = async (): Promise<
   const value: OraclePrice = {
     usdPerAi3: window.value.usdPerAi3,
     asOf: new Date(),
+    newestSwapMs: window.value.newestSwapMs,
     fromCache: false,
     stale: false,
   }
@@ -877,6 +890,11 @@ const refreshDisplay = async (): Promise<
   const value: OraclePrice = {
     usdPerAi3: window.value.usdPerAi3,
     asOf: new Date(),
+    // The window's newest fill, not now. This profile has no freshness bound
+    // (see `buildDisplayWindow`), so this is the only thing that says whether
+    // the market behind the rate is still moving — and it has to survive the
+    // stale fallback below, which spreads this value and rewrites `asOf`.
+    newestSwapMs: window.value.newestSwapMs,
     fromCache: false,
     stale: false,
   }

@@ -30,7 +30,7 @@ export const intents = {
                       type: 'object',
                       nullable: true,
                       description:
-                        'USD conversion of the price above, or null when no AI3/USD rate is available. The rate is the volume-weighted average of realized WAI3/USDC swaps over the last 30 days. It is an ESTIMATE and must not be used to settle anything: it is read from the price oracle\'s display profile, which drops the anti-manipulation guards the USDC purchase path relies on (pool depth, traded volume, window span, the newest-fill veto) because nothing here is charged. It also carries no quote margin. For what a USDC purchase would actually cost, create an intent. Null is uncommon but reachable — an empty window, a stalled indexer, an unreachable gateway — so clients must handle it; do not substitute zero.',
+                        'USD conversion of the price above, or null when no AI3/USD rate is available. The rate is the volume-weighted average of realized WAI3/USDC swaps over the last 30 days. It is an ESTIMATE and must not be used to settle anything: it is read from the price oracle\'s display profile, which drops the anti-manipulation guards the USDC purchase path relies on (pool depth, traded volume, window span, the newest-fill veto) AND the freshness bound the strict profile applies to the newest fill, because nothing here is charged. There is therefore no lower limit on how old the underlying trade may be beyond the 30-day window itself: read `lastTradeAt`, not `asOf`, to judge that. It also carries no quote margin. For what a USDC purchase would actually cost, create an intent. Null is uncommon but reachable — an empty window, a stalled indexer, an unreachable gateway — so clients must handle it; do not substitute zero.',
                       properties: {
                         usdPerAi3: {
                           type: 'number',
@@ -43,7 +43,14 @@ export const intents = {
                         asOf: {
                           type: 'string',
                           format: 'date-time',
-                          description: 'When the rate was read',
+                          description:
+                            'When the rate was read. This is a fact about us, not about the market — a fresh `asOf` says nothing about how recently the pool traded. See `lastTradeAt`.',
+                        },
+                        lastTradeAt: {
+                          type: 'string',
+                          format: 'date-time',
+                          description:
+                            'When the pool last traded among the fills this rate averages. May be up to 30 days before `asOf`, since the display profile accepts a single fill anywhere in its window and applies no freshness bound. This is the field to check before presenting the figure as current.',
                         },
                         stale: {
                           type: 'boolean',

@@ -239,6 +239,15 @@ export type StoragePriceUsd = {
   // When the underlying rate was read, ISO-8601. Rendered as-is by the UI so a
   // conversion can say how old it is rather than implying it is live.
   asOf: string;
+  // When the pool last traded among the fills this rate averages, ISO-8601.
+  //
+  // Not the same question as `asOf`, and the more important of the two. The
+  // display profile that serves this estimate averages a 30-day window and
+  // accepts a single fill, with no bound on how old that fill is — so a rate
+  // read one second ago can rest entirely on a trade from four weeks ago, and
+  // `asOf` alone would present it as current. A client deciding whether to
+  // qualify the figure should read THIS.
+  lastTradeAt: string;
   // The oracle's live read failed and this is its last-good value. Still worth
   // showing for an estimate — but the UI should say so, because a rate that
   // stopped updating during a move is wrong in a direction nobody can see.

@@ -876,6 +876,42 @@ describe('priceOracle.getDisplayPrice', () => {
     expect(result.isOk()).toBe(true)
   })
 
+  it('says how old the fills behind that rate are', async () => {
+    // The cost of the test above. Serving a three-week-old basis is the
+    // decision; serving it WITHOUT saying so is the bug, because `asOf` is our
+    // read time and reads as current no matter how dead the pool is.
+    const age = 21 * 86_400_000
+    mockWindow((now) => windowAt(now, { samples: swapsAt(3, now - age) }))
+
+    const price = (await priceOracle.getDisplayPrice())._unsafeUnwrap()
+
+    expect(price.newestSwapMs).toBe(Date.now() - age)
+    expect(price.asOf.getTime() - price.newestSwapMs).toBe(age)
+    // And it is not flagged stale, because nothing failed. `stale` answers "did
+    // our read work", never "is the market alive" — which is precisely why the
+    // timestamp has to travel separately.
+    expect(price.stale).toBe(false)
+  })
+
+  it('keeps the trade time of a last-good estimate, not the time it was reserved', async () => {
+    // A stale fallback rewrites nothing about the market it came from. If
+    // `newestSwapMs` were ever recomputed on the way out, a day-old fallback
+    // over a quiet pool would look freshly traded — the one combination that
+    // should be loudest.
+    const age = 10 * 86_400_000
+    const spy = mockWindow((now) =>
+      windowAt(now, { samples: swapsAt(3, now - age) }),
+    )
+    const first = (await priceOracle.getDisplayPrice())._unsafeUnwrap()
+
+    jest.advanceTimersByTime(DISPLAY_TTL_MS + 1)
+    spy.mockRejectedValueOnce(new Error('gateway 503'))
+    const fallback = (await priceOracle.getDisplayPrice())._unsafeUnwrap()
+
+    expect(fallback.stale).toBe(true)
+    expect(fallback.newestSwapMs).toBe(first.newestSwapMs)
+  })
+
   // ── What it still refuses ────────────────────────────────────────────────
 
   it('refuses an empty window', async () => {
