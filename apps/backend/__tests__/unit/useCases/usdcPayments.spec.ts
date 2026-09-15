@@ -24,6 +24,7 @@ import {
 import { slackNotifier } from '../../../src/infrastructure/services/slack/index.js'
 import { priceOracle } from '../../../src/infrastructure/services/priceOracle/index.js'
 import { config } from '../../../src/config.js'
+import { usdcChainGuard } from '../../../src/infrastructure/services/paymentManager/usdcChainGuard.js'
 import { ForbiddenError } from '../../../src/errors/index.js'
 
 const makeUser = (role: UserRole = UserRole.User): User =>
@@ -74,6 +75,7 @@ const HEALTHY_ORACLE = oracleReading(true)
 describe('UsdcPaymentsUseCases', () => {
   const ethereumDefaults = { ...config.ethereum }
   const usdcDefaults = { ...config.usdcPayments }
+  const paymentManagerDefaults = { ...config.paymentManager }
 
   // The two reads a gate evaluation makes. Typed, so a case states what the
   // poller observed rather than what JSON it left behind.
@@ -106,6 +108,10 @@ describe('UsdcPaymentsUseCases', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     _resetThresholds()
+    // The chain guard is process-global and fails the path closed once a
+    // mismatch is verified. Nothing here verifies one, so it must not carry a
+    // verdict in from another case.
+    usdcChainGuard._reset()
     // A complete Ethereum configuration: .env.test sets none of these, and
     // without them every case would stop at NOT_CONFIGURED.
     config.ethereum.rpcUrl = 'http://example.org'
@@ -120,8 +126,10 @@ describe('UsdcPaymentsUseCases', () => {
   afterEach(() => {
     jest.restoreAllMocks()
     _resetThresholds()
+    usdcChainGuard._reset()
     Object.assign(config.ethereum, ethereumDefaults)
     Object.assign(config.usdcPayments, usdcDefaults)
+    Object.assign(config.paymentManager, paymentManagerDefaults)
   })
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -688,6 +696,85 @@ describe('UsdcPaymentsUseCases', () => {
       // Summing an empty list to zero would report an empty treasury and hold the
       // gate open on no evidence at all, so the poller refuses instead.
       expect(UsdcPaymentsUseCases.treasuryAddresses()).toEqual([])
+    })
+  })
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // getPaymentTarget — what the purchase flow is told to pay, and where
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('getPaymentTarget', () => {
+    it('reports the chain, receiver, token and confirmation depth', () => {
+      config.ethereum.chainId = 11155111
+      config.ethereum.confirmations = 4
+
+      expect(UsdcPaymentsUseCases.getPaymentTarget()).toEqual({
+        chainId: 11155111,
+        receiverAddress: '0x1111111111111111111111111111111111111111',
+        tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+        tokenDecimals: 6,
+        confirmations: 4,
+        settleGraceMs: config.paymentManager.checkInterval * 4,
+      })
+    })
+
+    it('checksums the addresses it reports', () => {
+      // The buyer's wallet is about to show them a spender address next to this
+      // one. Two spellings of the same address on a confirmation screen is how a
+      // careful person talks themselves out of a legitimate payment.
+      config.ethereum.usdcTokenAddress =
+        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+
+      expect(UsdcPaymentsUseCases.getPaymentTarget()?.tokenAddress).toBe(
+        '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+      )
+    })
+
+    it('is null when the deployment has no complete Ethereum configuration', () => {
+      config.ethereum.rpcUrl = undefined
+      expect(UsdcPaymentsUseCases.getPaymentTarget()).toBeNull()
+    })
+
+    it('is null when the endpoint is verified to be a different chain', () => {
+      // The one availability-shaped condition the target DOES refuse on, and
+      // the exception proves the rule below. Every other closed gate leaves the
+      // target correct; this one means the target itself is wrong, and serving
+      // it sends a buyer's approval to a chain nothing here watches.
+      jest.spyOn(usdcChainGuard, 'isMismatched').mockReturnValue(true)
+      expect(UsdcPaymentsUseCases.getPaymentTarget()).toBeNull()
+    })
+
+    it('reports a grace derived from the credit-granting interval', () => {
+      // Served rather than compiled into the client, because it is a property
+      // of THIS backend's timing: a 410 from GET /intents/:id means the lock
+      // lapsed, not that credits are withheld, and how long a client should
+      // poll through it is a multiple of the poller below. A frontend constant
+      // would start calling credited purchases lost the day this changed.
+      config.paymentManager.checkInterval = 45_000
+      expect(UsdcPaymentsUseCases.getPaymentTarget()?.settleGraceMs).toBe(
+        180_000,
+      )
+    })
+
+    it('still reports the target while every gate is shut', async () => {
+      // Deliberately NOT gated on availability. A client holding a quoted intent
+      // still has ten minutes to pay it, and the payment is still owed to the
+      // same contract — so losing the address the moment the treasury hits its
+      // cap would strand a purchase that the backend would have credited.
+      mockState({ switch: switchEntry(false) })
+      expect(await UsdcPaymentsUseCases.getAvailability()).toEqual({
+        open: false,
+        closedReason: UsdcClosedReason.MANUAL_OFF,
+      })
+
+      expect(UsdcPaymentsUseCases.getPaymentTarget()).not.toBeNull()
+    })
+
+    it('reports 6 decimals regardless of what any token claims', () => {
+      // Every amount downstream assumes 6, and the watcher refuses a payment in
+      // any other token precisely so that holds. Reporting anything else would
+      // advertise a purchase this deployment would then refuse to credit.
+      expect(UsdcPaymentsUseCases.getPaymentTarget()?.tokenDecimals).toBe(6)
     })
   })
 })

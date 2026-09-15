@@ -1,5 +1,5 @@
 import { NetworkId } from './networks'
-import { Chain } from 'wagmi/chains'
+import { Chain } from 'viem/chains'
 
 export const evmChains: Record<NetworkId, Chain> = {
   [NetworkId.MAINNET]: {

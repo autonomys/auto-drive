@@ -18,6 +18,7 @@ import {
   paymentManager,
 } from '../../src/infrastructure/services/paymentManager/index.js'
 import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
+import { usdcChainGuard } from '../../src/infrastructure/services/paymentManager/usdcChainGuard.js'
 import { IntentMispaymentReason, PaymentMethod } from '@auto-drive/models'
 import { IntentsUseCases } from '../../src/core/users/intents.js'
 import { ok, err } from 'neverthrow'
@@ -1089,6 +1090,16 @@ describe('PaymentManager', () => {
     // network round-trip into a unit test on the way.
     const DEPLOYED_CODE = '0x60806040'
 
+    // The chain-id question belongs to usdcChainGuard now, and it has its own
+    // spec. Stubbed to "verified right" here so these cases test the contract
+    // checks — and so the guard's own client does not POST to example.org.
+    beforeEach(() => {
+      usdcChainGuard._reset()
+      jest
+        .spyOn(usdcChainGuard, 'verify')
+        .mockResolvedValue({ state: 'match', chainId: 1 })
+    })
+
     it('escalates a token address that disagrees with the deployed receiver', async () => {
       const watcherUnderTest = createPaymentWatcher(
         createUsdcChain('http://example.org', RECEIVER, USDC),
@@ -1523,7 +1534,9 @@ describe('PaymentManager', () => {
     })
 
     it('discards a scheme the RPC transport cannot POST over', () => {
-      expect(urlEnv('ETH_CHAIN_ENDPOINT', 'ws://eth.example/rpc')).toBeUndefined()
+      expect(
+        urlEnv('ETH_CHAIN_ENDPOINT', 'ws://eth.example/rpc'),
+      ).toBeUndefined()
       expect(urlEnv('ETH_CHAIN_ENDPOINT', 'file:///etc/passwd')).toBeUndefined()
     })
 

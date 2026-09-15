@@ -396,6 +396,62 @@ full commentary; the ones an operator reaches for are:
 | `USDC_TREASURY_BALANCE_CHECK_INTERVAL_MS` | Gate refresh cadence (default 300000) |
 | `USDC_TREASURY_BALANCE_MAX_STALE_MS` | Beyond this with no successful refresh, the path fails closed (default 900000) |
 | `GRAPH_SUBGRAPH_URL` / `GRAPH_API_KEY` | The rate source; see the oracle section of `.env.sample` |
+| `ETH_CHAIN_ID` | Chain id of `ETH_CHAIN_ENDPOINT` (default 1). Served to the purchase flow as the chain to switch wallets to; checked against the endpoint at startup |
+
+## USDC payments: where the money is sent
+
+The purchase flow does not know the USDC chain or the receiver address. It asks:
+
+```
+GET /payments/usdc/target        (any signed-in user)
+→ { chainId, receiverAddress, tokenAddress, tokenDecimals, confirmations }
+```
+
+**Do not move these into the frontend build.** The AI3 receiver can be a build
+constant because the Auto EVM chain *is* the Auto Drive network — choosing
+`mainnet` fixes the chain, the contract and the API together. USDC has no such
+coupling: the chain is whatever `ETH_CHAIN_ENDPOINT` points at and the receiver
+is whatever `ETH_USDC_RECEIVER_ADDRESS` names, both deployment-level environment
+choices with nothing in the frontend's build to tie them to.
+
+A client that guessed wrong does not show a broken screen. It switches the
+buyer's wallet to the wrong chain, approves USDC to an address where this
+deployment's receiver does not exist, and the payment is never observed — no
+credits, and no mispayment row either, because the watcher that files those is on
+the other chain.
+
+`ETH_CHAIN_ID` (default `1`) is the chain id served here. **Set it whenever the
+endpoint is not Ethereum mainnet.** It is checked rather than trusted, and the
+check is *acted on*: every process that can quote or serve a target asks the
+endpoint for its own chain id at startup (`usdcChainGuard`), alerts to Slack on a
+disagreement, and then **shuts the USDC path** — `/features` reports
+`chain_mismatch`, `createIntent` 403s, and this endpoint stops answering. An alert
+alone would leave the deployment selling into the failure it just detected.
+
+A read that *fails* is not a mismatch. An endpoint down at boot leaves the verdict
+unknown and USDC unchanged, because an outage must not become a payments outage
+that outlives it.
+
+Otherwise this endpoint is deliberately **not** gated on the switches below. A
+buyer holding a quoted intent has ten minutes to pay it, and the payment is owed
+to the same contract whatever the gates now say — so it answers whenever the
+deployment is configured, and 403s only when it is not, or when the chain it would
+name is wrong.
+
+`settleGraceMs` is served for the same reason as `confirmations`: it is a property
+of this backend's timing, not of the frontend build. `GET /intents/:id` answers
+410 the moment a price lock lapses, but credits are withheld by a different check
+entirely, so a client polls *through* a 410 — for four turns of
+`EVM_CHAIN_CHECK_INTERVAL`. A constant compiled into the client would start
+calling credited purchases lost the day an operator changed that interval.
+
+### Frontend variables
+
+| Variable | Meaning |
+| --- | --- |
+| `NEXT_PUBLIC_ETH_RPC_URL` | Ethereum endpoint the browser reads balances and allowances through. Optional; unset falls back to viem's shared public RPCs, where a rate limit surfaces as a failed purchase for a funded wallet. **Inlined at build time.** |
+| `NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL` | The same, for Sepolia |
+| `NEXT_PUBLIC_USDC_TESTNET_CHAINS` | `true` registers Sepolia with the user's wallet alongside Ethereum. Off by default — every chain listed is offered to every user of the deployment |
 
 ## USDC payments: the gates and how to shut them
 

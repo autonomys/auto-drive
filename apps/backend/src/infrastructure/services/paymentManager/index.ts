@@ -5,6 +5,7 @@ import { safeCallback } from '../../../shared/utils/safe.js'
 import { slackNotifier } from '../slack/index.js'
 import { ai3PaymentWatcher, getUsdcPaymentWatcher } from './chains.js'
 import { confirmedIntentsPoller } from './confirmedIntents.js'
+import { usdcChainGuard } from './usdcChainGuard.js'
 
 const logger = createLogger('PaymentManager')
 
@@ -87,6 +88,11 @@ const start = () => {
   logger.info('Starting payment manager', {
     watchers: usdcWatcher ? ['ai3', 'usdc'] : ['ai3'],
   })
+
+  // Ask before the watcher does, so this process's own quoting and target
+  // serving fail closed on a mismatch even in the all-in-one topology, where
+  // this IS the API. Memoised, so the watcher's own verifyChain reuses it.
+  void usdcChainGuard.verify()
 
   confirmedIntentsPoller.start()
   ai3PaymentWatcher.start()
