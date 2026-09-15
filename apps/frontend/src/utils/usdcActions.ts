@@ -36,6 +36,11 @@ export type UsdcActionInputs = {
   awaitingConfirmation: boolean;
   /** That quote is too close to expiry to pay safely. */
   quoteStale: boolean;
+  /**
+   * A payment call was entered and never reported back, so the transaction may
+   * already be on chain. See `mayHaveBroadcast` in useUsdcPurchase.
+   */
+  mayHaveBroadcast: boolean;
 };
 
 export type UsdcActions = {
@@ -53,6 +58,7 @@ export const evaluateUsdcActions = ({
   isAvailable,
   awaitingConfirmation,
   quoteStale,
+  mayHaveBroadcast,
 }: UsdcActionInputs): UsdcActions => {
   // What any wallet interaction needs. Availability is deliberately absent —
   // see canPay.
@@ -86,7 +92,13 @@ export const evaluateUsdcActions = ({
     // own popup causes — and a gate closing between the two clicks disabled Pay
     // on a live lock and sent the buyer to AI3 for a purchase that would have
     // been credited.
-    canPay: walletReady && awaitingConfirmation && !quoteStale,
+    // `mayHaveBroadcast` shuts it regardless. The intent is reused by design,
+    // and the receiver has no per-intent replay guard, so a second click on a
+    // payment that may already be on chain transfers the amount twice: one is
+    // credited and the other filed as ALREADY_SETTLED. Only the buyer can say
+    // which happened, and the panel asks them.
+    canPay:
+      walletReady && awaitingConfirmation && !quoteStale && !mayHaveBroadcast,
   };
 };
 

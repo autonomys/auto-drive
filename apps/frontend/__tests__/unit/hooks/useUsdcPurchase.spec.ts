@@ -328,6 +328,73 @@ describe('pay', () => {
     expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
   });
 
+  // -------------------------------------------------------------------------
+  // The payment call that does not report back
+  // -------------------------------------------------------------------------
+
+  /** Resolve the approval, then fail the payment call with `error`. */
+  const failThePaymentWith = (error: unknown) => {
+    writeContractAsync
+      .mockResolvedValueOnce('0xapproval')
+      .mockRejectedValueOnce(error);
+  };
+
+  it('will not offer Pay again when the payment call simply stops answering', async () => {
+    // `writeContractAsync` resolves only once the transaction is broadcast, but
+    // it can REJECT after `eth_sendTransaction` has gone out — a timeout, a
+    // dropped connection. The transaction is then on chain with nothing here
+    // recording it, and the intent is reused by design: a second click pays a
+    // second time, and only one of the two is ever credited.
+    failThePaymentWith(new Error('request timed out'));
+    const { result } = setup();
+    await quoteThen(result);
+
+    expect(result.current.mayHaveBroadcast).toBe(true);
+    // The quote is untouched — this is not a lapsed price — so what must stop
+    // the second payment is this flag and nothing else.
+    expect(result.current.stage).toBe('quoted');
+    expect(result.current.intent).not.toBeNull();
+  });
+
+  it('offers Pay again when the wallet says it declined', async () => {
+    // The one failure that proves nothing was sent. Treating it like the rest
+    // would make the commonest way out of this flow — changing your mind —
+    // require an acknowledgement about a transaction that does not exist.
+    failThePaymentWith(
+      new UserRejectedRequestError(new Error('user rejected')),
+    );
+    const { result } = setup();
+    await quoteThen(result);
+
+    expect(result.current.mayHaveBroadcast).toBe(false);
+    expect(result.current.failure).toBe('rejected');
+  });
+
+  it('pays again only once the buyer says their wallet is empty-handed', async () => {
+    failThePaymentWith(new Error('request timed out'));
+    const { result } = setup();
+    await quoteThen(result);
+
+    act(() => {
+      result.current.acknowledgeNotBroadcast();
+    });
+
+    expect(result.current.mayHaveBroadcast).toBe(false);
+    // And the acknowledgement clears the error with it: what is on screen next
+    // is the Pay button, not a failure the buyer has just answered.
+    expect(result.current.failure).toBeNull();
+
+    writeContractAsync.mockResolvedValue('0xdeadbeef');
+    await act(async () => {
+      await result.current.pay();
+    });
+
+    // The SAME intent, which is the point of the flag: paying twice against one
+    // intent is what the backend files as ALREADY_SETTLED.
+    expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
+    expect(result.current.payTxHash).toBe('0xdeadbeef');
+  });
+
   it('does nothing at all without a quote in hand', async () => {
     const { result } = setup();
 

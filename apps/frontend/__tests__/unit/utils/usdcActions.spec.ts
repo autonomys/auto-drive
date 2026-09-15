@@ -21,6 +21,7 @@ const OPEN: UsdcActionInputs = {
   isAvailable: true,
   awaitingConfirmation: false,
   quoteStale: false,
+  mayHaveBroadcast: false,
 };
 
 // The review gate: a live quote in hand, waiting on the buyer's second click.
@@ -142,6 +143,19 @@ describe('evaluateUsdcActions', () => {
     // wizard, and conflating it with a missing value here would hide which
     // check refused.
     expect(evaluateUsdcActions({ ...OPEN, sizeMib: 0 }).canQuote).toBe(true);
+  });
+
+  it('refuses to pay again while a payment may already be on chain', () => {
+    // The intent is reused by design and the receiver has no per-intent replay
+    // guard, so a second click transfers the amount twice — one credited, one
+    // filed as ALREADY_SETTLED. Quoting stays open: a new intent costs nothing
+    // and is not what pays twice.
+    const held = { ...QUOTED, mayHaveBroadcast: true };
+
+    expect(evaluateUsdcActions(held).canPay).toBe(false);
+    expect(evaluateUsdcActions({ ...held, quoteStale: true }).canQuote).toBe(
+      true,
+    );
   });
 });
 

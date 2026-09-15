@@ -84,9 +84,11 @@ export const UsdcTransferPanel = ({
     failure,
     message,
     approvalSkipped,
+    mayHaveBroadcast,
     quote,
     pay,
     reset,
+    acknowledgeNotBroadcast,
   } = useUsdcPurchase({ target, requestedBytes });
 
   // Re-rendered every second only to move the countdown. Started when a quote
@@ -260,6 +262,7 @@ export const UsdcTransferPanel = ({
     isAvailable,
     awaitingConfirmation,
     quoteStale,
+    mayHaveBroadcast,
   });
 
   // The way out, and the only one this step has: see canLeaveUsdcStep.
@@ -535,7 +538,30 @@ export const UsdcTransferPanel = ({
               </div>
             )}
 
-            {failure && message && (
+            {/* The payment call did not report back, so nobody here knows
+                whether it went out. This supersedes the generic failure below:
+                viem's message for a dropped request says nothing about the
+                thing that matters, which is that clicking Pay again can pay
+                twice. See `mayHaveBroadcast` in useUsdcPurchase. */}
+            {mayHaveBroadcast && !activeTxHash && (
+              <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
+                <strong>Check your wallet before paying again.</strong> We asked
+                your wallet to send the payment but did not get a transaction
+                back, so we cannot tell whether it went out. If your wallet
+                shows a USDC transfer — pending or complete — it will be
+                credited on its own; this page cannot follow it without the
+                transaction, so check your balance shortly and keep the details
+                for support. Paying again would transfer the amount a second
+                time, and only one of the two is credited.
+                <div className='mt-2'>
+                  <Button variant='outline' onClick={acknowledgeNotBroadcast}>
+                    My wallet shows nothing was sent
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {failure && message && !mayHaveBroadcast && (
               <div
                 className={`rounded-md p-3 text-sm ${
                   // A declined wallet prompt and a closed gate are not errors —

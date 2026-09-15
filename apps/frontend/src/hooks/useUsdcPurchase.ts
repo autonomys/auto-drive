@@ -53,6 +53,21 @@ export type UsdcPurchaseFailure =
 export const QUOTE_MIN_REMAINING_MS = 45_000;
 
 /**
+ * Did the buyer decline this in their wallet?
+ *
+ * Load-bearing twice over. It decides how a failure is worded — a choice is not
+ * a crash — and, in `pay()`, whether a failed payment call can be retried at
+ * all: a declined prompt is the ONE failure that proves nothing was broadcast.
+ *
+ * `walk` because wagmi wraps it: the rejection arrives nested inside a
+ * ContractFunctionExecutionError.
+ */
+const isWalletRejection = (error: unknown): boolean =>
+  error instanceof UserRejectedRequestError ||
+  (error instanceof BaseError &&
+    error.walk((e) => e instanceof UserRejectedRequestError) !== null);
+
+/**
  * The USDC leg of a credit purchase, in two acts: **quote**, then **pay**.
  *
  * Split deliberately. A buyer must see the exact figure they are about to
@@ -105,6 +120,27 @@ export const useUsdcPurchase = ({
   // Surfaced so the checklist can say "already approved" instead of silently
   // skipping a step the user was told to expect.
   const [approvalSkipped, setApprovalSkipped] = useState(false);
+  /**
+   * The payment call was entered and did not come back with a hash.
+   *
+   * Which is not the same as "it did not happen". `writeContractAsync` resolves
+   * with the hash only once the transaction has been broadcast, but it can
+   * REJECT after `eth_sendTransaction` has already gone out — a request timeout,
+   * a dropped wallet connection, wagmi surfacing a TransactionExecutionError.
+   * The transaction is then on chain with no record of it on this client.
+   *
+   * Without this, that landed back on `quoted` with `payTxHash` still undefined:
+   * Pay offered again, on the SAME intent, and `payIntentWithToken` has no
+   * per-intent replay guard — it pulls the amount and emits. The backend credits
+   * one payment and files the other as ALREADY_SETTLED: money kept, no credits,
+   * admin-only to untangle. The AI3 path is not exposed to this because it mints
+   * a fresh intent per attempt, so a retry there is a distinct intent rather than
+   * a second payment against one.
+   *
+   * So Pay stays shut until the buyer says they have looked. Cleared only by a
+   * declined prompt, which proves nothing was sent, or by that acknowledgement.
+   */
+  const [mayHaveBroadcast, setMayHaveBroadcast] = useState(false);
 
   const isBusy =
     stage !== 'idle' && stage !== 'quoted' && stage !== 'submitted';
@@ -135,6 +171,20 @@ export const useUsdcPurchase = ({
     setFailure(null);
     setMessage(null);
     setApprovalSkipped(false);
+    setMayHaveBroadcast(false);
+  }, []);
+
+  /**
+   * "I checked my wallet — nothing was sent."
+   *
+   * Only the buyer can close this. The client cannot tell a transaction that was
+   * never broadcast from one whose answer it simply lost; the wallet in front of
+   * them can.
+   */
+  const acknowledgeNotBroadcast = useCallback(() => {
+    setMayHaveBroadcast(false);
+    setFailure(null);
+    setMessage(null);
   }, []);
 
   /**
@@ -162,13 +212,8 @@ export const useUsdcPurchase = ({
       // out of this flow — the network switch and both signatures can each be
       // refused. viem's own message for it is a multi-paragraph dump with the
       // request details and a docs link, which reads like a crash for something
-      // the user chose to do. `walk` because wagmi wraps it: the rejection
-      // arrives nested inside a ContractFunctionExecutionError.
-      const rejected =
-        error instanceof UserRejectedRequestError ||
-        (error instanceof BaseError &&
-          error.walk((e) => e instanceof UserRejectedRequestError) !== null);
-      if (rejected) {
+      // the user chose to do.
+      if (isWalletRejection(error)) {
         fail(
           'rejected',
           'The request was declined in your wallet. Nothing was sent — you can ' +
@@ -377,6 +422,10 @@ export const useUsdcPurchase = ({
       }
 
       setStage('paying');
+      // Latched BEFORE the call, because the call is the one that may not report
+      // back. See `mayHaveBroadcast`: everything above is safe to retry, and
+      // this is the line after which a retry can pay twice.
+      setMayHaveBroadcast(true);
       const hash = await writeContractAsync({
         address: receiver,
         abi: usdcReceiverAbi,
@@ -387,6 +436,11 @@ export const useUsdcPurchase = ({
       setPayTxHash(hash);
       setStage('submitted');
     } catch (error) {
+      // A declined prompt is the one failure that proves nothing went out: the
+      // wallet refused before sending. Every other way out of the call above —
+      // a timeout, a dropped connection — leaves the question open, and the
+      // latch stands until the buyer answers it.
+      if (isWalletRejection(error)) setMayHaveBroadcast(false);
       // Back to `quoted`, not `idle`: the quote is untouched by a declined
       // signature or a failed switch, and asking for a new one would discard a
       // lock the buyer can still use.
@@ -414,9 +468,11 @@ export const useUsdcPurchase = ({
       failure,
       message,
       approvalSkipped,
+      mayHaveBroadcast,
       quote,
       pay,
       reset,
+      acknowledgeNotBroadcast,
     }),
     [
       stage,
@@ -426,9 +482,11 @@ export const useUsdcPurchase = ({
       failure,
       message,
       approvalSkipped,
+      mayHaveBroadcast,
       quote,
       pay,
       reset,
+      acknowledgeNotBroadcast,
     ],
   );
 };
