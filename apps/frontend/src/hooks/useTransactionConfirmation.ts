@@ -93,7 +93,6 @@ export const useTransactionConfirmation = ({
   // `chainId: undefined` is how wagmi spells "the connected chain", so passing
   // it through unset preserves the AI3 behaviour rather than special-casing it.
   const client = usePublicClient({ chainId });
-  const stopRef = useRef(false);
   const queryClient = useQueryClient();
 
   const {
@@ -124,29 +123,43 @@ export const useTransactionConfirmation = ({
     let unwatch: (() => void) | undefined;
     let baseBlockNumber: bigint | undefined;
 
-    // Cleared on every run, because the cleanup below sets it and this effect
-    // re-runs whenever `client` or `requiredConfirmations` changes. Left latched,
-    // the re-run's watcher returns on its first block and the count freezes at
-    // one — Continue disabled forever on a purchase that confirmed. Reachable on
-    // the AI3 path, where `client` follows whatever chain the wallet is on.
-    stopRef.current = false;
+    // Per RUN, not shared across them.
+    //
+    // A ref cleared at the top of each run had to be, because the cleanup sets
+    // it and this effect re-runs whenever `client` or `requiredConfirmations`
+    // changes — left latched, the new run's watcher returned on its first block
+    // and the count froze at one. But clearing it also un-stopped the PREVIOUS
+    // run: its `getTransactionReceipt` could still be in flight, and on
+    // resolving it would attach a watcher to the old client that this run's
+    // cleanup never stored, leaving it to update the count from the wrong
+    // chain. Not exotic — `client` changes whenever the chain under it does:
+    // the AI3 path follows whatever chain the wallet is on, and the USDC one
+    // swaps when a late payment target supplies the chain a resumed record
+    // did not carry.
+    //
+    // A local has both properties for free: each run stops only itself.
+    let stopped = false;
 
     const start = async () => {
       try {
         const receipt = await client.getTransactionReceipt({ hash: txHash });
+        // The cleanup may have run while this was in flight. Nothing below is
+        // this run's business any more, and the watcher it would start is one
+        // nobody holds the handle to.
+        if (stopped) return;
         baseBlockNumber = receipt.blockNumber;
         setCurrentConfs(1);
         setIsFullyConfirmed(1 >= requiredConfirmations);
 
         unwatch = client.watchBlockNumber({
           onBlockNumber: (bn) => {
-            if (stopRef.current || !baseBlockNumber) return;
+            if (stopped || !baseBlockNumber) return;
             const confs = Number(bn - baseBlockNumber + BigInt(1));
             const bounded = Math.max(1, Math.min(requiredConfirmations, confs));
             setCurrentConfs(bounded);
             if (bounded >= requiredConfirmations) {
               setIsFullyConfirmed(true);
-              stopRef.current = true;
+              stopped = true;
               if (unwatch) unwatch();
             }
           },
@@ -159,7 +172,7 @@ export const useTransactionConfirmation = ({
 
     void start();
     return () => {
-      stopRef.current = true;
+      stopped = true;
       if (unwatch) unwatch();
     };
   }, [client, isConfirmed, requiredConfirmations, txHash]);
