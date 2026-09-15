@@ -120,17 +120,24 @@ export const UsdcTransferPanel = ({
     waitError,
   } = useTransactionConfirmation({
     txHash: activeTxHash,
-    requiredConfirmations: target?.confirmations ?? 6,
+    requiredConfirmations: resumed?.confirmations ?? target?.confirmations ?? 6,
     api,
     intentId: activeIntentId,
     // The backend's own number, not a constant here: how long a 410 may persist
     // before the purchase is called lost is a multiple of its credit-granting
     // interval. See UsdcPaymentTarget.settleGraceMs.
-    lockLapsedGraceMs: target?.settleGraceMs,
+    lockLapsedGraceMs: resumed?.settleGraceMs ?? target?.settleGraceMs,
     // Pinned to the payment chain. The moment the payment is submitted the user
     // is free to switch their wallet back to Auto EVM, and unpinned that would
     // stall the confirmation count on a purchase already being credited.
-    chainId: target?.chainId,
+    //
+    // The record first, because it is the chain this hash was actually sent on;
+    // the target says where a payment would go now. They differ when the target
+    // is missing — it is fetched only while USDC is on offer, so a session
+    // resumed after the gate closed has none, and would watch the wallet's chain
+    // for an Ethereum receipt until it gave up and called a settled payment
+    // lost — and, in principle, if a deployment ever moved chains mid-session.
+    chainId: resumed?.chainId ?? target?.chainId,
   });
 
   // Tell the backend which transaction to watch, as soon as there is a hash —
@@ -169,8 +176,17 @@ export const UsdcTransferPanel = ({
   // whenever the next render happened to land.
   useEffect(() => {
     if (!payTxHash || !intent?.id) return;
-    saveUsdcResume({ intentId: intent.id, txHash: payTxHash, sizeMib });
-  }, [payTxHash, intent?.id, sizeMib]);
+    saveUsdcResume({
+      intentId: intent.id,
+      txHash: payTxHash,
+      sizeMib,
+      // The terms this payment was made under, so a resumed session judges it by
+      // those rather than by whatever it can still reach. See UsdcResumeRecord.
+      chainId: target?.chainId,
+      confirmations: target?.confirmations,
+      settleGraceMs: target?.settleGraceMs,
+    });
+  }, [payTxHash, intent?.id, sizeMib, target]);
 
   // Dropped once the purchase has an answer — credited, over cap, or genuinely
   // expired. A record kept past that would re-attach a finished purchase to the

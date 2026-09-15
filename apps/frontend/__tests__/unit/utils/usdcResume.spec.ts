@@ -85,4 +85,17 @@ describe('usdcResume', () => {
 
     Object.defineProperty(window, 'sessionStorage', original);
   });
+
+  it('still reads a record written before the payment terms were stored', () => {
+    // A tab that was mid-payment across a deploy. Losing the whole record would
+    // lose the hash, which is far worse than falling back to the target for the
+    // chain and the grace.
+    sessionStorage.setItem(
+      'auto-drive:usdc-purchase-in-flight',
+      JSON.stringify({ intentId: 'i1', txHash: '0xabc', sizeMib: 1024 }),
+    );
+
+    expect(readUsdcResume(1024)?.txHash).toBe('0xabc');
+    expect(readUsdcResume(1024)?.chainId).toBeUndefined();
+  });
 });

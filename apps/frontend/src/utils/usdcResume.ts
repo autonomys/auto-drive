@@ -26,6 +26,30 @@ export type UsdcResumeRecord = {
   txHash: string;
   /** The purchase size, so a record from a different purchase is not adopted. */
   sizeMib: number | null;
+  /**
+   * What the payment target said when the payment was made.
+   *
+   * Stored because the panel's other source for these is unavailable exactly
+   * when they are needed. `useUsdcAvailability` only asks for the target while
+   * `payWithUsdc` is true, so a session resumed after the gate has closed has
+   * none — and each of these then falls back to something that misreports a
+   * payment which is settling perfectly well:
+   *
+   *   - `chainId`: unpinned, `useTransactionConfirmation` follows the connected
+   *     chain, which the flow has just invited the buyer to switch back to Auto
+   *     EVM. The Ethereum receipt is never seen and the payment reads as lost.
+   *   - `settleGraceMs`: falls back to a compiled constant, which is the exact
+   *     thing serving it was meant to prevent — a build holding its own copy
+   *     starts calling credited purchases expired the day an operator changes
+   *     the interval behind it.
+   *   - `confirmations`: only the progress bar, but it should count to the same
+   *     number it started with.
+   *
+   * All optional, because a record written by an older build has none of them.
+   */
+  chainId?: number;
+  confirmations?: number;
+  settleGraceMs?: number;
 };
 
 const isRecord = (value: unknown): value is UsdcResumeRecord =>
