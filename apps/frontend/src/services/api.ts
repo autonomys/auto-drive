@@ -10,6 +10,7 @@ import {
   ObjectInformation,
   DownloadStatus,
   Intent,
+  StoragePrice,
   TouChangeType,
   TouStatus,
   TouVersion,
@@ -876,7 +877,7 @@ export const createApiService = ({
 
     return response.json() as Promise<ExpiringCreditBatch[]>;
   },
-  getCreditPrice: async (): Promise<{ price: number; pricePerGB: number }> => {
+  getCreditPrice: async (): Promise<StoragePrice> => {
     // GET /intents/price is a public endpoint (registered before the auth /
     // feature-flag middleware). Attach auth headers when a session exists, but
     // don't require one — this lets the purchase screen show live pricing to
