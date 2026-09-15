@@ -6,6 +6,7 @@ import { Section } from '../atoms/Section';
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { Zap, AlertTriangle, Info } from 'lucide-react';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
+import { UsdEstimateNote } from '../UsdEstimateNote';
 import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
 import { formatStorageSize } from '../../../../utils/number';
@@ -388,10 +389,17 @@ export const PurchaseStep2ConnectWallet = ({
                 label='USD Equivalent'
                 value={
                   <span>
-                    {usdAmount > 0 ? `$${usdAmount.toFixed(2)}` : '—'}
+                    {usdAmount !== null && usdAmount > 0
+                      ? `$${usdAmount.toFixed(2)}`
+                      : '—'}
                   </span>
                 }
               />
+              {/* Sits directly under the figure it qualifies: this is the
+                  screen where an amount is confirmed, so a rate that has
+                  stopped tracking the market has to be visible next to the
+                  number, not somewhere on the page. */}
+              <UsdEstimateNote className='-mt-1' />
               <div className='flex flex-col rounded-md border-b-2 border-gray-200' />
               <div className='mt-2'>
                 <InfoRow

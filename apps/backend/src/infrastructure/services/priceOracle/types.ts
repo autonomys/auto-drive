@@ -13,6 +13,17 @@ export type OraclePrice = {
   // When the value was fetched (the original fetch time when served as a
   // last-good fallback).
   asOf: Date
+  // When the pool last filled among the swaps this rate averages — a fact about
+  // the MARKET, where `asOf` is a fact about US.
+  //
+  // Carried rather than derived because the two can be far apart and only one
+  // of them answers "is this number still describing anything". The strict
+  // profile keeps them close by refusing a window whose newest fill is older
+  // than ORACLE_MAX_SWAP_AGE_MS; the display profile drops that bound on
+  // purpose, so there a rate built from a single month-old fill is served with
+  // a fresh `asOf` and `stale: false`. Without this field no caller can tell
+  // that apart from a rate struck a minute ago.
+  newestSwapMs: number
   // True only for a fresh in-memory TTL cache hit; always false for a stale
   // last-good fallback (see `stale`) and for a freshly fetched value.
   fromCache: boolean

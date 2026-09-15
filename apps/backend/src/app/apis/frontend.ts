@@ -22,6 +22,7 @@ import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 import { usdcChainGuard } from '../../infrastructure/services/paymentManager/usdcChainGuard.js'
+import { StoragePrice } from '@auto-drive/models'
 
 const logger = createLogger('api:frontend')
 
@@ -68,9 +69,12 @@ const createServer = async () => {
   app.get(
     '/intents/price',
     asyncSafeHandler(async (_req, res) => {
+      // getStoragePrice, not getPrice: the response carries the USD conversion
+      // alongside the AI3 rate. An oracle failure is not an error here — it
+      // comes back as a null `usd` on an otherwise complete price.
       const result = await handleInternalError(
-        new Promise<{ price: number; pricePerGB: number }>((resolve) =>
-          resolve(IntentsUseCases.getPrice()),
+        new Promise<StoragePrice>((resolve) =>
+          resolve(IntentsUseCases.getStoragePrice()),
         ),
         'Failed to get price',
       )

@@ -539,6 +539,73 @@ export const config = {
     // A price outside [min, max] is treated as a glitch and dropped.
     minUsdPerAi3: env('ORACLE_MIN_USD_PER_AI3', '0.0001'),
     maxUsdPerAi3: env('ORACLE_MAX_USD_PER_AI3', '100'),
+    /**
+     * The DISPLAY profile: the same pool, read for an estimate rather than for
+     * a charge.
+     *
+     * Every threshold above exists because a rate that is wrong by a few
+     * percent takes money from someone. None of that applies to the "≈ $1.72"
+     * under a storage package: nobody is billed from it, so a manipulated rate
+     * buys an attacker a misleading label and nothing else. The guards that
+     * exist to make manipulation expensive — pool depth, one-sided volume,
+     * window span, the newest-fill veto — are therefore not merely relaxed
+     * here, they are absent, because their cost is real and their benefit on
+     * this path is not.
+     *
+     * What survives is the guards that catch a WRONG number rather than a
+     * bought one: the sanity bounds, an indexer that has stopped, and a window
+     * with nothing in it. Those still refuse, and the endpoint still serves a
+     * null rather than a guess.
+     *
+     * Note what that list does NOT include: ORACLE_MAX_SWAP_AGE_MS, the strict
+     * profile's bound on the age of the newest fill, has no counterpart here.
+     * It is a fifth dropped guard and not merely a relaxed one. Nothing in this
+     * profile refuses a rate for being old, so anyone tuning the numbers below
+     * should read the window length as the ONLY thing bounding staleness. The
+     * endpoint compensates by publishing `usd.lastTradeAt` beside `usd.asOf`,
+     * which is what lets a client tell a month-old basis from a fresh one; if
+     * that field is ever dropped, this profile goes back to being able to
+     * present a month-old rate as current.
+     *
+     * Sized from this pool's actual history. Over the 120 days to 2026-09-10 it
+     * filled 103 times, and rolling 7-day windows cleared the strict floors in
+     * 16 of 113 days — so the strict profile would have withheld an estimate
+     * ~86% of the time. A 30-day window with a floor of one fill clears
+     * whenever the pool has traded at all in a month.
+     */
+    display: {
+      // The window fills are drawn from. 30 days.
+      //
+      // This is NOT a freshness bound, though it is the only thing resembling
+      // one on this path. An empty window is the refusal, but a window is not
+      // empty because its fills are old: with minSamples at 1, a single trade
+      // on day 1 satisfies this profile for the following 29 days, and the rate
+      // served on day 30 is that one trade. Lengthening this window therefore
+      // buys coverage by widening exactly that gap. What bounds the age of the
+      // newest fill in the strict profile is ORACLE_MAX_SWAP_AGE_MS, and it is
+      // deliberately absent here — see the note above.
+      windowAgeMs: positiveIntEnv('ORACLE_DISPLAY_WINDOW_AGE_MS', 2592000000),
+      // One fill in a month is a thin basis for an average and still a far
+      // better answer than a blank. The strict floor of 5 is about making a
+      // window expensive to own; there is nothing here worth owning.
+      minSamples: positiveIntEnv('ORACLE_DISPLAY_MIN_SAMPLES', 1),
+      // Longer than the strict TTL: an average over a month does not move in
+      // five minutes, and the gateway bills per query.
+      cacheTtlMs: positiveIntEnv('ORACLE_DISPLAY_CACHE_TTL_MS', 300000),
+      // A last-good estimate may be served for a day. The strict path allows
+      // ten minutes because it is deciding a charge; a day-old approximation
+      // is still worth more to a reader than no number at all.
+      maxStaleMs: positiveIntEnv('ORACLE_DISPLAY_MAX_STALE_MS', 86400000),
+      // The indexer may lag an hour before its report stops describing now.
+      // Four times the strict bound, still short of a window that would go
+      // visibly stale.
+      maxIndexLagMs: positiveIntEnv('ORACLE_DISPLAY_MAX_INDEX_LAG_MS', 3600000),
+      // The outlier trim is kept — it removes the lone absurd print, which is
+      // as unwelcome in an estimate as anywhere — but only once the window is
+      // large enough for a median to mean something. Below this the fills are
+      // averaged as they came.
+      minSamplesToTrim: positiveIntEnv('ORACLE_DISPLAY_MIN_SAMPLES_TO_TRIM', 5),
+    },
   },
   credits: {
     // How many days a purchased credit row remains valid before expiring.

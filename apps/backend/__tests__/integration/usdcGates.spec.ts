@@ -115,6 +115,7 @@ describe('USDC gates (integration)', () => {
       ok({
         usdPerAi3: 6_400_000_000_000_000n,
         asOf: new Date(),
+        newestSwapMs: Date.now(),
         fromCache: false,
         stale: false,
       }),
@@ -130,6 +131,7 @@ describe('USDC gates (integration)', () => {
       ok({
         usdPerAi3: 6_400_000_000_000_000n,
         asOf: new Date(),
+        newestSwapMs: Date.now(),
         fromCache: false,
         stale: false,
       }),

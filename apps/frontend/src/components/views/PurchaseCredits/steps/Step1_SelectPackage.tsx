@@ -2,6 +2,7 @@
 
 import { Button, Card, cn } from '@auto-drive/ui';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
+import { UsdEstimateNote } from '../UsdEstimateNote';
 import { usePrices } from '../../../../hooks/usePrices';
 import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 import { useUserStore } from '../../../../globalStates/user';
@@ -128,6 +129,10 @@ export const PurchaseStep1SelectPackage = ({
             const overCap =
               p.id !== 'custom' && checkPackageOverCap(p.creditsInMB);
             const disabled = purchaseBlocked || overCap;
+            // Null whenever the oracle has no AI3/USD rate to convert at.
+            const usd = p.creditsInMB
+              ? formatCreditsInMbAsUsd(p.creditsInMB)
+              : null;
             return (
               <Card
                 key={p.id}
@@ -164,9 +169,13 @@ export const PurchaseStep1SelectPackage = ({
                       <div className='text-sm'>
                         {formatCreditsInMbAsAi3(p.creditsInMB).toFixed(2)} AI3
                       </div>
-                      <div className='text-xs text-muted-foreground'>
-                        ≈ ${formatCreditsInMbAsUsd(p.creditsInMB).toFixed(2)}
-                      </div>
+                      {/* Omitted entirely when there is no rate: an absent
+                          estimate is a gap, and "$0.00" was a claim. */}
+                      {usd !== null && (
+                        <div className='text-xs text-muted-foreground'>
+                          ≈ ${usd.toFixed(2)}
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -211,6 +220,11 @@ export const PurchaseStep1SelectPackage = ({
             );
           })}
         </div>
+
+        {/* One note for the whole grid rather than a marker per card: the rate
+            is a single fact and every "≈ $" above is the same conversion of
+            it. Renders nothing when the estimate is live. */}
+        <UsdEstimateNote className='mt-3' />
 
         <div className='mt-8 rounded-xl border bg-muted/30 p-6'>
           <div className='mb-4 text-lg font-semibold'>How it works</div>
