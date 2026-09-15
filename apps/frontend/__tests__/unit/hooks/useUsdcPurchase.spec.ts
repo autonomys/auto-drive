@@ -328,6 +328,31 @@ describe('pay', () => {
     expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
   });
 
+  it('pays once when the button is double-clicked', async () => {
+    // The ordinary path has no `setStage` before the first await — the wallet is
+    // already on the payment chain and the allowance already covers — so `isBusy`
+    // is still false through both RPC reads and the button is still enabled and
+    // still reads Pay. Two clicks inside that window both reach
+    // `payIntentWithToken` on the SAME intent, and the receiver has no replay
+    // guard: one transfer is credited, the other filed as ALREADY_SETTLED.
+    balances({ allowance: AMOUNT });
+    const { result } = setup();
+    await act(async () => {
+      await result.current.quote();
+    });
+
+    await act(async () => {
+      await Promise.all([result.current.pay(), result.current.pay()]);
+    });
+
+    const payments = writeContractAsync.mock.calls.filter(
+      (c) =>
+        (c[0] as { functionName: string }).functionName ===
+        'payIntentWithToken',
+    );
+    expect(payments).toHaveLength(1);
+  });
+
   // -------------------------------------------------------------------------
   // The payment call that does not report back
   // -------------------------------------------------------------------------

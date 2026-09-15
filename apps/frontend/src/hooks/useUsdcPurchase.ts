@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   useAccount,
   usePublicClient,
@@ -141,6 +141,22 @@ export const useUsdcPurchase = ({
    * declined prompt, which proves nothing was sent, or by that acknowledgement.
    */
   const [mayHaveBroadcast, setMayHaveBroadcast] = useState(false);
+  /**
+   * A `pay()` run is already under way.
+   *
+   * A ref, because the state that would otherwise say so does not update in
+   * time. `isBusy` is derived from `stage`, and on the ordinary path — wallet
+   * already on the payment chain, allowance already covering — the first
+   * `setStage` is the one before the payment write, after two RPC reads. Until
+   * then the button is still enabled and still reads Pay, so an ordinary
+   * double-click starts `pay()` twice and both reach `payIntentWithToken` on the
+   * same intent. The receiver has no replay guard: one transfer is credited and
+   * the other filed as ALREADY_SETTLED.
+   *
+   * Synchronous, so the second click sees it on the same tick the first was
+   * dispatched — which a `setState` could not promise.
+   */
+  const payInFlight = useRef(false);
 
   const isBusy =
     stage !== 'idle' && stage !== 'quoted' && stage !== 'submitted';
@@ -291,7 +307,7 @@ export const useUsdcPurchase = ({
    * buyer back through `quote()`, so the figure they confirm is always the
    * figure they were shown.
    */
-  const pay = useCallback(async () => {
+  const runPay = useCallback(async () => {
     if (!target || !address || !publicClient) return;
     if (intent === null) return;
 
@@ -458,6 +474,22 @@ export const useUsdcPurchase = ({
     target,
     writeContractAsync,
   ]);
+
+  /**
+   * One payment at a time. See `payInFlight`.
+   *
+   * A wrapper rather than a check inside, because the run above leaves by seven
+   * different routes and every one of them has to release the latch.
+   */
+  const pay = useCallback(async () => {
+    if (payInFlight.current) return;
+    payInFlight.current = true;
+    try {
+      await runPay();
+    } finally {
+      payInFlight.current = false;
+    }
+  }, [runPay]);
 
   return useMemo(
     () => ({
