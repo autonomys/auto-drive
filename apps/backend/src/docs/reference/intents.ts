@@ -243,8 +243,9 @@ export const intents = {
                 properties: {
                   txHash: {
                     type: 'string',
+                    pattern: '^0x[0-9a-fA-F]{64}$',
                     description:
-                      'The transaction hash from the on-chain payIntent call',
+                      'The transaction hash from the on-chain payIntent call. A 0x-prefixed 32-byte hex hash; case-insensitive on the way in and stored lower-cased.',
                   },
                 },
                 required: ['txHash'],

@@ -7,9 +7,9 @@
  * The subtle case is HTTP 410. The backend returns it from `isIntentExpired`,
  * which for a PENDING row with no recorded `tx_hash` is nothing more than
  * `expires_at < now`. That is NOT the state that decides whether credits are
- * granted: `markIntentAsConfirmed` refuses on the status COLUMN being EXPIRED,
- * and the only writer of that column is `cleanupExpiredIntents`, on
- * CREDIT_EXPIRY_CHECK_INTERVAL — one hour by default. A USDC payment reaches
+ * granted: `markIntentAsConfirmed` keeps settling for a further twenty minutes
+ * past `expires_at` (`SETTLE_GRACE_MS`), which is the window the price lock is
+ * actually honoured over. A USDC payment reaches
  * six confirmations in about seventy seconds, so a payment sent just after the
  * lock lapsed is normally credited in full. It does not even need its hash to
  * have been registered for that: the receiver's event subscription identifies
@@ -37,9 +37,15 @@
  *
  * Measured from the first 410 the loop sees, which is after the client's own
  * confirmation threshold, so the remaining work is the backend's: its watcher
- * writes CONFIRMED off the same receipt, then the poller writes COMPLETED. Past
- * the grace the row is genuinely EXPIRED and the payment, if one arrived, is in
- * `intent_mispayments` for an admin.
+ * writes CONFIRMED off the same receipt, then the poller writes COMPLETED.
+ *
+ * Shorter than the backend's settlement window, so this gives up first: past the
+ * grace the loop reports expired while the backend would, for a few more
+ * minutes, still credit a payment that landed. That is the wrong direction to
+ * err in — it is the "your money is gone" report this grace exists to prevent —
+ * but it is the direction the endpoint can express, since one number cannot say
+ * how much of the window a particular row has left. Fixing it properly means
+ * serving the deadline per intent rather than a duration per deployment.
  */
 export const LOCK_LAPSED_SETTLE_GRACE_MS = 120_000;
 

@@ -19,6 +19,7 @@ import { dbMigration } from '../utils/dbMigrate.js'
 import { getDatabase } from '../../src/infrastructure/drivers/pg.js'
 import { AuthManager } from '../../src/infrastructure/services/auth/index.js'
 import { UsdcPaymentsUseCases } from '../../src/core/payments/usdc.js'
+import { IntentsUseCases } from '../../src/core/users/intents.js'
 import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
 import { usdcChainGuard } from '../../src/infrastructure/services/paymentManager/usdcChainGuard.js'
 
@@ -90,6 +91,17 @@ describe('USDC payment routes (integration)', () => {
 
   const post = (path: string, user: UserWithOrganization | null) =>
     fetch(`${base}${path}`, { method: 'POST', headers: as(user) })
+
+  const postJson = (
+    path: string,
+    user: UserWithOrganization | null,
+    body: unknown,
+  ) =>
+    fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { ...as(user), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
 
   beforeAll(async () => {
     await dbMigration.up()
@@ -378,6 +390,54 @@ describe('USDC payment routes (integration)', () => {
     const flags = (await response.json()) as Record<string, unknown>
     expect(flags.usdcAvailable).toBe(false)
     expect(flags.payWithUsdc).toBe(false)
+  })
+
+  // ── what /watch accepts ───────────────────────────────────────────────────
+
+  it('refuses a txHash that is not a transaction hash', async () => {
+    // The shape check has to sit at the route, because recording a hash is not
+    // inert: intents.tx_hash carries "a payment for this is in flight" to the
+    // cleanup sweep, to getIntent and to the startup recovery sweep, and a value
+    // that cannot name a transaction is a claim none of them can ever resolve.
+    // Only HTTP can prove the body never reached the use case.
+    buyCredits.active = true
+
+    const intentId = `0x${'d'.repeat(64)}`
+    const triggerSpy = jest.spyOn(IntentsUseCases, 'triggerWatchIntent')
+
+    const refused = [
+      'x',
+      // Right prefix, one nibble short.
+      `0x${'a'.repeat(63)}`,
+      // Right length, not hex.
+      `0x${'g'.repeat(64)}`,
+    ]
+
+    for (const txHash of refused) {
+      const response = await postJson(`/intents/${intentId}/watch`, buyer, {
+        txHash,
+      })
+      expect(response.status).toBe(400)
+    }
+
+    expect(triggerSpy).not.toHaveBeenCalled()
+  })
+
+  it('accepts a well-formed txHash in either case', async () => {
+    // Past the shape check the intent is simply unknown, so this asserts what it
+    // can: the request is no longer refused for its shape. Upper case is accepted
+    // and lower-cased on the way in — a hash carries no checksum encoding, so two
+    // spellings are one transaction and must not become two rows.
+    buyCredits.active = true
+
+    const intentId = `0x${'e'.repeat(64)}`
+
+    for (const txHash of [`0x${'a'.repeat(64)}`, `0x${'A'.repeat(64)}`]) {
+      const response = await postJson(`/intents/${intentId}/watch`, buyer, {
+        txHash,
+      })
+      expect(response.status).not.toBe(400)
+    }
   })
 
   // ── the status page ───────────────────────────────────────────────────────

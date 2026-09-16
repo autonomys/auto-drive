@@ -543,12 +543,16 @@ const getPaymentTarget = (): UsdcPaymentTarget | null => {
     // How long the client should keep polling a 410 before calling a purchase
     // lost. Derived here rather than kept as a frontend constant because it is
     // a property of THIS backend's timing: `GET /intents/:id` answers 410 the
-    // moment `expires_at` passes, but credits are withheld only once
-    // `cleanupExpiredIntents` writes the EXPIRED column — so a payment sent just
-    // after the lock lapsed is normally credited by the poller below, four turns
-    // of which is a generous margin. A constant compiled into the client would
-    // silently start calling credited purchases lost the day an operator raised
-    // EVM_CHAIN_CHECK_INTERVAL.
+    // moment `expires_at` passes on a row with no tx_hash, while settlement
+    // keeps crediting for SETTLE_GRACE_MS past that — so a payment
+    // sent just after the lock lapsed is still granted, and four turns of the
+    // poller below is the margin the common case needs. A constant compiled into
+    // the client would silently start calling credited purchases lost the day an
+    // operator raised EVM_CHAIN_CHECK_INTERVAL.
+    //
+    // Strictly inside the settlement window, so this gives up before crediting
+    // does. The proper fix is serving the settlement deadline per intent — one
+    // duration cannot say how much of the window a given row has left.
     settleGraceMs: config.paymentManager.checkInterval * 4,
   }
 }

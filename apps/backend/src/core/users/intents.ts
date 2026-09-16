@@ -82,29 +82,60 @@ const randomBytes32 = () => {
   return '0x' + randomBytes(32).toString('hex')
 }
 
+// How long past expires_at a payment can still be credited at the price the
+// intent was quoted.
+//
+// Not expires_at itself: a transaction signed just inside the lock needs
+// inclusion plus confirmations to land, and refusing that refuses an honest
+// purchase. Not the 120s the client polls for either (see settleGraceMs), which
+// covers the quiet case and would start refusing on the first gas spike. Short,
+// though — a quote that stays payable is an option on the rate it was struck at,
+// and the option is worth more the wider the window.
+//
+// A constant rather than config: it is derived from how long settlement takes,
+// not from anything an operator tunes per deployment.
+const SETTLE_GRACE_MS = 20 * 60 * 1000
+
+// True once a payment can no longer be credited at the price this intent was
+// quoted.
+//
+// The one clock both halves of the price lock read — getIntent, to stop
+// advertising a quote it will not honour, and markIntentAsConfirmed, to refuse
+// money rather than grant storage at a lapsed rate. Two windows would guarantee
+// a gap in one direction or the other.
+//
+// Deliberately NOT the status column, which is written by cleanupExpiredIntents
+// on its own schedule (hourly by default): reading it asks "has the sweep been
+// round yet" when the question is "has the window closed".
+//
+// A row with no expiresAt (pre-feature) has no window to be past.
+const isPastSettlement = (intent: Intent): boolean => {
+  if (!intent.expiresAt) return false
+  return intent.expiresAt.getTime() + SETTLE_GRACE_MS < Date.now()
+}
+
 // Returns true if the intent has passed its price-lock window.
 // Only PENDING intents can expire — once an intent is CONFIRMED or COMPLETED
 // the expiry window is irrelevant.
 // Intents without an expiresAt (pre-feature rows) are considered expired.
 //
-// A txHash exempts the intent while it could still plausibly resolve: it is
-// being watched on-chain and the answer comes from markIntentAsConfirmed. That
-// exemption is time-bounded rather than permanent, because it assumes a hash
-// resolves, and a refused payment or a transaction that never confirms both
-// break the assumption — leaving a row that getIntent advertises as payable
-// forever, long past the price lock it was quoted under. Past
-// intentTxGraceMinutes the hash stops earning the exemption. Kept in step with
-// getExpiredPendingIntents, so what this reports and what cleanup reclaims are
-// the same set.
+// A txHash exempts the intent while a payment for it could still settle, because
+// markIntentAsConfirmed keeps crediting until then: serving 410 inside that
+// window would call a purchase lost while the very next block is about to grant
+// it. The exemption ends where settlement ends, and not a minute later.
+//
+// NOT kept in step with getExpiredPendingIntents, which is the sweep's own,
+// far longer window and governs when the row is reclaimed rather than when it
+// stops being payable. Between the two, this reports expired while the status
+// column still says PENDING — the normal state of an abandoned row for most of
+// a day, not a discrepancy.
 const isIntentExpired = (intent: Intent): boolean => {
   if (intent.status === IntentStatus.EXPIRED) return true
   if (intent.status !== IntentStatus.PENDING) return false
   if (intent.txHash) {
-    // A pre-feature row has no window to be past, so the hash keeps its
-    // exemption — as it did before this grace existed.
-    if (!intent.expiresAt) return false
-    const graceMs = config.credits.intentTxGraceMinutes * 60 * 1000
-    return intent.expiresAt.getTime() + graceMs < Date.now()
+    // A pre-feature row has no window to be past, so isPastSettlement is false
+    // for it and the hash keeps the exemption it had before any grace existed.
+    return isPastSettlement(intent)
   }
   if (!intent.expiresAt) return true
   return intent.expiresAt < new Date()
@@ -1003,27 +1034,44 @@ const markIntentAsConfirmed = async ({
   //
   // Handled apart from the statuses above because it is not the same kind of
   // no-op. Those four mean the intent was already resolved and this call is
-  // re-delivery of something we acted on. EXPIRED means the opposite: nothing was
+  // re-delivery of something we acted on. Expiry means the opposite: nothing was
   // ever paid as far as the row knows, so money arriving now is a payment we have
   // no record of anywhere. Granting it is not an option — the rate it was quoted
   // under is gone — but returning quietly leaves an irreversible transfer with
   // nothing pointing at it, which is exactly what intent_mispayments exists to
   // prevent.
   //
-  // Reachable on both payment methods today, without the USDC flag: an intent
-  // expires ten minutes after creation, and a payment made near that edge can
-  // confirm after it. It becomes more reachable now that a stale tx_hash no
-  // longer exempts a row from expiry forever, which is why the two land together.
+  // Two ways to be expired, and the clock is the one that decides.
+  //
+  // The status column is written by cleanupExpiredIntents, hourly by default and
+  // not at all for a day on a row carrying a tx_hash, which the sweep skips so it
+  // does not race the watcher. Gating on it alone therefore honours the locked
+  // rate for however long the sweep happens to take — and a quote that outlives
+  // its window is an option on the rate it was struck at, worth more the wider
+  // the window. So the test is expires_at plus SETTLE_GRACE_MS, the same one
+  // getIntent serves 410 on, with the status column left as the belt to its
+  // braces for rows the sweep has already taken.
+  //
+  // Gated on both payment methods: a USDC intent locks a token amount against a
+  // quoted rate, an AI3 intent locks shannons_per_byte, and neither is quoted to
+  // be payable past its window.
   //
   // Still ok() rather than an error — the intent is untouched and there is
   // nothing for the watcher to retry — and still idempotent, since re-delivery
   // carries the same (txHash, logIndex) and de-duplicates on insert.
-  if (intent.status === IntentStatus.EXPIRED) {
+  if (intent.status === IntentStatus.EXPIRED || isPastSettlement(intent)) {
     logger.warn(
       'markIntentAsConfirmed: payment arrived for an expired intent — recording it',
       {
         intentId,
         expiresAt: intent.expiresAt,
+        // Which of the two said so. 'settlement-window' on a PENDING row is the
+        // ordinary case rather than an anomaly: the window closed and the sweep
+        // has not been round yet. 'status' means the sweep got there first.
+        expiredBy:
+          intent.status === IntentStatus.EXPIRED
+            ? 'status'
+            : 'settlement-window',
         paymentMethod: intent.paymentMethod,
         txHash,
       },

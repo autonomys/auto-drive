@@ -233,12 +233,21 @@ const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
 //     to resolve. The exclusion this replaces assumed a tx_hash means "actively
 //     being watched and will resolve"; a payment the watcher refused is a
 //     standing counterexample, and so is a transaction that never confirms. Left
-//     out, those rows can reach neither EXPIRED nor CONFIRMED: getIntent keeps
-//     serving them as payable indefinitely past their price lock, and the startup
-//     sweep re-watches them on every restart.
+//     out, those rows can reach neither EXPIRED nor CONFIRMED, so the startup
+//     sweep re-watches them on every restart, forever.
 //
-// A hash inside the grace window is still exempt, so the ordinary
-// slow-confirmation case resolves through markIntentAsConfirmed untouched.
+// A hash inside the grace window is still exempt, so the sweep never takes a row
+// out from under a confirmation the watcher is still waiting on.
+//
+// graceMinutes here is intentTxGraceMinutes (24h), and it is NOT the window that
+// decides whether a payment is still credited — that is SETTLE_GRACE_MS, read
+// off the clock by isPastSettlement in the intents use case. This query is
+// reclamation: when a row stops being swept, and so stops being re-watched.
+//
+// Do not narrow it to match settlement. Only a PENDING row with a tx_hash is
+// picked up by getPendingWithTxHash, which is what re-watches a transaction
+// across a restart — reclaim the row at twenty minutes and a payment confirming
+// during an outage is never looked at again, and the transfer goes unrecorded.
 const getExpiredPendingIntents = async (
   graceMinutes: number,
 ): Promise<Intent[]> => {
