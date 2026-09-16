@@ -544,7 +544,7 @@ const getPaymentTarget = (): UsdcPaymentTarget | null => {
     // lost. Derived here rather than kept as a frontend constant because it is
     // a property of THIS backend's timing: `GET /intents/:id` answers 410 the
     // moment `expires_at` passes on a row with no tx_hash, while settlement
-    // keeps crediting for INTENT_SETTLE_GRACE_MINUTES past that — so a payment
+    // keeps crediting for SETTLE_GRACE_MS past that — so a payment
     // sent just after the lock lapsed is still granted, and four turns of the
     // poller below is the margin the common case needs. A constant compiled into
     // the client would silently start calling credited purchases lost the day an
