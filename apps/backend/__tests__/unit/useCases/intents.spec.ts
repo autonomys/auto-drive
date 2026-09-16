@@ -1356,6 +1356,167 @@ describe('IntentsUseCases', () => {
     })
   })
 
+  // The settlement window in core/users/intents.ts. Restated here rather than
+  // imported so a change to it fails these tests loudly instead of moving them
+  // along with it.
+  const SETTLE_GRACE_MS = 20 * 60 * 1000
+
+  it('markIntentAsConfirmed refuses a payment once the settlement window closes', async () => {
+    // The row is still PENDING — the cleanup sweep has not been round yet, and on
+    // stock config will not be for up to an hour — but the window the price was
+    // locked for is long shut. What decides is the clock, not the status column:
+    // gating on the column alone honours the locked rate for as long as the sweep
+    // happens to take, which is a free option on the rate for whoever is holding
+    // the quote.
+    const intent: Intent = {
+      id: '0xusdc-past-settlement',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+      txHash: '0x' + 'a'.repeat(64),
+      expiresAt: new Date(Date.now() - SETTLE_GRACE_MS - 60 * 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockResolvedValue(null)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+      fromAddress: '0xpayer',
+      txHash: intent.txHash,
+      logIndex: 0,
+    })
+
+    // ok() and untouched: the row is not claimed, so a real payment is filed for
+    // an admin rather than granted at a rate that has lapsed.
+    expect(res.isOk()).toBe(true)
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intentId: intent.id,
+        reason: IntentMispaymentReason.INTENT_EXPIRED,
+        tokenAmount: 1_050_000n,
+      }),
+    )
+  })
+
+  it('markIntentAsConfirmed still credits a payment inside the settlement window', async () => {
+    // The case the window exists for. A transaction signed just inside the lock
+    // needs inclusion plus six confirmations to land, so arriving after
+    // expires_at is ordinary rather than suspicious, and refusing it would refuse
+    // an honest purchase.
+    const intent: Intent = {
+      id: '0xusdc-inside-settlement',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+      expiresAt: new Date(Date.now() - 60 * 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async () => ({
+        ...intent,
+        status: IntentStatus.CONFIRMED,
+        tokenAmount: 1_050_000n,
+      }))
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      tokenAmount: 1_050_000n,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
+  it('markIntentAsConfirmed holds an AI3 intent to the same settlement window', async () => {
+    // An AI3 intent is quoted no amount, but it does lock shannons_per_byte, and
+    // credits are paymentAmount / that number. Leaving it payable past its window
+    // is the same promise held open on a slower-moving figure, so the window is
+    // not scoped to the USDC path.
+    const intent: Intent = {
+      id: '0xai3-past-settlement',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+      txHash: '0x' + 'b'.repeat(64),
+      expiresAt: new Date(Date.now() - SETTLE_GRACE_MS - 60 * 1000),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockResolvedValue(null)
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 5n * 10n ** 18n,
+      txHash: intent.txHash,
+      logIndex: 0,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intentId: intent.id,
+        reason: IntentMispaymentReason.INTENT_EXPIRED,
+        expectedPaymentMethod: PaymentMethod.AI3_NATIVE,
+      }),
+    )
+  })
+
+  it('markIntentAsConfirmed credits a pre-feature row that has no window at all', async () => {
+    // No expires_at, so there is no window to be past and nothing for the clock
+    // to say. Behaviour unchanged for rows written before intents were given one.
+    const intent: Intent = {
+      id: '0xno-window',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.AI3_NATIVE,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    const confirmSpy = jest
+      .spyOn(intentsRepository, 'confirmIntentIfPending')
+      .mockImplementation(async () => ({
+        ...intent,
+        status: IntentStatus.CONFIRMED,
+        paymentAmount: 100n,
+      }))
+    const recordSpy = jest
+      .spyOn(intentMispaymentsRepository, 'record')
+      .mockResolvedValue(null)
+
+    const res = await IntentsUseCases.markIntentAsConfirmed({
+      intentId: intent.id,
+      paymentAmount: 100n,
+    })
+
+    expect(res.isOk()).toBe(true)
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
   it('markIntentAsConfirmed files an off-quote payment and still credits it', async () => {
     // Underpaying a quote the API advertised as exact. The grant stays
     // proportional — the user gets storage worth what they sent — but nothing on
@@ -2092,13 +2253,42 @@ describe('IntentsUseCases', () => {
       status: IntentStatus.PENDING,
       shannonsPerByte: 1n,
       txHash: '0xnever-confirmed',
-      expiresAt: new Date(
-        Date.now() - (config.credits.intentTxGraceMinutes + 60) * 60 * 1000,
-      ),
+      expiresAt: new Date(Date.now() - SETTLE_GRACE_MS - 60 * 60 * 1000),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(stale)
 
     const result = await IntentsUseCases.getIntent(user, stale.id)
+    expect(result.isErr()).toBe(true)
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(GoneError)
+  })
+
+  it('getIntent stops serving a watched intent at the settlement window, not the sweep window', async () => {
+    // The distinction the two graces exist to keep apart. This row is past
+    // settlement and nowhere near intentTxGraceMinutes, so the cleanup sweep will
+    // not touch it for the best part of a day and its status column still reads
+    // PENDING. Payability is not that column's to decide: the quote stopped being
+    // honoured when the settlement window closed, and getIntent has to say so
+    // rather than keep advertising a price nothing will settle at.
+    const sweepGraceMs = config.credits.intentTxGraceMinutes * 60 * 1000
+    const pastSettlement = SETTLE_GRACE_MS + 60 * 1000
+    // Guards the premise rather than the behaviour: if the two windows were ever
+    // set the same way round, this test would pass for the wrong reason.
+    expect(pastSettlement).toBeLessThan(sweepGraceMs)
+
+    const watched: Intent = {
+      id: '0x1w-past-settlement',
+      userPublicId: user.publicId,
+      status: IntentStatus.PENDING,
+      shannonsPerByte: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      quotedTokenAmount: 1_050_000n,
+      quotedAi3Shannons: 1000n,
+      txHash: '0x' + 'c'.repeat(64),
+      expiresAt: new Date(Date.now() - pastSettlement),
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(watched)
+
+    const result = await IntentsUseCases.getIntent(user, watched.id)
     expect(result.isErr()).toBe(true)
     expect(result._unsafeUnwrapErr()).toBeInstanceOf(GoneError)
   })

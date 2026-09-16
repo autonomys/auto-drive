@@ -201,6 +201,11 @@ intentsController.get(
   }),
 )
 
+// An EVM transaction hash: 32 bytes, hex, lower-cased by the handler before it
+// is tested. Deliberately not a viem `isHash` call — the shape is the whole
+// check, and keeping it here keeps it next to the normalisation it depends on.
+const TX_HASH_PATTERN = /^0x[0-9a-f]{64}$/
+
 // ---------------------------------------------------------------------------
 // POST /intents/:id/watch
 // Attaches a txHash to a pending intent and queues on-chain watching.
@@ -243,6 +248,28 @@ intentsController.post(
     // Trimmed for the same reason the address variables are: a value pasted out
     // of a block explorer arrives with whitespace more often than not.
     const txHash = rawTxHash.trim().toLowerCase()
+
+    // A transaction hash, not merely a string.
+    //
+    // Recording one is not inert. The hash is written to intents.tx_hash, and a
+    // row carrying a hash is understood everywhere downstream to mean "a payment
+    // for this is in flight": the cleanup sweep leaves it alone rather than race
+    // the watcher for it, getIntent keeps serving it while settlement could still
+    // land, and the startup recovery sweep re-watches it after every restart. All
+    // three are reasonable for a real hash and wrong for anything else, and a
+    // value that is not 32 hex bytes cannot be a real one — viem will not even
+    // look it up, so the watch task can only fail and retry its way onto
+    // frontend-errors.
+    //
+    // Checked after the lower-casing above so the pattern does not have to accept
+    // both cases, which would let two spellings of one hash through — the exact
+    // thing the normalisation is there to prevent.
+    if (!TX_HASH_PATTERN.test(txHash)) {
+      res.status(400).json({
+        error: 'Invalid field: txHash must be a 0x-prefixed 32-byte hex hash',
+      })
+      return
+    }
 
     const result = await handleInternalErrorResult(
       IntentsUseCases.triggerWatchIntent({

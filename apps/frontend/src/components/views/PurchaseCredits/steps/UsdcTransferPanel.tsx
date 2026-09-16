@@ -143,13 +143,14 @@ export const UsdcTransferPanel = ({
   // Tell the backend which transaction to watch, as soon as there is a hash —
   // NOT after it confirms, which is when the AI3 step does it.
   //
-  // The difference is a payment that can be lost. Recording the hash is what puts
-  // the intent under INTENT_TX_GRACE_MINUTES in the expiry sweeper; without it
-  // the row matches `tx_hash IS NULL AND expires_at < NOW()` and is expired on
-  // schedule. A payment submitted near the end of the ten-minute lock takes six
-  // Ethereum confirmations (~72s) to reach the `isConfirmed` this used to wait
-  // for, and an intent expired in the meantime files the arriving payment as a
-  // mispayment: money kept, no credits, admin only.
+  // The difference is a payment that can be lost. Recording the hash is what
+  // keeps `GET /intents/:id` answering 200 through the settlement window rather
+  // than 410 the instant `expires_at` passes, and what puts the row under
+  // INTENT_TX_GRACE_MINUTES in the expiry sweeper instead of
+  // `tx_hash IS NULL AND expires_at < NOW()`. A payment submitted near the end of
+  // the ten-minute lock takes six Ethereum confirmations (~72s) to reach the
+  // `isConfirmed` this used to wait for, and the buyer should not be shown a
+  // lapsed purchase for the whole of it.
   //
   // Best-effort, as before: the watcher subscribes to the receiver's events
   // independently, so a failure here costs the grace window and the head start,
@@ -163,12 +164,12 @@ export const UsdcTransferPanel = ({
   //
   // A caution, though, and NOT a verdict. `isIntentExpired` returns 410 for a
   // PENDING row merely past `expires_at`, while the refusal that actually
-  // withholds credits is `markIntentAsConfirmed` reading the status COLUMN as
-  // EXPIRED — written only by the hourly `cleanupExpiredIntents`. Six
-  // confirmations take ~72s, so this payment is normally credited, and the
-  // registration that just failed is not needed for it: the receiver's event
-  // subscription finds the intent in the deposit event itself. Cleared by the
-  // polling loop's first successful read, for exactly that reason.
+  // withholds credits is `markIntentAsConfirmed` finding the settlement window
+  // closed — `expires_at` plus `SETTLE_GRACE_MS`, twenty minutes.
+  // Six confirmations take ~72s, so this payment is normally credited,
+  // and the registration that just failed is not needed for it: the receiver's
+  // event subscription finds the intent in the deposit event itself. Cleared by
+  // the polling loop's first successful read, for exactly that reason.
   const [registrationLockLapsed, setRegistrationLockLapsed] = useState(false);
 
   // Written the moment a hash exists, so the window it protects — inclusion plus

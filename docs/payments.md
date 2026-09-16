@@ -337,6 +337,10 @@ Triggers the backend to watch for the transaction confirmation.
 }
 ```
 
+`txHash` must be a 0x-prefixed 32-byte hex hash (`^0x[0-9a-fA-F]{64}$`). It is
+case-insensitive on the way in and stored lower-cased, so the same transaction
+submitted in either spelling is one row.
+
 **Response:** `204 No Content`
 
 ## Error Handling
@@ -349,6 +353,7 @@ Triggers the backend to watch for the transaction confirmation.
 | Intent not found                   | 404         | The intent ID does not exist                                               |
 | Forbidden                          | 403         | User does not own this intent                                              |
 | Missing or invalid field: `txHash` | 400         | `POST /intents/:id/watch` body missing `txHash` or not a string            |
+| Invalid field: `txHash` must be a 0x-prefixed 32-byte hex hash | 400 | `txHash` is a string but not a transaction hash |
 | Payment not found (async)          | -           | Tx receipt does not contain the expected `IntentPaymentReceived`           |
 | Credits not applied (async)        | -           | Intent confirmed, but credit application failed (e.g. per-user cap reached — intent is parked in `over_cap` for admin review) |
 
