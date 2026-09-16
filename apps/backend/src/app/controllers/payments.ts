@@ -4,12 +4,55 @@ import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { UsdcPaymentsUseCases } from '../../core/payments/usdc.js'
 import { handleInternalErrorResult } from '../../shared/utils/neverthrow.js'
-import { handleError } from '../../errors/index.js'
+import { handleError, UsdcPaymentsDisabledError } from '../../errors/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('controllers:payments')
 
 export const paymentsController = Router()
+
+// ---------------------------------------------------------------------------
+// GET /payments/usdc/target
+//
+// Where to send a USDC payment: the chain, the receiver, the token, how many
+// confirmations the backend waits for, and how long a lapsed lock may keep
+// answering 410. Any signed-in user, because every buyer needs it — everything
+// in it is public on-chain data or a public timing constant.
+//
+// Served rather than compiled into the client; see UsdcPaymentTarget for why,
+// and `docs/payments.md` for the operator's version.
+//
+// NOT gated on the kill switch or the treasury cap: `/features` reports
+// availability, and a client mid-flow with a quoted intent still needs somewhere
+// to pay it. 403 when this deployment has no complete Ethereum configuration, or
+// when its endpoint has been verified to be a different chain from the one it
+// would name — the same status and code `createIntent` returns, because neither
+// is transient.
+// ---------------------------------------------------------------------------
+
+paymentsController.get(
+  '/usdc/target',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const target = UsdcPaymentsUseCases.getPaymentTarget()
+    if (!target) {
+      handleError(
+        new UsdcPaymentsDisabledError(
+          'Paying in USDC is not available on this deployment. Pay in AI3 ' +
+            'instead.',
+        ),
+        res,
+      )
+      return
+    }
+
+    res.status(200).json(target)
+  }),
+)
 
 // ---------------------------------------------------------------------------
 // GET /payments/usdc/status
@@ -96,10 +139,10 @@ const setGate = (enabled: boolean) =>
     try {
       availability = await UsdcPaymentsUseCases.getAvailability()
     } catch (error) {
-      logger.warn(
-        'USDC gate flipped, but the composite could not be re-read',
-        { enabled, error },
-      )
+      logger.warn('USDC gate flipped, but the composite could not be re-read', {
+        enabled,
+        error,
+      })
     }
 
     res.status(200).json({

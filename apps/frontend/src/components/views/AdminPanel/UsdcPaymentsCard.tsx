@@ -87,6 +87,7 @@ const CLOSED_REASON_LABEL: Record<UsdcClosedReason, string> = {
   [UsdcClosedReason.TREASURY_CAP]: 'treasury cap reached',
   [UsdcClosedReason.BALANCE_UNKNOWN]: 'treasury balance unknown',
   [UsdcClosedReason.ORACLE_UNAVAILABLE]: 'no AI3/USD rate',
+  [UsdcClosedReason.CHAIN_MISMATCH]: 'ETH_CHAIN_ID is not the chain the endpoint is on',
 };
 
 /**

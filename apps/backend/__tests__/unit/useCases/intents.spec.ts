@@ -113,7 +113,9 @@ describe('IntentsUseCases', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({ price: 1, pricePerGB: 1073741824 })
+    jest
+      .spyOn(IntentsUseCases, 'getPrice')
+      .mockResolvedValue({ price: 1, pricePerGB: 1073741824 })
     usdcFlag.active = true
     config.ethereum.rpcUrl = 'http://example.org'
     config.ethereum.usdcReceiverAddress =
@@ -540,6 +542,35 @@ describe('IntentsUseCases', () => {
     expect(res.statusCode).toBe(503)
     expect(res.body).toEqual({
       error: 'USDC_PAYMENTS_UNAVAILABLE',
+      message: expect.stringContaining('Pay in AI3'),
+    })
+  })
+
+  it('createIntent refuses a chain mismatch with a 403, not a retryable 503', async () => {
+    // The status is the whole point. A 503 tells the client to keep offering
+    // USDC and try again; a chain mismatch clears only when an operator fixes
+    // ETH_CHAIN_ID and restarts, so the honest answer is "not on this
+    // deployment" and the option should go away — the same answer, and the same
+    // code, as a deployment with no Ethereum configuration at all.
+    jest.spyOn(UsdcPaymentsUseCases, 'getAvailability').mockResolvedValue({
+      open: false,
+      closedReason: UsdcClosedReason.CHAIN_MISMATCH,
+    })
+
+    const result = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 1000n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    })
+
+    const error = result._unsafeUnwrapErr()
+    expect(error).toBeInstanceOf(UsdcPaymentsDisabledError)
+    expect(error).not.toBeInstanceOf(UsdcUnavailableError)
+
+    const res = mockResponse()
+    ;(error as UsdcPaymentsDisabledError).handleResponse(res as never)
+    expect(res.statusCode).toBe(403)
+    expect(res.body).toEqual({
+      error: 'USDC_PAYMENTS_DISABLED',
       message: expect.stringContaining('Pay in AI3'),
     })
   })
@@ -1885,11 +1916,14 @@ describe('IntentsUseCases', () => {
   it.each<[string, unknown]>([
     ['undefined', undefined],
     ['null', null],
-  ])('parsePaymentMethod defaults %s to AI3 (body-less requests)', (_l, raw) => {
-    const result = IntentsUseCases.parsePaymentMethod(raw)
-    expect(result.isOk()).toBe(true)
-    expect(result._unsafeUnwrap()).toBe(PaymentMethod.AI3_NATIVE)
-  })
+  ])(
+    'parsePaymentMethod defaults %s to AI3 (body-less requests)',
+    (_l, raw) => {
+      const result = IntentsUseCases.parsePaymentMethod(raw)
+      expect(result.isOk()).toBe(true)
+      expect(result._unsafeUnwrap()).toBe(PaymentMethod.AI3_NATIVE)
+    },
+  )
 
   it.each<[PaymentMethod]>([
     [PaymentMethod.AI3_NATIVE],
@@ -1907,13 +1941,16 @@ describe('IntentsUseCases', () => {
     ['an empty string', ''],
     ['a number', 1],
     ['an object', { paymentMethod: 'usdc_eth' }],
-  ])('parsePaymentMethod rejects %s rather than defaulting to AI3', (_l, raw) => {
-    // Defaulting would quote in AI3 a purchase the caller intended to pay in
-    // USDC, and they would only find out at payment time.
-    const result = IntentsUseCases.parsePaymentMethod(raw)
-    expect(result.isErr()).toBe(true)
-    expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
-  })
+  ])(
+    'parsePaymentMethod rejects %s rather than defaulting to AI3',
+    (_l, raw) => {
+      // Defaulting would quote in AI3 a purchase the caller intended to pay in
+      // USDC, and they would only find out at payment time.
+      const result = IntentsUseCases.parsePaymentMethod(raw)
+      expect(result.isErr()).toBe(true)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+    },
+  )
 
   // ────────────────────────────────────────────────────────────────────────────
   // parseRequestedBytes
@@ -2056,8 +2093,7 @@ describe('IntentsUseCases', () => {
       shannonsPerByte: 1n,
       txHash: '0xnever-confirmed',
       expiresAt: new Date(
-        Date.now() -
-          (config.credits.intentTxGraceMinutes + 60) * 60 * 1000,
+        Date.now() - (config.credits.intentTxGraceMinutes + 60) * 60 * 1000,
       ),
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(stale)
@@ -2382,7 +2418,11 @@ describe('IntentsUseCases', () => {
     const credits = paymentAmount / intent.shannonsPerByte
 
     expect(res.isOk()).toBe(true)
-    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, credits, intent.id)
+    expect(addCreditsSpy).toHaveBeenCalledWith(
+      user.publicId,
+      credits,
+      intent.id,
+    )
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         id: intent.id,
@@ -2415,7 +2455,11 @@ describe('IntentsUseCases', () => {
     expect(res.isOk()).toBe(true)
     // getIntentCredits now returns bigint; intentId is forwarded as third arg.
     const credits = paymentAmount / intent.shannonsPerByte
-    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, credits, intent.id)
+    expect(addCreditsSpy).toHaveBeenCalledWith(
+      user.publicId,
+      credits,
+      intent.id,
+    )
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         id: intent.id,
@@ -2791,7 +2835,10 @@ describe('IntentsUseCases', () => {
       .spyOn(intentsRepository, 'updateIntent')
       .mockResolvedValue({ ...overCapIntent, status: IntentStatus.CONFIRMED })
 
-    const result = await IntentsUseCases.reprocessOverCapIntent(admin, overCapIntent.id)
+    const result = await IntentsUseCases.reprocessOverCapIntent(
+      admin,
+      overCapIntent.id,
+    )
 
     expect(result.isOk()).toBe(true)
     expect(updateSpy).toHaveBeenCalledWith(
@@ -2806,7 +2853,10 @@ describe('IntentsUseCases', () => {
     const nonAdmin = { ...user, role: UserRole.User } as unknown as User
     const repoSpy = jest.spyOn(intentsRepository, 'getById')
 
-    const result = await IntentsUseCases.reprocessOverCapIntent(nonAdmin, '0xrp2')
+    const result = await IntentsUseCases.reprocessOverCapIntent(
+      nonAdmin,
+      '0xrp2',
+    )
 
     expect(result.isErr()).toBe(true)
     expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
@@ -2834,7 +2884,10 @@ describe('IntentsUseCases', () => {
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(completedIntent)
     const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
 
-    const result = await IntentsUseCases.reprocessOverCapIntent(admin, completedIntent.id)
+    const result = await IntentsUseCases.reprocessOverCapIntent(
+      admin,
+      completedIntent.id,
+    )
 
     expect(result.isErr()).toBe(true)
     expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)
@@ -2844,7 +2897,11 @@ describe('IntentsUseCases', () => {
 
   it('reprocessOverCapIntent should return ConflictError for PENDING, CONFIRMED, EXPIRED statuses', async () => {
     const admin = { ...user, role: UserRole.Admin } as unknown as User
-    const statuses = [IntentStatus.PENDING, IntentStatus.CONFIRMED, IntentStatus.EXPIRED]
+    const statuses = [
+      IntentStatus.PENDING,
+      IntentStatus.CONFIRMED,
+      IntentStatus.EXPIRED,
+    ]
 
     for (const status of statuses) {
       const intent: Intent = {
@@ -2855,7 +2912,10 @@ describe('IntentsUseCases', () => {
       }
       jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
 
-      const result = await IntentsUseCases.reprocessOverCapIntent(admin, intent.id)
+      const result = await IntentsUseCases.reprocessOverCapIntent(
+        admin,
+        intent.id,
+      )
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)

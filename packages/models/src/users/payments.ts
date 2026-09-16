@@ -47,6 +47,11 @@ export enum UsdcClosedReason {
   // to price against what it can see. Also covers "nothing has polled the rate
   // yet", which fails closed for the same reason an unknown balance does.
   ORACLE_UNAVAILABLE = "oracle_unavailable",
+  // ETH_CHAIN_ID and ETH_CHAIN_ENDPOINT name different chains, verified against
+  // the endpoint itself. Not transient and not self-clearing: a buyer obeying
+  // the served chain id would approve USDC on a chain nothing here watches, so
+  // the path stays shut until an operator fixes the variable and restarts.
+  CHAIN_MISMATCH = "chain_mismatch",
 }
 
 /**
@@ -172,4 +177,49 @@ export type UsdcPaymentsStatus = {
       oldestSwapAt: string;
     } | null;
   };
+};
+
+/**
+ * Where a USDC payment has to be sent, as the deployment itself reports it.
+ *
+ * Served to the purchase flow rather than compiled into it, and that is the
+ * load-bearing decision here: the chain and the receiver are `ETH_CHAIN_ENDPOINT`
+ * and `ETH_USDC_RECEIVER_ADDRESS`, deployment-level environment choices with
+ * nothing in the frontend's build to tie them to. A build constant would have to
+ * agree with a runtime variable by convention, on a money path, with no mechanism
+ * to detect disagreement — and getting it wrong approves a buyer's USDC to a
+ * contract on a chain nobody watches.
+ *
+ * The full argument, and what the backend does when the two disagree anyway, is
+ * in `docs/payments.md` under "USDC payments: where the money is sent". It is
+ * written down once; every other site points here.
+ *
+ * Everything in this type is public on-chain data or a public timing constant.
+ */
+export type UsdcPaymentTarget = {
+  // EIP-155 chain id the receiver is deployed on. The wallet is switched to this
+  // chain before anything is signed — never to a chain the client picked.
+  chainId: number;
+  // AutoDriveUSDCReceiver. `payIntentWithToken` is called here, and this is the
+  // spender the ERC20 approval names.
+  receiverAddress: string;
+  // The ERC20 the receiver accepts. `approve` is called on this.
+  tokenAddress: string;
+  // 6 for USDC. Carried rather than assumed so a display can be built from what
+  // the deployment says it accepts.
+  tokenDecimals: number;
+  // How many blocks the backend waits before crediting, so the progress bar
+  // counts to the number that actually gates settlement instead of a constant
+  // the client keeps in step by hand.
+  confirmations: number;
+  // How long a lapsed price lock may keep reporting HTTP 410 before the client
+  // should call the purchase lost.
+  //
+  // Served for the same reason `confirmations` is: it is a property of this
+  // backend's timing, not of the build. A 410 means `expires_at` has passed on a
+  // row that may still be settling — credits are withheld by a different check
+  // entirely — so the client polls through it, and how long it should is a
+  // multiple of the credit-granting poller's interval. Compiled into the client,
+  // it would start calling credited purchases lost the day that interval changed.
+  settleGraceMs: number;
 };

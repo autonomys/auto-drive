@@ -33,8 +33,9 @@ jest.mock('utils/file', () => ({
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { createApiService } from '../../../src/services/api';
+import { ApiError, createApiService } from '../../../src/services/api';
 import { getAuthSession } from 'utils/auth';
+import { PaymentMethod } from '@auto-drive/models';
 
 const mockGetAuthSession = getAuthSession as jest.MockedFunction<
   typeof getAuthSession
@@ -80,7 +81,7 @@ describe('createIntent error surfacing', () => {
       'Forbidden',
     );
 
-    await expect(api.createIntent(3221225472n)).rejects.toThrow(
+    await expect(api.createIntent({ requestedBytes: 3221225472n })).rejects.toThrow(
       /leaving 1073741824 available/,
     );
   });
@@ -101,7 +102,7 @@ describe('createIntent error surfacing', () => {
       'Service Unavailable',
     );
 
-    await expect(api.createIntent(1n)).rejects.toThrow(
+    await expect(api.createIntent({ requestedBytes: 1n })).rejects.toThrow(
       /rate could not be established/,
     );
   });
@@ -116,10 +117,10 @@ describe('createIntent error surfacing', () => {
       'Internal Server Error',
     );
 
-    await expect(api.createIntent(1n)).rejects.toThrow(
+    await expect(api.createIntent({ requestedBytes: 1n })).rejects.toThrow(
       'Network response was not ok: Internal Server Error',
     );
-    await expect(api.createIntent(1n)).rejects.not.toThrow(/ECONNREFUSED/);
+    await expect(api.createIntent({ requestedBytes: 1n })).rejects.not.toThrow(/ECONNREFUSED/);
   });
 
   it('still surfaces an uncoded 4xx, which describes the request', async () => {
@@ -131,7 +132,7 @@ describe('createIntent error surfacing', () => {
       'Bad Request',
     );
 
-    await expect(api.createIntent(0n)).rejects.toThrow(
+    await expect(api.createIntent({ requestedBytes: 0n })).rejects.toThrow(
       /must be a positive number of bytes/,
     );
   });
@@ -147,7 +148,7 @@ describe('createIntent error surfacing', () => {
       },
     }) as unknown as typeof fetch;
 
-    await expect(api.createIntent(1n)).rejects.toThrow(
+    await expect(api.createIntent({ requestedBytes: 1n })).rejects.toThrow(
       'Network response was not ok: Bad Gateway',
     );
   });
@@ -164,7 +165,7 @@ describe('createIntent error surfacing', () => {
     });
     global.fetch = fetchMock as unknown as typeof fetch;
 
-    await api.createIntent(1_073_741_824n);
+    await api.createIntent({ requestedBytes: 1_073_741_824n });
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(
       expect.objectContaining({ requestedBytes: '1073741824' }),
     );
@@ -173,5 +174,163 @@ describe('createIntent error surfacing', () => {
     expect(
       JSON.parse(fetchMock.mock.calls[1][1].body),
     ).not.toHaveProperty('requestedBytes');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The USDC additions: a code to branch on, and a quote to charge
+// ---------------------------------------------------------------------------
+
+describe('createIntent USDC support', () => {
+  const mockOkResponse = (body: unknown) => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => body,
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    return fetchMock;
+  };
+
+  it('sends paymentMethod when asked, and omits it otherwise', async () => {
+    // Omitted rather than defaulted to AI3: the backend's own default applies,
+    // so an AI3 request body stays byte-for-byte what it has always been.
+    const fetchMock = mockOkResponse({ id: '0xabc' });
+
+    await api.createIntent({
+      requestedBytes: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(
+      expect.objectContaining({ paymentMethod: 'usdc_eth' }),
+    );
+
+    await api.createIntent({ requestedBytes: 1n });
+    expect(
+      JSON.parse(fetchMock.mock.calls[1][1].body),
+    ).not.toHaveProperty('paymentMethod');
+  });
+
+  it('parses the locked quote as a bigint and the lock as a Date', async () => {
+    // `quotedTokenAmount` is the exact amount the wallet will be asked to move,
+    // and it crosses the wire as a decimal string because res.json() cannot
+    // serialise a BigInt. Reading it as a Number would round at ~9e15 base
+    // units, and rounding an amount charged is not a display bug.
+    mockOkResponse({
+      id: '0xintent',
+      paymentMethod: 'usdc_eth',
+      expiresAt: '2026-08-27T12:10:00.000Z',
+      quotedTokenAmount: '12505001',
+    });
+
+    const intent = await api.createIntent({
+      requestedBytes: 1n,
+      paymentMethod: PaymentMethod.USDC_ETH,
+    });
+
+    expect(intent.id).toBe('0xintent');
+    expect(intent.paymentMethod).toBe(PaymentMethod.USDC_ETH);
+    expect(intent.quotedTokenAmount).toBe(12505001n);
+    expect(intent.expiresAt).toEqual(new Date('2026-08-27T12:10:00.000Z'));
+  });
+
+  it('leaves the AI3 shape intact, with nulls rather than a throw', async () => {
+    // An AI3 intent has no quote and — on a row created before the price lock
+    // existed — no expiry either. A strict parse would turn "this intent has no
+    // quote" into an exception on the path that worked before USDC existed.
+    mockOkResponse({ id: '0xai3' });
+
+    const intent = await api.createIntent({ requestedBytes: 1n });
+
+    expect(intent).toEqual({
+      id: '0xai3',
+      paymentMethod: undefined,
+      expiresAt: null,
+      quotedTokenAmount: null,
+    });
+  });
+
+  it('carries USDC_PAYMENTS_UNAVAILABLE as a code, not just prose', async () => {
+    // This is what lets the purchase flow fall back to AI3 without matching on
+    // the sentence it renders. The message is surfaced too, because it is
+    // written for whoever is buying.
+    mockFetchResponse(
+      503,
+      {
+        error: 'USDC_PAYMENTS_UNAVAILABLE',
+        message:
+          'Paying in USDC is temporarily unavailable. Pay in AI3 instead, or try again later.',
+      },
+      'Service Unavailable',
+    );
+
+    const error = await api
+      .createIntent({ requestedBytes: 1n, paymentMethod: PaymentMethod.USDC_ETH })
+      .catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(503);
+    expect(error.code).toBe('USDC_PAYMENTS_UNAVAILABLE');
+    expect(error.message).toMatch(/Pay in AI3/);
+  });
+
+  it('does not mistake the plain error shape for a code', async () => {
+    // The HttpError default sends `{ error: <message> }` — prose in the same key
+    // a coded error puts a code in. Without the two-key guard, a caller
+    // branching on `code` would compare against a whole sentence: no match, but
+    // a `code` that looks meaningful in a debugger.
+    mockFetchResponse(
+      400,
+      { error: 'Invalid requestedBytes: 0 — must be a positive number of bytes' },
+      'Bad Request',
+    );
+
+    const error = await api.createIntent({ requestedBytes: 0n }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.code).toBeUndefined();
+    // The sentence still reaches the user, as it did before.
+    expect(error.message).toMatch(/must be a positive number of bytes/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// watchIntent
+// ---------------------------------------------------------------------------
+
+describe('watchIntent error surfacing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetAuthSession.mockResolvedValue({
+      authProvider: 'google',
+      accessToken: 'token',
+    } as unknown as Awaited<ReturnType<typeof getAuthSession>>);
+  });
+
+  it('throws an ApiError carrying the status, so a 410 is distinguishable', async () => {
+    // 410 is the backend refusing to record a hash against a lapsed price lock
+    // (isIntentExpired → GoneError). A payment is already on chain at that
+    // point, so this is the earliest notice it will not be credited — the USDC
+    // panel shows the expiry message at once rather than six confirmations of
+    // progress first. A bare Error would have thrown that status away.
+    mockFetchResponse(410, {}, 'Gone');
+
+    const error = await api.watchIntent('0xintent', '0xhash').catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(410);
+  });
+
+  it('still throws for other failures, so nothing else changes shape', async () => {
+    mockFetchResponse(500, {}, 'Internal Server Error');
+
+    const error = await api.watchIntent('0xintent', '0xhash').catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(500);
+    // Both callers swallow anything that is not a 410, which is why the message
+    // stays the generic one rather than becoming a sentence for a buyer.
+    expect(error.message).toMatch(/Network response was not ok/);
   });
 });
