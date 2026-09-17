@@ -36,7 +36,7 @@ export const processFrontendTask = createHandlerWithRetries(
     } else if (id === 'tag-upload') {
       return UploadsUseCases.tagUpload(params.cid)
     } else if (id === 'watch-intent-tx') {
-      return paymentManager.watchTransaction(params.txHash)
+      return paymentManager.watchTransaction(params.txHash, params.paymentMethod)
     } else if (id === 'reconcile-archival') {
       return ReconciliationUseCases.processReconciliation()
     } else if (id === 'recover-publishing') {

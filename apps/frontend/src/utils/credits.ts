@@ -4,6 +4,48 @@
  */
 
 /**
+ * Whole MiB to bytes.  The single conversion used both to decide locally
+ * whether a purchase fits under the cap and to tell the backend what size to
+ * check — the client's own verdict and the number the server re-checks must
+ * come from the same arithmetic, or a purchase can pass here and be rejected
+ * there.
+ */
+export const mibToBytes = (mib: number): bigint =>
+  BigInt(mib) * BigInt(1024 * 1024);
+
+/**
+ * Coerce an untrusted size into the whole MiB the rest of this module requires,
+ * or null when it is not a size at all.
+ *
+ * `sizeMB` normally comes from `inputToMib`, which already rounds. But it is
+ * also re-hydrated from the query string by PurchaseCredits/index.tsx, whose
+ * numeric coercion accepts anything matching `^-?\d+(\.\d+)?$` — so
+ * `?step=3&sizeMB=0.5` puts a fraction into the same variable, and a
+ * non-numeric `?sizeMB=abc` puts a string there. `BigInt()` throws a RangeError
+ * on both, which reaches the user as `The number 0.5 cannot be converted to a
+ * BigInt`.
+ *
+ * Deliberately NOT folded into `mibToBytes` as a rounding guard. Callers pass
+ * the same size to `mibToBytes` and to the AI3 pricing helper, and only the
+ * former would round — pricing the payment at 0.5 MiB while cap-checking 1 MiB,
+ * which is the exact divergence `mibToBytes` exists to prevent. Normalising
+ * once, before either is called, keeps them derived from one number.
+ *
+ * `Number.isSafeInteger` rather than `Number.isFinite`, because finite is not
+ * enough: `?sizeMB=1e308` and a 308-digit `?sizeMB=999…9` both survive rounding
+ * as finite doubles, and the pricing helper then evaluates `mib * 1048576` to
+ * `Infinity` before its own `BigInt()` — the same RangeError this exists to
+ * remove, one conversion earlier. Anything a purchase could legitimately be is
+ * many orders of magnitude below 2^53 (the per-account cap is ~102,400 MiB), so
+ * nothing real is excluded.
+ */
+export const normaliseMib = (value: unknown): number | null => {
+  const mib = Math.round(Number(value));
+  if (!Number.isSafeInteger(mib) || mib <= 0) return null;
+  return mib;
+};
+
+/**
  * Returns true when `mib` whole MiB would exceed `maxPurchasableBytes`.
  * Always returns false when the cap is null (not yet loaded) or the value
  * is non-positive.  Shared by both the preset-package and custom-amount
@@ -14,8 +56,7 @@ export const isMibOverCap = (
   maxPurchasableBytes: bigint | null,
 ): boolean => {
   if (maxPurchasableBytes === null || mib <= 0) return false;
-  const bytes = BigInt(mib) * BigInt(1024 * 1024);
-  return bytes > maxPurchasableBytes;
+  return mibToBytes(mib) > maxPurchasableBytes;
 };
 
 /**

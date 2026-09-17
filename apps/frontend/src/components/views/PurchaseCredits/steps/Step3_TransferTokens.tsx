@@ -11,22 +11,45 @@ import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 import { useNetwork } from '../../../../contexts/network';
 import { usePrices } from '../../../../hooks/usePrices';
 import { useTransactionConfirmation } from '../../../../hooks/useTransactionConfirmation';
+import { mibToBytes, normaliseMib } from '../../../../utils/credits';
+import { readPaymentMethod } from '../../../../utils/purchaseCredits';
+import { PaymentMethod } from '@auto-drive/models';
+import { UsdcTransferPanel } from './UsdcTransferPanel';
 
-export const PurchaseStep3TransferTokens = ({
-  onNext,
-  onBack,
-  context,
-}: {
+type TransferStepProps = {
   onNext: (data?: Record<string, unknown>) => void;
   onBack: () => void;
   context: Record<string, unknown>;
-}) => {
+};
+
+/**
+ * The payment step, dispatched by asset.
+ *
+ * Two panels rather than one with branches inside it. Paying in AI3 is a single
+ * native-value call on the connected chain; paying in USDC is a chain switch,
+ * an ERC20 approval and a contract call on another chain, with a price lock
+ * ticking through all three. Interleaving them would put every AI3 purchase —
+ * which is every purchase today — through code written for the other one.
+ *
+ * `readPaymentMethod` rather than a direct read, because `context` is
+ * re-hydrated from the query string and anything but the exact USDC value has to
+ * land on AI3.
+ */
+export const PurchaseStep3TransferTokens = (props: TransferStepProps) =>
+  readPaymentMethod(props.context.paymentMethod) === PaymentMethod.USDC_ETH ? (
+    <UsdcTransferPanel {...props} />
+  ) : (
+    <Ai3TransferPanel {...props} />
+  );
+
+const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
   void onBack;
   const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
   const publicClient = usePublicClient();
   const { formatCreditsInMbAsValue, formatCreditsInMbAsAi3 } = usePrices();
   const [intentId, setIntentId] = useState<string | undefined>(undefined);
+  const [intentError, setIntentError] = useState<string | undefined>(undefined);
 
   const { paymentIntent, targetContract, MINIMUM_CONFIRMATIONS } =
     usePaymentIntent();
@@ -43,6 +66,7 @@ export const PurchaseStep3TransferTokens = ({
     isBackendCompleted,
     isOverCap,
     isExpired,
+    lockLapsed,
     waitError,
   } = useTransactionConfirmation({
     txHash,
@@ -57,16 +81,35 @@ export const PurchaseStep3TransferTokens = ({
     error: writeError,
   } = useWriteContract();
 
-  const canSend = isConnected && !isWriting && !txHash;
+  // Normalised ONCE for the whole step, not per call site. The amount displayed
+  // and the amount charged have to come from the same number, and this step is
+  // reachable by deep link (`?step=3&sizeMB=…`), where `context.sizeMB` is not
+  // guaranteed to be the whole MiB `inputToMib` produces — see normaliseMib.
+  // Normalising inside handleSend alone would have shown the price of 0.5 MiB
+  // while asking the wallet for 1 MiB.
+  const sizeMib = normaliseMib(context.sizeMB);
+
+  // A size that cannot be normalised is not a purchase, and no wallet prompt
+  // should be raised for it. Disabling rather than failing on click is the
+  // difference between "this link is broken" and "the button does nothing".
+  const canSend = isConnected && !isWriting && !txHash && sizeMib !== null;
 
   const handleConnect = () => {
     if (openConnectModal) openConnectModal();
   };
 
   const handleSend = useCallback(async () => {
+    setIntentError(undefined);
     try {
+      // Defence in depth: `canSend` already gates the button on this, but
+      // handleSend must not depend on a caller having checked.
+      if (sizeMib === null) return;
       const depositTransaction = await paymentIntent(
-        formatCreditsInMbAsValue(Number(context.sizeMB)),
+        formatCreditsInMbAsValue(sizeMib),
+        // The same byte count the payment is priced from — formatCreditsInMbAsValue
+        // multiplies by exactly this before applying shannonsPerByte — so the
+        // size the cap is checked against is the size the payment will grant.
+        mibToBytes(sizeMib),
       );
       // Auto EVM is a Substrate-based network that does not support EIP-1559
       // fee history. Fetch the current gas price via eth_gasPrice and add a
@@ -85,12 +128,17 @@ export const PurchaseStep3TransferTokens = ({
       setTxHash(hash);
     } catch (error) {
       console.error('Error sending payment intent', error);
-      // no-op; UI will surface writeError via wagmi
+      // wagmi's writeError only covers the wallet call. A failure before that —
+      // now including a 403 when the purchase has no cap headroom left — has no
+      // other channel, and without this the button would appear to do nothing.
+      setIntentError(
+        error instanceof Error ? error.message : 'Could not start the payment',
+      );
     }
   }, [
     paymentIntent,
     formatCreditsInMbAsValue,
-    context.sizeMB,
+    sizeMib,
     publicClient,
     writeContractAsync,
   ]);
@@ -145,8 +193,9 @@ export const PurchaseStep3TransferTokens = ({
               label='Amount'
               value={
                 <span>
-                  {formatCreditsInMbAsAi3(Number(context.sizeMB)).toFixed(2)}{' '}
-                  AI3
+                  {sizeMib === null
+                    ? '—'
+                    : `${formatCreditsInMbAsAi3(sizeMib).toFixed(2)} AI3`}
                 </span>
               }
             />
@@ -155,9 +204,20 @@ export const PurchaseStep3TransferTokens = ({
                 {isWriting ? 'Sending…' : 'Send Transfer'}
               </Button>
             </div>
-            {writeError && (
+            {sizeMib === null && (
+              // Stated up front rather than on click, because this step has no
+              // back button — the only way out is to start the purchase again,
+              // and the user needs to know that before pressing anything.
               <div className='text-xs text-red-600'>
-                {writeError?.message || 'Missing deposit transaction'}
+                This link does not carry a valid purchase size. Start again from
+                package selection to choose one.
+              </div>
+            )}
+            {(intentError || writeError) && (
+              <div className='text-xs text-red-600'>
+                {intentError ||
+                  writeError?.message ||
+                  'Missing deposit transaction'}
               </div>
             )}
           </div>
@@ -209,6 +269,22 @@ export const PurchaseStep3TransferTokens = ({
                   assistance.
                 </div>
               )}
+              {/* The lock lapsed and the outcome is still open. Reachable on
+                  AI3 too — an intent expires ten minutes after it is created,
+                  and a transfer signed near that edge confirms after it — and
+                  what settles it either way is the polling loop, which keeps
+                  running through the caution. */}
+              {lockLapsed &&
+                !isBackendCompleted &&
+                !isOverCap &&
+                !isExpired && (
+                  <div className='rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
+                    <strong>Price lock lapsed.</strong> This payment confirmed
+                    after the quote&apos;s price lock ran out, so we are still
+                    confirming that it was accepted. Keep this page open — if it
+                    is not credited shortly, contact support for assistance.
+                  </div>
+                )}
               {isExpired && (
                 <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
                   <strong>Payment expired.</strong> The payment window for this
@@ -221,7 +297,10 @@ export const PurchaseStep3TransferTokens = ({
               )}
               <div className='flex gap-3'>
                 <Button
-                  onClick={() => onNext({ txHash })}
+                  // sizeMB travels forward as the normalised value, so the
+                  // success screen reports the size that was bought rather than
+                  // the one the URL happened to carry.
+                  onClick={() => onNext({ txHash, sizeMB: sizeMib })}
                   disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap || isExpired}
                 >
                   {isFullyConfirmed && !isBackendCompleted && !isOverCap && !isExpired

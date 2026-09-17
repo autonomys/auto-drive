@@ -11,6 +11,8 @@ import { PurchaseStep3TransferTokens } from './steps/Step3_TransferTokens';
 import { PurchaseStep4Success } from './steps/Step4_Success';
 import { GoogleAuthGate } from './GoogleAuthGate';
 import { StepDefinition } from './molecules/Stepper';
+import { readPaymentMethod } from '../../../utils/purchaseCredits';
+import { PaymentMethod } from '@auto-drive/models';
 
 export type PurchaseStep = 1 | 2 | 3 | 4 | 5;
 
@@ -178,7 +180,12 @@ export const PurchaseCredits = () => {
       },
       {
         id: 3,
-        title: 'Transfer AI3',
+        // Named after what the user is about to do, which now depends on what
+        // they chose to pay with.
+        title:
+          readPaymentMethod(context.paymentMethod) === PaymentMethod.USDC_ETH
+            ? 'Transfer USDC'
+            : 'Transfer AI3',
         component: (
           <PurchaseStep3TransferTokens
             onNext={(data) => {

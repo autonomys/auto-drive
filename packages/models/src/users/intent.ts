@@ -63,14 +63,150 @@ export const IntentSchema = z.object({
   // (USDC has 6 decimals). Set by the payment manager on confirmation.
   tokenAmount: z.bigint().optional(),
   // Token amount quoted to the user at creation, in the token's smallest unit.
+  // `usdRateAtCreation` applied to `quotedAi3Shannons`, plus USD_QUOTE_MARGIN.
+  //
+  // The fee and price impact the pool charged are inside it, but by way of the
+  // rate rather than this purchase: the rate averages realized fills, and those
+  // fills paid both. This purchase adds no impact of its own, because the
+  // treasury no longer swaps per intent.
+  //
+  // This is what the user was ASKED to pay, so it is margin-inclusive and
+  // rounded up — it must never sit below what the purchase costs. It is
+  // therefore not what credits are derived from either: those follow the amount
+  // actually received, which may be more or less than this.
+  //
+  // One half of the effective rate. `quotedAi3Shannons` is the other half.
   quotedTokenAmount: z.bigint().optional(),
-  // AI3/USD rate locked at creation, scaled by USD_RATE_SCALE (1e18). Used to
-  // convert the received token amount to an AI3-equivalent for the existing
-  // proportional credit math.
+  // The AI3 amount (shannons) `quotedTokenAmount` was quoted FOR — the
+  // requested byte count times `shannonsPerByte`. Not something the oracle is
+  // asked about: it reports one size-independent rate, and this is the amount
+  // that rate is applied to.
+  //
+  // Paired with `quotedTokenAmount` this IS the effective rate the user was
+  // charged at, and it is the pair rather than a rate because a rate here would
+  // have to be a rounded ratio: USDC carries 6 decimals against byte counts near
+  // 1e11, so USDC-per-byte is ~0.0027 base units and only survives as an integer
+  // if it is scaled — at which point it no longer round-trips the quote exactly.
+  // Two exact integers do:
+  //
+  //   bytes = tokenAmount * quotedAi3Shannons
+  //             / quotedTokenAmount / shannonsPerByte
+  //
+  // When the user pays exactly what was quoted the ratio cancels and the result
+  // is the requested size exactly. NULL for AI3_NATIVE.
+  quotedAi3Shannons: z.bigint().optional(),
+  // AI3/USD rate at creation, scaled by USD_RATE_SCALE (1e18). Display,
+  // reporting and oracle reconciliation — NOT the rate credits convert at.
+  //
+  // This is the RAW rate the oracle reported: a volume-weighted average of the
+  // pool's recent realized fills (#746). The user is charged that rate plus
+  // USD_QUOTE_MARGIN, so converting a received payment back to AI3 at this one
+  // hands the margin back as free storage on every purchase — the whole margin,
+  // exactly, since a rate is a scalar and the error scales with the amount —
+  // and grants more bytes than the pre-payment cap check was run against.
+  //
+  // It stays raw on purpose, so it remains comparable to the market and usable
+  // for reconciliation. The rate credits actually convert at is the
+  // `quotedTokenAmount` / `quotedAi3Shannons` pair above, which is why that pair
+  // is persisted: neither field here can stand in for it. This one is short by
+  // the margin, and `quotedTokenAmount` alone is an amount for one specific
+  // purchase rather than a rate.
   usdRateAtCreation: z.bigint().optional(),
 });
 
 export type Intent = z.infer<typeof IntentSchema>;
+
+/**
+ * Why an on-chain payment is on file rather than passing through unremarked.
+ *
+ * All but one are refusals. Both receivers take any `intentId` from anyone —
+ * `payIntent(bytes32)` on Auto EVM and `payIntentWithToken(bytes32, uint256)` on
+ * Ethereum — so a payment can name an intent that does not exist, one
+ * denominated in the other asset, or one whose price lock has already lapsed.
+ * None is resolvable in code: the money has moved and the only remaining
+ * question is who it belongs to.
+ *
+ * `AMOUNT_OFF_QUOTE` is the exception and was credited normally. Read `reason`
+ * before treating a row as a work item.
+ */
+export enum IntentMispaymentReason {
+  // The intent id in the event matches no row.
+  UNKNOWN_INTENT = "unknown_intent",
+  // The row exists but is denominated in the other asset — AI3 sent to a USDC
+  // intent, or vice versa.
+  ASSET_MISMATCH = "asset_mismatch",
+  // The intent had already been settled by a different payment. The first one is
+  // credited and untouched; this row is the second transfer, which cannot be
+  // added to a terminal intent and would otherwise be absorbed by the
+  // idempotency guard without a trace.
+  ALREADY_SETTLED = "already_settled",
+  // The intent's price-lock window had already passed when the payment arrived,
+  // so there is no rate left to convert it at. The intent is untouched and stays
+  // EXPIRED; this row is the only record that money showed up for it.
+  INTENT_EXPIRED = "intent_expired",
+  // The payment named a token the receiver was not configured for. Only
+  // reachable when USDC_TOKEN_ADDRESS disagrees with the contract that is
+  // actually deployed, since the receiver's token is immutable — so it means
+  // every payment to that receiver is being refused, not just this one. Filed
+  // without an amount on purpose: the value is denominated in a token we cannot
+  // name, and putting it in a column that means 6-decimal USDC would be a
+  // worse record than none. The hash, the log index and the payer are what find
+  // the transfer again.
+  UNRECOGNISED_TOKEN = "unrecognised_token",
+  // The payment was accepted and confirmed, then could not be turned into
+  // storage: too small to buy a single byte, missing one of its conversion
+  // inputs, or confirmed with no recorded amount at all. The intent is FAILED and
+  // the money is kept, which is terminal — nothing re-runs it — and no other
+  // listing surfaces a FAILED intent, so without this row the payment is
+  // invisible.
+  UNCONVERTIBLE_PAYMENT = "unconvertible_payment",
+  // The payment was ACCEPTED and credited, but its amount is not the amount
+  // quoted. Settlement converts proportionally, so the user receives storage
+  // worth what they actually sent and nothing needs resolving — but the API
+  // advertises `quotedTokenAmount` as the exact amount to pay, and nothing else
+  // on the intent would ever say that promise was missed. This row is the only
+  // record that it was: evidence, not a queue item.
+  AMOUNT_OFF_QUOTE = "amount_off_quote",
+}
+
+/**
+ * An on-chain payment that needs to be findable afterwards, recorded because
+ * nothing else durable points at it.
+ *
+ * Mostly a payment that arrived and was refused. Refusing is the right call —
+ * confirming a mispayment strands the intent and makes the idempotency guard
+ * discard the user's real payment when it lands — but a refusal that exists only
+ * as a log line leaves an irreversible on-chain transfer with nothing durable
+ * pointing at it. This row is what an admin works from: which intent was named,
+ * what actually arrived, who sent it, and the transaction to look it up by.
+ *
+ * `reason` also carries one case that was ACCEPTED and credited
+ * (AMOUNT_OFF_QUOTE), so the field is what says whether a row is a work item.
+ *
+ * Deliberately NOT foreign-keyed to `intents`: the UNKNOWN_INTENT case has no
+ * row to point at, and that is precisely the case with the least other evidence.
+ */
+export type IntentMispayment = {
+  id: string;
+  // The id named by the on-chain event. Not necessarily an existing intent.
+  intentId: string;
+  reason: IntentMispaymentReason;
+  // What the named intent was denominated in; absent for UNKNOWN_INTENT.
+  expectedPaymentMethod?: PaymentMethod;
+  // Whichever the watcher reported. Exactly one is set — which one is itself
+  // the evidence of what went wrong.
+  paymentAmount?: bigint;
+  tokenAmount?: bigint;
+  fromAddress?: string;
+  txHash?: string;
+  // Position of the payment event within its transaction. Together with txHash
+  // this identifies one payment, which is what makes recording idempotent: a
+  // reorg or the startup sweep re-delivers the same pair, while two payments in
+  // one transaction differ by it. A hash alone would collapse the second into
+  // the first and understate what arrived.
+  logIndex?: number;
+  createdAt: Date;
+};
 
 export const intentCreationSchema = z.object({
   expiresAt: z
@@ -86,3 +222,56 @@ export type IntentCreation = z.infer<typeof intentCreationSchema>;
 export const intentWatchSchema = z.object({
   txHash: z.string(),
 });
+
+/**
+ * The USD half of `GET /intents/price`.
+ *
+ * Both figures are plain decimal numbers rather than the 1e18-scaled bigints
+ * used in quote math: this is a display estimate, and the wire format a browser
+ * reads should not need reconstructing before it can be rendered. The backend
+ * does the descaling in integer arithmetic so nothing is lost on the way out.
+ */
+export type StoragePriceUsd = {
+  // USD per AI3, e.g. 0.00142.
+  usdPerAi3: number;
+  // USD to store one GiB, i.e. the AI3 rate above applied to `pricePerGB`.
+  pricePerGBUsd: number;
+  // When the underlying rate was read, ISO-8601. Rendered as-is by the UI so a
+  // conversion can say how old it is rather than implying it is live.
+  asOf: string;
+  // When the pool last traded among the fills this rate averages, ISO-8601.
+  //
+  // Not the same question as `asOf`, and the more important of the two. The
+  // display profile that serves this estimate averages a 30-day window and
+  // accepts a single fill, with no bound on how old that fill is — so a rate
+  // read one second ago can rest entirely on a trade from four weeks ago, and
+  // `asOf` alone would present it as current. A client deciding whether to
+  // qualify the figure should read THIS.
+  lastTradeAt: string;
+  // The oracle's live read failed and this is its last-good value. Still worth
+  // showing for an estimate — but the UI should say so, because a rate that
+  // stopped updating during a move is wrong in a direction nobody can see.
+  stale: boolean;
+};
+
+/**
+ * What `GET /intents/price` serves.
+ *
+ * `usd` is nullable on purpose. The AI3/USD rate comes from a market oracle
+ * that fails closed, and when it refuses there is no honest USD figure to
+ * print. The feed this replaced did the opposite: an exchange suspended the AI3
+ * market, its ticker kept answering 200 with a last-trade price of zero, and
+ * the UI rendered "$0.00" as though storage had become free. A missing estimate
+ * is a worse UI than a live one and a far better one than a confident lie, so
+ * callers must handle null rather than defaulting it to a number.
+ */
+export type StoragePrice = {
+  // Shannons per byte, with the credits price multiplier already applied.
+  price: number;
+  // AI3 to store one GiB, derived from `price`.
+  pricePerGB: number;
+  usd: StoragePriceUsd | null;
+  // Which oracle guard closed the door, when `usd` is null — for support and
+  // dashboards, not for UI logic. Null whenever `usd` is present.
+  usdUnavailableReason: string | null;
+};
