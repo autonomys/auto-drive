@@ -31,7 +31,7 @@ import {
   defaultSubgraphUrl,
 } from './pool.js'
 import { parseDecimalToScaledBigint } from './quote.js'
-import type { SwapSample } from './types.js'
+import type { SwapDirection, SwapSample } from './types.js'
 
 /**
  * The deployment is wrong, as opposed to the source being down.
@@ -105,10 +105,16 @@ export type SwapWindowResponse = {
  * accepted there.
  *
  * Amounts come back as BigDecimal strings in whole tokens — "199392.024", not
- * base units — and signed by direction, since one leg enters the pool while the
- * other leaves. `amountUSD` is deliberately not requested: it is the subgraph's
- * own valuation derived through its pricing paths, whereas amount1 IS the USDC
- * that changed hands. A realized fill is the whole point.
+ * base units. Whether they are SIGNED by direction is up to the indexer, and
+ * the two deployments this has run against disagree: the pool-delta convention
+ * signs the legs oppositely, since one leg enters the pool while the other
+ * leaves, while the current default reports bare magnitudes. `tick` and
+ * `logIndex` are requested for the latter — see `directionsByTickMove` — and
+ * cost nothing under the former, where the signs answer it outright.
+ *
+ * `amountUSD` is deliberately not requested: it is the subgraph's own valuation
+ * derived through its pricing paths, whereas amount1 IS the USDC that changed
+ * hands. A realized fill is the whole point.
  *
  * `totalValueLockedToken1` is the pool's USDC balance, and it is asked for on the
  * same grounds `amountUSD` is refused: it is a token quantity the pool holds
@@ -146,15 +152,37 @@ export const RECENT_SWAPS_QUERY = `
     ) {
       id
       timestamp
+      logIndex
+      tick
       amount0
       amount1
+    }
+    anchor: swaps(
+      first: 5
+      orderBy: timestamp
+      orderDirection: desc
+      where: { pool: $pool, timestamp_lte: $since }
+      subgraphError: allow
+    ) {
+      id
+      timestamp
+      logIndex
+      tick
     }
   }
 `
 
-type GraphSwap = {
+// What deriving a direction from tick movement needs: where the fill sits in
+// block order, and the tick the pool was left at. Optional because an indexer
+// that signs its amounts need not expose them, and the signed path never looks.
+type GraphTickRow = {
   id: string
   timestamp: string
+  logIndex?: string | null
+  tick?: string | null
+}
+
+type GraphSwap = GraphTickRow & {
   amount0: string
   amount1: string
 }
@@ -175,6 +203,10 @@ type GraphResponse = {
       totalValueLockedToken1: string
     } | null
     swaps: GraphSwap[]
+    // The fills immediately BEFORE the window, which give its oldest row a tick
+    // to be compared against. Absent on an indexer that signs its amounts, and
+    // on a pool with no history older than the window.
+    anchor?: GraphTickRow[] | null
   }
   errors?: { message: string }[]
 }
@@ -201,10 +233,7 @@ type GraphResponse = {
 // already dropped below — or magnitudes neither token can represent.
 type SignedAmount = { magnitude: bigint; negative: boolean }
 
-const toBaseUnits = (
-  amount: string,
-  decimals: number,
-): SignedAmount | null => {
+const toBaseUnits = (amount: string, decimals: number): SignedAmount | null => {
   const trimmed = amount.trim()
   try {
     return {
@@ -217,6 +246,100 @@ const toBaseUnits = (
   } catch {
     return null
   }
+}
+
+// graph-node renders its BigInt scalar as a decimal string, so `tick`,
+// `timestamp` and `logIndex` all arrive as one. `null` for anything that is not
+// a plain integer, which keeps a field the indexer never sent from reading as a
+// perfectly plausible zero.
+const toBigInt = (raw: string | null | undefined): bigint | null => {
+  if (typeof raw !== 'string') {
+    return null
+  }
+  const trimmed = raw.trim()
+  return /^-?\d+$/.test(trimmed) ? BigInt(trimmed) : null
+}
+
+// Chain order: the block a fill landed in, then its position within that block.
+// A row missing either field sorts as if it were 0 — it has no usable tick
+// either, so where it lands cannot change an answer.
+const byBlockOrder = (a: GraphTickRow, b: GraphTickRow): number => {
+  const timestamps = [toBigInt(a.timestamp) ?? 0n, toBigInt(b.timestamp) ?? 0n]
+  if (timestamps[0] !== timestamps[1]) {
+    return timestamps[0] < timestamps[1] ? -1 : 1
+  }
+  const logIndexes = [toBigInt(a.logIndex) ?? 0n, toBigInt(b.logIndex) ?? 0n]
+  if (logIndexes[0] !== logIndexes[1]) {
+    return logIndexes[0] < logIndexes[1] ? -1 : 1
+  }
+  return 0
+}
+
+/**
+ * Which way each fill went, for an indexer that reports its legs unsigned.
+ *
+ * The pool-delta convention answers this outright: one leg enters the pool and
+ * the other leaves, so their signs disagree and either one names the side. An
+ * indexer reporting bare magnitudes has discarded that fact, and it has to be
+ * recovered from somewhere else or every row is unreadable — which is not a
+ * hypothetical, it is what the current default deployment does.
+ *
+ * `tick` is where it survives. A Uniswap v4 pool's tick IS its price
+ * (1.0001^tick, token1 per token0 in raw units), and a swap is the only thing
+ * that moves it: minting or burning liquidity changes how much depth sits at a
+ * price, not the price. So a fill that left the tick HIGHER than the fill before
+ * it made WAI3 dearer in USDC, which is a trader paying USDC for AI3 — a buy —
+ * and lower is a sell. Checked against the live subgraph on 2026-09-21: the
+ * reported tick reproduces each row's own executed ratio to within a fraction of
+ * a percent on small fills and sits on the far side of it on large ones, which
+ * is what a POST-swap tick should do and what a pre-swap one would not.
+ *
+ * Deriving it from the executed ratio alone was the alternative and does not
+ * work: a fill's price differs from mid by its impact PLUS the fee, and on a 1%
+ * pool the fee dominates every ordinary fill, so the comparison points the wrong
+ * way for exactly the trades there are most of.
+ *
+ * What this needs and a sign does not is the fill BEFORE, so it is computed once
+ * per response rather than per row:
+ *
+ *   - Order is (timestamp, logIndex), not timestamp alone. Three of this pool's
+ *     fills share a timestamp — one block — and comparing those in the wrong
+ *     order inverts all three. graph-node cannot sort on two fields, so they are
+ *     ordered here.
+ *   - The window's OLDEST row has no predecessor within the window, so the query
+ *     asks for a few fills from before it (`anchor`) purely to supply one.
+ *     Falling back to the window's second-oldest row would sign the oldest fill
+ *     by the move that came AFTER it, which is backwards.
+ *   - A tick equal to its predecessor's is a fill too small to move the price.
+ *     That is no evidence either way, so the row gets no direction and is
+ *     dropped by the caller rather than guessed at.
+ *
+ * Returned as a map by swap id, so the mapping stays one pass and the signed
+ * path pays nothing for any of this.
+ */
+const directionsByTickMove = (
+  swaps: GraphSwap[],
+  anchors: GraphTickRow[],
+): Map<string, SwapDirection> => {
+  const directions = new Map<string, SwapDirection>()
+  const ordered = [...anchors, ...swaps].sort(byBlockOrder)
+
+  let previous: bigint | null = null
+  for (const row of ordered) {
+    const tick = toBigInt(row.tick)
+    if (tick === null) {
+      // An unreadable tick costs this row its direction AND the next row its
+      // comparison: the chain of prices is broken until a readable one arrives.
+      previous = null
+      continue
+    }
+    if (previous !== null && tick !== previous) {
+      directions.set(row.id, tick > previous ? 'buy' : 'sell')
+    }
+    previous = tick
+  }
+
+  return directions
 }
 
 /**
@@ -232,14 +355,21 @@ const toBaseUnits = (
  * there. An override names some other host — a local mirror, a test double, a
  * tunnel — and attaching a billed credential to a request bound for it would
  * hand the secret to whatever that variable happens to point at. So the key
- * rides with the pinned gateway URL or not at all, which is also what makes the
- * override safe to point anywhere.
+ * rides with a gateway URL or not at all, which is also what makes the override
+ * safe to point anywhere.
+ *
+ * `subgraphId` is the other axis and does NOT change that. It selects a
+ * deployment ON the gateway — same host, same credential, same billing — so the
+ * key still travels, and an operator moving off a dead indexer does not have to
+ * paste a secret into a URL to do it. `override` still wins when both are set:
+ * it names a host, which is the more specific statement of the two.
  */
 export type SubgraphEndpoint = { url: string; apiKey?: string }
 
 export const resolveEndpoint = (
   override: string | undefined,
   apiKey: string | undefined,
+  subgraphId?: string,
 ): SubgraphEndpoint => {
   if (override) {
     return { url: override }
@@ -251,7 +381,7 @@ export const resolveEndpoint = (
         '(set GRAPH_SUBGRAPH_URL instead to point at an unauthenticated mirror)',
     )
   }
-  return { url: defaultSubgraphUrl(), apiKey }
+  return { url: defaultSubgraphUrl(subgraphId), apiKey }
 }
 
 const assertPoolIdentity = (
@@ -380,6 +510,10 @@ export const fetchRecentSwapsFrom = async (
   // decides whether what survives is enough to price from. Fewer rows can only
   // make the oracle refuse, never mislead it.
   let unparsedSwaps = 0
+  const tickDirections = directionsByTickMove(
+    body.data.swaps,
+    body.data.anchor ?? [],
+  )
   const samples: SwapSample[] = body.data.swaps.flatMap((swap) => {
     const ai3 = toBaseUnits(swap.amount0, AI3_DECIMALS)
     const usdc = toBaseUnits(swap.amount1, USDC_DECIMALS)
@@ -390,13 +524,25 @@ export const fetchRecentSwapsFrom = async (
     if (ai3.magnitude <= 0n || usdc.magnitude <= 0n) {
       return []
     }
-    // Amounts are the POOL's deltas, so a positive USDC leg is USDC entering the
-    // pool: the trader paid USDC and took AI3 away. Read off the USDC leg
-    // because that is the side the oracle is denominated in, and cross-checked
-    // against the other: legs that agree in sign are not a swap, and none of
-    // this pool's 236 fills has ever done so. Dropped rather than trusted, on the
-    // same footing as any other unreadable row.
-    if (ai3.negative === usdc.negative) {
+    // Under the pool-delta convention the signs ARE the direction: a positive
+    // USDC leg is USDC entering the pool, so the trader paid USDC and took AI3
+    // away. Read off the USDC leg, because that is the side the oracle is
+    // denominated in, and believed only when the other leg disagrees with it.
+    //
+    // Legs that AGREE are not a swap under that convention — and are every row
+    // under the convention the current default deployment uses, where both legs
+    // are magnitudes. Neither case can be told from the other by looking at one
+    // row, so both fall through to tick movement, which answers the honest
+    // question: did this fill move the price up or down? A row is dropped only
+    // when neither signal answers, on the same footing as any other unreadable
+    // row.
+    let direction: SwapDirection | undefined
+    if (ai3.negative !== usdc.negative) {
+      direction = usdc.negative ? 'sell' : 'buy'
+    } else {
+      direction = tickDirections.get(swap.id)
+    }
+    if (!direction) {
       unparsedSwaps += 1
       return []
     }
@@ -404,7 +550,7 @@ export const fetchRecentSwapsFrom = async (
       {
         ai3Amount: ai3.magnitude,
         usdcAmount: usdc.magnitude,
-        direction: usdc.negative ? ('sell' as const) : ('buy' as const),
+        direction,
         timestampMs: Number(swap.timestamp) * 1000,
       },
     ]
@@ -456,6 +602,7 @@ export const fetchRecentSwaps = (
     resolveEndpoint(
       config.priceOracle.subgraphUrl,
       config.priceOracle.graphApiKey,
+      config.priceOracle.subgraphId,
     ),
     query,
     signal,

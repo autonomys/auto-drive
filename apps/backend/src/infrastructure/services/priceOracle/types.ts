@@ -54,11 +54,12 @@ export type SwapDirection = 'buy' | 'sell'
  * One realized swap, normalized out of the indexer's representation.
  *
  * Both legs are absolute base-unit amounts and the direction is carried
- * alongside them: which leg entered the pool is one fact, stated once, rather
- * than a sign duplicated across two amounts that always disagree. What matters
- * is that the two legs belong to the same fill, because their ratio is a price
- * the pool actually honoured — fee and price impact included, unlike a quoted
- * one.
+ * alongside them: which side the trader took is one fact, stated once, rather
+ * than left implicit in how the indexer happened to sign its amounts — which is
+ * not a convention every indexer follows, so ./subgraph.ts recovers it from two
+ * different places and this type is where they meet. What matters is that the
+ * two legs belong to the same fill, because their ratio is a price the pool
+ * actually honoured — fee and price impact included, unlike a quoted one.
  */
 export type SwapSample = {
   // USDC base units (6 decimals), absolute.

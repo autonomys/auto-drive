@@ -462,6 +462,25 @@ export const config = {
     // naming the missing variable the first time a rate is needed.
     subgraphUrl: process.env.GRAPH_SUBGRAPH_URL,
     graphApiKey: process.env.GRAPH_API_KEY,
+    // Which subgraph on the gateway, when no full URL override is given. Unset
+    // means the default pinned in priceOracle/pool.ts.
+    //
+    // Configurable because a subgraph deployment can stop indexing while the
+    // pool it describes keeps trading, and moving to a live deployment should
+    // not need a release. Unlike `subgraphUrl` this still goes through the
+    // gateway, so the API key still travels — it is the same host, named by a
+    // different deployment. Safety does not rest on this value: POOL_ID and the
+    // currency ordering stay in code and are asserted against whatever comes
+    // back, so a wrong ID here refuses as `misconfigured` rather than pricing
+    // from another market.
+    //
+    // Through `optionalTrimmedEnv` unlike its two neighbours above, because this
+    // one is CONSUMED differently. They are read for truthiness, so `''` and
+    // undefined behave alike; this is passed through to build a URL, where `''`
+    // would silently produce `…/subgraphs/id/` and query nothing. `.env.sample`
+    // ships every key blank, so that is the shape of a deployment configured the
+    // documented way, not a mistake an operator has to make.
+    subgraphId: optionalTrimmedEnv(process.env.GRAPH_SUBGRAPH_ID),
     // How long a freshly derived rate is served from memory before a refresh.
     // Safe to cache, unlike the spot price this replaced: a minute cannot move
     // an average built from days of fills.
