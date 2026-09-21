@@ -93,6 +93,24 @@ export type SwapWindowResponse = {
 }
 
 /**
+ * How many pre-window fills to ask for as an anchor.
+ *
+ * NOT a correctness bound — `anchorPredecessorIsCertain` is. graph-node breaks
+ * ties on `timestamp` by `id` rather than by `logIndex` (confirmed against the
+ * live gateway: a three-fill block paged at `first: 2` came back as logIndex 79
+ * and 83, dropping 28, which is id order and not block order), so a page that
+ * stops INSIDE a block returns an arbitrary subset of it, and the block's last
+ * fill — the only one that can serve as a predecessor — need not be in it. No
+ * page size fixes that; the check below detects it.
+ *
+ * What the size buys is how rarely that check has to fire. The busiest block in
+ * this pool's history held three fills (263 lifetime, verified 2026-09-21), so
+ * this leaves room for a market an order of magnitude busier before a window's
+ * oldest row starts losing its direction.
+ */
+export const ANCHOR_PAGE_SIZE = 50
+
+/**
  * One round trip for everything a window needs: the indexer's head (is the
  * source current?), the pool's identity (are we reading what we think?), and
  * the swaps themselves.
@@ -158,7 +176,7 @@ export const RECENT_SWAPS_QUERY = `
       amount1
     }
     anchor: swaps(
-      first: 5
+      first: ${ANCHOR_PAGE_SIZE}
       orderBy: timestamp
       orderDirection: desc
       where: { pool: $pool, timestamp_lte: $since }
@@ -261,8 +279,10 @@ const toBigInt = (raw: string | null | undefined): bigint | null => {
 }
 
 // Chain order: the block a fill landed in, then its position within that block.
-// A row missing either field sorts as if it were 0 — it has no usable tick
-// either, so where it lands cannot change an answer.
+// A row missing either field sorts as if it were 0, which is safe only because
+// `ambiguousTimestamps` has already condemned every block where that could
+// change an answer: a missing position matters exactly when something shares the
+// row's timestamp, and no row in such a block is given a direction at all.
 const byBlockOrder = (a: GraphTickRow, b: GraphTickRow): number => {
   const timestamps = [toBigInt(a.timestamp) ?? 0n, toBigInt(b.timestamp) ?? 0n]
   if (timestamps[0] !== timestamps[1]) {
@@ -273,6 +293,91 @@ const byBlockOrder = (a: GraphTickRow, b: GraphTickRow): number => {
     return logIndexes[0] < logIndexes[1] ? -1 : 1
   }
   return 0
+}
+
+/**
+ * Whether the anchor page definitely contains the window's predecessor.
+ *
+ * That predecessor is the newest fill at or before the window's start, so what
+ * is needed is ALL the fills carrying that newest timestamp — one block. A page
+ * that came back SHORT holds them by construction: it exhausted the filter
+ * rather than the row cap. A FULL page spanning two or more timestamps holds
+ * them too, since descending order finishes a timestamp before reaching an older
+ * one.
+ *
+ * A full page that is all ONE timestamp is the case this exists for: the block
+ * was bigger than the page, so what came back is whichever subset graph-node's
+ * id tie-break happened to pick, and the block's last fill may not be in it.
+ * Nothing in the response says whether it is, and the newest row that DID arrive
+ * would sign the window's oldest fill against a mid-block price — a wrong
+ * direction, not a missing one. So the anchor is discarded whole and that one
+ * fill goes undirected. An older anchor is no substitute: the predecessor is the
+ * newest pre-window fill or it is nothing.
+ */
+const anchorPredecessorIsCertain = (anchors: GraphTickRow[]): boolean => {
+  if (anchors.length < ANCHOR_PAGE_SIZE) {
+    return true
+  }
+  const timestamps = anchors.map((anchor) => toBigInt(anchor.timestamp))
+  if (timestamps.some((timestamp) => timestamp === null)) {
+    return false
+  }
+  return new Set(timestamps.map(String)).size > 1
+}
+
+/**
+ * Timestamps whose fills cannot be put in chain order.
+ *
+ * `logIndex` is what orders fills within a block, and the schema makes it
+ * OPTIONAL — `logIndex: BigInt` against `tick: BigInt!` in Uniswap's v4 schema —
+ * so an indexer may omit it while still reporting a perfectly good tick. Two
+ * more ways a block can end up unorderable: two fills reporting the SAME index,
+ * which that schema invites by documenting the field as "index within the txn"
+ * (a deployment numbering per transaction rather than per block collides across
+ * the block's transactions), and a timestamp that does not parse.
+ *
+ * None of this matters for a block holding a single fill, which is almost every
+ * block here — there is nothing to order it against. It matters when there are
+ * several, and it matters SILENTLY: with the indexes missing the comparator
+ * calls the rows equal, a stable sort leaves them as they arrived, and they
+ * arrived newest first. The block would be walked backwards and every direction
+ * in it inverted — precisely the failure ordering by logIndex was added to
+ * prevent, reintroduced by treating an absent index as position zero.
+ *
+ * So the timestamp is marked and every row under it is skipped, as a predecessor
+ * as well as a subject. See `directionsByTickMove`.
+ */
+const ambiguousTimestamps = (rows: GraphTickRow[]): Set<string> => {
+  const byTimestamp = new Map<string, (bigint | null)[]>()
+  for (const row of rows) {
+    const timestamp = toBigInt(row.timestamp)
+    if (timestamp === null) {
+      continue
+    }
+    const key = timestamp.toString()
+    byTimestamp.set(key, [
+      ...(byTimestamp.get(key) ?? []),
+      toBigInt(row.logIndex),
+    ])
+  }
+
+  const ambiguous = new Set<string>()
+  for (const [key, logIndexes] of byTimestamp) {
+    if (logIndexes.length < 2) {
+      continue
+    }
+    // Missing indexes fall out of the set and duplicates collapse into one, so
+    // either leaves it smaller than the group it came from: one comparison
+    // covers both ways a block can be unorderable.
+    const distinct = new Set(
+      logIndexes.filter((index) => index !== null).map(String),
+    )
+    if (distinct.size !== logIndexes.length) {
+      ambiguous.add(key)
+    }
+  }
+
+  return ambiguous
 }
 
 /**
@@ -313,6 +418,11 @@ const byBlockOrder = (a: GraphTickRow, b: GraphTickRow): number => {
  *   - A tick equal to its predecessor's is a fill too small to move the price.
  *     That is no evidence either way, so the row gets no direction and is
  *     dropped by the caller rather than guessed at.
+ *   - Where that order cannot be ESTABLISHED — a block whose fills carry no
+ *     logIndex, or the same one twice, and an anchor page that stopped inside a
+ *     block — the fills are skipped rather than ordered on a guess, and so is
+ *     the fill that follows them. See `ambiguousTimestamps` and
+ *     `anchorPredecessorIsCertain`.
  *
  * Returned as a map by swap id, so the mapping stays one pass and the signed
  * path pays nothing for any of this.
@@ -322,14 +432,23 @@ const directionsByTickMove = (
   anchors: GraphTickRow[],
 ): Map<string, SwapDirection> => {
   const directions = new Map<string, SwapDirection>()
-  const ordered = [...anchors, ...swaps].sort(byBlockOrder)
+  const rows = [...anchors, ...swaps]
+  const ambiguous = ambiguousTimestamps(rows)
+  const ordered = [...rows].sort(byBlockOrder)
 
   let previous: bigint | null = null
   for (const row of ordered) {
     const tick = toBigInt(row.tick)
-    if (tick === null) {
-      // An unreadable tick costs this row its direction AND the next row its
-      // comparison: the chain of prices is broken until a readable one arrives.
+    const timestamp = toBigInt(row.timestamp)
+    if (
+      tick === null ||
+      timestamp === null ||
+      ambiguous.has(timestamp.toString())
+    ) {
+      // Both failures cost this row its direction AND the next row its
+      // comparison, so the chain restarts either way: an unreadable tick leaves
+      // no price to carry forward, and an unorderable block leaves no way to
+      // know which of its ticks the next fill actually moved from.
       previous = null
       continue
     }
@@ -510,9 +629,10 @@ export const fetchRecentSwapsFrom = async (
   // decides whether what survives is enough to price from. Fewer rows can only
   // make the oracle refuse, never mislead it.
   let unparsedSwaps = 0
+  const anchors = body.data.anchor ?? []
   const tickDirections = directionsByTickMove(
     body.data.swaps,
-    body.data.anchor ?? [],
+    anchorPredecessorIsCertain(anchors) ? anchors : [],
   )
   const samples: SwapSample[] = body.data.swaps.flatMap((swap) => {
     const ai3 = toBaseUnits(swap.amount0, AI3_DECIMALS)

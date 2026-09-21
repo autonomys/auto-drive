@@ -7,6 +7,7 @@ import {
   afterEach,
 } from '@jest/globals'
 import {
+  ANCHOR_PAGE_SIZE,
   fetchRecentSwapsFrom,
   resolveEndpoint,
   RECENT_SWAPS_QUERY,
@@ -55,15 +56,31 @@ const unsignedSwap = (
   amount1: string,
   timestamp: string,
   tick: string,
-  logIndex = '1',
+  // Nullable because the schema makes it so: `logIndex: BigInt` against
+  // `tick: BigInt!`, which is the whole of the ordering problem below.
+  logIndex: string | null = '1',
 ) => ({
-  id: `0xfeedface-${timestamp}-${logIndex}`,
+  // The tick is in the id so that rows sharing a block with no logIndex are
+  // still distinct entities, as they would be on the wire.
+  id: `0xfeedface-${timestamp}-${logIndex}-${tick}`,
   timestamp,
   logIndex,
   tick,
   amount0,
   amount1,
 })
+
+// A FULL anchor page, which is the only size at which what the page might be
+// missing matters. Indexes are distinct, so nothing here is ambiguous in the
+// logIndex sense — what varies between these cases is only whether the page
+// stopped inside a block.
+const anchorPage = (timestamps: string[], tick = '-344400') =>
+  timestamps.map((timestamp, index) => ({
+    id: `anchor-${index}`,
+    timestamp,
+    logIndex: String(index),
+    tick,
+  }))
 
 // An explicit endpoint, so nothing here depends on what happens to be in .env.
 const ENDPOINT = { url: 'https://subgraph.test/query', apiKey: 'test-key' }
@@ -483,6 +500,164 @@ describe('priceOracle/subgraph', () => {
 
       expect(samples[0].direction).toBe('sell')
     })
+
+    it('drops the oldest fill when the anchor page stopped inside a block', async () => {
+      // A full anchor page whose rows all share one timestamp means the block
+      // at the window's edge held more fills than the page could carry, so what
+      // came back is an arbitrary subset of it: graph-node breaks a timestamp
+      // tie by `id`, not by logIndex, so the block's LAST fill — the only valid
+      // predecessor — may simply not be here. Sorting what did arrive cannot
+      // recover it.
+      //
+      // Trusting the newest row present would sign the window's oldest fill
+      // against a mid-block price, which is a wrong direction rather than a
+      // missing one. So the anchor is dropped whole and that fill goes
+      // undirected.
+      respondWith({
+        data: {
+          _meta: meta(),
+          pool: pool(),
+          swaps: [
+            unsignedSwap('9676.16', '10.51', '1789941299', '-344500'),
+            unsignedSwap('70787.25', '80.45', '1789755803', '-344300'),
+          ],
+          anchor: anchorPage(Array(ANCHOR_PAGE_SIZE).fill('1789700000')),
+        },
+      })
+
+      const { samples, unparsedSwaps } = await fetchSwaps(10)
+
+      // Without the check the oldest fill reads as a buy, -344400 → -344300.
+      expect(samples).toHaveLength(1)
+      expect(samples[0].direction).toBe('sell')
+      expect(unparsedSwaps).toBe(1)
+    })
+
+    it('trusts a full anchor page that reaches past the boundary block', async () => {
+      // Same page size, but it spans two timestamps — and descending order
+      // finishes a timestamp before moving to an older one, so every fill of
+      // the newest one is present. The predecessor is certain, and the oldest
+      // window fill keeps its direction.
+      respondWith({
+        data: {
+          _meta: meta(),
+          pool: pool(),
+          swaps: [
+            unsignedSwap('9676.16', '10.51', '1789941299', '-344500'),
+            unsignedSwap('70787.25', '80.45', '1789755803', '-344300'),
+          ],
+          anchor: anchorPage([
+            '1789700000',
+            ...Array(ANCHOR_PAGE_SIZE - 1).fill('1789600000'),
+          ]),
+        },
+      })
+
+      const { samples, unparsedSwaps } = await fetchSwaps(10)
+
+      expect(samples.map((s) => s.direction)).toEqual(['sell', 'buy'])
+      expect(unparsedSwaps).toBe(0)
+    })
+
+    it('refuses to order a block whose fills report no logIndex', async () => {
+      // `logIndex` is optional in the schema while `tick` is not, so an indexer
+      // can leave the field out and still report a usable tick. Three fills in
+      // one block with no index are not orderable: the comparator calls them
+      // equal, a stable sort leaves them as they arrived, and they arrived
+      // NEWEST FIRST — so the block would be walked backwards and all three
+      // directions inverted.
+      //
+      // Ticks -344300 / -344350 / -344200 in arrival order. Read backwards they
+      // would come out buy, sell, buy with total confidence.
+      respondWith({
+        data: {
+          _meta: meta(),
+          pool: pool(),
+          swaps: [
+            unsignedSwap('1000', '1.1', '1789950000', '-344100', '1'),
+            unsignedSwap('1000', '1.1', '1789941299', '-344300', null),
+            unsignedSwap('1000', '1.1', '1789941299', '-344350', null),
+            unsignedSwap('1000', '1.1', '1789941299', '-344200', null),
+            unsignedSwap('1000', '1.1', '1789800000', '-344380', '2'),
+          ],
+          anchor: [
+            {
+              id: 'anchor',
+              timestamp: '1789700000',
+              logIndex: '4',
+              tick: '-344400',
+            },
+          ],
+        },
+      })
+
+      const { samples, unparsedSwaps } = await fetchSwaps(10)
+
+      // Only the fill BEFORE the unorderable block survives, signed off the
+      // anchor. The one after it goes too: which of the block's ticks it moved
+      // from is exactly what cannot be established.
+      expect(samples).toHaveLength(1)
+      expect(samples[0].timestampMs).toBe(1_789_800_000_000)
+      expect(samples[0].direction).toBe('buy')
+      expect(unparsedSwaps).toBe(4)
+    })
+
+    it('still reads a lone fill whose logIndex is missing', async () => {
+      // A missing index only costs anything when something shares the row's
+      // timestamp. Alone in its block there is nothing to order it against, so
+      // the tick comparison stands.
+      respondWith({
+        data: {
+          _meta: meta(),
+          pool: pool(),
+          swaps: [unsignedSwap('1000', '1.1', '1789941299', '-344300', null)],
+          anchor: [
+            {
+              id: 'anchor',
+              timestamp: '1789700000',
+              logIndex: '4',
+              tick: '-344400',
+            },
+          ],
+        },
+      })
+
+      const { samples, unparsedSwaps } = await fetchSwaps(10)
+
+      expect(samples.map((s) => s.direction)).toEqual(['buy'])
+      expect(unparsedSwaps).toBe(0)
+    })
+
+    it('refuses to order a block whose fills share a logIndex', async () => {
+      // The other way the field can fail to order a block. Uniswap's schema
+      // documents it as "index within the txn", so a deployment numbering per
+      // transaction rather than per block collides across the block's
+      // transactions — indistinguishable from a missing index once two rows
+      // claim the same position.
+      respondWith({
+        data: {
+          _meta: meta(),
+          pool: pool(),
+          swaps: [
+            unsignedSwap('1000', '1.1', '1789941299', '-344300', '7'),
+            unsignedSwap('1000', '1.1', '1789941299', '-344200', '7'),
+          ],
+          anchor: [
+            {
+              id: 'anchor',
+              timestamp: '1789700000',
+              logIndex: '4',
+              tick: '-344400',
+            },
+          ],
+        },
+      })
+
+      const { samples, unparsedSwaps } = await fetchSwaps(10)
+
+      expect(samples).toHaveLength(0)
+      expect(unparsedSwaps).toBe(2)
+    })
   })
 
   describe('identity', () => {
@@ -757,6 +932,14 @@ describe('priceOracle/subgraph', () => {
       // nothing on an indexer that signs its amounts.
       expect(RECENT_SWAPS_QUERY).toMatch(/\btick\b/)
       expect(RECENT_SWAPS_QUERY).toMatch(/\blogIndex\b/)
+    })
+
+    it('sizes the anchor page by the constant the completeness check reads', () => {
+      // The two must not drift: a page sized independently of the check would
+      // either never look full or look full when it is not.
+      expect(RECENT_SWAPS_QUERY).toMatch(
+        new RegExp(`anchor: swaps\\(\\s*first: ${ANCHOR_PAGE_SIZE}\\b`),
+      )
     })
 
     it('asks for the fills immediately before the window as an anchor', () => {
