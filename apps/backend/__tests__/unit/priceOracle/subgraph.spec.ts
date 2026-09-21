@@ -628,6 +628,91 @@ describe('priceOracle/subgraph', () => {
       expect(unparsedSwaps).toBe(0)
     })
 
+    it('derives nothing at all from a response it cannot put in order', async () => {
+      // A row whose timestamp will not parse cannot be placed, and the cost is
+      // not its own direction — it is every direction. It sorts to the front
+      // instead of wherever it belongs, so the fill that truly followed it gets
+      // compared against whatever precedes it there and comes out confidently
+      // wrong. Condemning its block is no remedy: with no timestamp it is in no
+      // block.
+      //
+      // Read in arrival order the ticks look like a clean chain. In the sorted
+      // order the broken row leaves behind, the newest fill reads 'sell' off the
+      // OLDEST one.
+      respondWith({
+        data: {
+          _meta: meta(),
+          pool: pool(),
+          swaps: [
+            unsignedSwap('1000', '1.1', '1789950000', '-344500'),
+            unsignedSwap('1000', '1.1', 'not-an-integer', '-344600'),
+            unsignedSwap('1000', '1.1', '1789800000', '-344300'),
+          ],
+          anchor: [
+            {
+              id: 'anchor',
+              timestamp: '1789700000',
+              logIndex: '4',
+              tick: '-344400',
+            },
+          ],
+        },
+      })
+
+      const { samples, unparsedSwaps } = await fetchSwaps(10)
+
+      expect(samples).toHaveLength(0)
+      expect(unparsedSwaps).toBe(3)
+    })
+
+    it('discards a short anchor page holding a fill it cannot place', async () => {
+      // The page being short proves the filter was exhausted. It proves nothing
+      // about the rows in it — and an anchor that cannot be placed may be the
+      // predecessor itself, in which case trusting the rest of the page signs
+      // the window's oldest fill against a staler tick. Same defect as a
+      // truncated page, so the same answer, and the size check must not shadow
+      // it.
+      //
+      // Dropping the anchor costs exactly one direction, and it is the cheaper
+      // answer as well as the correct one: the window's own fills still have
+      // each other to chain against. Letting the unplaceable row through
+      // instead would poison the whole response and cost all three, since a row
+      // that cannot be placed is not a local problem — which is what makes the
+      // order of the two checks here observable rather than academic.
+      respondWith({
+        data: {
+          _meta: meta(),
+          pool: pool(),
+          swaps: [
+            unsignedSwap('1000', '1.1', '1789950000', '-344100'),
+            unsignedSwap('1000', '1.1', '1789900000', '-344250'),
+            unsignedSwap('1000', '1.1', '1789850000', '-344300'),
+          ],
+          anchor: [
+            {
+              id: 'anchor-broken',
+              timestamp: 'not-an-integer',
+              logIndex: '5',
+              tick: '-344200',
+            },
+            {
+              id: 'anchor-older',
+              timestamp: '1789600000',
+              logIndex: '4',
+              tick: '-344400',
+            },
+          ],
+        },
+      })
+
+      const { samples, unparsedSwaps } = await fetchSwaps(10)
+
+      // Only the oldest window fill loses its direction — the one the anchor
+      // existed to supply a predecessor for.
+      expect(samples.map((s) => s.direction)).toEqual(['buy', 'buy'])
+      expect(unparsedSwaps).toBe(1)
+    })
+
     it('refuses to order a block whose fills share a logIndex', async () => {
       // The other way the field can fail to order a block. Uniswap's schema
       // documents it as "index within the txn", so a deployment numbering per

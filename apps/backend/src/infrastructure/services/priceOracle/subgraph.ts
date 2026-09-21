@@ -78,6 +78,14 @@ export type SwapWindowResponse = {
   // saw and this is a count window again — the very thing selecting by time
   // exists to avoid. Reported rather than accepted: index.ts refuses, because a
   // window we cannot bound is one whose median we cannot vouch for.
+  //
+  // Refusing is also what keeps the DIRECTIONS honest, which is less obvious. A
+  // full page stops at an arbitrary point, and if it stopped inside a block it
+  // holds an arbitrary subset of it — the same defect `anchorPredecessorIsCertain`
+  // guards on the anchor page, here at the window's oldest edge. It is not
+  // guarded a second time because a truncated window is refused whole, ahead of
+  // anything sample-derived. A caller that consumed samples from a truncated
+  // response anyway would be reading directions this module cannot vouch for.
   truncated: boolean
   // USDC the pool currently holds, in base units. Depth, as opposed to volume:
   // volume is what traded and can be churned, depth is what is sitting there.
@@ -126,9 +134,12 @@ export const ANCHOR_PAGE_SIZE = 50
  * base units. Whether they are SIGNED by direction is up to the indexer, and
  * the two deployments this has run against disagree: the pool-delta convention
  * signs the legs oppositely, since one leg enters the pool while the other
- * leaves, while the current default reports bare magnitudes. `tick` and
- * `logIndex` are requested for the latter — see `directionsByTickMove` — and
- * cost nothing under the former, where the signs answer it outright.
+ * leaves, while the other reports bare magnitudes. The code default,
+ * `EzLH76FW…`, is a SIGNED one — all 263 of the pool's lifetime fills carry
+ * opposite leg signs, verified 2026-09-21 — so `tick` and `logIndex` are
+ * requested for a deployment an operator may point `GRAPH_SUBGRAPH_ID` at, not
+ * for the one shipped here. They cost nothing under the signed convention,
+ * where the signs answer the question outright. See `directionsByTickMove`.
  *
  * `amountUSD` is deliberately not requested: it is the subgraph's own valuation
  * derived through its pricing paths, whereas amount1 IS the USDC that changed
@@ -279,10 +290,13 @@ const toBigInt = (raw: string | null | undefined): bigint | null => {
 }
 
 // Chain order: the block a fill landed in, then its position within that block.
-// A row missing either field sorts as if it were 0, which is safe only because
-// `ambiguousTimestamps` has already condemned every block where that could
-// change an answer: a missing position matters exactly when something shares the
-// row's timestamp, and no row in such a block is given a direction at all.
+//
+// Either field missing sorts the row as if it were 0, and neither fallback can
+// change an answer — but for different reasons, and neither reason is local to
+// this function. A missing POSITION only matters when something shares the row's
+// timestamp, and `ambiguousTimestamps` condemns every such block outright. A
+// missing TIMESTAMP cannot be contained that way, so `directionsByTickMove`
+// refuses to derive any direction at all from a response containing one.
 const byBlockOrder = (a: GraphTickRow, b: GraphTickRow): number => {
   const timestamps = [toBigInt(a.timestamp) ?? 0n, toBigInt(b.timestamp) ?? 0n]
   if (timestamps[0] !== timestamps[1]) {
@@ -315,12 +329,18 @@ const byBlockOrder = (a: GraphTickRow, b: GraphTickRow): number => {
  * newest pre-window fill or it is nothing.
  */
 const anchorPredecessorIsCertain = (anchors: GraphTickRow[]): boolean => {
-  if (anchors.length < ANCHOR_PAGE_SIZE) {
-    return true
-  }
   const timestamps = anchors.map((anchor) => toBigInt(anchor.timestamp))
+  // Asked BEFORE the page size, not after. A row whose timestamp will not parse
+  // cannot be placed at all, and `byBlockOrder` puts it at the front rather than
+  // wherever it belongs — so if that row was the predecessor, a SHORT page hands
+  // over a staler tick with the same false confidence a truncated one would.
+  // The page being short proves the filter was exhausted; it proves nothing
+  // about the rows in it.
   if (timestamps.some((timestamp) => timestamp === null)) {
     return false
+  }
+  if (anchors.length < ANCHOR_PAGE_SIZE) {
+    return true
   }
   return new Set(timestamps.map(String)).size > 1
 }
@@ -346,6 +366,10 @@ const anchorPredecessorIsCertain = (anchors: GraphTickRow[]): boolean => {
  *
  * So the timestamp is marked and every row under it is skipped, as a predecessor
  * as well as a subject. See `directionsByTickMove`.
+ *
+ * A row whose TIMESTAMP will not parse is not handled here, because marking its
+ * group is not enough: it has no group. It cannot be placed anywhere, so it is
+ * the whole response's ordering that is in doubt — see `directionsByTickMove`.
  */
 const ambiguousTimestamps = (rows: GraphTickRow[]): Set<string> => {
   const byTimestamp = new Map<string, (bigint | null)[]>()
@@ -387,7 +411,9 @@ const ambiguousTimestamps = (rows: GraphTickRow[]): Set<string> => {
  * the other leaves, so their signs disagree and either one names the side. An
  * indexer reporting bare magnitudes has discarded that fact, and it has to be
  * recovered from somewhere else or every row is unreadable — which is not a
- * hypothetical, it is what the current default deployment does.
+ * hypothetical: `8B2wKxn…`, a mirror of the same subgraph, reports every leg as
+ * a magnitude. The code default does not, so nothing below runs against it; the
+ * point is that which deployment answers is now an env var.
  *
  * `tick` is where it survives. A Uniswap v4 pool's tick IS its price
  * (1.0001^tick, token1 per token0 in raw units), and a swap is the only thing
@@ -433,6 +459,22 @@ const directionsByTickMove = (
 ): Map<string, SwapDirection> => {
   const directions = new Map<string, SwapDirection>()
   const rows = [...anchors, ...swaps]
+
+  // One unplaceable row costs EVERY direction, not just its own. It sorts to the
+  // front on `byBlockOrder`'s fallback rather than to wherever it belongs, so
+  // the row that truly followed it is then compared against whatever precedes it
+  // there — a wrong direction stated with full confidence, and the row it is
+  // wrong about is not the broken one. Marking it is no help either: with no
+  // timestamp it belongs to no block, so there is no group to condemn.
+  //
+  // `timestamp` is `BigInt!` in the schema, so reaching this takes an indexer
+  // violating its own schema. It is checked anyway for the reason this whole
+  // file changed: which deployment answers is an env var now, and an assumption
+  // about the one we ship is not an assumption about the one that replies.
+  if (rows.some((row) => toBigInt(row.timestamp) === null)) {
+    return directions
+  }
+
   const ambiguous = ambiguousTimestamps(rows)
   const ordered = [...rows].sort(byBlockOrder)
 
@@ -650,9 +692,10 @@ export const fetchRecentSwapsFrom = async (
     // denominated in, and believed only when the other leg disagrees with it.
     //
     // Legs that AGREE are not a swap under that convention — and are every row
-    // under the convention the current default deployment uses, where both legs
-    // are magnitudes. Neither case can be told from the other by looking at one
-    // row, so both fall through to tick movement, which answers the honest
+    // under the convention where both legs are magnitudes, which is what some
+    // deployments of this subgraph report. Neither case can be told from the
+    // other by looking at one row, so both fall through to tick movement, which
+    // answers the honest
     // question: did this fill move the price up or down? A row is dropped only
     // when neither signal answers, on the same footing as any other unreadable
     // row.

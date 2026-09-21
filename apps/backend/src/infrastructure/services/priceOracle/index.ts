@@ -239,13 +239,20 @@ const buildWindow = async (): Promise<
   }
 
   // Not a refusal — a dropped row only shrinks the window, and the sample floor
-  // judges what is left. But it means the indexer is emitting an amount format
-  // this oracle does not read, which is worth seeing in a log rather than
-  // deducing from a sample count that came back mysteriously low.
+  // judges what is left. But it means the indexer served something this oracle
+  // could not read, which is worth seeing in a log rather than deducing from a
+  // sample count that came back mysteriously low.
+  //
+  // The reason is deliberately not narrowed here. A row lands in this count for
+  // an amount that will not parse, and equally for a direction that cannot be
+  // established — no sign on the legs and no usable tick move, which is what
+  // happens when a block cannot be put in order or a fill is too small to shift
+  // the price. Naming only the first sends an operator to look at amount
+  // formats for a problem that is not there.
   if (response.unparsedSwaps > 0) {
     logger.warn(
-      `Price oracle dropped ${response.unparsedSwaps} fill(s) whose amounts ` +
-        'did not parse as plain decimals; the window was built from the rest',
+      `Price oracle dropped ${response.unparsedSwaps} fill(s) it could not ` +
+        'read an amount or a direction from; the window was built from the rest',
     )
   }
 
@@ -578,7 +585,10 @@ const buildDisplayWindow = async (): Promise<
             `the oracle is not configured to read this pool: ${message}`,
             'misconfigured',
           )
-        : displayUnavailable(`could not read the subgraph: ${message}`, 'gateway'),
+        : displayUnavailable(
+            `could not read the subgraph: ${message}`,
+            'gateway',
+          ),
     )
   }
 
