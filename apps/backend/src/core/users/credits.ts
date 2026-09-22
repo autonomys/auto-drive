@@ -295,11 +295,8 @@ const refundBatch = async (
 // 404 listing the missing ids is returned. All batches still pending a
 // refund must belong to the same account, have been paid from the same
 // purchasing wallet (the intent's from_address) AND have been paid with the
-// same payment method — one on-chain refund transfer moves one asset, on one
-// chain, back to one wallet, so a combined refund spanning accounts, paying
-// wallets or assets is rejected with 400 and nothing is updated. The method
-// is its own check because an EVM address is the same string on both chains:
-// one wallet can pay AI3 on Auto EVM and USDC on Ethereum.
+// same payment method — see markManyAsRefunded. A combined refund spanning
+// any of the three is rejected with 400 and nothing is updated.
 // Already-refunded batches are skipped (idempotent, mirroring refundBatch)
 // and are excluded from both checks, so retries succeed even if the
 // already-refunded rows belong to different accounts or wallets.
@@ -389,8 +386,6 @@ const refundBatches = async (
     )
   }
 
-  // One refund transfer moves one asset on one chain. AI3 and USDC batches can
-  // share an account and a wallet address, so nothing above catches this.
   if (result.paymentMethods.length > 1) {
     return err(
       new BadRequestError(

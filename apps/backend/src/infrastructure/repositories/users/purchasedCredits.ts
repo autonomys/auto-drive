@@ -648,12 +648,10 @@ const markAsRefunded = async (
 // SAME account, have been paid from the SAME purchasing wallet (the
 // intent's from_address) AND have been paid with the SAME payment method —
 // one on-chain refund transfer moves one asset, on one chain, to one
-// wallet, so a combined refund spanning accounts, paying wallets or assets
-// is always a mistake. The method is checked separately from the wallet
-// because an EVM address is the same string on both chains: one wallet can
-// pay AI3 on Auto EVM and USDC on Ethereum, and those batches would
-// otherwise combine into a single refund that can only be sent in one of
-// the two. Rows that are already refunded are skipped
+// wallet. The method is checked separately from the wallet because an EVM
+// address is the same string on both chains: one wallet can pay AI3 on Auto
+// EVM and USDC on Ethereum, and those batches would otherwise combine into
+// a single refund that can only be sent in one of the two. Rows that are already refunded are skipped
 // (idempotent, mirroring the single-row behaviour) and keep their original
 // tx hash, so they are excluded from both checks — a retry where everything
 // is already refunded succeeds regardless. If the still-pending rows span
@@ -835,12 +833,10 @@ const markManyAsRefunded = async (
 // ---------------------------------------------------------------------------
 // getByUserPublicId
 // Admin view: all credit batches for a specific user (identified by their
-// user_public_id), joined with the fields of the originating intent that
-// answer, for each purchase: in what asset it was paid, how much was paid,
-// from which wallet, and — for USDC — at what AI3 rate. Every one of those is
-// needed to size and send a refund, and none of them can be recovered from
-// purchased_credits alone.
-// Ordered newest-first.
+// user_public_id), joined with the intent fields a refund is sized and sent
+// from — asset, amount, wallet, and the quote a USDC charge was priced at.
+// None of them can be recovered from purchased_credits, which records bytes
+// and nothing about the money. Ordered newest-first.
 // ---------------------------------------------------------------------------
 
 type DBPurchasedCreditWithIntent = DBPurchasedCredit & {
@@ -856,35 +852,24 @@ type DBPurchasedCreditWithIntent = DBPurchasedCredit & {
   usd_rate_at_creation: string | null
 }
 
+// Each field is documented on IntentSchema in @auto-drive/models; the notes
+// here say only which of them carries the money on which asset.
 export type AdminUserCreditBatchRow = PurchasedCredit & {
   userPublicId: string
-  // AI3 shannons received. NULL on a USDC purchase, where the amount lives in
-  // `tokenAmount` — so this field alone cannot answer "what was paid".
+  /** AI3 shannons received. NULL on a USDC purchase — see `tokenAmount`. */
   paymentAmount: bigint | null
   shannonsPerByte: bigint
   txHash: string | null
   fromAddress: string | null
-  // The asset, and therefore which of the amount fields below carries the
-  // payment and which chain a refund transfer has to go out on.
+  /** The asset paid, and the asset a refund has to go back in. */
   paymentMethod: PaymentMethod
-  // --- USDC purchases only; NULL for AI3_NATIVE -------------------------
-  // USDC base units actually received on chain. This is what a refund pays
-  // back, and it is not necessarily `quotedTokenAmount`: a payment that
-  // differs from the quote is credited pro-rata and filed as
-  // AMOUNT_OFF_QUOTE, so the two fields disagreeing is a real state an admin
-  // has to be able to see rather than an inconsistency.
+  /** USDC base units received. May differ from the quote (AMOUNT_OFF_QUOTE). */
   tokenAmount: bigint | null
-  // The charge the user was shown and agreed to, and — paired with
-  // `quotedAi3Shannons` — the effective USD/AI3 rate they bought at, margin
-  // included. The pair is carried rather than a ratio because a USDC-per-byte
-  // rate is deeply sub-unit and does not survive as an integer (see the
-  // Intent model and the 20260806 migration).
+  /** USDC quoted; with `quotedAi3Shannons`, the rate actually charged. */
   quotedTokenAmount: bigint | null
   quotedAi3Shannons: bigint | null
-  // The RAW oracle rate at quote time, scaled by USD_RATE_SCALE (1e18):
-  // comparable to the market, short of what the user paid by the quote
-  // margin. Exposed for reconciliation beside the effective rate, never as a
-  // substitute for it.
+  /** Raw oracle USD/AI3 at quote time. Reconciliation only — it is short by
+   * the quote margin, so it is never the rate a refund is sized at. */
   usdRateAtCreation: bigint | null
 }
 
@@ -945,11 +930,7 @@ export type AdminCreditBatchRow = PurchasedCredit & {
   userPublicId: string
   /** EVM wallet that paid for the batch (intents.from_address), if known. */
   fromAddress: string | null
-  /**
-   * Asset the batch was paid in. Carried on the overview because refunds are
-   * grouped by paying wallet there, and one EVM address can pay AI3 on Auto
-   * EVM and USDC on Ethereum — the wallet alone does not say which.
-   */
+  /** Asset the batch was paid in; the wallet alone does not say which. */
   paymentMethod: PaymentMethod
 }
 

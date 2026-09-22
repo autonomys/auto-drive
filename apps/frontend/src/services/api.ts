@@ -62,11 +62,7 @@ export type AdminCreditBatch = ExpiringCreditBatch & {
   refundTxHash: string | null;
   /** EVM purchasing wallet that paid for the batch, if known. */
   fromAddress: string | null;
-  /**
-   * `intents.payment_method` — the asset the batch was paid in. Carried on the
-   * overview because refunds are grouped by paying wallet, and one EVM address
-   * can pay AI3 on Auto EVM and USDC on Ethereum.
-   */
+  /** The asset the batch was paid in; the paying wallet does not say which. */
   paymentMethod: PaymentMethod;
 };
 
