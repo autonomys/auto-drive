@@ -152,6 +152,7 @@ creditsController.get(
         ...serializeCredit(batch),
         userPublicId: batch.userPublicId,
         fromAddress: batch.fromAddress ?? null,
+        paymentMethod: batch.paymentMethod,
       })),
     )
   }),
@@ -160,9 +161,12 @@ creditsController.get(
 // ---------------------------------------------------------------------------
 // GET /credits/batches/user/:userPublicId
 // Admin-only: all credit batches for a specific user, newest-first.
-// Each row includes intent fields (paymentAmount, shannonsPerByte, txHash,
-// fromAddress) so the admin can calculate the AI3 price paid and identify
-// the wallet used for the on-chain payment.
+// Each row includes the intent fields a refund is sized and sent from: the
+// payment method, the amount paid in whichever asset that is (paymentAmount
+// for AI3, tokenAmount for USDC), the quote it was charged against
+// (quotedTokenAmount / quotedAi3Shannons — together the effective USD/AI3
+// rate), the raw oracle rate at quote time, the per-byte price, and the
+// wallet and transaction the payment arrived on.
 // Returns 403 for non-admin callers.
 // ---------------------------------------------------------------------------
 
@@ -193,6 +197,11 @@ creditsController.get(
         shannonsPerByte: batch.shannonsPerByte.toString(),
         txHash: batch.txHash ?? null,
         fromAddress: batch.fromAddress ?? null,
+        paymentMethod: batch.paymentMethod,
+        tokenAmount: batch.tokenAmount?.toString() ?? null,
+        quotedTokenAmount: batch.quotedTokenAmount?.toString() ?? null,
+        quotedAi3Shannons: batch.quotedAi3Shannons?.toString() ?? null,
+        usdRateAtCreation: batch.usdRateAtCreation?.toString() ?? null,
       })),
     )
   }),

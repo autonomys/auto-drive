@@ -1,4 +1,5 @@
 import {
+  PaymentMethod,
   PurchasedCredit,
   PurchasedCreditSummary,
 } from '@auto-drive/models'
@@ -644,15 +645,21 @@ const markAsRefunded = async (
 // All-or-nothing on existence: if any id does not exist the transaction is
 // rolled back and missingIds is returned so the caller can 404 precisely.
 // All batches that are actually going to be refunded must belong to the
-// SAME account AND have been paid from the SAME purchasing wallet (the
-// intent's from_address) — one on-chain AI3 refund transfer goes back to a
-// single wallet, so a combined refund spanning accounts or paying wallets
-// is always a mistake. Rows that are already refunded are skipped
+// SAME account, have been paid from the SAME purchasing wallet (the
+// intent's from_address) AND have been paid with the SAME payment method —
+// one on-chain refund transfer moves one asset, on one chain, to one
+// wallet, so a combined refund spanning accounts, paying wallets or assets
+// is always a mistake. The method is checked separately from the wallet
+// because an EVM address is the same string on both chains: one wallet can
+// pay AI3 on Auto EVM and USDC on Ethereum, and those batches would
+// otherwise combine into a single refund that can only be sent in one of
+// the two. Rows that are already refunded are skipped
 // (idempotent, mirroring the single-row behaviour) and keep their original
 // tx hash, so they are excluded from both checks — a retry where everything
 // is already refunded succeeds regardless. If the still-pending rows span
-// multiple accounts or wallets the transaction is rolled back and
-// accountIds / walletAddresses list the offenders so the caller can 400.
+// multiple accounts, wallets or payment methods the transaction is rolled
+// back and accountIds / walletAddresses / paymentMethods list the offenders
+// so the caller can 400.
 // Batches whose intent has no from_address recorded (legacy rows) are
 // grouped under null: they can be combined with each other but not with
 // batches paid from a known wallet.
@@ -664,6 +671,8 @@ export type BatchRefundResult = {
   accountIds: string[]
   /** Distinct paying wallets (intents.from_address) across pending rows. */
   walletAddresses: (string | null)[]
+  /** Distinct payment assets (intents.payment_method) across pending rows. */
+  paymentMethods: PaymentMethod[]
   refundedRows: PurchasedCredit[]
   alreadyRefundedIds: string[]
   /**
@@ -687,6 +696,7 @@ const markManyAsRefunded = async (
       missingIds: malformedIds,
       accountIds: [],
       walletAddresses: [],
+      paymentMethods: [],
       refundedRows: [],
       alreadyRefundedIds: [],
     }
@@ -708,10 +718,11 @@ const markManyAsRefunded = async (
       refunded_at: Date | null
       upload_bytes_remaining: string
       from_address: string | null
+      payment_method: PaymentMethod
     }>(
       `SELECT pc.id, pc.account_id, pc.refunded_at,
               pc.upload_bytes_remaining,
-              i.from_address
+              i.from_address, i.payment_method
        FROM purchased_credits pc
        JOIN intents i ON i.id = pc.intent_id
        WHERE pc.id = ANY($1::uuid[])
@@ -731,6 +742,9 @@ const markManyAsRefunded = async (
     const walletAddresses = [
       ...new Set(pendingRows.map((r) => r.from_address)),
     ]
+    const paymentMethods = [
+      ...new Set(pendingRows.map((r) => r.payment_method)),
+    ]
 
     // Pending rows with no remaining upload bytes are depleted — nothing
     // was forfeited, so no refund is owed on them. Their presence rejects
@@ -745,6 +759,7 @@ const markManyAsRefunded = async (
         missingIds,
         accountIds,
         walletAddresses,
+        paymentMethods,
         refundedRows: [],
         alreadyRefundedIds: [],
         nonRefundableIds,
@@ -757,18 +772,24 @@ const markManyAsRefunded = async (
         missingIds: [],
         accountIds,
         walletAddresses,
+        paymentMethods,
         refundedRows: [],
         alreadyRefundedIds: [],
         nonRefundableIds,
       }
     }
 
-    if (accountIds.length > 1 || walletAddresses.length > 1) {
+    if (
+      accountIds.length > 1 ||
+      walletAddresses.length > 1 ||
+      paymentMethods.length > 1
+    ) {
       await client.query('ROLLBACK')
       return {
         missingIds: [],
         accountIds,
         walletAddresses,
+        paymentMethods,
         refundedRows: [],
         alreadyRefundedIds: [],
         nonRefundableIds: [],
@@ -797,6 +818,7 @@ const markManyAsRefunded = async (
       missingIds: [],
       accountIds,
       walletAddresses,
+      paymentMethods,
       refundedRows: updated.rows.map(mapRow),
       alreadyRefundedIds,
       nonRefundableIds: [],
@@ -813,8 +835,11 @@ const markManyAsRefunded = async (
 // ---------------------------------------------------------------------------
 // getByUserPublicId
 // Admin view: all credit batches for a specific user (identified by their
-// user_public_id), joined with key fields from the originating intent so the
-// admin page can show the AI3 price paid and the EVM wallet used.
+// user_public_id), joined with the fields of the originating intent that
+// answer, for each purchase: in what asset it was paid, how much was paid,
+// from which wallet, and — for USDC — at what AI3 rate. Every one of those is
+// needed to size and send a refund, and none of them can be recovered from
+// purchased_credits alone.
 // Ordered newest-first.
 // ---------------------------------------------------------------------------
 
@@ -824,14 +849,43 @@ type DBPurchasedCreditWithIntent = DBPurchasedCredit & {
   shannons_per_byte: string
   tx_hash: string | null
   from_address: string | null
+  payment_method: PaymentMethod
+  token_amount: string | null
+  quoted_token_amount: string | null
+  quoted_ai3_shannons: string | null
+  usd_rate_at_creation: string | null
 }
 
 export type AdminUserCreditBatchRow = PurchasedCredit & {
   userPublicId: string
+  // AI3 shannons received. NULL on a USDC purchase, where the amount lives in
+  // `tokenAmount` — so this field alone cannot answer "what was paid".
   paymentAmount: bigint | null
   shannonsPerByte: bigint
   txHash: string | null
   fromAddress: string | null
+  // The asset, and therefore which of the amount fields below carries the
+  // payment and which chain a refund transfer has to go out on.
+  paymentMethod: PaymentMethod
+  // --- USDC purchases only; NULL for AI3_NATIVE -------------------------
+  // USDC base units actually received on chain. This is what a refund pays
+  // back, and it is not necessarily `quotedTokenAmount`: a payment that
+  // differs from the quote is credited pro-rata and filed as
+  // AMOUNT_OFF_QUOTE, so the two fields disagreeing is a real state an admin
+  // has to be able to see rather than an inconsistency.
+  tokenAmount: bigint | null
+  // The charge the user was shown and agreed to, and — paired with
+  // `quotedAi3Shannons` — the effective USD/AI3 rate they bought at, margin
+  // included. The pair is carried rather than a ratio because a USDC-per-byte
+  // rate is deeply sub-unit and does not survive as an integer (see the
+  // Intent model and the 20260806 migration).
+  quotedTokenAmount: bigint | null
+  quotedAi3Shannons: bigint | null
+  // The RAW oracle rate at quote time, scaled by USD_RATE_SCALE (1e18):
+  // comparable to the market, short of what the user paid by the quote
+  // margin. Exposed for reconciliation beside the effective rate, never as a
+  // substitute for it.
+  usdRateAtCreation: bigint | null
 }
 
 const mapRowWithIntent = (
@@ -843,6 +897,17 @@ const mapRowWithIntent = (
   shannonsPerByte: BigInt(row.shannons_per_byte),
   txHash: row.tx_hash ?? null,
   fromAddress: row.from_address ?? null,
+  paymentMethod: row.payment_method,
+  tokenAmount: row.token_amount ? BigInt(row.token_amount) : null,
+  quotedTokenAmount: row.quoted_token_amount
+    ? BigInt(row.quoted_token_amount)
+    : null,
+  quotedAi3Shannons: row.quoted_ai3_shannons
+    ? BigInt(row.quoted_ai3_shannons)
+    : null,
+  usdRateAtCreation: row.usd_rate_at_creation
+    ? BigInt(row.usd_rate_at_creation)
+    : null,
 })
 
 const getByUserPublicId = async (
@@ -855,7 +920,12 @@ const getByUserPublicId = async (
             i.payment_amount,
             i.shannons_per_byte,
             i.tx_hash,
-            i.from_address
+            i.from_address,
+            i.payment_method,
+            i.token_amount,
+            i.quoted_token_amount,
+            i.quoted_ai3_shannons,
+            i.usd_rate_at_creation
      FROM purchased_credits pc
      JOIN intents i ON i.id = pc.intent_id
      WHERE i.user_public_id = $1
@@ -875,14 +945,24 @@ export type AdminCreditBatchRow = PurchasedCredit & {
   userPublicId: string
   /** EVM wallet that paid for the batch (intents.from_address), if known. */
   fromAddress: string | null
+  /**
+   * Asset the batch was paid in. Carried on the overview because refunds are
+   * grouped by paying wallet there, and one EVM address can pay AI3 on Auto
+   * EVM and USDC on Ethereum — the wallet alone does not say which.
+   */
+  paymentMethod: PaymentMethod
 }
 
 const getAllWithUserPublicId = async (): Promise<AdminCreditBatchRow[]> => {
   const db = await getDatabase()
   const result = await db.query<
-    DBPurchasedCredit & { user_public_id: string; from_address: string | null }
+    DBPurchasedCredit & {
+      user_public_id: string
+      from_address: string | null
+      payment_method: PaymentMethod
+    }
   >(
-    `SELECT pc.*, i.user_public_id, i.from_address
+    `SELECT pc.*, i.user_public_id, i.from_address, i.payment_method
      FROM purchased_credits pc
      JOIN intents i ON i.id = pc.intent_id
      ORDER BY pc.purchased_at DESC`,
@@ -891,6 +971,7 @@ const getAllWithUserPublicId = async (): Promise<AdminCreditBatchRow[]> => {
     ...mapRow(row),
     userPublicId: row.user_public_id,
     fromAddress: row.from_address ?? null,
+    paymentMethod: row.payment_method,
   }))
 }
 

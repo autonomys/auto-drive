@@ -58,10 +58,16 @@ export type AdminCreditBatch = ExpiringCreditBatch & {
   userPublicId: string;
   /** ISO timestamp of the refund action, or null if not yet refunded. */
   refundedAt: string | null;
-  /** On-chain tx hash of the AI3 refund transfer, or null if not refunded. */
+  /** On-chain tx hash of the refund transfer, or null if not refunded. */
   refundTxHash: string | null;
   /** EVM purchasing wallet that paid for the batch, if known. */
   fromAddress: string | null;
+  /**
+   * `intents.payment_method` — the asset the batch was paid in. Carried on the
+   * overview because refunds are grouped by paying wallet, and one EVM address
+   * can pay AI3 on Auto EVM and USDC on Ethereum.
+   */
+  paymentMethod: PaymentMethod;
 };
 
 // Wire-format of GET /credits/economics (admin)
@@ -83,18 +89,31 @@ export type OverCapIntent = {
 };
 
 // Wire-format of rows from GET /credits/batches/user/:userPublicId (admin).
-// Extends ExpiringCreditBatch with intent fields so the admin can see the
-// AI3 price paid and the EVM wallet address used for the on-chain payment.
+// Extends ExpiringCreditBatch with the intent fields a refund is sized and
+// sent from: the asset paid in, the amount paid in that asset, the quote it
+// was charged against, the wallet it came from and the transaction it arrived
+// on. All bigints cross as strings of base units, as everywhere else.
 export type AdminUserCreditBatch = ExpiringCreditBatch & {
   userPublicId: string;
+  /** AI3 shannons received. Null on a USDC purchase — see `tokenAmount`. */
   paymentAmount: string | null;
   shannonsPerByte: string;
   txHash: string | null;
   fromAddress: string | null;
   /** ISO timestamp of the refund action, or null if not yet refunded. */
   refundedAt: string | null;
-  /** On-chain tx hash of the AI3 refund transfer, or null if not refunded. */
+  /** On-chain tx hash of the refund transfer, or null if not refunded. */
   refundTxHash: string | null;
+  /** The asset this purchase was paid in, and a refund must go back in. */
+  paymentMethod: PaymentMethod;
+  /** USDC base units actually received. May differ from the quote. */
+  tokenAmount: string | null;
+  /** USDC base units quoted; with `quotedAi3Shannons`, the effective rate. */
+  quotedTokenAmount: string | null;
+  /** The AI3 (shannons) the USDC charge was quoted for. */
+  quotedAi3Shannons: string | null;
+  /** Raw oracle USD/AI3 at quote time, scaled by 1e18. Reconciliation only. */
+  usdRateAtCreation: string | null;
 };
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';

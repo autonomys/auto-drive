@@ -13,11 +13,13 @@ import { CopiableText } from '../../atoms/CopiableText';
  * marking one or more credit batches as refunded. The confirm button stays
  * disabled until a validly-formatted hash is entered, so a refund can never
  * be recorded without one. When several batches are refunded together the
- * same hash is recorded on each (one AI3 transfer covers them all).
+ * same hash is recorded on each (one transfer covers them all — the backend
+ * only allows batches that share an account, a wallet AND an asset).
  */
 export const RefundTxHashModal = ({
   batchCount,
-  suggestedRefundAi3,
+  refundAsset,
+  suggestedRefund,
   refundWalletAddress,
   isSubmitting,
   errorMessage,
@@ -26,16 +28,24 @@ export const RefundTxHashModal = ({
 }: {
   batchCount: number;
   /**
-   * Informational pro-rated refund suggestion (unused bytes × locked
-   * price), pre-formatted as an AI3 amount. The system does not enforce
-   * the transferred amount — the transfer happens out-of-band.
+   * The asset these batches were paid in ("AI3", "USDC"), and therefore the
+   * one the refund transfer has to move. Named rather than assumed: the
+   * amount and the chain both follow from it, and an AI3 instruction shown
+   * for a USDC purchase is a transfer sent on the wrong chain.
    */
-  suggestedRefundAi3?: string | null;
+  refundAsset: string;
+  /**
+   * Informational pro-rated refund suggestion, pre-formatted WITH its unit
+   * (sized from the price locked at purchase for AI3, from the amount
+   * actually received for USDC). The system does not enforce the transferred
+   * amount — the transfer happens out-of-band.
+   */
+  suggestedRefund?: string | null;
   /**
    * Purchasing wallet the batches were paid from — the destination of the
-   * out-of-band AI3 transfer. Shown in full and copiable so the admin can
-   * paste it straight into their wallet. Null for legacy intents with no
-   * recorded address.
+   * out-of-band transfer. Shown in full and copiable so the admin can paste
+   * it straight into their wallet. Null for legacy intents with no recorded
+   * address.
    */
   refundWalletAddress?: string | null;
   isSubmitting: boolean;
@@ -87,7 +97,8 @@ export const RefundTxHashModal = ({
         </div>
 
         <p className='mb-4 text-sm text-muted-foreground'>
-          Enter the transaction hash of the on-chain AI3 refund transfer.
+          Enter the transaction hash of the on-chain {refundAsset} refund
+          transfer.
           {batchCount > 1 &&
             ' The same hash will be recorded on every selected batch.'}{' '}
           A refund cannot be recorded without it. Marking as refunded voids
@@ -97,7 +108,9 @@ export const RefundTxHashModal = ({
 
         {refundWalletAddress && (
           <div className='mb-4 rounded border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
-            <p className='mb-1'>Send the refund to the purchasing wallet:</p>
+            <p className='mb-1'>
+              Send the {refundAsset} refund to the purchasing wallet:
+            </p>
             <CopiableText
               text={refundWalletAddress}
               className='break-all font-mono font-medium text-foreground'
@@ -105,14 +118,14 @@ export const RefundTxHashModal = ({
           </div>
         )}
 
-        {suggestedRefundAi3 && (
+        {suggestedRefund && (
           <p className='mb-4 rounded border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
             Suggested pro-rated refund:{' '}
             <span className='font-mono font-medium text-foreground'>
-              {suggestedRefundAi3}
+              {suggestedRefund}
             </span>{' '}
-            (unused storage × locked purchase price). Informational only —
-            the transferred amount is not verified.
+            (the unused share of what was paid for these batches).
+            Informational only — the transferred amount is not verified.
           </p>
         )}
 

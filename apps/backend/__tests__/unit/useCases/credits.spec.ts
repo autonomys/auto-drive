@@ -12,6 +12,7 @@ import {
   type PurchasedCredit,
   type User,
   type UserWithOrganization,
+  PaymentMethod,
   UserRole,
 } from '@auto-drive/models'
 import { config } from '../../../src/config.js'
@@ -557,6 +558,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-id'],
           walletAddresses: ['0xwallet-1'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [makeCreditRow()],
           alreadyRefundedIds: [],
         })
@@ -579,6 +581,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-id'],
           walletAddresses: ['0xwallet-1'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -604,6 +607,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-id'],
           walletAddresses: ['0xwallet-1'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -628,6 +632,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-id'],
           walletAddresses: ['0xwallet-1'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -650,6 +655,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-a', 'account-b'],
           walletAddresses: ['0xwallet-1'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -675,6 +681,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-id'],
           walletAddresses: ['0xwallet-1', '0xwallet-2'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -691,6 +698,34 @@ describe('CreditsUseCases', () => {
       expect(error.message).toContain('same purchasing wallet')
     })
 
+    it('returns 400 BadRequestError when the batches were paid in different assets', async () => {
+      // Same account, same wallet, two assets: an EVM address is the same
+      // string on Auto EVM and on Ethereum, so nothing above this check
+      // separates an AI3 batch from a USDC one. A single refund transfer
+      // cannot cover both.
+      jest
+        .spyOn(purchasedCreditsRepository, 'markManyAsRefunded')
+        .mockResolvedValue({
+          missingIds: [],
+          accountIds: ['account-id'],
+          walletAddresses: ['0xwallet-1'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE, PaymentMethod.USDC_ETH],
+          refundedRows: [],
+          alreadyRefundedIds: [],
+        })
+
+      const result = await CreditsUseCases.refundBatches(
+        adminUser,
+        [BATCH_1, BATCH_2],
+        VALID_TX_HASH,
+      )
+
+      expect(result.isErr()).toBe(true)
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(BadRequestError)
+      expect(error.message).toContain('same payment method')
+    })
+
     it('returns 400 BadRequestError when wallets differ by known vs unknown', async () => {
       // A batch with no recorded from_address (legacy intent) cannot be
       // combined with a batch paid from a known wallet.
@@ -700,6 +735,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-id'],
           walletAddresses: ['0xwallet-1', null],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -725,6 +761,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: [],
           walletAddresses: [],
+          paymentMethods: [],
           refundedRows: [],
           alreadyRefundedIds: [BATCH_1, BATCH_2],
         })
@@ -751,6 +788,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-id'],
           walletAddresses: ['0xwallet-1'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [],
           alreadyRefundedIds: [],
           nonRefundableIds: [BATCH_2],
@@ -776,6 +814,7 @@ describe('CreditsUseCases', () => {
           missingIds: [MISSING_ID],
           accountIds: ['account-id'],
           walletAddresses: ['0xwallet-1'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [],
           alreadyRefundedIds: [],
         })
@@ -799,6 +838,7 @@ describe('CreditsUseCases', () => {
           missingIds: [],
           accountIds: ['account-id'],
           walletAddresses: ['0xwallet-1'],
+          paymentMethods: [PaymentMethod.AI3_NATIVE],
           refundedRows: [
             makeCreditRow({ id: BATCH_1, refundedAt: now }),
             makeCreditRow({ id: BATCH_2, refundedAt: now }),
