@@ -65,6 +65,7 @@ export const evaluateUsdcActions = ({
   const walletReady =
     isConnected &&
     !isBusy &&
+    !mayHaveBroadcast &&
     !hasSubmittedPayment &&
     sizeMib !== null &&
     hasTarget &&

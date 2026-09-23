@@ -29,6 +29,26 @@ beforeEach(() => {
 });
 
 describe('usdcResume', () => {
+  it('restores a pending wallet batch before it has a transaction hash', () => {
+    const record = {
+      intentId: '0xabc',
+      batchId: 'wallet-batch',
+      payer: '0xpayer',
+      chainId: 1,
+      sizeMib: 1024,
+    };
+    saveUsdcResume(record);
+    expect(readUsdcResume(1024)).toEqual(record);
+  });
+
+  it('refuses a batch without its payer or payment chain', () => {
+    saveUsdcResume({
+      intentId: '0xabc',
+      batchId: 'wallet-batch',
+      sizeMib: 1024,
+    });
+    expect(readUsdcResume(1024)).toBeNull();
+  });
   it('round-trips a payment in flight', () => {
     saveUsdcResume(RECORD);
     expect(readUsdcResume(1024)).toEqual(RECORD);

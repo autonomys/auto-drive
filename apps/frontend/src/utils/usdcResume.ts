@@ -23,7 +23,11 @@ const KEY = 'auto-drive:usdc-purchase-in-flight';
 
 export type UsdcResumeRecord = {
   intentId: string;
-  txHash: string;
+  txHash?: string;
+  /** Wallet batch handle, saved before requesting approval so a lost response
+   * or reload can be recovered without sending the payment again. */
+  batchId?: string;
+  payer?: string;
   /** The purchase size, so a record from a different purchase is not adopted. */
   sizeMib: number | null;
   /**
@@ -56,7 +60,10 @@ const isRecord = (value: unknown): value is UsdcResumeRecord =>
   typeof value === 'object' &&
   value !== null &&
   typeof (value as UsdcResumeRecord).intentId === 'string' &&
-  typeof (value as UsdcResumeRecord).txHash === 'string';
+  (typeof (value as UsdcResumeRecord).txHash === 'string' ||
+    (typeof (value as UsdcResumeRecord).batchId === 'string' &&
+      typeof (value as UsdcResumeRecord).payer === 'string' &&
+      typeof (value as UsdcResumeRecord).chainId === 'number'));
 
 export const saveUsdcResume = (record: UsdcResumeRecord): void => {
   try {

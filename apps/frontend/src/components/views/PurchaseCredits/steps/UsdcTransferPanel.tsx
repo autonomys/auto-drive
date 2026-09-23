@@ -8,6 +8,7 @@ import type { Hash } from 'viem';
 import { Check, Loader2 } from 'lucide-react';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
+import { UsdcWalletStatus } from './UsdcWalletStatus';
 import { useNetwork } from '../../../../contexts/network';
 import { useTransactionConfirmation } from '../../../../hooks/useTransactionConfirmation';
 import { useUsdcAvailability } from '../../../../hooks/useUsdcAvailability';
@@ -45,7 +46,17 @@ const STEPS: { stage: UsdcPurchaseStage; label: string }[] = [
 const stageIndex = (stage: UsdcPurchaseStage) =>
   stage === 'submitted'
     ? STEPS.length
-    : STEPS.findIndex((step) => step.stage === stage);
+    : STEPS.findIndex(
+        (step) =>
+          step.stage ===
+          (stage === 'approval-confirming'
+            ? 'approving'
+            : stage === 'batching' || stage === 'batch-pending'
+              ? 'paying'
+              : stage === 'checking'
+                ? 'switching'
+                : stage),
+      );
 
 export const UsdcTransferPanel = ({
   onNext,
@@ -85,11 +96,19 @@ export const UsdcTransferPanel = ({
     message,
     approvalSkipped,
     mayHaveBroadcast,
+    batch,
+    batchStatusUnavailable,
     quote,
     pay,
     reset,
     acknowledgeNotBroadcast,
-  } = useUsdcPurchase({ target, requestedBytes });
+  } = useUsdcPurchase({ target, requestedBytes, resumed });
+
+  // A wallet-confirmed batch failure retires the resumed attempt. Its payment
+  // chain and intent must not be reused by the next purchase.
+  useEffect(() => {
+    if (resumed?.batchId && !batch && !payTxHash && failure) setResumed(null);
+  }, [resumed, batch, payTxHash, failure]);
 
   // Re-rendered every second only to move the countdown. Started when a quote
   // exists and stopped when it does not, so an idle screen is idle.
@@ -176,18 +195,18 @@ export const UsdcTransferPanel = ({
   // six confirmations — is covered from its first instant rather than from
   // whenever the next render happened to land.
   useEffect(() => {
-    if (!payTxHash || !intent?.id) return;
+    if (!payTxHash || !activeIntentId) return;
     saveUsdcResume({
-      intentId: intent.id,
+      intentId: activeIntentId,
       txHash: payTxHash,
       sizeMib,
       // The terms this payment was made under, so a resumed session judges it by
       // those rather than by whatever it can still reach. See UsdcResumeRecord.
-      chainId: target?.chainId,
-      confirmations: target?.confirmations,
-      settleGraceMs: target?.settleGraceMs,
+      chainId: resumed?.chainId ?? target?.chainId,
+      confirmations: resumed?.confirmations ?? target?.confirmations,
+      settleGraceMs: resumed?.settleGraceMs ?? target?.settleGraceMs,
     });
-  }, [payTxHash, intent?.id, sizeMib, target]);
+  }, [payTxHash, activeIntentId, sizeMib, target, resumed]);
 
   // Dropped once the purchase has an answer — credited, over cap, or genuinely
   // expired. A record kept past that would re-attach a finished purchase to the
@@ -205,15 +224,15 @@ export const UsdcTransferPanel = ({
   }, [isBackendCompleted, isOverCap, isExpired]);
 
   useEffect(() => {
-    if (!payTxHash || !intent?.id) return;
-    void api.watchIntent(intent.id, payTxHash).catch((error: unknown) => {
+    if (!payTxHash || !activeIntentId) return;
+    void api.watchIntent(activeIntentId, payTxHash).catch((error: unknown) => {
       if (error instanceof ApiError && error.status === 410) {
         setRegistrationLockLapsed(true);
       }
       // Anything else is ignored: the UI proceeds regardless and the watcher
       // subscribes to the receiver's events independently.
     });
-  }, [api, payTxHash, intent?.id]);
+  }, [api, payTxHash, activeIntentId]);
 
   // Latched, because `waitError` does not stay put and the exit it opens must.
   //
@@ -398,9 +417,15 @@ export const UsdcTransferPanel = ({
             )}
 
             {/* Progress through the two signatures */}
-            {(isBusy || awaitingConfirmation || stage === 'submitted') && (
+            {(isBusy ||
+              awaitingConfirmation ||
+              stage === 'submitted' ||
+              batch) && (
               <ol className='flex flex-col gap-1 text-xs'>
                 {STEPS.map((step, index) => {
+                  const batching =
+                    stage === 'batching' || stage === 'batch-pending';
+                  if (batching && step.stage === 'approving') return null;
                   const done =
                     index < currentStep ||
                     (step.stage === 'approving' && approvalSkipped);
@@ -430,7 +455,9 @@ export const UsdcTransferPanel = ({
                       ) : (
                         <span className='h-3.5 w-3.5' />
                       )}
-                      {step.label}
+                      {batching && step.stage === 'paying'
+                        ? 'Approve and pay USDC'
+                        : step.label}
                       {step.stage === 'approving' && approvalSkipped && (
                         <span className='text-muted-foreground'>
                           (already approved)
@@ -489,11 +516,13 @@ export const UsdcTransferPanel = ({
                 <Button onClick={() => void quote()} disabled={!canQuote}>
                   {isBusy
                     ? 'Working…'
-                    : activeTxHash
-                      ? 'Sent'
-                      : quoteStale
-                        ? 'Get a fresh price'
-                        : 'Get a price'}
+                    : batch
+                      ? 'Processing payment…'
+                      : activeTxHash
+                        ? 'Sent'
+                        : quoteStale
+                          ? 'Get a fresh price'
+                          : 'Get a price'}
                 </Button>
               )}
             </div>
@@ -555,28 +584,19 @@ export const UsdcTransferPanel = ({
               </div>
             )}
 
-            {/* The payment call did not report back, so nobody here knows
-                whether it went out. This supersedes the generic failure below:
-                viem's message for a dropped request says nothing about the
-                thing that matters, which is that clicking Pay again can pay
-                twice. See `mayHaveBroadcast` in useUsdcPurchase. */}
-            {mayHaveBroadcast && !activeTxHash && (
-              <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
-                <strong>Check your wallet before paying again.</strong> We asked
-                your wallet to send the payment but did not get a transaction
-                back, so we cannot tell whether it went out. If your wallet
-                shows a USDC transfer — pending or complete — it will be
-                credited on its own; this page cannot follow it without the
-                transaction, so check your balance shortly and keep the details
-                for support. Paying again would transfer the amount a second
-                time, and only one of the two is credited.
-                <div className='mt-2'>
-                  <Button variant='outline' onClick={acknowledgeNotBroadcast}>
-                    My wallet shows nothing was sent
-                  </Button>
-                </div>
-              </div>
-            )}
+            <UsdcWalletStatus
+              stage={stage}
+              isBusy={isBusy}
+              mayHaveBroadcast={mayHaveBroadcast}
+              hasTxHash={Boolean(activeTxHash)}
+              hasBatch={Boolean(batch)}
+              batchStatusUnavailable={batchStatusUnavailable}
+              batchWalletConnected={
+                isConnected &&
+                address?.toLowerCase() === batch?.payer?.toLowerCase()
+              }
+              onAcknowledge={acknowledgeNotBroadcast}
+            />
 
             {failure && message && !mayHaveBroadcast && (
               <div
