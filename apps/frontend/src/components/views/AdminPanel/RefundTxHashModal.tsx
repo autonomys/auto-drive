@@ -14,11 +14,10 @@ import { CopiableText } from '../../atoms/CopiableText';
  * disabled until a validly-formatted hash is entered, so a refund can never
  * be recorded without one. When several batches are refunded together the
  * same hash is recorded on each (one transfer covers them all — the backend
- * only allows batches that share an account, a wallet AND an asset).
+ * only allows batches that share an account and a wallet).
  */
 export const RefundTxHashModal = ({
   batchCount,
-  refundAsset,
   suggestedRefund,
   refundWalletAddress,
   isSubmitting,
@@ -27,19 +26,7 @@ export const RefundTxHashModal = ({
   onClose,
 }: {
   batchCount: number;
-  /**
-   * The asset these batches were paid in ("AI3", "USDC"), and therefore the
-   * one the refund transfer has to move. Named rather than assumed: the
-   * amount and the chain both follow from it, and an AI3 instruction shown
-   * for a USDC purchase is a transfer sent on the wrong chain.
-   */
-  refundAsset: string;
-  /**
-   * Informational pro-rated refund suggestion, pre-formatted WITH its unit
-   * (sized from the price locked at purchase for AI3, from the amount
-   * actually received for USDC). The system does not enforce the transferred
-   * amount — the transfer happens out-of-band.
-   */
+  /** AI3 refund for unused storage at the purchase-time conversion rate. */
   suggestedRefund?: string | null;
   /**
    * Purchasing wallet the batches were paid from — the destination of the
@@ -97,19 +84,18 @@ export const RefundTxHashModal = ({
         </div>
 
         <p className='mb-4 text-sm text-muted-foreground'>
-          Enter the transaction hash of the on-chain {refundAsset} refund
-          transfer.
+          Enter the transaction hash of the AI3 refund transfer on Auto-EVM.
           {batchCount > 1 &&
             ' The same hash will be recorded on every selected batch.'}{' '}
-          A refund cannot be recorded without it. Marking as refunded voids
-          the entire remaining balance of the selected{' '}
+          A refund cannot be recorded without it. Marking as refunded voids the
+          entire remaining balance of the selected{' '}
           {batchCount === 1 ? 'batch' : 'batches'}.
         </p>
 
         {refundWalletAddress && (
           <div className='mb-4 rounded border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
             <p className='mb-1'>
-              Send the {refundAsset} refund to the purchasing wallet:
+              Send the AI3 refund on Auto-EVM to the purchasing wallet:
             </p>
             <CopiableText
               text={refundWalletAddress}
@@ -124,7 +110,7 @@ export const RefundTxHashModal = ({
             <span className='font-mono font-medium text-foreground'>
               {suggestedRefund}
             </span>{' '}
-            (the unused share of what was paid for these batches).
+            (the unused share, converted to AI3 at the purchase-time rate).
             Informational only — the transferred amount is not verified.
           </p>
         )}
@@ -139,7 +125,7 @@ export const RefundTxHashModal = ({
           onChange={(e) => setTxHash(e.target.value)}
           placeholder='0x…'
           spellCheck={false}
-          className='bg-background-hover text-foreground-hover w-full rounded border px-3 py-2 font-mono text-xs'
+          className='text-foreground-hover w-full rounded border bg-background-hover px-3 py-2 font-mono text-xs'
         />
         {showFormatHint && (
           <p className='mt-1 text-xs text-red-500'>

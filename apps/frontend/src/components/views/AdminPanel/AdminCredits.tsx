@@ -144,10 +144,9 @@ const OverCapPanel = ({
 // account into multiple summary lines with incorrect totals.
 // Within an account, batches can have been paid from different purchasing
 // wallets (the intent's fromAddress) and in different assets. Refunds are
-// batched per (account, purchasing wallet, asset) group — one refund transfer
-// moves one asset back to one wallet — so the expanded list is sorted by
-// wallet and then asset and shows both per row; the actual refund selection
-// happens on the per-user screen, which enforces the same grouping.
+// sent in AI3 and batched per (account, purchasing wallet). The expanded list
+// sorts by wallet and shows the original payment asset for each purchase.
+// Refund selection happens on the per-user screen with the same grouping.
 // Each group renders as a single collapsed summary line (batch count,
 // users / wallets involved, purchased / remaining / expired storage).
 // ---------------------------------------------------------------------------
@@ -185,13 +184,12 @@ const groupBatchesByAccount = (
 
   return [...groups.entries()].map(([accountId, accountBatches]) => ({
     accountId,
-    // Sort by purchasing wallet and then asset so batches that can be
-    // refunded together (same account + wallet + asset) are adjacent, newest
+    // Sort by purchasing wallet so batches that can be
+    // refunded together (same account + wallet) are adjacent, newest
     // first within each.
     batches: [...accountBatches].sort(
       (a, b) =>
         (a.fromAddress ?? '').localeCompare(b.fromAddress ?? '') ||
-        a.paymentMethod.localeCompare(b.paymentMethod) ||
         new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime(),
     ),
     userPublicIds: [...new Set(accountBatches.map((b) => b.userPublicId))],
@@ -357,8 +355,7 @@ const AccountBatchGroupSection = ({
                     <span className='text-muted-foreground'>—</span>
                   )}
                 </td>
-                {/* The asset paid, and therefore the asset a refund goes out
-                    in. Amounts and rates are on the per-user history. */}
+                {/* Original payment asset. Refunds are always in AI3. */}
                 <td className='px-4 py-2 text-xs'>
                   {PAYMENT_METHOD_ASSET[batch.paymentMethod]}
                 </td>

@@ -17,7 +17,6 @@ import {
   describePayment,
   getBatchStatus,
   isBatchRefundable,
-  PAYMENT_METHOD_ASSET,
   STATUS_CLASSES,
   STATUS_LABEL,
   suggestedRefund,
@@ -31,15 +30,9 @@ import { CopiableText } from '../../atoms/CopiableText';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * A combined refund is one transfer, of one asset, back to one wallet — so it
- * can only cover batches of the SAME account, wallet and asset (all three
- * enforced by the backend; see markManyAsRefunded for why the asset is not
- * implied by the wallet). Batches without a recorded wallet (legacy intents)
- * only group with each other.
- */
+/** All refunds are in AI3 and can cover one account and purchasing wallet. */
 const refundGroupKey = (batch: AdminUserCreditBatch): string =>
-  `${batch.accountId}::${batch.fromAddress ?? 'unknown-wallet'}::${batch.paymentMethod}`;
+  `${batch.accountId}::${batch.fromAddress ?? 'unknown-wallet'}`;
 
 /** The short truncation used for transaction hashes in the table. */
 const shortHash = (hash: string): string =>
@@ -104,7 +97,7 @@ export const AdminUserCredits = ({
     [selectedIds, refundableIds],
   );
 
-  // (account, wallet, asset) anchor of the current selection — all selected
+  // (account, wallet) anchor of the current selection — all selected
   // batches share it.
   const selectedBatch = useMemo(
     () => batches.find((b) => selectedIds.has(b.id)) ?? null,
@@ -116,7 +109,7 @@ export const AdminUserCredits = ({
     isBatchRefundable(batch) &&
     (selectedGroupKey === null || refundGroupKey(batch) === selectedGroupKey);
 
-  // Select-all targets a single (account, wallet, asset) group: the
+  // Select-all targets a single (account, wallet) group: the
   // selection's group, or — when nothing is selected — the first group with
   // refundable batches.
   const selectAllGroupKey = useMemo(() => {
@@ -181,14 +174,11 @@ export const AdminUserCredits = ({
   };
 
   // The batches the modal is about, as rows rather than ids. Combined refunds
-  // are constrained to one (account, wallet, asset) group, so the first of
+  // are constrained to one (account, wallet) group, so the first of
   // them speaks for all of them.
   const refundTargetIds = new Set(refundTarget);
   const refundTargetBatches = batches.filter((b) => refundTargetIds.has(b.id));
   const refundTargetWallet = refundTargetBatches[0]?.fromAddress ?? null;
-  const refundTargetAsset = refundTargetBatches[0]
-    ? PAYMENT_METHOD_ASSET[refundTargetBatches[0].paymentMethod]
-    : '';
 
   return (
     <div className='space-y-6 p-6'>
@@ -203,7 +193,7 @@ export const AdminUserCredits = ({
         <div>
           <h1 className='text-xl font-semibold'>Purchase History</h1>
           <p
-            className='mt-0.5 font-mono text-xs text-muted-foreground break-all'
+            className='mt-0.5 break-all font-mono text-xs text-muted-foreground'
             title={userPublicId}
           >
             {userPublicId}
@@ -333,10 +323,10 @@ export const AdminUserCredits = ({
                 <th className='px-4 py-3 font-medium'>
                   <input
                     type='checkbox'
-                    aria-label='Select all refundable batches of the same account, purchasing wallet and payment asset'
+                    aria-label='Select all refundable batches of the same account and purchasing wallet'
                     title={
                       hasMultipleRefundGroups
-                        ? 'Selects refundable batches of one account/wallet/asset group only — one refund transfer moves one asset back to one wallet'
+                        ? 'Selects refundable batches of one account/wallet group only — one AI3 refund transfer goes back to one wallet'
                         : undefined
                     }
                     checked={allSelected}
@@ -353,7 +343,6 @@ export const AdminUserCredits = ({
                 <th className='px-4 py-3 font-medium'>Original</th>
                 <th className='px-4 py-3 font-medium'>Consumed</th>
                 <th className='px-4 py-3 font-medium'>Remaining</th>
-                <th className='px-4 py-3 font-medium'>Asset</th>
                 <th className='px-4 py-3 font-medium'>Paid</th>
                 <th className='px-4 py-3 font-medium'>USD/AI3 rate</th>
                 <th className='px-4 py-3 font-medium'>Purchasing Wallet</th>
@@ -368,8 +357,7 @@ export const AdminUserCredits = ({
                 const consumed = original - remaining;
                 const payment = describePayment(batch);
                 const isRefundable = isBatchRefundable(batch);
-                const isOtherRefundGroup =
-                  isRefundable && !isSelectable(batch);
+                const isOtherRefundGroup = isRefundable && !isSelectable(batch);
 
                 return (
                   <tr
@@ -383,7 +371,7 @@ export const AdminUserCredits = ({
                         aria-label='Select batch for refund'
                         title={
                           isOtherRefundGroup
-                            ? 'Belongs to a different account, purchasing wallet or asset than the current selection'
+                            ? 'Belongs to a different account or purchasing wallet than the current selection'
                             : undefined
                         }
                         checked={selectedIds.has(batch.id)}
@@ -456,14 +444,6 @@ export const AdminUserCredits = ({
                       {formatBytes(remaining, 1)}
                     </td>
 
-                    {/* The asset paid, and therefore the asset a refund has
-                        to go back in. */}
-                    <td className='px-4 py-3 text-xs'>{payment.asset}</td>
-
-                    {/* The amount, in that asset. A USDC purchase carries no
-                        AI3 amount at all, so the single AI3 column this
-                        replaced showed every one of them as a dash — as though
-                        nothing had been paid. */}
                     <td className='px-4 py-3 font-mono text-xs'>
                       <div className='flex flex-col gap-0.5'>
                         <span
@@ -485,20 +465,9 @@ export const AdminUserCredits = ({
                       </div>
                     </td>
 
-                    {/* The rate charged, with the raw oracle rate beside it in
-                        the tooltip — always the lower of the two, and not the
-                        rate anyone was charged. Empty on AI3 purchases, which
-                        involved no conversion. */}
                     <td className='px-4 py-3 font-mono text-xs'>
                       {payment.rate ? (
-                        <span
-                          title={
-                            'Effective rate charged, quote margin included.' +
-                            (payment.oracleRate
-                              ? ` Raw oracle rate at quote time: ${payment.oracleRate} USD/AI3.`
-                              : '')
-                          }
-                        >
+                        <span title='Effective purchase rate, quote margin included.'>
                           {payment.rate}
                         </span>
                       ) : (
@@ -578,7 +547,6 @@ export const AdminUserCredits = ({
       {refundTarget !== null && (
         <RefundTxHashModal
           batchCount={refundTarget.length}
-          refundAsset={refundTargetAsset}
           suggestedRefund={suggestedRefund(refundTargetBatches)}
           refundWalletAddress={refundTargetWallet}
           isSubmitting={isRefunding}

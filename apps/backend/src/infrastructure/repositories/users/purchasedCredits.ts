@@ -645,19 +645,15 @@ const markAsRefunded = async (
 // All-or-nothing on existence: if any id does not exist the transaction is
 // rolled back and missingIds is returned so the caller can 404 precisely.
 // All batches that are actually going to be refunded must belong to the
-// SAME account, have been paid from the SAME purchasing wallet (the
-// intent's from_address) AND have been paid with the SAME payment method —
-// one on-chain refund transfer moves one asset, on one chain, to one
-// wallet. The method is checked separately from the wallet because an EVM
-// address is the same string on both chains: one wallet can pay AI3 on Auto
-// EVM and USDC on Ethereum, and those batches would otherwise combine into
-// a single refund that can only be sent in one of the two. Rows that are already refunded are skipped
+// SAME account AND have been paid from the SAME purchasing wallet (the
+// intent's from_address) — one on-chain AI3 refund transfer goes back to a
+// single wallet, so a combined refund spanning accounts or paying wallets
+// is always a mistake. Rows that are already refunded are skipped
 // (idempotent, mirroring the single-row behaviour) and keep their original
 // tx hash, so they are excluded from both checks — a retry where everything
 // is already refunded succeeds regardless. If the still-pending rows span
-// multiple accounts, wallets or payment methods the transaction is rolled
-// back and accountIds / walletAddresses / paymentMethods list the offenders
-// so the caller can 400.
+// multiple accounts or wallets the transaction is rolled back and
+// accountIds / walletAddresses list the offenders so the caller can 400.
 // Batches whose intent has no from_address recorded (legacy rows) are
 // grouped under null: they can be combined with each other but not with
 // batches paid from a known wallet.
@@ -669,8 +665,6 @@ export type BatchRefundResult = {
   accountIds: string[]
   /** Distinct paying wallets (intents.from_address) across pending rows. */
   walletAddresses: (string | null)[]
-  /** Distinct payment assets (intents.payment_method) across pending rows. */
-  paymentMethods: PaymentMethod[]
   refundedRows: PurchasedCredit[]
   alreadyRefundedIds: string[]
   /**
@@ -694,7 +688,6 @@ const markManyAsRefunded = async (
       missingIds: malformedIds,
       accountIds: [],
       walletAddresses: [],
-      paymentMethods: [],
       refundedRows: [],
       alreadyRefundedIds: [],
     }
@@ -716,11 +709,10 @@ const markManyAsRefunded = async (
       refunded_at: Date | null
       upload_bytes_remaining: string
       from_address: string | null
-      payment_method: PaymentMethod
     }>(
       `SELECT pc.id, pc.account_id, pc.refunded_at,
               pc.upload_bytes_remaining,
-              i.from_address, i.payment_method
+              i.from_address
        FROM purchased_credits pc
        JOIN intents i ON i.id = pc.intent_id
        WHERE pc.id = ANY($1::uuid[])
@@ -740,9 +732,6 @@ const markManyAsRefunded = async (
     const walletAddresses = [
       ...new Set(pendingRows.map((r) => r.from_address)),
     ]
-    const paymentMethods = [
-      ...new Set(pendingRows.map((r) => r.payment_method)),
-    ]
 
     // Pending rows with no remaining upload bytes are depleted — nothing
     // was forfeited, so no refund is owed on them. Their presence rejects
@@ -757,7 +746,6 @@ const markManyAsRefunded = async (
         missingIds,
         accountIds,
         walletAddresses,
-        paymentMethods,
         refundedRows: [],
         alreadyRefundedIds: [],
         nonRefundableIds,
@@ -770,24 +758,18 @@ const markManyAsRefunded = async (
         missingIds: [],
         accountIds,
         walletAddresses,
-        paymentMethods,
         refundedRows: [],
         alreadyRefundedIds: [],
         nonRefundableIds,
       }
     }
 
-    if (
-      accountIds.length > 1 ||
-      walletAddresses.length > 1 ||
-      paymentMethods.length > 1
-    ) {
+    if (accountIds.length > 1 || walletAddresses.length > 1) {
       await client.query('ROLLBACK')
       return {
         missingIds: [],
         accountIds,
         walletAddresses,
-        paymentMethods,
         refundedRows: [],
         alreadyRefundedIds: [],
         nonRefundableIds: [],
@@ -816,7 +798,6 @@ const markManyAsRefunded = async (
       missingIds: [],
       accountIds,
       walletAddresses,
-      paymentMethods,
       refundedRows: updated.rows.map(mapRow),
       alreadyRefundedIds,
       nonRefundableIds: [],
@@ -849,7 +830,6 @@ type DBPurchasedCreditWithIntent = DBPurchasedCredit & {
   token_amount: string | null
   quoted_token_amount: string | null
   quoted_ai3_shannons: string | null
-  usd_rate_at_creation: string | null
 }
 
 // Each field is documented on IntentSchema in @auto-drive/models; the notes
@@ -861,16 +841,13 @@ export type AdminUserCreditBatchRow = PurchasedCredit & {
   shannonsPerByte: bigint
   txHash: string | null
   fromAddress: string | null
-  /** The asset paid, and the asset a refund has to go back in. */
+  /** The asset paid. Refunds are always in AI3. */
   paymentMethod: PaymentMethod
   /** USDC base units received. May differ from the quote (AMOUNT_OFF_QUOTE). */
   tokenAmount: bigint | null
   /** USDC quoted; with `quotedAi3Shannons`, the rate actually charged. */
   quotedTokenAmount: bigint | null
   quotedAi3Shannons: bigint | null
-  /** Raw oracle USD/AI3 at quote time. Reconciliation only — it is short by
-   * the quote margin, so it is never the rate a refund is sized at. */
-  usdRateAtCreation: bigint | null
 }
 
 const mapRowWithIntent = (
@@ -890,9 +867,6 @@ const mapRowWithIntent = (
   quotedAi3Shannons: row.quoted_ai3_shannons
     ? BigInt(row.quoted_ai3_shannons)
     : null,
-  usdRateAtCreation: row.usd_rate_at_creation
-    ? BigInt(row.usd_rate_at_creation)
-    : null,
 })
 
 const getByUserPublicId = async (
@@ -909,8 +883,7 @@ const getByUserPublicId = async (
             i.payment_method,
             i.token_amount,
             i.quoted_token_amount,
-            i.quoted_ai3_shannons,
-            i.usd_rate_at_creation
+            i.quoted_ai3_shannons
      FROM purchased_credits pc
      JOIN intents i ON i.id = pc.intent_id
      WHERE i.user_public_id = $1

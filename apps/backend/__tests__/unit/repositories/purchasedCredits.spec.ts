@@ -44,7 +44,6 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
     tokenAmount?: bigint
     quotedTokenAmount?: bigint
     quotedAi3Shannons?: bigint
-    usdRateAtCreation?: bigint
     fromAddress?: string
   }) => {
     await intentsRepository.createIntent({
@@ -58,7 +57,6 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
       tokenAmount: params.tokenAmount,
       quotedTokenAmount: params.quotedTokenAmount,
       quotedAi3Shannons: params.quotedAi3Shannons,
-      usdRateAtCreation: params.usdRateAtCreation,
     })
 
     // from_address is written on confirmation rather than at creation, so it
@@ -182,10 +180,7 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
         expiresAt: pastDate,
       })
 
-      const first = await purchasedCreditsRepository.markAsRefunded(
-        id,
-        TX_HASH,
-      )
+      const first = await purchasedCreditsRepository.markAsRefunded(id, TX_HASH)
       expect(first.found).toBe(true)
       expect(first.row).not.toBeNull()
       expect(first.row?.uploadBytesRemaining).toBe(0n)
@@ -193,10 +188,7 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
 
       // Retry: remaining is now 0 because of the refund itself — must be an
       // already-refunded no-op, NOT notRefundable.
-      const retry = await purchasedCreditsRepository.markAsRefunded(
-        id,
-        TX_HASH,
-      )
+      const retry = await purchasedCreditsRepository.markAsRefunded(id, TX_HASH)
       expect(retry.found).toBe(true)
       expect(retry.row).toBeNull()
       expect(retry.notRefundable).toBeUndefined()
@@ -234,10 +226,8 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
       expect(check.rows[0].refunded_at).toBeNull()
     })
 
-    it('rejects a combined refund spanning payment methods, same wallet and account', async () => {
-      // The case no other check catches: an EVM address is the same string on
-      // Auto EVM and on Ethereum, so one wallet can pay AI3 for one batch and
-      // USDC for the next. One refund transfer cannot cover both.
+    it('refunds AI3 and USDC purchases together for the same wallet and account', async () => {
+      // Both purchases are refunded in AI3 with one transfer to this wallet.
       const WALLET = `0x${'b'.repeat(40)}`
       const ai3Id = await createBatch({
         intentId: 'combined-ai3',
@@ -262,18 +252,20 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
 
       expect(result.accountIds).toHaveLength(1)
       expect(result.walletAddresses).toEqual([WALLET])
-      expect(result.paymentMethods.sort()).toEqual([
-        PaymentMethod.AI3_NATIVE,
-        PaymentMethod.USDC_ETH,
-      ])
-      expect(result.refundedRows).toHaveLength(0)
+      expect(result.refundedRows).toHaveLength(2)
+      expect(
+        result.refundedRows.every((row) => row.refundTxHash === TX_HASH),
+      ).toBe(true)
+      expect(
+        result.refundedRows.every((row) => row.uploadBytesRemaining === 0n),
+      ).toBe(true)
 
       const db = await getDatabase()
       const check = await db.query<{ refunded_at: Date | null }>(
         'SELECT refunded_at FROM purchased_credits WHERE id = ANY($1::uuid[])',
         [[ai3Id, usdcId]],
       )
-      expect(check.rows.every((r) => r.refunded_at === null)).toBe(true)
+      expect(check.rows.every((r) => r.refunded_at !== null)).toBe(true)
     })
   })
 
@@ -309,7 +301,6 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
         tokenAmount: 12_500_000n,
         quotedTokenAmount: 12_500_000n,
         quotedAi3Shannons: 2_000_000_000_000_000_000_000n,
-        usdRateAtCreation: 6_400_000_000_000_000n,
         fromAddress: USDC_WALLET,
       })
 
@@ -329,7 +320,6 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
       expect(usdc?.tokenAmount).toBe(12_500_000n)
       expect(usdc?.quotedTokenAmount).toBe(12_500_000n)
       expect(usdc?.quotedAi3Shannons).toBe(2_000_000_000_000_000_000_000n)
-      expect(usdc?.usdRateAtCreation).toBe(6_400_000_000_000_000n)
       expect(usdc?.fromAddress).toBe(USDC_WALLET)
     })
   })

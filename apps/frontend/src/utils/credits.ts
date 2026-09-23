@@ -168,50 +168,20 @@ export const STATUS_LABEL: Record<BatchStatus, string> = {
   expired: 'Expired',
 };
 
-// ---------------------------------------------------------------------------
-// Payment presentation — shared by AdminCredits and AdminUserCredits so the
-// two admin views cannot drift.
-//
-// purchased_credits records bytes and nothing about the money, so every figure
-// here comes from the originating intent. Which field carries the amount
-// depends on the asset: an AI3 purchase fills `paymentAmount` and leaves the
-// token fields null, a USDC purchase does the reverse.
-// ---------------------------------------------------------------------------
-
-/** The intent fields the admin views read to explain a purchase's payment. */
+/** Payment amounts and the effective purchase-time USDC/AI3 quote. */
 export interface PaymentFields {
   paymentMethod: PaymentMethod;
-  /** AI3 shannons received. Null on a USDC purchase. */
   paymentAmount: string | null;
-  /** USDC base units received on chain. Null on an AI3 purchase. */
   tokenAmount: string | null;
-  /** USDC base units quoted; with `quotedAi3Shannons`, the effective rate. */
   quotedTokenAmount: string | null;
-  /** The AI3 (shannons) that quote was priced for. */
   quotedAi3Shannons: string | null;
-  /** Raw oracle USD/AI3 at quote time, scaled by USD_RATE_SCALE. */
-  usdRateAtCreation: string | null;
 }
 
-/** The asset a purchase was paid in, and a refund has to be sent in. */
+/** The asset a purchase was paid in. All refunds are sent in AI3. */
 export const PAYMENT_METHOD_ASSET: Record<PaymentMethod, string> = {
   [PaymentMethod.AI3_NATIVE]: 'AI3',
   [PaymentMethod.USDC_ETH]: 'USDC',
 };
-
-/** One purchase's payment, as the admin table renders it. */
-export interface PaymentSummary {
-  asset: string;
-  /** The amount paid, in that asset. */
-  amountPaid: string;
-  /** USDC only: the AI3 the charge was quoted for. */
-  quotedFor: string | null;
-  /** Set when a USDC payment settled at an amount other than its quote. */
-  offQuoteNote: string | null;
-  /** USDC only: the USD/AI3 rate charged, and the raw oracle rate behind it. */
-  rate: string | null;
-  oracleRate: string | null;
-}
 
 const SHANNONS_PER_AI3 = BigInt(10) ** BigInt(18);
 const USDC_SCALE = BigInt(10) ** BigInt(USDC_DECIMALS);
@@ -224,37 +194,22 @@ const toBigInt = (value: string | null): bigint | null =>
 const formatAi3 = (shannons: bigint): string =>
   `${shannonsToAi3(shannons, { trimTrailingZeros: true })} AI3`;
 
-/**
- * Everything the purchase history says about how a batch was paid for.
- *
- * One function rather than a formatter per cell, because the asset decides
- * every field at once: on an AI3 purchase there is no token amount, no quote
- * and no rate to show, and branching on that once is what keeps those cells
- * empty rather than wrong.
- */
-export const describePayment = (batch: PaymentFields): PaymentSummary => {
+export const describePayment = (batch: PaymentFields) => {
   if (batch.paymentMethod !== PaymentMethod.USDC_ETH) {
     const shannons = toBigInt(batch.paymentAmount);
     return {
-      asset: PAYMENT_METHOD_ASSET[PaymentMethod.AI3_NATIVE],
       amountPaid: shannons === null ? '—' : formatAi3(shannons),
       quotedFor: null,
       offQuoteNote: null,
       rate: null,
-      oracleRate: null,
     };
   }
 
   const received = toBigInt(batch.tokenAmount);
   const quoted = toBigInt(batch.quotedTokenAmount);
   const quotedAi3 = toBigInt(batch.quotedAi3Shannons);
-  const oracleRate = toBigInt(batch.usdRateAtCreation);
 
   return {
-    asset: PAYMENT_METHOD_ASSET[PaymentMethod.USDC_ETH],
-    // What was RECEIVED, not what was quoted: a payment that differs from its
-    // quote is credited pro-rata, so the received amount is the one a refund
-    // is sized from. `offQuoteNote` is set when the two differ.
     amountPaid: received === null ? '—' : `${formatUsdcAmount(received)} USDC`,
     quotedFor: quotedAi3 === null ? null : formatAi3(quotedAi3),
     offQuoteNote:
@@ -262,9 +217,7 @@ export const describePayment = (batch: PaymentFields): PaymentSummary => {
         ? `Quoted ${formatUsdcAmount(quoted)} USDC, received ` +
           `${formatUsdcAmount(received)} USDC — credited pro-rata`
         : null,
-    // The rate the purchase was actually charged at: the quote over the AI3 it
-    // was quoted for, so the margin the user paid is inside it. The oracle's
-    // own rate is short by that margin and is shown beside it, never instead.
+    // The quote pair includes the margin paid by the buyer.
     rate:
       quoted !== null && quotedAi3 !== null && quotedAi3 !== BigInt(0)
         ? formatUsdPerAi3(
@@ -273,14 +226,8 @@ export const describePayment = (batch: PaymentFields): PaymentSummary => {
             RATE_DECIMALS,
           )
         : null,
-    oracleRate:
-      oracleRate === null ? null : formatUsdPerAi3(oracleRate, RATE_DECIMALS),
   };
 };
-
-// ---------------------------------------------------------------------------
-// Refund sizing
-// ---------------------------------------------------------------------------
 
 export interface RefundSizingFields extends PaymentFields {
   uploadBytesOriginal: string;
@@ -289,37 +236,43 @@ export interface RefundSizingFields extends PaymentFields {
 }
 
 /**
- * Informational pro-rated refund for a set of batches, pre-formatted with its
- * unit — the unit is the point: an AI3 figure shown for a USDC purchase is a
- * number an admin would send on the wrong chain.
- *
- * AI3 purchases are sized from the price locked at purchase. USDC purchases
- * are sized from the amount actually received, pro-rated by unused bytes:
- * credits were granted from what arrived, so refunding the unused share of it
- * is right even when the payment was off-quote.
- *
- * The transfer happens out-of-band and no amount is enforced anywhere. The
- * backend only allows one asset per combined refund, so the first batch speaks
- * for all of them.
+ * Informational refund in AI3 for the unused storage in these batches.
+ * Convert USDC received using the locked quote's effective rate (including
+ * margin), then take the unused share. Keep the arithmetic in integers and
+ * round down once, to shannons. Never use today's rate or the raw oracle rate.
+ * If any USDC batch lacks conversion data, omit the entire suggestion rather
+ * than showing a partial total. Transfers are made and confirmed manually.
  */
 export const suggestedRefund = (
   batches: RefundSizingFields[],
 ): string | null => {
   if (batches.length === 0) return null;
 
-  if (batches[0].paymentMethod === PaymentMethod.USDC_ETH) {
-    const total = batches.reduce((sum, b) => {
-      const paid = toBigInt(b.tokenAmount);
-      const original = BigInt(b.uploadBytesOriginal);
-      if (paid === null || original === BigInt(0)) return sum;
-      return sum + (paid * BigInt(b.uploadBytesRemaining)) / original;
-    }, BigInt(0));
-    return total === BigInt(0) ? null : `${formatUsdcAmount(total)} USDC`;
-  }
+  let shannons = BigInt(0);
+  for (const batch of batches) {
+    const remaining = BigInt(batch.uploadBytesRemaining);
+    if (remaining === BigInt(0)) continue;
 
-  const shannons = batches.reduce(
-    (sum, b) => sum + BigInt(b.uploadBytesRemaining) * BigInt(b.shannonsPerByte),
-    BigInt(0),
-  );
+    if (batch.paymentMethod === PaymentMethod.USDC_ETH) {
+      const paid = toBigInt(batch.tokenAmount);
+      const quoted = toBigInt(batch.quotedTokenAmount);
+      const quotedAi3 = toBigInt(batch.quotedAi3Shannons);
+      const original = BigInt(batch.uploadBytesOriginal);
+      if (
+        paid === null ||
+        paid <= BigInt(0) ||
+        quoted === null ||
+        quoted <= BigInt(0) ||
+        quotedAi3 === null ||
+        quotedAi3 <= BigInt(0) ||
+        original <= BigInt(0)
+      )
+        return null;
+
+      shannons += (paid * quotedAi3 * remaining) / (quoted * original);
+    } else {
+      shannons += remaining * BigInt(batch.shannonsPerByte);
+    }
+  }
   return shannons === BigInt(0) ? null : formatAi3(shannons);
 };

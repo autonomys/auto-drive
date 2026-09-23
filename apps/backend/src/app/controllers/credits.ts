@@ -52,7 +52,8 @@ creditsController.get(
     const summary = result.value
     res.status(200).json({
       uploadBytesRemaining: summary.uploadBytesRemaining.toString(),
-      totalPurchasedBytesOriginal: summary.totalPurchasedBytesOriginal.toString(),
+      totalPurchasedBytesOriginal:
+        summary.totalPurchasedBytesOriginal.toString(),
       downloadBytesRemaining: summary.downloadBytesRemaining.toString(),
       nextExpiryDate: summary.nextExpiryDate ?? null,
       batchCount: summary.batchCount,
@@ -161,12 +162,8 @@ creditsController.get(
 // ---------------------------------------------------------------------------
 // GET /credits/batches/user/:userPublicId
 // Admin-only: all credit batches for a specific user, newest-first.
-// Each row includes the intent fields a refund is sized and sent from: the
-// payment method, the amount paid in whichever asset that is (paymentAmount
-// for AI3, tokenAmount for USDC), the quote it was charged against
-// (quotedTokenAmount / quotedAi3Shannons — together the effective USD/AI3
-// rate), the raw oracle rate at quote time, the per-byte price, and the
-// wallet and transaction the payment arrived on.
+// Includes the original payment, effective purchase quote, locked byte price,
+// purchasing wallet and transaction for payment history and AI3 refunds.
 // Returns 403 for non-admin callers.
 // ---------------------------------------------------------------------------
 
@@ -201,7 +198,6 @@ creditsController.get(
         tokenAmount: batch.tokenAmount?.toString() ?? null,
         quotedTokenAmount: batch.quotedTokenAmount?.toString() ?? null,
         quotedAi3Shannons: batch.quotedAi3Shannons?.toString() ?? null,
-        usdRateAtCreation: batch.usdRateAtCreation?.toString() ?? null,
       })),
     )
   }),

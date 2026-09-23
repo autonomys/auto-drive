@@ -100,7 +100,7 @@ export type AdminUserCreditBatch = ExpiringCreditBatch & {
   refundedAt: string | null;
   /** On-chain tx hash of the refund transfer, or null if not refunded. */
   refundTxHash: string | null;
-  /** The asset this purchase was paid in, and a refund must go back in. */
+  /** The asset this purchase was paid in. Refunds are always in AI3. */
   paymentMethod: PaymentMethod;
   /** USDC base units actually received. May differ from the quote. */
   tokenAmount: string | null;
@@ -108,8 +108,6 @@ export type AdminUserCreditBatch = ExpiringCreditBatch & {
   quotedTokenAmount: string | null;
   /** The AI3 (shannons) the USDC charge was quoted for. */
   quotedAi3Shannons: string | null;
-  /** Raw oracle USD/AI3 at quote time, scaled by 1e18. Reconciliation only. */
-  usdRateAtCreation: string | null;
 };
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
