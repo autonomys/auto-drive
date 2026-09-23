@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@auto-drive/ui';
 import {
   formatUsdcBaseUnits,
-  USD_RATE_SCALE,
   UsdcClosedReason,
   UsdcManualGateSource,
   type UsdcPaymentsStatus,
@@ -13,22 +12,18 @@ import {
 import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
 import { useNetwork } from '../../../contexts/network';
 import { formatDate } from '../../../utils/time';
+import { formatUsdPerAi3 } from '../../../utils/usdc';
 
 // One formatter, shared with the backend's alerts through @auto-drive/models:
 // two renderings of the same money figure are two things that must agree.
 const usdc = (baseUnits: string | null): string =>
   baseUnits === null ? '—' : formatUsdcBaseUnits(baseUnits);
 
-// The oracle's rate is scaled by 1e18. Four decimals, because AI3 trades in
-// fractions of a cent and the figure exists to answer "is this sane".
-const usdPerAi3 = (scaled: string): string => {
-  // BigInt(...) rather than a bigint literal: this app targets below ES2020.
-  const tenThousand = BigInt(10000);
-  const value = BigInt(scaled);
-  const whole = value / USD_RATE_SCALE;
-  const fraction = ((value % USD_RATE_SCALE) * tenThousand) / USD_RATE_SCALE;
-  return `$${whole}.${fraction.toString().padStart(4, '0')}`;
-};
+// Four decimals, because AI3 trades in fractions of a cent and the figure
+// exists to answer "is this sane". The purchase history renders the same
+// quantity at six through the same formatter.
+const usdPerAi3 = (scaled: string): string =>
+  `$${formatUsdPerAi3(BigInt(scaled), 4)}`;
 
 const formatAge = (ageMs: number | null): string => {
   if (ageMs === null) return 'never';

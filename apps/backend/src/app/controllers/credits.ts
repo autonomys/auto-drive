@@ -52,7 +52,8 @@ creditsController.get(
     const summary = result.value
     res.status(200).json({
       uploadBytesRemaining: summary.uploadBytesRemaining.toString(),
-      totalPurchasedBytesOriginal: summary.totalPurchasedBytesOriginal.toString(),
+      totalPurchasedBytesOriginal:
+        summary.totalPurchasedBytesOriginal.toString(),
       downloadBytesRemaining: summary.downloadBytesRemaining.toString(),
       nextExpiryDate: summary.nextExpiryDate ?? null,
       batchCount: summary.batchCount,
@@ -152,6 +153,7 @@ creditsController.get(
         ...serializeCredit(batch),
         userPublicId: batch.userPublicId,
         fromAddress: batch.fromAddress ?? null,
+        paymentMethod: batch.paymentMethod,
       })),
     )
   }),
@@ -160,9 +162,8 @@ creditsController.get(
 // ---------------------------------------------------------------------------
 // GET /credits/batches/user/:userPublicId
 // Admin-only: all credit batches for a specific user, newest-first.
-// Each row includes intent fields (paymentAmount, shannonsPerByte, txHash,
-// fromAddress) so the admin can calculate the AI3 price paid and identify
-// the wallet used for the on-chain payment.
+// Includes the original payment, effective purchase quote, locked byte price,
+// purchasing wallet and transaction for payment history and AI3 refunds.
 // Returns 403 for non-admin callers.
 // ---------------------------------------------------------------------------
 
@@ -193,6 +194,10 @@ creditsController.get(
         shannonsPerByte: batch.shannonsPerByte.toString(),
         txHash: batch.txHash ?? null,
         fromAddress: batch.fromAddress ?? null,
+        paymentMethod: batch.paymentMethod,
+        tokenAmount: batch.tokenAmount?.toString() ?? null,
+        quotedTokenAmount: batch.quotedTokenAmount?.toString() ?? null,
+        quotedAi3Shannons: batch.quotedAi3Shannons?.toString() ?? null,
       })),
     )
   }),
