@@ -73,6 +73,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://ai3.storage/',
   },
+  other: {
+    'cf-2fa-verify': ' cnpDbdnXopj6eTAQcAzs',
+  },
 };
 
 export const viewport: Viewport = {
