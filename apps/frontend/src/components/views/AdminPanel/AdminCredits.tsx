@@ -18,6 +18,7 @@ import { Button, ROUTES, type NetworkId } from '@auto-drive/ui';
 import {
   getBatchStatus,
   isBatchRefundable,
+  PAYMENT_METHOD_ASSET,
   STATUS_CLASSES,
   STATUS_LABEL,
 } from '../../../utils/credits';
@@ -142,11 +143,10 @@ const OverCapPanel = ({
 // can each purchase credits for it, so grouping by user would split one
 // account into multiple summary lines with incorrect totals.
 // Within an account, batches can have been paid from different purchasing
-// wallets (the intent's fromAddress). Refunds are batched per
-// (account, purchasing wallet) pair — one refund transfer goes back to one
-// wallet — so the expanded list is sorted by purchasing wallet and shows it
-// per row; the actual refund selection happens on the per-user screen,
-// which enforces the same pairing.
+// wallets (the intent's fromAddress) and in different assets. Refunds are
+// sent in AI3 and batched per (account, purchasing wallet). The expanded list
+// sorts by wallet and shows the original payment asset for each purchase.
+// Refund selection happens on the per-user screen with the same grouping.
 // Each group renders as a single collapsed summary line (batch count,
 // users / wallets involved, purchased / remaining / expired storage).
 // ---------------------------------------------------------------------------
@@ -184,8 +184,9 @@ const groupBatchesByAccount = (
 
   return [...groups.entries()].map(([accountId, accountBatches]) => ({
     accountId,
-    // Sort by purchasing wallet so batches that can be refunded together
-    // (same account + same wallet) are adjacent, newest first within each.
+    // Sort by purchasing wallet so batches that can be
+    // refunded together (same account + wallet) are adjacent, newest
+    // first within each.
     batches: [...accountBatches].sort(
       (a, b) =>
         (a.fromAddress ?? '').localeCompare(b.fromAddress ?? '') ||
@@ -305,6 +306,7 @@ const AccountBatchGroupSection = ({
           <tr className='border-b border-border text-left text-xs text-muted-foreground'>
             <th className='px-4 py-2 font-medium'>User</th>
             <th className='px-4 py-2 font-medium'>Purchasing Wallet</th>
+            <th className='px-4 py-2 font-medium'>Asset</th>
             <th className='px-4 py-2 font-medium'>Status</th>
             <th className='px-4 py-2 font-medium'>Purchased</th>
             <th className='px-4 py-2 font-medium'>Original</th>
@@ -352,6 +354,10 @@ const AccountBatchGroupSection = ({
                   ) : (
                     <span className='text-muted-foreground'>—</span>
                   )}
+                </td>
+                {/* Original payment asset. Refunds are always in AI3. */}
+                <td className='px-4 py-2 text-xs'>
+                  {PAYMENT_METHOD_ASSET[batch.paymentMethod]}
                 </td>
                 <td className='px-4 py-2'>
                   <span

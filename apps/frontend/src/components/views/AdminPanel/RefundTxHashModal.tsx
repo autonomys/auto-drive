@@ -13,11 +13,12 @@ import { CopiableText } from '../../atoms/CopiableText';
  * marking one or more credit batches as refunded. The confirm button stays
  * disabled until a validly-formatted hash is entered, so a refund can never
  * be recorded without one. When several batches are refunded together the
- * same hash is recorded on each (one AI3 transfer covers them all).
+ * same hash is recorded on each (one transfer covers them all — the backend
+ * only allows batches that share an account and a wallet).
  */
 export const RefundTxHashModal = ({
   batchCount,
-  suggestedRefundAi3,
+  suggestedRefund,
   refundWalletAddress,
   isSubmitting,
   errorMessage,
@@ -25,17 +26,13 @@ export const RefundTxHashModal = ({
   onClose,
 }: {
   batchCount: number;
-  /**
-   * Informational pro-rated refund suggestion (unused bytes × locked
-   * price), pre-formatted as an AI3 amount. The system does not enforce
-   * the transferred amount — the transfer happens out-of-band.
-   */
-  suggestedRefundAi3?: string | null;
+  /** AI3 refund for unused storage at the purchase-time conversion rate. */
+  suggestedRefund?: string | null;
   /**
    * Purchasing wallet the batches were paid from — the destination of the
-   * out-of-band AI3 transfer. Shown in full and copiable so the admin can
-   * paste it straight into their wallet. Null for legacy intents with no
-   * recorded address.
+   * out-of-band transfer. Shown in full and copiable so the admin can paste
+   * it straight into their wallet. Null for legacy intents with no recorded
+   * address.
    */
   refundWalletAddress?: string | null;
   isSubmitting: boolean;
@@ -87,17 +84,19 @@ export const RefundTxHashModal = ({
         </div>
 
         <p className='mb-4 text-sm text-muted-foreground'>
-          Enter the transaction hash of the on-chain AI3 refund transfer.
+          Enter the transaction hash of the AI3 refund transfer on Auto EVM.
           {batchCount > 1 &&
             ' The same hash will be recorded on every selected batch.'}{' '}
-          A refund cannot be recorded without it. Marking as refunded voids
-          the entire remaining balance of the selected{' '}
+          A refund cannot be recorded without it. Marking as refunded voids the
+          entire remaining balance of the selected{' '}
           {batchCount === 1 ? 'batch' : 'batches'}.
         </p>
 
         {refundWalletAddress && (
           <div className='mb-4 rounded border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
-            <p className='mb-1'>Send the refund to the purchasing wallet:</p>
+            <p className='mb-1'>
+              Send the AI3 refund on Auto EVM to the purchasing wallet:
+            </p>
             <CopiableText
               text={refundWalletAddress}
               className='break-all font-mono font-medium text-foreground'
@@ -105,14 +104,14 @@ export const RefundTxHashModal = ({
           </div>
         )}
 
-        {suggestedRefundAi3 && (
+        {suggestedRefund && (
           <p className='mb-4 rounded border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
             Suggested pro-rated refund:{' '}
             <span className='font-mono font-medium text-foreground'>
-              {suggestedRefundAi3}
+              {suggestedRefund}
             </span>{' '}
-            (unused storage × locked purchase price). Informational only —
-            the transferred amount is not verified.
+            (the unused share, converted to AI3 at the purchase-time rate).
+            Informational only — the transferred amount is not verified.
           </p>
         )}
 
@@ -126,7 +125,7 @@ export const RefundTxHashModal = ({
           onChange={(e) => setTxHash(e.target.value)}
           placeholder='0x…'
           spellCheck={false}
-          className='bg-background-hover text-foreground-hover w-full rounded border px-3 py-2 font-mono text-xs'
+          className='text-foreground-hover w-full rounded border bg-background-hover px-3 py-2 font-mono text-xs'
         />
         {showFormatHint && (
           <p className='mt-1 text-xs text-red-500'>

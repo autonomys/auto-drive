@@ -1,5 +1,6 @@
 /**
- * Buyer-facing USDC formatting. Pure, so it can be tested without React.
+ * Exact USDC formatting — the purchase flow's charges and the admin panel's
+ * settled amounts. Pure, so it can be tested without React.
  *
  * Deliberately NOT `formatUsdcBaseUnits` from @auto-drive/models. That one
  * truncates to two decimals and is documented as operator-facing — right for a
@@ -17,12 +18,16 @@
  * disagree with the backend that does the crediting.
  */
 
+import { USD_RATE_SCALE } from '@auto-drive/models';
+
 /**
- * Fallback decimals, for the one caller that has no target in hand yet.
+ * Fallback decimals, for callers with no payment target in hand: the purchase
+ * flow before the target lands, and the admin views, which render amounts
+ * already settled rather than an amount about to be sent.
  *
- * Every real render passes `UsdcPaymentTarget.tokenDecimals` — what the
- * deployment says it accepts — rather than trusting this. The constant exists so
- * a display before the target lands is not a crash.
+ * Every render that IS quoting a live charge passes
+ * `UsdcPaymentTarget.tokenDecimals` — what the deployment says it accepts —
+ * rather than trusting this.
  */
 const DEFAULT_USDC_DECIMALS = 6;
 
@@ -96,4 +101,20 @@ export const formatQuoteCountdown = (
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
+/**
+ * Render a USD-per-AI3 rate — an integer scaled by USD_RATE_SCALE — at a fixed
+ * number of decimals.
+ *
+ * Fixed width rather than trimmed, and truncated rather than rounded: these
+ * rates live in fractions of a cent, so a trimmed "0.006" beside a "0.0064"
+ * reads as a different order of magnitude at a glance, and a rounded figure
+ * would sit above a rate nobody was charged.
+ */
+export const formatUsdPerAi3 = (scaled: bigint, decimals: number): string => {
+  const places = BigInt(10) ** BigInt(decimals);
+  const whole = scaled / USD_RATE_SCALE;
+  const fraction = ((scaled % USD_RATE_SCALE) * places) / USD_RATE_SCALE;
+  return `${whole}.${fraction.toString().padStart(decimals, '0')}`;
 };

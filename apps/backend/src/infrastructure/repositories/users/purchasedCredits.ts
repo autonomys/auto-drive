@@ -1,4 +1,5 @@
 import {
+  PaymentMethod,
   PurchasedCredit,
   PurchasedCreditSummary,
 } from '@auto-drive/models'
@@ -813,9 +814,10 @@ const markManyAsRefunded = async (
 // ---------------------------------------------------------------------------
 // getByUserPublicId
 // Admin view: all credit batches for a specific user (identified by their
-// user_public_id), joined with key fields from the originating intent so the
-// admin page can show the AI3 price paid and the EVM wallet used.
-// Ordered newest-first.
+// user_public_id), joined with the intent fields a refund is sized and sent
+// from — asset, amount, wallet, and the quote a USDC charge was priced at.
+// None of them can be recovered from purchased_credits, which records bytes
+// and nothing about the money. Ordered newest-first.
 // ---------------------------------------------------------------------------
 
 type DBPurchasedCreditWithIntent = DBPurchasedCredit & {
@@ -824,14 +826,28 @@ type DBPurchasedCreditWithIntent = DBPurchasedCredit & {
   shannons_per_byte: string
   tx_hash: string | null
   from_address: string | null
+  payment_method: PaymentMethod
+  token_amount: string | null
+  quoted_token_amount: string | null
+  quoted_ai3_shannons: string | null
 }
 
+// Each field is documented on IntentSchema in @auto-drive/models; the notes
+// here say only which of them carries the money on which asset.
 export type AdminUserCreditBatchRow = PurchasedCredit & {
   userPublicId: string
+  /** AI3 shannons received. NULL on a USDC purchase — see `tokenAmount`. */
   paymentAmount: bigint | null
   shannonsPerByte: bigint
   txHash: string | null
   fromAddress: string | null
+  /** The asset paid. Refunds are always in AI3. */
+  paymentMethod: PaymentMethod
+  /** USDC base units received. May differ from the quote (AMOUNT_OFF_QUOTE). */
+  tokenAmount: bigint | null
+  /** USDC quoted; with `quotedAi3Shannons`, the rate actually charged. */
+  quotedTokenAmount: bigint | null
+  quotedAi3Shannons: bigint | null
 }
 
 const mapRowWithIntent = (
@@ -843,6 +859,14 @@ const mapRowWithIntent = (
   shannonsPerByte: BigInt(row.shannons_per_byte),
   txHash: row.tx_hash ?? null,
   fromAddress: row.from_address ?? null,
+  paymentMethod: row.payment_method,
+  tokenAmount: row.token_amount ? BigInt(row.token_amount) : null,
+  quotedTokenAmount: row.quoted_token_amount
+    ? BigInt(row.quoted_token_amount)
+    : null,
+  quotedAi3Shannons: row.quoted_ai3_shannons
+    ? BigInt(row.quoted_ai3_shannons)
+    : null,
 })
 
 const getByUserPublicId = async (
@@ -855,7 +879,11 @@ const getByUserPublicId = async (
             i.payment_amount,
             i.shannons_per_byte,
             i.tx_hash,
-            i.from_address
+            i.from_address,
+            i.payment_method,
+            i.token_amount,
+            i.quoted_token_amount,
+            i.quoted_ai3_shannons
      FROM purchased_credits pc
      JOIN intents i ON i.id = pc.intent_id
      WHERE i.user_public_id = $1
@@ -875,14 +903,20 @@ export type AdminCreditBatchRow = PurchasedCredit & {
   userPublicId: string
   /** EVM wallet that paid for the batch (intents.from_address), if known. */
   fromAddress: string | null
+  /** Asset the batch was paid in; the wallet alone does not say which. */
+  paymentMethod: PaymentMethod
 }
 
 const getAllWithUserPublicId = async (): Promise<AdminCreditBatchRow[]> => {
   const db = await getDatabase()
   const result = await db.query<
-    DBPurchasedCredit & { user_public_id: string; from_address: string | null }
+    DBPurchasedCredit & {
+      user_public_id: string
+      from_address: string | null
+      payment_method: PaymentMethod
+    }
   >(
-    `SELECT pc.*, i.user_public_id, i.from_address
+    `SELECT pc.*, i.user_public_id, i.from_address, i.payment_method
      FROM purchased_credits pc
      JOIN intents i ON i.id = pc.intent_id
      ORDER BY pc.purchased_at DESC`,
@@ -891,6 +925,7 @@ const getAllWithUserPublicId = async (): Promise<AdminCreditBatchRow[]> => {
     ...mapRow(row),
     userPublicId: row.user_public_id,
     fromAddress: row.from_address ?? null,
+    paymentMethod: row.payment_method,
   }))
 }
 
