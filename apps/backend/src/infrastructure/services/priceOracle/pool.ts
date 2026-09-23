@@ -37,20 +37,37 @@ export const POOL_ID: Hex =
   '0xa65e8c1c28fc60612cb8e2df615cc8612bc6d8a04f96128fbd346df44601b6f6'
 
 /**
- * The subgraph the pool's trade history is read from, on The Graph's
- * decentralized network.
+ * The subgraph the pool's trade history is read from — a default, not an
+ * identity. `GRAPH_SUBGRAPH_ID` overrides it, so moving off a dead deployment is
+ * a restart rather than a release.
  *
- * Pinned in code rather than configured because it is part of the pool's
- * identity, exactly as POOL_ID is: pointing at a different subgraph is
- * pointing at different data, which is a code review's business and not a
- * deployment's. `GRAPH_SUBGRAPH_URL` overrides it for local mirrors and tests;
- * the API key stays in the environment, being a secret rather than an identity.
+ * What is load-bearing is POOL_ID and the currency ordering above. Those stay in
+ * code and `assertPoolIdentity` in ./subgraph.ts checks them against every
+ * response, so a wrong ID refuses as `misconfigured` instead of pricing from
+ * another market.
  *
- * Verified 2026-08-10 to index the Uniswap v4 PoolManager on Ethereum mainnet
- * and to expose this pool with token0=WAI3 (18dp), token1=USDC (6dp) — the same
- * ordering POOL_KEY pins.
+ * The default is the `uniswap-v4-ethereum` subgraph The Graph's explorer lists
+ * for this pool. Verified 2026-09-21: synced to chainhead,
+ * `hasIndexingErrors: false`, token0=WAI3 (18dp) and token1=USDC (6dp), 2 active
+ * indexers. It reports swap legs signed, as pool deltas.
+ *
+ * We also run our own, `Autonomys-USDC-Payments`
+ * (`HwYM4HPLXKzQmnmxU64m1ak6ChEesPyN3r9b4NDVdo66`), published 2026-09-21 and
+ * still syncing Ethereum. An unsynced deployment answers `_meta` and refuses
+ * entity queries.
  */
-export const SUBGRAPH_ID = 'DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G'
+export const DEFAULT_SUBGRAPH_ID =
+  'EzLH76FWsZUSBTfp2P6CV7cqN56e1rSt2uWtqtsUMEeb'
 
-export const defaultSubgraphUrl = (): string =>
-  `https://gateway.thegraph.com/api/subgraphs/id/${SUBGRAPH_ID}`
+/**
+ * The gateway URL for a subgraph ID. Takes the ID rather than reading config, so
+ * `resolveEndpoint` stays the one place configuration becomes an endpoint.
+ *
+ * Blank falls back as well as missing: dotenv parses the `GRAPH_SUBGRAPH_ID=`
+ * that `.env.sample` ships to `''`, which a default parameter does not catch and
+ * which would build `…/subgraphs/id/`.
+ */
+export const defaultSubgraphUrl = (subgraphId?: string): string =>
+  `https://gateway.thegraph.com/api/subgraphs/id/${
+    subgraphId?.trim() || DEFAULT_SUBGRAPH_ID
+  }`
