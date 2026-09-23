@@ -84,7 +84,7 @@ export const RefundTxHashModal = ({
         </div>
 
         <p className='mb-4 text-sm text-muted-foreground'>
-          Enter the transaction hash of the AI3 refund transfer on Auto-EVM.
+          Enter the transaction hash of the AI3 refund transfer on Auto EVM.
           {batchCount > 1 &&
             ' The same hash will be recorded on every selected batch.'}{' '}
           A refund cannot be recorded without it. Marking as refunded voids the
@@ -95,7 +95,7 @@ export const RefundTxHashModal = ({
         {refundWalletAddress && (
           <div className='mb-4 rounded border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
             <p className='mb-1'>
-              Send the AI3 refund on Auto-EVM to the purchasing wallet:
+              Send the AI3 refund on Auto EVM to the purchasing wallet:
             </p>
             <CopiableText
               text={refundWalletAddress}
