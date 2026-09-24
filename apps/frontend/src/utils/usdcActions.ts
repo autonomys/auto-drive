@@ -134,14 +134,14 @@ export const evaluateUsdcActions = ({
 export const canLeaveUsdcStep = ({
   isBusy,
   hasLivePayment,
-  hasPendingBatch,
+  hasUnresolvedPayment,
   confirmationStalled,
 }: {
   isBusy: boolean;
   /** A payment was submitted in this mount — not one restored from storage. */
   hasLivePayment: boolean;
-  /** A live or resumed batch has no safe retry until the wallet resolves it. */
-  hasPendingBatch: boolean;
+  /** A batch or server-reported payment without a hash has no safe retry. */
+  hasUnresolvedPayment: boolean;
   confirmationStalled: boolean;
 }): boolean =>
-  !isBusy && !hasPendingBatch && (!hasLivePayment || confirmationStalled);
+  !isBusy && !hasUnresolvedPayment && (!hasLivePayment || confirmationStalled);

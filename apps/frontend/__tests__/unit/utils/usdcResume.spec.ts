@@ -29,6 +29,16 @@ beforeEach(() => {
 });
 
 describe('usdcResume', () => {
+  it('restores a server-known payment that has no transaction hash yet', () => {
+    const record = {
+      intentId: '0xabc',
+      paymentKnown: true,
+      chainId: 1,
+      sizeMib: 1024,
+    };
+    saveUsdcResume(record);
+    expect(readUsdcResume(1024)).toEqual(record);
+  });
   it('restores a pending wallet batch before it has a transaction hash', () => {
     const record = {
       intentId: '0xabc',

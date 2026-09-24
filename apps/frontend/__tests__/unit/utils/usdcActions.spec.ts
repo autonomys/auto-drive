@@ -171,7 +171,7 @@ describe('evaluateUsdcActions', () => {
 describe('canLeaveUsdcStep', () => {
   const BEFORE_PAYING = {
     isBusy: false,
-    hasPendingBatch: false,
+    hasUnresolvedPayment: false,
     hasLivePayment: false,
     confirmationStalled: false,
   };
@@ -186,7 +186,7 @@ describe('canLeaveUsdcStep', () => {
       expect(
         canLeaveUsdcStep({
           ...BEFORE_PAYING,
-          hasPendingBatch: true,
+          hasUnresolvedPayment: true,
           confirmationStalled,
         }),
       ).toBe(false);
@@ -223,7 +223,7 @@ describe('canLeaveUsdcStep', () => {
     expect(
       canLeaveUsdcStep({
         isBusy: true,
-        hasPendingBatch: false,
+        hasUnresolvedPayment: false,
         hasLivePayment: true,
         confirmationStalled: true,
       }),

@@ -577,16 +577,109 @@ describe('pay', () => {
     expect(writeContractAsync).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { status: 'completed' },
-    { status: 'pending', txHash: '0xalready-paid' },
-    { status: 'pending', expiresAt: 'invalid' },
-  ])('refuses a server quote that cannot be paid: %j', async (fields) => {
-    getPaymentIntent.mockResolvedValue({ ...quoteIn(10), ...fields });
+  it.each([{ status: 'pending', expiresAt: 'invalid' }])(
+    'refuses a server quote that cannot be paid: %j',
+    async (fields) => {
+      getPaymentIntent.mockResolvedValue({ ...quoteIn(10), ...fields });
+      const { result } = setup();
+      await quoteThen(result);
+      expect(result.current.failure).not.toBeNull();
+      expect(writeContractAsync).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['pending', 'confirmed', 'completed'])(
+    'adopts an existing server payment in status %s and blocks re-quoting after expiry',
+    async (status) => {
+      getPaymentIntent.mockResolvedValue({
+        ...quoteIn(10),
+        status,
+        txHash: '0xalready-paid',
+      });
+      const { result } = setup();
+      await quoteThen(result);
+      expect(result.current.payTxHash).toBe('0xalready-paid');
+      expect(result.current.stage).toBe('submitted');
+      expect(readUsdcResume(1024)?.txHash).toBe('0xalready-paid');
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(Date.now() + 11 * 60_000);
+        await act(async () => {
+          result.current.acknowledgeNotBroadcast();
+          await result.current.quote();
+          await result.current.pay();
+        });
+        expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
+        expect(writeContractAsync).not.toHaveBeenCalled();
+        expect(sendCalls).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    },
+  );
+
+  it.each(['confirmed', 'completed', 'over_cap', 'failed'])(
+    'keeps a server payment without a hash locked in status %s',
+    async (status) => {
+      getPaymentIntent.mockResolvedValue({ ...quoteIn(10), status });
+      const { result } = setup();
+      await quoteThen(result);
+      expect(result.current.mayHaveBroadcast).toBe(true);
+      await act(async () => {
+        result.current.acknowledgeNotBroadcast();
+        result.current.reset();
+        await result.current.quote();
+        await result.current.pay();
+      });
+      expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
+      expect(writeContractAsync).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves the retry lock after reloading a server payment without a hash', async () => {
+    getPaymentIntent.mockResolvedValue({ ...quoteIn(10), status: 'confirmed' });
+    const first = setup();
+    await quoteThen(first.result);
+    const record = readUsdcResume(1024);
+    expect(record?.paymentKnown).toBe(true);
+    first.unmount();
+    const { result } = setup(record);
+    expect(result.current.failure).toBe('existing-payment');
+    await act(async () => {
+      result.current.acknowledgeNotBroadcast();
+      result.current.reset();
+      await result.current.quote();
+      await result.current.pay();
+    });
+    expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
+    expect(writeContractAsync).not.toHaveBeenCalled();
+  });
+
+  it('adopts a payment discovered after approval rather than sending another one', async () => {
+    getPaymentIntent
+      .mockResolvedValueOnce({ ...quoteIn(10), status: 'pending' })
+      .mockResolvedValueOnce({
+        ...quoteIn(10),
+        status: 'pending',
+        txHash: '0xalready-paid',
+      });
     const { result } = setup();
     await quoteThen(result);
-    expect(result.current.failure).not.toBeNull();
-    expect(writeContractAsync).not.toHaveBeenCalled();
+    expect(writeContractAsync).toHaveBeenCalledTimes(1); // Approval only.
+    expect(result.current.payTxHash).toBe('0xalready-paid');
+    expect(result.current.stage).toBe('submitted');
+  });
+
+  it('still permits a fresh quote for an explicitly expired unpaid intent', async () => {
+    getPaymentIntent.mockResolvedValue({ ...quoteIn(10), status: 'expired' });
+    const { result } = setup();
+    await quoteThen(result);
+    expect(result.current.failure).toBe('quote-expired');
+    expect(result.current.mayHaveBroadcast).toBe(false);
+    await act(async () => {
+      await result.current.quote();
+    });
+    expect(usdcPaymentIntent).toHaveBeenCalledTimes(2);
   });
 
   it('keeps tracking a wallet payment confirmed after expiry instead of inviting a duplicate', async () => {

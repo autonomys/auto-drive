@@ -303,7 +303,7 @@ export const UsdcTransferPanel = ({
     // The LIVE hash, not `activeTxHash`. A resumed one is proof the record
     // exists, and counting it made a reload a dead end. See canLeaveUsdcStep.
     hasLivePayment: Boolean(payTxHash),
-    hasPendingBatch: Boolean(batch),
+    hasUnresolvedPayment: Boolean(batch) || failure === 'existing-payment',
     confirmationStalled,
   });
 
@@ -588,6 +588,7 @@ export const UsdcTransferPanel = ({
               mayHaveBroadcast={mayHaveBroadcast}
               hasTxHash={Boolean(activeTxHash)}
               hasBatch={Boolean(batch)}
+              hasKnownPayment={failure === 'existing-payment'}
               batchStatusUnavailable={batchStatusUnavailable}
               batchWalletConnected={
                 isConnected &&

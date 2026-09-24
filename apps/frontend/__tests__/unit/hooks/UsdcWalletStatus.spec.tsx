@@ -18,12 +18,21 @@ const props = {
   mayHaveBroadcast: true,
   hasTxHash: false,
   hasBatch: false,
+  hasKnownPayment: false,
   batchStatusUnavailable: false,
   batchWalletConnected: true,
   onAcknowledge: jest.fn(),
 };
 
 describe('USDC wallet progress', () => {
+  it('does not offer the nothing-sent acknowledgement for a server-known payment', () => {
+    render(<UsdcWalletStatus {...props} hasKnownPayment />);
+    expect(screen.getByRole('status').textContent).toMatch(
+      /already been recorded/,
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
   it.each(['paying', 'batching'] as const)(
     'asks the buyer to reject an expired %s prompt without offering another payment',
     (stage) => {

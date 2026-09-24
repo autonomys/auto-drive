@@ -13,6 +13,7 @@ const pending = {
   sizeMib: 1024,
 };
 let batch: typeof pending | null = pending;
+let hasKnownPayment = false;
 const onBack = jest.fn();
 const quote = jest.fn();
 const api = { watchIntent: jest.fn() };
@@ -52,10 +53,10 @@ jest.mock('../../../src/hooks/useUsdcPurchase', () => ({
     isBusy: false,
     intent: null,
     payTxHash: undefined,
-    failure: null,
+    failure: hasKnownPayment ? 'existing-payment' : null,
     message: null,
     approvalSkipped: false,
-    mayHaveBroadcast: Boolean(batch),
+    mayHaveBroadcast: Boolean(batch || hasKnownPayment),
     batch,
     batchStatusUnavailable: true,
     quote,
@@ -72,7 +73,39 @@ describe('pending USDC batch navigation', () => {
   beforeEach(() => {
     sessionStorage.clear();
     batch = pending;
+    hasKnownPayment = false;
     jest.clearAllMocks();
+  });
+
+  it('blocks Back and retry acknowledgement for a server payment without a hash', () => {
+    batch = null;
+    hasKnownPayment = true;
+    render(
+      <UsdcTransferPanel
+        onNext={jest.fn()}
+        onBack={onBack}
+        context={{ sizeMB: 1024 }}
+      />,
+    );
+    expect(
+      (screen.getByRole('button', { name: 'Back' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole('button', { name: 'Get a price' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.queryByRole('button', {
+        name: 'My wallet shows nothing was sent',
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByText('Go back to change the payment method.'),
+    ).toBeNull();
+    expect(screen.getByRole('status').textContent).toMatch(
+      /already been recorded/,
+    );
   });
 
   it.each([false, true])(

@@ -24,6 +24,8 @@ const KEY = 'auto-drive:usdc-purchase-in-flight';
 export type UsdcResumeRecord = {
   intentId: string;
   txHash?: string;
+  /** The server knows a payment exists but has not supplied its hash. */
+  paymentKnown?: boolean;
   /** Wallet batch handle, saved before requesting approval so a lost response
    * or reload can be recovered without sending the payment again. */
   batchId?: string;
@@ -63,6 +65,8 @@ const isRecord = (value: unknown): value is UsdcResumeRecord =>
   value !== null &&
   typeof (value as UsdcResumeRecord).intentId === 'string' &&
   (typeof (value as UsdcResumeRecord).txHash === 'string' ||
+    ((value as UsdcResumeRecord).paymentKnown === true &&
+      typeof (value as UsdcResumeRecord).chainId === 'number') ||
     (typeof (value as UsdcResumeRecord).batchId === 'string' &&
       typeof (value as UsdcResumeRecord).payer === 'string' &&
       typeof (value as UsdcResumeRecord).chainId === 'number'));

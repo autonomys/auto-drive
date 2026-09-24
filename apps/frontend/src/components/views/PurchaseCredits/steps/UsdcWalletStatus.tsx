@@ -19,6 +19,7 @@ export const UsdcWalletStatus = ({
   mayHaveBroadcast,
   hasTxHash,
   hasBatch,
+  hasKnownPayment,
   batchStatusUnavailable,
   batchWalletConnected,
   onAcknowledge,
@@ -29,11 +30,20 @@ export const UsdcWalletStatus = ({
   mayHaveBroadcast: boolean;
   hasTxHash: boolean;
   hasBatch: boolean;
+  hasKnownPayment: boolean;
   batchStatusUnavailable: boolean;
   batchWalletConnected: boolean;
   onAcknowledge: () => void;
 }) => {
   if (hasTxHash) return null;
+  if (hasKnownPayment) {
+    return (
+      <div role='status' className='rounded-md bg-muted p-3 text-sm'>
+        A payment has already been recorded for this purchase. Do not pay again.
+        Check your credits or contact support if they have not arrived.
+      </div>
+    );
+  }
   if (isBusy) {
     if (quoteExpired) {
       return (

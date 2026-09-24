@@ -57,6 +57,8 @@ export type UsdcPurchaseFailure =
   | 'insufficient-balance'
   /** The user declined in their wallet — the network switch or a signature. */
   | 'rejected'
+  /** The server reports a payment, but has no hash we can track yet. */
+  | 'existing-payment'
   /** Something else went wrong. Offer a retry. */
   | 'failed';
 
@@ -66,6 +68,9 @@ export type UsdcPurchaseFailure =
  * This check cannot revoke a request that is already open in the wallet.
  */
 export const QUOTE_MIN_REMAINING_MS = 45_000;
+
+const EXISTING_PAYMENT_MESSAGE =
+  'The server has already recorded a payment for this purchase. Do not pay again. Check your credits or contact support if they have not arrived.';
 
 /**
  * The USDC leg of a credit purchase, in two acts: **quote**, then **pay**.
@@ -122,18 +127,29 @@ export const useUsdcPurchase = ({
   );
   const [intent, setIntent] = useState<CreatedIntent | null>(null);
   const [payTxHash, setPayTxHash] = useState<Hash | undefined>(undefined);
-  const [failure, setFailure] = useState<UsdcPurchaseFailure | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const knownPaymentWithoutHash = useRef(
+    Boolean(resumed?.paymentKnown && !resumed.txHash),
+  );
+  const [failure, setFailure] = useState<UsdcPurchaseFailure | null>(
+    knownPaymentWithoutHash.current ? 'existing-payment' : null,
+  );
+  const [message, setMessage] = useState<string | null>(
+    knownPaymentWithoutHash.current ? EXISTING_PAYMENT_MESSAGE : null,
+  );
   // Surfaced so the checklist can say "already approved" instead of silently
   // skipping a step the user was told to expect.
   const [approvalSkipped, setApprovalSkipped] = useState(false);
   // A submitted request can lose its response. Until it is explicitly refused
   // or resolved, retrying could pay the same intent twice. This flag is a
   // submission guard, not a UI error: it is also true while the wallet is open.
-  const [mayHaveBroadcast, setMayHaveBroadcast] = useState(Boolean(batch));
+  const [mayHaveBroadcast, setMayHaveBroadcast] = useState(
+    Boolean(batch || knownPaymentWithoutHash.current),
+  );
   // Unlike rendered button state, this also blocks stale callbacks and retries
   // before React has had a chance to render a submitted payment.
-  const paymentSubmitted = useRef(Boolean(batch || resumed?.txHash));
+  const paymentSubmitted = useRef(
+    Boolean(batch || resumed?.txHash || knownPaymentWithoutHash.current),
+  );
   // Synchronous guards cover double-clicks before React renders the busy state.
   const payInFlight = useRef(false);
 
@@ -169,12 +185,34 @@ export const useUsdcPurchase = ({
     async (quoted: CreatedIntent) => {
       try {
         const current = await getPaymentIntent(quoted.id);
+        if (current.status === IntentStatus.EXPIRED && !current.txHash) {
+          throw new ApiError(410, 'The price lock expired.');
+        }
         if (current.status !== IntentStatus.PENDING || current.txHash) {
-          fail(
-            'failed',
-            'This purchase already has a payment or is no longer payable. Check your credits before starting another purchase.',
-            'quoted',
-          );
+          // Server evidence of a payment is not a retryable validation error.
+          // Adopt the hash before checking expiry: the quote can expire while
+          // an existing payment settles, but that must never offer a new charge.
+          paymentSubmitted.current = true;
+          setMayHaveBroadcast(true);
+          knownPaymentWithoutHash.current = !current.txHash;
+          saveUsdcResume({
+            intentId: quoted.id,
+            txHash: current.txHash,
+            paymentKnown: !current.txHash,
+            sizeMib:
+              requestedBytes === null
+                ? null
+                : Number(requestedBytes) / 1_048_576,
+            chainId: target?.chainId,
+            confirmations: target?.confirmations,
+            settleGraceMs: target?.settleGraceMs,
+          });
+          if (current.txHash) {
+            setPayTxHash(current.txHash as Hash);
+            setStage('submitted');
+          } else {
+            fail('existing-payment', EXISTING_PAYMENT_MESSAGE, 'quoted');
+          }
           return false;
         }
         const deadline = current.expiresAt
@@ -199,11 +237,16 @@ export const useUsdcPurchase = ({
         return false;
       }
     },
-    [fail, getPaymentIntent, isQuoteLive],
+    [fail, getPaymentIntent, isQuoteLive, requestedBytes, target],
   );
 
   const reset = useCallback(() => {
-    if (payInFlight.current || batch || (mayHaveBroadcast && !payTxHash))
+    if (
+      payInFlight.current ||
+      batch ||
+      knownPaymentWithoutHash.current ||
+      (mayHaveBroadcast && !payTxHash)
+    )
       return;
     paymentSubmitted.current = false;
     setStage('idle');
@@ -223,7 +266,13 @@ export const useUsdcPurchase = ({
    * them can.
    */
   const acknowledgeNotBroadcast = useCallback(() => {
-    if (payInFlight.current || batch || payTxHash) return;
+    if (
+      payInFlight.current ||
+      batch ||
+      payTxHash ||
+      knownPaymentWithoutHash.current
+    )
+      return;
     paymentSubmitted.current = false;
     setMayHaveBroadcast(false);
     setFailure(null);
