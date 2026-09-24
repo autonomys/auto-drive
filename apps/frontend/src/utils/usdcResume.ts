@@ -28,6 +28,8 @@ export type UsdcResumeRecord = {
    * or reload can be recovered without sending the payment again. */
   batchId?: string;
   payer?: string;
+  /** Original quote deadline, for warnings while a batch is pending. */
+  expiresAt?: string;
   /** The purchase size, so a record from a different purchase is not adopted. */
   sizeMib: number | null;
   /**

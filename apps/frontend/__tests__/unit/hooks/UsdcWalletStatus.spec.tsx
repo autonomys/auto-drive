@@ -13,6 +13,7 @@ jest.mock('@auto-drive/ui', () => ({
 
 const props = {
   stage: 'paying' as UsdcPurchaseStage,
+  quoteExpired: false,
   isBusy: false,
   mayHaveBroadcast: true,
   hasTxHash: false,
@@ -23,6 +24,31 @@ const props = {
 };
 
 describe('USDC wallet progress', () => {
+  it.each(['paying', 'batching'] as const)(
+    'asks the buyer to reject an expired %s prompt without offering another payment',
+    (stage) => {
+      render(<UsdcWalletStatus {...props} stage={stage} isBusy quoteExpired />);
+      expect(screen.getByRole('alert').textContent).toMatch(
+        /Reject any unconfirmed payment request/,
+      );
+      expect(screen.queryByRole('button')).toBeNull();
+      expect(screen.queryByRole('status')).toBeNull();
+    },
+  );
+
+  it('explains that an approval can finish without sending an expired payment', () => {
+    render(
+      <UsdcWalletStatus
+        {...props}
+        stage='approval-confirming'
+        isBusy
+        quoteExpired
+      />,
+    );
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /will not request payment/,
+    );
+  });
   it.each(['paying', 'batching'] as const)(
     'shows progress, not recovery, while %s',
     (stage) => {
@@ -53,6 +79,21 @@ describe('USDC wallet progress', () => {
     expect(screen.getByRole('status').textContent).toMatch(
       /checking automatically/,
     );
+  });
+
+  it('warns about an expired pending batch without offering a fresh payment', () => {
+    render(
+      <UsdcWalletStatus
+        {...props}
+        stage='batch-pending'
+        hasBatch
+        quoteExpired
+      />,
+    );
+    expect(screen.getByRole('status').textContent).toMatch(
+      /reject that request/,
+    );
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('asks for the original wallet when a pending batch was resumed disconnected', () => {

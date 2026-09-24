@@ -1,0 +1,125 @@
+/** @jest-environment jsdom */
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { fireEvent, render, screen } from '@testing-library/react';
+import type { ButtonHTMLAttributes } from 'react';
+import { UsdcTransferPanel } from '../../../src/components/views/PurchaseCredits/steps/UsdcTransferPanel';
+import { saveUsdcResume } from '../../../src/utils/usdcResume';
+
+const pending = {
+  intentId: 'intent',
+  batchId: 'batch',
+  payer: '0xpayer',
+  chainId: 1,
+  sizeMib: 1024,
+};
+let batch: typeof pending | null = pending;
+const onBack = jest.fn();
+const quote = jest.fn();
+const api = { watchIntent: jest.fn() };
+
+jest.mock('@auto-drive/ui', () => ({
+  Button: ({
+    children,
+    onClick,
+    disabled,
+  }: ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  ),
+  cn: (...values: string[]) => values.filter(Boolean).join(' '),
+}));
+jest.mock('wagmi', () => ({
+  useAccount: () => ({ address: '0xpayer', isConnected: true, chainId: 1 }),
+}));
+jest.mock('@rainbow-me/rainbowkit', () => ({ useConnectModal: () => ({}) }));
+jest.mock('../../../src/contexts/network', () => ({
+  useNetwork: () => ({ api }),
+}));
+jest.mock('../../../src/hooks/useUsdcAvailability', () => ({
+  useUsdcAvailability: () => ({
+    target: { chainId: 1 },
+    chain: { name: 'Ethereum' },
+    isAvailable: false,
+    isLoading: false,
+    isUnsupported: false,
+  }),
+}));
+jest.mock('../../../src/hooks/useUsdcPurchase', () => ({
+  QUOTE_MIN_REMAINING_MS: 45_000,
+  useUsdcPurchase: () => ({
+    stage: batch ? 'batch-pending' : 'idle',
+    isBusy: false,
+    intent: null,
+    payTxHash: undefined,
+    failure: null,
+    message: null,
+    approvalSkipped: false,
+    mayHaveBroadcast: Boolean(batch),
+    batch,
+    batchStatusUnavailable: true,
+    quote,
+    pay: jest.fn(),
+    reset: jest.fn(),
+    acknowledgeNotBroadcast: jest.fn(),
+  }),
+}));
+jest.mock('../../../src/hooks/useTransactionConfirmation', () => ({
+  useTransactionConfirmation: () => ({}),
+}));
+
+describe('pending USDC batch navigation', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    batch = pending;
+    jest.clearAllMocks();
+  });
+
+  it.each([false, true])(
+    'blocks Back and change-payment links for a pending batch (resumed=%s)',
+    (resumed) => {
+      if (resumed) saveUsdcResume(pending);
+      render(
+        <UsdcTransferPanel
+          onNext={jest.fn()}
+          onBack={onBack}
+          context={{ sizeMB: 1024 }}
+        />,
+      );
+      const back = screen.getByRole('button', {
+        name: 'Back',
+      }) as HTMLButtonElement;
+      expect(back.disabled).toBe(true);
+      fireEvent.click(back);
+      expect(onBack).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText('Go back to change the payment method.'),
+      ).toBeNull();
+      expect(
+        screen.queryByRole('button', {
+          name: 'My wallet shows nothing was sent',
+        }),
+      ).toBeNull();
+    },
+  );
+
+  it('allows Back once the wallet has resolved the batch as failed', () => {
+    const { rerender } = render(
+      <UsdcTransferPanel
+        onNext={jest.fn()}
+        onBack={onBack}
+        context={{ sizeMB: 1024 }}
+      />,
+    );
+    batch = null;
+    rerender(
+      <UsdcTransferPanel
+        onNext={jest.fn()}
+        onBack={onBack}
+        context={{ sizeMB: 1024 }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});

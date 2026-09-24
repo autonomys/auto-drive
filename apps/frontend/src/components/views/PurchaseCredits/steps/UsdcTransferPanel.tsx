@@ -11,6 +11,7 @@ import { Section } from '../atoms/Section';
 import { UsdcWalletStatus } from './UsdcWalletStatus';
 import { useNetwork } from '../../../../contexts/network';
 import { useTransactionConfirmation } from '../../../../hooks/useTransactionConfirmation';
+import { useQuoteClock } from '../../../../hooks/useQuoteClock';
 import { useUsdcAvailability } from '../../../../hooks/useUsdcAvailability';
 import { ApiError } from '../../../../services/api';
 import {
@@ -110,16 +111,11 @@ export const UsdcTransferPanel = ({
     if (resumed?.batchId && !batch && !payTxHash && failure) setResumed(null);
   }, [resumed, batch, payTxHash, failure]);
 
-  // Re-rendered every second only to move the countdown. Started when a quote
-  // exists and stopped when it does not, so an idle screen is idle.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!intent?.expiresAt) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [intent?.expiresAt]);
-
-  const countdown = formatQuoteCountdown(intent?.expiresAt ?? null, now);
+  const expiresAt =
+    intent?.expiresAt ??
+    (resumed?.expiresAt ? new Date(resumed.expiresAt) : null);
+  const now = useQuoteClock(expiresAt);
+  const countdown = formatQuoteCountdown(expiresAt, now);
 
   // The live attempt wins; the stored one covers the reload. Both are the same
   // purchase — `readUsdcResume` refuses a record whose size does not match.
@@ -280,7 +276,7 @@ export const UsdcTransferPanel = ({
   // `pay()` refuses on the same margin, but discovering that by clicking is a
   // wallet prompt the buyer did not need to see: the button becomes a re-quote
   // instead, on the second the figure stops being payable.
-  const remaining = quoteRemainingMs(intent?.expiresAt ?? null, now);
+  const remaining = quoteRemainingMs(expiresAt, now);
   const quoteStale =
     awaitingConfirmation &&
     (remaining === null || remaining <= QUOTE_MIN_REMAINING_MS);
@@ -307,6 +303,7 @@ export const UsdcTransferPanel = ({
     // The LIVE hash, not `activeTxHash`. A resumed one is proof the record
     // exists, and counting it made a reload a dead end. See canLeaveUsdcStep.
     hasLivePayment: Boolean(payTxHash),
+    hasPendingBatch: Boolean(batch),
     confirmationStalled,
   });
 
@@ -535,10 +532,10 @@ export const UsdcTransferPanel = ({
               </div>
             )}
 
-            {quoteStale && (
+            {quoteStale && !mayHaveBroadcast && (
               <div className='text-xs text-amber-700 dark:text-amber-300'>
-                This price is too close to expiry to pay safely — a transfer
-                landing after the lock runs out is refused. Nothing was sent.
+                This quote has too little time left to start payment safely. Get
+                a fresh quote to continue.
               </div>
             )}
 
@@ -586,6 +583,7 @@ export const UsdcTransferPanel = ({
 
             <UsdcWalletStatus
               stage={stage}
+              quoteExpired={remaining === 0}
               isBusy={isBusy}
               mayHaveBroadcast={mayHaveBroadcast}
               hasTxHash={Boolean(activeTxHash)}
@@ -699,11 +697,13 @@ export const UsdcTransferPanel = ({
               )}
               {settlementUncertain && (
                 <div className='rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
-                  <strong>Price lock lapsed.</strong> Your payment was sent
-                  after the quote&apos;s price lock ran out, so we are still
-                  confirming that it was accepted. Keep this page open — if it
-                  is not credited shortly, contact support quoting the
-                  transaction hash above.
+                  <strong>
+                    Price lock lapsed; payment still being checked.
+                  </strong>{' '}
+                  The quote has expired. A payment already sent may still be
+                  credited during settlement. Do not send another payment. Keep
+                  this page open and contact support with the transaction hash
+                  above if your credits do not arrive.
                 </div>
               )}
               {isExpired && (

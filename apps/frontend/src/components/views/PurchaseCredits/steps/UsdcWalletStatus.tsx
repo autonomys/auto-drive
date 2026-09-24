@@ -14,6 +14,7 @@ const progress: Partial<Record<UsdcPurchaseStage, string>> = {
 
 export const UsdcWalletStatus = ({
   stage,
+  quoteExpired,
   isBusy,
   mayHaveBroadcast,
   hasTxHash,
@@ -23,6 +24,7 @@ export const UsdcWalletStatus = ({
   onAcknowledge,
 }: {
   stage: UsdcPurchaseStage;
+  quoteExpired: boolean;
   isBusy: boolean;
   mayHaveBroadcast: boolean;
   hasTxHash: boolean;
@@ -33,6 +35,21 @@ export const UsdcWalletStatus = ({
 }) => {
   if (hasTxHash) return null;
   if (isBusy) {
+    if (quoteExpired) {
+      return (
+        <div
+          role='alert'
+          className='rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+        >
+          <strong>Price lock expired.</strong>{' '}
+          {stage === 'paying' || stage === 'batching'
+            ? 'Reject any unconfirmed payment request in your wallet. This page cannot cancel it. If you already confirmed, do not pay again; we will keep tracking your payment.'
+            : stage === 'approval-confirming'
+              ? 'Your USDC approval may still confirm, but we will not request payment for this quote. Get a fresh quote once approval finishes.'
+              : 'Reject any open wallet request. We will not request payment for this quote. Get a fresh quote once the current request finishes.'}
+        </div>
+      );
+    }
     return progress[stage] ? (
       <div role='status' className='text-sm text-muted-foreground'>
         {progress[stage]}
@@ -47,6 +64,13 @@ export const UsdcWalletStatus = ({
           : batchStatusUnavailable
             ? 'Your wallet has not provided the payment result yet. We are checking automatically. Do not send another payment.'
             : 'Your payment is processing. We are checking your wallet for confirmation.'}
+        {quoteExpired && (
+          <p className='mt-2'>
+            The price lock has expired. If your wallet is still asking for
+            payment confirmation, reject that request. If the payment is already
+            pending or complete, do not pay again; we will keep tracking it.
+          </p>
+        )}
       </div>
     );
   }

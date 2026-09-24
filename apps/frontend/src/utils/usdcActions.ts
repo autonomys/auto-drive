@@ -126,14 +126,22 @@ export const evaluateUsdcActions = ({
  * never mined — dropped, replaced, underpriced — or an Ethereum RPC that is not
  * answering pins this step for about twelve minutes. There is nothing left to
  * watch by then.
+ *
+ * A pending batch is different: no receipt has been resolved yet, and leaving
+ * could start another purchase while the wallet still executes the first.
+ * Block that exit for both live and resumed batches, even after an RPC error.
  */
 export const canLeaveUsdcStep = ({
   isBusy,
   hasLivePayment,
+  hasPendingBatch,
   confirmationStalled,
 }: {
   isBusy: boolean;
   /** A payment was submitted in this mount — not one restored from storage. */
   hasLivePayment: boolean;
+  /** A live or resumed batch has no safe retry until the wallet resolves it. */
+  hasPendingBatch: boolean;
   confirmationStalled: boolean;
-}): boolean => !isBusy && (!hasLivePayment || confirmationStalled);
+}): boolean =>
+  !isBusy && !hasPendingBatch && (!hasLivePayment || confirmationStalled);

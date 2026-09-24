@@ -171,6 +171,7 @@ describe('evaluateUsdcActions', () => {
 describe('canLeaveUsdcStep', () => {
   const BEFORE_PAYING = {
     isBusy: false,
+    hasPendingBatch: false,
     hasLivePayment: false,
     confirmationStalled: false,
   };
@@ -178,6 +179,19 @@ describe('canLeaveUsdcStep', () => {
   it('lets a buyer back out before any money moves', () => {
     expect(canLeaveUsdcStep(BEFORE_PAYING)).toBe(true);
   });
+
+  it.each([false, true])(
+    'blocks leaving an unresolved batch even if confirmationStalled=%s',
+    (confirmationStalled) => {
+      expect(
+        canLeaveUsdcStep({
+          ...BEFORE_PAYING,
+          hasPendingBatch: true,
+          confirmationStalled,
+        }),
+      ).toBe(false);
+    },
+  );
 
   it('holds them while a wallet interaction is in flight', () => {
     expect(canLeaveUsdcStep({ ...BEFORE_PAYING, isBusy: true })).toBe(false);
@@ -209,6 +223,7 @@ describe('canLeaveUsdcStep', () => {
     expect(
       canLeaveUsdcStep({
         isBusy: true,
+        hasPendingBatch: false,
         hasLivePayment: true,
         confirmationStalled: true,
       }),

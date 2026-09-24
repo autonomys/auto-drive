@@ -10,7 +10,7 @@ import {
 } from 'wagmi';
 import { getCapabilities, getCallsStatus, sendCalls } from 'wagmi/actions';
 import { erc20ApprovalAbi, usdcReceiverAbi } from '@auto-drive/ui';
-import { UsdcPaymentTarget } from '@auto-drive/models';
+import { IntentStatus, UsdcPaymentTarget } from '@auto-drive/models';
 import { Address, BaseError, encodeFunctionData, Hash } from 'viem';
 import { ApiError, CreatedIntent } from '../services/api';
 import { usePaymentIntent } from './usePaymentIntent';
@@ -61,10 +61,9 @@ export type UsdcPurchaseFailure =
   | 'failed';
 
 /**
- * A margin, not a bare comparison: the payment needs time to be signed and
- * mined, and the backend rejects on ITS clock. Paying with twenty seconds left
- * is how a transaction lands just after expiry, which is the one outcome worse
- * than being told to start again.
+ * Leave time to confirm and mine the payment. Backend settlement grace protects
+ * submitted payments; it is not extra time for checkout to start new requests.
+ * This check cannot revoke a request that is already open in the wallet.
  */
 export const QUOTE_MIN_REMAINING_MS = 45_000;
 
@@ -86,12 +85,10 @@ export const QUOTE_MIN_REMAINING_MS = 45_000;
  *     the first, whose approval the user has already given — and the backend
  *     would file the eventual payment against whichever id the client last
  *     remembered.
- *   - **Nothing is paid against a lapsed quote.** The lock is checked immediately
- *     before the payment call, not merely when it was cut. A payment that arrives
- *     after expiry is refused and filed as a mispayment: the money is kept, no
- *     credits are granted, and only an admin can untangle it. Which makes the
- *     ordinary sequence — approve, get distracted, come back — a way to lose
- *     money, unless it is checked there.
+ *   - **No new payment request for an expired quote.** Revalidate immediately
+ *     before opening the wallet, including after approval. An already-open
+ *     request cannot be revoked by this hook: the receiver has no deadline.
+ *     Keep tracking any returned hash even if the buyer confirms it late.
  *
  * The approval survives an expired quote on purpose (an ERC20 allowance is not
  * tied to an intent), so the fresh attempt skips straight to paying when the new
@@ -108,7 +105,7 @@ export const useUsdcPurchase = ({
 }) => {
   const { address, connector, chainId: connectedChainId } = useAccount();
   const config = useConfig();
-  const { usdcPaymentIntent } = usePaymentIntent();
+  const { usdcPaymentIntent, getPaymentIntent } = usePaymentIntent();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   // Pinned to the payment chain, not the connected one: every read below is
@@ -163,6 +160,46 @@ export const useUsdcPurchase = ({
       setStage(next);
     },
     [],
+  );
+
+  // The browser clock is for display and early rejection. Re-read the server
+  // before opening a wallet request so a stale tab or slow device clock cannot
+  // initiate a payment that the server already considers expired.
+  const validateQuote = useCallback(
+    async (quoted: CreatedIntent) => {
+      try {
+        const current = await getPaymentIntent(quoted.id);
+        if (current.status !== IntentStatus.PENDING || current.txHash) {
+          fail(
+            'failed',
+            'This purchase already has a payment or is no longer payable. Check your credits before starting another purchase.',
+            'quoted',
+          );
+          return false;
+        }
+        const deadline = current.expiresAt
+          ? new Date(current.expiresAt).getTime()
+          : NaN;
+        if (
+          !isQuoteLive(quoted) ||
+          !Number.isFinite(deadline) ||
+          deadline - Date.now() <= QUOTE_MIN_REMAINING_MS
+        ) {
+          throw new ApiError(410, 'The price lock expired.');
+        }
+        return true;
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 410) throw error;
+        setIntent(null);
+        fail(
+          'quote-expired',
+          'The price lock expired. Get a fresh quote before confirming payment.',
+          'idle',
+        );
+        return false;
+      }
+    },
+    [fail, getPaymentIntent, isQuoteLive],
   );
 
   const reset = useCallback(() => {
@@ -409,6 +446,7 @@ export const useUsdcPurchase = ({
 
     try {
       setStage('checking');
+      if (!(await validateQuote(quoted))) return;
       // 1. The wallet has to be on the chain the receiver is deployed on. Every
       //    write below also names the chain, so wagmi refuses to sign on the
       //    wrong one even if this switch silently did nothing.
@@ -456,15 +494,7 @@ export const useUsdcPurchase = ({
         // "ready" requires a wallet upgrade; leave that user's existing wallet
         // configuration alone and use the sequential flow instead.
         if (capabilities?.atomic?.status === 'supported') {
-          if (!isQuoteLive(quoted)) {
-            setIntent(null);
-            fail(
-              'quote-expired',
-              'The price expired. Get a fresh quote to continue.',
-              'idle',
-            );
-            return;
-          }
+          if (!(await validateQuote(quoted))) return;
           // Encode before marking the request submitted: malformed input is
           // a local error and must not strand the buyer in batch recovery.
           const calls = [
@@ -487,6 +517,7 @@ export const useUsdcPurchase = ({
           ];
           const pending: UsdcResumeRecord = {
             intentId: quoted.id,
+            expiresAt: quoted.expiresAt?.toISOString(),
             batchId: crypto.randomUUID(),
             payer: address,
             sizeMib:
@@ -578,10 +609,8 @@ export const useUsdcPurchase = ({
         setApprovalSkipped(true);
       }
 
-      // 4. Pay — but only if the lock still holds. This is the check that
-      //    matters: the approval above can take minutes, and a payment landing
-      //    after expiry is refused, filed as a mispayment, and keeps the money
-      //    with no credits granted.
+      // 4. Approval can take minutes. Check the lock again before opening the
+      //    separate payment request; only the wallet can reject an open prompt.
       if (!isQuoteLive(quoted)) {
         setIntent(null);
         fail(
@@ -603,15 +632,7 @@ export const useUsdcPurchase = ({
         args: [quoted.id as Hash, amount],
         account: address,
       });
-      if (!isQuoteLive(quoted)) {
-        setIntent(null);
-        fail(
-          'quote-expired',
-          'The price expired. Get a fresh quote to continue.',
-          'idle',
-        );
-        return;
-      }
+      if (!(await validateQuote(quoted))) return;
       setStage('paying');
       // Latched BEFORE the call, because the call is the one that may not report
       // back. See `mayHaveBroadcast`: everything above is safe to retry, and
@@ -655,6 +676,7 @@ export const useUsdcPurchase = ({
     switchChainAsync,
     target,
     writeContractAsync,
+    validateQuote,
   ]);
 
   /**
