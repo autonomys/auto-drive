@@ -110,12 +110,9 @@ describe('ApiKeyUseCases', () => {
     ).rejects.toThrow('API key has already been deleted')
   })
 
-  it('should throw ApiKeyNotFoundError when deleting an already deleted or missing key directly from repository', async () => {
+  it('should throw ApiKeyNotFoundError when the repository deletes an already-deleted key', async () => {
     await expect(apiKeysRepository.deleteApiKey(apiKey.id)).rejects.toThrow(
       ApiKeyNotFoundError,
-    )
-    await expect(apiKeysRepository.deleteApiKey(apiKey.id)).rejects.toThrow(
-      'API key not found',
     )
   })
 

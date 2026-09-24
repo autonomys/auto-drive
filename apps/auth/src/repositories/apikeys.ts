@@ -84,7 +84,7 @@ const deleteApiKey = async (id: string): Promise<void> => {
     [new Date(), id],
   )
   if (result.rowCount === 0) {
-    throw new ApiKeyNotFoundError()
+    throw new ApiKeyNotFoundError('API key has already been deleted')
   }
 }
 
