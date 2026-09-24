@@ -93,6 +93,7 @@ export const UsdcTransferPanel = ({
     isBusy,
     intent,
     payTxHash,
+    isPaymentCompleted,
     failure,
     message,
     approvalSkipped,
@@ -336,6 +337,15 @@ export const UsdcTransferPanel = ({
   }, [reset]);
 
   const currentStep = stageIndex(stage);
+
+  if (isPaymentCompleted) {
+    return (
+      <Section title='Payment complete'>
+        <p>Your credits have been added.</p>
+        <Button onClick={() => onNext({ sizeMB: sizeMib })}>Continue</Button>
+      </Section>
+    );
+  }
 
   return (
     <div className='flex flex-col gap-4'>

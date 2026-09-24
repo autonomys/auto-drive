@@ -41,6 +41,11 @@ const sendCalls = jest.fn<(...args: unknown[]) => Promise<{ id: string }>>();
 const getCallsStatus = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const config = {};
 const connector = { uid: 'wallet' };
+const queryClient = { invalidateQueries: jest.fn() };
+
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => queryClient,
+}));
 
 let connectedChainId = 1;
 
@@ -668,6 +673,136 @@ describe('pay', () => {
     expect(writeContractAsync).toHaveBeenCalledTimes(1); // Approval only.
     expect(result.current.payTxHash).toBe('0xalready-paid');
     expect(result.current.stage).toBe('submitted');
+  });
+
+  it.each([false, true])(
+    'recovers a later server hash while retaining the retry guard (resumed=%s)',
+    async (resumed) => {
+      jest.useFakeTimers();
+      try {
+        getPaymentIntent.mockResolvedValue({
+          ...quoteIn(10),
+          status: 'confirmed',
+        });
+        const first = setup();
+        await quoteThen(first.result);
+        const record = readUsdcResume(1024);
+        let active = first;
+        if (resumed) {
+          first.unmount();
+          active = setup(record);
+        }
+        await act(async () => {});
+        getPaymentIntent.mockResolvedValue({
+          ...quoteIn(10),
+          status: 'confirmed',
+          txHash: '0xrecovered',
+        });
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(2000);
+        });
+        expect(active.result.current.payTxHash).toBe('0xrecovered');
+        expect(active.result.current.stage).toBe('submitted');
+        expect(active.result.current.failure).toBeNull();
+        expect(readUsdcResume(1024)?.txHash).toBe('0xrecovered');
+        await act(async () => {
+          active.result.current.acknowledgeNotBroadcast();
+          await active.result.current.quote();
+          await active.result.current.pay();
+        });
+        expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
+        expect(writeContractAsync).not.toHaveBeenCalled();
+        const reads = getPaymentIntent.mock.calls.length;
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(4000);
+        });
+        expect(getPaymentIntent).toHaveBeenCalledTimes(reads);
+        active.unmount();
+      } finally {
+        jest.useRealTimers();
+      }
+    },
+  );
+
+  it('recovers a completed purchase after reload without a hash, including after failed reads', async () => {
+    jest.useFakeTimers();
+    try {
+      getPaymentIntent.mockResolvedValue({
+        ...quoteIn(10),
+        status: 'confirmed',
+      });
+      const first = setup();
+      await quoteThen(first.result);
+      const record = readUsdcResume(1024);
+      first.unmount();
+      getPaymentIntent.mockRejectedValue(new Error('offline'));
+      const active = setup(record);
+      await act(async () => {});
+      getPaymentIntent.mockRejectedValue(new ApiError(410, 'Expired'));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+      expect(active.result.current.failure).toBe('existing-payment');
+      expect(readUsdcResume(1024)?.paymentKnown).toBe(true);
+      await act(async () => {
+        active.result.current.acknowledgeNotBroadcast();
+        await active.result.current.quote();
+        await active.result.current.pay();
+      });
+      expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
+      getPaymentIntent.mockResolvedValue({
+        ...quoteIn(10),
+        status: 'completed',
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+      expect(active.result.current.isPaymentCompleted).toBe(true);
+      expect(readUsdcResume(1024)).toBeNull();
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['creditSummary'],
+      });
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['account'],
+      });
+      await act(async () => {
+        active.result.current.reset();
+        await active.result.current.quote();
+        await active.result.current.pay();
+      });
+      expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
+      expect(writeContractAsync).not.toHaveBeenCalled();
+      const reads = getPaymentIntent.mock.calls.length;
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(4000);
+      });
+      expect(getPaymentIntent).toHaveBeenCalledTimes(reads);
+      active.unmount();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('ignores an in-flight reconciliation response after unmount', async () => {
+    getPaymentIntent.mockResolvedValue({ ...quoteIn(10), status: 'confirmed' });
+    const first = setup();
+    await quoteThen(first.result);
+    const record = readUsdcResume(1024);
+    first.unmount();
+    let resolve!: (value: unknown) => void;
+    getPaymentIntent.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const active = setup(record);
+    active.unmount();
+    await act(async () => {
+      resolve({ ...quoteIn(10), status: 'completed' });
+    });
+    expect(readUsdcResume(1024)).toEqual(record);
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
   });
 
   it('still permits a fresh quote for an explicitly expired unpaid intent', async () => {

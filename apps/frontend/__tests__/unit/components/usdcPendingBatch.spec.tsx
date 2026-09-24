@@ -14,6 +14,7 @@ const pending = {
 };
 let batch: typeof pending | null = pending;
 let hasKnownPayment = false;
+let isPaymentCompleted = false;
 const onBack = jest.fn();
 const quote = jest.fn();
 const api = { watchIntent: jest.fn() };
@@ -53,6 +54,7 @@ jest.mock('../../../src/hooks/useUsdcPurchase', () => ({
     isBusy: false,
     intent: null,
     payTxHash: undefined,
+    isPaymentCompleted,
     failure: hasKnownPayment ? 'existing-payment' : null,
     message: null,
     approvalSkipped: false,
@@ -74,6 +76,7 @@ describe('pending USDC batch navigation', () => {
     sessionStorage.clear();
     batch = pending;
     hasKnownPayment = false;
+    isPaymentCompleted = false;
     jest.clearAllMocks();
   });
 
@@ -106,6 +109,25 @@ describe('pending USDC batch navigation', () => {
     expect(screen.getByRole('status').textContent).toMatch(
       /already been recorded/,
     );
+  });
+
+  it('lets a completed purchase continue without a transaction hash', () => {
+    batch = null;
+    isPaymentCompleted = true;
+    const onNext = jest.fn();
+    render(
+      <UsdcTransferPanel
+        onNext={onNext}
+        onBack={onBack}
+        context={{ sizeMB: 1024 }}
+      />,
+    );
+    expect(screen.getByText('Your credits have been added.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(onNext).toHaveBeenCalledWith({ sizeMB: 1024 });
+    expect(
+      screen.queryByRole('button', { name: /Pay|Get a price/ }),
+    ).toBeNull();
   });
 
   it.each([false, true])(

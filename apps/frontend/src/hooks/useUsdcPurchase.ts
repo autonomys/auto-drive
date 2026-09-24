@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useAccount,
   useConfig,
@@ -110,6 +111,7 @@ export const useUsdcPurchase = ({
 }) => {
   const { address, connector, chainId: connectedChainId } = useAccount();
   const config = useConfig();
+  const queryClient = useQueryClient();
   const { usdcPaymentIntent, getPaymentIntent } = usePaymentIntent();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
@@ -127,6 +129,7 @@ export const useUsdcPurchase = ({
   );
   const [intent, setIntent] = useState<CreatedIntent | null>(null);
   const [payTxHash, setPayTxHash] = useState<Hash | undefined>(undefined);
+  const [isPaymentCompleted, setIsPaymentCompleted] = useState(false);
   const knownPaymentWithoutHash = useRef(
     Boolean(resumed?.paymentKnown && !resumed.txHash),
   );
@@ -278,6 +281,67 @@ export const useUsdcPurchase = ({
     setFailure(null);
     setMessage(null);
   }, [batch, payTxHash]);
+
+  // A server-recorded payment can acquire its hash or finish after our first
+  // read. Reconcile it even after reload, without ever enabling another charge.
+  const knownIntentId = intent?.id ?? resumed?.intentId;
+  useEffect(() => {
+    if (failure !== 'existing-payment' || !knownIntentId) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const current = await getPaymentIntent(knownIntentId);
+        if (stopped) return;
+        if (current.status === IntentStatus.COMPLETED) {
+          clearUsdcResume();
+          setIsPaymentCompleted(true);
+          setFailure(null);
+          setMessage(null);
+          setStage('submitted');
+          void queryClient.invalidateQueries({ queryKey: ['account'] });
+          void queryClient.invalidateQueries({ queryKey: ['creditSummary'] });
+          return;
+        }
+        if (current.txHash) {
+          saveUsdcResume({
+            intentId: knownIntentId,
+            txHash: current.txHash,
+            sizeMib:
+              requestedBytes === null
+                ? null
+                : Number(requestedBytes) / 1_048_576,
+            chainId: resumed?.chainId ?? target?.chainId,
+            confirmations: resumed?.confirmations ?? target?.confirmations,
+            settleGraceMs: resumed?.settleGraceMs ?? target?.settleGraceMs,
+          });
+          knownPaymentWithoutHash.current = false;
+          setPayTxHash(current.txHash as Hash);
+          setFailure(null);
+          setMessage(null);
+          setStage('submitted');
+          return;
+        }
+      } catch {
+        // A failed read, including an expired quote, cannot prove no payment
+        // was sent. Retain the record and retry without unlocking payment.
+      }
+      if (!stopped) timer = setTimeout(poll, 2000);
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    failure,
+    knownIntentId,
+    getPaymentIntent,
+    requestedBytes,
+    resumed,
+    target,
+    queryClient,
+  ]);
 
   // A batch ID is not a transaction hash. Keep polling it, including after a
   // reload or a lost sendCalls response, until the wallet supplies receipts.
@@ -752,6 +816,7 @@ export const useUsdcPurchase = ({
       isBusy,
       intent,
       payTxHash,
+      isPaymentCompleted,
       failure,
       message,
       approvalSkipped,
@@ -768,6 +833,7 @@ export const useUsdcPurchase = ({
       isBusy,
       intent,
       payTxHash,
+      isPaymentCompleted,
       failure,
       message,
       approvalSkipped,
