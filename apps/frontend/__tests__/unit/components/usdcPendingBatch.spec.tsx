@@ -15,6 +15,7 @@ const pending = {
 let batch: typeof pending | null = pending;
 let hasKnownPayment = false;
 let isPaymentCompleted = false;
+let hasQuote = false;
 const onBack = jest.fn();
 const quote = jest.fn();
 const api = { watchIntent: jest.fn() };
@@ -50,9 +51,15 @@ jest.mock('../../../src/hooks/useUsdcAvailability', () => ({
 jest.mock('../../../src/hooks/useUsdcPurchase', () => ({
   QUOTE_MIN_REMAINING_MS: 45_000,
   useUsdcPurchase: () => ({
-    stage: batch ? 'batch-pending' : 'idle',
+    stage: batch ? 'batch-pending' : hasQuote ? 'quoted' : 'idle',
     isBusy: false,
-    intent: null,
+    intent: hasQuote
+      ? {
+          id: 'intent',
+          expiresAt: new Date('2099-01-01'),
+          quotedTokenAmount: 12_500_000n,
+        }
+      : null,
     payTxHash: undefined,
     isPaymentCompleted,
     failure: hasKnownPayment ? 'existing-payment' : null,
@@ -77,6 +84,7 @@ describe('pending USDC batch navigation', () => {
     batch = pending;
     hasKnownPayment = false;
     isPaymentCompleted = false;
+    hasQuote = false;
     jest.clearAllMocks();
   });
 
@@ -95,8 +103,11 @@ describe('pending USDC batch navigation', () => {
         .disabled,
     ).toBe(true);
     expect(
-      (screen.getByRole('button', { name: 'Get a price' }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole('button', {
+          name: 'Processing payment…',
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(
       screen.queryByRole('button', {
@@ -128,6 +139,62 @@ describe('pending USDC batch navigation', () => {
     expect(
       screen.queryByRole('button', { name: /Pay|Get a price/ }),
     ).toBeNull();
+  });
+
+  it.each([false, true])(
+    'hides unpaid instructions for a known payment (resumed=%s)',
+    (resumed) => {
+      batch = null;
+      hasKnownPayment = true;
+      hasQuote = !resumed;
+      if (resumed)
+        saveUsdcResume({
+          intentId: 'intent',
+          paymentKnown: true,
+          chainId: 1,
+          sizeMib: 1024,
+        });
+      render(
+        <UsdcTransferPanel
+          onNext={jest.fn()}
+          onBack={onBack}
+          context={{ sizeMB: 1024 }}
+        />,
+      );
+      expect(screen.queryByText(/Nothing has been sent yet/)).toBeNull();
+      expect(screen.queryByText('Confirm the amount')).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Pay/ })).toBeNull();
+      expect(
+        (
+          screen.getByRole('button', {
+            name: 'Processing payment…',
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      expect(screen.getByRole('status').textContent).toMatch(
+        /already been recorded/,
+      );
+    },
+  );
+
+  it('keeps the review instructions and Pay action for an unpaid quote', () => {
+    batch = null;
+    hasQuote = true;
+    render(
+      <UsdcTransferPanel
+        onNext={jest.fn()}
+        onBack={onBack}
+        context={{ sizeMB: 1024 }}
+      />,
+    );
+    expect(screen.getByText(/Nothing has been sent yet/)).toBeTruthy();
+    expect(
+      (
+        screen.getByRole('button', {
+          name: /^Pay .* USDC$/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
   });
 
   it.each([false, true])(

@@ -271,7 +271,9 @@ export const UsdcTransferPanel = ({
   // A quote is in hand and nothing has been signed. This is the review gate:
   // the figure below is standing still, and the next click is the one that puts
   // a wallet prompt on screen.
-  const awaitingConfirmation = stage === 'quoted' && intent !== null;
+  const hasKnownPayment = failure === 'existing-payment';
+  const awaitingConfirmation =
+    stage === 'quoted' && intent !== null && !hasKnownPayment;
 
   // The gate is a place to sit, so the quote can die while it is being read.
   // `pay()` refuses on the same margin, but discovering that by clicking is a
@@ -304,7 +306,7 @@ export const UsdcTransferPanel = ({
     // The LIVE hash, not `activeTxHash`. A resumed one is proof the record
     // exists, and counting it made a reload a dead end. See canLeaveUsdcStep.
     hasLivePayment: Boolean(payTxHash),
-    hasUnresolvedPayment: Boolean(batch) || failure === 'existing-payment',
+    hasUnresolvedPayment: Boolean(batch) || hasKnownPayment,
     confirmationStalled,
   });
 
@@ -523,7 +525,7 @@ export const UsdcTransferPanel = ({
                 <Button onClick={() => void quote()} disabled={!canQuote}>
                   {isBusy
                     ? 'Working…'
-                    : batch
+                    : batch || hasKnownPayment
                       ? 'Processing payment…'
                       : activeTxHash
                         ? 'Sent'
@@ -598,7 +600,7 @@ export const UsdcTransferPanel = ({
               mayHaveBroadcast={mayHaveBroadcast}
               hasTxHash={Boolean(activeTxHash)}
               hasBatch={Boolean(batch)}
-              hasKnownPayment={failure === 'existing-payment'}
+              hasKnownPayment={hasKnownPayment}
               batchStatusUnavailable={batchStatusUnavailable}
               batchWalletConnected={
                 isConnected &&
