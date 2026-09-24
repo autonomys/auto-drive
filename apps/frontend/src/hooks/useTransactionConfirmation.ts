@@ -159,7 +159,10 @@ export const useTransactionConfirmation = ({
             if (bounded >= requiredConfirmations) {
               setIsFullyConfirmed(true);
               stopped = true;
-              if (unwatch) unwatch();
+              if (unwatch) {
+                unwatch();
+                unwatch = undefined;
+              }
             }
           },
           emitMissed: true,
@@ -172,7 +175,10 @@ export const useTransactionConfirmation = ({
     void start();
     return () => {
       stopped = true;
-      if (unwatch) unwatch();
+      if (unwatch) {
+        unwatch();
+        unwatch = undefined;
+      }
     };
   }, [client, isConfirmed, requiredConfirmations, txHash]);
 

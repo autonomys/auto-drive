@@ -146,6 +146,23 @@ describe('confirmation counting', () => {
     expect(result.current.currentConfs).toBe(3);
     expect(result.current.isFullyConfirmed).toBe(true);
   });
+
+  it('does not invoke unwatch a second time when unmounted after reaching required confirmations', async () => {
+    const { result, unmount } = renderHook(
+      () =>
+        useTransactionConfirmation({ txHash: TX, requiredConfirmations: 2 }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.currentConfs).toBe(1));
+    await emitBlock(101n);
+    expect(result.current.currentConfs).toBe(2);
+    expect(result.current.isFullyConfirmed).toBe(true);
+    expect(unwatchCount).toBe(1);
+
+    unmount();
+    expect(unwatchCount).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
