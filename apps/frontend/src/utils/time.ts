@@ -12,30 +12,37 @@ export const currentYear = () => {
 };
 
 export const formatDate = (date: string) => {
+  if (!date || !dayjs(date).isValid()) return 'N/A';
   const localDate = dayjs.utc(date).local();
   return localDate.format('MMM D, YYYY, h:mm A');
 };
 
 export const formatLocalDate = (date: string) => {
+  if (!date || !dayjs(date).isValid()) return 'N/A';
   const localDate = dayjs.utc(date).local();
   return `${localDate.format('MMM D, YYYY, h:mm A')}`;
 };
 
 export const utcToLocalRelativeTime = (timestamp: string): string => {
+  if (!timestamp || !dayjs(timestamp).isValid()) return 'N/A';
   const now = dayjs();
   const time = dayjs.utc(timestamp).local();
   const diffInSeconds = now.diff(time, 'second');
 
-  if (diffInSeconds > 0) {
+  if (diffInSeconds === 0) {
+    return 'just now';
+  } else if (diffInSeconds > 0) {
     if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
     return time.fromNow(true) + ' ago';
   } else {
-    if (diffInSeconds > -60) return `${diffInSeconds} seconds from now`;
+    const absDiff = Math.abs(diffInSeconds);
+    if (absDiff < 60) return `${absDiff} seconds from now`;
     return time.fromNow(true) + ' from now';
   }
 };
 
 export const formatDateWithTimezone = (date: string) => {
+  if (!date || !dayjs(date).isValid()) return 'N/A';
   const localDate = dayjs.utc(date).local();
   const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return `${localDate.format('MMM D, YYYY, h:mm A')} (${tzName})`;

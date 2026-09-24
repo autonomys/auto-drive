@@ -1,17 +1,22 @@
 import bytes from 'bytes';
 
 // Format number with commas
-export const formatNumberWithCommas = (num?: number): string => {
-  if (num === undefined) return 'N/A';
-  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+export const formatNumberWithCommas = (num?: number | null): string => {
+  if (num === undefined || num === null || Number.isNaN(num)) return 'N/A';
+  if (!Number.isFinite(num)) return num.toString();
+  const [integerPart, decimalPart] = num.toString().split('.');
+  const formattedInt = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return decimalPart !== undefined ? `${formattedInt}.${decimalPart}` : formattedInt;
 };
 
 export const truncateNumberWithDecimals = (
   num: number,
   decimals: number = 2,
 ): number => {
-  const precision = 10 ** decimals;
-  return Math.floor(num * precision) / precision;
+  if (Number.isNaN(num) || !Number.isFinite(num)) return num;
+  const safeDecimals = Math.max(0, Math.floor(decimals));
+  const precision = 10 ** safeDecimals;
+  return Math.trunc(num * precision) / precision;
 };
 
 const mappers = {
@@ -28,6 +33,7 @@ export const formatBytes = (
   amount: number,
   decimalPlaces: number = 2,
 ): string => {
+  if (typeof amount !== 'number' || Number.isNaN(amount) || !Number.isFinite(amount)) return 'N/A';
   const formatted = bytes(amount, { decimalPlaces });
   if (!formatted) return 'N/A';
 
@@ -48,6 +54,7 @@ export const formatStorageSize = (
   amount: number,
   decimalPlaces: number = 2,
 ): string => {
+  if (typeof amount !== 'number' || Number.isNaN(amount) || !Number.isFinite(amount)) return 'N/A';
   const formatted = bytes(amount, { decimalPlaces, unitSeparator: ' ' });
   if (!formatted) return 'N/A';
 
