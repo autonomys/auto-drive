@@ -57,6 +57,7 @@ export const updateSortParams = (
 };
 
 export const formatCid = (cid: string) => {
+  if (!cid) return '';
   if (cid.length <= 15) return cid;
   return `${cid.slice(0, 10)}...${cid.slice(-5)}`;
 };
