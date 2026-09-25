@@ -72,9 +72,15 @@ export const usePaymentIntent = () => {
     [api],
   );
 
+  const getPaymentIntent = useCallback(
+    (intentId: string) => api.getIntent(intentId),
+    [api],
+  );
+
   return {
     paymentIntent,
     usdcPaymentIntent,
+    getPaymentIntent,
     targetContract,
     MINIMUM_CONFIRMATIONS,
   };
