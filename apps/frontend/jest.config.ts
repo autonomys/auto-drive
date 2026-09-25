@@ -7,6 +7,8 @@ const config: Config = {
   moduleNameMapper: {
     // @/* → src/* (tsconfig paths alias)
     '^@/(.+)$': '<rootDir>/src/$1',
+    // gql/* → gql/* (tsconfig paths alias)
+    '^gql/(.+)$': '<rootDir>/gql/$1',
     // Bare non-scoped imports that go through baseUrl (e.g. "utils/auth",
     // "services/api", "contexts/network", etc.) → src/<path>
     '^(utils|services|contexts|globalStates|components|hooks|app)/(.+)$':
