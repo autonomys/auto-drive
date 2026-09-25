@@ -83,6 +83,18 @@ const publishNodes = async (cids: string[], signal?: AbortSignal) => {
     statusBreakdown,
   )
 
+  // Persist blockchain data for every node that succeeded before evaluating failures.
+  // This guarantees partial batch progress is never lost: successful nodes are marked
+  // published in the database, allowing publishing-recovery sweeps to find the object
+  // and retries to skip already-published nodes rather than restarting from zero.
+  await Promise.all(
+    publishingNodes.map((node, index) => {
+      const isSuccess = results[index].success
+      if (!isSuccess) return null
+      return NodesUseCases.setPublishedOn(node.cid, results[index])
+    }),
+  )
+
   const someNodeFailed = results.some((result) => !result.success)
   if (someNodeFailed) {
     // Surface the breakdown at warn too: a bare "Failed to publish nodes" gives
@@ -97,14 +109,6 @@ const publishNodes = async (cids: string[], signal?: AbortSignal) => {
       `Failed to publish nodes (${JSON.stringify(statusBreakdown)})`,
     )
   }
-
-  await Promise.all(
-    publishingNodes.map((node, index) => {
-      const isSuccess = results[index].success
-      if (!isSuccess) return null
-      return NodesUseCases.setPublishedOn(node.cid, results[index])
-    }),
-  )
 }
 
 export const OnchainPublisher = {
