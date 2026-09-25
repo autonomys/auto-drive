@@ -365,6 +365,7 @@ export const createApiService = ({
     }
 
     const response = await fetch(`${apiBaseUrl}/intents/${intentId}`, {
+      cache: 'no-store',
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,

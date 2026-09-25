@@ -28,6 +28,15 @@ const OPEN: UsdcActionInputs = {
 const QUOTED: UsdcActionInputs = { ...OPEN, awaitingConfirmation: true };
 
 describe('evaluateUsdcActions', () => {
+  it('does not replace an uncertain payment with a fresh quote after expiry', () => {
+    expect(
+      evaluateUsdcActions({
+        ...QUOTED,
+        quoteStale: true,
+        mayHaveBroadcast: true,
+      }),
+    ).toEqual({ canQuote: false, canPay: false });
+  });
   it('offers a quote and nothing else before one exists', () => {
     expect(evaluateUsdcActions(OPEN)).toEqual({
       canQuote: true,
@@ -148,13 +157,13 @@ describe('evaluateUsdcActions', () => {
   it('refuses to pay again while a payment may already be on chain', () => {
     // The intent is reused by design and the receiver has no per-intent replay
     // guard, so a second click transfers the amount twice — one credited, one
-    // filed as ALREADY_SETTLED. Quoting stays open: a new intent costs nothing
-    // and is not what pays twice.
+    // filed as ALREADY_SETTLED. Keep the current intent until its outcome is
+    // known, including after expiry, so recovery doesn't lose its identity.
     const held = { ...QUOTED, mayHaveBroadcast: true };
 
     expect(evaluateUsdcActions(held).canPay).toBe(false);
     expect(evaluateUsdcActions({ ...held, quoteStale: true }).canQuote).toBe(
-      true,
+      false,
     );
   });
 });
@@ -162,6 +171,7 @@ describe('evaluateUsdcActions', () => {
 describe('canLeaveUsdcStep', () => {
   const BEFORE_PAYING = {
     isBusy: false,
+    hasUnresolvedPayment: false,
     hasLivePayment: false,
     confirmationStalled: false,
   };
@@ -169,6 +179,19 @@ describe('canLeaveUsdcStep', () => {
   it('lets a buyer back out before any money moves', () => {
     expect(canLeaveUsdcStep(BEFORE_PAYING)).toBe(true);
   });
+
+  it.each([false, true])(
+    'blocks leaving an unresolved batch even if confirmationStalled=%s',
+    (confirmationStalled) => {
+      expect(
+        canLeaveUsdcStep({
+          ...BEFORE_PAYING,
+          hasUnresolvedPayment: true,
+          confirmationStalled,
+        }),
+      ).toBe(false);
+    },
+  );
 
   it('holds them while a wallet interaction is in flight', () => {
     expect(canLeaveUsdcStep({ ...BEFORE_PAYING, isBusy: true })).toBe(false);
@@ -200,6 +223,7 @@ describe('canLeaveUsdcStep', () => {
     expect(
       canLeaveUsdcStep({
         isBusy: true,
+        hasUnresolvedPayment: false,
         hasLivePayment: true,
         confirmationStalled: true,
       }),
