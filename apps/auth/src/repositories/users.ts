@@ -90,10 +90,10 @@ const updateRole = async (
   oauth_provider: string,
   oauth_user_id: string,
   role: UserRole,
-): Promise<User> => {
+): Promise<User | undefined> => {
   const db = await getDatabase()
 
-  const updatedUser = await db.query(
+  const updatedUser = await db.query<User>(
     'UPDATE users.users SET role = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *',
     [role, oauth_provider, oauth_user_id],
   )
@@ -139,10 +139,10 @@ const updateUsername = async (
   oauth_provider: string,
   oauth_user_id: string,
   oauth_username: string,
-): Promise<User> => {
+): Promise<User | undefined> => {
   const db = await getDatabase()
 
-  const updatedUser = await db.query(
+  const updatedUser = await db.query<User>(
     'UPDATE users.users SET oauth_username = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *',
     [oauth_username, oauth_provider, oauth_user_id],
   )
@@ -154,10 +154,10 @@ const updateAvatarUrl = async (
   oauth_provider: string,
   oauth_user_id: string,
   oauth_avatar_url: string,
-): Promise<User> => {
+): Promise<User | undefined> => {
   const db = await getDatabase()
 
-  const updatedUser = await db.query(
+  const updatedUser = await db.query<User>(
     'UPDATE users.users SET oauth_avatar_url = $1 WHERE oauth_provider = $2 AND oauth_user_id = $3 RETURNING *',
     [oauth_avatar_url, oauth_provider, oauth_user_id],
   )

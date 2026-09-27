@@ -1,4 +1,5 @@
 import { UsersUseCases } from '../src/useCases/users.js'
+import { usersRepository } from '../src/repositories/users.js'
 import { UnonboardedUser, UserRole } from '@auto-drive/models'
 import { OrganizationsUseCases } from '../src/useCases/organizations.js'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
@@ -92,15 +93,21 @@ describe('UsersUseCases', () => {
     })
   })
 
-  // it("should be able to get user list", async () => {
-  //   const user = await createMockUser();
-  //   await usersRepository.updateRole(
-  //     user.oauthProvider,
-  //     user.oauthUserId,
-  //     UserRole.Admin
-  //   );
+  it('usersRepository.updateRole should return undefined when updating a non-existent user', async () => {
+    const updated = await usersRepository.updateRole(
+      'non-existent-provider',
+      'non-existent-user-id',
+      UserRole.Admin,
+    )
+    expect(updated).toBeUndefined()
+  })
 
-  //   const users = await UsersUseCases.getUserList(user);
-  //   expect(users).toBeInstanceOf(Array);
-  // });
+  it('usersRepository.updateUsername should return undefined when updating a non-existent user', async () => {
+    const updated = await usersRepository.updateUsername(
+      'non-existent-provider',
+      'non-existent-user-id',
+      'new-username',
+    )
+    expect(updated).toBeUndefined()
+  })
 })

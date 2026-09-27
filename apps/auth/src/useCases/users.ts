@@ -204,7 +204,16 @@ const updateRole = async (
 
   const user = await resolveUser(userOrPublicId)
 
-  return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role)
+  const updatedUser = await usersRepository.updateRole(
+    user.oauthProvider,
+    user.oauthUserId,
+    role,
+  )
+  if (!updatedUser) {
+    throw new Error('User not found')
+  }
+
+  return updatedUser
 }
 
 const initUser = async (
