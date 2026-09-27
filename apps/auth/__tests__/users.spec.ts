@@ -92,15 +92,19 @@ describe('UsersUseCases', () => {
     })
   })
 
-  // it("should be able to get user list", async () => {
-  //   const user = await createMockUser();
-  //   await usersRepository.updateRole(
-  //     user.oauthProvider,
-  //     user.oauthUserId,
-  //     UserRole.Admin
-  //   );
+  it('should search users by public id substring', async () => {
+    const user = await UsersUseCases.onboardUser({
+      ...createUnonboardedUser(),
+      oauthUserId: 'search-target-user',
+    })
 
-  //   const users = await UsersUseCases.getUserList(user);
-  //   expect(users).toBeInstanceOf(Array);
-  // });
+    if (!user || !user.publicId) {
+      expect(user).toBeTruthy()
+      return
+    }
+
+    const prefix = user.publicId.slice(0, 8)
+    const results = await UsersUseCases.searchUsersByPublicId(prefix)
+    expect(results).toContain(user.publicId)
+  })
 })

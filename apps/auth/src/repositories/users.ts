@@ -79,7 +79,7 @@ const searchUsersByPublicId = async (
   const db = await getDatabase()
 
   const users = await db.query(
-    'SELECT * FROM users.users WHERE publicId LIKE $1 limit $2',
+    'SELECT * FROM users.users WHERE public_id LIKE $1 limit $2',
     [`%${publicId}%`, limit],
   )
 
