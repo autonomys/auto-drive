@@ -64,6 +64,12 @@ describe('number utils', () => {
       expect(truncateNumberWithDecimals(Infinity, 2)).toBe(0);
       expect(truncateNumberWithDecimals(-Infinity, 2)).toBe(0);
     });
+
+    it('avoids floating-point multiplication rounding errors on prone values', () => {
+      expect(truncateNumberWithDecimals(1.14, 2)).toBe(1.14);
+      expect(truncateNumberWithDecimals(-1.14, 2)).toBe(-1.14);
+      expect(truncateNumberWithDecimals(1.145, 2)).toBe(1.14);
+    });
   });
 
   describe('formatBytes', () => {

@@ -13,8 +13,16 @@ export const truncateNumberWithDecimals = (
   decimals: number = 2,
 ): number => {
   if (!Number.isFinite(num)) return 0;
-  const precision = 10 ** Math.max(0, decimals);
-  return Math.trunc(num * precision) / precision;
+  const dec = Math.max(0, Math.trunc(decimals));
+  if (dec === 0) return Math.trunc(num);
+  const str = num.toString();
+  if (str.includes('e')) {
+    const precision = 10 ** dec;
+    return Math.trunc(num * precision) / precision;
+  }
+  const dotIndex = str.indexOf('.');
+  if (dotIndex === -1) return num;
+  return Number(str.slice(0, dotIndex + 1 + dec));
 };
 
 const mappers = {
