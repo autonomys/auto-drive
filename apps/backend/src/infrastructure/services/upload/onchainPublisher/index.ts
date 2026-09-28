@@ -83,10 +83,8 @@ const publishNodes = async (cids: string[], signal?: AbortSignal) => {
     statusBreakdown,
   )
 
-  // Persist blockchain data for every node that succeeded before evaluating failures.
-  // This guarantees partial batch progress is never lost: successful nodes are marked
-  // published in the database, allowing publishing-recovery sweeps to find the object
-  // and retries to skip already-published nodes rather than restarting from zero.
+  // Record confirmed txs before throwing, so a retry only resubmits the
+  // failures and the object stays visible to the publishing-recovery sweep.
   await Promise.all(
     publishingNodes.map((node, index) => {
       const isSuccess = results[index].success

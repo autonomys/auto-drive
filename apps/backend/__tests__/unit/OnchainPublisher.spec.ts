@@ -32,6 +32,10 @@ describe('OnchainPublisher', () => {
     jest.clearAllMocks()
   })
 
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
   it('should publish nodes', async () => {
     const nodes: Node[] = [1, 2, 3].map((e) => ({
       cid: `QmHash${e}`,
@@ -110,7 +114,7 @@ describe('OnchainPublisher', () => {
     expect(submitSpy).toHaveBeenCalledWith(transactions, undefined)
   })
 
-  it('should persist successful nodes before throwing when some transactions in the batch fail', async () => {
+  it('should persist confirmed nodes when part of the batch fails', async () => {
     const nodes: Node[] = [1, 2].map((e) => ({
       cid: `QmHash${e}`,
       encoded_node: `QmHash${e}`,
@@ -129,21 +133,26 @@ describe('OnchainPublisher', () => {
       MOCK_PUBLISH_RESULT,
       {
         success: false,
+        txHash: '0x456',
         status: 'Timeout',
-        error: 'Confirmation timeout',
+        error: 'Transaction confirmation timeout',
       },
     ]
 
     jest.spyOn(transactionManager, 'submit').mockResolvedValue(mixedResults)
 
-    await expect(
-      OnchainPublisher.publishNodes(nodes.map((e) => e.cid)),
-    ).rejects.toThrow('Failed to publish nodes')
+    try {
+      await expect(
+        OnchainPublisher.publishNodes(nodes.map((e) => e.cid)),
+      ).rejects.toThrow('Failed to publish nodes')
 
-    expect(setPublishedOnSpy).toHaveBeenCalledTimes(1)
-    expect(setPublishedOnSpy).toHaveBeenCalledWith(
-      nodes[0].cid,
-      mixedResults[0],
-    )
+      expect(setPublishedOnSpy).toHaveBeenCalledTimes(1)
+      expect(setPublishedOnSpy).toHaveBeenCalledWith(
+        nodes[0].cid,
+        mixedResults[0],
+      )
+    } finally {
+      setPublishedOnSpy.mockRestore()
+    }
   })
 })
