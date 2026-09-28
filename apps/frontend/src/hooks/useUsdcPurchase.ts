@@ -278,92 +278,91 @@ export const useUsdcPurchase = ({
     setMessage(null);
   }, [batch, payTxHash]);
 
-  // A server-recorded payment can acquire its hash or finish after our first
-  // read. Reconcile it even after reload, without ever enabling another charge.
-  const knownIntentId = intent?.id ?? resumed?.intentId;
+  // Wallets may ignore our client batch ID and return a different one only
+  // after broadcasting. After a reload or lost response, reconcile the intent
+  // independently of wallet status so a missing batch ID cannot hide payment.
+  const knownIntentId = batch?.intentId ?? intent?.id ?? resumed?.intentId;
   useEffect(() => {
-    if (failure !== 'existing-payment' || !knownIntentId) return;
+    if ((!batch && failure !== 'existing-payment') || !knownIntentId) return;
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
+    let serverTimer: ReturnType<typeof setTimeout> | undefined;
+    let walletTimer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      stopped = true;
+      clearTimeout(serverTimer);
+      clearTimeout(walletTimer);
+    };
+    const finishPayment = (hash?: Hash) => {
+      // Stop both sources synchronously: an already-in-flight wallet response
+      // must not undo a server-recorded payment (or overwrite its saved hash).
+      stop();
+      knownPaymentWithoutHash.current = !hash;
+      setBatch(null);
+      setBatchStatusUnavailable(false);
+      setFailure(null);
+      setMessage(null);
+      setStage('submitted');
+    };
+    const pollServer = async () => {
       try {
         const current = await getPaymentIntent(knownIntentId);
         if (stopped) return;
         if (current.status === IntentStatus.COMPLETED) {
+          finishPayment();
           clearUsdcResume();
           setIsPaymentCompleted(true);
-          setFailure(null);
-          setMessage(null);
-          setStage('submitted');
           void queryClient.invalidateQueries({ queryKey: ['account'] });
           void queryClient.invalidateQueries({ queryKey: ['creditSummary'] });
           return;
         }
         if (current.txHash) {
+          const record = batch ?? resumed;
+          finishPayment(current.txHash as Hash);
           saveUsdcResume({
             intentId: knownIntentId,
             txHash: current.txHash,
-            sizeMib:
-              requestedBytes === null
+            sizeMib: record
+              ? record.sizeMib
+              : requestedBytes === null
                 ? null
                 : Number(requestedBytes) / 1_048_576,
-            chainId: resumed?.chainId ?? target?.chainId,
-            confirmations: resumed?.confirmations ?? target?.confirmations,
-            settleGraceMs: resumed?.settleGraceMs ?? target?.settleGraceMs,
+            chainId: record?.chainId ?? target?.chainId,
+            confirmations: record?.confirmations ?? target?.confirmations,
+            settleGraceMs: record?.settleGraceMs ?? target?.settleGraceMs,
           });
-          knownPaymentWithoutHash.current = false;
           setPayTxHash(current.txHash as Hash);
-          setFailure(null);
-          setMessage(null);
-          setStage('submitted');
           return;
         }
       } catch {
         // A failed read, including an expired quote, cannot prove no payment
         // was sent. Retain the record and retry without unlocking payment.
       }
-      if (!stopped) timer = setTimeout(poll, 2000);
+      if (!stopped) serverTimer = setTimeout(pollServer, 2000);
     };
-    void poll();
-    return () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [
-    failure,
-    knownIntentId,
-    getPaymentIntent,
-    requestedBytes,
-    resumed,
-    target,
-    queryClient,
-  ]);
 
-  // A batch ID is not a transaction hash. Keep polling it, including after a
-  // reload or a lost sendCalls response, until the wallet supplies receipts.
-  // Status errors never authorize another payment. 400/500 explicitly mean
-  // none of the calls took effect; 600 (partial execution) does NOT.
-  useEffect(() => {
-    if (
-      !batch?.batchId ||
-      !connector ||
-      address?.toLowerCase() !== batch.payer?.toLowerCase()
-    )
-      return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
+    // Run separately from the server poll: either source may hang or fail.
+    // Unknown IDs (5730) never authorize another payment. Only wallet status
+    // 400/500 proves the batch had no effect; 600 (partial execution) does not.
+    const pollWallet = async () => {
+      if (
+        !batch?.batchId ||
+        !connector ||
+        address?.toLowerCase() !== batch.payer?.toLowerCase()
+      )
+        return;
       try {
         const result = await getCallsStatus(config, {
-          id: batch.batchId!,
+          id: batch.batchId,
           connector,
         });
         if (stopped) return;
         if (result.chainId !== batch.chainId)
           throw new Error('Wrong batch chain');
         if (result.statusCode === 400 || result.statusCode === 500) {
+          stop();
           clearUsdcResume();
           setBatch(null);
+          setBatchStatusUnavailable(false);
           paymentSubmitted.current = false;
           setMayHaveBroadcast(false);
           fail(
@@ -381,26 +380,35 @@ export const useUsdcPurchase = ({
           receipts.every((receipt) => receipt.status === 'success')
         ) {
           const hash = receipts[receipts.length - 1].transactionHash;
+          finishPayment(hash);
           saveUsdcResume({ ...batch, batchId: undefined, txHash: hash });
           setPayTxHash(hash);
-          setBatch(null);
-          setFailure(null);
-          setMessage(null);
-          setStage('submitted');
           return;
         }
         setBatchStatusUnavailable(result.status !== 'pending');
       } catch {
         if (!stopped) setBatchStatusUnavailable(true);
       }
-      if (!stopped) timer = setTimeout(poll, 3000);
+      if (!stopped) walletTimer = setTimeout(pollWallet, 3000);
     };
-    void poll();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [address, batch, config, connector, fail, intent]);
+    void pollServer();
+    void pollWallet();
+    return stop;
+  }, [
+    address,
+    batch,
+    config,
+    connector,
+    fail,
+    failure,
+    getPaymentIntent,
+    intent,
+    knownIntentId,
+    queryClient,
+    requestedBytes,
+    resumed,
+    target,
+  ]);
 
   /**
    * Translate a thrown value into a failure the panel can offer a choice for.

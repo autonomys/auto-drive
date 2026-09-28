@@ -130,6 +130,7 @@ const setup = (resumed?: UsdcResumeRecord | null) =>
   );
 
 const BATCH_ID = `0x${'ab'.repeat(32)}`;
+const WALLET_BATCH_ID = `0x${'cd'.repeat(16)}`;
 
 beforeEach(() => {
   jest.resetAllMocks();
@@ -139,7 +140,7 @@ beforeEach(() => {
     value: (bytes: Uint8Array) => bytes.fill(0xab),
   });
   getCapabilities.mockResolvedValue({});
-  sendCalls.mockResolvedValue({ id: BATCH_ID });
+  sendCalls.mockResolvedValue({ id: WALLET_BATCH_ID });
   getCallsStatus.mockResolvedValue({
     chainId: 1,
     statusCode: 100,
@@ -968,6 +969,274 @@ describe('pay', () => {
       expect(writeContractAsync).not.toHaveBeenCalled();
     });
 
+    it('recovers after reload while a wallet-generated batch ID is still unknown', async () => {
+      const walletId = `0x${'cd'.repeat(16)}`;
+      sendCalls.mockImplementation(() => new Promise(() => {}));
+      const first = setup();
+      await act(async () => {
+        await first.result.current.quote();
+      });
+      act(() => {
+        void first.result.current.pay();
+      });
+      await waitFor(() => expect(readUsdcResume(1024)?.batchId).toBeDefined());
+      first.unmount();
+      getCallsStatus.mockImplementation(async (_config, args) => {
+        if ((args as { id: string }).id !== walletId)
+          throw { code: 5730, message: 'Unknown bundle id' };
+        return confirmed;
+      });
+      getPaymentIntent.mockResolvedValue({
+        ...quoteIn(10),
+        status: 'pending',
+        txHash: '0xpaid',
+      });
+      const next = setup(readUsdcResume(1024));
+      await waitFor(() => expect(next.result.current.payTxHash).toBe('0xpaid'));
+      expect(next.result.current.batch).toBeNull();
+      expect(next.result.current.stage).toBe('submitted');
+      expect(readUsdcResume(1024)?.txHash).toBe('0xpaid');
+      expect(readUsdcResume(1024)?.batchId).toBeUndefined();
+      expect(writeContractAsync).not.toHaveBeenCalled();
+    });
+
+    it.each(['hash', 'completed'])(
+      'recovers a lost batch response through the backend (%s)',
+      async (outcome) => {
+        jest.useFakeTimers();
+        try {
+          sendCalls.mockRejectedValue(new Error('wallet response lost'));
+          getCallsStatus.mockRejectedValue({ code: 5730 });
+          const { result } = setup();
+          await quoteThen(result);
+          getPaymentIntent.mockResolvedValue({
+            ...quoteIn(10),
+            status: outcome === 'completed' ? 'completed' : 'confirmed',
+            txHash: outcome === 'hash' ? '0xpaid' : undefined,
+          });
+          await act(async () => {
+            await jest.advanceTimersByTimeAsync(2000);
+          });
+          expect(result.current.stage).toBe('submitted');
+          expect(result.current.batch).toBeNull();
+          expect(result.current.batchStatusUnavailable).toBe(false);
+          if (outcome === 'completed') {
+            expect(result.current.isPaymentCompleted).toBe(true);
+            expect(readUsdcResume(1024)).toBeNull();
+            expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+              queryKey: ['creditSummary'],
+            });
+          } else {
+            expect(result.current.payTxHash).toBe('0xpaid');
+            expect(readUsdcResume(1024)).toEqual(
+              expect.objectContaining({
+                txHash: '0xpaid',
+                chainId: 1,
+                sizeMib: 1024,
+                confirmations: 6,
+                settleGraceMs: 120_000,
+              }),
+            );
+          }
+          await act(async () => {
+            result.current.acknowledgeNotBroadcast();
+            await result.current.quote();
+            await result.current.pay();
+          });
+          expect(sendCalls).toHaveBeenCalledTimes(1);
+          expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
+          expect(writeContractAsync).not.toHaveBeenCalled();
+          const reads = getPaymentIntent.mock.calls.length;
+          const walletReads = getCallsStatus.mock.calls.length;
+          await act(async () => {
+            await jest.advanceTimersByTimeAsync(6000);
+          });
+          expect(getPaymentIntent).toHaveBeenCalledTimes(reads);
+          expect(getCallsStatus).toHaveBeenCalledTimes(walletReads);
+        } finally {
+          jest.useRealTimers();
+        }
+      },
+    );
+
+    it('keeps an unknown batch locked through failed and unpaid backend reads', async () => {
+      jest.useFakeTimers();
+      try {
+        sendCalls.mockRejectedValue(new Error('wallet response lost'));
+        getCallsStatus.mockRejectedValue({ code: 5730 });
+        const { result } = setup();
+        await quoteThen(result);
+        const saved = readUsdcResume(1024);
+        for (const response of [
+          new Error('offline'),
+          new ApiError(410, 'Expired'),
+          'pending',
+          'expired',
+        ]) {
+          if (response instanceof Error)
+            getPaymentIntent.mockRejectedValue(response);
+          else
+            getPaymentIntent.mockResolvedValue({
+              ...quoteIn(10),
+              status: response,
+            });
+          await act(async () => {
+            await jest.advanceTimersByTimeAsync(3000);
+          });
+          await act(async () => {
+            result.current.reset();
+            result.current.acknowledgeNotBroadcast();
+            await result.current.quote();
+            await result.current.pay();
+          });
+          expect(result.current.stage).toBe('batch-pending');
+          expect(result.current.mayHaveBroadcast).toBe(true);
+          expect(readUsdcResume(1024)).toEqual(saved);
+        }
+        expect(sendCalls).toHaveBeenCalledTimes(1);
+        expect(usdcPaymentIntent).toHaveBeenCalledTimes(1);
+        expect(writeContractAsync).not.toHaveBeenCalled();
+        getPaymentIntent.mockResolvedValue({
+          ...quoteIn(10),
+          status: 'completed',
+        });
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(2000);
+        });
+        expect(result.current.isPaymentCompleted).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it.each([400, 500])(
+      'ignores a late wallet failure (%s) after backend recovery',
+      async (statusCode) => {
+        jest.useFakeTimers();
+        try {
+          let reply: (value: unknown) => void = () => {};
+          getCallsStatus.mockImplementation(
+            () =>
+              new Promise((resolve) => {
+                reply = resolve;
+              }),
+          );
+          const { result } = setup();
+          await quoteThen(result);
+          getPaymentIntent.mockResolvedValue({
+            ...quoteIn(10),
+            status: 'confirmed',
+            txHash: '0xpaid',
+          });
+          await act(async () => {
+            await jest.advanceTimersByTimeAsync(2000);
+          });
+          expect(result.current.payTxHash).toBe('0xpaid');
+          await act(async () => {
+            reply({ chainId: 1, statusCode, status: 'failure' });
+          });
+          expect(result.current.stage).toBe('submitted');
+          expect(result.current.mayHaveBroadcast).toBe(true);
+          expect(readUsdcResume(1024)?.txHash).toBe('0xpaid');
+          await act(async () => {
+            await result.current.pay();
+          });
+          expect(sendCalls).toHaveBeenCalledTimes(1);
+        } finally {
+          jest.useRealTimers();
+        }
+      },
+    );
+
+    it('ignores a late backend response after wallet recovery', async () => {
+      let reply: (value: unknown) => void = () => {};
+      getPaymentIntent
+        .mockResolvedValueOnce({ ...quoteIn(10), status: 'pending' })
+        .mockResolvedValueOnce({ ...quoteIn(10), status: 'pending' })
+        .mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              reply = resolve;
+            }),
+        );
+      getCallsStatus.mockResolvedValue(confirmed);
+      const { result } = setup();
+      await quoteThen(result);
+      await waitFor(() => expect(result.current.payTxHash).toBe('0xpaid'));
+      await act(async () => {
+        reply({ ...quoteIn(10), status: 'completed' });
+      });
+      expect(readUsdcResume(1024)?.txHash).toBe('0xpaid');
+      expect(result.current.isPaymentCompleted).toBe(false);
+      expect(result.current.batch).toBeNull();
+    });
+
+    it('recovers from the backend without the original wallet or an available target', async () => {
+      getPaymentIntent.mockResolvedValue({
+        ...quoteIn(10),
+        status: 'confirmed',
+        txHash: '0xpaid',
+      });
+      const { result } = renderHook(() =>
+        useUsdcPurchase({
+          target: undefined,
+          requestedBytes: REQUESTED_BYTES,
+          resumed: {
+            intentId: INTENT_ID,
+            batchId: BATCH_ID,
+            sizeMib: 1024,
+            chainId: 11155111,
+            confirmations: 3,
+            settleGraceMs: 100_000,
+            payer: TARGET.receiverAddress,
+          },
+        }),
+      );
+      await waitFor(() => expect(result.current.payTxHash).toBe('0xpaid'));
+      expect(result.current.batch).toBeNull();
+      expect(getCallsStatus).not.toHaveBeenCalled();
+      expect(readUsdcResume(1024)).toEqual(
+        expect.objectContaining({
+          txHash: '0xpaid',
+          chainId: 11155111,
+          confirmations: 3,
+          settleGraceMs: 100_000,
+        }),
+      );
+      expect(sendCalls).not.toHaveBeenCalled();
+    });
+
+    it('leaves the saved batch untouched when a backend response arrives after unmount', async () => {
+      jest.useFakeTimers();
+      try {
+        let reply: (value: unknown) => void = () => {};
+        getPaymentIntent
+          .mockResolvedValueOnce({ ...quoteIn(10), status: 'pending' })
+          .mockResolvedValueOnce({ ...quoteIn(10), status: 'pending' })
+          .mockImplementation(
+            () =>
+              new Promise((resolve) => {
+                reply = resolve;
+              }),
+          );
+        const first = setup();
+        await quoteThen(first.result);
+        const saved = readUsdcResume(1024);
+        first.unmount();
+        const serverReads = getPaymentIntent.mock.calls.length;
+        const walletReads = getCallsStatus.mock.calls.length;
+        await act(async () => {
+          reply({ ...quoteIn(10), status: 'completed' });
+          await jest.advanceTimersByTimeAsync(6000);
+        });
+        expect(readUsdcResume(1024)).toEqual(saved);
+        expect(getPaymentIntent).toHaveBeenCalledTimes(serverReads);
+        expect(getCallsStatus).toHaveBeenCalledTimes(walletReads);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('recovers a lost submission response using the saved client batch ID', async () => {
       sendCalls.mockImplementation(async () => {
         expect(readUsdcResume(1024)?.batchId).toBe(BATCH_ID);
@@ -988,7 +1257,7 @@ describe('pay', () => {
       const first = setup();
       await quoteThen(first.result);
       const saved = readUsdcResume(1024);
-      expect(saved?.batchId).toBe(BATCH_ID);
+      expect(saved?.batchId).toBe(WALLET_BATCH_ID);
       first.unmount();
       getCallsStatus.mockResolvedValue(confirmed);
       const next = setup(saved);
@@ -1105,7 +1374,7 @@ describe('pay', () => {
         expect(result.current.batchStatusUnavailable).toBe(true),
       );
       expect(result.current.mayHaveBroadcast).toBe(true);
-      expect(readUsdcResume(1024)?.batchId).toBe(BATCH_ID);
+      expect(readUsdcResume(1024)?.batchId).toBe(WALLET_BATCH_ID);
     });
 
     it('revalidates server expiry after discovering batch support', async () => {
