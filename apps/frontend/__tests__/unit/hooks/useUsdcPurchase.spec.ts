@@ -939,12 +939,23 @@ describe('pay', () => {
       expect(writeContractAsync).toHaveBeenCalledTimes(2);
     });
 
-    it('falls back only when the batch request explicitly reports lack of support', async () => {
-      sendCalls.mockRejectedValue({ cause: { code: 5760 } });
+    it.each([5760, -32602, -32600, 5740, 4100])(
+      'falls back when the wallet refuses the batch without submitting it (%s)',
+      async (code) => {
+        sendCalls.mockRejectedValue({ cause: { code } });
+        const { result } = setup();
+        await quoteThen(result);
+        expect(writeContractAsync).toHaveBeenCalledTimes(2);
+        expect(result.current.payTxHash).toBe('0xdeadbeef');
+      },
+    );
+
+    it('sends a hex batch ID', async () => {
       const { result } = setup();
       await quoteThen(result);
-      expect(writeContractAsync).toHaveBeenCalledTimes(2);
-      expect(result.current.payTxHash).toBe('0xdeadbeef');
+      expect((sendCalls.mock.calls[0][1] as { id: string }).id).toMatch(
+        /^0x[0-9a-f]{64}$/,
+      );
     });
 
     it('does not fall back when the buyer declines the batch', async () => {

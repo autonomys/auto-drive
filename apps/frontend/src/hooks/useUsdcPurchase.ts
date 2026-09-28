@@ -20,11 +20,7 @@ import {
   saveUsdcResume,
   type UsdcResumeRecord,
 } from '../utils/usdcResume';
-import {
-  isBatchUnsupported,
-  isWalletRejection,
-  wasNotSubmitted,
-} from '../utils/usdcWalletErrors';
+import { isWalletRejection, wasNotSubmitted } from '../utils/usdcWalletErrors';
 
 /**
  * How far a USDC purchase has got. Rendered as a checklist, so the buyer can see
@@ -672,9 +668,12 @@ export const useUsdcPurchase = ({
             clearUsdcResume();
             paymentSubmitted.current = false;
             setMayHaveBroadcast(false);
-            // Fall back only on an explicit unsupported response. A timeout
-            // may have submitted the batch, so falling back then could pay twice.
-            if (!isBatchUnsupported(error)) throw error;
+            // The batch provably never reached the chain, so the sequential
+            // flow cannot pay twice. Wallets differ in what they accept (batch
+            // ID format, EIP-5792 version, batch size), so any such refusal
+            // falls back, unless the buyer declined. A timeout stays locked
+            // above: it may have submitted the batch.
+            if (isWalletRejection(error)) throw error;
           }
         }
       }
