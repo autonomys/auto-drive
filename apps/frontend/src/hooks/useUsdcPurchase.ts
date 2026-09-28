@@ -1,21 +1,34 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useAccount,
+  useConfig,
   usePublicClient,
   useSwitchChain,
   useWriteContract,
 } from 'wagmi';
+import { getCapabilities, getCallsStatus, sendCalls } from 'wagmi/actions';
 import { erc20ApprovalAbi, usdcReceiverAbi } from '@auto-drive/ui';
-import { UsdcPaymentTarget } from '@auto-drive/models';
-import { Address, BaseError, Hash, UserRejectedRequestError } from 'viem';
+import { IntentStatus, UsdcPaymentTarget } from '@auto-drive/models';
+import { Address, BaseError, encodeFunctionData, Hash } from 'viem';
 import { ApiError, CreatedIntent } from '../services/api';
 import { usePaymentIntent } from './usePaymentIntent';
+import {
+  clearUsdcResume,
+  saveUsdcResume,
+  type UsdcResumeRecord,
+} from '../utils/usdcResume';
+import {
+  isBatchUnsupported,
+  isWalletRejection,
+  wasNotSubmitted,
+} from '../utils/usdcWalletErrors';
 
 /**
  * How far a USDC purchase has got. Rendered as a checklist, so the buyer can see
- * which of the two signatures they are being asked for and why.
+ * whether their wallet is approving, paying, or confirming a combined request.
  */
 export type UsdcPurchaseStage =
   | 'idle'
@@ -23,8 +36,12 @@ export type UsdcPurchaseStage =
   | 'quoting'
   /** A live quote is in hand and nothing has been signed. The review gate. */
   | 'quoted'
+  | 'checking'
   | 'switching'
   | 'approving'
+  | 'approval-confirming'
+  | 'batching'
+  | 'batch-pending'
   | 'paying'
   | 'submitted';
 
@@ -41,31 +58,20 @@ export type UsdcPurchaseFailure =
   | 'insufficient-balance'
   /** The user declined in their wallet — the network switch or a signature. */
   | 'rejected'
+  /** The server reports a payment, but has no hash we can track yet. */
+  | 'existing-payment'
   /** Something else went wrong. Offer a retry. */
   | 'failed';
 
 /**
- * A margin, not a bare comparison: the payment needs time to be signed and
- * mined, and the backend rejects on ITS clock. Paying with twenty seconds left
- * is how a transaction lands just after expiry, which is the one outcome worse
- * than being told to start again.
+ * Leave time to confirm and mine the payment. Backend settlement grace protects
+ * submitted payments; it is not extra time for checkout to start new requests.
+ * This check cannot revoke a request that is already open in the wallet.
  */
 export const QUOTE_MIN_REMAINING_MS = 45_000;
 
-/**
- * Did the buyer decline this in their wallet?
- *
- * Load-bearing twice over. It decides how a failure is worded — a choice is not
- * a crash — and, in `pay()`, whether a failed payment call can be retried at
- * all: a declined prompt is the ONE failure that proves nothing was broadcast.
- *
- * `walk` because wagmi wraps it: the rejection arrives nested inside a
- * ContractFunctionExecutionError.
- */
-const isWalletRejection = (error: unknown): boolean =>
-  error instanceof UserRejectedRequestError ||
-  (error instanceof BaseError &&
-    error.walk((e) => e instanceof UserRejectedRequestError) !== null);
+const EXISTING_PAYMENT_MESSAGE =
+  'The server has already recorded a payment for this purchase. Do not pay again. Check your credits or contact support if they have not arrived.';
 
 /**
  * The USDC leg of a credit purchase, in two acts: **quote**, then **pay**.
@@ -85,12 +91,10 @@ const isWalletRejection = (error: unknown): boolean =>
  *     the first, whose approval the user has already given — and the backend
  *     would file the eventual payment against whichever id the client last
  *     remembered.
- *   - **Nothing is paid against a lapsed quote.** The lock is checked immediately
- *     before the payment call, not merely when it was cut. A payment that arrives
- *     after expiry is refused and filed as a mispayment: the money is kept, no
- *     credits are granted, and only an admin can untangle it. Which makes the
- *     ordinary sequence — approve, get distracted, come back — a way to lose
- *     money, unless it is checked there.
+ *   - **No new payment request for an expired quote.** Revalidate immediately
+ *     before opening the wallet, including after approval. An already-open
+ *     request cannot be revoked by this hook: the receiver has no deadline.
+ *     Keep tracking any returned hash even if the buyer confirms it late.
  *
  * The approval survives an expired quote on purpose (an ERC20 allowance is not
  * tied to an intent), so the fresh attempt skips straight to paying when the new
@@ -99,12 +103,16 @@ const isWalletRejection = (error: unknown): boolean =>
 export const useUsdcPurchase = ({
   target,
   requestedBytes,
+  resumed,
 }: {
   target: UsdcPaymentTarget | undefined;
   requestedBytes: bigint | null;
+  resumed?: UsdcResumeRecord | null;
 }) => {
-  const { address, chainId: connectedChainId } = useAccount();
-  const { usdcPaymentIntent } = usePaymentIntent();
+  const { address, connector, chainId: connectedChainId } = useAccount();
+  const config = useConfig();
+  const queryClient = useQueryClient();
+  const { usdcPaymentIntent, getPaymentIntent } = usePaymentIntent();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   // Pinned to the payment chain, not the connected one: every read below is
@@ -112,54 +120,47 @@ export const useUsdcPurchase = ({
   // resolve against the wrong chain's state.
   const publicClient = usePublicClient({ chainId: target?.chainId });
 
-  const [stage, setStage] = useState<UsdcPurchaseStage>('idle');
+  const [batch, setBatch] = useState<UsdcResumeRecord | null>(() =>
+    resumed?.batchId && !resumed.txHash ? resumed : null,
+  );
+  const [batchStatusUnavailable, setBatchStatusUnavailable] = useState(false);
+  const [stage, setStage] = useState<UsdcPurchaseStage>(
+    batch ? 'batch-pending' : 'idle',
+  );
   const [intent, setIntent] = useState<CreatedIntent | null>(null);
   const [payTxHash, setPayTxHash] = useState<Hash | undefined>(undefined);
-  const [failure, setFailure] = useState<UsdcPurchaseFailure | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [isPaymentCompleted, setIsPaymentCompleted] = useState(false);
+  const knownPaymentWithoutHash = useRef(
+    Boolean(resumed?.paymentKnown && !resumed.txHash),
+  );
+  const [failure, setFailure] = useState<UsdcPurchaseFailure | null>(
+    knownPaymentWithoutHash.current ? 'existing-payment' : null,
+  );
+  const [message, setMessage] = useState<string | null>(
+    knownPaymentWithoutHash.current ? EXISTING_PAYMENT_MESSAGE : null,
+  );
   // Surfaced so the checklist can say "already approved" instead of silently
   // skipping a step the user was told to expect.
   const [approvalSkipped, setApprovalSkipped] = useState(false);
-  /**
-   * The payment call was entered and did not come back with a hash.
-   *
-   * Which is not the same as "it did not happen". `writeContractAsync` resolves
-   * with the hash only once the transaction has been broadcast, but it can
-   * REJECT after `eth_sendTransaction` has already gone out — a request timeout,
-   * a dropped wallet connection, wagmi surfacing a TransactionExecutionError.
-   * The transaction is then on chain with no record of it on this client.
-   *
-   * Without this, that landed back on `quoted` with `payTxHash` still undefined:
-   * Pay offered again, on the SAME intent, and `payIntentWithToken` has no
-   * per-intent replay guard — it pulls the amount and emits. The backend credits
-   * one payment and files the other as ALREADY_SETTLED: money kept, no credits,
-   * admin-only to untangle. The AI3 path is not exposed to this because it mints
-   * a fresh intent per attempt, so a retry there is a distinct intent rather than
-   * a second payment against one.
-   *
-   * So Pay stays shut until the buyer says they have looked. Cleared only by a
-   * declined prompt, which proves nothing was sent, or by that acknowledgement.
-   */
-  const [mayHaveBroadcast, setMayHaveBroadcast] = useState(false);
-  /**
-   * A `pay()` run is already under way.
-   *
-   * A ref, because the state that would otherwise say so does not update in
-   * time. `isBusy` is derived from `stage`, and on the ordinary path — wallet
-   * already on the payment chain, allowance already covering — the first
-   * `setStage` is the one before the payment write, after two RPC reads. Until
-   * then the button is still enabled and still reads Pay, so an ordinary
-   * double-click starts `pay()` twice and both reach `payIntentWithToken` on the
-   * same intent. The receiver has no replay guard: one transfer is credited and
-   * the other filed as ALREADY_SETTLED.
-   *
-   * Synchronous, so the second click sees it on the same tick the first was
-   * dispatched — which a `setState` could not promise.
-   */
+  // A submitted request can lose its response. Until it is explicitly refused
+  // or resolved, retrying could pay the same intent twice. This flag is a
+  // submission guard, not a UI error: it is also true while the wallet is open.
+  const [mayHaveBroadcast, setMayHaveBroadcast] = useState(
+    Boolean(batch || knownPaymentWithoutHash.current),
+  );
+  // Unlike rendered button state, this also blocks stale callbacks and retries
+  // before React has had a chance to render a submitted payment.
+  const paymentSubmitted = useRef(
+    Boolean(batch || resumed?.txHash || knownPaymentWithoutHash.current),
+  );
+  // Synchronous guards cover double-clicks before React renders the busy state.
   const payInFlight = useRef(false);
 
   const isBusy =
-    stage !== 'idle' && stage !== 'quoted' && stage !== 'submitted';
+    stage !== 'idle' &&
+    stage !== 'quoted' &&
+    stage !== 'submitted' &&
+    stage !== 'batch-pending';
 
   /** Is the quote still worth paying? See QUOTE_MIN_REMAINING_MS. */
   const isQuoteLive = useCallback(
@@ -180,7 +181,77 @@ export const useUsdcPurchase = ({
     [],
   );
 
+  // The browser clock is for display and early rejection. Re-read the server
+  // before opening a wallet request so a stale tab or slow device clock cannot
+  // initiate a payment that the server already considers expired.
+  const validateQuote = useCallback(
+    async (quoted: CreatedIntent) => {
+      try {
+        const current = await getPaymentIntent(quoted.id);
+        if (current.status === IntentStatus.EXPIRED && !current.txHash) {
+          throw new ApiError(410, 'The price lock expired.');
+        }
+        if (current.status !== IntentStatus.PENDING || current.txHash) {
+          // Server evidence of a payment is not a retryable validation error.
+          // Adopt the hash before checking expiry: the quote can expire while
+          // an existing payment settles, but that must never offer a new charge.
+          paymentSubmitted.current = true;
+          setMayHaveBroadcast(true);
+          knownPaymentWithoutHash.current = !current.txHash;
+          saveUsdcResume({
+            intentId: quoted.id,
+            txHash: current.txHash,
+            paymentKnown: !current.txHash,
+            sizeMib:
+              requestedBytes === null
+                ? null
+                : Number(requestedBytes) / 1_048_576,
+            chainId: target?.chainId,
+            confirmations: target?.confirmations,
+            settleGraceMs: target?.settleGraceMs,
+          });
+          if (current.txHash) {
+            setPayTxHash(current.txHash as Hash);
+            setStage('submitted');
+          } else {
+            fail('existing-payment', EXISTING_PAYMENT_MESSAGE, 'quoted');
+          }
+          return false;
+        }
+        const deadline = current.expiresAt
+          ? new Date(current.expiresAt).getTime()
+          : NaN;
+        if (
+          !isQuoteLive(quoted) ||
+          !Number.isFinite(deadline) ||
+          deadline - Date.now() <= QUOTE_MIN_REMAINING_MS
+        ) {
+          throw new ApiError(410, 'The price lock expired.');
+        }
+        return true;
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 410) throw error;
+        setIntent(null);
+        fail(
+          'quote-expired',
+          'The price lock expired. Get a fresh quote before confirming payment.',
+          'idle',
+        );
+        return false;
+      }
+    },
+    [fail, getPaymentIntent, isQuoteLive, requestedBytes, target],
+  );
+
   const reset = useCallback(() => {
+    if (
+      payInFlight.current ||
+      batch ||
+      knownPaymentWithoutHash.current ||
+      (mayHaveBroadcast && !payTxHash)
+    )
+      return;
+    paymentSubmitted.current = false;
     setStage('idle');
     setIntent(null);
     setPayTxHash(undefined);
@@ -188,7 +259,7 @@ export const useUsdcPurchase = ({
     setMessage(null);
     setApprovalSkipped(false);
     setMayHaveBroadcast(false);
-  }, []);
+  }, [batch, mayHaveBroadcast, payTxHash]);
 
   /**
    * "I checked my wallet — nothing was sent."
@@ -198,10 +269,142 @@ export const useUsdcPurchase = ({
    * them can.
    */
   const acknowledgeNotBroadcast = useCallback(() => {
+    if (
+      payInFlight.current ||
+      batch ||
+      payTxHash ||
+      knownPaymentWithoutHash.current
+    )
+      return;
+    paymentSubmitted.current = false;
     setMayHaveBroadcast(false);
     setFailure(null);
     setMessage(null);
-  }, []);
+  }, [batch, payTxHash]);
+
+  // A server-recorded payment can acquire its hash or finish after our first
+  // read. Reconcile it even after reload, without ever enabling another charge.
+  const knownIntentId = intent?.id ?? resumed?.intentId;
+  useEffect(() => {
+    if (failure !== 'existing-payment' || !knownIntentId) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const current = await getPaymentIntent(knownIntentId);
+        if (stopped) return;
+        if (current.status === IntentStatus.COMPLETED) {
+          clearUsdcResume();
+          setIsPaymentCompleted(true);
+          setFailure(null);
+          setMessage(null);
+          setStage('submitted');
+          void queryClient.invalidateQueries({ queryKey: ['account'] });
+          void queryClient.invalidateQueries({ queryKey: ['creditSummary'] });
+          return;
+        }
+        if (current.txHash) {
+          saveUsdcResume({
+            intentId: knownIntentId,
+            txHash: current.txHash,
+            sizeMib:
+              requestedBytes === null
+                ? null
+                : Number(requestedBytes) / 1_048_576,
+            chainId: resumed?.chainId ?? target?.chainId,
+            confirmations: resumed?.confirmations ?? target?.confirmations,
+            settleGraceMs: resumed?.settleGraceMs ?? target?.settleGraceMs,
+          });
+          knownPaymentWithoutHash.current = false;
+          setPayTxHash(current.txHash as Hash);
+          setFailure(null);
+          setMessage(null);
+          setStage('submitted');
+          return;
+        }
+      } catch {
+        // A failed read, including an expired quote, cannot prove no payment
+        // was sent. Retain the record and retry without unlocking payment.
+      }
+      if (!stopped) timer = setTimeout(poll, 2000);
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    failure,
+    knownIntentId,
+    getPaymentIntent,
+    requestedBytes,
+    resumed,
+    target,
+    queryClient,
+  ]);
+
+  // A batch ID is not a transaction hash. Keep polling it, including after a
+  // reload or a lost sendCalls response, until the wallet supplies receipts.
+  // Status errors never authorize another payment. 400/500 explicitly mean
+  // none of the calls took effect; 600 (partial execution) does NOT.
+  useEffect(() => {
+    if (
+      !batch?.batchId ||
+      !connector ||
+      address?.toLowerCase() !== batch.payer?.toLowerCase()
+    )
+      return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const result = await getCallsStatus(config, {
+          id: batch.batchId!,
+          connector,
+        });
+        if (stopped) return;
+        if (result.chainId !== batch.chainId)
+          throw new Error('Wrong batch chain');
+        if (result.statusCode === 400 || result.statusCode === 500) {
+          clearUsdcResume();
+          setBatch(null);
+          paymentSubmitted.current = false;
+          setMayHaveBroadcast(false);
+          fail(
+            'failed',
+            'The wallet could not complete the payment. No USDC was sent. Please try again.',
+            intent ? 'quoted' : 'idle',
+          );
+          return;
+        }
+        const receipts = result.receipts ?? [];
+        if (
+          result.status === 'success' &&
+          result.atomic &&
+          receipts.length > 0 &&
+          receipts.every((receipt) => receipt.status === 'success')
+        ) {
+          const hash = receipts[receipts.length - 1].transactionHash;
+          saveUsdcResume({ ...batch, batchId: undefined, txHash: hash });
+          setPayTxHash(hash);
+          setBatch(null);
+          setFailure(null);
+          setMessage(null);
+          setStage('submitted');
+          return;
+        }
+        setBatchStatusUnavailable(result.status !== 'pending');
+      } catch {
+        if (!stopped) setBatchStatusUnavailable(true);
+      }
+      if (!stopped) timer = setTimeout(poll, 3000);
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [address, batch, config, connector, fail, intent]);
 
   /**
    * Translate a thrown value into a failure the panel can offer a choice for.
@@ -241,9 +444,11 @@ export const useUsdcPurchase = ({
 
       fail(
         'failed',
-        error instanceof Error
-          ? error.message
-          : 'The payment could not be sent.',
+        error instanceof BaseError
+          ? error.shortMessage
+          : error instanceof Error
+            ? error.message
+            : 'The payment could not be sent.',
         next,
       );
     },
@@ -258,6 +463,7 @@ export const useUsdcPurchase = ({
    * see the figure.
    */
   const quote = useCallback(async () => {
+    if (payInFlight.current || paymentSubmitted.current) return;
     if (!target || requestedBytes === null) return;
 
     setFailure(null);
@@ -352,6 +558,8 @@ export const useUsdcPurchase = ({
     const token = target.tokenAddress as Address;
 
     try {
+      setStage('checking');
+      if (!(await validateQuote(quoted))) return;
       // 1. The wallet has to be on the chain the receiver is deployed on. Every
       //    write below also names the chain, so wagmi refuses to sign on the
       //    wrong one even if this switch silently did nothing.
@@ -390,6 +598,96 @@ export const useUsdcPurchase = ({
       });
 
       if (allowance < amount) {
+        // Capability discovery is read-only. Older wallets commonly reject it.
+        const capabilities = await getCapabilities(config, {
+          account: address,
+          chainId: target.chainId,
+          connector,
+        }).catch(() => undefined);
+        // "ready" requires a wallet upgrade; leave that user's existing wallet
+        // configuration alone and use the sequential flow instead.
+        if (capabilities?.atomic?.status === 'supported') {
+          if (!(await validateQuote(quoted))) return;
+          // Encode before marking the request submitted: malformed input is
+          // a local error and must not strand the buyer in batch recovery.
+          const calls = [
+            {
+              to: token,
+              data: encodeFunctionData({
+                abi: erc20ApprovalAbi,
+                functionName: 'approve',
+                args: [receiver, amount],
+              }),
+            },
+            {
+              to: receiver,
+              data: encodeFunctionData({
+                abi: usdcReceiverAbi,
+                functionName: 'payIntentWithToken',
+                args: [quoted.id as Hash, amount],
+              }),
+            },
+          ];
+          const pending: UsdcResumeRecord = {
+            intentId: quoted.id,
+            expiresAt: quoted.expiresAt?.toISOString(),
+            batchId: crypto.randomUUID(),
+            payer: address,
+            sizeMib:
+              requestedBytes === null
+                ? null
+                : Number(requestedBytes) / 1_048_576,
+            chainId: target.chainId,
+            confirmations: target.confirmations,
+            settleGraceMs: target.settleGraceMs,
+          };
+          saveUsdcResume(pending);
+          setStage('batching');
+          paymentSubmitted.current = true;
+          setMayHaveBroadcast(true);
+          try {
+            const sent = await sendCalls(config, {
+              account: address,
+              chainId: target.chainId,
+              connector,
+              id: pending.batchId,
+              forceAtomic: true,
+              // eslint-disable-next-line camelcase -- viem's option name
+              experimental_fallback: false,
+              calls,
+            });
+            const submitted = { ...pending, batchId: sent.id };
+            saveUsdcResume(submitted);
+            setBatch(submitted);
+            setStage('batch-pending');
+            return;
+          } catch (error) {
+            if (!wasNotSubmitted(error)) {
+              setBatch(pending);
+              setBatchStatusUnavailable(true);
+              setStage('batch-pending');
+              return;
+            }
+            clearUsdcResume();
+            paymentSubmitted.current = false;
+            setMayHaveBroadcast(false);
+            // Fall back only on an explicit unsupported response. A timeout
+            // may have submitted the batch, so falling back then could pay twice.
+            if (!isBatchUnsupported(error)) throw error;
+          }
+        }
+      }
+
+      if (allowance < amount) {
+        if (!isQuoteLive(quoted)) {
+          setIntent(null);
+          fail(
+            'quote-expired',
+            'The price expired. Get a fresh quote to continue.',
+            'idle',
+          );
+          return;
+        }
         setStage('approving');
         // Exactly the amount owed. Not an unlimited approval: this is a
         // one-off purchase, and leaving a standing allowance on a contract for
@@ -401,7 +699,10 @@ export const useUsdcPurchase = ({
           functionName: 'approve',
           args: [receiver, amount],
           chainId: target.chainId,
+          account: address,
+          connector,
         });
+        setStage('approval-confirming');
         const approveReceipt = await publicClient.waitForTransactionReceipt({
           hash: approveHash,
           confirmations: 1,
@@ -421,10 +722,8 @@ export const useUsdcPurchase = ({
         setApprovalSkipped(true);
       }
 
-      // 4. Pay — but only if the lock still holds. This is the check that
-      //    matters: the approval above can take minutes, and a payment landing
-      //    after expiry is refused, filed as a mispayment, and keeps the money
-      //    with no credits granted.
+      // 4. Approval can take minutes. Check the lock again before opening the
+      //    separate payment request; only the wallet can reject an open prompt.
       if (!isQuoteLive(quoted)) {
         setIntent(null);
         fail(
@@ -437,26 +736,40 @@ export const useUsdcPurchase = ({
         return;
       }
 
+      // Simulation is read-only, so its failures must never look like a
+      // potentially submitted payment (including RPC timeouts at this stage).
+      await publicClient.simulateContract({
+        address: receiver,
+        abi: usdcReceiverAbi,
+        functionName: 'payIntentWithToken',
+        args: [quoted.id as Hash, amount],
+        account: address,
+      });
+      if (!(await validateQuote(quoted))) return;
       setStage('paying');
       // Latched BEFORE the call, because the call is the one that may not report
       // back. See `mayHaveBroadcast`: everything above is safe to retry, and
       // this is the line after which a retry can pay twice.
       setMayHaveBroadcast(true);
+      paymentSubmitted.current = true;
       const hash = await writeContractAsync({
         address: receiver,
         abi: usdcReceiverAbi,
         functionName: 'payIntentWithToken',
         args: [quoted.id as Hash, amount],
         chainId: target.chainId,
+        account: address,
+        connector,
       });
       setPayTxHash(hash);
       setStage('submitted');
     } catch (error) {
-      // A declined prompt is the one failure that proves nothing went out: the
-      // wallet refused before sending. Every other way out of the call above —
-      // a timeout, a dropped connection — leaves the question open, and the
-      // latch stands until the buyer answers it.
-      if (isWalletRejection(error)) setMayHaveBroadcast(false);
+      // Explicit refusals and local validation errors are safe to retry.
+      // Timeouts, disconnects and unknown RPC errors remain ambiguous.
+      if (wasNotSubmitted(error)) {
+        paymentSubmitted.current = false;
+        setMayHaveBroadcast(false);
+      }
       // Back to `quoted`, not `idle`: the quote is untouched by a declined
       // signature or a failed switch, and asking for a new one would discard a
       // lock the buyer can still use.
@@ -465,14 +778,18 @@ export const useUsdcPurchase = ({
   }, [
     address,
     connectedChainId,
+    config,
+    connector,
     fail,
     handleThrown,
     intent,
     isQuoteLive,
     publicClient,
+    requestedBytes,
     switchChainAsync,
     target,
     writeContractAsync,
+    validateQuote,
   ]);
 
   /**
@@ -482,7 +799,7 @@ export const useUsdcPurchase = ({
    * different routes and every one of them has to release the latch.
    */
   const pay = useCallback(async () => {
-    if (payInFlight.current) return;
+    if (payInFlight.current || paymentSubmitted.current) return;
     payInFlight.current = true;
     try {
       await runPay();
@@ -494,9 +811,12 @@ export const useUsdcPurchase = ({
   return useMemo(
     () => ({
       stage,
+      batch,
+      batchStatusUnavailable,
       isBusy,
       intent,
       payTxHash,
+      isPaymentCompleted,
       failure,
       message,
       approvalSkipped,
@@ -508,9 +828,12 @@ export const useUsdcPurchase = ({
     }),
     [
       stage,
+      batch,
+      batchStatusUnavailable,
       isBusy,
       intent,
       payTxHash,
+      isPaymentCompleted,
       failure,
       message,
       approvalSkipped,

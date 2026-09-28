@@ -39,7 +39,9 @@ export const PurchaseStep4Success = ({
                 <InfoRow
                   className='items-center font-bold'
                   label='Storage Added'
-                  value={<span>{formatStorageSize(sizeMB * 1024 * 1024, 2)}</span>}
+                  value={
+                    <span>{formatStorageSize(sizeMB * 1024 * 1024, 2)}</span>
+                  }
                 />
                 <InfoRow
                   label='AI3 Paid'
@@ -62,14 +64,18 @@ export const PurchaseStep4Success = ({
                   label='Transaction Hash'
                   className='items-center font-bold'
                   value={
-                    <CopiableText
-                      text={(context.txHash as string) || '0x...'}
-                      displayText={shortenString(
-                        (context.txHash as string) || '0x...',
-                        10,
-                      )}
-                      copyButtonClassName='text-primary hover:text-primary/80'
-                    />
+                    context.txHash ? (
+                      <CopiableText
+                        text={context.txHash as string}
+                        displayText={shortenString(
+                          context.txHash as string,
+                          10,
+                        )}
+                        copyButtonClassName='text-primary hover:text-primary/80'
+                      />
+                    ) : (
+                      <span>Unavailable</span>
+                    )
                   }
                 />
                 <InfoRow

@@ -1,7 +1,7 @@
 import type { Config } from 'jest';
 
 const config: Config = {
-  testMatch: ['**/__tests__/**/*.spec.ts'],
+  testMatch: ['**/__tests__/**/*.spec.ts?(x)'],
   // Resolve baseUrl ("./src") path aliases so Jest can find modules that the
   // TypeScript compiler resolves through tsconfig's baseUrl/paths settings.
   moduleNameMapper: {
