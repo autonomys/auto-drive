@@ -129,15 +129,17 @@ const setup = (resumed?: UsdcResumeRecord | null) =>
     }),
   );
 
+const BATCH_ID = `0x${'ab'.repeat(32)}`;
+
 beforeEach(() => {
   jest.resetAllMocks();
   sessionStorage.clear();
-  Object.defineProperty(crypto, 'randomUUID', {
+  Object.defineProperty(crypto, 'getRandomValues', {
     configurable: true,
-    value: () => 'test-batch-id',
+    value: (bytes: Uint8Array) => bytes.fill(0xab),
   });
   getCapabilities.mockResolvedValue({});
-  sendCalls.mockResolvedValue({ id: 'test-batch-id' });
+  sendCalls.mockResolvedValue({ id: BATCH_ID });
   getCallsStatus.mockResolvedValue({
     chainId: 1,
     statusCode: 100,
@@ -957,7 +959,7 @@ describe('pay', () => {
 
     it('recovers a lost submission response using the saved client batch ID', async () => {
       sendCalls.mockImplementation(async () => {
-        expect(readUsdcResume(1024)?.batchId).toBe('test-batch-id');
+        expect(readUsdcResume(1024)?.batchId).toBe(BATCH_ID);
         throw new Error('wallet timed out');
       });
       getCallsStatus.mockResolvedValue(confirmed);
@@ -965,7 +967,7 @@ describe('pay', () => {
       await quoteThen(result);
       await waitFor(() => expect(result.current.payTxHash).toBe('0xpaid'));
       expect(getCallsStatus).toHaveBeenCalledWith(config, {
-        id: 'test-batch-id',
+        id: BATCH_ID,
         connector,
       });
       expect(writeContractAsync).not.toHaveBeenCalled();
@@ -975,7 +977,7 @@ describe('pay', () => {
       const first = setup();
       await quoteThen(first.result);
       const saved = readUsdcResume(1024);
-      expect(saved?.batchId).toBe('test-batch-id');
+      expect(saved?.batchId).toBe(BATCH_ID);
       first.unmount();
       getCallsStatus.mockResolvedValue(confirmed);
       const next = setup(saved);
@@ -1092,7 +1094,7 @@ describe('pay', () => {
         expect(result.current.batchStatusUnavailable).toBe(true),
       );
       expect(result.current.mayHaveBroadcast).toBe(true);
-      expect(readUsdcResume(1024)?.batchId).toBe('test-batch-id');
+      expect(readUsdcResume(1024)?.batchId).toBe(BATCH_ID);
     });
 
     it('revalidates server expiry after discovering batch support', async () => {

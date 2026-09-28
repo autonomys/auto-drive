@@ -12,7 +12,7 @@ import {
 import { getCapabilities, getCallsStatus, sendCalls } from 'wagmi/actions';
 import { erc20ApprovalAbi, usdcReceiverAbi } from '@auto-drive/ui';
 import { IntentStatus, UsdcPaymentTarget } from '@auto-drive/models';
-import { Address, BaseError, encodeFunctionData, Hash } from 'viem';
+import { Address, BaseError, encodeFunctionData, Hash, toHex } from 'viem';
 import { ApiError, CreatedIntent } from '../services/api';
 import { usePaymentIntent } from './usePaymentIntent';
 import {
@@ -631,7 +631,8 @@ export const useUsdcPurchase = ({
           const pending: UsdcResumeRecord = {
             intentId: quoted.id,
             expiresAt: quoted.expiresAt?.toISOString(),
-            batchId: crypto.randomUUID(),
+            // EIP-5792 call-batch IDs are hex; MetaMask rejects others (-32602).
+            batchId: toHex(crypto.getRandomValues(new Uint8Array(32))),
             payer: address,
             sizeMib:
               requestedBytes === null
