@@ -83,6 +83,16 @@ const publishNodes = async (cids: string[], signal?: AbortSignal) => {
     statusBreakdown,
   )
 
+  // Record confirmed txs before throwing, so a retry only resubmits the
+  // failures and the object stays visible to the publishing-recovery sweep.
+  await Promise.all(
+    publishingNodes.map((node, index) => {
+      const isSuccess = results[index].success
+      if (!isSuccess) return null
+      return NodesUseCases.setPublishedOn(node.cid, results[index])
+    }),
+  )
+
   const someNodeFailed = results.some((result) => !result.success)
   if (someNodeFailed) {
     // Surface the breakdown at warn too: a bare "Failed to publish nodes" gives
@@ -97,14 +107,6 @@ const publishNodes = async (cids: string[], signal?: AbortSignal) => {
       `Failed to publish nodes (${JSON.stringify(statusBreakdown)})`,
     )
   }
-
-  await Promise.all(
-    publishingNodes.map((node, index) => {
-      const isSuccess = results[index].success
-      if (!isSuccess) return null
-      return NodesUseCases.setPublishedOn(node.cid, results[index])
-    }),
-  )
 }
 
 export const OnchainPublisher = {
