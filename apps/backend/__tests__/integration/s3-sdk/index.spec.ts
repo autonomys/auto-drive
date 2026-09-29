@@ -1993,6 +1993,8 @@ describe('AWS S3 - SDK', () => {
         // shrink its client-wide rate limiter over one unservable object.
         $metadata: { httpStatusCode: 503 },
         Code: 'ServiceUnavailable',
+        message: 'The object is temporarily unavailable. Please retry.',
+        $response: { headers: { 'retry-after': '1' } },
       })
     }, 30_000)
   })

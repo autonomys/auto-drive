@@ -16,7 +16,7 @@ import {
   getByteRange,
   handleDownloadResponseHeaders,
 } from '@autonomys/file-server'
-import { handleError, ChunkNotFoundError } from '../../errors/index.js'
+import { handleError, ChunkNotFoundError, HttpError } from '../../errors/index.js'
 import {
   handleInternalError,
   handleInternalErrorResult,
@@ -307,6 +307,8 @@ downloadController.get(
           req.params.cid,
           error.cid,
         )
+      }
+      if (error instanceof HttpError && !res.headersSent) {
         handleError(error, res)
         return
       }

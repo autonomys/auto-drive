@@ -442,9 +442,10 @@ export const getObjectHandler = async (req: Request, res: Response) => {
       // it sees one, so a single object sitting in its migration window would
       // slow down every unrelated transfer that client has in flight. Nothing is
       // being throttled here — one object is briefly unservable.
+      res.setHeader('Retry-After', ChunkNotFoundError.retryAfterSeconds)
       sendXML(res.status(503), 'Error', {
         Code: 'ServiceUnavailable',
-        Message: 'The object is temporarily unavailable. Please retry.',
+        Message: ChunkNotFoundError.publicMessage,
       })
       return
     }
@@ -482,7 +483,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
       // must at least be reachable as S3.
       sendXML(res.status(500), 'Error', {
         Code: 'InternalError',
-        Message: err.message,
+        Message: 'Failed to stream data',
       })
     }
   })

@@ -1,7 +1,12 @@
 import { jest } from '@jest/globals'
 import { v4 } from 'uuid'
 import { dbMigration } from '../../utils/dbMigrate.js'
-import { createMockUser, mockRabbitPublish, unmockMethods } from '../../utils/mocks.js'
+import {
+  createMockUser,
+  mockRabbitPublish,
+  unmockMethods,
+} from '../../utils/mocks.js'
+import { nodesRepository } from '../../../src/infrastructure/repositories/objects/nodes.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 
@@ -26,10 +31,13 @@ describe('chunk resolution index coverage', () => {
   it('uses an index for the cid-only blockstore lookup', async () => {
     const db = await getDatabase()
     const upload = await UploadsUseCases.createFileUpload(
-      createMockUser(), 'plan.bin', 'application/octet-stream', null,
+      createMockUser(),
+      'plan.bin',
+      'application/octet-stream',
+      null,
     )
 
-    // Enough rows that a seq scan is genuinely the wrong plan.
+    // Include a backlog so this exercises a selective CID lookup.
     const payload = Buffer.alloc(4096, 7)
     const realCids: string[] = []
     for (let batch = 0; batch < 20; batch++) {
@@ -53,7 +61,9 @@ describe('chunk resolution index coverage', () => {
       `SELECT indexname FROM pg_indexes
        WHERE schemaname = 'uploads' AND tablename = 'blockstore'`,
     )
-    expect(indexes.rows.map((r) => r.indexname)).toContain('blockstore_cid_index')
+    expect(indexes.rows.map((r) => r.indexname)).toContain(
+      'blockstore_cid_index',
+    )
 
     // Whether the planner PICKS an index here depends on table size — at test
     // volumes a sequential scan is genuinely cheaper, because the 64 KiB
@@ -63,30 +73,31 @@ describe('chunk resolution index coverage', () => {
     // large table had no option but a full scan. Forcing the planner's hand
     // proves applicability without asserting a cost decision that legitimately
     // varies with size.
+    // Capture the production statement rather than duplicating it here.
+    const querySpy = jest.spyOn(db, 'query')
+    let query: { text: string; values: string[][] }
+    try {
+      await nodesRepository.resolveEncodedNodes(realCids)
+      expect(querySpy).toHaveBeenCalledTimes(1)
+      query = querySpy.mock.calls[0][0] as unknown as typeof query
+    } finally {
+      querySpy.mockRestore()
+    }
     const client = await db.connect()
     try {
       await client.query('BEGIN')
       await client.query('SET LOCAL enable_seqscan = off')
-      // The statement below must stay in step with resolveEncodedNodes; an
-      // EXPLAIN of a hand-written stand-in would keep passing after the real
-      // query changed shape.
       const { rows } = await client.query(
-        `EXPLAIN (COSTS OFF)
-         SELECT DISTINCT ON (cid) cid, encoded_node
-         FROM (
-           SELECT cid, encoded_node, 0 AS source
-           FROM nodes WHERE cid = ANY($1) AND encoded_node IS NOT NULL
-           UNION ALL
-           SELECT DISTINCT ON (cid) cid, encode(data, 'base64') AS encoded_node, 1 AS source
-           FROM uploads.blockstore WHERE cid = ANY($1)
-         ) resolved
-         ORDER BY cid, source`,
-        [realCids],
+        `EXPLAIN (ANALYZE, COSTS OFF) ${query.text}`,
+        query.values,
       )
-      const plan = rows.map((r: { [k: string]: string }) => r['QUERY PLAN']).join('\n')
+      const plan = rows
+        .map((r: { [k: string]: string }) => r['QUERY PLAN'])
+        .join('\n')
       expect(plan).toMatch(/blockstore_cid_index/)
-      await client.query('ROLLBACK')
+      expect(plan).not.toMatch(/Sort|Unique/)
     } finally {
+      await client.query('ROLLBACK')
       client.release()
     }
   })

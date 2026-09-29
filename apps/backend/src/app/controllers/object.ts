@@ -9,7 +9,7 @@ import {
   handleInternalError,
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
-import { handleError, ChunkNotFoundError } from '../../errors/index.js'
+import { handleError, ChunkNotFoundError, HttpError } from '../../errors/index.js'
 import { sendMetricToVictoria } from '../../infrastructure/drivers/vmetrics.js'
 import { config } from '../../config.js'
 
@@ -409,6 +409,8 @@ objectController.get(
           id,
           error.cid,
         )
+      }
+      if (error instanceof HttpError && !res.headersSent) {
         handleError(error, res)
         return
       }

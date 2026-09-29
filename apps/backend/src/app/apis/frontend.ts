@@ -12,6 +12,7 @@ import { docsController } from '../controllers/docs.js'
 import { intentsController } from '../controllers/intents.js'
 import { creditsController } from '../controllers/credits.js'
 import { bannersController } from '../controllers/banners.js'
+import { paymentsController } from '../controllers/payments.js'
 import { touController } from '../controllers/tou.js'
 import { deletionController } from '../controllers/deletion.js'
 import { featuresController } from '../controllers/features.js'
@@ -20,6 +21,8 @@ import { IntentsUseCases } from '../../core/users/intents.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
+import { usdcChainGuard } from '../../infrastructure/services/paymentManager/usdcChainGuard.js'
+import { StoragePrice } from '@auto-drive/models'
 
 const logger = createLogger('api:frontend')
 
@@ -53,7 +56,9 @@ const createServer = async () => {
       }),
     )
   } else {
-    logger.warn('CORS is not configured - no allowed origins specified, blocking cross-origin requests')
+    logger.warn(
+      'CORS is not configured - no allowed origins specified, blocking cross-origin requests',
+    )
   }
 
   app.use('/objects', objectController)
@@ -64,9 +69,12 @@ const createServer = async () => {
   app.get(
     '/intents/price',
     asyncSafeHandler(async (_req, res) => {
+      // getStoragePrice, not getPrice: the response carries the USD conversion
+      // alongside the AI3 rate. An oracle failure is not an error here — it
+      // comes back as a null `usd` on an otherwise complete price.
       const result = await handleInternalError(
-        new Promise<{ price: number; pricePerGB: number }>((resolve) =>
-          resolve(IntentsUseCases.getPrice()),
+        new Promise<StoragePrice>((resolve) =>
+          resolve(IntentsUseCases.getStoragePrice()),
         ),
         'Failed to get price',
       )
@@ -95,6 +103,11 @@ const createServer = async () => {
   app.use('/intents', featureFlagMiddleware('buyCredits'), intentsController)
   app.use('/credits', featureFlagMiddleware('buyCredits'), creditsController)
   app.use('/banners', bannersController)
+  // Deliberately NOT behind featureFlagMiddleware('buyCredits'): these are the
+  // admin controls for the USDC path, and hiding them behind the flag that gates
+  // buying would make the kill switch unreachable exactly when purchases are
+  // switched off. Authorisation is per-route and admin-only.
+  app.use('/payments', paymentsController)
   app.use('/tou', touController)
   app.use('/deletion', deletionController)
   app.use('/features', featuresController)
@@ -122,6 +135,17 @@ const createServer = async () => {
       })
     }
   })
+
+  // Verify ETH_CHAIN_ID against the endpoint, in the process that SERVES it.
+  //
+  // `start:fe:api` runs no payment manager — deliberately, since that would put
+  // a second credit poller behind every replica — yet this is the process a
+  // buyer asks for `GET /payments/usdc/target` and the one that quotes their
+  // intent. A verdict reached only in the worker would leave every API replica
+  // happily selling a chain nothing watches. Fire-and-forget: it fails closed on
+  // a verified mismatch and changes nothing otherwise, so it must not delay
+  // listen().
+  void usdcChainGuard.verify()
 
   app.listen(config.express.port, () => {
     logger.info('Server running at http://localhost:%d', config.express.port)

@@ -11,6 +11,9 @@ import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { AccountsUseCases } from '../../../src/core/index.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { downloadService } from '../../../src/infrastructure/services/download/index.js'
+import { ObjectUseCases } from '../../../src/core/objects/object.js'
+import { ok } from 'neverthrow'
+import { Readable } from 'stream'
 import { PaymentRequiredError } from '../../../src/errors/index.js'
 
 jest.setTimeout(120_000)
@@ -53,7 +56,12 @@ describe('a download the reader cannot pay for', () => {
       'application/octet-stream',
       null,
     )
-    await UploadsUseCases.uploadChunk(user, created.id, 0, randomBytes(64 * 1024))
+    await UploadsUseCases.uploadChunk(
+      user,
+      created.id,
+      0,
+      randomBytes(64 * 1024),
+    )
     const cid = await UploadsUseCases.completeUpload(user, created.id)
 
     // No download budget at all.
@@ -80,14 +88,51 @@ describe('a download the reader cannot pay for', () => {
     expect(downloadSpy).not.toHaveBeenCalled()
   })
 
-  it('destroys the stream if the budget disappears after it is built', async () => {
+  it('allows a zero-byte download even when the account is overdrawn', async () => {
+    const created = await UploadsUseCases.createFileUpload(
+      user,
+      `empty-${v4()}.bin`,
+      'application/octet-stream',
+      null,
+    )
+    await UploadsUseCases.uploadChunk(user, created.id, 0, randomBytes(1))
+    const cid = await UploadsUseCases.completeUpload(user, created.id)
+    const metadata = await ObjectUseCases.getMetadata(cid)
+    if (metadata.isErr()) throw new Error('expected metadata')
+    jest.spyOn(ObjectUseCases, 'getMetadata').mockResolvedValue(
+      ok({
+        ...metadata.value,
+        totalSize: 0n,
+      }),
+    )
+    const credits = jest
+      .spyOn(AccountsUseCases, 'getPendingCreditsByUserAndType')
+      .mockResolvedValue(-1)
+    const charge = jest.spyOn(AccountsUseCases, 'registerInteraction')
+    const stream = Readable.from([])
+    jest.spyOn(downloadService, 'download').mockResolvedValue(stream)
+
+    const result = await DownloadUseCase.downloadObjectByUser(user, cid, {})
+    if (result.isErr()) throw new Error('expected metadata to resolve')
+    await expect(result.value.startDownload()).resolves.toBe(stream)
+    expect(credits).not.toHaveBeenCalled()
+    expect(charge).toHaveBeenCalledWith(user, expect.anything(), 0n, cid)
+    stream.destroy()
+  })
+
+  it('drains the stream if the budget disappears after it is built', async () => {
     const created = await UploadsUseCases.createFileUpload(
       user,
       `credits-race-${v4()}.bin`,
       'application/octet-stream',
       null,
     )
-    await UploadsUseCases.uploadChunk(user, created.id, 0, randomBytes(64 * 1024))
+    await UploadsUseCases.uploadChunk(
+      user,
+      created.id,
+      0,
+      randomBytes(64 * 1024),
+    )
     const cid = await UploadsUseCases.completeUpload(user, created.id)
 
     // Pre-check passes, then a concurrent download eats the budget: the stream
@@ -121,7 +166,10 @@ describe('a download the reader cannot pay for', () => {
       if (built!.readableEnded) return resolve()
       built!.once('end', resolve)
       built!.once('close', resolve)
-      setTimeout(() => reject(new Error('stream never finished — leaked')), 10_000)
+      setTimeout(
+        () => reject(new Error('stream never finished — leaked')),
+        10_000,
+      )
     })
     expect(built!.readableEnded || built!.destroyed).toBe(true)
   })

@@ -119,9 +119,13 @@ describe('chunk resolution (issue #815)', () => {
     expect(fromBlockstore.queries).toBe(1)
 
     await UploadsUseCases.processMigration(uploadId)
-    expect((await blockstoreRepository.getBlockstoreEntries(uploadId)).length).toBe(0)
+    expect(
+      (await blockstoreRepository.getBlockstoreEntries(uploadId)).length,
+    ).toBe(0)
 
-    const fromNodes = await countQueries(() => NodesUseCases.getChunkData(chunk))
+    const fromNodes = await countQueries(() =>
+      NodesUseCases.getChunkData(chunk),
+    )
     expect(fromNodes.result).toBeDefined()
     expect(fromNodes.queries).toBe(1)
   })
@@ -165,17 +169,14 @@ describe('chunk resolution (issue #815)', () => {
     }
 
     const encodedFor = (text: string) =>
-      Buffer.from(
-        encodeNode(createSingleFileIpldNode(Buffer.from(text), text)),
-      )
+      Buffer.from(encodeNode(createSingleFileIpldNode(Buffer.from(text), text)))
 
     it('prefers the durable nodes row over a blockstore row', async () => {
       const cid = await seed(
         encodedFor('from-nodes').toString('base64'),
         encodedFor('from-blockstore'),
       )
-      // `nodes` is source 0 and must win. If the ORDER BY were reversed, a
-      // pre-cleanup blockstore copy would shadow the committed row.
+      // The durable nodes copy must win over a stale blockstore copy.
       expect((await NodesUseCases.getChunkData(cid))?.toString()).toBe(
         'from-nodes',
       )
@@ -185,8 +186,7 @@ describe('chunk resolution (issue #815)', () => {
       const cid = await seed(null, encodedFor('from-blockstore'))
       const db = await getDatabase()
       // Archival NULLs encoded_node in place (removeNodeDataByRootCid). Without
-      // the IS NOT NULL filter this row wins as source 0 and resolves to
-      // nothing, even though a usable copy exists.
+      // fallback this would resolve to nothing despite the usable copy.
       await db.query(
         'INSERT INTO nodes (cid, root_cid, head_cid, type, encoded_node) VALUES ($1, $1, $1, $2, NULL)',
         [cid, MetadataType.FileChunk],
@@ -202,6 +202,26 @@ describe('chunk resolution (issue #815)', () => {
       )
       expect(await NodesUseCases.getChunkData(absent)).toBeUndefined()
     })
+  })
+
+  it('omits absent CIDs and collapses repeated CIDs and blockstore rows', async () => {
+    const { cid } = await upload(Buffer.alloc(256 * 1024, 7))
+    const chunks = await chunkCidsOf(cid)
+    expect(new Set(chunks).size).toBeLessThan(chunks.length)
+    const absent = cidToString(
+      cidOfNode(createSingleFileIpldNode(Buffer.from(v4()), 'absent')),
+    )
+    const { result, queries } = await countQueries(() =>
+      NodesUseCases.getChunksData([...chunks, absent, ...chunks]),
+    )
+    expect(queries).toBe(1)
+    expect(result.size).toBe(new Set(chunks).size)
+    expect(result.has(absent)).toBe(false)
+    for (const chunk of chunks)
+      expect(result.get(chunk)?.length).toBeGreaterThan(0)
+    expect(
+      (await nodesRepository.resolveEncodedNodes([absent])).has(absent),
+    ).toBe(false)
   })
 
   // Characterisation, not regression: the issue asserted that the migration

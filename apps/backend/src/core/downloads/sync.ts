@@ -36,12 +36,7 @@ const downloadObjectByUser = async (
   reader: UserWithOrganization,
   cid: string,
   options: DownloadOptions = {},
-): Promise<
-  Result<
-    FileDownload,
-    ObjectNotFoundError | NotAcceptableError
-  >
-> => {
+): Promise<Result<FileDownload, ObjectNotFoundError | NotAcceptableError>> => {
   logger.debug(
     'downloadObjectByUser requested (cid=%s, userId=%s)',
     cid,
@@ -52,20 +47,6 @@ const downloadObjectByUser = async (
     return err(getResult.error)
   }
   const metadata = getResult.value
-
-  // NOTE: Download credit enforcement is intentionally disabled.
-  // The infrastructure exists for future use, but download limits are not
-  // enforced right now: purchased download bytes are not allocated on purchase,
-  // so users have no way to replenish a depleted download quota — making the
-  // block permanent. Re-enable once download credit purchasing is wired up.
-  //
-  // const pendingCredits = await AccountsUseCases.getPendingCreditsByUserAndType(
-  //   reader,
-  //   InteractionType.Download,
-  // )
-  // if (pendingCredits < metadata.totalSize) {
-  //   return err(new PaymentRequiredError('Not enough download credits'))
-  // }
 
   const authResult = await ObjectUseCases.authorizeDownload(
     cid,
@@ -99,40 +80,28 @@ const downloadObjectByUser = async (
         cid,
         reader.oauthUserId,
       )
-      // Charge AFTER the object is known to be servable, but refuse an
-      // unaffordable download BEFORE building a stream for it.
-      //
-      // registerInteraction books the full object size and throws
-      // PaymentRequiredError once the free tier is exhausted. Charging before
-      // resolution meant a download that never delivered a byte was still paid
-      // for — survivable while an unservable object failed slowly and
-      // mid-stream, but not now that resolution failures surface in
-      // milliseconds as an explicitly retryable 503: a client's retry budget
-      // then buys many more attempts, each booking the full size, and a reader
-      // could burn its way to a 402 lockout on an object it never received. On
-      // /:id/public that charge lands on the PUBLISHER's account and any
-      // anonymous visitor can drive it.
-      //
-      // Simply swapping the two is not enough. downloadService.download forks
-      // the source stream for caching before it returns, so a throw after it
-      // abandons a paused source, a paused fork and an open cache write, with
-      // no handle left to close them — and the out-of-credits path is exactly
-      // where a client retries hardest. Hence the read-only check first: the
-      // ordinary insufficient-credits case never constructs a stream at all.
-      const availableCredits =
-        await AccountsUseCases.getPendingCreditsByUserAndType(
-          reader,
-          InteractionType.Download,
-        )
-      if (BigInt(availableCredits) < totalSize) {
-        throw new PaymentRequiredError('Insufficient credits to process download')
+      // registerInteraction enforces the free-tier download limit. Check before
+      // allocating a stream, but charge only after initial resolution succeeds
+      // so retries of an unavailable object do not consume the reader's quota.
+      // Zero-byte downloads do not spend credits, even on an overdrawn account.
+      if (totalSize > 0n) {
+        const availableCredits =
+          await AccountsUseCases.getPendingCreditsByUserAndType(
+            reader,
+            InteractionType.Download,
+          )
+        if (BigInt(availableCredits) < totalSize) {
+          throw new PaymentRequiredError(
+            'Insufficient credits to process download',
+          )
+        }
       }
 
       const download = await downloadService.download(cid, options)
 
       // The check above is not a lock, so a concurrent download can still
       // consume the budget in between. That leaves the stream already built, so
-      // tear it down rather than leaking it — this is the narrow race, not the
+      // drain it rather than leaking it — this is the narrow race, not the
       // common path.
       try {
         await AccountsUseCases.registerInteraction(

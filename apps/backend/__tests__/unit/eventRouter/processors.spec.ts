@@ -6,6 +6,7 @@ import {
   beforeEach,
   afterEach,
 } from '@jest/globals'
+import { PaymentMethod } from '@auto-drive/models'
 import { processFrontendTask } from '../../../src/infrastructure/eventRouter/processors/frontend.js'
 import { processDownloadTask } from '../../../src/infrastructure/eventRouter/processors/download.js'
 import { processPublishTask } from '../../../src/infrastructure/eventRouter/processors/publish.js'
@@ -155,7 +156,39 @@ describe('EventRouter Processors', () => {
 
       await processFrontendTask(task)
 
-      expect(watchTransactionSpy).toHaveBeenCalledWith('0xtxhash')
+      // No payment method on the task, as every task queued before the second
+      // chain existed. The schema defaults it to AI3, which is what all of them
+      // are — rejecting them would drop watch requests for payments already on
+      // chain.
+      expect(watchTransactionSpy).toHaveBeenCalledWith(
+        '0xtxhash',
+        PaymentMethod.AI3_NATIVE,
+      )
+    })
+
+    it('routes a watch-intent-tx task for a USDC intent to Ethereum', async () => {
+      const watchTransactionSpy = jest
+        .spyOn(paymentManager, 'watchTransaction')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'watch-intent-tx',
+        params: {
+          txHash: '0xethtxhash',
+          paymentMethod: PaymentMethod.USDC_ETH,
+        },
+        retriesLeft: 3,
+      }
+
+      await processFrontendTask(task)
+
+      // A hash is the same 32 bytes on either chain, so the chain has to travel
+      // with the task: looked up on Auto EVM, an Ethereum hash does not error,
+      // it just never resolves.
+      expect(watchTransactionSpy).toHaveBeenCalledWith(
+        '0xethtxhash',
+        PaymentMethod.USDC_ETH,
+      )
     })
 
     it('should throw error for unknown task', async () => {
