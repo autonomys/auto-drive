@@ -1,9 +1,14 @@
 'use client';
 
-import { Button } from '@auto-drive/ui';
+import { Button, evmChains } from '@auto-drive/ui';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
-import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
+import {
+  useAccount,
+  usePublicClient,
+  useSwitchChain,
+  useWriteContract,
+} from 'wagmi';
 import { parseGwei, type Hash } from 'viem';
 import { useCallback, useEffect, useState } from 'react';
 import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
@@ -26,7 +31,7 @@ type TransferStepProps = {
  * The payment step, dispatched by asset.
  *
  * Two panels rather than one with branches inside it. Paying in AI3 is a single
- * native-value call on the connected chain; paying in USDC is a chain switch,
+ * native-value call on Auto EVM; paying in USDC is a chain switch,
  * an ERC20 approval and a contract call on another chain, with a price lock
  * ticking through all three. Interleaving them would put every AI3 purchase —
  * which is every purchase today — through code written for the other one.
@@ -44,8 +49,16 @@ export const PurchaseStep3TransferTokens = (props: TransferStepProps) =>
 
 const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
   void onBack;
-  const { isConnected } = useAccount();
-  const publicClient = usePublicClient();
+  const {
+    isConnected,
+    chainId: connectedChainId,
+    address,
+    connector,
+  } = useAccount();
+  const { api, network } = useNetwork();
+  const paymentChain = evmChains[network.id];
+  const publicClient = usePublicClient({ chainId: paymentChain.id });
+  const { switchChainAsync, isPending: isSwitching } = useSwitchChain();
   const { formatCreditsInMbAsValue, formatCreditsInMbAsAi3 } = usePrices();
   const [intentId, setIntentId] = useState<string | undefined>(undefined);
   const [intentError, setIntentError] = useState<string | undefined>(undefined);
@@ -53,7 +66,6 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
 
   const { paymentIntent, targetContract, MINIMUM_CONFIRMATIONS } =
     usePaymentIntent();
-  const { api } = useNetwork();
 
   const [txHash, setTxHash] = useState<Hash | undefined>(undefined);
 
@@ -73,6 +85,7 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
     requiredConfirmations: MINIMUM_CONFIRMATIONS,
     api,
     intentId,
+    chainId: paymentChain.id,
   });
 
   const {
@@ -102,6 +115,12 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
       // Defence in depth: `canSend` already gates the button on this, but
       // handleSend must not depend on a caller having checked.
       if (sizeMib === null) return;
+      // A USDC purchase can leave the wallet on Ethereum or Sepolia. Switching
+      // before creating the intent also avoids starting its expiry countdown
+      // while the buyer is still approving the network change.
+      if (connectedChainId !== paymentChain.id) {
+        await switchChainAsync({ chainId: paymentChain.id, connector });
+      }
       const depositTransaction = await paymentIntent(
         formatCreditsInMbAsValue(sizeMib),
         // The same byte count the payment is priced from — formatCreditsInMbAsValue
@@ -120,6 +139,11 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
         : undefined;
       const hash = await writeContractAsync({
         ...depositTransaction,
+        // Keep this explicit even after switching: the wallet can change
+        // networks again while the intent or gas price request is in flight.
+        chainId: paymentChain.id,
+        account: address,
+        connector,
         ...(gasPrice != null && { gasPrice }),
       });
       setIntentId(depositTransaction.intentId);
@@ -141,6 +165,11 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
     sizeMib,
     publicClient,
     writeContractAsync,
+    connectedChainId,
+    paymentChain.id,
+    switchChainAsync,
+    address,
+    connector,
   ]);
 
   const notifyAndNext = useCallback(async () => {
@@ -164,11 +193,22 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
       <Section title='Transfer AI3 Tokens'>
         <div className='flex flex-col gap-4'>
           {/* Step 1: Ensure wallet connected */}
-          <WalletConnection isBusy={isSending || isWriting} />
+          <WalletConnection
+            isBusy={isSending || isWriting}
+            connectedMessage={
+              !txHash && connectedChainId !== paymentChain.id
+                ? `Connected — will switch to Auto EVM (${paymentChain.name}) when you pay`
+                : 'Wallet connected'
+            }
+          />
 
           {/* Step 2: Send transfer */}
           <div className='flex flex-col gap-3 rounded-md bg-muted p-4'>
             <div className='text-sm font-medium'>Send AI3 Transfer</div>
+            <InfoRow
+              label='Network'
+              value={<span>Auto EVM ({paymentChain.name})</span>}
+            />
             <InfoRow
               label='Recipient'
               value={<span>{targetContract || '—'}</span>}
@@ -185,7 +225,11 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
             />
             <div className='flex gap-3'>
               <Button onClick={handleSend} disabled={!canSend}>
-                {isSending || isWriting ? 'Sending…' : 'Send Transfer'}
+                {isSwitching
+                  ? 'Switching network…'
+                  : isSending || isWriting
+                    ? 'Sending…'
+                    : 'Send Transfer'}
               </Button>
             </div>
             {sizeMib === null && (
@@ -198,7 +242,7 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
               </div>
             )}
             {(intentError || writeError) && (
-              <div className='text-xs text-red-600'>
+              <div role='alert' className='text-xs text-red-600'>
                 {intentError ||
                   writeError?.message ||
                   'Missing deposit transaction'}
