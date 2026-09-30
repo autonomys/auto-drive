@@ -4,7 +4,6 @@ import { Button } from '@auto-drive/ui';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
-import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { parseGwei, type Hash } from 'viem';
 import { useCallback, useEffect, useState } from 'react';
 import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
@@ -15,6 +14,7 @@ import { mibToBytes, normaliseMib } from '../../../../utils/credits';
 import { readPaymentMethod } from '../../../../utils/purchaseCredits';
 import { PaymentMethod } from '@auto-drive/models';
 import { UsdcTransferPanel } from './UsdcTransferPanel';
+import { WalletConnection } from '../molecules/WalletConnection';
 
 type TransferStepProps = {
   onNext: (data?: Record<string, unknown>) => void;
@@ -44,12 +44,12 @@ export const PurchaseStep3TransferTokens = (props: TransferStepProps) =>
 
 const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
   void onBack;
-  const { address, isConnected } = useAccount();
-  const { openConnectModal } = useConnectModal();
+  const { isConnected } = useAccount();
   const publicClient = usePublicClient();
   const { formatCreditsInMbAsValue, formatCreditsInMbAsAi3 } = usePrices();
   const [intentId, setIntentId] = useState<string | undefined>(undefined);
   const [intentError, setIntentError] = useState<string | undefined>(undefined);
+  const [isSending, setIsSending] = useState(false);
 
   const { paymentIntent, targetContract, MINIMUM_CONFIRMATIONS } =
     usePaymentIntent();
@@ -92,13 +92,11 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
   // A size that cannot be normalised is not a purchase, and no wallet prompt
   // should be raised for it. Disabling rather than failing on click is the
   // difference between "this link is broken" and "the button does nothing".
-  const canSend = isConnected && !isWriting && !txHash && sizeMib !== null;
-
-  const handleConnect = () => {
-    if (openConnectModal) openConnectModal();
-  };
+  const canSend =
+    isConnected && !isSending && !isWriting && !txHash && sizeMib !== null;
 
   const handleSend = useCallback(async () => {
+    setIsSending(true);
     setIntentError(undefined);
     try {
       // Defence in depth: `canSend` already gates the button on this, but
@@ -134,6 +132,8 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
       setIntentError(
         error instanceof Error ? error.message : 'Could not start the payment',
       );
+    } finally {
+      setIsSending(false);
     }
   }, [
     paymentIntent,
@@ -164,23 +164,7 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
       <Section title='Transfer AI3 Tokens'>
         <div className='flex flex-col gap-4'>
           {/* Step 1: Ensure wallet connected */}
-          <div className='flex items-center justify-between rounded-md bg-muted p-4'>
-            <div className='flex flex-col'>
-              <div className='text-sm font-medium'>Wallet Connection</div>
-              <div className='text-xs text-muted-foreground'>
-                {isConnected
-                  ? 'Wallet connected'
-                  : 'Please connect your wallet to continue'}
-              </div>
-            </div>
-            {isConnected ? (
-              <span className='text-xs font-semibold text-green-700'>
-                {address}
-              </span>
-            ) : (
-              <Button onClick={handleConnect}>Connect Wallet</Button>
-            )}
-          </div>
+          <WalletConnection isBusy={isSending || isWriting} />
 
           {/* Step 2: Send transfer */}
           <div className='flex flex-col gap-3 rounded-md bg-muted p-4'>
@@ -201,7 +185,7 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
             />
             <div className='flex gap-3'>
               <Button onClick={handleSend} disabled={!canSend}>
-                {isWriting ? 'Sending…' : 'Send Transfer'}
+                {isSending || isWriting ? 'Sending…' : 'Send Transfer'}
               </Button>
             </div>
             {sizeMib === null && (

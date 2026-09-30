@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ButtonHTMLAttributes } from 'react';
 import { UsdcTransferPanel } from '../../../src/components/views/PurchaseCredits/steps/UsdcTransferPanel';
-import { saveUsdcResume } from '../../../src/utils/usdcResume';
+import { readUsdcResume, saveUsdcResume } from '../../../src/utils/usdcResume';
 
 const pending = {
   intentId: 'intent',
@@ -16,6 +16,12 @@ let batch: typeof pending | null = pending;
 let hasKnownPayment = false;
 let isPaymentCompleted = false;
 let hasQuote = false;
+let isConnected = true;
+let isBusy = false;
+const disconnect = jest.fn(() => {
+  isConnected = false;
+});
+const openConnectModal = jest.fn();
 const onBack = jest.fn();
 const quote = jest.fn();
 const api = { watchIntent: jest.fn() };
@@ -33,9 +39,16 @@ jest.mock('@auto-drive/ui', () => ({
   cn: (...values: string[]) => values.filter(Boolean).join(' '),
 }));
 jest.mock('wagmi', () => ({
-  useAccount: () => ({ address: '0xpayer', isConnected: true, chainId: 1 }),
+  useAccount: () => ({
+    address: isConnected ? '0xpayer' : undefined,
+    isConnected,
+    chainId: 1,
+  }),
+  useDisconnect: () => ({ disconnect, isPending: false, error: null }),
 }));
-jest.mock('@rainbow-me/rainbowkit', () => ({ useConnectModal: () => ({}) }));
+jest.mock('@rainbow-me/rainbowkit', () => ({
+  useConnectModal: () => ({ openConnectModal }),
+}));
 jest.mock('../../../src/contexts/network', () => ({
   useNetwork: () => ({ api }),
 }));
@@ -52,7 +65,7 @@ jest.mock('../../../src/hooks/useUsdcPurchase', () => ({
   QUOTE_MIN_REMAINING_MS: 45_000,
   useUsdcPurchase: () => ({
     stage: batch ? 'batch-pending' : hasQuote ? 'quoted' : 'idle',
-    isBusy: false,
+    isBusy,
     intent: hasQuote
       ? {
           id: 'intent',
@@ -85,7 +98,55 @@ describe('pending USDC batch navigation', () => {
     hasKnownPayment = false;
     isPaymentCompleted = false;
     hasQuote = false;
+    isConnected = true;
+    isBusy = false;
     jest.clearAllMocks();
+  });
+
+  it('preserves a pending batch when disconnecting and offers the wallet picker', () => {
+    saveUsdcResume(pending);
+    const panel = () => (
+      <UsdcTransferPanel
+        onNext={jest.fn()}
+        onBack={onBack}
+        context={{ sizeMB: 1024 }}
+      />
+    );
+    const { rerender } = render(panel());
+    const storedPayment = readUsdcResume(1024);
+    expect(storedPayment?.batchId).toBe(pending.batchId);
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect Wallet' }));
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    rerender(panel());
+    expect(screen.getByRole('status').textContent).toMatch(/Reconnect/);
+    expect(
+      (
+        screen.getByRole('button', {
+          name: 'Processing payment…',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(readUsdcResume(1024)).toEqual(storedPayment);
+    fireEvent.click(screen.getByRole('button', { name: 'Connect Wallet' }));
+    expect(openConnectModal).toHaveBeenCalledTimes(1);
+  });
+
+  it('prevents disconnect during an active USDC payment request', () => {
+    batch = null;
+    isBusy = true;
+    render(
+      <UsdcTransferPanel
+        onNext={jest.fn()}
+        onBack={onBack}
+        context={{ sizeMB: 1024 }}
+      />,
+    );
+    const button = screen.getByRole('button', {
+      name: 'Disconnect Wallet',
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(disconnect).not.toHaveBeenCalled();
   });
 
   it('blocks Back and retry acknowledgement for a server payment without a hash', () => {

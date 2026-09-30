@@ -2,13 +2,13 @@
 
 import { Button } from '@auto-drive/ui';
 import { useAccount } from 'wagmi';
-import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useCallback, useEffect, useState } from 'react';
 import type { Hash } from 'viem';
 import { Check, Loader2 } from 'lucide-react';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
 import { UsdcWalletStatus } from './UsdcWalletStatus';
+import { WalletConnection } from '../molecules/WalletConnection';
 import { useNetwork } from '../../../../contexts/network';
 import { useTransactionConfirmation } from '../../../../hooks/useTransactionConfirmation';
 import { useQuoteClock } from '../../../../hooks/useQuoteClock';
@@ -69,7 +69,6 @@ export const UsdcTransferPanel = ({
   context: Record<string, unknown>;
 }) => {
   const { address, isConnected, chainId: connectedChainId } = useAccount();
-  const { openConnectModal } = useConnectModal();
   const { api } = useNetwork();
   const { target, chain, isAvailable, isLoading, isUnsupported } =
     useUsdcAvailability();
@@ -354,27 +353,14 @@ export const UsdcTransferPanel = ({
       <Section title={`Pay with USDC${chain ? ` on ${chain.name}` : ''}`}>
         <div className='flex flex-col gap-4'>
           {/* Wallet */}
-          <div className='flex items-center justify-between rounded-md bg-muted p-4'>
-            <div className='flex flex-col'>
-              <div className='text-sm font-medium'>Wallet Connection</div>
-              <div className='text-xs text-muted-foreground'>
-                {isConnected
-                  ? wrongChain
-                    ? `Connected — will switch to ${chain?.name ?? 'Ethereum'} when you pay`
-                    : 'Wallet connected'
-                  : 'Please connect your wallet to continue'}
-              </div>
-            </div>
-            {isConnected ? (
-              <span className='text-xs font-semibold text-green-700'>
-                {address}
-              </span>
-            ) : (
-              <Button onClick={() => openConnectModal?.()}>
-                Connect Wallet
-              </Button>
-            )}
-          </div>
+          <WalletConnection
+            isBusy={isBusy}
+            connectedMessage={
+              wrongChain
+                ? `Connected — will switch to ${chain?.name ?? 'Ethereum'} when you pay`
+                : 'Wallet connected'
+            }
+          />
 
           {/* The charge */}
           <div className='flex flex-col gap-3 rounded-md bg-muted p-4'>
