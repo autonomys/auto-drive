@@ -480,11 +480,9 @@ export const UsdcTransferPanel = ({
                   Coming back mounts a fresh hook with no intent, which quotes
                   again and charges a second time for the same purchase. Still
                   offered while a quote merely sits unpaid — nothing is owed on
-                  an intent nobody transfers to, and it expires on its own. The
-                  AI3
-                  panel avoids all of this by rendering no Back button at all
-                  (`void onBack`); this one needs the affordance before the
-                  money moves and must not keep it afterwards.
+                  an intent nobody transfers to, and it expires on its own.
+                  Both payment panels disable Back while a payment request is
+                  active or a submitted payment is being tracked.
 
                   With one exception, which is `canLeaveUsdcStep`: a payment
                   whose confirmation has stalled outright. Watching it is no

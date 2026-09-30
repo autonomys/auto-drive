@@ -20,6 +20,7 @@ const disconnect = jest.fn(() => {
   isConnected = false;
 });
 const openConnectModal = jest.fn();
+const onBack = jest.fn();
 const paymentIntent = jest.fn<() => Promise<{ intentId: string }>>();
 const writeContractAsync = jest.fn<() => Promise<string>>();
 const switchChainAsync =
@@ -86,7 +87,7 @@ jest.mock(
 const panel = () => (
   <PurchaseStep3TransferTokens
     onNext={jest.fn()}
-    onBack={jest.fn()}
+    onBack={onBack}
     context={{ sizeMB: 1024 }}
   />
 );
@@ -126,6 +127,55 @@ describe('AI3 payment wallet controls', () => {
     expect(openConnectModal).toHaveBeenCalledTimes(1);
   });
 
+  it.each([true, false])(
+    'allows Back before payment (connected=%s)',
+    (connected) => {
+      isConnected = connected;
+      render(panel());
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(paymentIntent).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['preparation', 'wallet'] as const)(
+    'allows Back after a failed %s request, but not while it is pending',
+    async (stage) => {
+      let rejectRequest!: (error: Error) => void;
+      const request =
+        stage === 'preparation' ? paymentIntent : writeContractAsync;
+      request.mockImplementationOnce(
+        () =>
+          new Promise<never>((_, reject) => {
+            rejectRequest = reject;
+          }),
+      );
+      const errorLog = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      try {
+        render(panel());
+        fireEvent.click(screen.getByRole('button', { name: 'Send Transfer' }));
+        await waitFor(() => expect(request).toHaveBeenCalled());
+        const back = screen.getByRole('button', {
+          name: 'Back',
+        }) as HTMLButtonElement;
+        expect(back.disabled).toBe(true);
+        fireEvent.click(back);
+        expect(onBack).not.toHaveBeenCalled();
+        await act(async () => {
+          rejectRequest(new Error('Request rejected'));
+        });
+        expect(screen.getByRole('alert').textContent).toBe('Request rejected');
+        expect(back.disabled).toBe(false);
+        fireEvent.click(back);
+        expect(onBack).toHaveBeenCalledTimes(1);
+      } finally {
+        errorLog.mockRestore();
+      }
+    },
+  );
+
   it('blocks disconnect during payment preparation and preserves a submitted payment', async () => {
     let resolveIntent!: (value: { intentId: string }) => void;
     paymentIntent.mockReturnValue(
@@ -149,6 +199,12 @@ describe('AI3 payment wallet controls', () => {
     connectedChainId = 11155111;
     rerender(panel());
     expect(screen.getByText('0xpayment')).toBeTruthy();
+    const back = screen.getByRole('button', {
+      name: 'Back',
+    }) as HTMLButtonElement;
+    expect(back.disabled).toBe(true);
+    fireEvent.click(back);
+    expect(onBack).not.toHaveBeenCalled();
     expect(useTransactionConfirmation).toHaveBeenLastCalledWith(
       expect.objectContaining({
         txHash: '0xpayment',
@@ -178,6 +234,12 @@ describe('AI3 payment wallet controls', () => {
       expect(switchChainAsync).toHaveBeenCalledWith({ chainId, connector });
       expect(paymentIntent).not.toHaveBeenCalled();
       expect(writeContractAsync).not.toHaveBeenCalled();
+      const back = screen.getByRole('button', {
+        name: 'Back',
+      }) as HTMLButtonElement;
+      expect(back.disabled).toBe(true);
+      fireEvent.click(back);
+      expect(onBack).not.toHaveBeenCalled();
       await act(async () => {
         resolveSwitch({ id: chainId });
       });
@@ -211,6 +273,8 @@ describe('AI3 payment wallet controls', () => {
       expect(paymentIntent).not.toHaveBeenCalled();
       expect(getGasPrice).not.toHaveBeenCalled();
       expect(writeContractAsync).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+      expect(onBack).toHaveBeenCalledTimes(1);
       expect(
         (
           screen.getByRole('button', {

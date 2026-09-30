@@ -48,7 +48,6 @@ export const PurchaseStep3TransferTokens = (props: TransferStepProps) =>
   );
 
 const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
-  void onBack;
   const {
     isConnected,
     chainId: connectedChainId,
@@ -107,6 +106,9 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
   // difference between "this link is broken" and "the button does nothing".
   const canSend =
     isConnected && !isSending && !isWriting && !txHash && sizeMib !== null;
+  // Leaving unmounts this panel. Keep the payment request and its submitted
+  // hash here until confirmation; a failed or rejected request can go back.
+  const canGoBack = !isSending && !isWriting && !txHash;
 
   const handleSend = useCallback(async () => {
     setIsSending(true);
@@ -224,6 +226,14 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
               }
             />
             <div className='flex gap-3'>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={onBack}
+                disabled={!canGoBack}
+              >
+                Back
+              </Button>
               <Button onClick={handleSend} disabled={!canSend}>
                 {isSwitching
                   ? 'Switching network…'
@@ -233,9 +243,6 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
               </Button>
             </div>
             {sizeMib === null && (
-              // Stated up front rather than on click, because this step has no
-              // back button — the only way out is to start the purchase again,
-              // and the user needs to know that before pressing anything.
               <div className='text-xs text-red-600'>
                 This link does not carry a valid purchase size. Start again from
                 package selection to choose one.
