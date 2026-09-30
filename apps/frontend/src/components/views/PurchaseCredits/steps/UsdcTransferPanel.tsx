@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@auto-drive/ui';
+import { PaymentMethod } from '@auto-drive/models';
 import { useAccount } from 'wagmi';
 import { useCallback, useEffect, useState } from 'react';
 import type { Hash } from 'viem';
@@ -338,12 +339,19 @@ export const UsdcTransferPanel = ({
   }, [reset]);
 
   const currentStep = stageIndex(stage);
+  const continueToReceipt = () =>
+    onNext({
+      txHash: activeTxHash,
+      intentId: activeIntentId,
+      paymentMethod: PaymentMethod.USDC_ETH,
+      sizeMB: sizeMib,
+    });
 
   if (isPaymentCompleted) {
     return (
       <Section title='Payment complete'>
         <p>Your credits have been added.</p>
-        <Button onClick={() => onNext({ sizeMB: sizeMib })}>Continue</Button>
+        <Button onClick={continueToReceipt}>Continue</Button>
       </Section>
     );
   }
@@ -736,9 +744,7 @@ export const UsdcTransferPanel = ({
               )}
               <div className='flex gap-3'>
                 <Button
-                  onClick={() =>
-                    onNext({ txHash: activeTxHash, sizeMB: sizeMib })
-                  }
+                  onClick={continueToReceipt}
                   disabled={
                     !isFullyConfirmed ||
                     !isBackendCompleted ||

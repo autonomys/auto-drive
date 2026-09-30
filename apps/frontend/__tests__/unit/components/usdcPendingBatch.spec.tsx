@@ -183,24 +183,34 @@ describe('pending USDC batch navigation', () => {
     );
   });
 
-  it('lets a completed purchase continue without a transaction hash', () => {
-    batch = null;
-    isPaymentCompleted = true;
-    const onNext = jest.fn();
-    render(
-      <UsdcTransferPanel
-        onNext={onNext}
-        onBack={onBack}
-        context={{ sizeMB: 1024 }}
-      />,
-    );
-    expect(screen.getByText('Your credits have been added.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(onNext).toHaveBeenCalledWith({ sizeMB: 1024 });
-    expect(
-      screen.queryByRole('button', { name: /Pay|Get a price/ }),
-    ).toBeNull();
-  });
+  it.each([false, true])(
+    'passes the receipt ID for a completed purchase without a hash (resumed=%s)',
+    (resumed) => {
+      batch = null;
+      isPaymentCompleted = true;
+      hasQuote = !resumed;
+      if (resumed) saveUsdcResume(pending);
+      const onNext = jest.fn();
+      render(
+        <UsdcTransferPanel
+          onNext={onNext}
+          onBack={onBack}
+          context={{ sizeMB: 1024 }}
+        />,
+      );
+      expect(screen.getByText('Your credits have been added.')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+      expect(onNext).toHaveBeenCalledWith({
+        sizeMB: 1024,
+        intentId: 'intent',
+        paymentMethod: 'usdc_eth',
+        txHash: undefined,
+      });
+      expect(
+        screen.queryByRole('button', { name: /Pay|Get a price/ }),
+      ).toBeNull();
+    },
+  );
 
   it.each([false, true])(
     'hides unpaid instructions for a known payment (resumed=%s)',

@@ -21,6 +21,7 @@ const disconnect = jest.fn(() => {
 });
 const openConnectModal = jest.fn();
 const onBack = jest.fn();
+const onNext = jest.fn();
 const paymentIntent = jest.fn<() => Promise<{ intentId: string }>>();
 const writeContractAsync = jest.fn<() => Promise<string>>();
 const switchChainAsync =
@@ -31,7 +32,10 @@ const usePublicClient = jest.fn<(options: unknown) => typeof publicClient>(
   () => publicClient,
 );
 const useTransactionConfirmation = jest.fn<
-  (options: unknown) => Record<string, never>
+  (options: unknown) => {
+    isFullyConfirmed?: boolean;
+    isBackendCompleted?: boolean;
+  }
 >(() => ({}));
 const api = {};
 
@@ -86,7 +90,7 @@ jest.mock(
 
 const panel = () => (
   <PurchaseStep3TransferTokens
-    onNext={jest.fn()}
+    onNext={onNext}
     onBack={onBack}
     context={{ sizeMB: 1024 }}
   />
@@ -95,6 +99,7 @@ const panel = () => (
 describe('AI3 payment wallet controls', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useTransactionConfirmation.mockReturnValue({});
     isConnected = true;
     isDisconnecting = false;
     disconnectError = null;
@@ -295,6 +300,23 @@ describe('AI3 payment wallet controls', () => {
     expect(writeContractAsync).toHaveBeenCalledWith(
       expect.objectContaining({ chainId: 870 }),
     );
+  });
+
+  it('passes the settled intent and currency to the receipt', async () => {
+    useTransactionConfirmation.mockReturnValue({
+      isFullyConfirmed: true,
+      isBackendCompleted: true,
+    });
+    render(panel());
+    fireEvent.click(screen.getByRole('button', { name: 'Send Transfer' }));
+    const button = await screen.findByRole('button', { name: 'Continue' });
+    fireEvent.click(button);
+    expect(onNext).toHaveBeenCalledWith({
+      intentId: 'intent',
+      paymentMethod: 'ai3_native',
+      sizeMB: 1024,
+      txHash: '0xpayment',
+    });
   });
 
   it('keeps the write pinned if the wallet network changes during preparation', async () => {

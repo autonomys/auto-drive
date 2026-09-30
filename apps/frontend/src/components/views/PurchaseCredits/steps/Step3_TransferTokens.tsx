@@ -335,7 +335,14 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
                   // sizeMB travels forward as the normalised value, so the
                   // success screen reports the size that was bought rather than
                   // the one the URL happened to carry.
-                  onClick={() => onNext({ txHash, sizeMB: sizeMib })}
+                  onClick={() =>
+                    onNext({
+                      txHash,
+                      intentId,
+                      paymentMethod: PaymentMethod.AI3_NATIVE,
+                      sizeMB: sizeMib,
+                    })
+                  }
                   disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap || isExpired}
                 >
                   {isFullyConfirmed && !isBackendCompleted && !isOverCap && !isExpired
