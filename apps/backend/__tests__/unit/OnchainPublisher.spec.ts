@@ -9,6 +9,7 @@ import {
 } from '../../src/infrastructure/services/upload/onchainPublisher/index.js'
 import { jest } from '@jest/globals'
 import { dbMigration } from '../utils/dbMigrate.js'
+import { NodesUseCases } from '../../src/core/objects/nodes.js'
 
 const MOCK_PUBLISH_RESULT = {
   success: true,
@@ -29,6 +30,10 @@ describe('OnchainPublisher', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
   })
 
   it('should publish nodes', async () => {
@@ -107,5 +112,47 @@ describe('OnchainPublisher', () => {
 
     // Signal is optional: called without one here, so it forwards undefined.
     expect(submitSpy).toHaveBeenCalledWith(transactions, undefined)
+  })
+
+  it('should persist confirmed nodes when part of the batch fails', async () => {
+    const nodes: Node[] = [1, 2].map((e) => ({
+      cid: `QmHash${e}`,
+      encoded_node: `QmHash${e}`,
+    })) as unknown as Node[]
+
+    jest.spyOn(nodesRepository, 'getNodesByCids').mockResolvedValue(nodes)
+    jest
+      .spyOn(nodesRepository, 'getNodesBlockchainDataBatch')
+      .mockResolvedValue([])
+
+    const setPublishedOnSpy = jest
+      .spyOn(NodesUseCases, 'setPublishedOn')
+      .mockResolvedValue(undefined)
+
+    const mixedResults = [
+      MOCK_PUBLISH_RESULT,
+      {
+        success: false,
+        txHash: '0x456',
+        status: 'Timeout',
+        error: 'Transaction confirmation timeout',
+      },
+    ]
+
+    jest.spyOn(transactionManager, 'submit').mockResolvedValue(mixedResults)
+
+    try {
+      await expect(
+        OnchainPublisher.publishNodes(nodes.map((e) => e.cid)),
+      ).rejects.toThrow('Failed to publish nodes')
+
+      expect(setPublishedOnSpy).toHaveBeenCalledTimes(1)
+      expect(setPublishedOnSpy).toHaveBeenCalledWith(
+        nodes[0].cid,
+        mixedResults[0],
+      )
+    } finally {
+      setPublishedOnSpy.mockRestore()
+    }
   })
 })

@@ -79,6 +79,40 @@ const getNode = async (cid: string) => {
     .then((e) => (e.rows.length > 0 ? e.rows[0] : undefined))
 }
 
+/**
+ * Read both tables in one statement so they share a READ COMMITTED snapshot.
+ * Separate queries can miss nodes before migration commits and then miss the
+ * blockstore after cleanup, even though a copy was present the whole time.
+ */
+const resolveEncodedNodes = async (
+  cids: string[],
+): Promise<Map<string, string>> => {
+  if (cids.length === 0) return new Map()
+
+  const db = await getDatabase()
+  // Probe once per distinct CID. LIMIT avoids reading duplicate payloads and
+  // COALESCE skips the blockstore when a non-archived nodes copy exists. No
+  // payload sort is needed to establish precedence or collapse duplicates.
+  const distinctCids = [...new Set(cids)]
+  const result = await db.query<{ cid: string; encoded_node: string | null }>({
+    text: `SELECT k.cid, COALESCE(
+             (SELECT encoded_node FROM nodes
+              WHERE nodes.cid = k.cid AND encoded_node IS NOT NULL LIMIT 1),
+             (SELECT encode(data, 'base64') FROM uploads.blockstore
+              WHERE blockstore.cid = k.cid LIMIT 1)
+           ) AS encoded_node
+           FROM unnest($1::text[]) AS k(cid)`,
+    values: [distinctCids],
+  })
+
+  // Filter in application code: a SQL filter can evaluate the subqueries twice.
+  const resolved = new Map<string, string>()
+  for (const row of result.rows) {
+    if (row.encoded_node !== null) resolved.set(row.cid, row.encoded_node)
+  }
+  return resolved
+}
+
 const getNodesByHeadCid = async (headCid: string) => {
   const db = await getDatabase()
 
@@ -542,6 +576,7 @@ const getUnrecoverablePublishingRootCids = async (
 
 export const nodesRepository = {
   getNode,
+  resolveEncodedNodes,
   getNodeCount,
   saveNode,
   saveNodes,

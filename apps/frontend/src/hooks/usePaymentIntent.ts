@@ -6,7 +6,7 @@ import {
   evmChains,
 } from '@auto-drive/ui';
 import { PaymentMethod } from '@auto-drive/models';
-import { Address, Chain, Hash } from 'viem';
+import { Address, Hash } from 'viem';
 
 export interface PaymentIntentTransaction {
   abi: typeof paymentReceiverAbi;
@@ -15,7 +15,7 @@ export interface PaymentIntentTransaction {
   value: bigint;
   address: Address;
   intentId: string;
-  chain: Chain;
+  chainId: number;
 }
 
 export const usePaymentIntent = () => {
@@ -42,7 +42,8 @@ export const usePaymentIntent = () => {
         value: amount,
         address: targetContract,
         intentId: intent.id,
-        chain: evmChains[network.id],
+        // wagmi enforces the wallet network through chainId, not viem's chain.
+        chainId: evmChains[network.id].id,
       } as PaymentIntentTransaction;
     },
     [api, network.id, targetContract],

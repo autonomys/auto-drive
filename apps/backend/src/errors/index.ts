@@ -177,6 +177,28 @@ export class ServiceUnavailableError extends HttpError {
   }
 }
 
+// Metadata exists, but its bytes cannot currently be resolved. Keep the CID
+// in the error for server logs; clients get a stable, retryable response.
+export class ChunkNotFoundError extends ServiceUnavailableError {
+  static readonly publicMessage =
+    'The object is temporarily unavailable. Please retry.'
+  static readonly retryAfterSeconds = '1'
+  public readonly cid: string
+
+  constructor(cid: string) {
+    super(`Chunk not found: cid=${cid}`)
+    this.name = 'ChunkNotFoundError'
+    this.cid = cid
+  }
+
+  handleResponse(res: Response) {
+    res.setHeader('Retry-After', ChunkNotFoundError.retryAfterSeconds)
+    res
+      .status(this.statusCode)
+      .json({ error: ChunkNotFoundError.publicMessage })
+  }
+}
+
 // 503 Service Unavailable — paying in USDC is temporarily closed.
 //
 // A distinct class from UsdcPaymentsDisabledError (403), and the status is the

@@ -70,34 +70,48 @@ const saveNode = async (
   })
 }
 
+/**
+ * Resolve the payload of many chunks at once, returning a CID -> data map that
+ * simply omits whatever could not be resolved.
+ *
+ * Batched because the alternative is what caused issue #815 to be reachable so
+ * often. composeNodesDataAsFileReadable fetches up to `concurrentChunks` (100)
+ * chunks at a time; resolving them one CID at a time meant up to 200 statements
+ * per batch against a pg.Pool with the default max of 10 connections. A given
+ * chunk's second statement could therefore be queued for hundreds of
+ * milliseconds behind its own first one — which is what let a reader straddle
+ * the migration's commit and the blockstore cleanup. One statement per batch
+ * removes both the straddle (see resolveEncodedNodes) and the queueing.
+ */
+const getChunksData = async (
+  cids: (string | CID)[],
+): Promise<Map<string, Buffer>> => {
+  const cidStrings = cids.map((cid) =>
+    typeof cid === 'string' ? cid : cidToString(cid),
+  )
+
+  const encodedNodes = await nodesRepository.resolveEncodedNodes(cidStrings)
+
+  const chunks = new Map<string, Buffer>()
+  for (const [cidString, encodedNode] of encodedNodes) {
+    const decoded = decodeIPLDNodeData(
+      new Uint8Array(Buffer.from(encodedNode, 'base64')),
+    )
+    // A node that carries no data is not a chunk we can serve. Left out of the
+    // map rather than mapped to an empty buffer, so callers cannot mistake
+    // "resolved to nothing" for "resolved".
+    if (decoded?.data) {
+      chunks.set(cidString, Buffer.from(decoded.data))
+    }
+  }
+
+  return chunks
+}
+
 const getChunkData = async (cid: string | CID): Promise<Buffer | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
 
-  let ipldNodeBytes: Buffer | undefined = await nodesRepository
-    .getNode(cidString)
-    .then((e) => {
-      if (!e || !e.encoded_node) {
-        return undefined
-      }
-
-      return Buffer.from(e.encoded_node, 'base64')
-    })
-
-  if (!ipldNodeBytes) {
-    ipldNodeBytes = await BlockstoreUseCases.getNode(cidString)
-  }
-
-  if (!ipldNodeBytes) {
-    return undefined
-  }
-
-  const chunkData = decodeIPLDNodeData(new Uint8Array(ipldNodeBytes))
-
-  if (!chunkData) {
-    return undefined
-  }
-
-  return chunkData.data ? Buffer.from(chunkData.data) : undefined
+  return (await getChunksData([cidString])).get(cidString)
 }
 
 const saveNodes = async (
@@ -413,6 +427,7 @@ export const NodesUseCases = {
   getNode,
   saveNode,
   getChunkData,
+  getChunksData,
   saveNodes,
   migrateFromBlockstoreToNodesTable,
   processNodeArchived,

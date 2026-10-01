@@ -26,8 +26,8 @@ interface UseTransactionConfirmationProps {
    * arrive, and the Continue button would stay disabled for a purchase whose
    * credits had already been granted.
    *
-   * Omitted keeps the previous behaviour exactly: follow the connected chain,
-   * which is correct for AI3 because that IS the chain being paid on.
+   * Both payment flows pass their payment chain so a later wallet network
+   * change cannot move confirmation tracking to another chain.
    */
   chainId?: number;
   /**
@@ -90,8 +90,7 @@ export const useTransactionConfirmation = ({
   chainId,
   lockLapsedGraceMs,
 }: UseTransactionConfirmationProps): UseTransactionConfirmationReturn => {
-  // `chainId: undefined` is how wagmi spells "the connected chain", so passing
-  // it through unset preserves the AI3 behaviour rather than special-casing it.
+  // Callers without a payment chain retain wagmi's connected-chain default.
   const client = usePublicClient({ chainId });
   const queryClient = useQueryClient();
 
