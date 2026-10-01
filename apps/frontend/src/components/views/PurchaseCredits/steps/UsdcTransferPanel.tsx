@@ -489,8 +489,8 @@ export const UsdcTransferPanel = ({
                   again and charges a second time for the same purchase. Still
                   offered while a quote merely sits unpaid — nothing is owed on
                   an intent nobody transfers to, and it expires on its own.
-                  Both payment panels disable Back while a payment request is
-                  active or a submitted payment is being tracked.
+                  This guard is specific to USDC. AI3 also allows Back after
+                  polling ends with an expired or over-cap outcome.
 
                   With one exception, which is `canLeaveUsdcStep`: a payment
                   whose confirmation has stalled outright. Watching it is no

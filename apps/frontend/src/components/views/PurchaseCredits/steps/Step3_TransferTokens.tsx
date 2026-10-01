@@ -106,9 +106,11 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
   // difference between "this link is broken" and "the button does nothing".
   const canSend =
     isConnected && !isSending && !isWriting && !txHash && sizeMib !== null;
-  // Leaving unmounts this panel. Keep the payment request and its submitted
-  // hash here until confirmation; a failed or rejected request can go back.
-  const canGoBack = !isSending && !isWriting && !txHash;
+  // Leaving unmounts this panel. Keep active requests and submitted payments
+  // here while they are tracked, but allow Back once polling has ended with
+  // an expired or over-cap outcome.
+  const canGoBack =
+    !isSending && !isWriting && (!txHash || isExpired || isOverCap);
 
   const handleSend = useCallback(async () => {
     setIsSending(true);

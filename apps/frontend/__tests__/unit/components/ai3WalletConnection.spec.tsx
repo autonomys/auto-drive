@@ -35,6 +35,10 @@ const useTransactionConfirmation = jest.fn<
   (options: unknown) => {
     isFullyConfirmed?: boolean;
     isBackendCompleted?: boolean;
+    isExpired?: boolean;
+    isOverCap?: boolean;
+    lockLapsed?: boolean;
+    waitError?: Error | null;
   }
 >(() => ({}));
 const api = {};
@@ -218,6 +222,57 @@ describe('AI3 payment wallet controls', () => {
       }),
     );
   });
+
+  it.each(['isExpired', 'isOverCap'] as const)(
+    'allows Back after a submitted payment reaches %s',
+    async (status) => {
+      const { rerender } = render(panel());
+      fireEvent.click(screen.getByRole('button', { name: 'Send Transfer' }));
+      await screen.findByText('0xpayment');
+      const back = screen.getByRole('button', {
+        name: 'Back',
+      }) as HTMLButtonElement;
+      expect(back.disabled).toBe(true);
+
+      useTransactionConfirmation.mockReturnValue({ [status]: true });
+      rerender(panel());
+      expect(back.disabled).toBe(false);
+      expect(
+        (
+          screen.getByRole('button', {
+            name: 'Send Transfer',
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      expect(
+        (screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      fireEvent.click(back);
+      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(writeContractAsync).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    { lockLapsed: true },
+    { waitError: new Error('Receipt unavailable') },
+  ])(
+    'keeps Back disabled while the payment outcome is uncertain (%j)',
+    async (status) => {
+      const { rerender } = render(panel());
+      fireEvent.click(screen.getByRole('button', { name: 'Send Transfer' }));
+      await screen.findByText('0xpayment');
+      useTransactionConfirmation.mockReturnValue(status);
+      rerender(panel());
+      const back = screen.getByRole('button', {
+        name: 'Back',
+      }) as HTMLButtonElement;
+      expect(back.disabled).toBe(true);
+      fireEvent.click(back);
+      expect(onBack).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['mainnet', 870],
