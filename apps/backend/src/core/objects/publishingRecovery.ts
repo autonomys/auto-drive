@@ -65,6 +65,7 @@ const runRecoveryBatch = async (): Promise<void> => {
   const stuckRootCids = await nodesRepository.getStuckPublishingRootCids(
     maxPerCycle,
     config.publishingRecovery.stalenessThresholdBlocks,
+    config.publishingRecovery.zeroPublishedStalenessMs,
   )
 
   if (stuckRootCids.length === 0) {

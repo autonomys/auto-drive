@@ -223,6 +223,14 @@ export const config = {
     publishManagerBacklogLimit: Number(
       env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100'),
     ),
+    // For objects where every transaction in the batch failed (0 nodes published),
+    // MAX(block_published_on) does not exist. An object is considered stuck if all
+    // its nodes remain unpublished and it was created longer ago than this.
+    // At ~6s block time, 1000 blocks ≈ 1.7 hours, so 2 hours (7200000 ms) provides
+    // a safe window that won't interfere with active initial publishing.
+    zeroPublishedStalenessMs: Number(
+      env('PUBLISHING_RECOVERY_ZERO_PUBLISHED_STALENESS_MS', '7200000'),
+    ),
   },
   migrationRecovery: {
     intervalMs: Number(env('MIGRATION_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
