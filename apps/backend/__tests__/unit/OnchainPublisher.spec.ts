@@ -155,4 +155,69 @@ describe('OnchainPublisher', () => {
       setPublishedOnSpy.mockRestore()
     }
   })
+
+  it('should preserve batch failure breakdown even when persistence rejects for confirmed nodes', async () => {
+    const nodes: Node[] = [1, 2].map((e) => ({
+      cid: `QmHash${e}`,
+      encoded_node: `QmHash${e}`,
+    })) as unknown as Node[]
+
+    jest.spyOn(nodesRepository, 'getNodesByCids').mockResolvedValue(nodes)
+    jest
+      .spyOn(nodesRepository, 'getNodesBlockchainDataBatch')
+      .mockResolvedValue([])
+
+    const setPublishedOnSpy = jest
+      .spyOn(NodesUseCases, 'setPublishedOn')
+      .mockRejectedValue(new Error('DB write failed'))
+
+    const mixedResults = [
+      MOCK_PUBLISH_RESULT,
+      {
+        success: false,
+        txHash: '0x456',
+        status: 'Timeout',
+        error: 'Transaction confirmation timeout',
+      },
+    ]
+
+    jest.spyOn(transactionManager, 'submit').mockResolvedValue(mixedResults)
+
+    try {
+      await expect(
+        OnchainPublisher.publishNodes(nodes.map((e) => e.cid)),
+      ).rejects.toThrow('Failed to publish nodes')
+    } finally {
+      setPublishedOnSpy.mockRestore()
+    }
+  })
+
+  it('should throw persistence error when all chain txs succeed but persistence fails', async () => {
+    const nodes: Node[] = [1].map((e) => ({
+      cid: `QmHash${e}`,
+      encoded_node: `QmHash${e}`,
+    })) as unknown as Node[]
+
+    jest.spyOn(nodesRepository, 'getNodesByCids').mockResolvedValue(nodes)
+    jest
+      .spyOn(nodesRepository, 'getNodesBlockchainDataBatch')
+      .mockResolvedValue([])
+
+    const setPublishedOnSpy = jest
+      .spyOn(NodesUseCases, 'setPublishedOn')
+      .mockRejectedValue(new Error('DB write failed'))
+
+    jest
+      .spyOn(transactionManager, 'submit')
+      .mockResolvedValue([MOCK_PUBLISH_RESULT])
+
+    try {
+      await expect(
+        OnchainPublisher.publishNodes(nodes.map((e) => e.cid)),
+      ).rejects.toThrow('Failed to record published status for 1 node(s)')
+    } finally {
+      setPublishedOnSpy.mockRestore()
+    }
+  })
 })
+
