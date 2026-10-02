@@ -494,6 +494,7 @@ const getFullyArchivedHeadCids = async (
 const getStuckPublishingRootCids = async (
   limit: number,
   stalenessThresholdBlocks: number,
+  zeroPublishedStalenessMs?: number,
 ): Promise<string[]> => {
   const db = await getDatabase()
 
@@ -503,17 +504,33 @@ const getStuckPublishingRootCids = async (
         SELECT root_cid
         FROM nodes
         GROUP BY root_cid
-        HAVING COUNT(block_published_on) > 0
-           AND COUNT(block_published_on) < COUNT(*)
-           AND COUNT(*) FILTER (
-             WHERE block_published_on IS NULL AND encoded_node IS NOT NULL
-           ) > 0
-           AND MAX(block_published_on) + $2 < (
-             SELECT MAX(block_published_on) FROM nodes
-           )
+        HAVING (
+          (
+            COUNT(block_published_on) > 0
+            AND COUNT(block_published_on) < COUNT(*)
+            AND COUNT(*) FILTER (
+              WHERE block_published_on IS NULL AND encoded_node IS NOT NULL
+            ) > 0
+            AND MAX(block_published_on) + $2 < (
+              SELECT MAX(block_published_on) FROM nodes
+            )
+          )
+          OR
+          (
+            COUNT(block_published_on) = 0
+            AND COUNT(*) FILTER (
+              WHERE encoded_node IS NOT NULL
+            ) > 0
+            AND MAX(created_at) < NOW() - ($3 * INTERVAL '1 millisecond')
+          )
+        )
         LIMIT $1
       `,
-      values: [limit, stalenessThresholdBlocks],
+      values: [
+        limit,
+        stalenessThresholdBlocks,
+        zeroPublishedStalenessMs ?? 7200000,
+      ],
     })
     .then((e) => e.rows.map((r) => r.root_cid))
 }
