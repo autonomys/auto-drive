@@ -106,6 +106,10 @@ const runRecoveryBatch = async (): Promise<void> => {
           createTask({ id: 'publish-nodes', params: { nodes: batch } }),
         )
       }
+
+      // Stamp updated_at on unpublished nodes to enforce a retry cooldown
+      // and prevent re-selection while batches are in flight.
+      await nodesRepository.touchUnpublishedNodesByRootCid(rootCid)
     } catch (error) {
       logger.error(
         'Failed to recover publishing for object (rootCid=%s): %s',

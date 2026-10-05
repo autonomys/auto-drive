@@ -26,6 +26,9 @@ describe('PublishingRecoveryUseCases.processPublishingRecovery', () => {
     jest
       .spyOn(nodesRepository, 'getUnpublishedNodeCidsByRootCid')
       .mockResolvedValue(unpublishedCids)
+    const touchSpy = jest
+      .spyOn(nodesRepository, 'touchUnpublishedNodesByRootCid')
+      .mockResolvedValue(undefined)
     const publishSpy = jest.spyOn(EventRouter, 'publish').mockReturnValue()
 
     await PublishingRecoveryUseCases.processPublishingRecovery()
@@ -40,6 +43,7 @@ describe('PublishingRecoveryUseCases.processPublishingRecovery', () => {
 
     expect(tasks[1].id).toBe('publish-nodes')
     expect(tasks[1].params.nodes).toHaveLength(25)
+    expect(touchSpy).toHaveBeenCalledWith('root-1')
   })
 
   it('queries getStuckPublishingRootCids with configured limit, staleness blocks, and zeroPublishedStalenessMs', async () => {

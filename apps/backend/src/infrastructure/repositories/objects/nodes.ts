@@ -521,9 +521,10 @@ const getStuckPublishingRootCids = async (
             AND COUNT(*) FILTER (
               WHERE encoded_node IS NOT NULL
             ) > 0
-            AND MAX(created_at) < NOW() - ($3 * INTERVAL '1 millisecond')
+            AND MAX(updated_at) < NOW() - ($3 * INTERVAL '1 millisecond')
           )
         )
+        ORDER BY MIN(updated_at) ASC
         LIMIT $1
       `,
       values: [
@@ -533,6 +534,25 @@ const getStuckPublishingRootCids = async (
       ],
     })
     .then((e) => e.rows.map((r) => r.root_cid))
+}
+
+/**
+ * Stamps updated_at = NOW() on all unpublished nodes for a root_cid.
+ * Acts as a cooldown so re-enqueued objects are not re-selected immediately
+ * on subsequent recovery cycles while their tasks are queued/in-flight.
+ */
+const touchUnpublishedNodesByRootCid = async (rootCid: string): Promise<void> => {
+  const db = await getDatabase()
+
+  await db.query({
+    text: `
+      UPDATE nodes
+      SET updated_at = NOW()
+      WHERE root_cid = $1
+        AND block_published_on IS NULL
+    `,
+    values: [rootCid],
+  })
 }
 
 /**
@@ -619,4 +639,5 @@ export const nodesRepository = {
   getStuckPublishingRootCids,
   getUnpublishedNodeCidsByRootCid,
   getUnrecoverablePublishingRootCids,
+  touchUnpublishedNodesByRootCid,
 }
