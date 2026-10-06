@@ -1,4 +1,11 @@
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals'
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+} from '@jest/globals'
 import { PublishingRecoveryUseCases } from '../../../src/core/objects/publishingRecovery.js'
 import { nodesRepository } from '../../../src/infrastructure/repositories/index.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
@@ -46,7 +53,7 @@ describe('PublishingRecoveryUseCases.processPublishingRecovery', () => {
     expect(touchSpy).toHaveBeenCalledWith('root-1')
   })
 
-  it('queries getStuckPublishingRootCids with configured limit, staleness blocks, and zeroPublishedStalenessMs', async () => {
+  it('queries getStuckPublishingRootCids with configured limit, staleness blocks, and retry cooldown', async () => {
     const getUnrecSpy = jest
       .spyOn(nodesRepository, 'getUnrecoverablePublishingRootCids')
       .mockResolvedValue([])
@@ -56,11 +63,13 @@ describe('PublishingRecoveryUseCases.processPublishingRecovery', () => {
 
     await PublishingRecoveryUseCases.processPublishingRecovery()
 
-    expect(getUnrecSpy).toHaveBeenCalledWith(config.publishingRecovery.maxObjectsPerCycle)
+    expect(getUnrecSpy).toHaveBeenCalledWith(
+      config.publishingRecovery.maxObjectsPerCycle,
+    )
     expect(getStuckSpy).toHaveBeenCalledWith(
       config.publishingRecovery.maxObjectsPerCycle,
       config.publishingRecovery.stalenessThresholdBlocks,
-      config.publishingRecovery.zeroPublishedStalenessMs,
+      config.publishingRecovery.retryCooldownMs,
     )
   })
 

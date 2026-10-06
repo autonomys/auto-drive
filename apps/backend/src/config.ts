@@ -223,13 +223,14 @@ export const config = {
     publishManagerBacklogLimit: Number(
       env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100'),
     ),
-    // For objects where every transaction in the batch failed (0 nodes published),
-    // MAX(block_published_on) does not exist. An object is considered stuck if all
-    // its nodes remain unpublished and it was created longer ago than this.
-    // At ~6s block time, 1000 blocks ≈ 1.7 hours, so 2 hours (7200000 ms) provides
-    // a safe window that won't interfere with active initial publishing.
-    zeroPublishedStalenessMs: Number(
-      env('PUBLISHING_RECOVERY_ZERO_PUBLISHED_STALENESS_MS', '7200000'),
+    // An object's unpublished nodes must be untouched for this long before
+    // recovery (re-)enqueues them. Nodes are stamped at insert and on every
+    // recovery attempt, so this is both the staleness window for objects with
+    // zero published nodes (where the block filter above has nothing to
+    // measure) and the per-object retry interval. 2 hours sits just above the
+    // ~1.7 hour block window.
+    retryCooldownMs: Number(
+      env('PUBLISHING_RECOVERY_RETRY_COOLDOWN_MS', '7200000'),
     ),
   },
   migrationRecovery: {
