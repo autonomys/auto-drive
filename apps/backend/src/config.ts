@@ -279,6 +279,13 @@ export const config = {
     url: env('RABBITMQ_URL'),
     prefetch: Number(env('RABBITMQ_PREFETCH', '10')),
     keepAliveInterval: Number(env('RABBITMQ_KEEP_ALIVE_INTERVAL', '60000')),
+    // Timeout for tasks processed by the frontend worker (task-manager).
+    // Without a per-task timeout, a hung or slow task blocks the single-threaded
+    // consumer indefinitely. Defaults to 5 minutes (300,000 ms).
+    frontendTaskTimeoutMs: positiveIntEnv(
+      'FRONTEND_TASK_TIMEOUT_MS',
+      300000,
+    ),
   },
   // Alerting for tasks that exhausted their retries. Without a consumer the
   // error queues grow forever and nobody finds out a task died.

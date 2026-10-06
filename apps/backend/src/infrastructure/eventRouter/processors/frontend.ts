@@ -7,6 +7,7 @@ import { Rabbit } from '../../drivers/rabbit.js'
 import { Task } from '../tasks.js'
 import { createHandlerWithRetries } from '../utils.js'
 import { paymentManager } from '../../services/paymentManager/index.js'
+import { config } from '../../../config.js'
 
 export const frontendErrorPublishedQueue = 'frontend-errors'
 
@@ -49,5 +50,6 @@ export const processFrontendTask = createHandlerWithRetries(
   },
   {
     errorPublishQueue: frontendErrorPublishedQueue,
+    taskTimeoutMs: config.rabbitmq.frontendTaskTimeoutMs,
   },
 )
