@@ -45,20 +45,24 @@ export const BannerAdmin = () => {
 
   const handleCreate = useCallback(
     async (data: BannerFormData) => {
-      await api.createBanner({
-        title: data.title,
-        body: data.body,
-        criticality: data.criticality,
-        dismissable: data.dismissable,
-        requiresAcknowledgement: data.requiresAcknowledgement,
-        displayStart: new Date(data.displayStart).toISOString(),
-        displayEnd: data.displayEnd
-          ? new Date(data.displayEnd).toISOString()
-          : null,
-        active: data.active,
-      });
-      setShowForm(false);
-      fetchBanners();
+      try {
+        await api.createBanner({
+          title: data.title,
+          body: data.body,
+          criticality: data.criticality,
+          dismissable: data.dismissable,
+          requiresAcknowledgement: data.requiresAcknowledgement,
+          displayStart: new Date(data.displayStart).toISOString(),
+          displayEnd: data.displayEnd
+            ? new Date(data.displayEnd).toISOString()
+            : null,
+          active: data.active,
+        });
+        setShowForm(false);
+        fetchBanners();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to create banner');
+      }
     },
     [api, fetchBanners],
   );
@@ -66,28 +70,36 @@ export const BannerAdmin = () => {
   const handleUpdate = useCallback(
     async (data: BannerFormData) => {
       if (!editingBanner) return;
-      await api.updateBanner(editingBanner.id, {
-        title: data.title,
-        body: data.body,
-        criticality: data.criticality,
-        dismissable: data.dismissable,
-        requiresAcknowledgement: data.requiresAcknowledgement,
-        displayStart: new Date(data.displayStart).toISOString(),
-        displayEnd: data.displayEnd
-          ? new Date(data.displayEnd).toISOString()
-          : null,
-        active: data.active,
-      });
-      setEditingBanner(null);
-      fetchBanners();
+      try {
+        await api.updateBanner(editingBanner.id, {
+          title: data.title,
+          body: data.body,
+          criticality: data.criticality,
+          dismissable: data.dismissable,
+          requiresAcknowledgement: data.requiresAcknowledgement,
+          displayStart: new Date(data.displayStart).toISOString(),
+          displayEnd: data.displayEnd
+            ? new Date(data.displayEnd).toISOString()
+            : null,
+          active: data.active,
+        });
+        setEditingBanner(null);
+        fetchBanners();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to update banner');
+      }
     },
     [api, editingBanner, fetchBanners],
   );
 
   const handleToggle = useCallback(
     async (bannerId: string, active: boolean) => {
-      await api.toggleBanner(bannerId, active);
-      fetchBanners();
+      try {
+        await api.toggleBanner(bannerId, active);
+        fetchBanners();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to toggle banner');
+      }
     },
     [api, fetchBanners],
   );
