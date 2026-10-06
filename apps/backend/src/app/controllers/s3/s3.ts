@@ -219,7 +219,7 @@ const rejectIfUserMetadataTooLarge = (
  * (Node) rather than res.set (Express) so Content-Type is sent byte-for-byte with
  * no injected "; charset=..." — S3 never mutates a stored Content-Type.
  */
-const applyStoredMetadataHeaders = (
+export const applyStoredMetadataHeaders = (
   res: Response,
   metadata: S3ObjectMetadata | null,
   { isCompressed }: { isCompressed: boolean },
@@ -454,6 +454,7 @@ export const getObjectHandler = async (req: Request, res: Response) => {
 
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
+    rawMode: true,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
   // Override the generic headers with the stored S3 metadata (verbatim
@@ -518,6 +519,7 @@ export const headObjectHandler = async (req: Request, res: Response) => {
 
   handleDownloadResponseHeaders(req, res, metadata, {
     byteRange: resultingByteRange,
+    rawMode: true,
   })
   handleS3DownloadResponseHeaders(req, res, metadata)
   // Override the generic headers with the stored S3 metadata (verbatim
