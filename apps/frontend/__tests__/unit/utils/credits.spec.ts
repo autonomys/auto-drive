@@ -1,4 +1,4 @@
-import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, isBatchRefundable } from '../../../src/utils/credits'
+import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, isBatchRefundable, mibToBytes, normaliseMib } from '../../../src/utils/credits'
 
 // ---------------------------------------------------------------------------
 // isMibOverCap (shared helper used by both package and custom-amount flows)
@@ -255,5 +255,104 @@ describe('isBatchRefundable', () => {
 
   it('returns false for a depleted batch (0 upload bytes) — no refund is owed', () => {
     expect(isBatchRefundable(makeBatch({ uploadBytesRemaining: '0' }))).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// normaliseMib
+//
+// The size reaching Step 3 is not always the whole MiB inputToMib produces:
+// PurchaseCredits/index.tsx re-hydrates it from the query string with a numeric
+// coercion that accepts decimals, and leaves anything non-numeric as a string.
+// mibToBytes calls BigInt(), which throws a RangeError on both — a raw
+// `The number 0.5 cannot be converted to a BigInt` shown to whoever opened the
+// link.
+// ---------------------------------------------------------------------------
+
+describe('normaliseMib', () => {
+  // Characterisation, not a regression guard: this passes with or without
+  // normaliseMib. It is here to pin WHY the rounding was not put inside
+  // mibToBytes, so a later reader does not "simplify" it back in.
+  it('mibToBytes throws on a fraction — the hazard this exists to remove', () => {
+    // Witness for the bug: BigInt() rejects a non-integer outright, and the
+    // RangeError reached the user as `The number 0.5 cannot be converted to a
+    // BigInt`. formatCreditsInMbAsValue does not throw on the same input
+    // (0.5 * 1048576 is a whole number), which is why the URL worked before the
+    // cap pre-check started passing the size through mibToBytes as well.
+    expect(() => mibToBytes(0.5)).toThrow(RangeError)
+    expect(() => mibToBytes(NaN)).toThrow(RangeError)
+  })
+
+  it('passes a whole MiB through unchanged', () => {
+    expect(normaliseMib(100)).toBe(100)
+  })
+
+  it('accepts the decimal string the query-param coercion produces', () => {
+    // ?step=3&sizeMB=0.5 — the URL that used to reach the wallet and now must
+    // not throw on its way there.
+    expect(normaliseMib(0.5)).toBe(1)
+    expect(normaliseMib('1024')).toBe(1024)
+  })
+
+  it('rounds a fraction to a whole MiB', () => {
+    expect(normaliseMib(1.4)).toBe(1)
+    expect(normaliseMib(1.5)).toBe(2)
+  })
+
+  it('rejects a size that is not a number', () => {
+    // ?sizeMB=abc reaches the component as the string, not as NaN-coerced input.
+    expect(normaliseMib('abc')).toBeNull()
+    expect(normaliseMib(undefined)).toBeNull()
+    expect(normaliseMib(null)).toBeNull()
+    expect(normaliseMib(NaN)).toBeNull()
+    expect(normaliseMib(Infinity)).toBeNull()
+  })
+
+  it('rejects a non-positive size', () => {
+    expect(normaliseMib(0)).toBeNull()
+    expect(normaliseMib(-5)).toBeNull()
+    // Rounds to 0, which is not a purchase.
+    expect(normaliseMib(0.4)).toBeNull()
+  })
+
+  it('produces a value mibToBytes can always convert', () => {
+    // The whole point: every non-null return must survive BigInt().
+    for (const raw of [0.5, 1.4, 2.5, '3', 100, 1.9999]) {
+      const mib = normaliseMib(raw)
+      expect(mib).not.toBeNull()
+      expect(() => mibToBytes(mib as number)).not.toThrow()
+    }
+  })
+
+  it('survives BOTH conversions Step 3 performs, not just mibToBytes', () => {
+    // Step 3 passes the normalised size to the AI3 pricing helper AND to
+    // mibToBytes. usePrices' formatCreditsInMbAsValue does
+    // `BigInt(creditsInMb * BYTES_PER_MiB) * BigInt(shannonsPerByte)` — its own
+    // BigInt(), on its own arithmetic — so a value that is safe for mibToBytes
+    // is not automatically safe for it. That is the hole `Number.isFinite`
+    // left: 1e308 rounds to itself, then 1e308 * 1048576 is Infinity.
+    //
+    // Replicated here rather than imported because the real one lives inside a
+    // React hook; the arithmetic is what matters and is asserted verbatim.
+    const priceArithmetic = (mib: number) => BigInt(mib * (1024 * 1024))
+
+    for (const raw of [0.5, 1.4, '3', 100, 102400, 1.9999]) {
+      const mib = normaliseMib(raw)
+      expect(mib).not.toBeNull()
+      expect(() => priceArithmetic(mib as number)).not.toThrow()
+      expect(() => mibToBytes(mib as number)).not.toThrow()
+    }
+  })
+
+  it('rejects a size that overflows the pricing arithmetic into Infinity', () => {
+    // Reachable two ways: a 308-digit ?sizeMB=999…9 matches the query-param
+    // regex and arrives as 1e308, and ?sizeMB=1e308 fails the regex but arrives
+    // as a string Number() is happy to widen. Both are finite doubles, so a
+    // Number.isFinite guard passes them straight into BigInt(Infinity).
+    expect(normaliseMib('1e308')).toBeNull()
+    expect(normaliseMib('9'.repeat(308))).toBeNull()
+    expect(normaliseMib(Number.MAX_SAFE_INTEGER + 2)).toBeNull()
+    // The boundary itself is still a number, however absurd a purchase.
+    expect(normaliseMib(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER)
   })
 })

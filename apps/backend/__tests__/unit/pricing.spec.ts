@@ -1,5 +1,41 @@
 import { describe, it, expect } from '@jest/globals'
-import { applyMarginPercent } from '../../src/shared/utils/pricing.js'
+import {
+  ai3ShannonsToUsdcBaseUnits,
+  applyMarginPercent,
+} from '../../src/shared/utils/pricing.js'
+
+describe('ai3ShannonsToUsdcBaseUnits', () => {
+  const ONE_AI3 = 10n ** 18n
+  // 0.0064 USD/AI3, scaled by USD_RATE_SCALE (1e18).
+  const RATE = 6_400_000_000_000_000n
+
+  it('converts whole AI3 amounts to USDC base units', () => {
+    // 1000 AI3 * $0.0064 = $6.40 -> 6_400_000 USDC base units.
+    expect(ai3ShannonsToUsdcBaseUnits(1000n * ONE_AI3, RATE)).toBe(6_400_000n)
+    // 1 AI3 * $0.0064 = $0.0064 -> 6_400 base units.
+    expect(ai3ShannonsToUsdcBaseUnits(ONE_AI3, RATE)).toBe(6_400n)
+  })
+
+  it('bridges the 18-decimal and 6-decimal domains', () => {
+    // At $1.00/AI3 exactly, 1 AI3 must be 1_000_000 USDC base units — an error
+    // in the decimal exponent shows up here as a factor of 1e12.
+    expect(ai3ShannonsToUsdcBaseUnits(ONE_AI3, 10n ** 18n)).toBe(1_000_000n)
+  })
+
+  it('rounds up so a conversion is never valued short', () => {
+    // One shannon at $0.0064 is far below a USDC base unit, but not free.
+    expect(ai3ShannonsToUsdcBaseUnits(1n, RATE)).toBe(1n)
+  })
+
+  it('returns zero for a zero amount', () => {
+    expect(ai3ShannonsToUsdcBaseUnits(0n, RATE)).toBe(0n)
+  })
+
+  it('throws on negative inputs', () => {
+    expect(() => ai3ShannonsToUsdcBaseUnits(-1n, RATE)).toThrow()
+    expect(() => ai3ShannonsToUsdcBaseUnits(ONE_AI3, -1n)).toThrow()
+  })
+})
 
 describe('applyMarginPercent', () => {
   it('adds a whole-percent margin (USDC 6-dp amounts)', () => {

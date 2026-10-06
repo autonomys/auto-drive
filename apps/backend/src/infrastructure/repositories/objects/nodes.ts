@@ -79,6 +79,40 @@ const getNode = async (cid: string) => {
     .then((e) => (e.rows.length > 0 ? e.rows[0] : undefined))
 }
 
+/**
+ * Read both tables in one statement so they share a READ COMMITTED snapshot.
+ * Separate queries can miss nodes before migration commits and then miss the
+ * blockstore after cleanup, even though a copy was present the whole time.
+ */
+const resolveEncodedNodes = async (
+  cids: string[],
+): Promise<Map<string, string>> => {
+  if (cids.length === 0) return new Map()
+
+  const db = await getDatabase()
+  // Probe once per distinct CID. LIMIT avoids reading duplicate payloads and
+  // COALESCE skips the blockstore when a non-archived nodes copy exists. No
+  // payload sort is needed to establish precedence or collapse duplicates.
+  const distinctCids = [...new Set(cids)]
+  const result = await db.query<{ cid: string; encoded_node: string | null }>({
+    text: `SELECT k.cid, COALESCE(
+             (SELECT encoded_node FROM nodes
+              WHERE nodes.cid = k.cid AND encoded_node IS NOT NULL LIMIT 1),
+             (SELECT encode(data, 'base64') FROM uploads.blockstore
+              WHERE blockstore.cid = k.cid LIMIT 1)
+           ) AS encoded_node
+           FROM unnest($1::text[]) AS k(cid)`,
+    values: [distinctCids],
+  })
+
+  // Filter in application code: a SQL filter can evaluate the subqueries twice.
+  const resolved = new Map<string, string>()
+  for (const row of result.rows) {
+    if (row.encoded_node !== null) resolved.set(row.cid, row.encoded_node)
+  }
+  return resolved
+}
+
 const getNodesByHeadCid = async (headCid: string) => {
   const db = await getDatabase()
 
@@ -445,13 +479,26 @@ const getFullyArchivedHeadCids = async (
 }
 
 /**
- * Returns root_cids of objects that are partially published — some nodes
- * have block_published_on set but others do not — AND whose most recent
- * published block is at least `stalenessThresholdBlocks` behind the
- * chain head (approximated by the global MAX(block_published_on)).
+ * Returns root_cids of objects stuck in publishing: they still have
+ * publishable nodes (block_published_on IS NULL, encoded_node present) and
+ * either
+ * - some nodes are published, but the most recent published block is at
+ *   least `stalenessThresholdBlocks` behind the chain head (approximated by
+ *   the global MAX(block_published_on)), or
+ * - no node is published at all (every transaction of the first batch
+ *   failed), which the block filter cannot measure.
  *
- * The staleness filter prevents false positives on objects that are
- * still being actively published in the normal pipeline.
+ * Both cases also require the unpublished nodes to be untouched for
+ * `retryCooldownMs`. Nodes are inserted at migration and stamped on every
+ * recovery attempt (touchUnpublishedNodesByRootCid), so this is the age
+ * filter for zero-published objects and a per-object retry interval for
+ * both. Ordering by the same timestamp rotates through stuck objects
+ * oldest-first, so a large backlog of one kind cannot starve the other.
+ *
+ * Roots that still have a blockstore row are excluded: their migration has
+ * not completed (removeUploadArtifacts runs after the nodes are written), so
+ * the node set may be partial, and a migration re-drive deletes and
+ * re-inserts it.
  *
  * Objects where every unpublished node has `encoded_node IS NULL`
  * (i.e. archived before publishing completed) are excluded — they
@@ -460,6 +507,7 @@ const getFullyArchivedHeadCids = async (
 const getStuckPublishingRootCids = async (
   limit: number,
   stalenessThresholdBlocks: number,
+  retryCooldownMs: number,
 ): Promise<string[]> => {
   const db = await getDatabase()
 
@@ -469,19 +517,47 @@ const getStuckPublishingRootCids = async (
         SELECT root_cid
         FROM nodes
         GROUP BY root_cid
-        HAVING COUNT(block_published_on) > 0
-           AND COUNT(block_published_on) < COUNT(*)
-           AND COUNT(*) FILTER (
+        HAVING COUNT(*) FILTER (
              WHERE block_published_on IS NULL AND encoded_node IS NOT NULL
            ) > 0
-           AND MAX(block_published_on) + $2 < (
-             SELECT MAX(block_published_on) FROM nodes
+           AND (
+             COUNT(block_published_on) = 0
+             OR MAX(block_published_on) + $2 < (
+               SELECT MAX(block_published_on) FROM nodes
+             )
            )
+           AND MAX(updated_at) FILTER (WHERE block_published_on IS NULL)
+             < NOW() - $3 * INTERVAL '1 millisecond'
+           AND NOT EXISTS (
+             SELECT 1 FROM uploads.blockstore b WHERE b.cid = nodes.root_cid
+           )
+        ORDER BY MAX(updated_at) FILTER (WHERE block_published_on IS NULL)
         LIMIT $1
       `,
-      values: [limit, stalenessThresholdBlocks],
+      values: [limit, stalenessThresholdBlocks, retryCooldownMs],
     })
     .then((e) => e.rows.map((r) => r.root_cid))
+}
+
+/**
+ * Stamps updated_at = NOW() on all unpublished nodes for a root_cid.
+ * Acts as a cooldown so re-enqueued objects are not re-selected immediately
+ * on subsequent recovery cycles while their tasks are queued/in-flight.
+ */
+const touchUnpublishedNodesByRootCid = async (
+  rootCid: string,
+): Promise<void> => {
+  const db = await getDatabase()
+
+  await db.query({
+    text: `
+      UPDATE nodes
+      SET updated_at = NOW()
+      WHERE root_cid = $1
+        AND block_published_on IS NULL
+    `,
+    values: [rootCid],
+  })
 }
 
 /**
@@ -542,6 +618,7 @@ const getUnrecoverablePublishingRootCids = async (
 
 export const nodesRepository = {
   getNode,
+  resolveEncodedNodes,
   getNodeCount,
   saveNode,
   saveNodes,
@@ -567,4 +644,5 @@ export const nodesRepository = {
   getStuckPublishingRootCids,
   getUnpublishedNodeCidsByRootCid,
   getUnrecoverablePublishingRootCids,
+  touchUnpublishedNodesByRootCid,
 }

@@ -7,11 +7,12 @@ const logger = createLogger('http:controllers:features')
 
 export const featuresController = Router()
 
-// asyncSafeHandler, like every other controller: Express 4 does not catch an
-// async rejection, so without it a throw anywhere in here would leave the
-// request unanswered — the opposite of this endpoint's "always answers"
-// contract, which is now the only thing standing between a stale token and a
-// frontend with no flags. It also restores the requestTrace metric.
+// asyncSafeHandler, because this handler can now await a database read (the USDC
+// availability overlay). Express 4 does not catch a rejected promise from a route
+// handler, so without this an unhandled rejection would take the process down —
+// and this controller is mounted on the download API as well as the frontend one.
+// The overlay itself also fails closed rather than throwing; this is the second
+// layer, for anything else that ever awaits here.
 featuresController.get(
   '/',
   asyncSafeHandler(async (req, res) => {

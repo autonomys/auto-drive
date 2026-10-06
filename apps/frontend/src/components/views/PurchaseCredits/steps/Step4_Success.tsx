@@ -1,9 +1,14 @@
 'use client';
 
 import { Button, Card, ROUTES } from '@auto-drive/ui';
+import { PaymentMethod, USDC_DECIMALS } from '@auto-drive/models';
+import { useQuery } from '@tanstack/react-query';
+import { formatEther } from 'viem';
 import { InfoRow } from '../atoms/InfoRow';
 import { Section } from '../atoms/Section';
-import { usePrices } from '../../../../hooks/usePrices';
+import { useNetwork } from '../../../../contexts/network';
+import { readPaymentMethod } from '../../../../utils/purchaseCredits';
+import { formatUsdcAmount } from '../../../../utils/usdc';
 import { shortenString } from '../../../../utils/misc';
 import { CopiableText } from '../../../atoms/CopiableText';
 import { useUserStore } from '../../../../globalStates/user';
@@ -14,7 +19,34 @@ export const PurchaseStep4Success = ({
 }: {
   context: Record<string, unknown>;
 }) => {
-  const { formatCreditsInMbAsAi3 } = usePrices();
+  const { api, network } = useNetwork();
+  const intentId =
+    typeof context.intentId === 'string' ? context.intentId : undefined;
+  // Receipts use the settled amount, which can differ from the quote. Keeping
+  // the intent ID in the URL also makes this work after a reload or batch resume.
+  const {
+    data: receipt,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['paymentReceipt', network.id, intentId],
+    queryFn: () => api.getIntent(intentId!),
+    enabled: Boolean(intentId),
+    retry: false,
+  });
+  const isUsdc =
+    readPaymentMethod(receipt?.paymentMethod ?? context.paymentMethod) ===
+    PaymentMethod.USDC_ETH;
+  const currency = isUsdc ? 'USDC' : 'AI3';
+  const baseUnits = isUsdc ? receipt?.tokenAmount : receipt?.paymentAmount;
+  const amountPaid =
+    baseUnits == null
+      ? null
+      : isUsdc
+        ? formatUsdcAmount(BigInt(baseUnits), USDC_DECIMALS)
+        : formatEther(BigInt(baseUnits));
+  const txHash = receipt?.txHash ?? context.txHash;
 
   const sizeMB = context.sizeMB as number;
 
@@ -39,17 +71,31 @@ export const PurchaseStep4Success = ({
                 <InfoRow
                   className='items-center font-bold'
                   label='Storage Added'
-                  value={<span>{formatStorageSize(sizeMB * 1024 * 1024, 2)}</span>}
+                  value={
+                    <span>{formatStorageSize(sizeMB * 1024 * 1024, 2)}</span>
+                  }
                 />
                 <InfoRow
-                  label='AI3 Paid'
+                  label={`${currency} Paid`}
                   className='items-center font-bold'
                   value={
-                    <span className='font-bold'>
-                      {formatCreditsInMbAsAi3(Number(context.sizeMB)).toFixed(
-                        2,
-                      )}{' '}
-                      AI3
+                    <span className='flex items-center gap-2'>
+                      <span className='font-bold'>
+                        {amountPaid !== null
+                          ? `${amountPaid} ${currency}`
+                          : isLoading
+                            ? 'Loading…'
+                            : 'Unavailable'}
+                      </span>
+                      {isError && (
+                        <button
+                          type='button'
+                          className='text-sm underline'
+                          onClick={() => void refetch()}
+                        >
+                          Retry
+                        </button>
+                      )}
                     </span>
                   }
                 />
@@ -62,14 +108,15 @@ export const PurchaseStep4Success = ({
                   label='Transaction Hash'
                   className='items-center font-bold'
                   value={
-                    <CopiableText
-                      text={(context.txHash as string) || '0x...'}
-                      displayText={shortenString(
-                        (context.txHash as string) || '0x...',
-                        10,
-                      )}
-                      copyButtonClassName='text-primary hover:text-primary/80'
-                    />
+                    typeof txHash === 'string' && txHash ? (
+                      <CopiableText
+                        text={txHash}
+                        displayText={shortenString(txHash, 10)}
+                        copyButtonClassName='text-primary hover:text-primary/80'
+                      />
+                    ) : (
+                      <span>Unavailable</span>
+                    )
                   }
                 />
                 <InfoRow

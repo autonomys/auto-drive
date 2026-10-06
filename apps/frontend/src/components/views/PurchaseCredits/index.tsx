@@ -11,13 +11,16 @@ import { PurchaseStep3TransferTokens } from './steps/Step3_TransferTokens';
 import { PurchaseStep4Success } from './steps/Step4_Success';
 import { GoogleAuthGate } from './GoogleAuthGate';
 import { StepDefinition } from './molecules/Stepper';
+import { readPaymentMethod } from '../../../utils/purchaseCredits';
+import { PaymentMethod } from '@auto-drive/models';
 
-export type PurchaseStep = 1 | 2 | 3 | 4 | 5;
+export type PurchaseStep = 1 | 2 | 3 | 4;
 
 export const PurchaseCredits = () => {
   const [currentStep, setCurrentStep] = useState<PurchaseStep>(1);
   const [context, setContext] = useState<Record<string, unknown>>({});
   const searchParams = useSearchParams();
+  const searchQuery = searchParams?.toString();
   const router = useRouter();
   const pathname = usePathname();
   const { network } = useNetwork();
@@ -50,7 +53,7 @@ export const PurchaseCredits = () => {
 
   const navigateWithParams = useCallback(
     (changes: Record<string, unknown>) => {
-      const params = new URLSearchParams(searchParams?.toString());
+      const params = new URLSearchParams(searchQuery);
       Object.entries(changes).forEach(([key, value]) => {
         if (value === undefined || value === null || value === '') {
           params.delete(key);
@@ -63,16 +66,18 @@ export const PurchaseCredits = () => {
         scroll: false,
       });
     },
-    [searchParams, router, pathname],
+    [searchQuery, router, pathname],
   );
 
-  // Initialize from query params (e.g., ?step=2&packageId=pro)
+  // Navigation can reuse this page. Replace the previous purchase with the
+  // URL's state, including resetting to package selection for Buy more credits.
   useEffect(() => {
-    if (!searchParams) return;
+    if (searchQuery === undefined) return;
+    const params = new URLSearchParams(searchQuery);
 
     const newContext: Record<string, unknown> = {};
     // Copy all query params into context, number-coercing simple numerics
-    searchParams.forEach((value, key) => {
+    params.forEach((value, key) => {
       const numericValue = Number(value);
       newContext[key] =
         Number.isFinite(numericValue) &&
@@ -82,17 +87,19 @@ export const PurchaseCredits = () => {
           : value;
     });
 
-    if (Object.keys(newContext).length > 0) {
-      setContext((prev) => ({ ...newContext, ...prev }));
-    }
+    setContext(newContext);
 
-    const stepParamRaw = searchParams.get('step');
-    const stepParam = stepParamRaw ? Number(stepParamRaw) : undefined;
-    if (stepParam && stepParam >= 1 && stepParam <= 5) {
-      setCurrentStep(stepParam as PurchaseStep);
+    const stepParam = Number(params.get('step'));
+    const step: PurchaseStep =
+      Number.isInteger(stepParam) && stepParam >= 1 && stepParam <= 4
+        ? (stepParam as PurchaseStep)
+        : 1;
+    setCurrentStep(step);
+    if (step === 1) {
+      setPendingSelection(null);
+      setAuthGateOpen(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams?.toString()]);
+  }, [searchQuery]);
 
   // Enforce the Google gate at render: non-Google users (once auth resolves)
   // can never see beyond package selection, regardless of how `currentStep`
@@ -178,7 +185,12 @@ export const PurchaseCredits = () => {
       },
       {
         id: 3,
-        title: 'Transfer AI3',
+        // Named after what the user is about to do, which now depends on what
+        // they chose to pay with.
+        title:
+          readPaymentMethod(context.paymentMethod) === PaymentMethod.USDC_ETH
+            ? 'Transfer USDC'
+            : 'Transfer AI3',
         component: (
           <PurchaseStep3TransferTokens
             onNext={(data) => {
@@ -200,10 +212,7 @@ export const PurchaseCredits = () => {
         component: <PurchaseStep4Success context={context} />,
       },
     ],
-    // Intentionally exclude navigateWithParams from deps to avoid re-render loop
-    // as it's a stable function over the lifetime of the component.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [context],
+    [context, navigateWithParams, onBack],
   );
 
   return (

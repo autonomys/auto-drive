@@ -304,14 +304,18 @@ describe('Folder Upload', () => {
       // Mocking node publishing
       const blockNumber = 123
       const nodes = await nodesRepository.getNodesByRootCid(folderCID)
-      const promises = nodes.map((e) => {
+      // `return` is load-bearing: without it the block body discards each
+      // promise, `promises` is an array of undefined, and `Promise.all` resolves
+      // before a single node has been marked published. The assertion below then
+      // races the writes and sees whichever subset happened to land.
+      const promises = nodes.map((e) =>
         NodesUseCases.setPublishedOn(e.cid, {
           success: true,
           txHash: '0x123',
           status: TransactionStatus.CONFIRMED,
           blockNumber,
-        })
-      })
+        }),
+      )
 
       await Promise.all(promises)
       // End of mocking

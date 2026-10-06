@@ -6,7 +6,7 @@ export const intents = {
       get: {
         summary: 'Intents - Get current storage price',
         description:
-          'Returns the current price per byte (in shannons) and price per GB (in AI3). This endpoint does not require authentication.',
+          'Returns the current price per byte (in shannons) and price per GB (in AI3), plus an estimated USD conversion when one is available. This endpoint does not require authentication.',
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         security: [],
@@ -25,6 +25,45 @@ export const intents = {
                     pricePerGB: {
                       type: 'number',
                       description: 'Price per GB in AI3 tokens',
+                    },
+                    usd: {
+                      type: 'object',
+                      nullable: true,
+                      description:
+                        'USD conversion of the price above, or null when no AI3/USD rate is available. The rate is the volume-weighted average of realized WAI3/USDC swaps over the last 30 days. It is an ESTIMATE and must not be used to settle anything: it is read from the price oracle\'s display profile, which drops the anti-manipulation guards the USDC purchase path relies on (pool depth, traded volume, window span, the newest-fill veto) AND the freshness bound the strict profile applies to the newest fill, because nothing here is charged. There is therefore no lower limit on how old the underlying trade may be beyond the 30-day window itself: read `lastTradeAt`, not `asOf`, to judge that. It also carries no quote margin. For what a USDC purchase would actually cost, create an intent. Null is uncommon but reachable — an empty window, a stalled indexer, an unreachable gateway — so clients must handle it; do not substitute zero.',
+                      properties: {
+                        usdPerAi3: {
+                          type: 'number',
+                          description: 'USD per AI3, e.g. 0.00142',
+                        },
+                        pricePerGBUsd: {
+                          type: 'number',
+                          description: 'USD to store one GB',
+                        },
+                        asOf: {
+                          type: 'string',
+                          format: 'date-time',
+                          description:
+                            'When the rate was read. This is a fact about us, not about the market — a fresh `asOf` says nothing about how recently the pool traded. See `lastTradeAt`.',
+                        },
+                        lastTradeAt: {
+                          type: 'string',
+                          format: 'date-time',
+                          description:
+                            'When the pool last traded among the fills this rate averages. May be up to 30 days before `asOf`, since the display profile accepts a single fill anywhere in its window and applies no freshness bound. This is the field to check before presenting the figure as current.',
+                        },
+                        stale: {
+                          type: 'boolean',
+                          description:
+                            'The live read failed and this is the last-good rate. Usable as an estimate, but it stopped updating at `asOf`.',
+                        },
+                      },
+                    },
+                    usdUnavailableReason: {
+                      type: 'string',
+                      nullable: true,
+                      description:
+                        'Why the conversion was withheld when `usd` is null: `insufficient-samples` (the pool has not traded inside the window), `indexer-lag` or `indexer-error` (the source cannot be reasoned from), `out-of-bounds` (the derived rate failed its sanity bounds), `gateway` (the subgraph was unreachable), `misconfigured` (this deployment has no credential for it), or `internal` (our bug). Null when `usd` is present. Intended for support and dashboards rather than UI logic.',
                     },
                   },
                 },
@@ -77,6 +116,32 @@ export const intents = {
 9. Upload content via the Auto Drive SDK using the same API key`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  requestedBytes: {
+                    type: 'string',
+                    description:
+                      'How many bytes the purchase is for, as a decimal string (a JSON number is also accepted while it is a safe integer). Checked against the per-user credit cap before the intent is created, so a purchase with no headroom fails here rather than after an irreversible on-chain payment. Optional when `paymentMethod` is `ai3_native`, where the intent locks a per-byte rate, any payment settles it, and the size is used only for that pre-check and then discarded. REQUIRED when `paymentMethod` is `usdc_eth`, where the amount charged is the AI3/USD rate applied to this size, returned as `quotedTokenAmount`.',
+                    example: '1073741824',
+                  },
+                  paymentMethod: {
+                    type: 'string',
+                    enum: ['ai3_native', 'usdc_eth'],
+                    default: 'ai3_native',
+                    description:
+                      'Which asset the intent will be paid in. Omit for native AI3. With `usdc_eth` the response carries `quotedTokenAmount` — the exact USDC amount (6-decimal base units) to pay — locked for the intent\'s expiry window. An unrecognised value is rejected rather than defaulted, so a typo cannot quietly create an AI3 intent for a caller who intended to pay in USDC. `usdc_eth` is gated: it is available to admin accounts always, and to everyone else only where the deployment has enabled it (`PAY_WITH_USDC_ACTIVE`). A caller without access gets 403 `USDC_PAYMENTS_DISABLED`.',
+                    example: 'usdc_eth',
+                  },
+                },
+              },
+            },
+          },
+        },
         responses: {
           '200': {
             description: 'Intent created successfully',
@@ -88,16 +153,24 @@ export const intents = {
               },
             },
           },
+          '400': {
+            description:
+              '`requestedBytes` was supplied but is not a positive whole number of bytes, or is larger than the per-account maximum; `requestedBytes` was omitted on a `usdc_eth` intent; or `paymentMethod` was not a recognised value',
+          },
           '401': {
             description: 'Unauthorized — missing or invalid credentials',
           },
           '403': {
             description:
-              'Google-verified account required — the authenticated account was not registered via Google OAuth',
+              'Google-verified account required (`GOOGLE_ACCOUNT_REQUIRED`); the purchase would exceed the per-user credit cap (`CREDIT_CAP_EXCEEDED`, with the cap and current balance in `message`); or `paymentMethod` was `usdc_eth` and paying in USDC is not open to this account (`USDC_PAYMENTS_DISABLED`)',
           },
           '404': {
             description:
               'Feature not available — the buyCredits feature flag is not active for this user',
+          },
+          '503': {
+            description:
+              'Storage could not be priced, which is our problem rather than the caller\'s — retry unchanged. On a `usdc_eth` intent: `PRICE_ORACLE_UNAVAILABLE` when the AI3/USD rate could not be read or failed one of its guards, `PRICE_UNSTABLE` when the market has re-priced past the window the rate is averaged over. Note there is no size-related refusal: the rate is a size-independent average, so asking for less never turns a refusal into a quote. On either payment method, also returned when the per-byte AI3 rate resolves to zero, which is a server misconfiguration rather than a market condition.',
           },
         },
       },
@@ -170,8 +243,9 @@ export const intents = {
                 properties: {
                   txHash: {
                     type: 'string',
+                    pattern: '^0x[0-9a-fA-F]{64}$',
                     description:
-                      'The transaction hash from the on-chain payIntent call',
+                      'The transaction hash from the on-chain payIntent call. A 0x-prefixed 32-byte hex hash; case-insensitive on the way in and stored lower-cased.',
                   },
                 },
                 required: ['txHash'],
@@ -252,7 +326,8 @@ export const intents = {
           },
           paymentAmount: {
             type: 'string',
-            description: 'Payment amount in shannons (bigint as string)',
+            description:
+              'AI3 amount received, in shannons (bigint as string). Set on `ai3_native` intents once payment is confirmed; null on `usdc_eth` intents, where `tokenAmount` carries what was received instead.',
           },
           shannonsPerByte: {
             type: 'string',
@@ -263,6 +338,31 @@ export const intents = {
             type: 'string',
             format: 'date-time',
             description: 'Price-lock expiry timestamp',
+          },
+          paymentMethod: {
+            type: 'string',
+            enum: ['ai3_native', 'usdc_eth'],
+            description: 'Asset this intent is paid in',
+          },
+          quotedTokenAmount: {
+            type: 'string',
+            description:
+              'For `usdc_eth`: the exact amount to pay, in USDC base units (6 decimals), as a bigint string. Locked until `expiresAt`. It is the AI3/USD rate applied to `quotedAi3Shannons` plus the quote margin — and the margin is the whole of the difference, because the rate is an average of realized fills that already paid the pool\'s swap fee. This purchase adds no price impact of its own; the treasury converts USDC in batches rather than swapping per intent. Null on `ai3_native`.',
+          },
+          quotedAi3Shannons: {
+            type: 'string',
+            description:
+              'For `usdc_eth`: the AI3 amount, in shannons, that `quotedTokenAmount` was quoted for. Together the two are the rate the payment converts to storage at, which is why paying exactly `quotedTokenAmount` grants exactly the bytes requested. Null on `ai3_native`.',
+          },
+          tokenAmount: {
+            type: 'string',
+            description:
+              'For `usdc_eth`: token base units actually received on-chain, set once payment is confirmed. Null on `ai3_native`.',
+          },
+          usdRateAtCreation: {
+            type: 'string',
+            description:
+              'For `usdc_eth`: the raw AI3/USD rate at creation, scaled by 1e18 — a volume-weighted average of the pool\'s recent realized fills. Reporting and reconciliation only. It is short by the quote margin that `quotedTokenAmount` includes, so it is not the rate credits are granted at; that rate is the `quotedTokenAmount` / `quotedAi3Shannons` pair. Null on `ai3_native`.',
           },
         },
       },

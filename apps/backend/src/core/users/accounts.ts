@@ -177,9 +177,8 @@ const getPendingCreditsByAccountAndType = async (
   // (pendingCredits < metadata.totalSize) grants access when the user has
   // enough purchased bytes, even if their free allocation is exhausted.
   //
-  // Download credits are not enforced right now — infrastructure exists for
-  // future use but purchased download bytes are not allocated on purchase and
-  // are not counted here.
+  // Downloads use only their free-tier budget. Purchased download bytes are
+  // not allocated on purchase and are not counted here.
   //
   // getRemainingCredits is a plain DB query with no awareness of the
   // buyCredits feature flag. If the flag is OFF and no rows exist in
@@ -267,9 +266,9 @@ const registerInteraction = async (
   // where releasing FOR UPDATE locks between calls allowed concurrent requests
   // to consume the same credits.
   //
-  // Download credits are not enforced right now — purchased bytes are not
-  // allocated on purchase and are not consumed here. The consumeUpTo path
-  // and all compensation logic below is upload-only for now.
+  // Downloads use only the free-tier guard below. Purchased download bytes
+  // are not allocated on purchase or consumed here; consumeUpTo and its
+  // compensation logic are upload-only for now.
   const fromPurchased =
     type === InteractionType.Upload
       ? await purchasedCreditsRepository.consumeUpTo(account.id, creditType, size)

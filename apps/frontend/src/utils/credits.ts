@@ -1,7 +1,57 @@
 /**
- * Pure utility functions for credit cap and expiry calculations.
+ * Pure utility functions for credit cap, expiry and payment presentation.
  * Extracted so they can be unit-tested without a React environment.
  */
+
+import {
+  PaymentMethod,
+  USD_RATE_SCALE,
+  USDC_DECIMALS,
+} from '@auto-drive/models';
+import { shannonsToAi3 } from '@autonomys/auto-utils';
+import { formatUsdcAmount, formatUsdPerAi3 } from './usdc';
+
+/**
+ * Whole MiB to bytes.  The single conversion used both to decide locally
+ * whether a purchase fits under the cap and to tell the backend what size to
+ * check — the client's own verdict and the number the server re-checks must
+ * come from the same arithmetic, or a purchase can pass here and be rejected
+ * there.
+ */
+export const mibToBytes = (mib: number): bigint =>
+  BigInt(mib) * BigInt(1024 * 1024);
+
+/**
+ * Coerce an untrusted size into the whole MiB the rest of this module requires,
+ * or null when it is not a size at all.
+ *
+ * `sizeMB` normally comes from `inputToMib`, which already rounds. But it is
+ * also re-hydrated from the query string by PurchaseCredits/index.tsx, whose
+ * numeric coercion accepts anything matching `^-?\d+(\.\d+)?$` — so
+ * `?step=3&sizeMB=0.5` puts a fraction into the same variable, and a
+ * non-numeric `?sizeMB=abc` puts a string there. `BigInt()` throws a RangeError
+ * on both, which reaches the user as `The number 0.5 cannot be converted to a
+ * BigInt`.
+ *
+ * Deliberately NOT folded into `mibToBytes` as a rounding guard. Callers pass
+ * the same size to `mibToBytes` and to the AI3 pricing helper, and only the
+ * former would round — pricing the payment at 0.5 MiB while cap-checking 1 MiB,
+ * which is the exact divergence `mibToBytes` exists to prevent. Normalising
+ * once, before either is called, keeps them derived from one number.
+ *
+ * `Number.isSafeInteger` rather than `Number.isFinite`, because finite is not
+ * enough: `?sizeMB=1e308` and a 308-digit `?sizeMB=999…9` both survive rounding
+ * as finite doubles, and the pricing helper then evaluates `mib * 1048576` to
+ * `Infinity` before its own `BigInt()` — the same RangeError this exists to
+ * remove, one conversion earlier. Anything a purchase could legitimately be is
+ * many orders of magnitude below 2^53 (the per-account cap is ~102,400 MiB), so
+ * nothing real is excluded.
+ */
+export const normaliseMib = (value: unknown): number | null => {
+  const mib = Math.round(Number(value));
+  if (!Number.isSafeInteger(mib) || mib <= 0) return null;
+  return mib;
+};
 
 /**
  * Returns true when `mib` whole MiB would exceed `maxPurchasableBytes`.
@@ -14,8 +64,7 @@ export const isMibOverCap = (
   maxPurchasableBytes: bigint | null,
 ): boolean => {
   if (maxPurchasableBytes === null || mib <= 0) return false;
-  const bytes = BigInt(mib) * BigInt(1024 * 1024);
-  return bytes > maxPurchasableBytes;
+  return mibToBytes(mib) > maxPurchasableBytes;
 };
 
 /**
@@ -117,4 +166,113 @@ export const STATUS_LABEL: Record<BatchStatus, string> = {
   expiring: 'Expiring soon',
   depleted: 'Depleted',
   expired: 'Expired',
+};
+
+/** Payment amounts and the effective purchase-time USDC/AI3 quote. */
+export interface PaymentFields {
+  paymentMethod: PaymentMethod;
+  paymentAmount: string | null;
+  tokenAmount: string | null;
+  quotedTokenAmount: string | null;
+  quotedAi3Shannons: string | null;
+}
+
+/** The asset a purchase was paid in. All refunds are sent in AI3. */
+export const PAYMENT_METHOD_ASSET: Record<PaymentMethod, string> = {
+  [PaymentMethod.AI3_NATIVE]: 'AI3',
+  [PaymentMethod.USDC_ETH]: 'USDC',
+};
+
+const SHANNONS_PER_AI3 = BigInt(10) ** BigInt(18);
+const USDC_SCALE = BigInt(10) ** BigInt(USDC_DECIMALS);
+/** Decimals the USD/AI3 rate is rendered at. */
+const RATE_DECIMALS = 6;
+
+const toBigInt = (value: string | null): bigint | null =>
+  value === null ? null : BigInt(value);
+
+const formatAi3 = (shannons: bigint): string =>
+  `${shannonsToAi3(shannons, { trimTrailingZeros: true })} AI3`;
+
+export const describePayment = (batch: PaymentFields) => {
+  if (batch.paymentMethod !== PaymentMethod.USDC_ETH) {
+    const shannons = toBigInt(batch.paymentAmount);
+    return {
+      amountPaid: shannons === null ? '—' : formatAi3(shannons),
+      quotedFor: null,
+      offQuoteNote: null,
+      rate: null,
+    };
+  }
+
+  const received = toBigInt(batch.tokenAmount);
+  const quoted = toBigInt(batch.quotedTokenAmount);
+  const quotedAi3 = toBigInt(batch.quotedAi3Shannons);
+
+  return {
+    amountPaid: received === null ? '—' : `${formatUsdcAmount(received)} USDC`,
+    quotedFor: quotedAi3 === null ? null : formatAi3(quotedAi3),
+    offQuoteNote:
+      received !== null && quoted !== null && received !== quoted
+        ? `Quoted ${formatUsdcAmount(quoted)} USDC, received ` +
+          `${formatUsdcAmount(received)} USDC — credited pro-rata`
+        : null,
+    // The quote pair includes the margin paid by the buyer.
+    rate:
+      quoted !== null && quotedAi3 !== null && quotedAi3 !== BigInt(0)
+        ? formatUsdPerAi3(
+            (quoted * SHANNONS_PER_AI3 * USD_RATE_SCALE) /
+              (USDC_SCALE * quotedAi3),
+            RATE_DECIMALS,
+          )
+        : null,
+  };
+};
+
+export interface RefundSizingFields extends PaymentFields {
+  uploadBytesOriginal: string;
+  uploadBytesRemaining: string;
+  shannonsPerByte: string;
+}
+
+/**
+ * Informational refund in AI3 for the unused storage in these batches.
+ * Convert USDC received using the locked quote's effective rate (including
+ * margin), then take the unused share. Keep the arithmetic in integers and
+ * round down once, to shannons. Never use today's rate or the raw oracle rate.
+ * If any USDC batch lacks conversion data, omit the entire suggestion rather
+ * than showing a partial total. Transfers are made and confirmed manually.
+ */
+export const suggestedRefund = (
+  batches: RefundSizingFields[],
+): string | null => {
+  if (batches.length === 0) return null;
+
+  let shannons = BigInt(0);
+  for (const batch of batches) {
+    const remaining = BigInt(batch.uploadBytesRemaining);
+    if (remaining === BigInt(0)) continue;
+
+    if (batch.paymentMethod === PaymentMethod.USDC_ETH) {
+      const paid = toBigInt(batch.tokenAmount);
+      const quoted = toBigInt(batch.quotedTokenAmount);
+      const quotedAi3 = toBigInt(batch.quotedAi3Shannons);
+      const original = BigInt(batch.uploadBytesOriginal);
+      if (
+        paid === null ||
+        paid <= BigInt(0) ||
+        quoted === null ||
+        quoted <= BigInt(0) ||
+        quotedAi3 === null ||
+        quotedAi3 <= BigInt(0) ||
+        original <= BigInt(0)
+      )
+        return null;
+
+      shannons += (paid * quotedAi3 * remaining) / (quoted * original);
+    } else {
+      shannons += remaining * BigInt(batch.shannonsPerByte);
+    }
+  }
+  return shannons === BigInt(0) ? null : formatAi3(shannons);
 };

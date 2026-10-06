@@ -337,6 +337,10 @@ Triggers the backend to watch for the transaction confirmation.
 }
 ```
 
+`txHash` must be a 0x-prefixed 32-byte hex hash (`^0x[0-9a-fA-F]{64}$`). It is
+case-insensitive on the way in and stored lower-cased, so the same transaction
+submitted in either spelling is one row.
+
 **Response:** `204 No Content`
 
 ## Error Handling
@@ -349,6 +353,7 @@ Triggers the backend to watch for the transaction confirmation.
 | Intent not found                   | 404         | The intent ID does not exist                                               |
 | Forbidden                          | 403         | User does not own this intent                                              |
 | Missing or invalid field: `txHash` | 400         | `POST /intents/:id/watch` body missing `txHash` or not a string            |
+| Invalid field: `txHash` must be a 0x-prefixed 32-byte hex hash | 400 | `txHash` is a string but not a transaction hash |
 | Payment not found (async)          | -           | Tx receipt does not contain the expected `IntentPaymentReceived`           |
 | Credits not applied (async)        | -           | Intent confirmed, but credit application failed (e.g. per-user cap reached — intent is parked in `over_cap` for admin review) |
 
@@ -379,6 +384,161 @@ The payment system requires the following environment variables:
 | `EVM_CHAIN_CHECK_INTERVAL`   | Interval to process `confirmed` intents (ms)     |
 | `CREDITS_PRICE_MULTIPLIER`   | Multiplier applied to base transaction byte fee  |
 | `RPC_ENDPOINT`               | WebSocket endpoint for Autonomys consensus chain |
+
+USDC payments add their own variables. `apps/backend/.env.sample` carries the
+full commentary; the ones an operator reaches for are:
+
+| Variable | Description |
+| --- | --- |
+| `ETH_CHAIN_ENDPOINT` | Ethereum mainnet RPC (distinct from Auto-EVM above) |
+| `ETH_USDC_RECEIVER_ADDRESS` | AutoDriveUSDCReceiver — setting it is what makes a deployment accept USDC |
+| `USDC_TOKEN_ADDRESS` | The ERC20 the receiver was deployed against |
+| `ETH_CHAIN_CONFIRMATIONS` | Blocks required before a USDC payment is credited (default 6) |
+| `USDC_PAYMENTS_ENABLED` | Manual gate's value **until the first admin flip only** |
+| `USDC_TREASURY_PAUSE_THRESHOLD` | FX-exposure cap, in whole USDC (default 2000) |
+| `USDC_TREASURY_RESUME_THRESHOLD` | Where the cap reopens; defaults to the pause threshold |
+| `USDC_TREASURY_ADDRESSES` | Extra addresses summed against the cap; the receiver is always included |
+| `USDC_TREASURY_BALANCE_CHECK_INTERVAL_MS` | Gate refresh cadence (default 300000) |
+| `USDC_TREASURY_BALANCE_MAX_STALE_MS` | Beyond this with no successful refresh, the path fails closed (default 900000) |
+| `GRAPH_SUBGRAPH_URL` / `GRAPH_API_KEY` | The rate source; see the oracle section of `.env.sample` |
+| `ETH_CHAIN_ID` | Chain id of `ETH_CHAIN_ENDPOINT` (default 1). Served to the purchase flow as the chain to switch wallets to; checked against the endpoint at startup |
+
+## USDC payments: where the money is sent
+
+The purchase flow does not know the USDC chain or the receiver address. It asks:
+
+```
+GET /payments/usdc/target        (any signed-in user)
+→ { chainId, receiverAddress, tokenAddress, tokenDecimals, confirmations }
+```
+
+**Do not move these into the frontend build.** The AI3 receiver can be a build
+constant because the Auto EVM chain *is* the Auto Drive network — choosing
+`mainnet` fixes the chain, the contract and the API together. USDC has no such
+coupling: the chain is whatever `ETH_CHAIN_ENDPOINT` points at and the receiver
+is whatever `ETH_USDC_RECEIVER_ADDRESS` names, both deployment-level environment
+choices with nothing in the frontend's build to tie them to.
+
+A client that guessed wrong does not show a broken screen. It switches the
+buyer's wallet to the wrong chain, approves USDC to an address where this
+deployment's receiver does not exist, and the payment is never observed — no
+credits, and no mispayment row either, because the watcher that files those is on
+the other chain.
+
+`ETH_CHAIN_ID` (default `1`) is the chain id served here. **Set it whenever the
+endpoint is not Ethereum mainnet.** It is checked rather than trusted, and the
+check is *acted on*: every process that can quote or serve a target asks the
+endpoint for its own chain id at startup (`usdcChainGuard`), alerts to Slack on a
+disagreement, and then **shuts the USDC path** — `/features` reports
+`chain_mismatch`, `createIntent` 403s, and this endpoint stops answering. An alert
+alone would leave the deployment selling into the failure it just detected.
+
+A read that *fails* is not a mismatch. An endpoint down at boot leaves the verdict
+unknown and USDC unchanged, because an outage must not become a payments outage
+that outlives it.
+
+Otherwise this endpoint is deliberately **not** gated on the switches below. A
+buyer holding a quoted intent has ten minutes to pay it, and the payment is owed
+to the same contract whatever the gates now say — so it answers whenever the
+deployment is configured, and 403s only when it is not, or when the chain it would
+name is wrong.
+
+`settleGraceMs` is served for the same reason as `confirmations`: it is a property
+of this backend's timing, not of the frontend build. `GET /intents/:id` answers
+410 the moment a price lock lapses, but credits are withheld by a different check
+entirely, so a client polls *through* a 410 — for four turns of
+`EVM_CHAIN_CHECK_INTERVAL`. A constant compiled into the client would start
+calling credited purchases lost the day an operator changed that interval.
+
+### Frontend variables
+
+| Variable | Meaning |
+| --- | --- |
+| `NEXT_PUBLIC_ETH_RPC_URL` | Ethereum endpoint the browser reads balances and allowances through. Optional; unset falls back to viem's shared public RPCs, where a rate limit surfaces as a failed purchase for a funded wallet. **Inlined at build time.** |
+| `NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL` | The same, for Sepolia |
+| `NEXT_PUBLIC_USDC_TESTNET_CHAINS` | `true` registers Sepolia with the user's wallet alongside Ethereum. Off by default — every chain listed is offered to every user of the deployment |
+
+## USDC payments: the gates and how to shut them
+
+USDC purchases are gated by four facts, all reported by
+`GET /payments/usdc/status` (admin only) and on the admin credits page:
+
+| Gate | Closes when | Reopens |
+| --- | --- | --- |
+| Configuration | `ETH_CHAIN_ENDPOINT`, `ETH_USDC_RECEIVER_ADDRESS` or `USDC_TOKEN_ADDRESS` is unset | Set all three and restart |
+| Manual switch | An admin turns it off | **Only an admin.** Nothing automatic reopens it |
+| Treasury cap | Un-converted USDC reaches `USDC_TREASURY_PAUSE_THRESHOLD` | By itself, once the balance falls below `USDC_TREASURY_RESUME_THRESHOLD` |
+| Price oracle | No trustworthy AI3/USD rate (see the oracle's own guards) | By itself, on the next poll that gets a rate |
+
+All four gate **creating** a USDC intent, and nothing else. A payment that has
+already arrived is always confirmed and always credited, and an intent quoted
+while the gates were open stays payable for the rest of its ten-minute lock.
+
+### Turning USDC payments off
+
+Normal path: the admin credits page, "Disable USDC". It takes effect on the next
+quote — no redeploy, no restart — and posts to the Slack alert channel with the
+name of whoever flipped it.
+
+If the dashboard or the frontend is unavailable:
+
+```bash
+curl -X POST https://<api-host>/payments/usdc/disable \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "X-Auth-Provider: $ADMIN_AUTH_PROVIDER"
+```
+
+If the API itself is unavailable, append the row directly — the gate is read from
+the database on every quote, so this is equivalent:
+
+```sql
+INSERT INTO usdc_payment_switch (enabled, set_by)
+VALUES (false, '<your-public-id>');
+```
+
+The switch is an append-only log: the newest row is the current value, so a flip
+is always an INSERT and never an UPDATE. That also means the table is its own
+audit trail — `SELECT enabled, set_by, created_at FROM usdc_payment_switch ORDER
+BY id DESC` is the history of who changed it and when.
+
+`USDC_PAYMENTS_ENABLED` is **not** the live switch. It is the value used only
+until the first flip; after that the newest row wins and the variable is inert.
+The status endpoint says which is in force (`manualGate.source` is `env_default`
+or `admin`).
+
+The treasury and oracle readings live in `usdc_gate_readings` (one row, written
+only by the payment worker). Do not hand-edit it to force the path open: the
+gates fail closed on a reading older than `USDC_TREASURY_BALANCE_MAX_STALE_MS`,
+and CHECK constraints reject a half-written reading — so the only way to reopen
+the path is a worker that can actually read the balance and a rate.
+
+### Rejecting payments that are already in flight
+
+The backend gates cannot do this, by design. The hard stop is `pause()` on
+`AutoDriveUSDCReceiver`, called by the contract owner — it makes the receiver
+reject incoming transfers, so a user who has approved and is mid-transaction
+fails on chain rather than being credited.
+
+This is **manual escalation only**. It is deliberately not wired to the treasury
+cap or to the kill switch: an automatic `pause()` would strand users who have an
+approval in flight for a condition that clears itself in five minutes.
+
+### Treasury conversion
+
+USDC accumulates in the receiver and is converted to AI3 **by hand** (see the
+epic's treasury-ops step). The cap is what makes that safe: it bounds how much
+un-hedged USDC can ever be exposed to the AI3/USD rate moving between purchase
+and conversion.
+
+Watch `usdc_treasury` in Victoria (`balance_base_units`, `headroom_base_units`,
+`paused`, `stale`) rather than waiting for the auto-pause alert — the alert fires
+when the cap has already been reached. A `stale` series, or one that goes flat,
+means the payment worker has stopped refreshing the gates and USDC purchases are
+closed.
+
+Sweeping to an address outside `USDC_TREASURY_ADDRESSES` reopens the gate, which
+is only correct if the sweep means conversion is imminent. To keep swept but
+unconverted USDC counted against the cap, add the destination to that variable.
 
 ## Security Considerations
 
