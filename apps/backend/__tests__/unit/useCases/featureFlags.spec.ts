@@ -3,7 +3,10 @@ import { FeatureFlagsUseCases, hasGoogleAuth } from '../../../src/core/featureFl
 import { config } from '../../../src/config.js'
 import type { User } from '@auto-drive/models'
 import type { Request } from 'express'
-import { getFeatureFlags } from '../../../src/core/featureFlags/express.js'
+import {
+  getFeatureFlags,
+  withUsdcAvailability,
+} from '../../../src/core/featureFlags/express.js'
 import {
   AuthLookupError,
   AuthManager,
@@ -417,7 +420,9 @@ describe('getFeatureFlags degrades instead of failing', () => {
       .mockRejectedValue(new AuthLookupError('rejected', true, 401) as never)
 
     const flags = await getFeatureFlags(reqWithToken())
-    expect(flags).toEqual(FeatureFlagsUseCases.get(null))
+    expect(flags).toEqual(
+      await withUsdcAvailability(FeatureFlagsUseCases.get(null)),
+    )
   })
 
   it('serves unauthenticated flags when the auth service is unreachable', async () => {
@@ -427,7 +432,9 @@ describe('getFeatureFlags degrades instead of failing', () => {
 
     // Previously a 503 here left the frontend with no flags at all.
     const flags = await getFeatureFlags(reqWithToken())
-    expect(flags).toEqual(FeatureFlagsUseCases.get(null))
+    expect(flags).toEqual(
+      await withUsdcAvailability(FeatureFlagsUseCases.get(null)),
+    )
   })
 
   it('uses the resolved user when the credential is good', async () => {
@@ -440,6 +447,8 @@ describe('getFeatureFlags degrades instead of failing', () => {
       .mockResolvedValue(user as never)
 
     const flags = await getFeatureFlags(reqWithToken())
-    expect(flags).toEqual(FeatureFlagsUseCases.get(user))
+    expect(flags).toEqual(
+      await withUsdcAvailability(FeatureFlagsUseCases.get(user)),
+    )
   })
 })
