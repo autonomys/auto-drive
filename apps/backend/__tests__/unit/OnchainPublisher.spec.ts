@@ -157,7 +157,7 @@ describe('OnchainPublisher', () => {
   })
 
   it('should preserve batch failure breakdown even when persistence rejects for confirmed nodes', async () => {
-    const nodes: Node[] = [1, 2].map((e) => ({
+    const nodes: Node[] = [1, 2, 3].map((e) => ({
       cid: `QmHash${e}`,
       encoded_node: `QmHash${e}`,
     })) as unknown as Node[]
@@ -169,9 +169,15 @@ describe('OnchainPublisher', () => {
 
     const setPublishedOnSpy = jest
       .spyOn(NodesUseCases, 'setPublishedOn')
-      .mockRejectedValue(new Error('DB write failed'))
+      .mockImplementation(async (cid) => {
+        if (cid === 'QmHash1') {
+          throw new Error('DB write failed')
+        }
+        return undefined
+      })
 
     const mixedResults = [
+      MOCK_PUBLISH_RESULT,
       MOCK_PUBLISH_RESULT,
       {
         success: false,
@@ -186,7 +192,17 @@ describe('OnchainPublisher', () => {
     try {
       await expect(
         OnchainPublisher.publishNodes(nodes.map((e) => e.cid)),
-      ).rejects.toThrow('Failed to publish nodes')
+      ).rejects.toThrow('Failed to publish nodes ({"Ok":2,"Timeout":1})')
+
+      expect(setPublishedOnSpy).toHaveBeenCalledTimes(2)
+      expect(setPublishedOnSpy).toHaveBeenCalledWith(
+        nodes[0].cid,
+        mixedResults[0],
+      )
+      expect(setPublishedOnSpy).toHaveBeenCalledWith(
+        nodes[1].cid,
+        mixedResults[1],
+      )
     } finally {
       setPublishedOnSpy.mockRestore()
     }
@@ -220,4 +236,3 @@ describe('OnchainPublisher', () => {
     }
   })
 })
-
