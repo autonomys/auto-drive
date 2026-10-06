@@ -114,7 +114,7 @@ export const ObjectDetailsActions = ({
           <span className='ml-2 text-xs text-gray-500'>(File is banned)</span>
         )}
       </Button>
-      {isCached === false && (
+      {isCached === false && !!user && (
         <Button
           variant='primary'
           className={cn(
