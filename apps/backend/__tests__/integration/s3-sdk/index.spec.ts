@@ -1266,6 +1266,23 @@ describe('AWS S3 - SDK', () => {
       expect(body.equals(bytes)).toBe(true)
     })
 
+    it('round-trips a composite Content-Encoding byte-for-byte', async () => {
+      const Key = 'metadata-test/encoding-composite.bin'
+      // Stored verbatim, not renormalised: 'gzip,br' must not come back as
+      // 'gzip, br', even though RFC 9110 treats the two as equivalent.
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: Buffer.from([0x00, 0x01]),
+          ContentEncoding: 'gzip,br',
+        }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentEncoding).toBe('gzip,br')
+    })
+
     it('carries metadata through a plain (COPY-directive) server-side copy', async () => {
       const Src = 'metadata-test/copy-src.csv'
       const Dst = 'metadata-test/copy-dst.csv'

@@ -17,8 +17,8 @@ export type FeatureFlagKey = keyof typeof config.featureFlags.flags
 // Unlike `getFeatureFlags` (used by the public /features endpoint), this
 // middleware does NOT silently fall back to unauthenticated flags on auth
 // failure.  If the request includes credentials but auth fails (e.g. the
-// auth service is unreachable, or the API key is invalid), the middleware
-// lets the auth error surface rather than hiding the route behind a 404.
+// auth service is unreachable, or the API key is invalid), handleAuth answers
+// with that failure rather than the route hiding behind a 404.
 // AUDIENCE ONLY for payWithUsdc: this asks whether the caller may use the
 // feature, not whether the deployment is currently selling it. The USDC
 // availability gates (admin kill switch, treasury cap, oracle) are enforced in
@@ -33,7 +33,8 @@ export const featureFlagMiddleware =
       if (req.headers.authorization) {
         user = await handleAuth(req, res)
         if (!user) {
-          // handleAuth already sent a 401 response
+          // handleAuth already answered (401, or 503 if the auth service
+          // could not be reached)
           return
         }
       }

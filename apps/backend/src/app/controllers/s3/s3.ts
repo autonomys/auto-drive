@@ -154,20 +154,9 @@ const getObjectMetadata = (req: Request): S3ObjectMetadata | null => {
   // read it back from there. It cannot be forged: a client-sent header only ever
   // lands in req.headers, never in the WeakMap. The req.headers fallback just
   // catches an 'identity' encoding the middleware intentionally leaves in place.
-  // The aws-chunked token is dropped, and only that token: it is AWS transfer
-  // framing (the middleware leaves it on the headers for exactly that reason),
-  // never a description of the stored bytes, so echoing it back as the object's
-  // Content-Encoding would advertise an encoding untied to the body. A composite
-  // 'aws-chunked,gzip' keeps its gzip — discarding the whole value would lose
-  // the client's real encoding along with the framing.
-  const rawContentEncoding =
+  const contentEncoding =
     headerString(req.headers['content-encoding']) ??
     stashedContentEncoding.get(req)
-  const contentEncoding = rawContentEncoding
-    ?.split(',')
-    .map((token) => token.trim())
-    .filter((token) => token.toLowerCase() !== 'aws-chunked')
-    .join(', ')
   if (contentEncoding) metadata.contentEncoding = contentEncoding
 
   const userMetadata: Record<string, string> = {}
@@ -1048,12 +1037,12 @@ export const completeMultipartUploadHandler = async (
   }
 
   // completeUpload throws (rather than returning an err) when it cannot take the
-  // completion claim, and this handler has no error middleware behind it — an
-  // uncaught throw reaches Express's default handler and answers a non-XML 500,
-  // which an S3 client cannot parse and will not retry. Concurrent completes are
-  // precisely what a client's own timeout retry produces, so answer with the
-  // retryable error S3 clients already understand: 503 SlowDown, which the AWS
-  // SDK retries with backoff until the winning call finishes.
+  // completion claim. s3ErrorHandler would render that throw as XML, but only
+  // with the code its status map infers, and these two errors need codes it
+  // cannot: concurrent completes are precisely what a client's own timeout retry
+  // produces, so answer with the retryable error S3 clients already understand —
+  // 503 SlowDown, which the AWS SDK retries with backoff until the winning call
+  // finishes.
   let result
   try {
     result = await S3UseCases.completeMultipartUpload(user, {
