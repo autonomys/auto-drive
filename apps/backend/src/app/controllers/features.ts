@@ -18,11 +18,7 @@ featuresController.get(
   asyncSafeHandler(async (req, res) => {
     logger.debug('Services configuration requested')
 
-    const featureFlags = await getFeatureFlags(req, res)
-    if (!featureFlags) {
-      return
-    }
-
-    res.json(featureFlags)
+    // Always answers: an unresolvable credential yields the unauthenticated flags.
+    res.json(await getFeatureFlags(req))
   }),
 )

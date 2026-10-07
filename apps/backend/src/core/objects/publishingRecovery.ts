@@ -16,8 +16,10 @@ let isRunning = false
  * publish-nodes batches.
  *
  * Strategy:
- * - Detects objects where some nodes are published but others are not
- *   (partial publishing — indicates a batch failure)
+ * - Detects objects with publishable nodes left unpublished, either
+ *   partially published or with no node published at all (every
+ *   transaction of the first batch failed), retrying each at most
+ *   once per retryCooldownMs
  * - For each stuck object, fetches only the unpublished node CIDs
  *   and enqueues them as batched publish-nodes tasks (same as the
  *   normal upload pipeline) so each batch gets independent retries
@@ -65,6 +67,7 @@ const runRecoveryBatch = async (): Promise<void> => {
   const stuckRootCids = await nodesRepository.getStuckPublishingRootCids(
     maxPerCycle,
     config.publishingRecovery.stalenessThresholdBlocks,
+    config.publishingRecovery.retryCooldownMs,
   )
 
   if (stuckRootCids.length === 0) {
@@ -98,6 +101,10 @@ const runRecoveryBatch = async (): Promise<void> => {
         batchCount,
         rootCid,
       )
+
+      // Start the retry cooldown before enqueuing: if the stamp failed after
+      // the tasks went out, the next cycle would enqueue them all again.
+      await nodesRepository.touchUnpublishedNodesByRootCid(rootCid)
 
       for (let i = 0; i < unpublishedCids.length; i += PUBLISH_BATCH_SIZE) {
         const batch = unpublishedCids.slice(i, i + PUBLISH_BATCH_SIZE)
