@@ -62,15 +62,21 @@ export const TouAdmin = () => {
 
   const handleCreate = useCallback(
     async (data: TouVersionFormData) => {
-      await api.createTouVersion({
-        versionLabel: data.versionLabel,
-        effectiveDate: new Date(data.effectiveDate).toISOString(),
-        contentUrl: data.contentUrl,
-        changeType: data.changeType,
-        adminNotes: data.adminNotes || undefined,
-      });
-      setShowForm(false);
-      fetchVersions();
+      try {
+        await api.createTouVersion({
+          versionLabel: data.versionLabel,
+          effectiveDate: new Date(data.effectiveDate).toISOString(),
+          contentUrl: data.contentUrl,
+          changeType: data.changeType,
+          adminNotes: data.adminNotes || undefined,
+        });
+        setShowForm(false);
+        fetchVersions();
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : 'Failed to create ToU version',
+        );
+      }
     },
     [api, fetchVersions],
   );
@@ -78,15 +84,21 @@ export const TouAdmin = () => {
   const handleUpdate = useCallback(
     async (data: TouVersionFormData) => {
       if (!editingVersion) return;
-      await api.updateTouVersion(editingVersion.id, {
-        versionLabel: data.versionLabel,
-        effectiveDate: new Date(data.effectiveDate).toISOString(),
-        contentUrl: data.contentUrl,
-        changeType: data.changeType,
-        adminNotes: data.adminNotes || null,
-      });
-      setEditingVersion(null);
-      fetchVersions();
+      try {
+        await api.updateTouVersion(editingVersion.id, {
+          versionLabel: data.versionLabel,
+          effectiveDate: new Date(data.effectiveDate).toISOString(),
+          contentUrl: data.contentUrl,
+          changeType: data.changeType,
+          adminNotes: data.adminNotes || null,
+        });
+        setEditingVersion(null);
+        fetchVersions();
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : 'Failed to update ToU version',
+        );
+      }
     },
     [api, editingVersion, fetchVersions],
   );

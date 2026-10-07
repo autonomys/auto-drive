@@ -2,6 +2,7 @@
 
 import { Banner, BannerCriticality } from '@auto-drive/models';
 import { useCallback, useState } from 'react';
+import { toDateTimeLocalValue } from 'utils/time';
 import { BannerItem } from '../../organisms/BannerNotifications/BannerItem';
 
 type BannerFormData = {
@@ -21,7 +22,7 @@ const defaultFormData: BannerFormData = {
   criticality: BannerCriticality.Info,
   dismissable: true,
   requiresAcknowledgement: false,
-  displayStart: new Date().toISOString().slice(0, 16),
+  displayStart: toDateTimeLocalValue(new Date()),
   displayEnd: '',
   active: true,
 };
@@ -47,11 +48,9 @@ export const BannerForm = ({
           criticality: initialData.criticality,
           dismissable: initialData.dismissable,
           requiresAcknowledgement: initialData.requiresAcknowledgement,
-          displayStart: new Date(initialData.displayStart)
-            .toISOString()
-            .slice(0, 16),
+          displayStart: toDateTimeLocalValue(initialData.displayStart),
           displayEnd: initialData.displayEnd
-            ? new Date(initialData.displayEnd).toISOString().slice(0, 16)
+            ? toDateTimeLocalValue(initialData.displayEnd)
             : '',
           active: initialData.active,
         }
