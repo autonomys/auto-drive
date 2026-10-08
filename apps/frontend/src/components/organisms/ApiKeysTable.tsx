@@ -15,7 +15,7 @@ import {
   TableBodyRow,
 } from '@/components/molecules/Table/TableBody';
 import { Button } from '@auto-drive/ui';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 const formatDate = (d: Date | string | null): string => {
   if (!d) return '—';
@@ -38,21 +38,31 @@ const COLUMN_COUNT = 5;
 
 export const ApiKeysTable = ({
   apiKeys,
+  newKeyName,
 }: {
   apiKeys: ApiKeyWithoutSecret[] | undefined;
+  /** From `?newKey=`: open the create dialog on load with this name. */
+  newKeyName?: string;
 }) => {
-  const [isCreationOpen, setIsCreationOpen] = useState(false);
+  const [isCreationOpen, setIsCreationOpen] = useState(!!newKeyName);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const closeCreationModal = useCallback(() => setIsCreationOpen(false), []);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Drop `?newKey=` once its dialog closes, so a reload doesn't reopen it and
+  // the next manual "Create API Key" starts with an empty name. Navigating
+  // also re-renders the server page, which refreshes the key list.
+  const closeCreationModal = useCallback(() => {
+    setIsCreationOpen(false);
+    if (newKeyName) router.replace(pathname);
+  }, [newKeyName, pathname, router]);
   const openCreationModal = useCallback(() => setIsCreationOpen(true), []);
 
   const openDeleteModal = useCallback((id: string) => setDeleteId(id), []);
   const closeDeleteModal = useCallback(() => setDeleteId(null), []);
 
   const nonDeletedApiKeys = apiKeys?.filter((apiKey) => !apiKey.deletedAt);
-
-  const router = useRouter();
 
   const refresh = useCallback(() => router.refresh(), [router]);
 
@@ -67,6 +77,7 @@ export const ApiKeysTable = ({
         isOpen={isCreationOpen}
         onClose={closeCreationModal}
         onSuccess={onCreationSuccess}
+        initialName={newKeyName}
       />
       <DeleteApiKeyModal apiKeyId={deleteId} closeModal={closeDeleteModal} />
       <div className='flex'>

@@ -7,15 +7,18 @@ import {
 } from '@headlessui/react';
 import { Fragment } from 'react';
 import { Button } from '@auto-drive/ui';
-import { useLogIn } from '../../hooks/useAuth';
+import { AuthProvider, useLogIn } from '../../hooks/useAuth';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Where to land after sign-in. Defaults to the drive view. */
+  callbackUrl?: string;
 }
 
-export const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
-  const { signIn } = useLogIn();
+export const AuthModal = ({ isOpen, onClose, callbackUrl }: AuthModalProps) => {
+  const { signIn: logIn } = useLogIn();
+  const signIn = (provider: AuthProvider) => logIn(provider, { callbackUrl });
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as='div' className='relative z-10' onClose={onClose}>
