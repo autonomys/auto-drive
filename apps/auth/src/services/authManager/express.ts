@@ -15,7 +15,14 @@ export const handleAuth = async (
   logger.trace('handleAuth called')
   const user = await handleAuthIgnoreOnboarding(req, res)
 
-  if (!user?.onboarded) {
+  if (!user) {
+    return null
+  }
+
+  // Callers return as soon as this yields null, so the rejection has to be
+  // sent here — otherwise the request is left open until the client times out.
+  if (!user.onboarded) {
+    res.status(403).json({ error: 'User not onboarded' })
     return null
   }
 

@@ -1,4 +1,6 @@
-import { AuthService } from 'services/auth/auth';
+import { redirect } from 'next/navigation';
+import { AuthService, UserNotOnboardedError } from 'services/auth/auth';
+import { CALLBACK_URL_PARAM } from 'utils/callbackUrl';
 import { Developers } from '@/components/views/Developers';
 import { UserProtectedLayout } from '../../../../components/layouts/UserProtectedLayout';
 
@@ -12,18 +14,28 @@ const parseNewKeyName = (raw: string | string[] | undefined) => {
 };
 
 const Page = async ({
+  params,
   searchParams,
 }: {
+  params: { chain: string };
   searchParams?: Record<string, string | string[] | undefined>;
 }) => {
-  const apiKeys = await AuthService.getApiKeys();
+  const newKeyName = parseNewKeyName(searchParams?.newKey);
+
+  // A first-time user arriving from a deep link must onboard before keys can
+  // be listed; send them through onboarding and back here afterwards.
+  const apiKeys = await AuthService.getApiKeys().catch((error) => {
+    if (!(error instanceof UserNotOnboardedError)) throw error;
+    const query = newKeyName
+      ? `?${new URLSearchParams({ newKey: newKeyName })}`
+      : '';
+    const here = `/${params.chain}/drive/developers${query}`;
+    redirect(`/onboarding?${CALLBACK_URL_PARAM}=${encodeURIComponent(here)}`);
+  });
 
   return (
     <UserProtectedLayout>
-      <Developers
-        apiKeys={apiKeys}
-        newKeyName={parseNewKeyName(searchParams?.newKey)}
-      />
+      <Developers apiKeys={apiKeys} newKeyName={newKeyName} />
     </UserProtectedLayout>
   );
 };
