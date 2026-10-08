@@ -5,6 +5,7 @@ import { env } from '../utils/misc.js'
 import { createLogger } from './logger.js'
 
 let db: pg.Client | undefined
+let adminDb: pg.Client | undefined
 
 const logger = createLogger('auth:pg')
 
@@ -35,25 +36,58 @@ export const createDSQLConnection = async (): Promise<pg.Client> => {
     region: env('AWS_REGION'),
   })
 
-  const token = await signer.getDbConnectAdminAuthToken()
+  const token = await signer.getDbConnectAuthToken()
 
   const client = new pg.Client({
     host: env('DSQL_CLUSTER_ENDPOINT'),
-    port: Number(env('DSQL_CLUSTER_PORT', '5432')),
-    user: env('DSQL_CLUSTER_USER', 'admin'),
+    port: Number(config.dsql.clusterPort),
+    user: config.dsql.user,
     password: token,
-    database: env('DB_NAME', 'postgres'),
+    database: config.dsql.dbName,
     ssl: { rejectUnauthorized: false },
   })
 
   await client.connect()
 
-  logger.info('Connected to DSQL cluster')
+  logger.info('Connected to DSQL cluster (runtime)')
 
   const originalDsqlQuery = client.query.bind(client)
   client.query = ((...args: Parameters<typeof client.query>) => {
     logger.trace(
       'SQL (DSQL) Query: %s',
+      typeof args[0] === 'string' ? args[0] : '<prepared>',
+    )
+    return originalDsqlQuery(...args)
+  }) as typeof client.query
+
+  return client
+}
+
+export const createDSQLAdminConnection = async (): Promise<pg.Client> => {
+  const signer = new DsqlSigner({
+    hostname: env('DSQL_CLUSTER_ENDPOINT'),
+    region: env('AWS_REGION'),
+  })
+
+  const token = await signer.getDbConnectAdminAuthToken()
+
+  const client = new pg.Client({
+    host: env('DSQL_CLUSTER_ENDPOINT'),
+    port: Number(config.dsql.clusterPort),
+    user: config.dsql.adminUser,
+    password: token,
+    database: config.dsql.dbName,
+    ssl: { rejectUnauthorized: false },
+  })
+
+  await client.connect()
+
+  logger.info('Connected to DSQL cluster (admin)')
+
+  const originalDsqlQuery = client.query.bind(client)
+  client.query = ((...args: Parameters<typeof client.query>) => {
+    logger.trace(
+      'SQL (DSQL Admin) Query: %s',
       typeof args[0] === 'string' ? args[0] : '<prepared>',
     )
     return originalDsqlQuery(...args)
@@ -71,6 +105,15 @@ export const createDB = async () => {
   return createPgDB()
 }
 
+export const createAdminDB = async () => {
+  const isDSQL = !!process.env.DSQL_CLUSTER_ENDPOINT
+  if (isDSQL) {
+    return createDSQLAdminConnection()
+  }
+
+  return createPgDB()
+}
+
 export const getDatabase = async () => {
   if (!db) {
     db = await createDB()
@@ -79,9 +122,24 @@ export const getDatabase = async () => {
   return db
 }
 
+export const getAdminDatabase = async () => {
+  if (!adminDb) {
+    adminDb = await createAdminDB()
+  }
+
+  return adminDb
+}
+
 export const closeDatabase = async () => {
   if (db) {
     await db.end()
     db = undefined
+  }
+}
+
+export const closeAdminDatabase = async () => {
+  if (adminDb) {
+    await adminDb.end()
+    adminDb = undefined
   }
 }
