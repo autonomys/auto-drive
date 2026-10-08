@@ -1,4 +1,10 @@
-import React, { useCallback, useContext, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   SidebarHeader,
   Sidebar,
@@ -22,6 +28,8 @@ import { SIDEBAR_DEFINITION } from './items';
 import { SideNavBarContent } from './SideNavBarContent';
 import { AskForCreditsButton } from '../../atoms/AskForCredits';
 import { BuyMoreCreditsButton } from '../../atoms/BuyMoreCreditsButton';
+import { useSearchParams } from 'next/navigation';
+import { CALLBACK_URL_PARAM, sanitizeCallbackUrl } from '@/utils/callbackUrl';
 
 export type SideNavbarProps = {
   networkId: NetworkId;
@@ -42,6 +50,17 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   const handleOpenAuthModal = useCallback(() => {
     setIsAuthModalOpen(true);
   }, []);
+
+  // Set by the middleware when a signed-out visitor deep-links into a
+  // protected page: open the login modal and return there after sign-in.
+  const searchParams = useSearchParams();
+  const callbackUrl =
+    sanitizeCallbackUrl(searchParams.get(CALLBACK_URL_PARAM)) ?? undefined;
+  const loggedOut = session?.data === null;
+
+  useEffect(() => {
+    if (callbackUrl && loggedOut) setIsAuthModalOpen(true);
+  }, [callbackUrl, loggedOut]);
 
   const renewalDate = useMemo(() => {
     const date = dayjs().add(1, 'month').startOf('month');
@@ -101,6 +120,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
+        callbackUrl={callbackUrl}
       />
       <SidebarHeader className='p-4'>
         <div className='flex items-center space-x-2'>

@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CreditSummaryResponse } from '../../services/api';
 import { TouChangeType } from '@auto-drive/models';
 import { TouAcceptanceInterstitial } from '../views/TouAcceptance';
+import { CALLBACK_URL_PARAM } from '../../utils/callbackUrl';
 
 export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
@@ -35,7 +36,12 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
             setUser(user);
           } else {
             setUser(null);
-            router.push('/onboarding');
+            // Carry the current page through onboarding so a first-time user
+            // who arrived via a deep link still lands where they were going.
+            const here = `${window.location.pathname}${window.location.search}`;
+            router.push(
+              `/onboarding?${CALLBACK_URL_PARAM}=${encodeURIComponent(here)}`,
+            );
           }
         })
         .catch(() => {
