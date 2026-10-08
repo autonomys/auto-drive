@@ -192,7 +192,9 @@ describe('OnchainPublisher', () => {
     try {
       await expect(
         OnchainPublisher.publishNodes(nodes.map((e) => e.cid)),
-      ).rejects.toThrow('Failed to publish nodes ({"Ok":2,"Timeout":1})')
+      ).rejects.toThrow(
+        'Failed to publish nodes ({"ok:Success":2,"fail:Timeout":1})',
+      )
 
       expect(setPublishedOnSpy).toHaveBeenCalledTimes(2)
       expect(setPublishedOnSpy).toHaveBeenCalledWith(
