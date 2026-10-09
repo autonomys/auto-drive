@@ -732,10 +732,6 @@ const triggerWatchIntent = async ({
   }
   const intent = result.value
 
-  if (intent?.userPublicId !== executor.publicId) {
-    return err(new ForbiddenError('Intent not found'))
-  }
-
   // Claim the row before queueing anything, and write only the hash.
   //
   // This used to write the whole intent back from the snapshot getIntent returned,
