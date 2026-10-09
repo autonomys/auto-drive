@@ -111,7 +111,7 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
   // here while they are tracked, but allow Back once polling has ended with
   // an expired or over-cap outcome.
   const canGoBack =
-    !isSending && !isWriting && (!txHash || isExpired || isOverCap);
+    !isSending && !isWriting && (!txHash || isExpired || isOverCap || isFailed);
 
   const handleSend = useCallback(async () => {
     setIsSending(true);

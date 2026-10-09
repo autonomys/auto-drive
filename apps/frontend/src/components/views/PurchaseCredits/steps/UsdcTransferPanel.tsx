@@ -216,10 +216,10 @@ export const UsdcTransferPanel = ({
   // Continue button with it and offering "Get a price" for credits the buyer has
   // just been granted.
   useEffect(() => {
-    if (isBackendCompleted || isOverCap || isExpired) {
+    if (isBackendCompleted || isOverCap || isFailed || isExpired) {
       clearUsdcResume();
     }
-  }, [isBackendCompleted, isOverCap, isExpired]);
+  }, [isBackendCompleted, isOverCap, isFailed, isExpired]);
 
   useEffect(() => {
     if (!payTxHash || !activeIntentId) return;
