@@ -38,6 +38,7 @@ export const ObjectDetailsActions = ({
   const [deleteModalCid, setDeleteModalCid] = useState<string | null>(null);
   const [isReporting, setIsReporting] = useState(false);
   const [isBringingToCache, setIsBringingToCache] = useState(false);
+  const [bringToCacheRequested, setBringToCacheRequested] = useState(false);
 
   const hasFileOwnership = object?.owners.some(
     (o) =>
@@ -88,6 +89,7 @@ export const ObjectDetailsActions = ({
     setIsBringingToCache(true);
     try {
       await api.createAsyncDownload(object.metadata.dataCid);
+      setBringToCacheRequested(true);
       toast.success('File is being brought to cache');
     } catch (error) {
       console.error('Bring to cache error:', error);
@@ -114,7 +116,7 @@ export const ObjectDetailsActions = ({
           <span className='ml-2 text-xs text-gray-500'>(File is banned)</span>
         )}
       </Button>
-      {isCached === false && (
+      {isCached === false && !bringToCacheRequested && !!user && (
         <Button
           variant='primary'
           className={cn(
