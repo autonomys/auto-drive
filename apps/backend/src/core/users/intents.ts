@@ -732,10 +732,6 @@ const triggerWatchIntent = async ({
   }
   const intent = result.value
 
-  if (intent?.userPublicId !== executor.publicId) {
-    return err(new ForbiddenError('Intent not found'))
-  }
-
   // Claim the row before queueing anything, and write only the hash.
   //
   // This used to write the whole intent back from the snapshot getIntent returned,
@@ -1643,7 +1639,7 @@ const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
   return {
     price,
     pricePerGB:
-      Math.round(((price * BYTES_PER_GB) / SHANNONS_PER_AI3) * 100) / 100,
+      Math.round(((price / SHANNONS_PER_AI3) * BYTES_PER_GB) * 100) / 100,
   }
 }
 
