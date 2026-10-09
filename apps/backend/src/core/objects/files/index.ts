@@ -46,7 +46,7 @@ const getNodesForPartialRetrieval = async (
 
   // Searchs for the last node that contains the byte range
   // unless the byte range is the last byte of the file
-  if (byteRange[1]) {
+  if (byteRange[1] != null) {
     while (nodeRange[1] === null && i < chunks.length) {
       const chunk = chunks[i]
       const chunkSize = Number(chunk.size.valueOf())
