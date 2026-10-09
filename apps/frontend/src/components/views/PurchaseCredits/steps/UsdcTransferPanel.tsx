@@ -130,6 +130,7 @@ export const UsdcTransferPanel = ({
     isPollingBackend,
     isBackendCompleted,
     isOverCap,
+    isFailed,
     isExpired,
     lockLapsed,
     hasReadIntent,
@@ -215,10 +216,10 @@ export const UsdcTransferPanel = ({
   // Continue button with it and offering "Get a price" for credits the buyer has
   // just been granted.
   useEffect(() => {
-    if (isBackendCompleted || isOverCap || isExpired) {
+    if (isBackendCompleted || isOverCap || isFailed || isExpired) {
       clearUsdcResume();
     }
-  }, [isBackendCompleted, isOverCap, isExpired]);
+  }, [isBackendCompleted, isOverCap, isFailed, isExpired]);
 
   useEffect(() => {
     if (!payTxHash || !activeIntentId) return;
@@ -259,6 +260,7 @@ export const UsdcTransferPanel = ({
     ((registrationLockLapsed && !hasReadIntent) || lockLapsed) &&
     !isBackendCompleted &&
     !isOverCap &&
+    !isFailed &&
     !isExpired &&
     // Not alongside the stall notice. Both are amber and their advice is
     // opposite — "keep this page open" against "you can go back" — and a
@@ -700,6 +702,12 @@ export const UsdcTransferPanel = ({
                   assistance.
                 </div>
               )}
+              {isFailed && (
+                <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
+                  <strong>Payment failed.</strong> Your payment could not be
+                  processed. Please contact support or try again.
+                </div>
+              )}
               {settlementUncertain && (
                 <div className='rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
                   <strong>
@@ -749,12 +757,14 @@ export const UsdcTransferPanel = ({
                     !isFullyConfirmed ||
                     !isBackendCompleted ||
                     isOverCap ||
+                    isFailed ||
                     isExpired
                   }
                 >
                   {isFullyConfirmed &&
                   !isBackendCompleted &&
                   !isOverCap &&
+                  !isFailed &&
                   !isExpired
                     ? 'Finalizing…'
                     : 'Continue'}
