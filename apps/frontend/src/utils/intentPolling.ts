@@ -54,6 +54,8 @@ export type IntentPollDecision =
   | { state: 'completed'; shouldContinue: false }
   /** Payment received, credit cap reached. Terminal, needs an admin. */
   | { state: 'over_cap'; shouldContinue: false }
+  /** Payment failed (e.g. dust payment). Terminal. */
+  | { state: 'failed'; shouldContinue: false }
   /** The lock lapsed and stayed lapsed past the grace. Terminal. */
   | { state: 'expired'; shouldContinue: false }
   /** The lock has lapsed, but the payment can still settle. Warn, keep going. */
@@ -75,6 +77,8 @@ export const evaluateIntentStatus = (status: string): IntentPollDecision => {
     return { state: 'completed', shouldContinue: false };
   if (status === 'over_cap')
     return { state: 'over_cap', shouldContinue: false };
+  if (status === 'failed')
+    return { state: 'failed', shouldContinue: false };
   return { state: 'live', shouldContinue: true };
 };
 
