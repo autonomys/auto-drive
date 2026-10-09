@@ -88,6 +88,7 @@ export const sliceReadable = async (
       if (bytesPushed >= length) {
         cleanup()
         pass.end()
+        readable.destroy()
       } else {
         // If there are leftover bytes in the chunk, but we only needed part of it, update bytesRead
         if (chunkStart < chunkEnd) {
