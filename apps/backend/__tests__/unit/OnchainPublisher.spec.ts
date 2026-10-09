@@ -155,4 +155,40 @@ describe('OnchainPublisher', () => {
       setPublishedOnSpy.mockRestore()
     }
   })
+
+  it('should still throw batch failure breakdown if setPublishedOn rejects', async () => {
+    const nodes: Node[] = [1, 2].map((e) => ({
+      cid: `QmHash${e}`,
+      encoded_node: `QmHash${e}`,
+    })) as unknown as Node[]
+
+    jest.spyOn(nodesRepository, 'getNodesByCids').mockResolvedValue(nodes)
+    jest
+      .spyOn(nodesRepository, 'getNodesBlockchainDataBatch')
+      .mockResolvedValue([])
+
+    const setPublishedOnSpy = jest
+      .spyOn(NodesUseCases, 'setPublishedOn')
+      .mockRejectedValue(new Error('DB connection lost'))
+
+    const mixedResults = [
+      MOCK_PUBLISH_RESULT,
+      {
+        success: false,
+        txHash: '0x456',
+        status: 'Timeout',
+        error: 'Transaction confirmation timeout',
+      },
+    ]
+
+    jest.spyOn(transactionManager, 'submit').mockResolvedValue(mixedResults)
+
+    try {
+      await expect(
+        OnchainPublisher.publishNodes(nodes.map((e) => e.cid)),
+      ).rejects.toThrow('Failed to publish nodes')
+    } finally {
+      setPublishedOnSpy.mockRestore()
+    }
+  })
 })
