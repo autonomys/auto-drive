@@ -1,17 +1,28 @@
 import bytes from 'bytes';
 
 // Format number with commas
-export const formatNumberWithCommas = (num?: number): string => {
-  if (num === undefined) return 'N/A';
-  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+export const formatNumberWithCommas = (num?: number | null): string => {
+  if (num === undefined || num === null || Number.isNaN(num)) return 'N/A';
+  const parts = num.toString().split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
 };
 
 export const truncateNumberWithDecimals = (
   num: number,
   decimals: number = 2,
 ): number => {
-  const precision = 10 ** decimals;
-  return Math.floor(num * precision) / precision;
+  if (!Number.isFinite(num)) return 0;
+  const dec = Math.max(0, Math.trunc(decimals));
+  if (dec === 0) return Math.trunc(num);
+  const str = num.toString();
+  if (str.includes('e')) {
+    const precision = 10 ** dec;
+    return Math.trunc(num * precision) / precision;
+  }
+  const dotIndex = str.indexOf('.');
+  if (dotIndex === -1) return num;
+  return Number(str.slice(0, dotIndex + 1 + dec));
 };
 
 const mappers = {
