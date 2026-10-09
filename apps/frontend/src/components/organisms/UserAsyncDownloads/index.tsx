@@ -43,11 +43,15 @@ export const UserAsyncDownloads = () => {
   const dismissOutdatedAsyncDownloads = useCallback(async () => {
     let hasDismissedSome = false;
     for (const asyncDownload of asyncDownloads) {
-      if (asyncDownload.status !== AsyncDownloadStatus.Completed) return;
-      const status = await api.checkDownloadStatus(asyncDownload.cid);
-      if (status === DownloadStatus.NotCached) {
-        api.dismissAsyncDownload(asyncDownload.id);
-        hasDismissedSome = true;
+      if (asyncDownload.status !== AsyncDownloadStatus.Completed) continue;
+      try {
+        const status = await api.checkDownloadStatus(asyncDownload.cid);
+        if (status === DownloadStatus.NotCached) {
+          await api.dismissAsyncDownload(asyncDownload.id);
+          hasDismissedSome = true;
+        }
+      } catch (error) {
+        console.error('Failed to dismiss outdated async download:', error);
       }
     }
     if (hasDismissedSome) {
