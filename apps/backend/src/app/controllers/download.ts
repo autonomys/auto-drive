@@ -265,6 +265,10 @@ downloadController.get(
               'but stored data is not compressed. Serving raw data.',
             cid,
           )
+          res.removeHeader('Content-Encoding')
+          if (metadata.size != null) {
+            res.setHeader('Content-Length', metadata.size.toString())
+          }
           pipeline(combinedStream, res, (err: Error | null) => {
             if (err) {
               logger.error(
