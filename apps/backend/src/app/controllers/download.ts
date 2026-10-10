@@ -128,6 +128,15 @@ downloadController.get(
 
       const { metadata } = metadataResult.value
 
+      if (requestedByteRange) {
+        const totalSize = Number(metadata.size)
+        if (requestedByteRange[0] >= totalSize) {
+          res.set('Content-Range', `bytes */${totalSize}`)
+          res.sendStatus(416)
+          return
+        }
+      }
+
       // Check if this is a media file that needs decompression
       const mimeType = (metadata.mimeType || '').toLowerCase()
       const isMediaType =
