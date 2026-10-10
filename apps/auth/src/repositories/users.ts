@@ -72,20 +72,6 @@ const createUser = async (
   return user.rows.at(0)
 }
 
-const searchUsersByPublicId = async (
-  publicId: string,
-  limit: number,
-): Promise<User[]> => {
-  const db = await getDatabase()
-
-  const users = await db.query(
-    'SELECT * FROM users.users WHERE publicId LIKE $1 limit $2',
-    [`%${publicId}%`, limit],
-  )
-
-  return users.rows
-}
-
 const updateRole = async (
   oauth_provider: string,
   oauth_user_id: string,
@@ -170,7 +156,6 @@ export const usersRepository = {
   getUsersByPublicIds,
   createUser,
   getUserByOAuthInformation,
-  searchUsersByPublicId,
   updateRole,
   getAllUsers,
   updateUsername,

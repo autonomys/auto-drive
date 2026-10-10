@@ -165,16 +165,6 @@ const getUserByOAuthUser = async (user: OAuthUser): Promise<MaybeUser> => {
   })
 }
 
-const searchUsersByPublicId = async (publicId: string): Promise<string[]> => {
-  const maxResults = 10
-  const dbUsers = await usersRepository.searchUsersByPublicId(
-    publicId,
-    maxResults,
-  )
-
-  return dbUsers.map((e) => e.public_id)
-}
-
 const isAdminUser = async (
   userOrPublicId: UserOrPublicId,
 ): Promise<boolean> => {
@@ -312,7 +302,6 @@ export const UsersUseCases = {
   getUserByOAuthUser,
   getUserByPublicId,
   getUsersByPublicIds,
-  searchUsersByPublicId,
   isAdminUser,
   updateRole,
   resolveUser,
