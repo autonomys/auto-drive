@@ -380,13 +380,46 @@ const registerInteraction = async (
       fromFree,
     )
 
-    await InteractionsUseCases.createInteraction(
-      account.id,
-      type,
-      fromFree,
-      InteractionSource.FreeTier,
-      cid,
-    )
+    try {
+      await InteractionsUseCases.createInteraction(
+        account.id,
+        type,
+        fromFree,
+        InteractionSource.FreeTier,
+        cid,
+      )
+    } catch (freeTierError) {
+      if (fromPurchased > BigInt(0)) {
+        logger.error(
+          freeTierError,
+          'registerInteraction: free-tier interaction recording failed after purchased credits consumed — attempting compensating refund (accountId=%s, type=%s, bytes=%d)',
+          account.id,
+          creditType,
+          fromPurchased,
+        )
+        try {
+          await purchasedCreditsRepository.refundCredits(
+            account.id,
+            creditType,
+            fromPurchased,
+          )
+          logger.warn(
+            'registerInteraction: compensating refund succeeded after free-tier failure (accountId=%s, bytes=%d)',
+            account.id,
+            fromPurchased,
+          )
+        } catch (refundError) {
+          logger.error(
+            refundError,
+            'CRITICAL: registerInteraction: free-tier interaction AND refund both failed — manual recovery required (accountId=%s, type=%s, bytes=%d)',
+            account.id,
+            creditType,
+            fromPurchased,
+          )
+        }
+      }
+      throw freeTierError
+    }
   }
 }
 
