@@ -15,7 +15,10 @@ export const sanitizeCallbackUrl = (
     // Rejects protocol-relative (`//evil.com`) and backslash (`/\evil.com`)
     // forms, which resolve to a different origin.
     if (url.origin !== PLACEHOLDER_ORIGIN) return null;
-    return `${url.pathname}${url.search}${url.hash}`;
+    // Dot segments (`/.//evil.com`) pass the origin check but normalize to a
+    // protocol-relative path, so reject a leading `//` on the result too.
+    const path = `${url.pathname}${url.search}${url.hash}`;
+    return path.startsWith('//') ? null : path;
   } catch {
     return null;
   }
