@@ -19,6 +19,7 @@ import {
   listObjectVersionsHandler,
   notImplementedHandler,
   putObjectHandler,
+  s3ErrorHandler,
   uploadPartHandler,
   stashContentEncoding,
 } from './s3.js'
@@ -210,7 +211,7 @@ s3Controller.use(
   // left req.body as `{}` and broke uploads.
   raw({
     type: () => true,
-    limit: '100mb',
+    limit: '200mb',
   }),
   asyncSafeHandler(async (req: Request, res: Response) => {
     const s3Method = getS3Method(req)
@@ -224,5 +225,10 @@ s3Controller.use(
     return handler(req, res)
   }),
 )
+
+// Last on the router: turns anything the handlers above did not answer — a
+// body-parser rejection, a throw forwarded by asyncSafeHandler — into an S3
+// <Error> document instead of Express's default HTML.
+s3Controller.use(s3ErrorHandler)
 
 export { s3Controller }

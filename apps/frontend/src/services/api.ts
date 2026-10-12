@@ -838,7 +838,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create banner: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to create banner: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<Banner>;
@@ -872,7 +875,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to update banner: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to update banner: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<Banner>;
@@ -897,7 +903,10 @@ export const createApiService = ({
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to toggle banner: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to toggle banner: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<Banner>;
@@ -1237,7 +1246,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create ToU version: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to create ToU version: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<TouVersion>;
@@ -1268,7 +1280,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to update ToU version: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to update ToU version: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<TouVersion>;

@@ -35,6 +35,7 @@ export const authOptions: AuthOptions = {
     DiscordProvider({
       clientId: process.env.DISCORD_AUTH_CLIENT_ID as string,
       clientSecret: process.env.DISCORD_AUTH_CLIENT_SECRET as string,
+      issuer: 'https://discord.com',
       authorization: { params: { scope: 'identify' } },
     }),
     GithubProvider({

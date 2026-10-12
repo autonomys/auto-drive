@@ -223,6 +223,15 @@ export const config = {
     publishManagerBacklogLimit: Number(
       env('PUBLISHING_RECOVERY_PUBLISH_BACKLOG_LIMIT', '100'),
     ),
+    // An object's unpublished nodes must be untouched for this long before
+    // recovery (re-)enqueues them. Nodes are stamped at insert and on every
+    // recovery attempt, so this is both the staleness window for objects with
+    // zero published nodes (where the block filter above has nothing to
+    // measure) and the per-object retry interval. 2 hours sits just above the
+    // ~1.7 hour block window.
+    retryCooldownMs: Number(
+      env('PUBLISHING_RECOVERY_RETRY_COOLDOWN_MS', '7200000'),
+    ),
   },
   migrationRecovery: {
     intervalMs: Number(env('MIGRATION_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
