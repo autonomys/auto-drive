@@ -35,6 +35,9 @@ export const utcToLocalRelativeTime = (timestamp: string): string => {
   }
 };
 
+export const toDateTimeLocalValue = (date: Date | string) =>
+  dayjs(date).format('YYYY-MM-DD[T]HH:mm');
+
 export const formatDateWithTimezone = (date: string) => {
   const localDate = dayjs.utc(date).local();
   const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;

@@ -2,6 +2,7 @@
 
 import { TouChangeType, TouVersion } from '@auto-drive/models';
 import { useCallback, useState } from 'react';
+import { toDateTimeLocalValue } from 'utils/time';
 
 export type TouVersionFormData = {
   versionLabel: string;
@@ -36,9 +37,7 @@ export const TouVersionForm = ({
     initialData
       ? {
           versionLabel: initialData.versionLabel,
-          effectiveDate: new Date(initialData.effectiveDate)
-            .toISOString()
-            .slice(0, 16),
+          effectiveDate: toDateTimeLocalValue(initialData.effectiveDate),
           contentUrl: initialData.contentUrl,
           changeType: initialData.changeType,
           adminNotes: initialData.adminNotes || '',
