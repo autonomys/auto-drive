@@ -959,13 +959,22 @@ export const createApiService = ({
       throw new Error('No session');
     }
 
-    await fetch(`${downloadApiUrl}/downloads/async/${id}/dismiss`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
+    const response = await fetch(
+      `${downloadApiUrl}/downloads/async/${id}/dismiss`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
       },
-    });
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to dismiss async download: ${response.statusText}`,
+      );
+    }
   },
   checkDownloadStatus: async (cid: string): Promise<DownloadStatus> => {
     const session = await getAuthSession();
