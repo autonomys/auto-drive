@@ -109,7 +109,7 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
     isConnected && !isSending && !isWriting && !txHash && sizeMib !== null;
   // Leaving unmounts this panel. Keep active requests and submitted payments
   // here while they are tracked, but allow Back once polling has ended with
-  // an expired or over-cap outcome.
+  // an expired, over-cap or failed outcome.
   const canGoBack =
     !isSending && !isWriting && (!txHash || isExpired || isOverCap || isFailed);
 
@@ -309,8 +309,10 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
               )}
               {isFailed && (
                 <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
-                  <strong>Payment failed.</strong> Your payment could not be
-                  processed. Please contact support or try again.
+                  <strong>Payment not credited.</strong> Your payment was
+                  received but could not be converted into any credits — most
+                  often because it was too small. Do not send it again; contact
+                  support with the transaction hash above so it can be resolved.
                 </div>
               )}
               {/* The lock lapsed and the outcome is still open. Reachable on
@@ -353,9 +355,19 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
                       sizeMB: sizeMib,
                     })
                   }
-                  disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap || isFailed || isExpired}
+                  disabled={
+                    !isFullyConfirmed ||
+                    !isBackendCompleted ||
+                    isOverCap ||
+                    isFailed ||
+                    isExpired
+                  }
                 >
-                  {isFullyConfirmed && !isBackendCompleted && !isOverCap && !isFailed && !isExpired
+                  {isFullyConfirmed &&
+                  !isBackendCompleted &&
+                  !isOverCap &&
+                  !isFailed &&
+                  !isExpired
                     ? 'Finalizing…'
                     : 'Continue'}
                 </Button>

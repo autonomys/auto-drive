@@ -704,8 +704,10 @@ export const UsdcTransferPanel = ({
               )}
               {isFailed && (
                 <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
-                  <strong>Payment failed.</strong> Your payment could not be
-                  processed. Please contact support or try again.
+                  <strong>Payment not credited.</strong> Your payment was
+                  received but could not be converted into any credits — most
+                  often because it was too small. Do not send it again; contact
+                  support with the transaction hash above so it can be resolved.
                 </div>
               )}
               {settlementUncertain && (

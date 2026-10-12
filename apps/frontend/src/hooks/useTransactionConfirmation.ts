@@ -232,7 +232,8 @@ export const useTransactionConfirmation = ({
           setIsPollingBackend(false);
           return;
         case 'failed':
-          // Payment failed (e.g. dust payment). Terminal without retry.
+          // Payment received but worth no credits. Terminal: nothing moves an
+          // intent out of FAILED, so polling would spin on "Finalizing…".
           setIsFailed(true);
           setIsPollingBackend(false);
           return;
