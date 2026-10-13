@@ -50,6 +50,8 @@ interface UseTransactionConfirmationReturn {
   isBackendCompleted: boolean;
   /** True when the backend put the intent in the over_cap terminal state. */
   isOverCap: boolean;
+  /** True when the backend put the intent in the failed terminal state. */
+  isFailed: boolean;
   /**
    * True only once the intent's expiry is TERMINAL: the backend has answered
    * 410 for long enough that no settlement is coming, so credits will not be
@@ -108,6 +110,7 @@ export const useTransactionConfirmation = ({
   const [isPollingBackend, setIsPollingBackend] = useState(false);
   const [isBackendCompleted, setIsBackendCompleted] = useState(false);
   const [isOverCap, setIsOverCap] = useState(false);
+  const [isFailed, setIsFailed] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
   const [lockLapsed, setLockLapsed] = useState(false);
   const [hasReadIntent, setHasReadIntent] = useState(false);
@@ -184,6 +187,7 @@ export const useTransactionConfirmation = ({
       !isFullyConfirmed ||
       isBackendCompleted ||
       isOverCap ||
+      isFailed ||
       isExpired
     )
       return;
@@ -225,6 +229,12 @@ export const useTransactionConfirmation = ({
         case 'over_cap':
           // Payment received, cap reached. Terminal without an admin.
           setIsOverCap(true);
+          setIsPollingBackend(false);
+          return;
+        case 'failed':
+          // Payment received but worth no credits. Terminal: nothing moves an
+          // intent out of FAILED, so polling would spin on "Finalizing…".
+          setIsFailed(true);
           setIsPollingBackend(false);
           return;
         case 'expired':
@@ -269,6 +279,7 @@ export const useTransactionConfirmation = ({
     isFullyConfirmed,
     isBackendCompleted,
     isOverCap,
+    isFailed,
     isExpired,
     lockLapsedGraceMs,
     queryClient,
@@ -282,6 +293,7 @@ export const useTransactionConfirmation = ({
     isPollingBackend,
     isBackendCompleted,
     isOverCap,
+    isFailed,
     isExpired,
     lockLapsed,
     hasReadIntent,

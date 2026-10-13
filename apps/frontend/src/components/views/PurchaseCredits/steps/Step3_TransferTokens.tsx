@@ -76,6 +76,7 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
     isPollingBackend,
     isBackendCompleted,
     isOverCap,
+    isFailed,
     isExpired,
     lockLapsed,
     waitError,
@@ -108,9 +109,9 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
     isConnected && !isSending && !isWriting && !txHash && sizeMib !== null;
   // Leaving unmounts this panel. Keep active requests and submitted payments
   // here while they are tracked, but allow Back once polling has ended with
-  // an expired or over-cap outcome.
+  // an expired, over-cap or failed outcome.
   const canGoBack =
-    !isSending && !isWriting && (!txHash || isExpired || isOverCap);
+    !isSending && !isWriting && (!txHash || isExpired || isOverCap || isFailed);
 
   const handleSend = useCallback(async () => {
     setIsSending(true);
@@ -306,6 +307,14 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
                   assistance.
                 </div>
               )}
+              {isFailed && (
+                <div className='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300'>
+                  <strong>Payment not credited.</strong> Your payment was
+                  received but could not be converted into any credits — most
+                  often because it was too small. Do not send it again; contact
+                  support with the transaction hash above so it can be resolved.
+                </div>
+              )}
               {/* The lock lapsed and the outcome is still open. Reachable on
                   AI3 too — an intent expires ten minutes after it is created,
                   and a transfer signed near that edge confirms after it — and
@@ -314,6 +323,7 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
               {lockLapsed &&
                 !isBackendCompleted &&
                 !isOverCap &&
+                !isFailed &&
                 !isExpired && (
                   <div className='rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
                     <strong>Price lock lapsed.</strong> This payment confirmed
@@ -345,9 +355,19 @@ const Ai3TransferPanel = ({ onNext, onBack, context }: TransferStepProps) => {
                       sizeMB: sizeMib,
                     })
                   }
-                  disabled={!isFullyConfirmed || !isBackendCompleted || isOverCap || isExpired}
+                  disabled={
+                    !isFullyConfirmed ||
+                    !isBackendCompleted ||
+                    isOverCap ||
+                    isFailed ||
+                    isExpired
+                  }
                 >
-                  {isFullyConfirmed && !isBackendCompleted && !isOverCap && !isExpired
+                  {isFullyConfirmed &&
+                  !isBackendCompleted &&
+                  !isOverCap &&
+                  !isFailed &&
+                  !isExpired
                     ? 'Finalizing…'
                     : 'Continue'}
                 </Button>

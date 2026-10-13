@@ -85,13 +85,27 @@ const publishNodes = async (cids: string[], signal?: AbortSignal) => {
 
   // Record confirmed txs before throwing, so a retry only resubmits the
   // failures and the object stays visible to the publishing-recovery sweep.
-  await Promise.all(
+  // Use allSettled so a persistence failure on one node does not short-circuit
+  // other writes or conceal the batch failure breakdown.
+  const persistenceResults = await Promise.allSettled(
     publishingNodes.map((node, index) => {
       const isSuccess = results[index].success
       if (!isSuccess) return null
       return NodesUseCases.setPublishedOn(node.cid, results[index])
     }),
   )
+
+  const persistenceFailures = persistenceResults.filter(
+    (r): r is PromiseRejectedResult => r.status === 'rejected',
+  )
+  if (persistenceFailures.length > 0) {
+    logger.warn(
+      'Failed to record published status for %d/%d nodes: %o',
+      persistenceFailures.length,
+      publishingNodes.length,
+      persistenceFailures.map((f) => f.reason),
+    )
+  }
 
   const someNodeFailed = results.some((result) => !result.success)
   if (someNodeFailed) {
@@ -105,6 +119,12 @@ const publishNodes = async (cids: string[], signal?: AbortSignal) => {
     )
     throw new Error(
       `Failed to publish nodes (${JSON.stringify(statusBreakdown)})`,
+    )
+  }
+
+  if (persistenceFailures.length > 0) {
+    throw new Error(
+      `Failed to record published status for ${persistenceFailures.length} node(s)`,
     )
   }
 }
