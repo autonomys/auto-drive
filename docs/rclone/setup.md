@@ -4,7 +4,7 @@ This guide walks you through configuring rclone to use Auto Drive as a permanent
 
 ## 1. Create an Auto Drive Account
 
-Go to [ai3.storage](https://ai3.storage) and sign in with Google, Discord, or GitHub. This creates your Auto Drive account and gives you access to the free tier immediately.
+Go to [ai3.storage](https://ai3.storage) and sign in with Google, Discord, GitHub, or an EVM wallet. This creates your Auto Drive account and gives you access to the free tier immediately.
 
 ## 2. Create an API Key
 
@@ -15,18 +15,21 @@ Go to [ai3.storage](https://ai3.storage) and sign in with Google, Discord, or Gi
 5. Optionally set an expiry date
 6. Copy the API key and store it securely - it will not be shown again
 
-The API key serves as the S3 access key for authentication.
+The API key is your S3 access key. Auto Drive does not check the secret key or the request signature, so anyone who has the API key has full access to your files. Keep it secret.
 
 ## 3. Purchase Storage Credits (Optional)
 
-A free tier is available for development and testing. For production workloads, purchase credits with AI3 tokens:
+A free tier is available for development and testing. For production workloads, purchase credits:
 
-1. Sign in at [ai3.storage](https://ai3.storage) using Google auth
+1. Sign in at [ai3.storage](https://ai3.storage) with Google (purchases require a Google sign-in)
 2. Connect an EVM-compatible wallet (MetaMask, etc.)
 3. Select the amount of storage credits to purchase
-4. Confirm the transaction with AI3 tokens
+4. Choose the payment method: AI3 or USDC (USDC can be temporarily unavailable; AI3 is always offered)
+5. Confirm the transaction in your wallet
 
-Storage pricing is dynamic, denominated in AI3, and reflects the on-chain storage cost plus a service fee. For details, see the [Autonomys Academy](https://academy.autonomys.xyz/autonomys-network/rewards-and-fees).
+Storage pricing reflects the on-chain storage cost plus a service fee. For details, see the [Autonomys Academy](https://academy.autonomys.xyz/autonomys-network/rewards-and-fees).
+
+Credits are used when content is uploaded. Deletes, renames, and server-side copies do not upload new content, so they use no credits, and a delete does not refund any.
 
 ## 4. Install rclone
 
@@ -54,6 +57,8 @@ sudo dnf install rclone
 # Arch
 sudo pacman -S rclone
 ```
+
+Distribution packages can be several releases behind. If a command or flag in this guide is missing, install the latest version with the script above.
 
 ### Windows
 
@@ -84,6 +89,7 @@ secret_access_key = placeholder
 endpoint = https://s3.auto-drive.autonomys.xyz
 no_check_bucket = true
 list_version = 2
+list_url_encode = true
 ```
 
 ### Option B: Use rclone config interactively
@@ -101,19 +107,26 @@ rclone config
 7. Enter `https://s3.auto-drive.autonomys.xyz` as the endpoint
 8. Accept defaults for all remaining options
 
-Then manually add `no_check_bucket = true` and `list_version = 2` to the config section.
+Then set the three options that the interactive flow does not ask for:
+
+```bash
+rclone config update autodrive no_check_bucket true list_version 2 list_url_encode true
+```
 
 ### Configuration notes
 
 | Option | Value | Notes |
 |---|---|---|
 | `type` | `s3` | Use the S3 backend |
-| `provider` | `Other` | Generic S3-compatible mode - no provider-specific assumptions |
-| `access_key_id` | Your API key | Obtain from the Developers tab in the web UI |
+| `provider` | `Other` | Generic S3-compatible mode |
+| `access_key_id` | Your API key | Obtain from the Developers section in the web UI |
 | `secret_access_key` | Any non-empty string | Required by rclone but ignored by Auto Drive |
-| `endpoint` | `https://s3.auto-drive.autonomys.xyz` | Auto Drive S3 API base URL |
-| `no_check_bucket` | `true` | Skip bucket existence check - buckets are created implicitly on first write |
-| `list_version` | `2` | **Required.** Auto Drive implements the ListObjectsV2 API only; without this rclone defaults to the V1 listing API and listing fails |
+| `endpoint` | `https://s3.auto-drive.autonomys.xyz` | Auto Drive S3 API |
+| `no_check_bucket` | `true` | **Required.** Auto Drive has no bucket-level endpoints (CreateBucket, HeadBucket). Buckets are created on first write |
+| `list_version` | `2` | **Required.** Auto Drive implements ListObjectsV2 only. With `provider = Other`, rclone defaults to V1 and listing fails |
+| `list_url_encode` | `true` | Recommended. Keys with special characters list correctly. With `provider = Other`, rclone defaults to off |
+
+**Use the `s3.` endpoint.** The older `https://public.auto-drive.autonomys.xyz/s3` endpoint still works for existing clients, but it runs through a CDN that can decompress objects stored with `Content-Encoding: gzip`. The `s3.auto-drive.autonomys.xyz` endpoint returns stored bytes exactly.
 
 ### Local development
 
@@ -129,7 +142,7 @@ rclone lsd autodrive:
 
 # Upload a test file
 echo "Hello, Autonomys!" > /tmp/test-autodrive.txt
-rclone copy /tmp/test-autodrive.txt autodrive:test-bucket/ --immutable -v
+rclone copy /tmp/test-autodrive.txt autodrive:test-bucket/ -v
 
 # Download it back
 rclone cat autodrive:test-bucket/test-autodrive.txt
@@ -141,12 +154,12 @@ You should see `Hello, Autonomys!` printed to the terminal.
 
 Auto Drive treats the **first segment** of an object key as the bucket name. When you copy files to `autodrive:my-archive/`, rclone uses `my-archive` as the bucket and the remaining path as the key:
 
-| rclone command | Bucket | Key |
+| rclone path | Bucket | Key |
 |---|---|---|
 | `autodrive:my-archive/file.txt` | `my-archive` | `file.txt` |
 | `autodrive:my-archive/sub/file.txt` | `my-archive` | `sub/file.txt` |
 
-Buckets do not need to be created in advance - they appear automatically when the first object is written to them.
+Buckets do not need to be created in advance - they appear automatically when the first object is written to them. Buckets belong to your account: other users cannot see them, and they can use the same bucket names for their own files.
 
 Objects uploaded before bucket support was introduced (flat keys with no `/`) remain accessible in the `default` bucket.
 
@@ -154,19 +167,27 @@ Objects uploaded before bucket support was introduced (flat keys with no `/`) re
 
 | Flag | Purpose | When to use |
 |---|---|---|
-| `--immutable` | Prevent overwrite attempts on existing files | All upload commands |
+| `--immutable` | Refuse to replace existing files with different content | Archives that must never change |
 | `-v` / `--verbose` | Show progress and transfer details | Debugging |
 | `--log-file=rclone.log` | Write logs to a file | Production and CI/CD |
 | `--transfers=N` | Number of parallel transfers | Large jobs (default: 4) |
 
-### Note on checksums
+### Upload size limits
 
-Auto Drive returns MD5 hashes as ETags for all objects uploaded after the MD5 ETag feature was introduced. This means `rclone check` and `rclone md5sum` work correctly without any special flags.
+rclone sends files smaller than `--s3-upload-cutoff` (default 200 MiB) as a single request, and larger files as multipart uploads in `--s3-chunk-size` parts (default 5 MiB). Auto Drive accepts requests of up to 200 MiB. Keep `--s3-upload-cutoff` and `--s3-chunk-size` at 200M or below.
 
-Objects uploaded before this feature was introduced do not have a stored MD5. For these legacy objects, use `--ignore-checksum` or `--size-only` to skip checksum comparison.
+### Checksums
+
+Auto Drive returns MD5 hashes as ETags, and keeps the MD5 that rclone attaches to multipart uploads. `rclone check` and `rclone md5sum` work without any special flags.
+
+Objects uploaded before the MD5 ETag feature was introduced have no stored MD5. For these legacy objects, use `--ignore-checksum` or `--size-only`.
+
+### Modification times
+
+Auto Drive stores the modification time that rclone sends with each upload. `rclone lsl` shows the original file times, and `sync` and `copy` use them to detect changes.
 
 ## Next steps
 
 - Read the [Operations Reference](operations.md) to understand which rclone commands work with Auto Drive
-- See [Workflows](workflows.md) for common recipes (archival, migration, CI/CD)
+- See [Workflows](workflows.md) for common recipes (archival, migration, versioning, CI/CD)
 - Check [Troubleshooting](troubleshooting.md) if you encounter errors

@@ -4,7 +4,7 @@ Common recipes for using rclone with Auto Drive. Each workflow is self-contained
 
 All workflows assume you have completed the [Setup Guide](setup.md) and have a working `autodrive` remote configured.
 
-**Storage costs:** All operations that write data consume credits from your Auto Drive account. Credits are denominated in AI3. Check your balance at [ai3.storage](https://ai3.storage). See [Setup Guide - Purchase Storage Credits](setup.md#3-purchase-storage-credits-optional) for purchasing details.
+**Storage costs:** Every upload of new content uses credits from your Auto Drive account, because the content is stored permanently. Deletes, renames, moves, and server-side copies within Auto Drive do not upload content, so they use no credits. Deleting a file does not refund its credits. Check your balance at [ai3.storage](https://ai3.storage). See [Setup Guide - Purchase Storage Credits](setup.md#3-purchase-storage-credits-optional) for purchasing details.
 
 ---
 
@@ -19,14 +19,14 @@ rclone copy ./important-data/ autodrive:my-archive/important-data/ \
 ```
 
 **What happens:**
-- Every file in `./important-data/` is uploaded to Auto Drive under the bucket `my-archive`, key prefix `important-data/`
-- Files are stored permanently on the Autonomys DSN - they cannot be deleted or modified
-- Files larger than 5 MB automatically use multipart upload
-- `--immutable` ensures rclone will not attempt to overwrite a file that already exists at the same key
+- Every file in `./important-data/` is uploaded to the bucket `my-archive`, under the key prefix `important-data/`
+- The content is stored permanently on the Autonomys DSN
+- Files of 200 MiB and over use multipart upload
+- `--immutable` makes rclone refuse to replace a file that already exists at the same key with different content
 
-**Re-running the same command:** If you run the command again after adding new files, only the new files are uploaded (existing keys are skipped due to `--immutable`). This makes the command safe to run repeatedly and large transfers resumable.
+**Re-running the same command:** Only new files are uploaded; files that are already stored are skipped. This makes the command safe to repeat and large transfers resumable.
 
-**Cost note:** Each file upload consumes credits. The cost depends on the file size and the current storage price on the network. Check [ai3.storage](https://ai3.storage) for your current credit balance and [Autonomys Academy](https://academy.autonomys.xyz/autonomys-network/rewards-and-fees) for how pricing works.
+**Cost note:** Each file upload uses credits. The cost depends on the file size and the current storage price on the network. Check [ai3.storage](https://ai3.storage) for your current credit balance and [Autonomys Academy](https://academy.autonomys.xyz/autonomys-network/rewards-and-fees) for how pricing works.
 
 ---
 
@@ -54,7 +54,7 @@ Add the line:
 ### What the script does
 
 1. Copies all files from a source directory to Auto Drive
-2. Uses `--immutable` to skip files already stored
+2. Uses `--immutable` to skip files already stored and to refuse changes to them
 3. Logs the operation with timestamps
 4. Exits with a non-zero status on failure (useful for alerting)
 
@@ -62,22 +62,38 @@ See [examples/archive-script.sh](examples/archive-script.sh) for the full script
 
 ---
 
-## 3. Browse and Verify Stored Files
+## 3. Mirror a Directory (Sync)
 
-List and browse files stored in Auto Drive.
+Keep a copy in Auto Drive that matches a local directory, including removals.
 
 ```bash
-# List all buckets
+rclone sync ./project/ autodrive:my-archive/project-mirror/ -v
+```
+
+- New and changed files are uploaded. A changed file becomes a new version of its key.
+- Files you removed locally are deleted at the destination. They disappear from listings, but their content stays on the DSN and earlier versions stay readable.
+
+To keep replaced and removed files at a readable path, add a backup directory. rclone moves them there server-side, at no extra cost:
+
+```bash
+rclone sync ./project/ autodrive:my-archive/project-mirror/ \
+  --backup-dir autodrive:my-archive/project-history/$(date +%Y%m%d) \
+  -v
+```
+
+---
+
+## 4. Browse and Verify Stored Files
+
+```bash
+# List your buckets
 rclone lsd autodrive:
 
 # List top-level directories in a bucket
 rclone lsd autodrive:my-archive/
 
-# List all files in a bucket
-rclone ls autodrive:my-archive/
-
-# List files under a specific prefix
-rclone ls autodrive:my-archive/reports/
+# List all files in a bucket, with modification times
+rclone lsl autodrive:my-archive/
 
 # Show a recursive tree
 rclone tree autodrive:my-archive/
@@ -91,35 +107,82 @@ rclone cat autodrive:my-archive/logs/app.log
 
 ---
 
-## 4. Read-Only Mount
+## 5. Recover an Overwritten or Deleted File
 
-Mount your Auto Drive storage as a local filesystem for browsing and reading files.
+Every version of every key stays readable, because the DSN never erases data.
 
 ```bash
-# Create the mount point
+# Show all versions under a prefix, including deleted and overwritten files
+rclone ls --s3-versions autodrive:my-archive/reports/
+```
+
+Older versions appear with a timestamp suffix, for example `q1-v2026-09-01-120000-000.pdf`. Copy one back to restore it:
+
+```bash
+rclone copyto --s3-versions \
+  autodrive:my-archive/reports/q1-v2026-09-01-120000-000.pdf \
+  ./q1-restored.pdf
+```
+
+Or restore a whole directory as it was at a point in time:
+
+```bash
+rclone copy --s3-version-at "2026-09-01 00:00:00" \
+  autodrive:my-archive/reports/ ./reports-2026-09-01/
+```
+
+A deleted file whose content is not used by any other key is also in the Trash at [ai3.storage](https://ai3.storage). Restoring it there makes the key visible again.
+
+---
+
+## 6. Reorganize Files
+
+Rename and move files inside Auto Drive. These are server-side operations: nothing is re-uploaded and no credits are used.
+
+```bash
+# Rename a file
+rclone moveto autodrive:my-archive/draft.pdf autodrive:my-archive/final.pdf
+
+# Move a directory into another bucket
+rclone move autodrive:my-archive/2025/ autodrive:cold-archive/2025/ -v
+
+# Copy a directory to a second location
+rclone copy autodrive:my-archive/reports/ autodrive:shared/reports/
+```
+
+Files of about 4.6 GiB and over cannot be copied server-side. Add `--disable copy` to have rclone download and re-upload them.
+
+---
+
+## 7. Mount
+
+Mount your Auto Drive storage as a local filesystem.
+
+```bash
 mkdir -p /mnt/autodrive
 
-# Mount as read-only (recommended)
+# Read-only (recommended for browsing)
 rclone mount autodrive:my-archive/ /mnt/autodrive \
   --read-only \
   --vfs-cache-mode full \
   --vfs-read-chunk-size 5M
 ```
 
-Once mounted, use standard filesystem tools to navigate and read:
+Once mounted, use standard filesystem tools:
 
 ```bash
 ls /mnt/autodrive/
 cat /mnt/autodrive/reports/q1.pdf
 ```
 
-**Recommended flags for mount:**
+### Read-write mount
 
-| Flag | Purpose |
-|---|---|
-| `--read-only` | Prevents confusing behavior from failed write/delete operations |
-| `--vfs-cache-mode full` | Caches files locally for better read performance |
-| `--vfs-read-chunk-size 5M` | Reads files in 5 MB chunks for efficient streaming |
+```bash
+rclone mount autodrive:my-archive/ /mnt/autodrive \
+  --vfs-cache-mode writes
+```
+
+Creating, renaming, and deleting files all work. Each save of a file uploads a new version and uses credits, so applications that save often can use more storage than you expect. Use a read-only mount unless you need to write.
 
 **Unmounting:**
 
@@ -128,20 +191,9 @@ fusermount -u /mnt/autodrive   # Linux
 umount /mnt/autodrive          # macOS
 ```
 
-### Write-capable mount (advanced)
-
-A mount without `--read-only` allows creating new files via the filesystem. However:
-
-- **Creating new files** works normally - the file is uploaded to Auto Drive
-- **Deleting files** fails at the S3 layer but may appear to succeed in your file explorer. The file reappears on refresh.
-- **Renaming files** fails for the same reason (rename = copy + delete)
-- **Modifying files** creates a new object at the same key; the old data persists on the DSN
-
-Use write-capable mount only if you understand these behaviors and specifically need to create new files via the filesystem.
-
 ---
 
-## 5. Migrate from Another Cloud Provider
+## 8. Migrate from Another Cloud Provider
 
 Copy files from any rclone-supported cloud provider to permanent storage on Auto Drive.
 
@@ -180,17 +232,18 @@ rclone copy <source-remote>:<source-path>/ autodrive:<bucket>/<destination-prefi
 ```
 
 **Tips for large migrations:**
-- Use `-v` or `--progress` to monitor progress
+- Use `--progress` to monitor progress
 - Use `--transfers=4` to control the number of parallel transfers (adjust based on your bandwidth)
 - Use `--log-file=migration.log` to capture a full log
-- Consider running in a `screen` or `tmux` session for long-running transfers
-- The `--immutable` flag makes migrations resumable - if interrupted, re-run the same command and only remaining files are transferred
+- Run long transfers in a `screen` or `tmux` session
+- If interrupted, re-run the same command: only the remaining files are transferred
+- Run `rclone check <source> autodrive:<destination>` afterwards to verify every file
 
-**Cost note:** Migration transfers consume Auto Drive credits for every file written. For large datasets, estimate the total size first and ensure you have sufficient credits. The free tier is suitable for testing the migration workflow with a small subset before committing to a full migration.
+**Cost note:** A migration uses credits for every file written. For large datasets, check the total size first with `rclone size <source-remote>:<source-path>` and make sure you have enough credits. Test the workflow on a small subset with the free tier before you migrate everything.
 
 ---
 
-## 6. CI/CD Integration
+## 9. CI/CD Integration
 
 Store build artifacts, logs, or compliance records from CI/CD pipelines.
 
@@ -215,29 +268,25 @@ jobs:
       - name: Install rclone
         run: curl https://rclone.org/install.sh | sudo bash
 
-      - name: Configure rclone
-        run: |
-          mkdir -p ~/.config/rclone
-          cat > ~/.config/rclone/rclone.conf << 'EOF'
-          [autodrive]
-          type = s3
-          provider = Other
-          access_key_id = ${{ secrets.AUTO_DRIVE_API_KEY }}
-          secret_access_key = placeholder
-          endpoint = https://s3.auto-drive.autonomys.xyz
-          no_check_bucket = true
-          list_version = 2
-          EOF
-
       - name: Archive build artifacts
+        env:
+          RCLONE_CONFIG_AUTODRIVE_TYPE: s3
+          RCLONE_CONFIG_AUTODRIVE_PROVIDER: Other
+          RCLONE_CONFIG_AUTODRIVE_ACCESS_KEY_ID: ${{ secrets.AUTO_DRIVE_API_KEY }}
+          RCLONE_CONFIG_AUTODRIVE_SECRET_ACCESS_KEY: placeholder
+          RCLONE_CONFIG_AUTODRIVE_ENDPOINT: https://s3.auto-drive.autonomys.xyz
+          RCLONE_CONFIG_AUTODRIVE_NO_CHECK_BUCKET: 'true'
+          RCLONE_CONFIG_AUTODRIVE_LIST_VERSION: '2'
+          RCLONE_CONFIG_AUTODRIVE_LIST_URL_ENCODE: 'true'
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          COMMIT_SHA=${{ github.sha }}
           rclone copy ./dist/ \
-            autodrive:ci-builds/${COMMIT_SHA}-${TIMESTAMP}/ \
+            "autodrive:ci-builds/${GITHUB_SHA}-${TIMESTAMP}/" \
             --immutable \
             -v
 ```
+
+The `RCLONE_CONFIG_<REMOTE>_<OPTION>` variables define the remote without writing a config file, so the API key never touches the disk.
 
 ### GitLab CI
 
@@ -245,23 +294,21 @@ jobs:
 archive-artifacts:
   stage: deploy
   image: rclone/rclone:latest
+  variables:
+    RCLONE_CONFIG_AUTODRIVE_TYPE: s3
+    RCLONE_CONFIG_AUTODRIVE_PROVIDER: Other
+    RCLONE_CONFIG_AUTODRIVE_SECRET_ACCESS_KEY: placeholder
+    RCLONE_CONFIG_AUTODRIVE_ENDPOINT: https://s3.auto-drive.autonomys.xyz
+    RCLONE_CONFIG_AUTODRIVE_NO_CHECK_BUCKET: 'true'
+    RCLONE_CONFIG_AUTODRIVE_LIST_VERSION: '2'
+    RCLONE_CONFIG_AUTODRIVE_LIST_URL_ENCODE: 'true'
   script:
-    - mkdir -p ~/.config/rclone
-    - |
-      cat > ~/.config/rclone/rclone.conf << 'EOF'
-      [autodrive]
-      type = s3
-      provider = Other
-      access_key_id = ${AUTO_DRIVE_API_KEY}
-      secret_access_key = placeholder
-      endpoint = https://s3.auto-drive.autonomys.xyz
-      no_check_bucket = true
-      list_version = 2
-      EOF
+    # AUTO_DRIVE_API_KEY is a masked CI/CD variable
+    - export RCLONE_CONFIG_AUTODRIVE_ACCESS_KEY_ID="${AUTO_DRIVE_API_KEY}"
     - TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-    - rclone copy ./dist/ autodrive:ci-builds/${CI_COMMIT_SHA}-${TIMESTAMP}/ --immutable -v
-  only:
-    - main
+    - rclone copy ./dist/ "autodrive:ci-builds/${CI_COMMIT_SHA}-${TIMESTAMP}/" --immutable -v
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
 ```
 
 ### Compliance and Audit Logs
@@ -275,28 +322,43 @@ rclone copy /var/log/app/ autodrive:compliance/logs/$(date +%Y/%m/%d)/ \
   --include "*.log"
 
 # Archive database backups
-pg_dump mydb | rclone rcat autodrive:compliance/db-backups/$(date +%Y%m%d-%H%M%S).sql \
-  --immutable
+pg_dump mydb | rclone rcat autodrive:compliance/db-backups/$(date +%Y%m%d-%H%M%S).sql
 ```
 
-Permanent storage ensures these records cannot be tampered with or accidentally deleted, meeting retention requirements by design.
+The content of every version is stored permanently and cannot be erased, even if a key is later deleted or overwritten. This is the same guarantee as an S3 bucket with COMPLIANCE-mode Object Lock. Each version's CID identifies its exact content, so you can prove later that a record has not changed.
 
 ---
 
-## 7. Pipe and Stream Data
+## 10. Pipe and Stream Data
 
 Upload data from other commands directly to Auto Drive without intermediate files.
 
 ```bash
 # Archive a compressed tarball
-tar czf - ./project/ | rclone rcat autodrive:my-archive/archives/project-$(date +%Y%m%d).tar.gz \
-  --immutable
+tar czf - ./project/ | rclone rcat autodrive:my-archive/archives/project-$(date +%Y%m%d).tar.gz
 
 # Store command output
-mysqldump --all-databases | rclone rcat autodrive:backups/mysql-$(date +%Y%m%d).sql \
-  --immutable
+mysqldump --all-databases | rclone rcat autodrive:backups/mysql-$(date +%Y%m%d).sql
 
 # Store a Docker image
-docker save my-app:latest | rclone rcat autodrive:docker-images/my-app-$(date +%Y%m%d).tar \
-  --immutable
+docker save my-app:latest | rclone rcat autodrive:docker-images/my-app-$(date +%Y%m%d).tar
 ```
+
+---
+
+## 11. Share a File Publicly
+
+`rclone link` does not work with Auto Drive. Share the file's permanent gateway link instead.
+
+```bash
+# Get the file's CID
+rclone lsjson --metadata autodrive:my-archive/report.pdf
+```
+
+Find `cid` in the `Metadata` field of the output. The public link is:
+
+```
+https://gateway.autonomys.xyz/file/<CID>
+```
+
+The link points at that exact content and never changes. If you upload a new version of the file, the new version has a new CID and a new link.

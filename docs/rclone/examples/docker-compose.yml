@@ -10,6 +10,9 @@
 #   3. Start the service: docker compose up -d
 #   4. Browse files at http://localhost:8181
 #
+# The HTTP server has no authentication, so the port is bound to localhost only.
+# Anyone who can reach it can read the served bucket.
+#
 # To upload files from the container:
 #   docker compose exec rclone rclone copy /data autodrive:my-archive/ --immutable
 
@@ -19,35 +22,29 @@ services:
     container_name: rclone-autodrive
     restart: unless-stopped
     environment:
-      - AUTO_DRIVE_API_KEY=${AUTO_DRIVE_API_KEY:?Set AUTO_DRIVE_API_KEY environment variable}
-      - AUTO_DRIVE_BUCKET=${AUTO_DRIVE_BUCKET:-my-archive}
+      # The remote is defined with RCLONE_CONFIG_<REMOTE>_<OPTION> variables,
+      # so no config file is needed and the API key is never written to disk.
+      RCLONE_CONFIG_AUTODRIVE_TYPE: s3
+      RCLONE_CONFIG_AUTODRIVE_PROVIDER: Other
+      RCLONE_CONFIG_AUTODRIVE_ACCESS_KEY_ID: ${AUTO_DRIVE_API_KEY:?Set AUTO_DRIVE_API_KEY environment variable}
+      RCLONE_CONFIG_AUTODRIVE_SECRET_ACCESS_KEY: placeholder
+      RCLONE_CONFIG_AUTODRIVE_ENDPOINT: https://s3.auto-drive.autonomys.xyz
+      RCLONE_CONFIG_AUTODRIVE_NO_CHECK_BUCKET: 'true'
+      RCLONE_CONFIG_AUTODRIVE_LIST_VERSION: '2'
+      RCLONE_CONFIG_AUTODRIVE_LIST_URL_ENCODE: 'true'
     volumes:
       # Mount a local directory for uploading files
       - ./data:/data:ro
     ports:
-      # HTTP file server port
-      - "8181:8181"
-    entrypoint: ["/bin/sh", "-c"]
+      # HTTP file server port (localhost only)
+      - '127.0.0.1:8181:8181'
+    # Serve Auto Drive content over HTTP (read-only)
     command:
-      - |
-        # Write rclone config from environment
-        mkdir -p /root/.config/rclone
-        cat > /root/.config/rclone/rclone.conf << EOF
-        [autodrive]
-        type = s3
-        provider = Other
-        access_key_id = $${AUTO_DRIVE_API_KEY}
-        secret_access_key = placeholder
-        endpoint = https://s3.auto-drive.autonomys.xyz
-        no_check_bucket = true
-        list_version = 2
-        EOF
-
-        echo "rclone configured. Starting HTTP server on :8181..."
-        echo "Serving bucket: $${AUTO_DRIVE_BUCKET}"
-
-        # Serve Auto Drive content over HTTP (read-only)
-        rclone serve http "autodrive:$${AUTO_DRIVE_BUCKET}/" \
-          --addr :8181 \
-          --read-only \
-          --vfs-cache-mode full
+      - serve
+      - http
+      - autodrive:${AUTO_DRIVE_BUCKET:-my-archive}/
+      - --addr
+      - :8181
+      - --read-only
+      - --vfs-cache-mode
+      - full

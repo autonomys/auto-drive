@@ -2,26 +2,32 @@
 
 This document covers every relevant rclone command and its compatibility with Auto Drive's S3 layer.
 
-Auto Drive is permanent, immutable storage. Operations that require mutability (delete, rename, overwrite) are unsupported by design. This is the mechanism that guarantees your data can never be lost.
+**How Auto Drive storage works.** File content lives on the Autonomys DSN, where it is permanent. The S3 keys that point at that content can be changed like on any versioned S3 bucket:
+
+- Deletes hide a key behind a delete marker.
+- Overwrites add a new version.
+- Renames are a server-side copy followed by a delete.
+
+The only thing that is refused is destroying a version, because the DSN cannot erase data.
 
 ## Recommended Flags
 
 | Flag | Purpose | When to use |
 |---|---|---|
-| `--immutable` | Prevent overwrite attempts on existing files | All upload commands |
+| `--immutable` | Refuse to replace existing files with different content | Archives that must never change |
 | `-v` / `--verbose` | Show progress and transfer details | Debugging |
 | `--log-file=FILE` | Write logs to a file | Production and CI/CD |
 | `--transfers=N` | Number of parallel transfers (default: 4) | Large jobs |
 
 ### Note on checksums
 
-Auto Drive returns MD5 hashes as ETags for all objects uploaded after the MD5 ETag feature was introduced. rclone's checksum verification (`rclone check`, `rclone md5sum`) works correctly for these objects without any special flags.
+Auto Drive returns MD5 hashes as ETags. `rclone check` and `rclone md5sum` work without any special flags.
 
-Objects uploaded before this feature was introduced have no stored MD5. For those legacy objects, add `--ignore-checksum` or `--size-only` to skip checksum comparison.
+Objects uploaded before MD5 ETags were introduced have no stored MD5 and report their CID as the ETag. For those legacy objects, add `--ignore-checksum` or `--size-only`.
 
 ---
 
-## Supported Operations
+## Uploading
 
 ### copy (upload)
 
@@ -29,47 +35,23 @@ Copies files from source to destination without deleting source files. The prima
 
 ```bash
 # Copy a single file
-rclone copy ./report.pdf autodrive:my-archive/reports/ --immutable
+rclone copy ./report.pdf autodrive:my-archive/reports/
 
 # Copy a directory
-rclone copy ./backup/ autodrive:my-archive/backup-2026-05-03/ --immutable
+rclone copy ./backup/ autodrive:my-archive/backup-2026-05-03/
 
-# Copy with verbose output
+# Copy an archive that must never change
 rclone copy ./data/ autodrive:my-archive/data/ --immutable -v
 ```
 
-**Status:** Fully supported. Each file is stored permanently on the Autonomys DSN. Files larger than 5 MB automatically use multipart upload.
-
-### copy (download)
-
-Download previously stored files.
-
-```bash
-# Download a single file
-rclone copy autodrive:my-archive/reports/report.pdf ./downloaded/
-
-# Download a directory tree
-rclone copy autodrive:my-archive/backup-2026-05-03/ ./restored/
-```
-
-**Status:** Fully supported. Byte-range downloads are also supported.
-
-### cat
-
-Read file contents to stdout.
-
-```bash
-rclone cat autodrive:my-archive/logs/app.log
-```
-
-**Status:** Fully supported.
+**Status:** Fully supported. Content is stored permanently on the Autonomys DSN. Files under 200 MiB go up as a single request; larger files use multipart upload.
 
 ### copyto
 
 Copy a single file to a specific destination path.
 
 ```bash
-rclone copyto ./local-file.txt autodrive:my-archive/archive/renamed-file.txt --immutable
+rclone copyto ./local-file.txt autodrive:my-archive/archive/renamed-file.txt
 ```
 
 **Status:** Fully supported.
@@ -79,30 +61,71 @@ rclone copyto ./local-file.txt autodrive:my-archive/archive/renamed-file.txt --i
 Upload data from stdin.
 
 ```bash
-echo "log entry" | rclone rcat autodrive:my-archive/logs/entry.txt --immutable
-tar czf - ./project/ | rclone rcat autodrive:my-archive/archives/project.tar.gz --immutable
+echo "log entry" | rclone rcat autodrive:my-archive/logs/entry.txt
+tar czf - ./project/ | rclone rcat autodrive:my-archive/archives/project.tar.gz
 ```
 
 **Status:** Supported. Useful for piping data directly to permanent storage.
 
-### ls / lsl
+### Overwriting a file
 
-List files with sizes (`ls`) or sizes and modification times (`lsl`).
+Uploading to a key that already exists makes the new content the current version. The previous version is kept and stays readable (see [Versions](#versions)). Each version is stored separately and uses credits.
+
+Add `--immutable` to make rclone refuse instead.
+
+---
+
+## Downloading and reading
+
+### copy (download)
+
+```bash
+# Download a single file
+rclone copy autodrive:my-archive/reports/report.pdf ./downloaded/
+
+# Download a directory tree
+rclone copy autodrive:my-archive/backup-2026-05-03/ ./restored/
+```
+
+**Status:** Fully supported, including byte-range downloads.
+
+### cat
+
+Read file contents to stdout.
+
+```bash
+rclone cat autodrive:my-archive/logs/app.log
+
+# Read part of a file
+rclone cat autodrive:my-archive/logs/app.log --offset 1024 --count 512
+```
+
+**Status:** Fully supported.
+
+---
+
+## Listing
+
+### ls / lsl / lsjson
+
+List files with sizes (`ls`), with sizes and modification times (`lsl`), or as JSON (`lsjson`).
 
 ```bash
 rclone ls autodrive:my-archive/
-rclone ls autodrive:my-archive/reports/
-rclone lsl autodrive:my-archive/
+rclone lsl autodrive:my-archive/reports/
+
+# Include metadata (Content-Type, user metadata, and the content CID)
+rclone lsjson --metadata autodrive:my-archive/reports/report.pdf
 ```
 
-**Status:** Fully supported. Uses ListObjectsV2 with prefix and delimiter folding.
+**Status:** Fully supported. `lsl` shows the modification time rclone recorded at upload.
 
 ### lsd
 
 List directories (common prefixes) or list all buckets.
 
 ```bash
-# List buckets
+# List your buckets
 rclone lsd autodrive:
 
 # List top-level directories in a bucket
@@ -112,11 +135,9 @@ rclone lsd autodrive:my-archive/
 rclone lsd autodrive:my-archive/reports/
 ```
 
-**Status:** Fully supported. Top-level `rclone lsd autodrive:` uses ListBuckets; per-bucket listing uses ListObjectsV2 with delimiter.
+**Status:** Fully supported. `rclone lsd autodrive:` uses ListBuckets and returns only your own buckets. Per-bucket listing uses ListObjectsV2 with a delimiter.
 
 ### tree
-
-Display a recursive tree of the remote.
 
 ```bash
 rclone tree autodrive:my-archive/
@@ -124,90 +145,114 @@ rclone tree autodrive:my-archive/
 
 **Status:** Fully supported.
 
-### md5sum / hashsum
-
-Compute and compare MD5 checksums.
-
-```bash
-rclone md5sum autodrive:my-archive/
-rclone check ./local/ autodrive:my-archive/ 
-```
-
-**Status:** Fully supported for objects uploaded after MD5 ETag support was introduced. For legacy objects (uploaded before this feature), use `--ignore-checksum` or `--size-only`.
-
 ### size
 
 Show total size and count of objects at a remote path.
 
 ```bash
 rclone size autodrive:my-archive/
-rclone size autodrive:my-archive/reports/
 ```
 
-**Status:** Fully supported.
-
-### check
-
-Compare source and destination file lists and verify integrity.
-
-```bash
-rclone check ./local/ autodrive:my-archive/
-```
-
-**Status:** Fully supported for objects with MD5 ETags. For legacy objects, use `--ignore-checksum` or `--size-only`.
+**Status:** Fully supported. Counts current versions only.
 
 ---
 
-## Supported with Caveats
+## Verifying
+
+### md5sum / check
+
+```bash
+rclone md5sum autodrive:my-archive/
+rclone check ./local/ autodrive:my-archive/
+```
+
+**Status:** Fully supported for objects with MD5 ETags, including rclone multipart uploads. For legacy objects (uploaded before MD5 ETags were introduced), use `--ignore-checksum` or `--size-only`.
+
+---
+
+## Changing and removing files
+
+### delete / deletefile
+
+```bash
+# Delete everything under a prefix
+rclone delete autodrive:my-archive/old-reports/
+
+# Delete one file
+rclone deletefile autodrive:my-archive/reports/draft.pdf
+```
+
+**Status:** Supported. The key is hidden behind a delete marker and no longer appears in listings. The content stays on the DSN:
+
+- If no other key in your account points at the same content, the file moves to the Trash in the web app at [ai3.storage](https://ai3.storage). Restoring it there makes the key visible again.
+- Earlier versions of the key stay readable with `--s3-versions`.
+
+### move / moveto
+
+```bash
+# Rename a file
+rclone moveto autodrive:my-archive/draft.pdf autodrive:my-archive/final.pdf
+
+# Move a directory to another bucket
+rclone move autodrive:my-archive/2025/ autodrive:cold-archive/2025/
+
+# Upload local files, then remove the local copies
+rclone move ./outbox/ autodrive:my-archive/inbox/
+```
+
+**Status:** Supported. Moves within Auto Drive are a server-side copy followed by a delete. No data is re-uploaded and no extra credits are used.
+
+### Server-side copy
+
+```bash
+rclone copy autodrive:my-archive/reports/ autodrive:shared-reports/
+```
+
+**Status:** Supported. The new key points at the existing content, so nothing is re-uploaded and no extra credits are used.
+
+Exception: files of about 4.6 GiB or more (rclone's `--s3-copy-cutoff`) cannot be copied server-side, because Auto Drive does not implement UploadPartCopy (`501 NotImplemented`). To copy or move such a file, add `--disable copy` so rclone downloads and re-uploads it instead.
 
 ### sync
 
-Sync makes the destination match the source. With Auto Drive, only the upload side works - deletions are silently skipped or will error.
-
 ```bash
-rclone sync ./local/ autodrive:my-archive/mirror/ --immutable
+rclone sync ./local/ autodrive:my-archive/mirror/
 ```
 
-**Status:** Partially supported. New files are uploaded. Files that exist at the destination cannot be deleted or overwritten.
+**Status:** Supported. New and changed files are uploaded. Files that are no longer in the source are deleted at the destination, which hides them. Their content stays on the DSN.
 
-**Recommendation:** Use `rclone copy` instead of `rclone sync`. The sync mental model assumes the ability to delete, which does not apply to permanent storage.
-
-### move
-
-Move files to a destination (copy then delete source).
+Add `--backup-dir` to move replaced and removed files to another path instead (server-side, at no extra cost):
 
 ```bash
-rclone move ./local-files/ autodrive:my-archive/archive/ --immutable
+rclone sync ./local/ autodrive:my-archive/mirror/ \
+  --backup-dir autodrive:my-archive/mirror-history/$(date +%Y%m%d)
 ```
-
-**Status:** Partially supported. The upload succeeds, but the local source delete depends on rclone's behavior after a successful transfer. When moving FROM Auto Drive, the download succeeds but the remote delete will fail.
 
 ### mount
 
 Mount the remote as a filesystem via FUSE.
 
 ```bash
-# Create the mount point
 mkdir -p /mnt/autodrive
 
-# Read-only mount (recommended)
+# Read-only mount (recommended for browsing)
 rclone mount autodrive:my-archive/ /mnt/autodrive \
   --read-only \
   --vfs-cache-mode full \
   --vfs-read-chunk-size 5M
-```
 
-**Recommended flags for mount:**
+# Read-write mount
+rclone mount autodrive:my-archive/ /mnt/autodrive \
+  --vfs-cache-mode writes
+```
 
 | Flag | Purpose |
 |---|---|
-| `--read-only` | Prevents confusing behavior from failed write/delete operations |
+| `--read-only` | Browse without the risk of accidental writes |
 | `--vfs-cache-mode full` | Caches files locally for better read performance |
+| `--vfs-cache-mode writes` | Needed for applications that edit files in place |
 | `--vfs-read-chunk-size 5M` | Reads files in 5 MB chunks for efficient streaming |
 
-**Read-only mount:** Fully supported. Directory browsing works via ListObjectsV2.
-
-**Read-write mount:** Creating new files works normally - the file is uploaded to Auto Drive. Delete and rename operations fail at the S3 layer. File explorers may show confusing behavior where deleted files reappear on refresh. Use `--read-only` unless you specifically need to create new files via the filesystem.
+**Status:** Supported, read-only and read-write. In a read-write mount, every save of a file uploads a new version and uses credits. Editors that save often can use more storage than you expect.
 
 **Unmounting:**
 
@@ -218,63 +263,108 @@ umount /mnt/autodrive          # macOS
 
 ---
 
-## Unsupported by Design
+## Versions
 
-These operations require mutability and will fail. This is by design - permanence is the guarantee.
-
-### delete
+Versioning is always on and cannot be turned off. Each version's ID is the content's CID.
 
 ```bash
-rclone delete autodrive:my-archive/file.txt
+# List all versions, including hidden and overwritten ones
+rclone ls --s3-versions autodrive:my-archive/reports/
+
+# Read the bucket as it was at a point in time
+rclone copy --s3-version-at "2026-09-01 00:00:00" \
+  autodrive:my-archive/reports/ ./reports-as-of-sept/
+
+# Check that versioning is enabled
+rclone backend versioning autodrive:my-archive
 ```
 
-**What you see:**
+With `--s3-versions`, older versions appear with a timestamp suffix in the file name (for example `report-v2026-09-01-120000-000.pdf`). You can copy them like any other file.
+
+Versions are permanent. Commands that destroy versions are refused with `403 AccessDenied`:
+
+- `rclone deletefile --s3-versions` on an old version
+- `rclone backend cleanup-hidden`
+- `rclone purge` (see below)
+
+---
+
+## Links
+
+### link
+
+```bash
+rclone link autodrive:my-archive/report.pdf
+```
+
+**Status:** Not supported. rclone builds a presigned S3 URL, but Auto Drive authenticates with API keys and does not accept presigned URLs. The link will not open.
+
+To share a file publicly, use its permanent content-addressed link on the Autonomys gateway:
 
 ```
-ERROR : file.txt: Failed to delete: 403 Access Denied: Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.
+https://gateway.autonomys.xyz/file/<CID>
 ```
 
-**Why:** Auto Drive storage is permanent. Files stored on the Autonomys DSN cannot be deleted.
+The CID is in the file's metadata as `cid`:
+
+```bash
+rclone lsjson --metadata autodrive:my-archive/report.pdf
+```
+
+A gateway link is public: anyone who has it can read the file.
+
+---
+
+## Not supported
 
 ### purge
 
 ```bash
-rclone purge autodrive:my-archive/
+rclone purge autodrive:my-archive/old/
 ```
 
-**What you see:** Same 403 error as delete.
+**What you see:** `403 AccessDenied` errors.
 
-**Why:** Cannot remove a directory and all its contents from permanent storage.
+**Why:** Auto Drive reports versioning as enabled. rclone's `purge` then tries to delete every version of every file, and versions cannot be destroyed. The same thing happens on any S3 bucket with COMPLIANCE-mode Object Lock.
 
-### rmdir / rmdirs
+**Instead:** use `rclone delete`, which hides all current files under the path:
 
 ```bash
+rclone delete autodrive:my-archive/old/
+```
+
+Directories are virtual, so the path disappears once it has no visible files.
+
+### mkdir / rmdir / rmdirs
+
+```bash
+rclone mkdir autodrive:new-bucket
 rclone rmdir autodrive:my-archive/empty-folder/
 ```
 
-**What you see:** Error - folder deletion is not supported.
+**What you see:** The command succeeds but has no effect.
 
-**Why:** Cannot remove a directory and all its contents from permanent storage.
+**Why:** Buckets and directories are virtual. A bucket appears when you write the first file into it, and a directory disappears when it has no visible files. `rmdir` never fails, even on a path that still contains files.
 
 ### cleanup
 
 ```bash
-rclone cleanup autodrive:
+rclone cleanup autodrive:my-archive
 ```
 
 **What you see:** `501 NotImplemented`.
 
-**Why:** Cleanup lists and aborts incomplete multipart uploads. Auto Drive implements neither `ListMultipartUploads` nor `AbortMultipartUpload`, so both return 501.
+**Why:** `cleanup` lists incomplete multipart uploads, and Auto Drive does not implement `ListMultipartUploads`. rclone aborts its own failed multipart uploads automatically (`AbortMultipartUpload` is supported), so there is normally nothing to clean up.
 
-### mkdir
+### about
 
 ```bash
-rclone mkdir autodrive:new-bucket
+rclone about autodrive:
 ```
 
-**What you see:** Error - CreateBucket is not implemented.
+**What you see:** An error that the remote does not support `about`.
 
-**Why:** Buckets are created implicitly when the first object is written to them. Explicit bucket creation is not needed and not implemented.
+**Why:** There is no quota API. Check your storage and credit balance at [ai3.storage](https://ai3.storage).
 
 ---
 
@@ -282,25 +372,25 @@ rclone mkdir autodrive:new-bucket
 
 | Command | Status | Notes |
 |---|---|---|
-| `copy` (upload) | ✅ Supported | Use `--immutable` |
+| `copy` / `copyto` (upload) | ✅ Supported | Multipart from 200 MiB |
 | `copy` (download) | ✅ Supported | Byte-range downloads supported |
-| `cat` | ✅ Supported | Stream file to stdout |
-| `copyto` | ✅ Supported | Copy single file to specific path |
+| `cat` | ✅ Supported | Supports `--offset` / `--count` |
 | `rcat` | ✅ Supported | Upload from stdin |
-| `ls` / `lsl` | ✅ Supported | Uses ListObjectsV2 |
-| `lsd` | ✅ Supported | Bucket listing and directory listing |
-| `tree` | ✅ Supported | Recursive tree via ListObjectsV2 |
-| `md5sum` | ✅ Supported | MD5 ETags on new objects; use `--ignore-checksum` for legacy |
-| `check` | ✅ Supported | Same caveat as `md5sum` for legacy objects |
-| `size` | ✅ Supported | Aggregates across prefix |
-| `mount` (read-only) | ✅ Supported | Use `--read-only --vfs-cache-mode full` |
-| `sync` | ⚠️ Partial | Upload-only; deletions skipped/error; use `copy` instead |
-| `move` | ⚠️ Partial | Upload works; source delete may fail |
-| `mount` (read-write) | ⚠️ Partial | New files work; delete/rename fail |
-| server-side copy | ❌ Not implemented | `CopyObject` returns 501; rclone falls back to download + re-upload |
-| `about` | ❌ Not implemented | No quota/usage API |
-| `delete` | ❌ Unsupported by design | Returns 403 - storage is permanent |
-| `purge` | ❌ Unsupported by design | Returns 403 - storage is permanent |
-| `rmdir` / `rmdirs` | ❌ Unsupported by design | No deletion |
-| `mkdir` | ❌ Not implemented | Buckets are created implicitly on first write |
-| `cleanup` | ❌ Not implemented | Returns 501; multipart-upload APIs not implemented |
+| `ls` / `lsl` / `lsjson` | ✅ Supported | Modification times and metadata included |
+| `lsd` | ✅ Supported | Your own buckets, and directories |
+| `tree` | ✅ Supported | |
+| `md5sum` / `check` | ✅ Supported | Use `--ignore-checksum` for legacy objects |
+| `size` | ✅ Supported | Current versions only |
+| `delete` / `deletefile` | ✅ Supported | Hides the file; content stays on the DSN |
+| `move` / `moveto` | ✅ Supported | Server-side copy + delete |
+| server-side copy | ✅ Supported | Not for files of ~4.6 GiB and over |
+| `sync` | ✅ Supported | Removed files are hidden |
+| `mount` | ✅ Supported | Each save in a read-write mount is a new version |
+| `--s3-versions` / `--s3-version-at` | ✅ Supported | Read old versions |
+| `backend versioning` | ✅ Supported | Always `Enabled` |
+| `mkdir` / `rmdir` / `rmdirs` | ⚠️ No effect | Buckets and directories are virtual |
+| `link` | ❌ Not supported | Use `https://gateway.autonomys.xyz/file/<CID>` |
+| `purge` | ❌ Fails (403) | Use `rclone delete` |
+| delete a specific version, `backend cleanup-hidden` | ❌ Refused by design (403) | Versions are permanent |
+| `cleanup` | ❌ Not implemented (501) | `ListMultipartUploads` not implemented |
+| `about` | ❌ Not implemented | No quota API |

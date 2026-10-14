@@ -6,15 +6,138 @@ Common errors and solutions when using rclone with Auto Drive.
 
 | Flag | Purpose | When to use |
 |---|---|---|
-| `--immutable` | Prevent overwrite attempts on existing files | Every upload command |
 | `-v` / `--verbose` | Show detailed transfer information | Debugging any issue |
 | `--log-file=FILE` | Write detailed logs to a file | Diagnosing intermittent failures |
 | `--ignore-checksum` | Skip MD5 checksum verification | Legacy objects without MD5 ETags |
 | `--size-only` | Use file size instead of checksum for change detection | Alternative to `--ignore-checksum` for legacy objects |
+| `--retries=N` | Retry failed operations | Unreliable networks, throttling |
 
 ---
 
 ## Error Reference
+
+### Listing Fails (404 NoSuchKey)
+
+**What you see:**
+
+```
+ListObjects, ... StatusCode: 404, ... NoSuchKey: The specified key does not exist
+```
+
+(`rclone ls`, `lsd`, `check`, and `sync` all fail.)
+
+**Why it happens:** Auto Drive implements the **ListObjectsV2** API only. With `provider = Other`, rclone uses the older **ListObjectsV1** API by default. Auto Drive does not recognise it and treats the request as a download of a missing key.
+
+**Solution:** Set `list_version = 2` in your rclone config:
+
+```bash
+rclone config update autodrive list_version 2
+```
+
+---
+
+### Authentication Errors (403 InvalidAccessKeyId)
+
+**What you see:**
+
+```
+InvalidAccessKeyId: ... StatusCode: 403
+```
+
+**Possible causes:**
+
+1. **Invalid API key:** The API key in your rclone config is incorrect or has been deleted
+2. **Expired API key:** If you set an expiry date when creating the key, it may have expired
+
+**Solutions:**
+
+- Check your API keys at [ai3.storage](https://ai3.storage) in the Developers section. The table shows each key's expiry.
+- Create a new API key if the current one has expired
+- Make sure the `access_key_id` in your rclone config matches your API key exactly
+
+rclone does not retry this error, because a rejected key will not start working on its own. A `503 ServiceUnavailable` during sign-in is different: it is temporary, and rclone retries it.
+
+---
+
+### Out of Credits (402 PaymentRequired)
+
+**What you see:**
+
+```
+PaymentRequired: ... StatusCode: 402
+```
+
+**Why it happens:** Your account does not have enough storage credits for the upload.
+
+**Solution:** Check your balance at [ai3.storage](https://ai3.storage) and purchase more credits. See [Setup Guide - Purchase Storage Credits](setup.md#3-purchase-storage-credits-optional). Downloads, listings, deletes, renames, and server-side copies do not need credits and keep working.
+
+---
+
+### Purge Fails (403 AccessDenied)
+
+**What you see:**
+
+```
+ERROR : file.txt: Couldn't delete: AccessDenied: Versions are permanent and cannot be destroyed. ...
+```
+
+**Why it happens:** Auto Drive reports versioning as enabled, so `rclone purge` tries to delete every version of every file. Versions on the DSN cannot be destroyed. Commands that delete a specific version (`deletefile --s3-versions`, `backend cleanup-hidden`) fail the same way.
+
+**Solution:** Use `rclone delete` to hide the current files:
+
+```bash
+rclone delete autodrive:my-archive/old/
+```
+
+---
+
+### Large File Upload Fails (413 EntityTooLarge)
+
+**What you see:**
+
+```
+EntityTooLarge: ... StatusCode: 413
+```
+
+**Why it happens:** Auto Drive accepts requests of up to 200 MiB. rclone sends files below `--s3-upload-cutoff` as one request, and larger files as multipart parts of `--s3-chunk-size`. With rclone's defaults (200 MiB cutoff, 5 MiB parts) every request fits. This error means one of these options is set higher than 200M.
+
+**Solution:** Remove the setting, or set it to 200M or lower:
+
+```bash
+rclone copy ./large-file.bin autodrive:my-archive/ \
+  --s3-upload-cutoff 200M \
+  --s3-chunk-size 64M
+```
+
+---
+
+### Throttling (503 SlowDown / ServiceUnavailable)
+
+**What you see:** In verbose output, retries after `503` responses. If all retries fail:
+
+```
+ERROR : file.txt: Failed to copy: ... StatusCode: 503
+```
+
+**Why it happens:** The S3 endpoint limits how many requests and connections each client can make. Requests above the limit get a `503`, which rclone retries with backoff.
+
+**Solutions:**
+
+- Lower parallelism: `--transfers=4 --checkers=8`
+- Limit the request rate: `--tpslimit 50`
+- Add retries: `--retries=5 --low-level-retries=20`
+
+---
+
+### Recently Uploaded File Is Temporarily Unavailable (503 ServiceUnavailable)
+
+**What you see:** A download of a file you uploaded recently fails with `503 ServiceUnavailable`, and the response includes a `Retry-After` header.
+
+**Why it happens:** After an upload, Auto Drive moves the file's data through its processing and archiving pipeline. For a short time a single object may not be ready to serve. Nothing is lost, and the error is temporary.
+
+**Solution:** rclone retries `503` automatically. If it still fails, wait a few minutes and run the command again.
+
+---
 
 ### Checksum Mismatch on Legacy Objects
 
@@ -24,89 +147,63 @@ Common errors and solutions when using rclone with Auto Drive.
 ERROR : file.txt: corrupted on transfer: md5 hash differ "abc123" vs "bafkr..."
 ```
 
-**Why it happens:** This object was uploaded before Auto Drive introduced MD5 ETag support. Legacy objects use the CID (Content Identifier) as the ETag rather than an MD5 hash. rclone interprets the CID as a failed checksum.
+**Why it happens:** This object was uploaded before Auto Drive introduced MD5 ETags. Legacy objects use their CID (Content Identifier) as the ETag, and rclone reads the CID as a wrong checksum.
 
-**Solution:** Add `--ignore-checksum` to your command for these legacy objects:
-
-```bash
-rclone copy ./files/ autodrive:my-archive/ --immutable --ignore-checksum
-```
-
-Or use `--size-only` to skip checksum comparison entirely:
+**Solution:** Add `--ignore-checksum` to the command:
 
 ```bash
-rclone copy ./files/ autodrive:my-archive/ --immutable --size-only
+rclone copy autodrive:my-archive/ ./restore/ --ignore-checksum
 ```
 
-For objects uploaded after MD5 ETag support was introduced, checksums work correctly without any special flags.
+Or use `--size-only` to compare files by size:
+
+```bash
+rclone check ./files/ autodrive:my-archive/ --size-only
+```
 
 ---
 
-### Delete Operation Returns 403
+### Immutable File Conflict
 
 **What you see:**
 
 ```
-ERROR : file.txt: Failed to delete: 403 Access Denied: Auto Drive storage is immutable. Objects cannot be deleted from the Autonomys DSN.
+ERROR : file.txt: Source and destination exist but do not match: immutable file modified
 ```
 
-**Why it happens:** Auto Drive storage is permanent by design. The S3 layer rejects all DELETE requests.
+**Why it happens:** `--immutable` is set and a file with different content already exists at the same key.
 
-**Commands affected:** `rclone delete`, `rclone purge`, `rclone rmdir`, `rclone move` (delete phase), `rclone sync` (when trying to remove files that no longer exist locally).
+**What to do:**
 
-**Solution:** Do not attempt to delete files from Auto Drive. Use `rclone copy` instead of `rclone sync` or `rclone move` to avoid triggering delete operations.
+- If you want to keep both, upload the new file under a different key (for example with a version number or date):
+
+```bash
+rclone copyto ./report.pdf autodrive:my-archive/reports/report-v2.pdf
+```
+
+- If you want to replace the file, run the command without `--immutable`. The new content becomes the current version, and the old version stays readable with `--s3-versions`.
 
 ---
 
-### Authentication Errors
+### Files Are Missing From a Listing
 
-**What you see:**
-
-```
-ERROR : error listing: AccessDenied: Access Denied
-```
-
-or
-
-```
-ERROR : file.txt: Failed to copy: 401 Unauthorized
-```
+**What you see:** `rclone ls` or `lsd` does not show files you expect.
 
 **Possible causes:**
 
-1. **Invalid API key:** The API key in your rclone config is incorrect or has been revoked
-2. **Expired API key:** If you set an expiry date when creating the key, it may have expired
-3. **No credits:** Your Auto Drive account has no remaining storage credits
-
-**Solutions:**
-
-- Verify your API key at [ai3.storage](https://ai3.storage) in the Developers section
-- Create a new API key if the current one has expired
-- Check your credit balance at [ai3.storage](https://ai3.storage) and purchase more if needed
-- Ensure the `access_key_id` in your rclone config matches your API key exactly
+1. **A different API key.** Buckets are private to the account. Keys from another account see a different set of buckets, even with the same bucket name.
+2. **The files were deleted.** Deleted files are hidden from listings. Check with `rclone ls --s3-versions autodrive:my-archive/`. If a deleted file is in the Trash at [ai3.storage](https://ai3.storage), you can restore it there.
+3. **Legacy keys.** Objects uploaded with a key that has no `/` are in the `default` bucket: `rclone ls autodrive:default/`.
 
 ---
 
-### Large File Upload Failures
+### Public Link Does Not Open
 
-**What you see:**
+**What you see:** The URL from `rclone link` returns an error in the browser.
 
-```
-ERROR : large-file.bin: Failed to copy: 413 Request Entity Too Large
-```
+**Why it happens:** Auto Drive does not accept presigned S3 URLs.
 
-**Why it happens:** Single-part uploads are limited by the S3 layer's body parser. Files larger than this threshold must use multipart upload.
-
-**Solution:** rclone uses multipart upload by default for files over 5 MB (the `--s3-chunk-size` default). If you see this error:
-
-1. Ensure you have not set `--s3-chunk-size` to an excessively large value
-2. For very large files, the default 5 MB chunk size works well:
-
-```bash
-rclone copy ./large-file.bin autodrive:my-archive/ \
-  --immutable \
-  --s3-chunk-size 5M
-```
+**Solution:** Share the file's gateway link, `https://gateway.autonomys.xyz/file/<CID>`. Get the CID with `rclone lsjson --metadata autodrive:path/to/file` (field `cid`).
 
 ---
 
@@ -127,75 +224,22 @@ ERROR : file.txt: Failed to copy: connection timed out
 **Solutions:**
 
 - Verify connectivity: `curl -I https://s3.auto-drive.autonomys.xyz`
-- Increase timeout with `--timeout=60s` (default is 5 minutes)
+- Increase timeout with `--timeout=10m` (default is 5 minutes)
 - Add retries: `--retries=5 --retries-sleep=10s`
 - Check the Autonomys Network status for any outages
 
 ---
 
-### Immutable File Conflict
+### Corrupted Download of a Gzip-Encoded File
 
-**What you see:**
+**What you see:** A file uploaded with `Content-Encoding: gzip` downloads decompressed, with a size or checksum mismatch.
 
-```
-ERROR : file.txt: File exists and --immutable is set
-```
+**Why it happens:** Your remote uses the older endpoint `https://public.auto-drive.autonomys.xyz/s3`, which runs through a CDN that decompresses these files.
 
-**Why it happens:** You are trying to upload a file with a key that already exists, and `--immutable` is set (as recommended).
-
-**What to do:**
-
-- If the file is the same content, this is expected behavior - the file is already safely stored
-- If you want to store a new version, use a different key (e.g., include a timestamp or version number):
+**Solution:** Switch to the dedicated S3 endpoint:
 
 ```bash
-rclone copy ./report.pdf autodrive:my-archive/reports/report-v2.pdf --immutable
-```
-
-**Note:** If you remove `--immutable` and upload to the same key, a new object is created and the key mapping is updated. However, the old data persists forever on the Autonomys DSN.
-
----
-
-### Bucket Not Found / No Such Bucket
-
-**What you see:**
-
-```
-ERROR : : error listing: NoSuchBucket: The specified bucket does not exist
-```
-
-**Why it happens:** You are referencing a bucket that has never had any objects written to it. Buckets in Auto Drive are created implicitly when the first object is written - they do not exist until then.
-
-**Solution:** Write an object to the bucket first, or ensure your bucket name in the command matches one you have previously uploaded to.
-
-Also verify that `no_check_bucket = true` is set in your rclone config. Without it, rclone may attempt a `HeadBucket` check before any operation.
-
----
-
-### Listing Fails (404 NoSuchKey, or 500 on older deployments)
-
-**What you see:**
-
-```
-ListObjects, ... StatusCode: 404, ... NoSuchKey: The specified key does not exist
-```
-
-(commands fail on `rclone ls`, `rclone lsd`, `rclone check`, `rclone sync`. Older Auto Drive deployments returned `StatusCode: 500, InternalServerError` for the same cause.)
-
-**Why it happens:** Auto Drive implements the **ListObjectsV2** API only. By default rclone's generic S3 backend (`provider = Other`) uses the older **ListObjectsV1** API; Auto Drive does not recognise it and falls through to a per-object lookup, which then reports the key as missing.
-
-**Solution:** Set `list_version = 2` in your rclone config:
-
-```ini
-[autodrive]
-...
-list_version = 2
-```
-
-or on an existing remote:
-
-```bash
-rclone config update autodrive list_version 2
+rclone config update autodrive endpoint https://s3.auto-drive.autonomys.xyz
 ```
 
 ---
@@ -224,11 +268,12 @@ rclone lsd autodrive:
 
 ```bash
 rclone copy ./test-file.txt autodrive:test-bucket/test/ \
-  --immutable \
   -vv \
   --log-file=rclone-debug.log \
   --dump headers
 ```
+
+`--dump headers` writes your API key to the log (in the `Authorization` header). Remove it before you share the log.
 
 ### Check rclone version
 
@@ -236,7 +281,7 @@ rclone copy ./test-file.txt autodrive:test-bucket/test/ \
 rclone version
 ```
 
-Ensure you are running rclone v1.60 or later for full S3 compatibility.
+Use a recent rclone release. `--s3-versions` needs v1.59 or later, and `--s3-version-at` needs v1.61 or later.
 
 ---
 
