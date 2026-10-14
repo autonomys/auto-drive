@@ -8,6 +8,7 @@ import {
   InteractionType,
   InteractionSource,
   AccountInfo,
+  AccountInfoWithUser,
   AccountWithTotalSize,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
@@ -472,7 +473,36 @@ const getTopAccounts = async (
   )
 }
 
+/**
+ * Admin lookup by any identifier an admin is likely to hold: a (partial) user
+ * publicId, an account ID or an organization ID. An account ID is translated to
+ * its organization so the auth service can return that organization's members.
+ */
+const adminSearchAccounts = async (
+  executor: User,
+  query: string,
+): Promise<Result<AccountInfoWithUser[], ForbiddenError>> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  const account = await accountsRepository.getById(query)
+  const users = await AuthManager.adminSearchUsers(
+    query,
+    account?.organizationId ?? query,
+  )
+
+  const results = await Promise.all(
+    users
+      .filter((u): u is UserWithOrganization => !!u.organizationId)
+      .map(async (user) => ({ ...(await getAccountInfo(user)), user })),
+  )
+
+  return ok(results)
+}
+
 export const AccountsUseCases = {
+  adminSearchAccounts,
   updateAccount,
   getOrCreateAccount,
   initAccount,

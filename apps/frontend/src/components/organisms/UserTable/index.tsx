@@ -41,6 +41,7 @@ export const UserAccountsTable = ({
               <TableHead>
                 <TableHeadRow>
                   <TableHeadCell>Public ID</TableHeadCell>
+                  <TableHeadCell>Account ID</TableHeadCell>
                   <TableHeadCell>Provider</TableHeadCell>
                   <TableHeadCell>Role</TableHeadCell>
                   <TableHeadCell>Model</TableHeadCell>
@@ -61,7 +62,7 @@ export const UserAccountsTable = ({
                 {users === undefined && (
                   <TableBodyRow>
                     <TableBodyCell
-                      colSpan={9}
+                      colSpan={10}
                       className='text-foreground-hover whitespace-nowrap px-6 py-4 text-center text-sm'
                     >
                       <span className='flex items-center justify-center'>

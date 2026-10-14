@@ -1,6 +1,11 @@
 'use client';
 
-import { OwnerRole, ObjectInformation } from '@auto-drive/models';
+import {
+  OwnerRole,
+  ObjectInformation,
+  UserRole,
+  deriveUserPublicId,
+} from '@auto-drive/models';
 import { getTypeFromMetadata } from 'utils/file';
 import { useUserStore } from 'globalStates/user';
 import { useMemo } from 'react';
@@ -32,6 +37,16 @@ export const ObjectDetails = ({
       o.role === OwnerRole.ADMIN,
   );
 
+  // Ownership rows are only returned to signed-in users, and Hasura nulls the
+  // oauth columns of removed rows, so anonymous viewers get an empty list.
+  const ownerPublicIds = useMemo(
+    () =>
+      (owners ?? [])
+        .filter((o) => o.role === OwnerRole.ADMIN && o.oauthUserId)
+        .map((o) => deriveUserPublicId(o.oauthProvider, o.oauthUserId)),
+    [owners],
+  );
+
   const isCached = useFileInCache(object?.metadata.dataCid ?? '');
 
   const isLoading = object === null;
@@ -59,9 +74,18 @@ export const ObjectDetails = ({
           </div>
           <ObjectDetailsTags object={object} isCached={isCached} />
         </div>
-        <ObjectDetailsActions isOwner={isOwner} object={object} isCached={isCached} />
+        <ObjectDetailsActions
+          isOwner={isOwner}
+          object={object}
+          isCached={isCached}
+        />
       </div>
-      <ObjectUploadDetails object={object} isOwner={isOwner} />
+      <ObjectUploadDetails
+        object={object}
+        ownerPublicIds={ownerPublicIds}
+        myPublicId={user?.publicId ?? null}
+        isAdminViewer={user?.role === UserRole.Admin}
+      />
       <ObjectUploadOptions object={object} />
       {object.metadata.type === 'file' && (
         <div className='rounded-lg border border-border bg-card p-6'>

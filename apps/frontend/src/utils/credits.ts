@@ -276,3 +276,49 @@ export const suggestedRefund = (
   }
   return shannons === BigInt(0) ? null : formatAi3(shannons);
 };
+
+export interface PurchaseSummaryFields extends PaymentFields {
+  uploadBytesOriginal: string;
+  uploadBytesRemaining: string;
+  expired: boolean;
+  refundedAt: string | null;
+}
+
+/**
+ * Totals for an account's purchase history: bytes bought, bytes still usable
+ * (not expired, not refunded) and the amount paid in each asset. Amounts are
+ * kept per asset because AI3 and USDC purchases cannot be summed.
+ */
+export const summarizePurchases = (batches: PurchaseSummaryFields[]) => {
+  let bytesPurchased = BigInt(0);
+  let bytesRemaining = BigInt(0);
+  let ai3Paid = BigInt(0);
+  let usdcPaid = BigInt(0);
+  let refundedCount = 0;
+
+  for (const batch of batches) {
+    bytesPurchased += BigInt(batch.uploadBytesOriginal);
+    if (batch.refundedAt !== null) refundedCount += 1;
+    else if (!batch.expired)
+      bytesRemaining += BigInt(batch.uploadBytesRemaining);
+
+    if (batch.paymentMethod === PaymentMethod.USDC_ETH) {
+      usdcPaid += toBigInt(batch.tokenAmount) ?? BigInt(0);
+    } else {
+      ai3Paid += toBigInt(batch.paymentAmount) ?? BigInt(0);
+    }
+  }
+
+  const paid = [
+    ...(ai3Paid > BigInt(0) ? [formatAi3(ai3Paid)] : []),
+    ...(usdcPaid > BigInt(0) ? [`${formatUsdcAmount(usdcPaid)} USDC`] : []),
+  ];
+
+  return {
+    batchCount: batches.length,
+    bytesPurchased,
+    bytesRemaining,
+    paid,
+    refundedCount,
+  };
+};

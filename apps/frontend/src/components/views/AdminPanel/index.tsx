@@ -21,7 +21,7 @@ export const AdminPanel = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
-  const [searchPublicId, setSearchPublicId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchError, setSearchError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
@@ -67,8 +67,9 @@ export const AdminPanel = () => {
   const handleSearchUser = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!searchPublicId.trim()) {
-      setSearchError('Please enter a public ID');
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchError('Enter a public ID, account ID or organization ID');
       return;
     }
 
@@ -76,34 +77,13 @@ export const AdminPanel = () => {
     setSearchError('');
 
     try {
-      const user = await AuthService.getUserByPublicId(searchPublicId);
-
-      if (user) {
-        const publicIds = [user.publicId];
-        const accountsByPublicId = await network?.api.getUserList(publicIds);
-
-        if (accountsByPublicId) {
-          const accounts = Object.values(accountsByPublicId);
-          const accountsWithUsers: AccountInfoWithUser[] = accounts.map(
-            (account) => ({
-              ...account,
-              pendingUploadCredits: account.pendingUploadCredits || 0,
-              pendingDownloadCredits: account.pendingDownloadCredits || 0,
-              user: user,
-            }),
-          );
-
-          setAccountsWithUsers(accountsWithUsers);
-          setTotalCount(1);
-        } else {
-          // If no account data, still show the user
-          setAccountsWithUsers([]);
-          setTotalCount(0);
-        }
-      }
+      const results = await network.api.adminSearchAccounts(query);
+      setAccountsWithUsers(results);
+      setTotalCount(results.length);
+      if (results.length === 0) setSearchError('No matching users');
     } catch (error) {
       console.error('Error searching for user:', error);
-      setSearchError('User not found');
+      setSearchError('Search failed');
       setAccountsWithUsers([]);
     } finally {
       setIsSearching(false);
@@ -111,7 +91,7 @@ export const AdminPanel = () => {
   };
 
   const handleResetSearch = () => {
-    setSearchPublicId('');
+    setSearchQuery('');
     setSearchError('');
     fetchUserList();
   };
@@ -178,30 +158,30 @@ export const AdminPanel = () => {
         <div className='mb-6'>
           <form onSubmit={handleSearchUser} className='flex items-end gap-2'>
             <div className='flex flex-col'>
-              <label htmlFor='publicId' className='mb-1 text-sm'>
-                Search by Public ID
+              <label htmlFor='adminUserSearch' className='mb-1 text-sm'>
+                Search users
               </label>
               <input
-                id='publicId'
+                id='adminUserSearch'
                 type='text'
-                value={searchPublicId}
-                onChange={(e) => setSearchPublicId(e.target.value)}
-                placeholder='Enter exact public ID'
-                className='bg-background-hover text-foreground-hover rounded border px-3 py-2'
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder='Public ID (partial), account ID or organization ID'
+                className='text-foreground-hover w-96 rounded border bg-background-hover px-3 py-2'
               />
             </div>
             <Button
               variant='primary'
               disabled={isSearching}
-              className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground disabled:opacity-50'
+              className='text-foreground-hover rounded bg-background-hover px-4 py-2 hover:bg-background hover:text-foreground disabled:opacity-50'
             >
               {isSearching ? 'Searching...' : 'Search'}
             </Button>
-            {searchPublicId && (
+            {searchQuery && (
               <Button
                 variant='danger'
                 onClick={handleResetSearch}
-                className='bg-background-hover text-foreground-hover rounded px-4 py-2 hover:bg-background hover:text-foreground'
+                className='text-foreground-hover rounded bg-background-hover px-4 py-2 hover:bg-background hover:text-foreground'
               >
                 Reset
               </Button>
