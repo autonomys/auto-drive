@@ -521,17 +521,22 @@ const onObjectArchived = async (cid: string, signal?: AbortSignal) => {
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
   logger.debug('Attempting to publish object (cid=%s)', cid)
-  const objects = await publishedObjectsRepository.getPublishedObjectById(cid)
-  if (objects) {
-    logger.debug('Object already published (cid=%s)', cid)
-    return objects
-  }
   if (!user.publicId) {
     logger.warn(
       'Failed to publish object - user has no public ID (userId=%s)',
       user.oauthUserId,
     )
     throw new Error('User public ID is required')
+  }
+  // Look up by owner too: downloads through a public link are charged to its owner
+  const objects =
+    await publishedObjectsRepository.getPublishedObjectByCidAndPublicId(
+      cid,
+      user.publicId,
+    )
+  if (objects) {
+    logger.debug('Object already published (cid=%s)', cid)
+    return objects
   }
 
   const publishedObject =

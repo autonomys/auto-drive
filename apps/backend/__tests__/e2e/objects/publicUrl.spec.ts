@@ -41,6 +41,32 @@ describe('Public URL', () => {
     })
   })
 
+  it('should return the same public link when publishing again', async () => {
+    const publishedAgain = await ObjectUseCases.publishObject(user, fileCid)
+
+    expect(publishedAgain).toMatchObject({
+      id: publishedObject.id,
+      publicId: user.publicId,
+      cid: fileCid,
+    })
+  })
+
+  it('should give another user publishing the same cid their own public link', async () => {
+    const otherUser = createMockUser()
+    await uploadFile(otherUser, 'test.txt', content, 'text/plain')
+
+    const otherPublishedObject = await ObjectUseCases.publishObject(
+      otherUser,
+      fileCid,
+    )
+
+    expect(otherPublishedObject).toMatchObject({
+      publicId: otherUser.publicId,
+      cid: fileCid,
+    })
+    expect(otherPublishedObject.id).not.toBe(publishedObject.id)
+  })
+
   it('should be downloadable by public id and credits should be deducted', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(user)
     jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())

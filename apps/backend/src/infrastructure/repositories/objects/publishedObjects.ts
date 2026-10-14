@@ -59,6 +59,18 @@ const getPublishedObjectByCid = async (
   return result.rows.map(mapToPublishedObject).at(0) || null
 }
 
+const getPublishedObjectByCidAndPublicId = async (
+  cid: string,
+  publicId: string,
+): Promise<PublishedObject | null> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPublishedObject>(
+    'SELECT * FROM public.published_objects WHERE cid = $1 AND public_id = $2',
+    [cid, publicId],
+  )
+  return result.rows.map(mapToPublishedObject).at(0) || null
+}
+
 const updatePublishedObject = async (
   id: string,
   publicId: string,
@@ -83,4 +95,5 @@ export const publishedObjectsRepository = {
   updatePublishedObject,
   deletePublishedObjectByCid,
   getPublishedObjectByCid,
+  getPublishedObjectByCidAndPublicId,
 }
