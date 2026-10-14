@@ -16,15 +16,17 @@ export const useAutomaticLogin = () => {
 
   useEffect(() => {
     if (!provider) return;
-    // Already signed in: skip OAuth and go where sign-in would have landed,
-    // so a link carrying `provider` works with or without a session.
+    // Already signed in: skip OAuth. Only move on when the link names a
+    // destination; otherwise stay on the current page (e.g. the extension's
+    // `/developers?newKey=…&provider=…` link opened with a session).
     getSession().then((session) => {
-      const target = callbackUrl ?? ROUTES.drive(network.id);
       if (session) {
-        router.replace(target);
-      } else {
-        signIn(provider as AuthProvider, { callbackUrl: target });
+        if (callbackUrl) router.replace(callbackUrl);
+        return;
       }
+      signIn(provider as AuthProvider, {
+        callbackUrl: callbackUrl ?? ROUTES.drive(network.id),
+      });
     });
   }, [provider, callbackUrl, signIn, router, network.id]);
 };
