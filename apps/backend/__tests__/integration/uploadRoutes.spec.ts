@@ -38,6 +38,13 @@ describe('Upload routes answer client errors with their own status', () => {
     'X-Auth-Provider': user.oauthProvider,
   })
 
+  const postJson = (path: string, body: unknown) =>
+    fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
   const postChunk = (
     uploadId: string,
     index: number,
@@ -106,6 +113,63 @@ describe('Upload routes answer client errors with their own status', () => {
 
   afterEach(() => {
     jest.restoreAllMocks()
+  })
+
+  describe('name too long (400)', () => {
+    const tooLongName = '€'.repeat(86)
+    const tooLongError = { error: 'Filename is too long: 258 > 255 bytes' }
+
+    it('POST /uploads/file', async () => {
+      const accepted = await postJson('/uploads/file', {
+        filename: '€'.repeat(85),
+        mimeType: null,
+        uploadOptions: null,
+      })
+      expect(accepted.status).toBe(200)
+
+      const rejected = await postJson('/uploads/file', {
+        filename: tooLongName,
+        mimeType: null,
+        uploadOptions: null,
+      })
+      expect(rejected.status).toBe(400)
+      expect(await rejected.json()).toEqual(tooLongError)
+    })
+
+    it('POST /uploads/folder', async () => {
+      const response = await postJson('/uploads/folder', {
+        fileTree: {
+          name: 'folder',
+          type: 'folder',
+          id: 'folder',
+          children: [{ name: tooLongName, type: 'file', id: 'file' }],
+        },
+        uploadOptions: null,
+      })
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual(tooLongError)
+    })
+
+    it('POST /uploads/folder/:uploadId/file', async () => {
+      const folderUpload = await UploadsUseCases.createFolderUpload(
+        user,
+        'folder',
+        { name: 'folder', type: 'folder', id: 'folder', children: [] },
+        null,
+      )
+
+      const response = await postJson(
+        `/uploads/folder/${folderUpload.id}/file`,
+        {
+          name: tooLongName,
+          mimeType: null,
+          relativeId: 'file',
+          uploadOptions: null,
+        },
+      )
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual(tooLongError)
+    })
   })
 
   describe('POST /uploads/file/:uploadId/chunk', () => {

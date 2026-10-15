@@ -1105,6 +1105,77 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  // The object's name in the DAG is the key's last path segment.
+  describe('Object name length', () => {
+    const rejection = async (request: () => Promise<unknown>) => {
+      try {
+        await request()
+      } catch (e) {
+        const err = e as {
+          $metadata?: { httpStatusCode?: number }
+          name?: string
+          message?: string
+        }
+        return {
+          status: err.$metadata?.httpStatusCode,
+          code: err.name,
+          message: err.message,
+        }
+      }
+      throw new Error('expected the request to be rejected')
+    }
+
+    const tooLongError = {
+      status: 400,
+      code: 'InvalidRequest',
+      message: 'Filename is too long: 258 > 255 bytes',
+    }
+
+    it('accepts a 255-byte last segment', async () => {
+      const Key = `name-length/${'€'.repeat(85)}`
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentLength).toBe(4)
+    })
+
+    it('accepts a key over 255 bytes whose last segment fits', async () => {
+      const Key = `name-length/${'d'.repeat(300)}/short.txt`
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
+      )
+
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentLength).toBe(4)
+    })
+
+    it('rejects PutObject with a 258-byte last segment', async () => {
+      const Key = `name-length/${'€'.repeat(86)}`
+      expect(
+        await rejection(() =>
+          s3Client.send(
+            new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
+          ),
+        ),
+      ).toEqual(tooLongError)
+
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key })),
+      ).rejects.toThrow()
+    })
+
+    it('rejects CreateMultipartUpload with a 258-byte last segment', async () => {
+      const Key = `name-length/${'文'.repeat(86)}`
+      expect(
+        await rejection(() =>
+          s3Client.send(new CreateMultipartUploadCommand({ Bucket, Key })),
+        ),
+      ).toEqual(tooLongError)
+    })
+  })
+
   describe('Uploads the caller cannot pay for', () => {
     it('answers PutObject with 402 PaymentRequired and stores nothing', async () => {
       const Key = 'upload-credits/unpaid.txt'
