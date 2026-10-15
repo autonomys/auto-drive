@@ -39,6 +39,7 @@ import { CID } from 'multiformats'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from '../users/accounts.js'
 import { UploadPartsChangedError } from './errors.js'
+import { PaymentRequiredError } from '../../errors/index.js'
 
 const logger = createLogger('useCases:uploads:uploadProcessing')
 
@@ -262,7 +263,7 @@ const handleFileUploadFinalization = async (
     await UploadArtifactsUseCase.generateFileArtifacts(uploadId)
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (pendingCredits < metadata.totalSize) {
-    throw new Error('Not enough upload credits')
+    throw new PaymentRequiredError('Not enough upload credits')
   }
 
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid)

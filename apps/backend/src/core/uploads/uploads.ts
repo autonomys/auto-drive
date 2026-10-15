@@ -9,6 +9,7 @@ import {
   Upload,
   UploadStatus,
   UploadType,
+  FolderTree,
   FolderTreeFolder,
   UserWithOrganization,
 } from '@auto-drive/models'
@@ -17,7 +18,11 @@ import { UploadFileProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../infrastructure/repositories/uploads/fileProcessingInfo.js'
 import { NodesUseCases } from '../objects/nodes.js'
 import { ObjectUseCases } from '../objects/object.js'
-import { cidToString, FileUploadOptions } from '@autonomys/auto-dag-data'
+import {
+  cidToString,
+  FileUploadOptions,
+  MAX_NAME_SIZE,
+} from '@autonomys/auto-dag-data'
 import { CID } from 'multiformats'
 import { EventRouter } from '../../infrastructure/eventRouter/index.js'
 import { createTask, Task } from '../../infrastructure/eventRouter/tasks.js'
@@ -67,6 +72,22 @@ const checkPermissions = async (
   }
 }
 
+const assertNameFits = (name: string): void => {
+  const bytes = Buffer.byteLength(name, 'utf8')
+  if (bytes > MAX_NAME_SIZE) {
+    throw new BadRequestError(
+      `Filename is too long: ${bytes} > ${MAX_NAME_SIZE} bytes`,
+    )
+  }
+}
+
+const assertFolderTreeNamesFit = (tree: FolderTree): void => {
+  assertNameFits(tree.name)
+  if (tree.type === 'folder') {
+    tree.children.forEach(assertFolderTreeNamesFit)
+  }
+}
+
 const initFileProcessing = async (upload: UploadEntry): Promise<void> => {
   await fileProcessingInfoRepository.addFileProcessingInfo({
     upload_id: upload.id,
@@ -90,6 +111,7 @@ const createFileUpload = async (
     user.oauthUserId,
     name,
   )
+  assertNameFits(name)
   rootId = rootId ?? null
   relativeId = relativeId ?? null
 
@@ -119,6 +141,8 @@ export const createFolderUpload = async (
   folderTree: FolderTreeFolder,
   uploadOptions: FileUploadOptions | null,
 ): Promise<FolderUpload> => {
+  assertFolderTreeNamesFit(folderTree)
+
   const uploadId = v4()
   const result = await uploadsRepository.createUploadEntry(
     uploadId,
