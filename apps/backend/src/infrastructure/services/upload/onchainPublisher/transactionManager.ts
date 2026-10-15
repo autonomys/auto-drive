@@ -12,6 +12,7 @@ import { createAccountManager } from './accounts.js'
 import {
   hasReachedConfirmationDepth,
   isAccountFault,
+  isInsufficientFundsError,
   isStillCanonical,
 } from './confirmation.js'
 import pLimit from 'p-limit'
@@ -555,16 +556,24 @@ export const submitTransaction = (
   })
 }
 
-export const createTransactionManager = () => {
-  let api: ApiPromise
-  let accountManager: Awaited<ReturnType<typeof createAccountManager>>
+export const createTransactionManager = (
+  customApi?: ApiPromise,
+  customAccountManager?: Awaited<ReturnType<typeof createAccountManager>>,
+) => {
+  let api: ApiPromise | undefined = customApi
+  let accountManager:
+    | Awaited<ReturnType<typeof createAccountManager>>
+    | undefined = customAccountManager
 
   const uniqueExecution = pLimit(1)
   const ensureInitialized = () =>
     uniqueExecution(async (): Promise<void> => {
       await waitReady()
-      api = api ?? (await createConnection())
-      accountManager = accountManager ?? (await createAccountManager(api))
+      api = api ?? customApi ?? (await createConnection())
+      accountManager =
+        accountManager ??
+        customAccountManager ??
+        (await createAccountManager(api))
     })
 
   const pLimitted = pLimit(config.params.maxConcurrentUploads)
@@ -574,59 +583,102 @@ export const createTransactionManager = () => {
     signal?: AbortSignal,
   ): Promise<TransactionResult[]> => {
     await ensureInitialized()
+    const activeApi = api!
+    const activeAccountManager = accountManager!
 
-    const trxPromises = transactions.map(async (transaction) => {
-      const { account, nonce } = await accountManager.registerTransaction()
-      return { transaction, account, nonce }
-    })
+    const maxAttempts = 3
 
-    const transactionWithAccount = await Promise.all(trxPromises)
+    const executeTransaction = async (
+      transaction: Transaction,
+    ): Promise<TransactionResult> => {
+      let registration = await activeAccountManager.registerTransaction()
 
-    const promises = transactionWithAccount.map(
-      ({ transaction, account, nonce }) => {
-        const trx = api.tx[transaction.module][transaction.method](
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const { account, nonce } = registration
+        const trx = activeApi.tx[transaction.module][transaction.method](
           ...transaction.params,
         )
 
-        return pLimitted(() =>
-          submitTransaction(api, account, trx, nonce, signal)
-            .catch((error) => {
-              logger.error(error as Error, 'Transaction submission failed')
-              return {
-                success: false,
-                error: error.message,
-                status: 'Failed',
-              }
-            })
-            .then(async (result) => {
-              if (!result.success) {
-                // Only a genuinely Invalid transaction implicates the signing
-                // account itself (unusable key / insufficient balance), so it is
-                // the sole case that evicts the account from the pool. Every
-                // other failure — reorg, timeout, usurped, RPC/subscription/API
-                // blips, submission errors — is a chain or infrastructure event:
-                // resync the nonce and keep the account, so a transient incident
-                // can't drain the signer pool during the congestion/reorgs this
-                // change exists to survive.
-                try {
-                  if (isAccountFault(result.status)) {
-                    await accountManager.removeAccount(account.address)
-                  } else {
-                    await accountManager.resyncAccount(account.address)
-                  }
-                } catch (recoveryError) {
-                  logger.error(
-                    recoveryError as Error,
-                    'Failed to recover account %s after transaction failure',
-                    account.address,
-                  )
-                }
-              }
+        let result: TransactionResult
+        try {
+          result = await submitTransaction(
+            activeApi,
+            account,
+            trx,
+            nonce,
+            signal,
+          )
+        } catch (error) {
+          logger.error(error as Error, 'Transaction submission failed')
+          if (isInsufficientFundsError(error)) {
+            result = {
+              success: false,
+              error: (error as Error).message,
+              status: 'InsufficientFunds',
+            }
+          } else {
+            result = {
+              success: false,
+              error: (error as Error).message,
+              status: 'Failed',
+            }
+          }
+        }
 
-              return result
-            }),
-        )
-      },
+        if (result.status === 'InsufficientFunds') {
+          // 1. Mark account unfunded (triggers cooldown and nonce resync)
+          await activeAccountManager.markUnfunded(account.address)
+
+          // 2. Reroute within the same batch to another eligible wallet
+          if (attempt < maxAttempts) {
+            try {
+              const next = await activeAccountManager.registerTransaction()
+              logger.warn(
+                'Rerouting transaction from unfunded account %s to %s (attempt %d/%d)',
+                account.address,
+                next.account.address,
+                attempt + 1,
+                maxAttempts,
+              )
+              registration = next
+              continue
+            } catch (rerouteError) {
+              logger.error(
+                rerouteError as Error,
+                'Failed to register eligible account for rerouting transaction',
+              )
+            }
+          }
+        }
+
+        if (!result.success && result.status !== 'InsufficientFunds') {
+          try {
+            if (isAccountFault(result.status)) {
+              await activeAccountManager.removeAccount(account.address)
+            } else {
+              await activeAccountManager.resyncAccount(account.address)
+            }
+          } catch (recoveryError) {
+            logger.error(
+              recoveryError as Error,
+              'Failed to recover account %s after transaction failure',
+              account.address,
+            )
+          }
+        }
+
+        return result
+      }
+
+      return {
+        success: false,
+        status: 'InsufficientFunds',
+        error: 'Max reroute attempts reached for unfunded accounts',
+      }
+    }
+
+    const promises = transactions.map((transaction) =>
+      pLimitted(() => executeTransaction(transaction)),
     )
 
     return Promise.all(promises)

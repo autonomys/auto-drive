@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals'
 import type { ApiPromise } from '@polkadot/api'
 import type { SubmittableExtrinsic } from '@polkadot/api/types'
 import type { KeyringPair } from '@polkadot/keyring/types'
-import { submitTransaction } from '../../../src/infrastructure/services/upload/onchainPublisher/transactionManager.js'
+import {
+  submitTransaction,
+  createTransactionManager,
+} from '../../../src/infrastructure/services/upload/onchainPublisher/transactionManager.js'
+import type { createAccountManager as createAccountManagerFn } from '../../../src/infrastructure/services/upload/onchainPublisher/accounts.js'
 import { config } from '../../../src/config.js'
 
 /**
@@ -35,7 +39,9 @@ const makeApi = (opts: {
   return {
     once: jest.fn(),
     off: jest.fn(),
-    registry: { findMetaError: () => ({ section: 'x', name: 'y', docs: ['z'] }) },
+    registry: {
+      findMetaError: () => ({ section: 'x', name: 'y', docs: ['z'] }),
+    },
     rpc: {
       chain: {
         // Resolves the inclusion block number for the hash reported by isInBlock.
@@ -80,7 +86,10 @@ const makeTransaction = () => {
   return { tx, triggerInBlock }
 }
 
-const run = (api: ReturnType<typeof makeApi>, tx: ReturnType<typeof makeTransaction>['tx']) =>
+const run = (
+  api: ReturnType<typeof makeApi>,
+  tx: ReturnType<typeof makeTransaction>['tx'],
+) =>
   submitTransaction(
     api as unknown as ApiPromise,
     KEYPAIR,
@@ -108,7 +117,9 @@ describe('submitTransaction — confirmation watch', () => {
     await triggerInBlock()
 
     // No head is ever pushed; only the poll can move this forward.
-    await jest.advanceTimersByTimeAsync(config.chain.confirmationPollIntervalMs * 2)
+    await jest.advanceTimersByTimeAsync(
+      config.chain.confirmationPollIntervalMs * 2,
+    )
 
     await expect(result).resolves.toMatchObject({
       success: true,
@@ -120,7 +131,9 @@ describe('submitTransaction — confirmation watch', () => {
 
     // The poll interval is torn down on resolution: further time does not poll.
     const polls = api.rpc.chain.getHeader.mock.calls.length
-    await jest.advanceTimersByTimeAsync(config.chain.confirmationPollIntervalMs * 3)
+    await jest.advanceTimersByTimeAsync(
+      config.chain.confirmationPollIntervalMs * 3,
+    )
     expect(api.rpc.chain.getHeader.mock.calls.length).toBe(polls)
   })
 
@@ -139,9 +152,14 @@ describe('submitTransaction — confirmation watch', () => {
 
     const result = run(api, tx)
     await triggerInBlock()
-    await jest.advanceTimersByTimeAsync(config.chain.confirmationPollIntervalMs * 2)
+    await jest.advanceTimersByTimeAsync(
+      config.chain.confirmationPollIntervalMs * 2,
+    )
 
-    await expect(result).resolves.toMatchObject({ success: true, status: 'InBlock' })
+    await expect(result).resolves.toMatchObject({
+      success: true,
+      status: 'InBlock',
+    })
   })
 
   it('still confirms via the new-heads subscription (primary path unchanged)', async () => {
@@ -181,11 +199,183 @@ describe('submitTransaction — confirmation watch', () => {
 
     const result = run(api, tx)
     await triggerInBlock()
-    await jest.advanceTimersByTimeAsync(config.chain.confirmationPollIntervalMs * 2)
+    await jest.advanceTimersByTimeAsync(
+      config.chain.confirmationPollIntervalMs * 2,
+    )
 
     await expect(result).resolves.toMatchObject({
       success: false,
       status: 'Reorged',
     })
+  })
+})
+
+describe('createTransactionManager — submission reroute and error recovery', () => {
+  const alice = {
+    address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+  } as KeyringPair
+  const bob = {
+    address: '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
+  } as KeyringPair
+
+  it('reroutes to another wallet within the same submit when encountering 1010 / InsufficientFunds', async () => {
+    const mockExtrinsic = {
+      hash: { toString: (): string => '0xtx' },
+      signAndSend: jest.fn(
+        (pair: KeyringPair, _opts: unknown, cb: (res: unknown) => unknown) => {
+          if (pair.address === alice.address) {
+            // Alice fails with 1010 Inability to pay fees
+            return Promise.reject(
+              new Error(
+                '1010: Invalid Transaction: Inability to pay some fees',
+              ),
+            )
+          }
+          // Bob succeeds
+          setTimeout(() => {
+            cb({
+              status: {
+                isInBlock: true,
+                isInvalid: false,
+                isUsurped: false,
+                type: 'InBlock',
+                asInBlock: { toString: (): string => INCLUSION_HASH },
+              },
+            })
+          }, 10)
+          return Promise.resolve(() => {})
+        },
+      ),
+    }
+
+    const mockApi = {
+      tx: {
+        system: {
+          remark: jest.fn(() => mockExtrinsic),
+        },
+      },
+      registry: {
+        findMetaError: () => ({ section: 'x', name: 'y', docs: ['z'] }),
+      },
+      rpc: {
+        chain: {
+          getBlock: jest.fn(async () => ({
+            block: { header: { number: { toNumber: () => INCLUSION_NUMBER } } },
+          })),
+          subscribeNewHeads: jest.fn(
+            async (cb: (header: unknown) => unknown) => {
+              setTimeout(() => {
+                cb({ number: { toNumber: () => HEAD_AT_DEPTH } })
+              }, 20)
+              return () => {}
+            },
+          ),
+          getHeader: jest.fn(async () => ({
+            number: { toNumber: () => HEAD_AT_DEPTH },
+          })),
+          getBlockHash: jest.fn(async () => ({
+            toString: (): string => INCLUSION_HASH,
+          })),
+        },
+      },
+      once: jest.fn(),
+      off: jest.fn(),
+    } as unknown as ApiPromise
+
+    let currentRegistration = 0
+    const registrations = [
+      { account: alice, nonce: 1 },
+      { account: bob, nonce: 2 },
+    ]
+
+    const mockAccountManager = {
+      registerTransaction: jest.fn(async () => {
+        const reg = registrations[currentRegistration]
+        currentRegistration = Math.min(
+          currentRegistration + 1,
+          registrations.length - 1,
+        )
+        return reg
+      }),
+      markUnfunded: jest.fn(async () => {}),
+      removeAccount: jest.fn(async () => {}),
+      resyncAccount: jest.fn(async () => {}),
+      refreshBalances: jest.fn(async () => {}),
+      getAccountStates: jest.fn(() => new Map()),
+      stop: jest.fn(),
+    }
+
+    const txManager = createTransactionManager(
+      mockApi,
+      mockAccountManager as unknown as Awaited<
+        ReturnType<typeof createAccountManagerFn>
+      >,
+    )
+    const results = await txManager.submit([
+      {
+        module: 'system',
+        method: 'remark',
+        params: ['test'],
+      },
+    ])
+
+    expect(results).toHaveLength(1)
+    expect(results[0].success).toBe(true)
+    expect(results[0].status).toBe('InBlock')
+    expect(mockAccountManager.markUnfunded).toHaveBeenCalledWith(alice.address)
+    expect(mockAccountManager.registerTransaction).toHaveBeenCalledTimes(2)
+  })
+
+  it('resyncs nonce and keeps wallet when encountering transient network failure (WS error)', async () => {
+    const mockExtrinsic = {
+      hash: { toString: (): string => '0xtx' },
+      signAndSend: jest.fn(() =>
+        Promise.reject(new Error('WebSocket is not connected')),
+      ),
+    }
+
+    const mockApi = {
+      tx: {
+        system: {
+          remark: jest.fn(() => mockExtrinsic),
+        },
+      },
+      registry: {
+        findMetaError: () => ({ section: 'x', name: 'y', docs: ['z'] }),
+      },
+      once: jest.fn(),
+      off: jest.fn(),
+    } as unknown as ApiPromise
+
+    const mockAccountManager = {
+      registerTransaction: jest.fn(async () => ({ account: alice, nonce: 1 })),
+      markUnfunded: jest.fn(async () => {}),
+      removeAccount: jest.fn(async () => {}),
+      resyncAccount: jest.fn(async () => {}),
+      refreshBalances: jest.fn(async () => {}),
+      getAccountStates: jest.fn(() => new Map()),
+      stop: jest.fn(),
+    }
+
+    const txManager = createTransactionManager(
+      mockApi,
+      mockAccountManager as unknown as Awaited<
+        ReturnType<typeof createAccountManagerFn>
+      >,
+    )
+    const results = await txManager.submit([
+      {
+        module: 'system',
+        method: 'remark',
+        params: ['test'],
+      },
+    ])
+
+    expect(results).toHaveLength(1)
+    expect(results[0].success).toBe(false)
+    expect(results[0].status).toBe('Failed')
+    expect(mockAccountManager.markUnfunded).not.toHaveBeenCalled()
+    expect(mockAccountManager.removeAccount).not.toHaveBeenCalled()
+    expect(mockAccountManager.resyncAccount).toHaveBeenCalledWith(alice.address)
   })
 })
