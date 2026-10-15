@@ -12,6 +12,13 @@ import {
 import { getAuthSession } from 'utils/auth';
 import { API_BASE_URL } from 'services/auth/config';
 
+/** The auth service rejected the request because the user hasn't onboarded. */
+export class UserNotOnboardedError extends Error {
+  constructor() {
+    super('User not onboarded');
+  }
+}
+
 export const AuthService = {
   onboardUser: async (): Promise<User> => {
     const session = await getAuthSession();
@@ -155,6 +162,9 @@ export const AuthService = {
       },
     });
 
+    if (response.status === 403) {
+      throw new UserNotOnboardedError();
+    }
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
     }
