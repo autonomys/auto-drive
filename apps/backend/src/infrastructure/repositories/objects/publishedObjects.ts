@@ -59,6 +59,21 @@ const getPublishedObjectByCid = async (
   return result.rows.map(mapToPublishedObject).at(0) || null
 }
 
+const getPublishedObjectByCidAndPublicId = async (
+  cid: string,
+  publicId: string,
+): Promise<PublishedObject | null> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPublishedObject>(
+    `SELECT * FROM public.published_objects
+     WHERE cid = $1 AND public_id = $2
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    [cid, publicId],
+  )
+  return result.rows.map(mapToPublishedObject).at(0) || null
+}
+
 const updatePublishedObject = async (
   id: string,
   publicId: string,
@@ -72,15 +87,22 @@ const updatePublishedObject = async (
   return result.rows.map(mapToPublishedObject)[0]
 }
 
-const deletePublishedObjectByCid = async (cid: string): Promise<void> => {
+const deletePublishedObjectsByCidAndPublicId = async (
+  cid: string,
+  publicId: string,
+): Promise<void> => {
   const db = await getDatabase()
-  await db.query('DELETE FROM public.published_objects WHERE cid = $1', [cid])
+  await db.query(
+    'DELETE FROM public.published_objects WHERE cid = $1 AND public_id = $2',
+    [cid, publicId],
+  )
 }
 
 export const publishedObjectsRepository = {
   createPublishedObject,
   getPublishedObjectById,
   updatePublishedObject,
-  deletePublishedObjectByCid,
+  deletePublishedObjectsByCidAndPublicId,
   getPublishedObjectByCid,
+  getPublishedObjectByCidAndPublicId,
 }
