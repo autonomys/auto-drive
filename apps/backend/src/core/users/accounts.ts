@@ -272,7 +272,11 @@ const registerInteraction = async (
   // compensation logic are upload-only for now.
   const fromPurchased =
     type === InteractionType.Upload
-      ? await purchasedCreditsRepository.consumeUpTo(account.id, creditType, size)
+      ? await purchasedCreditsRepository.consumeUpTo(
+          account.id,
+          creditType,
+          size,
+        )
       : BigInt(0)
 
   const fromFree = size - fromPurchased
@@ -307,9 +311,12 @@ const registerInteraction = async (
       BigInt(0),
     )
     const freeLimit = BigInt(
-      type === InteractionType.Upload ? account.uploadLimit : account.downloadLimit,
+      type === InteractionType.Upload
+        ? account.uploadLimit
+        : account.downloadLimit,
     )
-    const freeAvailable = freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
+    const freeAvailable =
+      freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
 
     if (fromFree > freeAvailable) {
       logger.warn(
@@ -325,7 +332,9 @@ const registerInteraction = async (
           fromPurchased,
         )
       }
-      throw new PaymentRequiredError(`Insufficient credits to process ${creditType}`)
+      throw new PaymentRequiredError(
+        `Insufficient credits to process ${creditType}`,
+      )
     }
   }
 
@@ -407,18 +416,19 @@ const addCreditsToAccount = async (
   // protected by a per-account advisory lock. This prevents two concurrent
   // onConfirmedIntent calls for different intents from both passing the cap
   // check and both inserting, which would push the account over the cap.
-  const result = await purchasedCreditsRepository.createPurchasedCreditWithCapCheck(
-    {
-      accountId: account.id,
-      intentId,
-      uploadBytesOriginal: credits,
-      // Download credits are not allocated on purchase — infrastructure is
-      // kept for future use but download limits are not enforced right now.
-      downloadBytesOriginal: 0n,
-      expiresAt,
-    },
-    config.credits.maxBytesPerUser,
-  )
+  const result =
+    await purchasedCreditsRepository.createPurchasedCreditWithCapCheck(
+      {
+        accountId: account.id,
+        intentId,
+        uploadBytesOriginal: credits,
+        // Download credits are not allocated on purchase — infrastructure is
+        // kept for future use but download limits are not enforced right now.
+        downloadBytesOriginal: 0n,
+        expiresAt,
+      },
+      config.credits.maxBytesPerUser,
+    )
 
   if (result.isErr()) {
     logger.warn(
@@ -492,13 +502,32 @@ const adminSearchAccounts = async (
     account?.organizationId ?? query,
   )
 
-  const results = await Promise.all(
-    users
-      .filter((u): u is UserWithOrganization => !!u.organizationId)
-      .map(async (user) => ({ ...(await getAccountInfo(user)), user })),
+  type MemberUser = UserWithOrganization & { organizationId: string }
+  const onboarded = users.filter((u): u is MemberUser => !!u.organizationId)
+
+  // One lookup per organisation: getAccountInfo may create the account, and
+  // concurrent creates for members of the same organisation would collide.
+  const byOrganization = new Map<string, MemberUser>()
+  for (const user of onboarded) {
+    if (!byOrganization.has(user.organizationId)) {
+      byOrganization.set(user.organizationId, user)
+    }
+  }
+  const accountInfos = new Map(
+    await Promise.all(
+      [...byOrganization].map(
+        async ([organizationId, user]) =>
+          [organizationId, await getAccountInfo(user)] as const,
+      ),
+    ),
   )
 
-  return ok(results)
+  return ok(
+    onboarded.map((user) => ({
+      ...accountInfos.get(user.organizationId)!,
+      user,
+    })),
+  )
 }
 
 export const AccountsUseCases = {

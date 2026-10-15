@@ -12,8 +12,9 @@ export default async function Page({
 
   return (
     <UserProtectedLayout>
-      <OrganizationDetails organizationId={id} />
+      {/* Keyed so moving between accounts starts from empty state instead of
+          showing the previous account's credits and activity. */}
+      <OrganizationDetails key={id} organizationId={id} />
     </UserProtectedLayout>
   );
 }
-

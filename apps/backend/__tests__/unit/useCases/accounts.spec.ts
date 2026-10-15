@@ -386,10 +386,7 @@ describe('AccountsUseCases', () => {
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({ uploadBytesRemaining: BigInt(5) } as any)
 
-      const result = await AccountsUseCases.adminSearchAccounts(
-        admin,
-        'acc123',
-      )
+      const result = await AccountsUseCases.adminSearchAccounts(admin, 'acc123')
 
       expect(search).toHaveBeenCalledWith('acc123', 'org123')
       const [found] = result._unsafeUnwrap()
@@ -397,6 +394,46 @@ describe('AccountsUseCases', () => {
       expect(found.user.publicId).toBe('pub1')
       expect(found.pendingUploadCredits).toBe(15)
       expect(found.pendingDownloadCredits).toBe(10)
+    })
+
+    it('should look up a shared account once for all its members', async () => {
+      const account = {
+        id: 'acc-shared',
+        organizationId: 'org-shared',
+        uploadLimit: 10,
+        downloadLimit: 10,
+        model: AccountModel.OneOff,
+      }
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
+      jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([
+        { publicId: 'pub1', organizationId: 'org-shared' },
+        { publicId: 'pub2', organizationId: 'org-shared' },
+      ] as any)
+      const lookup = jest
+        .spyOn(accountsRepository, 'getByOrganizationId')
+        .mockResolvedValue(account)
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: BigInt(0) } as any)
+
+      const result = await AccountsUseCases.adminSearchAccounts(
+        admin,
+        'acc-shared',
+      )
+
+      expect(lookup).toHaveBeenCalledTimes(1)
+      expect(
+        result._unsafeUnwrap().map((r) => [r.id, r.user.publicId]),
+      ).toEqual([
+        ['acc-shared', 'pub1'],
+        ['acc-shared', 'pub2'],
+      ])
     })
 
     it('should pass the query through as an organization ID otherwise', async () => {

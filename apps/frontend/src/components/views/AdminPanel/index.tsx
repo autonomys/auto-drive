@@ -24,6 +24,11 @@ export const AdminPanel = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchError, setSearchError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  // Non-null while search results are shown. They are paginated locally, so
+  // the server-paginated user list must not refetch over them.
+  const [searchResults, setSearchResults] = useState<
+    AccountInfoWithUser[] | null
+  >(null);
 
   const network = useNetwork();
 
@@ -61,8 +66,8 @@ export const AdminPanel = () => {
   }, [network?.api, currentPage, itemsPerPage]);
 
   useEffect(() => {
-    fetchUserList();
-  }, [fetchUserList]);
+    if (searchResults === null) fetchUserList();
+  }, [fetchUserList, searchResults]);
 
   const handleSearchUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,13 +83,13 @@ export const AdminPanel = () => {
 
     try {
       const results = await network.api.adminSearchAccounts(query);
-      setAccountsWithUsers(results);
-      setTotalCount(results.length);
+      setSearchResults(results);
+      setCurrentPage(1);
       if (results.length === 0) setSearchError('No matching users');
     } catch (error) {
       console.error('Error searching for user:', error);
       setSearchError('Search failed');
-      setAccountsWithUsers([]);
+      setSearchResults([]);
     } finally {
       setIsSearching(false);
     }
@@ -93,11 +98,21 @@ export const AdminPanel = () => {
   const handleResetSearch = () => {
     setSearchQuery('');
     setSearchError('');
-    fetchUserList();
+    setCurrentPage(1);
+    setSearchResults(null);
   };
 
-  // Calculate total pages based on the total count from server
-  const totalPages = Math.ceil(totalCount / itemsPerPage);
+  const shownUsers = searchResults
+    ? searchResults.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage,
+      )
+    : accountsWithUsers;
+
+  // Total from the server for the user list, or from the local search results
+  const totalPages = Math.ceil(
+    (searchResults?.length ?? totalCount) / itemsPerPage,
+  );
 
   // Pagination handlers
   const handlePageChange = (pageNumber: number) => {
@@ -177,7 +192,7 @@ export const AdminPanel = () => {
             >
               {isSearching ? 'Searching...' : 'Search'}
             </Button>
-            {searchQuery && (
+            {(searchQuery || searchResults) && (
               <Button
                 variant='danger'
                 onClick={handleResetSearch}
@@ -194,7 +209,7 @@ export const AdminPanel = () => {
 
         <div className='flex flex-col gap-2'>
           <UserAccountsTable
-            users={accountsWithUsers}
+            users={shownUsers}
             currentPage={currentPage}
             totalPages={totalPages}
             itemsPerPage={itemsPerPage}
