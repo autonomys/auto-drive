@@ -44,6 +44,7 @@ import {
   summarizePurchases,
 } from '@/utils/credits';
 import { CopiableText } from '@/components/atoms/CopiableText';
+import { formatCid } from '@/utils/table';
 import { useUserStore } from 'globalStates/user';
 import { useRouter } from 'next/navigation';
 
@@ -120,17 +121,18 @@ type Interaction = {
 };
 
 type Props = {
-  organizationId: string;
+  accountId: string;
 };
 
-export const OrganizationDetails = ({ organizationId }: Props) => {
+export const OrganizationDetails = ({ accountId }: Props) => {
   const { network, api } = useNetwork();
   const router = useRouter();
   const user = useUserStore(({ user }) => user);
   const apolloClient = useApolloClient();
 
-  // `organizationId` may be an account ID, an organization ID or a user
-  // publicId — every link into this page uses one of the three.
+  // One row per member of the account's organisation, each carrying the same
+  // account. The page is keyed by account ID only: an organisation and a
+  // person are different records (see #888).
   const [profile, setProfile] = useState<AccountInfoWithUser[] | null>(null);
   const [batches, setBatches] = useState<AdminUserCreditBatch[] | null>(null);
   const [batchesError, setBatchesError] = useState(false);
@@ -158,45 +160,29 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
     if (user?.role !== UserRole.Admin) return;
     setIsLoading(true);
     api
-      .adminSearchAccounts(organizationId)
-      .then((results) =>
-        setProfile(
-          results.filter(
-            (r) =>
-              r.id === organizationId ||
-              r.organizationId === organizationId ||
-              r.user.publicId === organizationId,
-          ),
-        ),
-      )
+      .adminSearchAccounts(accountId)
+      .then((results) => setProfile(results.filter((r) => r.id === accountId)))
       .catch((error) => {
         console.error('Error fetching account:', error);
         setProfile([]);
       })
       .finally(() => setIsLoading(false));
-  }, [api, organizationId, user?.role]);
+  }, [api, accountId, user?.role]);
 
-  // Purchases are recorded per user (intent) but credited per account, so
-  // load each member's batches and keep the ones credited to this account.
+  // Selected by the account credited, not by buyer: members can buy for a
+  // shared account, and a member's earlier purchases stay on their old one.
   useEffect(() => {
-    if (!account) return;
-    Promise.all(members.map((m) => api.getUserCreditBatches(m.publicId!)))
-      .then((all) =>
-        setBatches(all.flat().filter((b) => b.accountId === account.id)),
-      )
+    if (user?.role !== UserRole.Admin) return;
+    api
+      .getAccountCreditBatches(accountId)
+      .then(setBatches)
       .catch((error) => {
         console.error('Error fetching purchased credits:', error);
         setBatchesError(true);
       });
-  }, [api, account, members]);
-
-  // Fall back to the raw id so a link carrying an account ID still shows
-  // activity if the account lookup fails.
-  const accountIdForInteractions =
-    account?.id ?? (profile ? organizationId : null);
+  }, [api, accountId, user?.role]);
 
   useEffect(() => {
-    if (!accountIdForInteractions) return;
     let cancelled = false;
     setIsLoadingActivity(true);
 
@@ -204,7 +190,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       const result = await apolloClient.query({
         query: GET_ACCOUNT_INTERACTIONS,
         variables: {
-          accountId: accountIdForInteractions,
+          accountId: accountId,
           type: activityFilter === 'all' ? {} : { _eq: activityFilter },
           limit: itemsPerPage,
           offset: (currentPage - 1) * itemsPerPage,
@@ -252,7 +238,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
     return () => {
       cancelled = true;
     };
-  }, [apolloClient, accountIdForInteractions, activityFilter, currentPage]);
+  }, [apolloClient, accountId, activityFilter, currentPage]);
 
   const purchases = useMemo(
     () => (batches ? summarizePurchases(batches) : null),
@@ -293,8 +279,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
           </div>
         ) : !account ? (
           <p className='text-sm text-gray-500'>
-            No account found for{' '}
-            <span className='font-mono'>{organizationId}</span>.
+            No account found for <span className='font-mono'>{accountId}</span>.
           </p>
         ) : (
           <div className='space-y-4'>
@@ -381,116 +366,116 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       </div>
 
       {/* Purchased Credits */}
-      {account && (
-        <div className='rounded-lg border border-gray-200 bg-background p-6'>
-          <div className='mb-4 flex items-center justify-between'>
-            <h2 className='flex items-center gap-2 text-lg font-semibold'>
-              <CreditCard className='h-5 w-5' />
-              Purchased Credits
-            </h2>
-            {members.map((member) => (
-              <Link
-                key={member.publicId}
-                href={ROUTES.adminUserCredits(network.id, member.publicId!)}
-                className='text-sm text-blue-600 hover:underline dark:text-blue-400'
-              >
-                Manage refunds →
-              </Link>
-            ))}
-          </div>
-          {batchesError ? (
-            <p className='text-sm text-gray-500'>
-              Purchased credits are unavailable.
-            </p>
-          ) : !batches || !purchases ? (
-            <div className='flex items-center justify-center py-4'>
-              <Loader className='h-5 w-5 animate-spin' />
-            </div>
-          ) : (
-            <div className='space-y-4'>
-              <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
-                <div className='rounded-lg border border-gray-200 p-4'>
-                  <p className='text-xs text-gray-500'>Purchases</p>
-                  <p className='mt-1 font-medium'>
-                    {purchases.refundedCount > 0
-                      ? `${purchases.batchCount} (${purchases.refundedCount} refunded)`
-                      : purchases.batchCount}
-                  </p>
-                </div>
-                <div className='rounded-lg border border-gray-200 p-4'>
-                  <p className='text-xs text-gray-500'>Bytes Purchased</p>
-                  <p className='mt-1 font-medium'>
-                    {formatBytes(Number(purchases.bytesPurchased))}
-                  </p>
-                </div>
-                <div className='rounded-lg border border-gray-200 p-4'>
-                  <p className='text-xs text-gray-500'>Bytes Remaining</p>
-                  <p className='mt-1 font-medium'>
-                    {formatBytes(Number(purchases.bytesRemaining))}
-                  </p>
-                </div>
-                <div className='rounded-lg border border-gray-200 p-4'>
-                  <p className='text-xs text-gray-500'>Amount Paid</p>
-                  <p className='mt-1 font-medium'>
-                    {purchases.paid.length > 0
-                      ? purchases.paid.join(' + ')
-                      : '—'}
-                  </p>
-                </div>
-              </div>
-              {batches.length > 0 && (
-                <div className='overflow-x-auto rounded-lg border border-gray-200'>
-                  <Table className='min-w-full'>
-                    <TableHead>
-                      <TableHeadRow>
-                        <TableHeadCell>Purchased</TableHeadCell>
-                        <TableHeadCell>Bytes</TableHeadCell>
-                        <TableHeadCell>Remaining</TableHeadCell>
-                        <TableHeadCell>Paid</TableHeadCell>
-                        <TableHeadCell>Expires</TableHeadCell>
-                        <TableHeadCell>Status</TableHeadCell>
-                      </TableHeadRow>
-                    </TableHead>
-                    <TableBody>
-                      {batches.map((batch) => {
-                        const status = getBatchStatus(batch);
-                        return (
-                          <TableBodyRow key={batch.id}>
-                            <TableBodyCell>
-                              {dayjs(batch.purchasedAt).format('MMM D, YYYY')}
-                            </TableBodyCell>
-                            <TableBodyCell>
-                              {formatBytes(Number(batch.uploadBytesOriginal))}
-                            </TableBodyCell>
-                            <TableBodyCell>
-                              {formatBytes(Number(batch.uploadBytesRemaining))}
-                            </TableBodyCell>
-                            <TableBodyCell>
-                              {describePayment(batch).amountPaid}
-                            </TableBodyCell>
-                            <TableBodyCell>
-                              {dayjs(batch.expiresAt).format('MMM D, YYYY')}
-                            </TableBodyCell>
-                            <TableBodyCell>
-                              <span
-                                className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
-                              >
-                                {batch.refundedAt
-                                  ? 'Refunded'
-                                  : STATUS_LABEL[status]}
-                              </span>
-                            </TableBodyCell>
-                          </TableBodyRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
-          )}
+      <div className='rounded-lg border border-gray-200 bg-background p-6'>
+        <div className='mb-4 flex items-center justify-between'>
+          <h2 className='flex items-center gap-2 text-lg font-semibold'>
+            <CreditCard className='h-5 w-5' />
+            Purchased Credits
+          </h2>
         </div>
-      )}
+        {batchesError ? (
+          <p className='text-sm text-gray-500'>
+            Purchased credits are unavailable.
+          </p>
+        ) : !batches || !purchases ? (
+          <div className='flex items-center justify-center py-4'>
+            <Loader className='h-5 w-5 animate-spin' />
+          </div>
+        ) : (
+          <div className='space-y-4'>
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Purchases</p>
+                <p className='mt-1 font-medium'>
+                  {purchases.refundedCount > 0
+                    ? `${purchases.batchCount} (${purchases.refundedCount} refunded)`
+                    : purchases.batchCount}
+                </p>
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Bytes Purchased</p>
+                <p className='mt-1 font-medium'>
+                  {formatBytes(Number(purchases.bytesPurchased))}
+                </p>
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Bytes Remaining</p>
+                <p className='mt-1 font-medium'>
+                  {formatBytes(Number(purchases.bytesRemaining))}
+                </p>
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Amount Paid</p>
+                <p className='mt-1 font-medium'>
+                  {purchases.paid.length > 0 ? purchases.paid.join(' + ') : '—'}
+                </p>
+              </div>
+            </div>
+            {batches.length > 0 && (
+              <div className='overflow-x-auto rounded-lg border border-gray-200'>
+                <Table className='min-w-full'>
+                  <TableHead>
+                    <TableHeadRow>
+                      <TableHeadCell>Purchased</TableHeadCell>
+                      <TableHeadCell>Buyer</TableHeadCell>
+                      <TableHeadCell>Bytes</TableHeadCell>
+                      <TableHeadCell>Remaining</TableHeadCell>
+                      <TableHeadCell>Paid</TableHeadCell>
+                      <TableHeadCell>Expires</TableHeadCell>
+                      <TableHeadCell>Status</TableHeadCell>
+                    </TableHeadRow>
+                  </TableHead>
+                  <TableBody>
+                    {batches.map((batch) => {
+                      const status = getBatchStatus(batch);
+                      return (
+                        <TableBodyRow key={batch.id}>
+                          <TableBodyCell>
+                            {dayjs(batch.purchasedAt).format('MMM D, YYYY')}
+                          </TableBodyCell>
+                          <TableBodyCell>
+                            <Link
+                              href={ROUTES.adminUserCredits(
+                                network.id,
+                                batch.userPublicId,
+                              )}
+                              className='font-mono text-xs text-blue-600 hover:underline dark:text-blue-400'
+                              title='Purchase history and refunds'
+                            >
+                              {formatCid(batch.userPublicId)}
+                            </Link>
+                          </TableBodyCell>
+                          <TableBodyCell>
+                            {formatBytes(Number(batch.uploadBytesOriginal))}
+                          </TableBodyCell>
+                          <TableBodyCell>
+                            {formatBytes(Number(batch.uploadBytesRemaining))}
+                          </TableBodyCell>
+                          <TableBodyCell>
+                            {describePayment(batch).amountPaid}
+                          </TableBodyCell>
+                          <TableBodyCell>
+                            {dayjs(batch.expiresAt).format('MMM D, YYYY')}
+                          </TableBodyCell>
+                          <TableBodyCell>
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
+                            >
+                              {batch.refundedAt
+                                ? 'Refunded'
+                                : STATUS_LABEL[status]}
+                            </span>
+                          </TableBodyCell>
+                        </TableBodyRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Statistics Summary */}
       <div className='rounded-lg border border-gray-200 bg-background p-6'>

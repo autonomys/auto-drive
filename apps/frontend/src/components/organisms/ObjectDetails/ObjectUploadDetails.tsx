@@ -17,12 +17,13 @@ export const ObjectUploadDetails = ({
   object,
   ownerPublicIds,
   myPublicId,
-  isAdminViewer,
+  ownerAccountIds,
 }: {
   object: ObjectInformation;
   ownerPublicIds: string[];
   myPublicId: string | null;
-  isAdminViewer: boolean;
+  /** publicId → current account ID; only filled in for admin viewers. */
+  ownerAccountIds: Record<string, string>;
 }) => {
   const { network } = useNetwork();
   const { minimumBlockDepth, maximumBlockDepth } = object.uploadState;
@@ -134,9 +135,12 @@ export const ObjectUploadDetails = ({
                       {publicId === myPublicId && (
                         <span className='text-gray-500'>You</span>
                       )}
-                      {isAdminViewer ? (
+                      {ownerAccountIds[publicId] ? (
                         <Link
-                          href={ROUTES.adminOrganization(network.id, publicId)}
+                          href={ROUTES.adminOrganization(
+                            network.id,
+                            ownerAccountIds[publicId],
+                          )}
                           className='font-mono text-primary hover:underline'
                           title='Open account'
                         >

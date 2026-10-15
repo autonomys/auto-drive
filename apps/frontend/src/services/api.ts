@@ -1464,6 +1464,32 @@ export const createApiService = ({
   // GET /credits/batches/user/:userPublicId
   // -------------------------------------------------------------------------
 
+  /** Admin: every batch credited to an account, with each batch's buyer. */
+  getAccountCreditBatches: async (
+    accountId: string,
+  ): Promise<AdminUserCreditBatch[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/credits/batches/account/${encodeURIComponent(accountId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<AdminUserCreditBatch[]>;
+  },
+
   getUserCreditBatches: async (
     userPublicId: string,
   ): Promise<AdminUserCreditBatch[]> => {

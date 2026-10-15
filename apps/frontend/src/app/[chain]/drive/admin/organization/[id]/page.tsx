@@ -12,7 +12,7 @@ export default async function Page({
 
   return (
     <UserProtectedLayout>
-      <OrganizationDetails organizationId={id} />
+      <OrganizationDetails accountId={id} />
     </UserProtectedLayout>
   );
 }
