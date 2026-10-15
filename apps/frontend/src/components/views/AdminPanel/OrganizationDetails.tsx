@@ -121,18 +121,18 @@ type Interaction = {
 };
 
 type Props = {
-  accountId: string;
+  organizationId: string;
 };
 
-export const OrganizationDetails = ({ accountId }: Props) => {
+export const OrganizationDetails = ({ organizationId }: Props) => {
   const { network, api } = useNetwork();
   const router = useRouter();
   const user = useUserStore(({ user }) => user);
   const apolloClient = useApolloClient();
 
-  // One row per member of the account's organisation, each carrying the same
-  // account. The page is keyed by account ID only: an organisation and a
-  // person are different records (see #888).
+  // `organizationId` is an account ID or an organization ID, as before. The
+  // lookup returns one row per member of the organisation, each carrying the
+  // same account.
   const [profile, setProfile] = useState<AccountInfoWithUser[] | null>(null);
   const [batches, setBatches] = useState<AdminUserCreditBatch[] | null>(null);
   const [batchesError, setBatchesError] = useState(false);
@@ -160,29 +160,41 @@ export const OrganizationDetails = ({ accountId }: Props) => {
     if (user?.role !== UserRole.Admin) return;
     setIsLoading(true);
     api
-      .adminSearchAccounts(accountId)
-      .then((results) => setProfile(results.filter((r) => r.id === accountId)))
+      .adminSearchAccounts(organizationId)
+      .then((results) =>
+        setProfile(
+          results.filter(
+            (r) =>
+              r.id === organizationId || r.organizationId === organizationId,
+          ),
+        ),
+      )
       .catch((error) => {
         console.error('Error fetching account:', error);
         setProfile([]);
       })
       .finally(() => setIsLoading(false));
-  }, [api, accountId, user?.role]);
+  }, [api, organizationId, user?.role]);
 
   // Selected by the account credited, not by buyer: members can buy for a
   // shared account, and a member's earlier purchases stay on their old one.
   useEffect(() => {
-    if (user?.role !== UserRole.Admin) return;
+    if (!account) return;
     api
-      .getAccountCreditBatches(accountId)
+      .getAccountCreditBatches(account.id)
       .then(setBatches)
       .catch((error) => {
         console.error('Error fetching purchased credits:', error);
         setBatchesError(true);
       });
-  }, [api, accountId, user?.role]);
+  }, [api, account]);
+
+  // Fall back to the raw id, as before, so a link carrying an account ID still
+  // shows activity if the account lookup fails.
+  const accountId = account?.id ?? (profile ? organizationId : null);
 
   useEffect(() => {
+    if (!accountId) return;
     let cancelled = false;
     setIsLoadingActivity(true);
 
@@ -190,7 +202,7 @@ export const OrganizationDetails = ({ accountId }: Props) => {
       const result = await apolloClient.query({
         query: GET_ACCOUNT_INTERACTIONS,
         variables: {
-          accountId: accountId,
+          accountId,
           type: activityFilter === 'all' ? {} : { _eq: activityFilter },
           limit: itemsPerPage,
           offset: (currentPage - 1) * itemsPerPage,
@@ -279,7 +291,8 @@ export const OrganizationDetails = ({ accountId }: Props) => {
           </div>
         ) : !account ? (
           <p className='text-sm text-gray-500'>
-            No account found for <span className='font-mono'>{accountId}</span>.
+            No account found for{' '}
+            <span className='font-mono'>{organizationId}</span>.
           </p>
         ) : (
           <div className='space-y-4'>
@@ -366,116 +379,120 @@ export const OrganizationDetails = ({ accountId }: Props) => {
       </div>
 
       {/* Purchased Credits */}
-      <div className='rounded-lg border border-gray-200 bg-background p-6'>
-        <div className='mb-4 flex items-center justify-between'>
-          <h2 className='flex items-center gap-2 text-lg font-semibold'>
-            <CreditCard className='h-5 w-5' />
-            Purchased Credits
-          </h2>
-        </div>
-        {batchesError ? (
-          <p className='text-sm text-gray-500'>
-            Purchased credits are unavailable.
-          </p>
-        ) : !batches || !purchases ? (
-          <div className='flex items-center justify-center py-4'>
-            <Loader className='h-5 w-5 animate-spin' />
+      {account && (
+        <div className='rounded-lg border border-gray-200 bg-background p-6'>
+          <div className='mb-4 flex items-center justify-between'>
+            <h2 className='flex items-center gap-2 text-lg font-semibold'>
+              <CreditCard className='h-5 w-5' />
+              Purchased Credits
+            </h2>
           </div>
-        ) : (
-          <div className='space-y-4'>
-            <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Purchases</p>
-                <p className='mt-1 font-medium'>
-                  {purchases.refundedCount > 0
-                    ? `${purchases.batchCount} (${purchases.refundedCount} refunded)`
-                    : purchases.batchCount}
-                </p>
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Bytes Purchased</p>
-                <p className='mt-1 font-medium'>
-                  {formatBytes(Number(purchases.bytesPurchased))}
-                </p>
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Bytes Remaining</p>
-                <p className='mt-1 font-medium'>
-                  {formatBytes(Number(purchases.bytesRemaining))}
-                </p>
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Amount Paid</p>
-                <p className='mt-1 font-medium'>
-                  {purchases.paid.length > 0 ? purchases.paid.join(' + ') : '—'}
-                </p>
-              </div>
+          {batchesError ? (
+            <p className='text-sm text-gray-500'>
+              Purchased credits are unavailable.
+            </p>
+          ) : !batches || !purchases ? (
+            <div className='flex items-center justify-center py-4'>
+              <Loader className='h-5 w-5 animate-spin' />
             </div>
-            {batches.length > 0 && (
-              <div className='overflow-x-auto rounded-lg border border-gray-200'>
-                <Table className='min-w-full'>
-                  <TableHead>
-                    <TableHeadRow>
-                      <TableHeadCell>Purchased</TableHeadCell>
-                      <TableHeadCell>Buyer</TableHeadCell>
-                      <TableHeadCell>Bytes</TableHeadCell>
-                      <TableHeadCell>Remaining</TableHeadCell>
-                      <TableHeadCell>Paid</TableHeadCell>
-                      <TableHeadCell>Expires</TableHeadCell>
-                      <TableHeadCell>Status</TableHeadCell>
-                    </TableHeadRow>
-                  </TableHead>
-                  <TableBody>
-                    {batches.map((batch) => {
-                      const status = getBatchStatus(batch);
-                      return (
-                        <TableBodyRow key={batch.id}>
-                          <TableBodyCell>
-                            {dayjs(batch.purchasedAt).format('MMM D, YYYY')}
-                          </TableBodyCell>
-                          <TableBodyCell>
-                            <Link
-                              href={ROUTES.adminUserCredits(
-                                network.id,
-                                batch.userPublicId,
-                              )}
-                              className='font-mono text-xs text-blue-600 hover:underline dark:text-blue-400'
-                              title='Purchase history and refunds'
-                            >
-                              {formatCid(batch.userPublicId)}
-                            </Link>
-                          </TableBodyCell>
-                          <TableBodyCell>
-                            {formatBytes(Number(batch.uploadBytesOriginal))}
-                          </TableBodyCell>
-                          <TableBodyCell>
-                            {formatBytes(Number(batch.uploadBytesRemaining))}
-                          </TableBodyCell>
-                          <TableBodyCell>
-                            {describePayment(batch).amountPaid}
-                          </TableBodyCell>
-                          <TableBodyCell>
-                            {dayjs(batch.expiresAt).format('MMM D, YYYY')}
-                          </TableBodyCell>
-                          <TableBodyCell>
-                            <span
-                              className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
-                            >
-                              {batch.refundedAt
-                                ? 'Refunded'
-                                : STATUS_LABEL[status]}
-                            </span>
-                          </TableBodyCell>
-                        </TableBodyRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+          ) : (
+            <div className='space-y-4'>
+              <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
+                <div className='rounded-lg border border-gray-200 p-4'>
+                  <p className='text-xs text-gray-500'>Purchases</p>
+                  <p className='mt-1 font-medium'>
+                    {purchases.refundedCount > 0
+                      ? `${purchases.batchCount} (${purchases.refundedCount} refunded)`
+                      : purchases.batchCount}
+                  </p>
+                </div>
+                <div className='rounded-lg border border-gray-200 p-4'>
+                  <p className='text-xs text-gray-500'>Bytes Purchased</p>
+                  <p className='mt-1 font-medium'>
+                    {formatBytes(Number(purchases.bytesPurchased))}
+                  </p>
+                </div>
+                <div className='rounded-lg border border-gray-200 p-4'>
+                  <p className='text-xs text-gray-500'>Bytes Remaining</p>
+                  <p className='mt-1 font-medium'>
+                    {formatBytes(Number(purchases.bytesRemaining))}
+                  </p>
+                </div>
+                <div className='rounded-lg border border-gray-200 p-4'>
+                  <p className='text-xs text-gray-500'>Amount Paid</p>
+                  <p className='mt-1 font-medium'>
+                    {purchases.paid.length > 0
+                      ? purchases.paid.join(' + ')
+                      : '—'}
+                  </p>
+                </div>
               </div>
-            )}
-          </div>
-        )}
-      </div>
+              {batches.length > 0 && (
+                <div className='overflow-x-auto rounded-lg border border-gray-200'>
+                  <Table className='min-w-full'>
+                    <TableHead>
+                      <TableHeadRow>
+                        <TableHeadCell>Purchased</TableHeadCell>
+                        <TableHeadCell>Buyer</TableHeadCell>
+                        <TableHeadCell>Bytes</TableHeadCell>
+                        <TableHeadCell>Remaining</TableHeadCell>
+                        <TableHeadCell>Paid</TableHeadCell>
+                        <TableHeadCell>Expires</TableHeadCell>
+                        <TableHeadCell>Status</TableHeadCell>
+                      </TableHeadRow>
+                    </TableHead>
+                    <TableBody>
+                      {batches.map((batch) => {
+                        const status = getBatchStatus(batch);
+                        return (
+                          <TableBodyRow key={batch.id}>
+                            <TableBodyCell>
+                              {dayjs(batch.purchasedAt).format('MMM D, YYYY')}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              <Link
+                                href={ROUTES.adminUserCredits(
+                                  network.id,
+                                  batch.userPublicId,
+                                )}
+                                className='font-mono text-xs text-blue-600 hover:underline dark:text-blue-400'
+                                title='Purchase history and refunds'
+                              >
+                                {formatCid(batch.userPublicId)}
+                              </Link>
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              {formatBytes(Number(batch.uploadBytesOriginal))}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              {formatBytes(Number(batch.uploadBytesRemaining))}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              {describePayment(batch).amountPaid}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              {dayjs(batch.expiresAt).format('MMM D, YYYY')}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              <span
+                                className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
+                              >
+                                {batch.refundedAt
+                                  ? 'Refunded'
+                                  : STATUS_LABEL[status]}
+                              </span>
+                            </TableBodyCell>
+                          </TableBodyRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Statistics Summary */}
       <div className='rounded-lg border border-gray-200 bg-background p-6'>
