@@ -104,7 +104,10 @@ userController.get('/@me', async (req: Request, res: Response) => {
   try {
     const userInfo = await UsersUseCases.getUserWithOrganization(user)
 
-    res.json(userInfo)
+    // The backend records the key on every interaction it makes (#891).
+    res.json(
+      user.apiKeyId ? { ...userInfo, apiKeyId: user.apiKeyId } : userInfo,
+    )
   } catch (error) {
     logger.error(error)
     res.status(500).json({
