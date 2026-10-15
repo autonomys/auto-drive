@@ -110,9 +110,8 @@ export const AdminPanel = () => {
     : accountsWithUsers;
 
   // Total from the server for the user list, or from the local search results
-  const totalPages = Math.ceil(
-    (searchResults?.length ?? totalCount) / itemsPerPage,
-  );
+  const resultCount = searchResults?.length ?? totalCount;
+  const totalPages = Math.ceil(resultCount / itemsPerPage);
 
   // Pagination handlers
   const handlePageChange = (pageNumber: number) => {
@@ -194,6 +193,7 @@ export const AdminPanel = () => {
             </Button>
             {(searchQuery || searchResults) && (
               <Button
+                type='button'
                 variant='danger'
                 onClick={handleResetSearch}
                 className='text-foreground-hover rounded bg-background-hover px-4 py-2 hover:bg-background hover:text-foreground'
@@ -210,6 +210,7 @@ export const AdminPanel = () => {
         <div className='flex flex-col gap-2'>
           <UserAccountsTable
             users={shownUsers}
+            totalCount={resultCount}
             currentPage={currentPage}
             totalPages={totalPages}
             itemsPerPage={itemsPerPage}

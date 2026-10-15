@@ -17,6 +17,8 @@ import { ChevronLeft, ChevronRight, Loader } from 'lucide-react';
 
 interface UserAccountsTableProps {
   users: AccountInfoWithUser[] | undefined;
+  /** All matching rows; `users` is only the current page. */
+  totalCount: number;
   currentPage: number;
   totalPages: number;
   itemsPerPage: number;
@@ -26,6 +28,7 @@ interface UserAccountsTableProps {
 
 export const UserAccountsTable = ({
   users,
+  totalCount,
   currentPage,
   totalPages,
   itemsPerPage,
@@ -107,9 +110,9 @@ export const UserAccountsTable = ({
             </span>{' '}
             to{' '}
             <span className='font-medium'>
-              {Math.min(currentPage * itemsPerPage, users?.length || 0)}
+              {(currentPage - 1) * itemsPerPage + (users?.length || 0)}
             </span>{' '}
-            of <span className='font-medium'>{users?.length || 0}</span> results
+            of <span className='font-medium'>{totalCount}</span> results
           </p>
         </div>
 
