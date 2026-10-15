@@ -35,6 +35,8 @@ import {
 import { config } from '../../../src/config.js'
 import { AccountsUseCases, ObjectUseCases } from '../../../src/core/index.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
+import { downloadService } from '../../../src/infrastructure/services/download/index.js'
+import { InteractionType } from '@auto-drive/models'
 
 /** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
 const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
@@ -2236,6 +2238,156 @@ describe('AWS S3 - SDK', () => {
         'B owns a different thing',
       )
     })
+  })
+
+  // S3 requests are always signed, so reads are charged to the caller's download
+  // credits. The anonymous path they used to take refused anything over its size
+  // cap with a 402, even to the owner; the cap is lowered here so a small fixture
+  // sits above it.
+  describe('Reads are charged to the caller, not capped as anonymous', () => {
+    const LargeKey = 'credits-test/large.bin'
+    const LargeBody = randomBytes(64 * 1024)
+    const anonymousCap = config.params.maxAnonymousDownloadSize
+    let cid: string
+    let checkCredits: jest.SpiedFunction<
+      typeof AccountsUseCases.getPendingCreditsByUserAndType
+    >
+    let charge: jest.SpiedFunction<typeof AccountsUseCases.registerInteraction>
+    let buildStream: jest.SpiedFunction<typeof downloadService.download>
+
+    beforeAll(async () => {
+      config.params.maxAnonymousDownloadSize = 1024
+      const put = await s3Client.send(
+        new PutObjectCommand({ Bucket, Key: LargeKey, Body: LargeBody }),
+      )
+      cid = put.VersionId!
+    })
+
+    // Restored one by one: restoreAllMocks would also drop the suite's
+    // AuthManager and Rabbit mocks.
+    beforeEach(() => {
+      checkCredits = jest.spyOn(
+        AccountsUseCases,
+        'getPendingCreditsByUserAndType',
+      )
+      charge = jest.spyOn(AccountsUseCases, 'registerInteraction')
+      buildStream = jest.spyOn(downloadService, 'download')
+    })
+
+    afterEach(() => {
+      checkCredits.mockRestore()
+      charge.mockRestore()
+      buildStream.mockRestore()
+    })
+
+    afterAll(() => {
+      config.params.maxAnonymousDownloadSize = anonymousCap
+    })
+
+    it('serves the whole object to its owner and charges its size', async () => {
+      const result = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: LargeKey }),
+      )
+
+      expect(result.$metadata.httpStatusCode).toBe(200)
+      expect(result.ContentLength).toBe(LargeBody.length)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        LargeBody,
+      )
+      expect(charge).toHaveBeenCalledTimes(1)
+      expect(charge).toHaveBeenCalledWith(
+        expect.objectContaining({ oauthUserId: user.oauthUserId }),
+        InteractionType.Download,
+        BigInt(LargeBody.length),
+        cid,
+      )
+    }, 15_000)
+
+    it('charges a ranged read only for the bytes in the range', async () => {
+      const result = await s3Client.send(
+        new GetObjectCommand({
+          Bucket,
+          Key: LargeKey,
+          Range: 'bytes=1000-1999',
+        }),
+      )
+
+      expect(result.$metadata.httpStatusCode).toBe(206)
+      expect(result.ContentRange).toBe(`bytes 1000-1999/${LargeBody.length}`)
+      expect(result.ContentLength).toBe(1000)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        LargeBody.subarray(1000, 2000),
+      )
+      expect(charge).toHaveBeenCalledTimes(1)
+      expect(charge).toHaveBeenCalledWith(
+        expect.anything(),
+        InteractionType.Download,
+        BigInt(1000),
+        cid,
+      )
+    }, 15_000)
+
+    it('answers HeadObject without checking credits, charging, or building a stream', async () => {
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: LargeKey }),
+      )
+
+      expect(head.$metadata.httpStatusCode).toBe(200)
+      expect(head.ContentLength).toBe(LargeBody.length)
+      expect(checkCredits).not.toHaveBeenCalled()
+      expect(charge).not.toHaveBeenCalled()
+      expect(buildStream).not.toHaveBeenCalled()
+    }, 15_000)
+
+    it('answers a read the caller cannot pay for with 402 PaymentRequired XML', async () => {
+      checkCredits.mockResolvedValue(0)
+
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: LargeKey })),
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 402 },
+        Code: 'PaymentRequired',
+        message: 'Insufficient credits to process download',
+        $response: {
+          headers: {
+            'content-type': expect.stringContaining('application/xml'),
+          },
+        },
+      })
+      // Not retried, and refused before a stream was built or anything charged.
+      expect(checkCredits).toHaveBeenCalledTimes(1)
+      expect(buildStream).not.toHaveBeenCalled()
+      expect(charge).not.toHaveBeenCalled()
+    }, 15_000)
+
+    it('charges a versioned read for the version it serves', async () => {
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: LargeKey,
+          Body: Buffer.from('a newer, smaller version'),
+        }),
+      )
+      // The upload above is charged through registerInteraction too.
+      charge.mockClear()
+
+      const result = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: LargeKey, VersionId: cid }),
+      )
+
+      expect(result.$metadata.httpStatusCode).toBe(200)
+      expect(result.VersionId).toBe(cid)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        LargeBody,
+      )
+      expect(charge).toHaveBeenCalledTimes(1)
+      expect(charge).toHaveBeenCalledWith(
+        expect.objectContaining({ oauthUserId: user.oauthUserId }),
+        InteractionType.Download,
+        BigInt(LargeBody.length),
+        cid,
+      )
+    }, 15_000)
   })
 
   // Issue #815: an unresolvable chunk used to be discovered only after 200 +

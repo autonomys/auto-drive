@@ -89,7 +89,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ md5: 'abc123' }))
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .spyOn(DownloadUseCase, 'downloadObjectByUser')
         .mockResolvedValue(err(new ObjectNotFoundError('Download failed')) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -105,7 +105,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ md5: 'abc123def456abc123def456abc123de' }))
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .spyOn(DownloadUseCase, 'downloadObjectByUser')
         .mockResolvedValue(ok({ read: jest.fn() }) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -130,7 +130,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ metadata: objectMetadata }))
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .spyOn(DownloadUseCase, 'downloadObjectByUser')
         .mockResolvedValue(ok({ read: jest.fn() }) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -159,7 +159,7 @@ describe('S3UseCases', () => {
           createdAt: writtenAt,
         })
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .spyOn(DownloadUseCase, 'downloadObjectByUser')
         .mockResolvedValue(ok({ read: jest.fn() }) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -177,7 +177,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ md5: null }))
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .spyOn(DownloadUseCase, 'downloadObjectByUser')
         .mockResolvedValue(ok({} as any) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -189,10 +189,14 @@ describe('S3UseCases', () => {
       expect(result._unsafeUnwrap().etag).toBeNull()
     })
 
-    it('passes the byte range to the download use case', async () => {
+    it('reads as the caller, passing the byte range, never anonymously', async () => {
       const downloadSpy = jest
-        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .spyOn(DownloadUseCase, 'downloadObjectByUser')
         .mockResolvedValue(ok({} as any) as any)
+      const anonymousSpy = jest.spyOn(
+        DownloadUseCase,
+        'downloadObjectByAnonymous',
+      )
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping())
@@ -204,9 +208,11 @@ describe('S3UseCases', () => {
       } as any)
 
       expect(downloadSpy).toHaveBeenCalledWith(
+        mockUser,
         'cid123',
         expect.objectContaining({ byteRange: [100, 200] }),
       )
+      expect(anonymousSpy).not.toHaveBeenCalled()
     })
 
     it('serves a specific version by CID and returns that version’s content', async () => {
@@ -224,8 +230,12 @@ describe('S3UseCases', () => {
         .mockResolvedValue(version as any)
       const findByKeySpy = jest.spyOn(s3ObjectMappingsRepository, 'findByKey')
       const downloadSpy = jest
-        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .spyOn(DownloadUseCase, 'downloadObjectByUser')
         .mockResolvedValue(ok({ read: jest.fn() }) as any)
+      const anonymousSpy = jest.spyOn(
+        DownloadUseCase,
+        'downloadObjectByAnonymous',
+      )
 
       const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
@@ -248,7 +258,12 @@ describe('S3UseCases', () => {
         'file.txt',
         'oldcid',
       )
-      expect(downloadSpy).toHaveBeenCalledWith('oldcid', expect.any(Object))
+      expect(downloadSpy).toHaveBeenCalledWith(
+        mockUser,
+        'oldcid',
+        expect.any(Object),
+      )
+      expect(anonymousSpy).not.toHaveBeenCalled()
       expect(findByKeySpy).not.toHaveBeenCalled()
     })
 

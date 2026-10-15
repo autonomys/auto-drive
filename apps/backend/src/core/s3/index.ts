@@ -4,6 +4,8 @@ import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
 import {
   ForbiddenError,
+  IllegalContentError,
+  NotAcceptableError,
   ObjectNotFoundError,
   RangeNotSatisfiableError,
 } from '../../errors/index.js'
@@ -225,16 +227,27 @@ const resolveRequestedByteRange = async (
     ? ok(params.Range)
     : resolveSuffixLength(cid, params.SuffixLength)
 
+/**
+ * Reads are charged to the caller's download credits, but the credit check and
+ * the charge both run inside startDownload(), so HeadObject, which never calls
+ * it, stays free.
+ */
 const getObject = async (
   user: UserWithOrganization,
   params: GetObjectParams,
 ): Promise<
-  Result<GetObjectUseCaseResult, ObjectNotFoundError | RangeNotSatisfiableError>
+  Result<
+    GetObjectUseCaseResult,
+    | ObjectNotFoundError
+    | NotAcceptableError
+    | IllegalContentError
+    | RangeNotSatisfiableError
+  >
 > => {
   // Versioned read (GET/HEAD ?versionId=<cid>): fetch the specific version's
   // content by CID rather than the current pointer. The version must belong to
   // this key in the caller's namespace; the download itself still runs the
-  // moderation/ban checks (downloadObjectByAnonymous → authorizeDownload), so a
+  // moderation/ban checks (downloadObjectByUser → authorizeDownload), so a
   // removed/banned version is not retrievable even though it is retained.
   if (params.VersionId) {
     const version = await s3ObjectMappingsRepository.findVersionByCid(
@@ -254,12 +267,12 @@ const getObject = async (
     const versionedRange = await resolveRequestedByteRange(version.cid, params)
     if (versionedRange.isErr()) return err(versionedRange.error)
 
-    const versionedDownload = await DownloadUseCase.downloadObjectByAnonymous(
+    const versionedDownload = await DownloadUseCase.downloadObjectByUser(
+      user,
       version.cid,
       { byteRange: versionedRange.value },
     )
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (versionedDownload as any).map((dl: GetObjectCommandResult) => ({
+    return versionedDownload.map((dl) => ({
       ...dl,
       cid: version.cid,
       etag: version.md5 ? formatETag(version.md5) : null,
@@ -300,16 +313,13 @@ const getObject = async (
   const byteRange = await resolveRequestedByteRange(mapping.cid, params)
   if (byteRange.isErr()) return err(byteRange.error)
 
-  const downloadResult = await DownloadUseCase.downloadObjectByAnonymous(
+  const downloadResult = await DownloadUseCase.downloadObjectByUser(
+    user,
     mapping.cid,
     { byteRange: byteRange.value },
   )
 
-  // Use .map() to attach cid/etag to the ok value and propagate any error
-  // unchanged. The error type from downloadObjectByAnonymous is wider than
-  // ObjectNotFoundError but handleError in the controller accepts any Error.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (downloadResult as any).map((dl: GetObjectCommandResult) => ({
+  return downloadResult.map((dl) => ({
     ...dl,
     cid: mapping.cid,
     // Objects uploaded before this feature have null md5; fall back to null
