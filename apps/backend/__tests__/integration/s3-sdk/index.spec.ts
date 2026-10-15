@@ -1105,6 +1105,30 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  describe('Uploads the caller cannot pay for', () => {
+    it('answers PutObject with 402 PaymentRequired and stores nothing', async () => {
+      const Key = 'upload-credits/unpaid.txt'
+      const noCredits = jest
+        .spyOn(AccountsUseCases, 'getPendingCreditsByUserAndType')
+        .mockResolvedValue(0)
+
+      await expect(
+        s3Client.send(
+          new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
+        ),
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 402 },
+        Code: 'PaymentRequired',
+        message: 'Not enough upload credits',
+      })
+      noCredits.mockRestore()
+
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key })),
+      ).rejects.toThrow()
+    })
+  })
+
   // S3 stores object metadata (system headers + arbitrary x-amz-meta-*) once at
   // write and returns it verbatim on GET/HEAD; CopyObject carries or replaces it
   // per the metadata directive. See issue #786.
