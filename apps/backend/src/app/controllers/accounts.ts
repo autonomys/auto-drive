@@ -66,6 +66,35 @@ accountController.post(
   }),
 )
 
+// Admin-only: find accounts by partial user publicId, account ID or
+// organization ID. Each result carries the matching user.
+accountController.get(
+  '/admin/search',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+    if (!query) {
+      res.status(400).json({ error: 'Missing query parameter `q`' })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.adminSearchAccounts(user, query),
+      'Failed to search accounts',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
 accountController.get(
   '/ranking',
   asyncSafeHandler(async (req: Request, res: Response) => {

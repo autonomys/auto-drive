@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatBytes } from '@/utils/number';
 import {
   Loader,
@@ -11,8 +11,9 @@ import {
   HardDrive,
   Calendar,
   Clock,
+  CreditCard,
 } from 'lucide-react';
-import { gql, useApolloClient, ApolloError } from '@apollo/client';
+import { gql, useApolloClient } from '@apollo/client';
 import { Table } from '@/components/molecules/Table';
 import {
   TableHead,
@@ -28,36 +29,35 @@ import dayjs from 'dayjs';
 import Link from 'next/link';
 import { useNetwork } from 'contexts/network';
 import { ROUTES } from '@auto-drive/ui';
-import { UserRole } from '@auto-drive/models';
+import {
+  AccountInfoWithUser,
+  AccountModel,
+  InteractionType,
+  UserRole,
+} from '@auto-drive/models';
+import type { AdminUserCreditBatch } from '@/services/api';
+import {
+  describePayment,
+  getBatchStatus,
+  STATUS_CLASSES,
+  STATUS_LABEL,
+  summarizePurchases,
+} from '@/utils/credits';
+import { CopiableText } from '@/components/atoms/CopiableText';
+import { formatCid } from '@/utils/table';
 import { useUserStore } from 'globalStates/user';
 import { useRouter } from 'next/navigation';
 
-// GraphQL query for account details - try both id and organization_id
-const GET_ACCOUNT_BY_ID = gql`
-  query GetAccountById($id: String!) {
-    accounts(
-      where: { _or: [{ id: { _eq: $id } }, { organization_id: { _eq: $id } }] }
-    ) {
-      id
-      organization_id
-      model
-      upload_limit
-      download_limit
-      created_at
-      updated_at
-    }
-  }
-`;
-
-// GraphQL query for account interactions — includes cid (requires migration 20260227000000)
+// GraphQL query for account interactions. `$type` is `{}` for all types.
 const GET_ACCOUNT_INTERACTIONS = gql`
   query GetAccountInteractions(
     $accountId: String!
+    $type: String_comparison_exp!
     $limit: Int!
     $offset: Int!
   ) {
     interactions(
-      where: { account_id: { _eq: $accountId } }
+      where: { account_id: { _eq: $accountId }, type: $type }
       order_by: { created_at: desc }
       limit: $limit
       offset: $offset
@@ -68,7 +68,9 @@ const GET_ACCOUNT_INTERACTIONS = gql`
       cid
       created_at
     }
-    interactions_aggregate(where: { account_id: { _eq: $accountId } }) {
+    interactions_aggregate(
+      where: { account_id: { _eq: $accountId }, type: $type }
+    ) {
       aggregate {
         count
       }
@@ -96,61 +98,18 @@ const GET_ACCOUNT_INTERACTIONS = gql`
   }
 `;
 
-// Fallback query used before the cid migration has been applied
-const GET_ACCOUNT_INTERACTIONS_LEGACY = gql`
-  query GetAccountInteractionsLegacy(
-    $accountId: String!
-    $limit: Int!
-    $offset: Int!
-  ) {
-    interactions(
-      where: { account_id: { _eq: $accountId } }
-      order_by: { created_at: desc }
-      limit: $limit
-      offset: $offset
-    ) {
-      id
-      type
-      size
-      created_at
-    }
-    interactions_aggregate(where: { account_id: { _eq: $accountId } }) {
-      aggregate {
-        count
-      }
-    }
-    upload_stats: interactions_aggregate(
-      where: { account_id: { _eq: $accountId }, type: { _eq: "upload" } }
-    ) {
-      aggregate {
-        count
-        sum {
-          size
-        }
-      }
-    }
-    download_stats: interactions_aggregate(
-      where: { account_id: { _eq: $accountId }, type: { _eq: "download" } }
-    ) {
-      aggregate {
-        count
-        sum {
-          size
-        }
-      }
+// File names for the CIDs on the current activity page. Objects the viewer
+// cannot see (e.g. another user's trashed file) simply have no name.
+const GET_NAMES_BY_CID = gql`
+  query GetNamesByCid($cids: [String!]!) {
+    metadata(where: { head_cid: { _in: $cids } }) {
+      head_cid
+      name
     }
   }
 `;
 
-type Account = {
-  id: string;
-  organization_id: string;
-  model: string;
-  upload_limit: number;
-  download_limit: number;
-  created_at: string;
-  updated_at: string;
-};
+type ActivityFilter = 'all' | InteractionType;
 
 type Interaction = {
   id: string;
@@ -158,6 +117,7 @@ type Interaction = {
   size: string;
   cid: string | null;
   created_at: string;
+  name: string | null;
 };
 
 type Props = {
@@ -165,19 +125,29 @@ type Props = {
 };
 
 export const OrganizationDetails = ({ organizationId }: Props) => {
-  const { network } = useNetwork();
+  const { network, api } = useNetwork();
   const router = useRouter();
   const user = useUserStore(({ user }) => user);
   const apolloClient = useApolloClient();
 
-  const [account, setAccount] = useState<Account | null>(null);
+  // `organizationId` is an account ID or an organization ID, as before. The
+  // lookup returns one row per member of the organisation, each carrying the
+  // same account.
+  const [profile, setProfile] = useState<AccountInfoWithUser[] | null>(null);
+  const [batches, setBatches] = useState<AdminUserCreditBatch[] | null>(null);
+  const [batchesError, setBatchesError] = useState(false);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [totalInteractions, setTotalInteractions] = useState(0);
   const [uploadStats, setUploadStats] = useState({ count: 0, size: 0 });
   const [downloadStats, setDownloadStats] = useState({ count: 0, size: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(true);
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+
+  const account = profile?.[0] ?? null;
+  const members = useMemo(() => profile?.map((p) => p.user) ?? [], [profile]);
 
   // Redirect non-admin users
   useEffect(() => {
@@ -186,104 +156,106 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
     }
   }, [user, router, network.id]);
 
-  const fetchInteractions = useCallback(
-    async (accountId: string) => {
-      const variables = {
-        accountId,
-        limit: itemsPerPage,
-        offset: (currentPage - 1) * itemsPerPage,
-      };
-
-      // Try the query that includes cid first (requires migration 20260227000000).
-      // Only fall back to the legacy query when Hasura rejects the cid field
-      // (migration not yet applied). Any other error is re-thrown so it surfaces
-      // to the caller rather than being silently swallowed.
-      try {
-        return await apolloClient.query({
-          query: GET_ACCOUNT_INTERACTIONS,
-          variables,
-          fetchPolicy: 'network-only',
-        });
-      } catch (err) {
-        // Hasura/GraphQL errors for unknown fields always mention the field name
-        // with double quotes (e.g. `field "cid" not found` or
-        // `Cannot query field "cid"`). Using a regex avoids hardcoding any
-        // quote characters, which prevents Prettier/ESLint quote-style issues.
-        const isMissingField =
-          err instanceof ApolloError &&
-          err.graphQLErrors.some((e) => {
-            const msg = e.message;
-            return (
-              (/cannot query field/i.test(msg) ||
-                /field .+ not found/i.test(msg)) &&
-              /\bcid\b/.test(msg)
-            );
-          });
-        if (!isMissingField) throw err;
-        return await apolloClient.query({
-          query: GET_ACCOUNT_INTERACTIONS_LEGACY,
-          variables,
-          fetchPolicy: 'network-only',
-        });
-      }
-    },
-    [apolloClient, currentPage],
-  );
-
-  const fetchAccountDetails = useCallback(async () => {
+  useEffect(() => {
+    if (user?.role !== UserRole.Admin) return;
     setIsLoading(true);
-    try {
-      // Fetch account by ID or organization_id
-      const accountResult = await apolloClient.query({
-        query: GET_ACCOUNT_BY_ID,
-        variables: { id: organizationId },
-        fetchPolicy: 'network-only',
-      });
-
-      const accountData = accountResult.data?.accounts?.[0];
-      setAccount(accountData || null);
-
-      // Use the account.id for interactions query (organizationId param might be account.id or organization_id)
-      const accountIdForInteractions = accountData?.id || organizationId;
-
-      // Fetch interactions (with automatic fallback if cid column isn't migrated yet)
-      const interactionsResult = await fetchInteractions(
-        accountIdForInteractions,
-      );
-
-      setInteractions(
-        (interactionsResult.data?.interactions || []).map(
-          (i: Omit<Interaction, 'cid'> & { cid?: string | null }) => ({
-            ...i,
-            cid: i.cid ?? null,
-          }),
+    api
+      .adminSearchAccounts(organizationId)
+      .then((results) =>
+        setProfile(
+          results.filter(
+            (r) =>
+              r.id === organizationId || r.organizationId === organizationId,
+          ),
         ),
-      );
-      setTotalInteractions(
-        interactionsResult.data?.interactions_aggregate?.aggregate?.count || 0,
-      );
-      setUploadStats({
-        count: interactionsResult.data?.upload_stats?.aggregate?.count || 0,
-        size: Number(
-          interactionsResult.data?.upload_stats?.aggregate?.sum?.size || 0,
-        ),
+      )
+      .catch((error) => {
+        console.error('Error fetching account:', error);
+        setProfile([]);
+      })
+      .finally(() => setIsLoading(false));
+  }, [api, organizationId, user?.role]);
+
+  // Selected by the account credited, not by buyer: members can buy for a
+  // shared account, and a member's earlier purchases stay on their old one.
+  useEffect(() => {
+    if (!account) return;
+    api
+      .getAccountCreditBatches(account.id)
+      .then(setBatches)
+      .catch((error) => {
+        console.error('Error fetching purchased credits:', error);
+        setBatchesError(true);
       });
-      setDownloadStats({
-        count: interactionsResult.data?.download_stats?.aggregate?.count || 0,
-        size: Number(
-          interactionsResult.data?.download_stats?.aggregate?.sum?.size || 0,
-        ),
-      });
-    } catch (error) {
-      console.error('Error fetching account details:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [apolloClient, organizationId, fetchInteractions]);
+  }, [api, account]);
+
+  // Fall back to the raw id, as before, so a link carrying an account ID still
+  // shows activity if the account lookup fails.
+  const accountId = account?.id ?? (profile ? organizationId : null);
 
   useEffect(() => {
-    fetchAccountDetails();
-  }, [fetchAccountDetails]);
+    if (!accountId) return;
+    let cancelled = false;
+    setIsLoadingActivity(true);
+
+    (async () => {
+      const result = await apolloClient.query({
+        query: GET_ACCOUNT_INTERACTIONS,
+        variables: {
+          accountId,
+          type: activityFilter === 'all' ? {} : { _eq: activityFilter },
+          limit: itemsPerPage,
+          offset: (currentPage - 1) * itemsPerPage,
+        },
+        fetchPolicy: 'network-only',
+      });
+      const rows: Omit<Interaction, 'name'>[] = result.data?.interactions ?? [];
+
+      const cids = [...new Set(rows.map((i) => i.cid).filter(Boolean))];
+      const names = new Map<string, string>();
+      if (cids.length > 0) {
+        const namesResult = await apolloClient.query({
+          query: GET_NAMES_BY_CID,
+          variables: { cids },
+        });
+        for (const m of namesResult.data?.metadata ?? []) {
+          if (m.name && !names.has(m.head_cid)) names.set(m.head_cid, m.name);
+        }
+      }
+      if (cancelled) return;
+
+      setInteractions(
+        rows.map((i) => ({
+          ...i,
+          name: i.cid ? (names.get(i.cid) ?? null) : null,
+        })),
+      );
+      setTotalInteractions(
+        result.data?.interactions_aggregate?.aggregate?.count || 0,
+      );
+      setUploadStats({
+        count: result.data?.upload_stats?.aggregate?.count || 0,
+        size: Number(result.data?.upload_stats?.aggregate?.sum?.size || 0),
+      });
+      setDownloadStats({
+        count: result.data?.download_stats?.aggregate?.count || 0,
+        size: Number(result.data?.download_stats?.aggregate?.sum?.size || 0),
+      });
+    })()
+      .catch((error) => console.error('Error fetching activity:', error))
+      .finally(() => {
+        if (!cancelled) setIsLoadingActivity(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apolloClient, accountId, activityFilter, currentPage]);
+
+  const purchases = useMemo(
+    () => (batches ? summarizePurchases(batches) : null),
+    [batches],
+  );
 
   const totalPages = Math.ceil(totalInteractions / itemsPerPage);
 
@@ -310,58 +282,217 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       <div className='rounded-lg border border-gray-200 bg-background p-6'>
         <h1 className='mb-4 flex items-center gap-2 text-xl font-semibold'>
           <Building2 className='h-5 w-5' />
-          Organization Details
+          Account Details
         </h1>
 
         {isLoading ? (
           <div className='flex items-center justify-center py-8'>
             <Loader className='h-6 w-6 animate-spin' />
           </div>
+        ) : !account ? (
+          <p className='text-sm text-gray-500'>
+            No account found for{' '}
+            <span className='font-mono'>{organizationId}</span>.
+          </p>
         ) : (
-          <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
-            <div className='rounded-lg border border-gray-200 p-4'>
-              <p className='text-xs text-gray-500'>Organization ID</p>
-              <p className='mt-1 break-all font-mono text-sm'>
-                {organizationId}
-              </p>
+          <div className='space-y-4'>
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Organization ID</p>
+                <CopiableText
+                  text={account.organizationId}
+                  className='mt-1 break-all font-mono text-sm'
+                />
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Account ID</p>
+                <CopiableText
+                  text={account.id}
+                  className='mt-1 break-all font-mono text-sm'
+                />
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Model</p>
+                <p className='mt-1 font-medium'>
+                  {account.model === AccountModel.OneOff
+                    ? 'One-off'
+                    : 'Monthly'}
+                </p>
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Upload Credits</p>
+                <p className='mt-1 font-medium'>
+                  {formatBytes(Number(account.uploadLimit))}
+                </p>
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Pending Upload</p>
+                <p className='mt-1 font-medium'>
+                  {formatBytes(Number(account.pendingUploadCredits))}
+                </p>
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Download Credits</p>
+                <p className='mt-1 font-medium'>
+                  {formatBytes(Number(account.downloadLimit))}
+                </p>
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Pending Download</p>
+                <p className='mt-1 font-medium'>
+                  {formatBytes(Number(account.pendingDownloadCredits))}
+                </p>
+              </div>
             </div>
-            {account && (
-              <>
-                <div className='rounded-lg border border-gray-200 p-4'>
-                  <p className='text-xs text-gray-500'>Account ID</p>
-                  <p className='mt-1 break-all font-mono text-sm'>
-                    {account.id}
-                  </p>
-                </div>
-                <div className='rounded-lg border border-gray-200 p-4'>
-                  <p className='text-xs text-gray-500'>Model</p>
-                  <p className='mt-1 font-medium capitalize'>{account.model}</p>
-                </div>
-                <div className='rounded-lg border border-gray-200 p-4'>
-                  <p className='text-xs text-gray-500'>Upload Limit</p>
-                  <p className='mt-1 font-medium'>
-                    {formatBytes(Number(account.upload_limit))}
-                  </p>
-                </div>
-                <div className='rounded-lg border border-gray-200 p-4'>
-                  <p className='text-xs text-gray-500'>Download Limit</p>
-                  <p className='mt-1 font-medium'>
-                    {formatBytes(Number(account.download_limit))}
-                  </p>
-                </div>
-                <div className='rounded-lg border border-gray-200 p-4'>
-                  <p className='text-xs text-gray-500'>Created</p>
-                  <p className='mt-1 font-medium'>
-                    {account.created_at
-                      ? dayjs(account.created_at).format('MMM D, YYYY')
-                      : 'N/A'}
-                  </p>
-                </div>
-              </>
-            )}
+
+            <div className='overflow-hidden rounded-lg border border-gray-200'>
+              <Table className='min-w-full'>
+                <TableHead>
+                  <TableHeadRow>
+                    <TableHeadCell>Public ID</TableHeadCell>
+                    <TableHeadCell>Username</TableHeadCell>
+                    <TableHeadCell>Provider</TableHeadCell>
+                    <TableHeadCell>Role</TableHeadCell>
+                  </TableHeadRow>
+                </TableHead>
+                <TableBody>
+                  {members.map((member) => (
+                    <TableBodyRow key={member.publicId}>
+                      <TableBodyCell>
+                        <CopiableText
+                          text={member.publicId!}
+                          className='break-all font-mono text-sm'
+                        />
+                      </TableBodyCell>
+                      <TableBodyCell>
+                        {member.oauthUsername ?? '—'}
+                      </TableBodyCell>
+                      <TableBodyCell>{member.oauthProvider}</TableBodyCell>
+                      <TableBodyCell>{member.role}</TableBodyCell>
+                    </TableBodyRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
       </div>
+
+      {/* Purchased Credits */}
+      {account && (
+        <div className='rounded-lg border border-gray-200 bg-background p-6'>
+          <div className='mb-4 flex items-center justify-between'>
+            <h2 className='flex items-center gap-2 text-lg font-semibold'>
+              <CreditCard className='h-5 w-5' />
+              Purchased Credits
+            </h2>
+          </div>
+          {batchesError ? (
+            <p className='text-sm text-gray-500'>
+              Purchased credits are unavailable.
+            </p>
+          ) : !batches || !purchases ? (
+            <div className='flex items-center justify-center py-4'>
+              <Loader className='h-5 w-5 animate-spin' />
+            </div>
+          ) : (
+            <div className='space-y-4'>
+              <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
+                <div className='rounded-lg border border-gray-200 p-4'>
+                  <p className='text-xs text-gray-500'>Purchases</p>
+                  <p className='mt-1 font-medium'>
+                    {purchases.refundedCount > 0
+                      ? `${purchases.batchCount} (${purchases.refundedCount} refunded)`
+                      : purchases.batchCount}
+                  </p>
+                </div>
+                <div className='rounded-lg border border-gray-200 p-4'>
+                  <p className='text-xs text-gray-500'>Bytes Purchased</p>
+                  <p className='mt-1 font-medium'>
+                    {formatBytes(Number(purchases.bytesPurchased))}
+                  </p>
+                </div>
+                <div className='rounded-lg border border-gray-200 p-4'>
+                  <p className='text-xs text-gray-500'>Bytes Remaining</p>
+                  <p className='mt-1 font-medium'>
+                    {formatBytes(Number(purchases.bytesRemaining))}
+                  </p>
+                </div>
+                <div className='rounded-lg border border-gray-200 p-4'>
+                  <p className='text-xs text-gray-500'>Amount Paid</p>
+                  <p className='mt-1 font-medium'>
+                    {purchases.paid.length > 0
+                      ? purchases.paid.join(' + ')
+                      : '—'}
+                  </p>
+                </div>
+              </div>
+              {batches.length > 0 && (
+                <div className='overflow-x-auto rounded-lg border border-gray-200'>
+                  <Table className='min-w-full'>
+                    <TableHead>
+                      <TableHeadRow>
+                        <TableHeadCell>Purchased</TableHeadCell>
+                        <TableHeadCell>Buyer</TableHeadCell>
+                        <TableHeadCell>Bytes</TableHeadCell>
+                        <TableHeadCell>Remaining</TableHeadCell>
+                        <TableHeadCell>Paid</TableHeadCell>
+                        <TableHeadCell>Expires</TableHeadCell>
+                        <TableHeadCell>Status</TableHeadCell>
+                      </TableHeadRow>
+                    </TableHead>
+                    <TableBody>
+                      {batches.map((batch) => {
+                        const status = getBatchStatus(batch);
+                        return (
+                          <TableBodyRow key={batch.id}>
+                            <TableBodyCell>
+                              {dayjs(batch.purchasedAt).format('MMM D, YYYY')}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              <Link
+                                href={ROUTES.adminUserCredits(
+                                  network.id,
+                                  batch.userPublicId,
+                                )}
+                                className='font-mono text-xs text-blue-600 hover:underline dark:text-blue-400'
+                                title='Purchase history and refunds'
+                              >
+                                {formatCid(batch.userPublicId)}
+                              </Link>
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              {formatBytes(Number(batch.uploadBytesOriginal))}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              {formatBytes(Number(batch.uploadBytesRemaining))}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              {describePayment(batch).amountPaid}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              {dayjs(batch.expiresAt).format('MMM D, YYYY')}
+                            </TableBodyCell>
+                            <TableBodyCell>
+                              <span
+                                className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
+                              >
+                                {batch.refundedAt
+                                  ? 'Refunded'
+                                  : STATUS_LABEL[status]}
+                              </span>
+                            </TableBodyCell>
+                          </TableBodyRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Statistics Summary */}
       <div className='rounded-lg border border-gray-200 bg-background p-6'>
@@ -427,22 +558,37 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
 
       {/* Activity Log */}
       <div className='rounded-lg border border-gray-200 bg-background p-6'>
-        <h2 className='mb-4 flex items-center gap-2 text-lg font-semibold'>
-          <Clock className='h-5 w-5' />
-          Activity Log
-        </h2>
+        <div className='mb-4 flex items-center justify-between'>
+          <h2 className='flex items-center gap-2 text-lg font-semibold'>
+            <Clock className='h-5 w-5' />
+            Activity Log
+          </h2>
+          <select
+            aria-label='Filter activity by type'
+            value={activityFilter}
+            onChange={(e) => {
+              setActivityFilter(e.target.value as ActivityFilter);
+              setCurrentPage(1);
+            }}
+            className='rounded border border-gray-300 bg-background px-2 py-1 text-sm'
+          >
+            <option value='all'>All activity</option>
+            <option value={InteractionType.Upload}>Uploads</option>
+            <option value={InteractionType.Download}>Downloads</option>
+          </select>
+        </div>
         <div className='overflow-hidden rounded-lg border border-gray-200'>
           <Table className='min-w-full'>
             <TableHead>
               <TableHeadRow>
                 <TableHeadCell>Type</TableHeadCell>
-                <TableHeadCell>File (CID)</TableHeadCell>
+                <TableHeadCell>File</TableHeadCell>
                 <TableHeadCell>Size</TableHeadCell>
                 <TableHeadCell>Date</TableHeadCell>
               </TableHeadRow>
             </TableHead>
             <TableBody>
-              {isLoading ? (
+              {isLoadingActivity ? (
                 <TableBodyRow>
                   <TableBodyCell colSpan={4} className='text-center'>
                     <span className='flex items-center justify-center py-4'>
@@ -469,18 +615,23 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
                         {interaction.type}
                       </span>
                     </TableBodyCell>
-                    <TableBodyCell className='font-mono text-xs'>
+                    <TableBodyCell className='text-xs'>
                       {interaction.cid ? (
                         <Link
                           href={ROUTES.objectDetails(
                             network.id,
                             interaction.cid,
                           )}
-                          className='text-blue-600 hover:underline dark:text-blue-400'
+                          className='flex flex-col text-blue-600 hover:underline dark:text-blue-400'
                           title={interaction.cid}
                         >
-                          {interaction.cid.slice(0, 8)}…
-                          {interaction.cid.slice(-6)}
+                          {interaction.name && (
+                            <span className='text-sm'>{interaction.name}</span>
+                          )}
+                          <span className='font-mono'>
+                            {interaction.cid.slice(0, 8)}…
+                            {interaction.cid.slice(-6)}
+                          </span>
                         </Link>
                       ) : (
                         <span className='text-gray-400'>—</span>
@@ -545,4 +696,3 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
     </div>
   );
 };
-

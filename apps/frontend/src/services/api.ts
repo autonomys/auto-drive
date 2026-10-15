@@ -1,6 +1,7 @@
 import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
   AccountInfo,
+  AccountInfoWithUser,
   AccountModel,
   Banner,
   BannerCriticality,
@@ -419,6 +420,31 @@ export const createApiService = ({
 
     if (!response.ok) {
       throw new Error(`Failed to get features: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  /** Admin: accounts matching a partial publicId, account ID or org ID. */
+  adminSearchAccounts: async (
+    query: string,
+  ): Promise<AccountInfoWithUser[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/accounts/admin/search?q=${encodeURIComponent(query)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to search accounts: ${response.statusText}`);
     }
 
     return response.json();
@@ -1446,6 +1472,32 @@ export const createApiService = ({
   // Admin: get all credit batches for a specific user with intent data
   // GET /credits/batches/user/:userPublicId
   // -------------------------------------------------------------------------
+
+  /** Admin: every batch credited to an account, with each batch's buyer. */
+  getAccountCreditBatches: async (
+    accountId: string,
+  ): Promise<AdminUserCreditBatch[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/credits/batches/account/${encodeURIComponent(accountId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<AdminUserCreditBatch[]>;
+  },
 
   getUserCreditBatches: async (
     userPublicId: string,
