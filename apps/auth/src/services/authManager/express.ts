@@ -32,7 +32,7 @@ export const handleAuth = async (
 export const handleAuthIgnoreOnboarding = async (
   req: Request,
   res: Response,
-): Promise<MaybeUser | null> => {
+): Promise<(MaybeUser & { apiKeyId?: string }) | null> => {
   logger.trace('handleAuthIgnoreOnboarding called')
   const accessToken = req.headers.authorization?.split(' ')[1]
   if (!accessToken) {
@@ -66,7 +66,8 @@ export const handleAuthIgnoreOnboarding = async (
     return null
   }
 
-  return UsersUseCases.getUserByOAuthUser(oauthUser)
+  const user = await UsersUseCases.getUserByOAuthUser(oauthUser)
+  return oauthUser.apiKeyId ? { ...user, apiKeyId: oauthUser.apiKeyId } : user
 }
 
 export const handleAdminAuth = async (

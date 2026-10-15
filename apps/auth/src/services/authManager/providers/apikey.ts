@@ -19,6 +19,7 @@ const getUserFromApiKey = async (secret: string): Promise<OAuthUser> => {
     id: apiKey.oauthUserId,
     username: dbUser?.oauth_username ?? undefined,
     avatarUrl: dbUser?.oauth_avatar_url ?? undefined,
+    apiKeyId: apiKey.id,
   }
 }
 

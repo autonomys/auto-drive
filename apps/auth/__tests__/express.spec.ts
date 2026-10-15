@@ -60,4 +60,30 @@ describe('handleAuth', () => {
     expect(user).toMatchObject({ oauthUserId, onboarded: true })
     expect(res.status).not.toHaveBeenCalled()
   })
+
+  it('carries the API key that authenticated the request', async () => {
+    const oauthUserId = v4()
+    await UsersUseCases.onboardUser({ ...MOCK_UNONBOARDED_USER, oauthUserId })
+    jest
+      .spyOn(AuthManager, 'getUserFromAccessToken')
+      .mockResolvedValue({
+        provider: 'google',
+        id: oauthUserId,
+        apiKeyId: 'k1',
+      })
+
+    const user = await handleAuth(mockRequest(), mockResponse())
+
+    expect(user).toMatchObject({ oauthUserId, apiKeyId: 'k1' })
+  })
+
+  it('carries no API key for a session login', async () => {
+    const oauthUserId = v4()
+    await UsersUseCases.onboardUser({ ...MOCK_UNONBOARDED_USER, oauthUserId })
+    signInAs(oauthUserId)
+
+    const user = await handleAuth(mockRequest(), mockResponse())
+
+    expect(user).not.toHaveProperty('apiKeyId')
+  })
 })
