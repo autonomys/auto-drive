@@ -591,23 +591,16 @@ const unpublishObject = async (
   cid: string,
 ): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
   logger.debug('Attempting to unpublish object (cid=%s)', cid)
-  const publishedObject =
-    await publishedObjectsRepository.getPublishedObjectByCid(cid)
-  if (!publishedObject) {
-    logger.debug('Object not published, nothing to unpublish (cid=%s)', cid)
+  // Each user has their own public links for a CID, so only the caller's are removed
+  if (!user.publicId) {
+    logger.debug('User has no public ID, nothing to unpublish (cid=%s)', cid)
     return ok()
   }
 
-  if (publishedObject.publicId !== user.publicId) {
-    logger.warn(
-      'User (%s) attempted to unpublish object without access (cid=%s)',
-      user.publicId,
-      cid,
-    )
-    return err(new ForbiddenError('User does not have access to this object'))
-  }
-
-  await publishedObjectsRepository.deletePublishedObjectByCid(cid)
+  await publishedObjectsRepository.deletePublishedObjectsByCidAndPublicId(
+    cid,
+    user.publicId,
+  )
   logger.info('Object unpublished successfully (cid=%s)', cid)
 
   return ok()
