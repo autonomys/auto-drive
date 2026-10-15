@@ -11,9 +11,9 @@ import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { PaymentRequiredError } from '../../../src/errors/index.js'
 import { createMockUser } from '../../utils/mocks.js'
 
-// S3 reads are charged to the caller's download credits, and the credit check
-// and the charge both live inside startDownload(). These pin the two handler
-// behaviours that depend on that.
+// S3 reads of objects over the anonymous cap are charged to the caller's
+// download credits, and the credit check and the charge both live inside
+// startDownload(). These pin the two handler behaviours that depend on that.
 describe('S3 reads and download credits', () => {
   const VALID_AUTH =
     'AWS4-HMAC-SHA256 Credential=e046e71c8dc3459c8da189e62418203a/20260821/us-west-2/s3/aws4_request, SignedHeaders=host, Signature=0'

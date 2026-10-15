@@ -14,6 +14,7 @@ import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
 import { ObjectNotFoundError, ForbiddenError } from '../../../src/errors/index.js'
+import { config } from '../../../src/config.js'
 
 /** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
 const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
@@ -62,11 +63,19 @@ describe('S3UseCases', () => {
     // getObject (non-versioned) looks up the current version to anchor
     // Last-Modified to its write time; default to "no version row" so the tests
     // that don't exercise it fall back to the mapping without hitting the DB.
+    // The object's size picks the download path; default to one under the
+    // anonymous cap.
     beforeEach(() => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
         .mockResolvedValue(null)
+      objectOfSize(13)
     })
+
+    const objectOfSize = (size: number) =>
+      jest
+        .spyOn(ObjectUseCases, 'getMetadata')
+        .mockResolvedValue(ok({ totalSize: BigInt(size) }) as any)
 
     it('returns an error when the caller has no such key', async () => {
       const findSpy = jest
@@ -89,7 +98,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ md5: 'abc123' }))
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByUser')
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(err(new ObjectNotFoundError('Download failed')) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -105,7 +114,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ md5: 'abc123def456abc123def456abc123de' }))
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByUser')
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(ok({ read: jest.fn() }) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -130,7 +139,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ metadata: objectMetadata }))
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByUser')
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(ok({ read: jest.fn() }) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -159,7 +168,7 @@ describe('S3UseCases', () => {
           createdAt: writtenAt,
         })
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByUser')
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(ok({ read: jest.fn() }) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -177,7 +186,7 @@ describe('S3UseCases', () => {
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ md5: null }))
       jest
-        .spyOn(DownloadUseCase, 'downloadObjectByUser')
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(ok({} as any) as any)
 
       const result = await S3UseCases.getObject(mockUser, {
@@ -189,14 +198,10 @@ describe('S3UseCases', () => {
       expect(result._unsafeUnwrap().etag).toBeNull()
     })
 
-    it('reads as the caller, passing the byte range, never anonymously', async () => {
+    it('passes the byte range to the download use case', async () => {
       const downloadSpy = jest
-        .spyOn(DownloadUseCase, 'downloadObjectByUser')
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(ok({} as any) as any)
-      const anonymousSpy = jest.spyOn(
-        DownloadUseCase,
-        'downloadObjectByAnonymous',
-      )
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping())
@@ -208,11 +213,9 @@ describe('S3UseCases', () => {
       } as any)
 
       expect(downloadSpy).toHaveBeenCalledWith(
-        mockUser,
         'cid123',
         expect.objectContaining({ byteRange: [100, 200] }),
       )
-      expect(anonymousSpy).not.toHaveBeenCalled()
     })
 
     it('serves a specific version by CID and returns that version’s content', async () => {
@@ -230,12 +233,8 @@ describe('S3UseCases', () => {
         .mockResolvedValue(version as any)
       const findByKeySpy = jest.spyOn(s3ObjectMappingsRepository, 'findByKey')
       const downloadSpy = jest
-        .spyOn(DownloadUseCase, 'downloadObjectByUser')
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
         .mockResolvedValue(ok({ read: jest.fn() }) as any)
-      const anonymousSpy = jest.spyOn(
-        DownloadUseCase,
-        'downloadObjectByAnonymous',
-      )
 
       const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
@@ -258,12 +257,7 @@ describe('S3UseCases', () => {
         'file.txt',
         'oldcid',
       )
-      expect(downloadSpy).toHaveBeenCalledWith(
-        mockUser,
-        'oldcid',
-        expect.any(Object),
-      )
-      expect(anonymousSpy).not.toHaveBeenCalled()
+      expect(downloadSpy).toHaveBeenCalledWith('oldcid', expect.any(Object))
       expect(findByKeySpy).not.toHaveBeenCalled()
     })
 
@@ -280,6 +274,115 @@ describe('S3UseCases', () => {
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+    })
+
+    describe('picks the download path by object size', () => {
+      const cap = config.params.maxAnonymousDownloadSize
+
+      const spyBothPaths = () => ({
+        anonymous: jest
+          .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+          .mockResolvedValue(ok({} as any) as any),
+        byUser: jest
+          .spyOn(DownloadUseCase, 'downloadObjectByUser')
+          .mockResolvedValue(ok({} as any) as any),
+      })
+
+      beforeEach(() => {
+        jest
+          .spyOn(s3ObjectMappingsRepository, 'findByKey')
+          .mockResolvedValue(mapping())
+      })
+
+      it('reads an object exactly at the anonymous cap anonymously', async () => {
+        objectOfSize(cap)
+        const { anonymous, byUser } = spyBothPaths()
+
+        await S3UseCases.getObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+        } as any)
+
+        expect(anonymous).toHaveBeenCalledWith('cid123', {
+          byteRange: undefined,
+        })
+        expect(byUser).not.toHaveBeenCalled()
+      })
+
+      it('reads an object one byte over the cap as the caller', async () => {
+        objectOfSize(cap + 1)
+        const { anonymous, byUser } = spyBothPaths()
+
+        await S3UseCases.getObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+        } as any)
+
+        expect(byUser).toHaveBeenCalledWith(mockUser, 'cid123', {
+          byteRange: undefined,
+        })
+        expect(anonymous).not.toHaveBeenCalled()
+      })
+
+      it('decides by the object size, not the size of the range', async () => {
+        objectOfSize(cap + 1)
+        const { anonymous, byUser } = spyBothPaths()
+
+        await S3UseCases.getObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+          Range: [0, 9],
+        } as any)
+
+        expect(byUser).toHaveBeenCalledWith(mockUser, 'cid123', {
+          byteRange: [0, 9],
+        })
+        expect(anonymous).not.toHaveBeenCalled()
+      })
+
+      it('applies the same rule to a versioned read', async () => {
+        jest
+          .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
+          .mockResolvedValue({
+            bucket: 'my-bucket',
+            key: 'file.txt',
+            cid: 'oldcid',
+            md5: null,
+            mtime: null,
+            metadata: null,
+            createdAt: new Date(0),
+          })
+        const getMetadata = objectOfSize(cap + 1)
+        const { anonymous, byUser } = spyBothPaths()
+
+        await S3UseCases.getObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+          VersionId: 'oldcid',
+        } as any)
+
+        expect(getMetadata).toHaveBeenCalledWith('oldcid')
+        expect(byUser).toHaveBeenCalledWith(mockUser, 'oldcid', {
+          byteRange: undefined,
+        })
+        expect(anonymous).not.toHaveBeenCalled()
+      })
+
+      it('looks the size up once and resolves a suffix range against it', async () => {
+        const getMetadata = objectOfSize(70)
+        const { anonymous } = spyBothPaths()
+
+        await S3UseCases.getObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+          SuffixLength: 10,
+        } as any)
+
+        expect(getMetadata).toHaveBeenCalledTimes(1)
+        expect(anonymous).toHaveBeenCalledWith('cid123', {
+          byteRange: [60, 69],
+        })
+      })
     })
   })
 
