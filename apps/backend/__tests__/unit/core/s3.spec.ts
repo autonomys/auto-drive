@@ -388,6 +388,7 @@ describe('S3UseCases', () => {
 
   describe('getObjectVersions', () => {
     const row = (over: Record<string, unknown> = {}) => ({
+      id: 1n,
       key: 'file.txt',
       cid: 'cid1',
       md5: null,
@@ -403,8 +404,8 @@ describe('S3UseCases', () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
         .mockResolvedValue([
-          row({ cid: 'cid2', lastModified: new Date(2000) }),
-          row({ cid: 'cid1', lastModified: new Date(1000) }),
+          row({ id: 2n, cid: 'cid2', lastModified: new Date(2000) }),
+          row({ id: 1n, cid: 'cid1', lastModified: new Date(1000) }),
         ] as any)
 
       const result = await S3UseCases.getObjectVersions(mockUser, {
@@ -419,6 +420,8 @@ describe('S3UseCases', () => {
       expect(result.versions[1].isLatest).toBe(false)
       expect(result.deleteMarkers).toHaveLength(0)
       expect(result.isTruncated).toBe(false)
+      expect(result.nextKeyMarker).toBeNull()
+      expect(result.nextVersionIdMarker).toBeNull()
     })
 
     it('synthesises a delete marker as latest when the current pointer is deleted', async () => {
@@ -426,8 +429,8 @@ describe('S3UseCases', () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
         .mockResolvedValue([
-          row({ cid: 'cid2', pointerDeletedAt: deletedAt }),
-          row({ cid: 'cid1', pointerDeletedAt: deletedAt }),
+          row({ id: 2n, cid: 'cid2', pointerDeletedAt: deletedAt }),
+          row({ id: 1n, cid: 'cid1', pointerDeletedAt: deletedAt }),
         ] as any)
 
       const result = await S3UseCases.getObjectVersions(mockUser, {
@@ -452,8 +455,8 @@ describe('S3UseCases', () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
         .mockResolvedValue([
-          row({ cid: 'cid2', lastModified: new Date(2000), ownerRemoved: true }),
-          row({ cid: 'cid1', lastModified: new Date(1000), ownerRemoved: true }),
+          row({ id: 2n, cid: 'cid2', lastModified: new Date(2000), ownerRemoved: true }),
+          row({ id: 1n, cid: 'cid1', lastModified: new Date(1000), ownerRemoved: true }),
         ] as any)
 
       const result = await S3UseCases.getObjectVersions(mockUser, {
@@ -472,13 +475,13 @@ describe('S3UseCases', () => {
       expect(result.deleteMarkers[0].lastModified).toEqual(new Date(2000))
     })
 
-    it('truncates at maxKeys and reports the next key marker', async () => {
+    it('truncates at maxKeys and reports nextKeyMarker and nextVersionIdMarker', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
         .mockResolvedValue([
-          row({ key: 'a.txt', cid: 'a1' }),
-          row({ key: 'b.txt', cid: 'b1' }),
-          row({ key: 'c.txt', cid: 'c1' }),
+          row({ id: 10n, key: 'a.txt', cid: 'a1' }),
+          row({ id: 20n, key: 'b.txt', cid: 'b1' }),
+          row({ id: 30n, key: 'c.txt', cid: 'c1' }),
         ] as any)
 
       const result = await S3UseCases.getObjectVersions(mockUser, {
@@ -491,6 +494,115 @@ describe('S3UseCases', () => {
       expect(result.versions.map((v) => v.key)).toEqual(['a.txt', 'b.txt'])
       expect(result.isTruncated).toBe(true)
       expect(result.nextKeyMarker).toBe('b.txt')
+      expect(result.nextVersionIdMarker).toBe('20')
+    })
+
+    it('paginates mid-key across pages when a single key has more than maxKeys versions', async () => {
+      const listSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'listObjectVersions',
+      )
+
+      // Page 1: key has 3 versions (ids 30, 20, 10), maxKeys = 2.
+      listSpy.mockResolvedValueOnce([
+        row({ id: 30n, key: 'heavy.txt', cid: 'v3' }),
+        row({ id: 20n, key: 'heavy.txt', cid: 'v2' }),
+        row({ id: 10n, key: 'heavy.txt', cid: 'v1' }),
+      ] as any)
+
+      const page1 = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: null,
+        versionIdMarker: null,
+        maxKeys: 2,
+      })
+
+      expect(page1.versions.map((v) => v.versionId)).toEqual(['v3', 'v2'])
+      expect(page1.versions.map((v) => v.isLatest)).toEqual([true, false])
+      expect(page1.isTruncated).toBe(true)
+      expect(page1.nextKeyMarker).toBe('heavy.txt')
+      expect(page1.nextVersionIdMarker).toBe('20')
+
+      // Page 2: resumes mid-key with keyMarker='heavy.txt' and versionIdMarker='20'.
+      listSpy.mockResolvedValueOnce([
+        row({ id: 10n, key: 'heavy.txt', cid: 'v1' }),
+        row({ id: 40n, key: 'next.txt', cid: 'n1' }),
+      ] as any)
+
+      const page2 = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: page1.nextKeyMarker,
+        versionIdMarker: page1.nextVersionIdMarker,
+        maxKeys: 2,
+      })
+
+      expect(listSpy).toHaveBeenLastCalledWith(
+        'google',
+        'user1',
+        'b',
+        '',
+        'heavy.txt',
+        20n,
+        3,
+      )
+      // v1 is a continuation of heavy.txt (isLatest must be false); n1 starts
+      // next.txt fresh (isLatest is true).
+      expect(page2.versions.map((v) => [v.key, v.versionId, v.isLatest])).toEqual([
+        ['heavy.txt', 'v1', false],
+        ['next.txt', 'n1', true],
+      ])
+      expect(page2.isTruncated).toBe(false)
+      expect(page2.nextKeyMarker).toBeNull()
+      expect(page2.nextVersionIdMarker).toBeNull()
+    })
+
+    it('counts synthesised delete markers toward maxKeys and does not re-emit them on mid-key resume', async () => {
+      const deletedAt = new Date(5000)
+      const listSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'listObjectVersions',
+      )
+
+      // Deleted key with 1 content version (id: 10n), paged with maxKeys = 1.
+      // Page 1 emits ONLY the delete marker (1 entry) and advances the cursor
+      // to id 11 (firstRowId + 1) so Page 2 still fetches id 10 without
+      // re-emitting the delete marker.
+      listSpy.mockResolvedValueOnce([
+        row({ id: 10n, key: 'del.txt', cid: 'v1', pointerDeletedAt: deletedAt }),
+      ] as any)
+
+      const page1 = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: null,
+        maxKeys: 1,
+      })
+
+      expect(page1.deleteMarkers).toHaveLength(1)
+      expect(page1.versions).toHaveLength(0)
+      expect(page1.isTruncated).toBe(true)
+      expect(page1.nextKeyMarker).toBe('del.txt')
+      expect(page1.nextVersionIdMarker).toBe('11')
+
+      listSpy.mockResolvedValueOnce([
+        row({ id: 10n, key: 'del.txt', cid: 'v1', pointerDeletedAt: deletedAt }),
+      ] as any)
+
+      const page2 = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: page1.nextKeyMarker,
+        versionIdMarker: page1.nextVersionIdMarker,
+        maxKeys: 1,
+      })
+
+      expect(page2.deleteMarkers).toHaveLength(0)
+      expect(page2.versions).toHaveLength(1)
+      expect(page2.versions[0].versionId).toBe('v1')
+      expect(page2.versions[0].isLatest).toBe(false)
+      expect(page2.isTruncated).toBe(false)
     })
 
     it('collapses repeated same-CID writes into one version (versionId = CID is unique per key)', async () => {
@@ -499,9 +611,9 @@ describe('S3UseCases', () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
         .mockResolvedValue([
-          row({ cid: 'cidX', md5: 'newmd5', lastModified: new Date(3000) }),
-          row({ cid: 'cidY', md5: 'ymd5', lastModified: new Date(2000) }),
-          row({ cid: 'cidX', md5: 'oldmd5', lastModified: new Date(1000) }),
+          row({ id: 3n, cid: 'cidX', md5: 'newmd5', lastModified: new Date(3000) }),
+          row({ id: 2n, cid: 'cidY', md5: 'ymd5', lastModified: new Date(2000) }),
+          row({ id: 1n, cid: 'cidX', md5: 'oldmd5', lastModified: new Date(1000) }),
         ] as any)
 
       const result = await S3UseCases.getObjectVersions(mockUser, {

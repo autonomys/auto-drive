@@ -53,6 +53,8 @@ export interface S3ObjectVersion {
  * version first.
  */
 export interface S3ObjectVersionListingRow {
+  /** Monotonic row id in "S3".object_versions, used as the pagination cursor. */
+  id: bigint
   key: string
   cid: string
   md5: string | null
@@ -251,7 +253,7 @@ const findVersionByCid = async (
  * List the version history for a bucket/prefix (ListObjectVersions), scoped to
  * the caller. Each content version is joined with its key's current-pointer
  * delete state so the caller can flag IsLatest and synthesise a delete marker
- * for keys whose current pointer is soft-deleted.
+ * for keys whose current pointer is soft-deleted or owner-removed.
  *
  * Unlike ListObjectsV2, this deliberately does NOT hide soft-deleted or
  * web-app-Trashed keys: version history is the point of WORM versioning and
@@ -259,13 +261,13 @@ const findVersionByCid = async (
  * delete marker). Retention is unconditional; moderation applies to RETRIEVAL
  * (GET ?versionId runs authorizeDownload), not to listing metadata.
  *
- * Pagination is by KEY: `keyLimit` bounds the number of distinct keys, and ALL
- * version rows of each selected key are returned (ordered key asc, then newest
- * version first). Whole keys are selected — never a partial key — so the caller
- * can page by key with `key > marker` without ever dropping part of a key's
- * history. Pass keyLimit = maxKeys + 1 so the caller detects truncation via the
- * extra key. There is deliberately no flat row cap: one that cut a key mid-
- * history would make the next page silently skip the remainder.
+ * Pagination is entry-level (#790):
+ * - Repeated same-CID writes on a key are deduplicated first in SQL via
+ *   `DISTINCT ON (ov.key, ov.cid)` (keeping the newest row `ov.id DESC`), so a
+ *   CID emitted on one page can never reappear on a subsequent page via an
+ *   older duplicate row.
+ * - Rows are then filtered by `(keyMarker, idMarker)` (`key > km` or
+ *   `key = km AND id < idm`) and bounded by `rowLimit` (`maxKeys + 1`).
  */
 const listObjectVersions = async (
   ownerOauthProvider: string,
@@ -273,7 +275,8 @@ const listObjectVersions = async (
   bucket: string,
   prefix: string,
   keyMarker: string | null,
-  keyLimit: number,
+  idMarker: bigint | null,
+  rowLimit: number,
 ): Promise<S3ObjectVersionListingRow[]> => {
   const db = await getDatabase()
 
@@ -282,71 +285,111 @@ const listObjectVersions = async (
     .replace(/%/g, '\\%')
     .replace(/_/g, '\\_')
 
-  // Scope filter shared by the key-selection CTE and the row fetch. ov.key alone
-  // is not unique across owners/buckets, so it is re-applied on the outer query.
   const scope = `
     ov.owner_oauth_provider = $1
     AND ov.owner_oauth_user_id = $2
     AND ov.bucket = $3
     AND ov.key LIKE $4
   `
-  // $5 = keyLimit; $6 = keyMarker (present only when paging).
-  const markerClause = keyMarker ? ' AND ov.key > $6' : ''
 
-  // Pick the page's distinct keys first, then fetch every version row for
-  // exactly those keys. Selecting whole keys (rather than a flat LIMIT on rows)
-  // guarantees no key is truncated mid-history.
+  // When resuming mid-key (keyMarker + idMarker), the dedup CTE must still see
+  // all rows of keyMarker (`ov.key >= $6`) so DISTINCT ON (key, cid) picks each
+  // CID's newest row before the outer query filters `dv.id < $7`. When paging
+  // by keyMarker alone, `ov.key > $6` can be pushed straight into the CTE.
+  const hasKeyMarker = keyMarker !== null
+  const hasIdMarker = hasKeyMarker && idMarker !== null
+  const cteKeyClause = hasKeyMarker
+    ? hasIdMarker
+      ? ' AND ov.key >= $6'
+      : ' AND ov.key > $6'
+    : ''
+  const outerWhereClause = hasIdMarker
+    ? 'WHERE dv.key > $6 OR (dv.key = $6 AND dv.id < $7)'
+    : ''
+
   const text = `
-    WITH page_keys AS (
-      SELECT DISTINCT ov.key
+    WITH deduped_versions AS (
+      SELECT DISTINCT ON (ov.key, ov.cid)
+        ov.id,
+        ov.owner_oauth_provider,
+        ov.owner_oauth_user_id,
+        ov.bucket,
+        ov.key,
+        ov.cid,
+        ov.md5,
+        ov.created_at
       FROM "S3".object_versions ov
-      WHERE ${scope}${markerClause}
-      ORDER BY ov.key ASC
+      WHERE ${scope}${cteKeyClause}
+      ORDER BY ov.key ASC, ov.cid ASC, ov.id DESC
+    ),
+    page_versions AS (
+      SELECT
+        dv.id,
+        dv.owner_oauth_provider,
+        dv.owner_oauth_user_id,
+        dv.bucket,
+        dv.key,
+        dv.cid,
+        dv.md5,
+        dv.created_at
+      FROM deduped_versions dv
+      ${outerWhereClause}
+      ORDER BY dv.key ASC, dv.id DESC
       LIMIT $5
     )
     SELECT
-      ov.key,
-      ov.cid,
-      ov.md5,
+      pv.id,
+      pv.key,
+      pv.cid,
+      pv.md5,
       COALESCE(m.total_size, 0) AS size,
-      ov.created_at AS last_modified,
+      pv.created_at AS last_modified,
       om.deleted_at AS pointer_deleted_at,
-      NOT (${ownershipSQL.notRemovedByOwnerSQL('ov.cid')}) AS owner_removed
-    FROM "S3".object_versions ov
-    JOIN page_keys pk ON pk.key = ov.key
+      NOT (${ownershipSQL.notRemovedByOwnerSQL('pv.cid')}) AS owner_removed
+    FROM page_versions pv
     JOIN "S3".object_mappings om
-      ON om.owner_oauth_provider = ov.owner_oauth_provider
-     AND om.owner_oauth_user_id = ov.owner_oauth_user_id
-     AND om.bucket = ov.bucket
-     AND om.key = ov.key
+      ON om.owner_oauth_provider = pv.owner_oauth_provider
+     AND om.owner_oauth_user_id = pv.owner_oauth_user_id
+     AND om.bucket = pv.bucket
+     AND om.key = pv.key
     LEFT JOIN LATERAL (
       SELECT (metadata->>'totalSize')::bigint AS total_size
       FROM metadata
-      WHERE head_cid = ov.cid
+      WHERE head_cid = pv.cid
       LIMIT 1
     ) m ON true
-    WHERE ${scope}
-    ORDER BY ov.key ASC, ov.id DESC
+    ORDER BY pv.key ASC, pv.id DESC
   `
 
-  const values: unknown[] = keyMarker
+  const values: unknown[] = hasIdMarker
     ? [
         ownerOauthProvider,
         ownerOauthUserId,
         bucket,
         `${escapedPrefix}%`,
-        keyLimit,
+        rowLimit,
         keyMarker,
+        idMarker.toString(),
       ]
-    : [
-        ownerOauthProvider,
-        ownerOauthUserId,
-        bucket,
-        `${escapedPrefix}%`,
-        keyLimit,
-      ]
+    : hasKeyMarker
+      ? [
+          ownerOauthProvider,
+          ownerOauthUserId,
+          bucket,
+          `${escapedPrefix}%`,
+          rowLimit,
+          keyMarker,
+        ]
+      : [
+          ownerOauthProvider,
+          ownerOauthUserId,
+          bucket,
+          `${escapedPrefix}%`,
+          rowLimit,
+        ]
 
   const result = await db.query<{
+    id: string
     key: string
     cid: string
     md5: string | null
@@ -357,6 +400,7 @@ const listObjectVersions = async (
   }>({ text, values })
 
   return result.rows.map((row) => ({
+    id: BigInt(row.id),
     key: row.key,
     cid: row.cid,
     md5: row.md5 ?? null,

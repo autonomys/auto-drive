@@ -131,4 +131,62 @@ describe('S3 object mappings repository — Last-Modified anchoring', () => {
       ),
     ).toBeNull()
   })
+
+  it('listObjectVersions deduplicates repeated CIDs per key in SQL and resumes mid-key by idMarker without cross-page duplicates', async () => {
+    const bucket = 'worm-versions-paging'
+    const key = 'overwritten.txt'
+
+    // Write cidA -> cidB -> cidA (repeated same-CID write).
+    await s3ObjectMappingsRepository.createMapping(
+      OWNER,
+      USER,
+      bucket,
+      key,
+      'cidA',
+      'md5-old',
+    )
+    await s3ObjectMappingsRepository.createMapping(
+      OWNER,
+      USER,
+      bucket,
+      key,
+      'cidB',
+      'md5-b',
+    )
+    await s3ObjectMappingsRepository.createMapping(
+      OWNER,
+      USER,
+      bucket,
+      key,
+      'cidA',
+      'md5-new',
+    )
+
+    // Page 1 (rowLimit = 1): returns the newest cidA row only.
+    const page1 = await s3ObjectMappingsRepository.listObjectVersions(
+      OWNER,
+      USER,
+      bucket,
+      key,
+      null,
+      null,
+      1,
+    )
+    expect(page1).toHaveLength(1)
+    expect(page1[0].cid).toBe('cidA')
+    expect(page1[0].md5).toBe('md5-new')
+
+    // Page 2 (resume mid-key with idMarker = page1[0].id): returns cidB, and
+    // the older cidA duplicate row does NOT reappear.
+    const page2 = await s3ObjectMappingsRepository.listObjectVersions(
+      OWNER,
+      USER,
+      bucket,
+      key,
+      key,
+      page1[0].id,
+      10,
+    )
+    expect(page2.map((r) => r.cid)).toEqual(['cidB'])
+  })
 })
