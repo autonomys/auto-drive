@@ -3,6 +3,7 @@ import { ReconciliationUseCases } from '../../../core/objects/reconciliation.js'
 import { PublishingRecoveryUseCases } from '../../../core/objects/publishingRecovery.js'
 import { MigrationRecoveryUseCases } from '../../../core/uploads/migrationRecovery.js'
 import { UploadsUseCases } from '../../../core/uploads/uploads.js'
+import { config } from '../../../config.js'
 import { Rabbit } from '../../drivers/rabbit.js'
 import { Task } from '../tasks.js'
 import { createHandlerWithRetries } from '../utils.js'
@@ -49,5 +50,6 @@ export const processFrontendTask = createHandlerWithRetries(
   },
   {
     errorPublishQueue: frontendErrorPublishedQueue,
+    taskTimeoutMs: config.frontendWorker.taskTimeoutMs,
   },
 )

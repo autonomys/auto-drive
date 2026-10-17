@@ -203,6 +203,16 @@ export const config = {
     // the confirmation-watch fix (separate PR); this is containment.
     taskTimeoutMs: positiveIntEnv('PUBLISH_TASK_TIMEOUT_MS', 3600000),
   },
+  frontendWorker: {
+    // Per-task timeout for processFrontendTask on the task-manager queue.
+    // Prevents a single hung or slow task from pinning a consumer slot
+    // indefinitely (see issue #791). Defaults to CHAIN_TRANSACTION_TIMEOUT_MS
+    // (300000ms / 5 min) unless overridden via FRONTEND_TASK_TIMEOUT_MS.
+    taskTimeoutMs: positiveIntEnv(
+      'FRONTEND_TASK_TIMEOUT_MS',
+      positiveIntEnv('CHAIN_TRANSACTION_TIMEOUT_MS', 300000),
+    ),
+  },
   publishingRecovery: {
     intervalMs: Number(env('PUBLISHING_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes
     maxObjectsPerCycle: Number(env('PUBLISHING_RECOVERY_MAX_PER_CYCLE', '5')),
