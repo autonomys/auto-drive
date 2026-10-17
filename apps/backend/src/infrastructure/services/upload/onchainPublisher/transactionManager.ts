@@ -8,7 +8,7 @@ import { waitReady } from '@polkadot/wasm-crypto'
 import { createConnection } from '../../../drivers/substrate.js'
 import { Transaction, TransactionResult } from '@auto-drive/models'
 import { createLogger } from '../../../drivers/logger.js'
-import { createAccountManager } from './accounts.js'
+import { createAccountManager, NoFundedSignerError } from './accounts.js'
 import {
   hasReachedConfirmationDepth,
   isAccountFault,
@@ -591,7 +591,26 @@ export const createTransactionManager = (
     const executeTransaction = async (
       transaction: Transaction,
     ): Promise<TransactionResult> => {
-      let registration = await activeAccountManager.registerTransaction()
+      let registration: Awaited<
+        ReturnType<typeof activeAccountManager.registerTransaction>
+      >
+      try {
+        registration = await activeAccountManager.registerTransaction()
+      } catch (error) {
+        logger.error(
+          error as Error,
+          'Failed to register account for transaction submission',
+        )
+        return {
+          success: false,
+          error: (error as Error).message,
+          status:
+            error instanceof NoFundedSignerError ||
+            isInsufficientFundsError(error)
+              ? 'InsufficientFunds'
+              : 'Failed',
+        }
+      }
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const { account, nonce } = registration

@@ -5,6 +5,7 @@ import {
   optionalBoolEnvironmentVariable,
   env,
   positiveIntEnv,
+  nonNegativeIntEnv,
 } from './shared/utils/misc.js'
 import { getAddress, isAddress } from 'viem'
 
@@ -182,7 +183,7 @@ export const config = {
     unfundedCooldownMs: positiveIntEnv('UNFUNDED_COOLDOWN_MS', 60000),
     // Cadence (in ms) for proactive background checking of publisher signer balances.
     // Default: 60s. Set to 0 to disable background interval.
-    signerBalanceCheckIntervalMs: positiveIntEnv(
+    signerBalanceCheckIntervalMs: nonNegativeIntEnv(
       'SIGNER_BALANCE_CHECK_INTERVAL_MS',
       60000,
     ),
