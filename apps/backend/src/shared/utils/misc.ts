@@ -41,6 +41,11 @@ export const positiveIntEnv = (key: string, fallback: number): number => {
   return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : fallback
 }
 
+export const nonNegativeIntEnv = (key: string, fallback: number): number => {
+  const parsed = Number(env(key, String(fallback)))
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback
+}
+
 export const consumeStream = async (stream: Readable) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for await (const _ of stream) {
