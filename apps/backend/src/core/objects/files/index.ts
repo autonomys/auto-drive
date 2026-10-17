@@ -88,8 +88,9 @@ const retrieveFileByteRange = async (
     byteRange,
   )
 
-  const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
-  const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+  const fetcher = (await ObjectUseCases.hasAllNodeData(metadata))
+    ? DBObjectFetcher
+    : FileGatewayObjectFetcher
 
   const reader = await composeNodesDataAsFileReadable({
     fetcher,
@@ -118,8 +119,9 @@ const retrieveFullFile = async (metadata: OffchainMetadata) => {
     metadata.dataCid,
     metadata.type,
   )
-  const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
-  const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+  const fetcher = (await ObjectUseCases.hasAllNodeData(metadata))
+    ? DBObjectFetcher
+    : FileGatewayObjectFetcher
 
   return fetcher.fetchFile(metadata.dataCid)
 }
