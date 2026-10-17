@@ -6,7 +6,10 @@ import {
   submitTransaction,
   createTransactionManager,
 } from '../../../src/infrastructure/services/upload/onchainPublisher/transactionManager.js'
-import type { createAccountManager as createAccountManagerFn } from '../../../src/infrastructure/services/upload/onchainPublisher/accounts.js'
+import {
+  type createAccountManager as createAccountManagerFn,
+  NoFundedSignerError,
+} from '../../../src/infrastructure/services/upload/onchainPublisher/accounts.js'
 import { config } from '../../../src/config.js'
 
 /**
@@ -377,5 +380,103 @@ describe('createTransactionManager — submission reroute and error recovery', (
     expect(mockAccountManager.markUnfunded).not.toHaveBeenCalled()
     expect(mockAccountManager.removeAccount).not.toHaveBeenCalled()
     expect(mockAccountManager.resyncAccount).toHaveBeenCalledWith(alice.address)
+  })
+
+  it('returns InsufficientFunds result instead of rejecting Promise.all when initial registerTransaction throws NoFundedSignerError', async () => {
+    const mockExtrinsic = {
+      hash: { toString: (): string => '0xtx' },
+      signAndSend: jest.fn(
+        (_pair: KeyringPair, _opts: unknown, cb: (res: unknown) => unknown) => {
+          setTimeout(() => {
+            cb({
+              status: {
+                isInBlock: true,
+                isInvalid: false,
+                isUsurped: false,
+                type: 'InBlock',
+                asInBlock: { toString: (): string => INCLUSION_HASH },
+              },
+            })
+          }, 10)
+          return Promise.resolve(() => {})
+        },
+      ),
+    }
+
+    const mockApi = {
+      tx: {
+        system: {
+          remark: jest.fn(() => mockExtrinsic),
+        },
+      },
+      registry: {
+        findMetaError: () => ({ section: 'x', name: 'y', docs: ['z'] }),
+      },
+      rpc: {
+        chain: {
+          getBlock: jest.fn(async () => ({
+            block: { header: { number: { toNumber: () => INCLUSION_NUMBER } } },
+          })),
+          subscribeNewHeads: jest.fn(
+            async (cb: (header: unknown) => unknown) => {
+              setTimeout(() => {
+                cb({ number: { toNumber: () => HEAD_AT_DEPTH } })
+              }, 20)
+              return () => {}
+            },
+          ),
+          getHeader: jest.fn(async () => ({
+            number: { toNumber: () => HEAD_AT_DEPTH },
+          })),
+          getBlockHash: jest.fn(async () => ({
+            toString: (): string => INCLUSION_HASH,
+          })),
+        },
+      },
+      once: jest.fn(),
+      off: jest.fn(),
+    } as unknown as ApiPromise
+
+    let callCount = 0
+    const mockAccountManager = {
+      registerTransaction: jest.fn(async () => {
+        callCount += 1
+        if (callCount === 1) {
+          return { account: alice, nonce: 1 }
+        }
+        throw new NoFundedSignerError('No funded signer accounts available')
+      }),
+      markUnfunded: jest.fn(async () => {}),
+      removeAccount: jest.fn(async () => {}),
+      resyncAccount: jest.fn(async () => {}),
+      refreshBalances: jest.fn(async () => {}),
+      getAccountStates: jest.fn(() => new Map()),
+      stop: jest.fn(),
+    }
+
+    const txManager = createTransactionManager(
+      mockApi,
+      mockAccountManager as unknown as Awaited<
+        ReturnType<typeof createAccountManagerFn>
+      >,
+    )
+    const results = await txManager.submit([
+      {
+        module: 'system',
+        method: 'remark',
+        params: ['tx-1'],
+      },
+      {
+        module: 'system',
+        method: 'remark',
+        params: ['tx-2'],
+      },
+    ])
+
+    expect(results).toHaveLength(2)
+    expect(results[0].success).toBe(true)
+    expect(results[0].status).toBe('InBlock')
+    expect(results[1].success).toBe(false)
+    expect(results[1].status).toBe('InsufficientFunds')
   })
 })
