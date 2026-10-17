@@ -75,11 +75,23 @@ export const FileGatewayObjectFetcher: ObjectFetcher = {
         cid,
         GATEWAY_TIMEOUT_MS,
       )
-      return withTimeout(
-        FileGateway.getFile(cid),
-        GATEWAY_TIMEOUT_MS,
-        `FileGateway.getFile(${cid})`,
-      )
+      try {
+        return await withTimeout(
+          FileGateway.getFile(cid),
+          GATEWAY_TIMEOUT_MS,
+          `FileGateway.getFile(${cid})`,
+        )
+      } catch (error) {
+        if (await ObjectUseCases.hasAllNodeData(metadata)) {
+          logger.warn(
+            error as Error,
+            'Gateway fetch failed, falling back to local DB node data (cid=%s)',
+            cid,
+          )
+          return DBObjectFetcher.fetchFile(cid)
+        }
+        throw error
+      }
     }
 
     return retrieveAndReassembleFolderAsZip(new PizZip(), cid)

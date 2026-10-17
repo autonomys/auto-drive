@@ -33,6 +33,7 @@ import { consumeStream } from '../../shared/utils/misc.js'
 import { DownloadUseCase } from '../../core/downloads/index.js'
 import { err, ok, Result } from 'neverthrow'
 import { FileGateway } from '../../infrastructure/services/dsn/fileGateway/index.js'
+import { config } from '../../config.js'
 import {
   ForbiddenError,
   IllegalContentError,
@@ -415,6 +416,28 @@ const isArchived = async (cid: string) => {
   return metadata.is_archived
 }
 
+const hasAllNodeData = async (
+  metadata: OffchainMetadata,
+): Promise<boolean> => {
+  if (metadata.type === 'file') {
+    const uniqueChunkCids = [
+      ...new Set(metadata.chunks.map((chunk) => chunk.cid)),
+    ]
+    if (uniqueChunkCids.length === 0) {
+      return true
+    }
+    const count = await nodesRepository.countCidsWithData(uniqueChunkCids)
+    return count === uniqueChunkCids.length
+  }
+
+  const areNodesEncoded = await Promise.all(
+    metadata.children.map((child) =>
+      ObjectUseCases.isReconstructable(child.cid),
+    ),
+  )
+  return areNodesEncoded.every((e) => e)
+}
+
 // to remove: this will not be used after we process data with no duplicates handling
 const isReconstructable = async (cid: string): Promise<boolean> => {
   const metadata = await metadataRepository.getMetadata(cid)
@@ -423,22 +446,7 @@ const isReconstructable = async (cid: string): Promise<boolean> => {
     return false
   }
 
-  const metadataType = metadata.metadata.type
-  if (metadataType === 'file') {
-    const areNodesEncoded = await Promise.all(
-      metadata.metadata.chunks.map((child) =>
-        nodesRepository.hasEncodedNode(child.cid),
-      ),
-    )
-    return areNodesEncoded.every((e) => e)
-  } else {
-    const areNodesEncoded = await Promise.all(
-      metadata.metadata.children.map((child) =>
-        ObjectUseCases.isReconstructable(child.cid),
-      ),
-    )
-    return areNodesEncoded.every((e) => e)
-  }
+  return ObjectUseCases.hasAllNodeData(metadata.metadata)
 }
 
 const hasAllNodesArchived = async (cid: string) => {
@@ -507,16 +515,27 @@ const onObjectArchived = async (cid: string, signal?: AbortSignal) => {
   if (signal?.aborted) return
 
   await metadataRepository.markAsArchived(cid)
+  // Stripping now belongs to the reclaim sweep, which strips only what the
+  // gateway has confirmed it can serve. piece_index proves the data reached
+  // the chain; it does not prove any reader can fetch it for ~3 days yet.
+}
 
-  if (signal?.aborted) {
-    logger.warn(
-      'Archival aborted after marking metadata, before stripping node data (cid=%s)',
-      cid,
-    )
-    return
+const reclaimArchivedNodeData = async (signal?: AbortSignal) => {
+  const cids = await nodesRepository.getArchivedRootCidsWithData(
+    config.reclaim.batchSize,
+  )
+  logger.info(
+    'Reclaim sweep: %d object(s) still holding node data',
+    cids.length,
+  )
+
+  for (const cid of cids) {
+    if (signal?.aborted) return
+    if (!(await FileGateway.isRetrievableFromGateway(cid))) continue
+
+    await nodesRepository.removeNodeDataByRootCid(cid)
+    logger.info('Reclaimed node data, gateway confirmed (cid=%s)', cid)
   }
-
-  await nodesRepository.removeNodeDataByRootCid(cid)
 }
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
@@ -890,5 +909,8 @@ export const ObjectUseCases = {
   authorizeDownload,
   getToBeReviewedList,
   syncingIsObjectBanned,
+  hasAllNodeData,
   isReconstructable,
+  reclaimArchivedNodeData,
 }
+
