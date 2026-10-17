@@ -1217,12 +1217,14 @@ export const listObjectVersionsHandler = async (
   const rawMaxKeys = parseInt((req.query['max-keys'] as string) ?? '1000', 10)
   const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
   const keyMarker = (req.query['key-marker'] as string) ?? null
+  const versionIdMarker = (req.query['version-id-marker'] as string) ?? null
   const encodingType = (req.query['encoding-type'] as string) ?? null
 
   const result = await S3UseCases.getObjectVersions(user, {
     bucket,
     prefix,
     keyMarker,
+    versionIdMarker,
     maxKeys,
   })
 
@@ -1251,11 +1253,15 @@ export const listObjectVersionsHandler = async (
     Name: bucket,
     Prefix: encode(prefix),
     KeyMarker: keyMarker ?? '',
+    VersionIdMarker: versionIdMarker ?? '',
     MaxKeys: maxKeys,
     IsTruncated: result.isTruncated,
   }
   if (plan === 'encode') xmlBody.EncodingType = 'url'
   if (result.nextKeyMarker) xmlBody.NextKeyMarker = encode(result.nextKeyMarker)
+  if (result.nextVersionIdMarker) {
+    xmlBody.NextVersionIdMarker = result.nextVersionIdMarker
+  }
 
   if (result.versions.length > 0) {
     xmlBody.Version = result.versions.map((v) => ({

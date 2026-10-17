@@ -355,6 +355,7 @@ export interface ListObjectVersionsParams {
   bucket: string
   prefix: string
   keyMarker: string | null
+  versionIdMarker?: string | null
   maxKeys: number
 }
 
@@ -363,6 +364,7 @@ export interface ListObjectVersionsResult {
   deleteMarkers: S3DeleteMarkerEntry[]
   isTruncated: boolean
   nextKeyMarker: string | null
+  nextVersionIdMarker: string | null
 }
 
 // A synthesised delete marker's versionId. Markers are not stored — they are
@@ -373,6 +375,19 @@ export interface ListObjectVersionsResult {
 const deleteMarkerVersionId = (deletedAt: Date): string =>
   `dm-${deletedAt.getTime()}`
 
+// Parse an opaque version-id-marker token (encoding `object_versions.id`) into
+// its monotonic bigint cursor. Returns null when unset or invalid.
+const parseVersionIdMarker = (
+  marker: string | null | undefined,
+): bigint | null => {
+  if (!marker || !/^[1-9]\d*$/.test(marker)) return null
+  try {
+    return BigInt(marker)
+  } catch {
+    return null
+  }
+}
+
 /**
  * ListObjectVersions: enumerate the version history for a bucket/prefix in the
  * caller's namespace, newest version first per key. IsLatest marks the current
@@ -380,73 +395,96 @@ const deleteMarkerVersionId = (deletedAt: Date): string =>
  * owner-removed (web-app Trash / moderation) — i.e. absent on every other read
  * API — a delete marker is synthesised as the latest entry instead (its versionId
  * derived from the delete time — markers are display-only, since
- * DeleteObject?versionId always 403s). Pagination is key-level: up to maxKeys
- * keys are returned, with nextKeyMarker set when more remain. The repository
- * returns WHOLE keys (every version row of up to maxKeys + 1 distinct keys), so
- * a key's history is never split across a page boundary.
+ * DeleteObject?versionId always 403s).
  *
- * KNOWN LIMITATION (tracked in #790): maxKeys bounds the number of distinct KEYS,
- * not entries. S3 defines max-keys as a hard bound on Version+DeleteMarker
- * entries with version-id-marker resume; here a single key with > maxKeys
- * versions returns them all in one page. This is deliberate — whole keys are
- * never split, so no version is silently dropped (the higher-severity concern) —
- * at the cost of an oversized page for a pathologically-overwritten key. Proper
- * entry-level pagination is deferred: it needs an opaque object_versions.id
- * cursor (versionId=CID isn't monotonic) plus SQL-level DISTINCT ON dedup, per
- * #790.
+ * Pagination is entry-level (#790): each page returns at most `maxKeys`
+ * `Version` + `DeleteMarker` entries, with `nextKeyMarker` and
+ * `nextVersionIdMarker` (an opaque cursor encoding `object_versions.id`) set
+ * when truncated so a heavily-overwritten key can be resumed mid-key across
+ * pages without dropping or duplicating versions.
  */
 const getObjectVersions = async (
   user: UserWithOrganization,
   params: ListObjectVersionsParams,
 ): Promise<ListObjectVersionsResult> => {
-  // maxKeys + 1: the extra key (if any) signals more history to page through.
-  // Because whole keys are fetched, that extra key is complete too — nothing is
-  // cut, so paging with `key > nextKeyMarker` can't skip any of a key's history.
+  const idMarker =
+    params.keyMarker !== null
+      ? parseVersionIdMarker(params.versionIdMarker)
+      : null
+
+  // Fetch up to maxKeys + 1 deduplicated version rows. Each row produces at
+  // least one entry (or two when starting a deleted key that also synthesises
+  // a delete marker), so maxKeys + 1 rows are always sufficient to fill a page
+  // of maxKeys entries and detect truncation.
   const rows = await s3ObjectMappingsRepository.listObjectVersions(
     user.oauthProvider,
     user.oauthUserId,
     params.bucket,
     params.prefix,
     params.keyMarker,
+    idMarker,
     params.maxKeys + 1,
   )
 
   const versions: S3VersionEntry[] = []
   const deleteMarkers: S3DeleteMarkerEntry[] = []
-  let keysEmitted = 0
+  let entriesEmitted = 0
   let lastKey: string | null = null
-  let isTruncated = false
+  let lastCursorId: bigint | null = null
 
-  // Rows arrive ordered by key asc, then newest version first, so a key's rows
-  // are contiguous and the first row of each key is its newest version.
+  // Rows arrive ordered by key asc, then newest version first (id desc).
   let i = 0
   while (i < rows.length) {
-    const key = rows[i].key
-    // New key: enforce the maxKeys page limit before emitting its group. Since
-    // maxKeys + 1 keys were fetched, seeing another key here means more remain.
-    if (keysEmitted >= params.maxKeys) {
-      isTruncated = true
+    if (entriesEmitted >= params.maxKeys) {
       break
     }
+
+    const key = rows[i].key
+    const resumingMidKey = key === params.keyMarker && idMarker !== null
     // The key's current state is a delete marker (no content version is IsLatest)
     // when the pointer is soft-deleted OR the content is owner-removed (web-app
     // Trash / moderation). Both make GET / ListObjectsV2 / GetObjectRetention
     // treat the key as absent, so ListObjectVersions must agree.
     const pointerDeletedAt = rows[i].pointerDeletedAt
     const isDeleted = pointerDeletedAt != null || rows[i].ownerRemoved
-    // Rows are newest-first, so the first row is the newest version — used as the
-    // marker time for an owner-removed key that has no deleted_at.
     const newestVersionTime = rows[i].lastModified
-    // versionId = CID, so multiple rows sharing a CID (repeated same-content
-    // writes — e.g. an mtime-only copy-to-self) are ONE version. Collapse them,
-    // keeping the newest occurrence (first in id-desc order) and its metadata.
+    const firstRowId = rows[i].id ?? 1n
+
+    // Emit the synthesised delete marker only when starting a key fresh (not
+    // when resuming mid-key, where the marker was already emitted on an earlier
+    // page). Doing this before the key's content versions ensures a page that
+    // splits a deleted key emits the marker on the first page and content
+    // versions on subsequent pages.
+    if (isDeleted && !resumingMidKey) {
+      const markerTime = pointerDeletedAt ?? newestVersionTime
+      deleteMarkers.push({
+        key,
+        versionId: deleteMarkerVersionId(markerTime),
+        isLatest: true,
+        lastModified: markerTime,
+      })
+      entriesEmitted++
+      lastKey = key
+      // If `maxKeys` is reached right after emitting the delete marker (before
+      // emitting `rows[i]`), setting the cursor to `firstRowId + 1n` ensures
+      // the next page's `id < idMarker` filter still includes `firstRowId`
+      // while `resumingMidKey` suppresses a duplicate delete marker.
+      lastCursorId = firstRowId + 1n
+    }
+
     const seenCids = new Set<string>()
-    let isNewestOfKey = true
+    let isNewestOfKey = !resumingMidKey
     while (i < rows.length && rows[i].key === key) {
       const row = rows[i]
-      i++
-      if (seenCids.has(row.cid)) continue
+      if (seenCids.has(row.cid)) {
+        i++
+        continue
+      }
+      if (entriesEmitted >= params.maxKeys) {
+        break
+      }
       seenCids.add(row.cid)
+      i++
       versions.push({
         key: row.key,
         versionId: row.cid,
@@ -456,28 +494,21 @@ const getObjectVersions = async (
         size: row.size,
       })
       isNewestOfKey = false
+      entriesEmitted++
+      lastKey = row.key
+      lastCursorId = row.id ?? 1n
     }
-    if (isDeleted) {
-      // Soft-delete has a precise deleted_at; an owner-removed key with no
-      // deleted_at falls back to the newest version's time (markers are
-      // display-only, so this just sorts the marker as latest).
-      const markerTime = pointerDeletedAt ?? newestVersionTime
-      deleteMarkers.push({
-        key,
-        versionId: deleteMarkerVersionId(markerTime),
-        isLatest: true,
-        lastModified: markerTime,
-      })
-    }
-    keysEmitted++
-    lastKey = key
   }
+
+  const isTruncated = i < rows.length
 
   return {
     versions,
     deleteMarkers,
     isTruncated,
     nextKeyMarker: isTruncated ? lastKey : null,
+    nextVersionIdMarker:
+      isTruncated && lastCursorId !== null ? lastCursorId.toString() : null,
   }
 }
 
