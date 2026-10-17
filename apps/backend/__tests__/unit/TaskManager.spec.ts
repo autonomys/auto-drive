@@ -22,6 +22,12 @@ jest.unstable_mockModule('../../src/core/objects/index.js', () => ({
   },
 }))
 
+jest.unstable_mockModule('@keyvhq/sqlite', () => ({
+  default: jest.fn(() => new Map()),
+}))
+
+
+
 jest.unstable_mockModule('../../src/core/uploads/uploads.js', () => ({
   UploadsUseCases: {
     processMigration: jest.fn(),
@@ -185,7 +191,79 @@ describe('TaskManager', () => {
         expect.any(Object),
       )
     })
+
+    it('should abort, decrement retriesLeft, and re-enqueue when a task exceeds taskTimeoutMs', async () => {
+      const { createHandlerWithRetries } = await import(
+        '../../src/infrastructure/eventRouter/utils.js'
+      )
+      let observedSignal: AbortSignal | undefined
+      const slowHandler = createHandlerWithRetries(
+        (_task, signal) => {
+          observedSignal = signal
+          return new Promise(() => {
+            // never settles
+          })
+        },
+        {
+          errorPublishQueue: 'frontend-errors',
+          taskTimeoutMs: 25,
+        },
+      )
+
+      await slowHandler({
+        id: 'migrate-upload-nodes',
+        params: { uploadId: 'slow-123' },
+        retriesLeft: 2,
+      })
+
+      expect(observedSignal?.aborted).toBe(true)
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Task %s timed out after %dms (retriesLeft=%d)',
+        'migrate-upload-nodes',
+        25,
+        2,
+      )
+      expect(Rabbit.publish).toHaveBeenCalledWith('task-manager', {
+        id: 'migrate-upload-nodes',
+        params: { uploadId: 'slow-123' },
+        retriesLeft: 1,
+      })
+    })
+
+    it('should route a timed-out task with no retries left to the error queue', async () => {
+      const { createHandlerWithRetries } = await import(
+        '../../src/infrastructure/eventRouter/utils.js'
+      )
+      const slowHandler = createHandlerWithRetries(
+        () =>
+          new Promise(() => {
+            // never settles
+          }),
+        {
+          errorPublishQueue: 'frontend-errors',
+          taskTimeoutMs: 25,
+        },
+      )
+
+      await slowHandler({
+        id: 'migrate-upload-nodes',
+        params: { uploadId: 'slow-final' },
+        retriesLeft: 0,
+      })
+
+      expect(Rabbit.publish).toHaveBeenCalledWith(
+        'frontend-errors',
+        expect.objectContaining({
+          id: 'migrate-upload-nodes',
+          params: { uploadId: 'slow-final' },
+          retriesLeft: 3,
+          error: expect.stringContaining('timed out after 25ms'),
+          failedAt: expect.any(String),
+        }),
+      )
+    })
   })
+
 
   describe('publish', () => {
     it('should publish a single task', () => {

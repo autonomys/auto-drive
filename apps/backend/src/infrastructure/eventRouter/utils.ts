@@ -31,7 +31,9 @@ export const createHandlerWithRetries =
     const abortController = new AbortController()
 
     try {
-      const handlerPromise = handler(parsingResult.data, abortController.signal)
+      const handlerPromise = Promise.resolve(
+        handler(parsingResult.data, abortController.signal),
+      )
       if (taskTimeoutMs > 0) {
         await withTimeout(
           handlerPromise,
