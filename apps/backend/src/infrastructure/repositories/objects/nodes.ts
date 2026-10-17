@@ -269,14 +269,7 @@ const updateNodePublishedOn = async (
   return db.query({
     text: `UPDATE nodes
            SET block_published_on = $1,
-               tx_published_on = $2,
-               encoded_node = CASE
-                 WHEN EXISTS (
-                   SELECT 1 FROM metadata
-                   WHERE head_cid = nodes.head_cid AND is_archived = true
-                 ) THEN NULL
-                 ELSE encoded_node
-               END
+               tx_published_on = $2
            WHERE cid = $3`,
     values: [blockPublishedOn, txPublishedOn, cid],
   })
@@ -616,6 +609,39 @@ const getUnrecoverablePublishingRootCids = async (
     .then((e) => e.rows)
 }
 
+// One round trip for the whole chunk list. idx_nodes_cid covers it.
+const countCidsWithData = async (cids: string[]): Promise<number> => {
+  if (cids.length === 0) return 0
+
+  const db = await getDatabase()
+  const result = await db.query<{ count: string }>({
+    text: `SELECT count(DISTINCT cid) AS count FROM nodes
+           WHERE cid = ANY($1) AND encoded_node IS NOT NULL`,
+    values: [cids],
+  })
+  return Number(result.rows[0].count)
+}
+
+const getArchivedRootCidsWithData = async (
+  limit: number,
+): Promise<string[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ head_cid: string }>({
+      text: `
+        SELECT DISTINCT m.head_cid
+        FROM metadata m
+        JOIN nodes n ON n.root_cid = m.head_cid
+        WHERE m.is_archived = true
+          AND n.encoded_node IS NOT NULL
+        LIMIT $1
+      `,
+      values: [limit],
+    })
+    .then((e) => e.rows.map((r) => r.head_cid))
+}
+
 export const nodesRepository = {
   getNode,
   resolveEncodedNodes,
@@ -638,6 +664,8 @@ export const nodesRepository = {
   updateNodeBlockchainData,
   updateNodesBlockchainDataBatch,
   hasEncodedNode,
+  countCidsWithData,
+  getArchivedRootCidsWithData,
   getUnreconciledNodes,
   getUnreconciledNodesCount,
   getFullyArchivedHeadCids,
@@ -646,3 +674,4 @@ export const nodesRepository = {
   getUnrecoverablePublishingRootCids,
   touchUnpublishedNodesByRootCid,
 }
+

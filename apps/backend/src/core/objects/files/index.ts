@@ -24,8 +24,8 @@ const retrieveFileByteRange = async (
     byteRange,
   )
   return readByteRange(metadata.chunks, byteRange, async (chunks) => {
-    const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
-    const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+    const hasData = await ObjectUseCases.hasAllNodeData(metadata)
+    const fetcher = hasData ? DBObjectFetcher : FileGatewayObjectFetcher
     return composeNodesDataAsFileReadable({
       fetcher,
       chunks,
@@ -40,8 +40,9 @@ const retrieveFullFile = async (metadata: OffchainMetadata) => {
     metadata.dataCid,
     metadata.type,
   )
-  const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
-  const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+  const fetcher = (await ObjectUseCases.hasAllNodeData(metadata))
+    ? DBObjectFetcher
+    : FileGatewayObjectFetcher
 
   return fetcher.fetchFile(metadata.dataCid)
 }

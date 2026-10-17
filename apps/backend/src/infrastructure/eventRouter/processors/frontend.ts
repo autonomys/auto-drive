@@ -1,4 +1,5 @@
 import { NodesUseCases } from '../../../core/objects/nodes.js'
+import { ObjectUseCases } from '../../../core/objects/object.js'
 import { ReconciliationUseCases } from '../../../core/objects/reconciliation.js'
 import { PublishingRecoveryUseCases } from '../../../core/objects/publishingRecovery.js'
 import { MigrationRecoveryUseCases } from '../../../core/uploads/migrationRecovery.js'
@@ -11,7 +12,7 @@ import { paymentManager } from '../../services/paymentManager/index.js'
 export const frontendErrorPublishedQueue = 'frontend-errors'
 
 export const processFrontendTask = createHandlerWithRetries(
-  (task: Task) => {
+  (task: Task, signal: AbortSignal) => {
     const { id, params } = task
     if (id === 'migrate-upload-nodes') {
       return UploadsUseCases.processMigration(params.uploadId)
@@ -43,6 +44,8 @@ export const processFrontendTask = createHandlerWithRetries(
       return PublishingRecoveryUseCases.processPublishingRecovery()
     } else if (id === 'recover-migrations') {
       return MigrationRecoveryUseCases.processMigrationRecovery()
+    } else if (id === 'reclaim-archived-data') {
+      return ObjectUseCases.reclaimArchivedNodeData(signal)
     } else {
       throw new Error(`Received task ${id} but no handler found.`)
     }
@@ -51,3 +54,4 @@ export const processFrontendTask = createHandlerWithRetries(
     errorPublishQueue: frontendErrorPublishedQueue,
   },
 )
+
