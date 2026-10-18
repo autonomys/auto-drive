@@ -117,6 +117,7 @@ describe('FilesUseCases', () => {
         chunks,
       } as any
 
+      jest.spyOn(ObjectUseCases, 'isArchived').mockResolvedValue(true)
       jest.spyOn(ObjectUseCases, 'hasAllNodeData').mockResolvedValue(true)
       const fetchNodesSpy = jest
         .spyOn(DBObjectFetcher, 'fetchNodes')
@@ -132,6 +133,29 @@ describe('FilesUseCases', () => {
       expect(fetchNodesSpy.mock.calls).toEqual([[['chunk0']]])
     })
 
+    it('routes unarchived (pre-migration) objects directly to DBObjectFetcher', async () => {
+      const metadata: OffchainMetadata = {
+        totalSize: '1000',
+        dataCid: 'cid-pre-migration',
+        type: 'file',
+        chunks: [{ size: BigInt(1000), cid: 'chunk-pre-migration' }],
+      } as any
+
+      jest.spyOn(ObjectUseCases, 'isArchived').mockResolvedValue(false)
+      const hasAllNodeDataSpy = jest.spyOn(ObjectUseCases, 'hasAllNodeData')
+      const dbFetchFileSpy = jest
+        .spyOn(DBObjectFetcher, 'fetchFile')
+        .mockResolvedValue(Readable.from([Buffer.from('blockstore-bytes')]))
+
+      const stream = await FilesUseCases.retrieveFullFile(metadata)
+      const received: Buffer[] = []
+      for await (const data of stream) received.push(data)
+
+      expect(hasAllNodeDataSpy).not.toHaveBeenCalled()
+      expect(dbFetchFileSpy).toHaveBeenCalledWith('cid-pre-migration')
+      expect(Buffer.concat(received).toString('utf8')).toBe('blockstore-bytes')
+    })
+
     it('routes archived objects to DBObjectFetcher while local node data is still retained', async () => {
       const metadata: OffchainMetadata = {
         totalSize: '1000',
@@ -140,6 +164,7 @@ describe('FilesUseCases', () => {
         chunks: [{ size: BigInt(1000), cid: 'chunk-retained' }],
       } as any
 
+      jest.spyOn(ObjectUseCases, 'isArchived').mockResolvedValue(true)
       const hasAllNodeDataSpy = jest
         .spyOn(ObjectUseCases, 'hasAllNodeData')
         .mockResolvedValue(true)
@@ -293,6 +318,47 @@ describe('FilesUseCases', () => {
 
       expect(removeNodeDataSpy).toHaveBeenCalledTimes(1)
       expect(removeNodeDataSpy).toHaveBeenCalledWith('cid-ready')
+    })
+
+    it('advances cursor across sweeps when a full batch of CIDs is not yet retrievable', async () => {
+      const { nodesRepository } = await import(
+        '../../../src/infrastructure/repositories/index.js'
+      )
+      const { FileGateway } = await import(
+        '../../../src/infrastructure/services/dsn/fileGateway/index.js'
+      )
+      const { config } = await import('../../../src/config.js')
+      const batchSize = config.reclaim.batchSize
+      const fullUnconfirmedBatch = Array.from(
+        { length: batchSize },
+        (_, i) => `cid-unconfirmed-${String(i).padStart(3, '0')}`,
+      )
+
+      const getArchivedSpy = jest
+        .spyOn(nodesRepository, 'getArchivedRootCidsWithData')
+        .mockImplementation(async (_limit, afterCid) => {
+          if (!afterCid) return fullUnconfirmedBatch
+          return ['cid-confirmed-next-page']
+        })
+      jest
+        .spyOn(FileGateway, 'isRetrievableFromGateway')
+        .mockImplementation(async (cid) => cid === 'cid-confirmed-next-page')
+      const removeNodeDataSpy = jest
+        .spyOn(nodesRepository, 'removeNodeDataByRootCid')
+        .mockResolvedValue(undefined as any)
+
+      // Sweep 1 hits a full batch of unconfirmed CIDs
+      await ObjectUseCases.reclaimArchivedNodeData()
+      expect(getArchivedSpy).toHaveBeenLastCalledWith(batchSize, null)
+      expect(removeNodeDataSpy).not.toHaveBeenCalled()
+
+      // Sweep 2 advances past the last CID of Sweep 1 instead of stalling
+      await ObjectUseCases.reclaimArchivedNodeData()
+      expect(getArchivedSpy).toHaveBeenLastCalledWith(
+        batchSize,
+        fullUnconfirmedBatch[batchSize - 1],
+      )
+      expect(removeNodeDataSpy).toHaveBeenCalledWith('cid-confirmed-next-page')
     })
   })
 })

@@ -520,10 +520,20 @@ const onObjectArchived = async (cid: string, signal?: AbortSignal) => {
   // the chain; it does not prove any reader can fetch it for ~3 days yet.
 }
 
+let reclaimCursorCid: string | null = null
+
 const reclaimArchivedNodeData = async (signal?: AbortSignal) => {
-  const cids = await nodesRepository.getArchivedRootCidsWithData(
-    config.reclaim.batchSize,
+  const batchSize = config.reclaim.batchSize
+  let cids = await nodesRepository.getArchivedRootCidsWithData(
+    batchSize,
+    reclaimCursorCid,
   )
+  if (cids.length === 0 && reclaimCursorCid !== null) {
+    reclaimCursorCid = null
+    cids = await nodesRepository.getArchivedRootCidsWithData(batchSize, null)
+  }
+  reclaimCursorCid = cids.length === batchSize ? cids[cids.length - 1] : null
+
   logger.info(
     'Reclaim sweep: %d object(s) still holding node data',
     cids.length,
