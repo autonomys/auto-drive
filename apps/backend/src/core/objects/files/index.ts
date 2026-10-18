@@ -10,6 +10,17 @@ import { composeNodesDataAsFileReadable } from './nodeComposer.js'
 
 const logger = createLogger('useCases:objects:files')
 
+const selectObjectFetcher = async (metadata: OffchainMetadata) => {
+  const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
+  if (!isArchived) {
+    return DBObjectFetcher
+  }
+
+  return (await ObjectUseCases.hasAllNodeData(metadata))
+    ? DBObjectFetcher
+    : FileGatewayObjectFetcher
+}
+
 const retrieveFileByteRange = async (
   metadata: OffchainMetadata,
   byteRange: ByteRange,
@@ -24,8 +35,7 @@ const retrieveFileByteRange = async (
     byteRange,
   )
   return readByteRange(metadata.chunks, byteRange, async (chunks) => {
-    const hasData = await ObjectUseCases.hasAllNodeData(metadata)
-    const fetcher = hasData ? DBObjectFetcher : FileGatewayObjectFetcher
+    const fetcher = await selectObjectFetcher(metadata)
     return composeNodesDataAsFileReadable({
       fetcher,
       chunks,
@@ -40,9 +50,7 @@ const retrieveFullFile = async (metadata: OffchainMetadata) => {
     metadata.dataCid,
     metadata.type,
   )
-  const fetcher = (await ObjectUseCases.hasAllNodeData(metadata))
-    ? DBObjectFetcher
-    : FileGatewayObjectFetcher
+  const fetcher = await selectObjectFetcher(metadata)
 
   return fetcher.fetchFile(metadata.dataCid)
 }
@@ -58,14 +66,13 @@ const retrieveObject = async (
 
   const isFullRetrieval = !byteRange
   if (isFullRetrieval) {
-    return FilesUseCases.retrieveFullFile(metadata)
+    return retrieveFullFile(metadata)
   }
 
-  return FilesUseCases.retrieveFileByteRange(metadata, byteRange)
+  return retrieveFileByteRange(metadata, byteRange)
 }
 
 export const FilesUseCases = {
   retrieveObject,
-  retrieveFullFile,
-  retrieveFileByteRange,
+  selectObjectFetcher,
 }

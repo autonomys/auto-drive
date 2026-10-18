@@ -609,21 +609,33 @@ const getUnrecoverablePublishingRootCids = async (
     .then((e) => e.rows)
 }
 
-// One round trip for the whole chunk list. idx_nodes_cid covers it.
+// One round trip for the whole chunk list. Checks both nodes and
+// uploads.blockstore so pre-migration uploads (whose chunks still live in
+// uploads.blockstore) report their local data as present just like
+// resolveEncodedNodes does.
 const countCidsWithData = async (cids: string[]): Promise<number> => {
   if (cids.length === 0) return 0
 
+  const distinctCids = [...new Set(cids)]
   const db = await getDatabase()
   const result = await db.query<{ count: string }>({
-    text: `SELECT count(DISTINCT cid) AS count FROM nodes
-           WHERE cid = ANY($1) AND encoded_node IS NOT NULL`,
-    values: [cids],
+    text: `SELECT count(*)::int AS count
+           FROM unnest($1::text[]) AS k(cid)
+           WHERE EXISTS (
+             SELECT 1 FROM nodes
+             WHERE nodes.cid = k.cid AND encoded_node IS NOT NULL
+           ) OR EXISTS (
+             SELECT 1 FROM uploads.blockstore
+             WHERE blockstore.cid = k.cid
+           )`,
+    values: [distinctCids],
   })
   return Number(result.rows[0].count)
 }
 
 const getArchivedRootCidsWithData = async (
   limit: number,
+  afterCid: string | null = null,
 ): Promise<string[]> => {
   const db = await getDatabase()
 
@@ -635,9 +647,11 @@ const getArchivedRootCidsWithData = async (
         JOIN nodes n ON n.root_cid = m.head_cid
         WHERE m.is_archived = true
           AND n.encoded_node IS NOT NULL
+          AND ($2::text IS NULL OR m.head_cid > $2)
+        ORDER BY m.head_cid ASC
         LIMIT $1
       `,
-      values: [limit],
+      values: [limit, afterCid],
     })
     .then((e) => e.rows.map((r) => r.head_cid))
 }
