@@ -206,12 +206,10 @@ export const config = {
   frontendWorker: {
     // Per-task timeout for processFrontendTask on the task-manager queue.
     // Prevents a single hung or slow task from pinning a consumer slot
-    // indefinitely (see issue #791). Defaults to CHAIN_TRANSACTION_TIMEOUT_MS
-    // (300000ms / 5 min) unless overridden via FRONTEND_TASK_TIMEOUT_MS.
-    taskTimeoutMs: positiveIntEnv(
-      'FRONTEND_TASK_TIMEOUT_MS',
-      positiveIntEnv('CHAIN_TRANSACTION_TIMEOUT_MS', 300000),
-    ),
+    // indefinitely (see issue #791). Defaults to 2100000ms (35 min) so it sits
+    // comfortably above the 30-minute migrationRecovery.stalenessMs window for
+    // large upload migrations and the 10-minute USDC receipt watch window.
+    taskTimeoutMs: positiveIntEnv('FRONTEND_TASK_TIMEOUT_MS', 2100000),
   },
   publishingRecovery: {
     intervalMs: Number(env('PUBLISHING_RECOVERY_INTERVAL_MS', '300000')), // 5 minutes

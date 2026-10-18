@@ -9,7 +9,7 @@ const logger = createLogger('useCases:objects:publishingRecovery')
 const PUBLISH_BATCH_SIZE = 50
 
 // Concurrency guard — if a recovery is already in flight, skip.
-let isRunning = false
+let currentRun: symbol | null = null
 
 /**
  * Recovers objects stuck in the "Publishing" state due to failed
@@ -31,21 +31,34 @@ let isRunning = false
  * that only timer-triggered runs defer, while task-triggered runs
  * always execute.
  */
-const processPublishingRecovery = async (): Promise<void> => {
-  if (isRunning) {
+const processPublishingRecovery = async (
+  signal?: AbortSignal,
+): Promise<void> => {
+  signal?.throwIfAborted()
+  if (currentRun !== null) {
     logger.debug('Publishing recovery already in progress, skipping')
     return
   }
 
-  isRunning = true
+  const runId = Symbol('publishingRecoveryRun')
+  currentRun = runId
+  const onAbort = () => {
+    if (currentRun === runId) {
+      currentRun = null
+    }
+  }
+  signal?.addEventListener('abort', onAbort, { once: true })
   try {
-    await runRecoveryBatch()
+    await runRecoveryBatch(signal)
   } finally {
-    isRunning = false
+    signal?.removeEventListener('abort', onAbort)
+    if (currentRun === runId) {
+      currentRun = null
+    }
   }
 }
 
-const runRecoveryBatch = async (): Promise<void> => {
+const runRecoveryBatch = async (signal?: AbortSignal): Promise<void> => {
   const maxPerCycle = config.publishingRecovery.maxObjectsPerCycle
 
   // Surface objects that are stuck in an unrecoverable state — they have
@@ -54,6 +67,7 @@ const runRecoveryBatch = async (): Promise<void> => {
   // automatically and need operational attention.
   const unrecoverable =
     await nodesRepository.getUnrecoverablePublishingRootCids(maxPerCycle)
+  signal?.throwIfAborted()
   if (unrecoverable.length > 0) {
     logger.warn(
       'Found %d objects with unrecoverable unpublished nodes (data stripped before publishing): %s',
@@ -69,6 +83,7 @@ const runRecoveryBatch = async (): Promise<void> => {
     config.publishingRecovery.stalenessThresholdBlocks,
     config.publishingRecovery.retryCooldownMs,
   )
+  signal?.throwIfAborted()
 
   if (stuckRootCids.length === 0) {
     logger.debug('No stuck publishing objects found, skipping')
@@ -81,9 +96,11 @@ const runRecoveryBatch = async (): Promise<void> => {
   )
 
   for (const rootCid of stuckRootCids) {
+    signal?.throwIfAborted()
     try {
       const unpublishedCids =
         await nodesRepository.getUnpublishedNodeCidsByRootCid(rootCid)
+      signal?.throwIfAborted()
 
       if (unpublishedCids.length === 0) {
         // Race condition: nodes were published between detection and recovery
@@ -105,6 +122,7 @@ const runRecoveryBatch = async (): Promise<void> => {
       // Start the retry cooldown before enqueuing: if the stamp failed after
       // the tasks went out, the next cycle would enqueue them all again.
       await nodesRepository.touchUnpublishedNodesByRootCid(rootCid)
+      signal?.throwIfAborted()
 
       for (let i = 0; i < unpublishedCids.length; i += PUBLISH_BATCH_SIZE) {
         const batch = unpublishedCids.slice(i, i + PUBLISH_BATCH_SIZE)

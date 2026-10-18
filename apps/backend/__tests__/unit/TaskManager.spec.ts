@@ -144,7 +144,10 @@ describe('TaskManager', () => {
 
       await subscribeCallback(validTask)
 
-      expect(UploadsUseCases.processMigration).toHaveBeenCalledWith('123')
+      expect(UploadsUseCases.processMigration).toHaveBeenCalledWith(
+        '123',
+        expect.any(AbortSignal),
+      )
     })
 
     it('should forward publish-nodes to the publish manager queue without publishing inline', async () => {
