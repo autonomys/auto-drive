@@ -2,6 +2,10 @@ import path from 'path';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Next 14's SWC minifier rewrites @scure/sr25519's `proving${'\0'}0` (reached
+  // through @autonomys/auto-utils) as `proving\00`, an invalid octal escape in a
+  // template literal. Terser keeps it valid.
+  swcMinify: false,
   webpack: (config, { isServer }) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
