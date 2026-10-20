@@ -119,10 +119,13 @@ const runRecoveryBatch = async (signal?: AbortSignal): Promise<void> => {
         rootCid,
       )
 
+      // Check for abort before stamping cooldown to prevent delaying retries
+      // when publishing tasks were never enqueued.
+      signal?.throwIfAborted()
+
       // Start the retry cooldown before enqueuing: if the stamp failed after
       // the tasks went out, the next cycle would enqueue them all again.
       await nodesRepository.touchUnpublishedNodesByRootCid(rootCid)
-      signal?.throwIfAborted()
 
       for (let i = 0; i < unpublishedCids.length; i += PUBLISH_BATCH_SIZE) {
         const batch = unpublishedCids.slice(i, i + PUBLISH_BATCH_SIZE)
@@ -131,6 +134,9 @@ const runRecoveryBatch = async (signal?: AbortSignal): Promise<void> => {
         )
       }
     } catch (error) {
+      if (signal?.aborted) {
+        throw error
+      }
       logger.error(
         'Failed to recover publishing for object (rootCid=%s): %s',
         rootCid,

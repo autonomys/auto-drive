@@ -157,6 +157,7 @@ const runReconciliationBatch = async (signal?: AbortSignal): Promise<void> => {
           affectedHeadCids.add(headCid)
         }
       } catch (error) {
+        if (signal?.aborted) throw error
         logger.warn(
           'Failed to set archival data for node %s: %s',
           cid,
