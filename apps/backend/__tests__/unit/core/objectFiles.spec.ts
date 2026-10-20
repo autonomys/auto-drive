@@ -360,6 +360,39 @@ describe('FilesUseCases', () => {
       )
       expect(removeNodeDataSpy).toHaveBeenCalledWith('cid-confirmed-next-page')
     })
+
+    it('does not advance cursor past unvisited CIDs when aborted mid-sweep', async () => {
+      const { nodesRepository } = await import(
+        '../../../src/infrastructure/repositories/index.js'
+      )
+      const { FileGateway } = await import(
+        '../../../src/infrastructure/services/dsn/fileGateway/index.js'
+      )
+      const { config } = await import('../../../src/config.js')
+      const batchSize = config.reclaim.batchSize
+
+      const batch = Array.from({ length: batchSize }, (_, i) => `cid-abort-${i}`)
+      const getArchivedSpy = jest
+        .spyOn(nodesRepository, 'getArchivedRootCidsWithData')
+        .mockImplementation(async (_limit, afterCid) => {
+          if (!afterCid) return batch
+          return []
+        })
+
+      const controller = new AbortController()
+      jest
+        .spyOn(FileGateway, 'isRetrievableFromGateway')
+        .mockImplementation(async (cid) => {
+          if (cid === 'cid-abort-1') controller.abort()
+          return false
+        })
+
+      await ObjectUseCases.reclaimArchivedNodeData(controller.signal)
+
+      // The next sweep must resume after cid-abort-1 (the last visited), not the end of the batch
+      await ObjectUseCases.reclaimArchivedNodeData()
+      expect(getArchivedSpy).toHaveBeenLastCalledWith(batchSize, 'cid-abort-1')
+    })
   })
 })
 

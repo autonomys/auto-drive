@@ -532,8 +532,6 @@ const reclaimArchivedNodeData = async (signal?: AbortSignal) => {
     reclaimCursorCid = null
     cids = await nodesRepository.getArchivedRootCidsWithData(batchSize, null)
   }
-  reclaimCursorCid = cids.length === batchSize ? cids[cids.length - 1] : null
-
   logger.info(
     'Reclaim sweep: %d object(s) still holding node data',
     cids.length,
@@ -541,10 +539,15 @@ const reclaimArchivedNodeData = async (signal?: AbortSignal) => {
 
   for (const cid of cids) {
     if (signal?.aborted) return
+    reclaimCursorCid = cid
     if (!(await FileGateway.isRetrievableFromGateway(cid))) continue
 
     await nodesRepository.removeNodeDataByRootCid(cid)
     logger.info('Reclaimed node data, gateway confirmed (cid=%s)', cid)
+  }
+
+  if (cids.length < batchSize) {
+    reclaimCursorCid = null
   }
 }
 
