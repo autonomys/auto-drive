@@ -1,9 +1,24 @@
+# Allowlist: local builds must not pick up untracked files such as
+# credentials. Every workspace's package.json is needed for yarn install.
+*
+!package.json
+!yarn.lock
+!.yarnrc.yml
+!apps/*/package.json
+!packages/*/package.json
+!apps/backend
+!apps/auth
+!packages/models
+!packages/s3
+!submodules/files-gateway
+!nginx/nginx.conf
+!nginx/backend.mainnet.public.conf
+!docker/auto-drive-test
+
+**/.env*
 **/node_modules
 **/dist
-**/.next
 **/.cache
 **/.test-cache
-**/.env
 **/coverage
-.git
 **/.git
