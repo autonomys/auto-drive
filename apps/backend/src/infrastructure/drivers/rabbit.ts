@@ -394,7 +394,9 @@ const keepAlive = async () => {
     } catch {
       // ignore errors while closing a stale channel
     }
-    channelPromise = null
+    // Not reset here: the channel's 'close' handler has already dropped it if
+    // it was still current, and a reset now could discard a replacement that
+    // another keepalive tick or a publish has opened since.
     // attempt immediate reconnect so next operations don't stall
     try {
       await getChannel()

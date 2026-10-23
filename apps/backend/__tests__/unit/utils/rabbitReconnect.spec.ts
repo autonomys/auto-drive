@@ -42,6 +42,7 @@ interface FakeChannel extends EventEmitter {
   closed: boolean
   liveConsumers: Set<string>
   handlers: Map<string, ConsumeHandler>
+  pendingProbes: Array<(error: Error) => void>
   ack: jest.Mock<(message: FakeMessage) => void>
   nack: jest.Mock<(message: FakeMessage) => void>
 }
@@ -51,6 +52,7 @@ const consumerTags: { tag: string; channel: number; queue: string }[] = []
 const cancelledTags: string[] = []
 let nextConsumerTag = 0
 let failCheckQueue = false
+let hangCheckQueue = false
 let failConnect = false
 let consumeFailuresLeft = 0
 
@@ -73,6 +75,7 @@ jest.unstable_mockModule('amqplib', () => ({
           closed: false,
           liveConsumers: new Set<string>(),
           handlers: new Map<string, ConsumeHandler>(),
+          pendingProbes: [],
           assertQueue: jest.fn(),
           prefetch: jest.fn(),
           ack: jest.fn(() => throwIfClosed(channel)),
@@ -97,15 +100,22 @@ jest.unstable_mockModule('amqplib', () => ({
             channel.liveConsumers.delete(tag)
           },
           checkQueue: async () => {
+            if (hangCheckQueue) {
+              return new Promise((_, reject) =>
+                channel.pendingProbes.push(reject),
+              )
+            }
             if (failCheckQueue) {
               throw new Error('keepalive probe failed')
             }
             return { messageCount: 0 }
           },
           close: async () => {
+            throwIfClosed(channel)
             channel.closed = true
             // A closed channel takes its consumers with it.
             channel.liveConsumers.clear()
+            rejectPendingProbes(channel)
             channel.emit('close')
           },
         })
@@ -116,6 +126,13 @@ jest.unstable_mockModule('amqplib', () => ({
     })
   }),
 }))
+
+// amqplib rejects the outstanding RPCs of a channel as it closes.
+const rejectPendingProbes = (channel: FakeChannel) => {
+  for (const reject of channel.pendingProbes.splice(0)) {
+    reject(new Error('Channel closed'))
+  }
+}
 
 /**
  * What amqplib does on a server-initiated Channel.Close, such as the broker's
@@ -131,6 +148,7 @@ const brokerClosesChannel = (channel: FakeChannel) => {
   channel.emit('error', error)
   channel.closed = true
   channel.liveConsumers.clear()
+  rejectPendingProbes(channel)
   channel.emit('close')
 }
 
@@ -167,6 +185,7 @@ describe('Rabbit consumer lifecycle', () => {
   beforeEach(async () => {
     await Rabbit.close().catch(() => undefined)
     failCheckQueue = false
+    hangCheckQueue = false
     failConnect = false
     consumeFailuresLeft = 0
     channels.length = 0
@@ -286,6 +305,7 @@ describe('Rabbit reconnect resilience', () => {
   beforeEach(async () => {
     await Rabbit.close().catch(() => undefined)
     failCheckQueue = false
+    hangCheckQueue = false
     failConnect = false
     consumeFailuresLeft = 0
     channels.length = 0
@@ -331,6 +351,30 @@ describe('Rabbit reconnect resilience', () => {
     await expect(Rabbit.getMessageCount('download-errors')).resolves.toBe(0)
   }, 15000)
 
+  // setInterval does not wait for the previous tick, so a probe that never
+  // answers leaves several keepalives waiting on the same channel. When it dies,
+  // each of them used to reset the cached channel and open another, discarding
+  // the replacement the tick before it had just opened and leaking its
+  // connection.
+  it('opens one replacement when several keepalive probes fail on the same channel', async () => {
+    const callback = jest.fn(async () => undefined)
+    await Rabbit.subscribe('download-errors', callback as never)
+    await tick(20)
+    const first = channels.at(-1)!
+
+    hangCheckQueue = true
+    await tick(120)
+    expect(first.pendingProbes.length).toBeGreaterThan(1)
+    hangCheckQueue = false
+
+    brokerClosesChannel(first)
+    expect(await waitFor(() => liveConsumers().length === 1)).toBe(true)
+    await tick(1200)
+
+    expect(channels.filter((c) => !c.closed)).toHaveLength(1)
+    expect(liveConsumers()).toHaveLength(1)
+  })
+
   it('does not resurrect a consumer unsubscribed while its retry is pending', async () => {
     const callback = jest.fn(async () => undefined)
     const unsubscribe = await Rabbit.subscribe(
@@ -375,6 +419,7 @@ describe('Rabbit channel closed by the broker', () => {
   beforeEach(async () => {
     await Rabbit.close().catch(() => undefined)
     failCheckQueue = false
+    hangCheckQueue = false
     failConnect = false
     consumeFailuresLeft = 0
     channels.length = 0
