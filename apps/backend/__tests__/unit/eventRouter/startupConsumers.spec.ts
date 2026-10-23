@@ -28,7 +28,9 @@ jest.unstable_mockModule('amqplib', () => ({
       throw new Error('ECONNREFUSED: broker unreachable')
     }
     return {
+      on: jest.fn(),
       createChannel: async () => ({
+        on: jest.fn(),
         assertQueue: jest.fn(),
         prefetch: jest.fn(),
         ack: jest.fn(),

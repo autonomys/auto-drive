@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { Channel, ConsumeMessage, connect } from 'amqplib'
 import { config } from '../../config.js'
 import { createLogger } from './logger.js'
@@ -53,6 +54,164 @@ const activeConsumers: Partial<
 
 let channelPromise: Promise<Channel> | null = null
 let keepAliveInterval: NodeJS.Timeout | null = null
+let reconnectTimer: NodeJS.Timeout | null = null
+
+const RECONNECT_DELAY_MS = 1000
+
+type Settlement = 'ack' | 'requeue'
+
+interface Delivery {
+  key: string
+  outcome: Promise<Settlement>
+}
+
+/**
+ * Deliveries handed to a callback and not yet acked or nacked, per open channel.
+ * A delivery tag is only valid on the channel that issued it, and these are
+ * exactly the messages the broker requeues when that channel closes.
+ */
+const unsettledDeliveries = new Map<Channel, Set<Delivery>>()
+
+interface OrphanedWork {
+  outcome: Promise<Settlement>
+  settledAt: number | null
+}
+
+/**
+ * Work still running (or just finished) in this process whose delivery died with
+ * its channel, keyed by queue and message body.
+ *
+ * The broker requeues such a message and redelivers it, normally to this process
+ * right after the reconnect. Running the callback for it again would put a second
+ * copy of the task beside the first, or repeat one that has just finished, so the
+ * redelivery is attached to the existing work instead and settled with its
+ * outcome once that work ends. Never before it ends: a crash in the meantime must
+ * still leave the message on the queue.
+ */
+const orphanedWork = new Map<string, OrphanedWork[]>()
+
+// How long finished work waits for its redelivery, which may have gone to
+// another consumer and then never arrives here.
+const ORPHANED_WORK_TTL_MS = 60 * 60 * 1000
+
+const deliveryKey = (queue: Queue, message: ConsumeMessage) =>
+  `${queue}:${createHash('sha256').update(message.content).digest('hex')}`
+
+const pruneOrphanedWork = () => {
+  const now = Date.now()
+  for (const [key, entries] of orphanedWork) {
+    const kept = entries.filter(
+      ({ settledAt }) =>
+        settledAt === null || now - settledAt < ORPHANED_WORK_TTL_MS,
+    )
+    if (kept.length === 0) {
+      orphanedWork.delete(key)
+    } else {
+      orphanedWork.set(key, kept)
+    }
+  }
+}
+
+const orphan = (delivery: Delivery) => {
+  pruneOrphanedWork()
+  const entry: OrphanedWork = { outcome: delivery.outcome, settledAt: null }
+  delivery.outcome.then(() => {
+    entry.settledAt = Date.now()
+  })
+  orphanedWork.set(delivery.key, [
+    ...(orphanedWork.get(delivery.key) ?? []),
+    entry,
+  ])
+}
+
+const claimOrphanedWork = (key: string) => {
+  pruneOrphanedWork()
+  const entries = orphanedWork.get(key)
+  const claimed = entries?.shift()
+  if (entries?.length === 0) {
+    orphanedWork.delete(key)
+  }
+  return claimed?.outcome
+}
+
+const orphanUnsettledDeliveries = (channel: Channel) => {
+  const unsettled = unsettledDeliveries.get(channel)
+  unsettledDeliveries.delete(channel)
+  if (!unsettled?.size) {
+    return
+  }
+  logger.warn(
+    'RabbitMQ channel closed with %d deliveries still being handled; they keep running, and their redeliveries will be settled with their outcome',
+    unsettled.size,
+  )
+  unsettled.forEach(orphan)
+}
+
+const runCallback = async (
+  queue: Queue,
+  callback: SubscriptionCallback,
+  message: ConsumeMessage,
+): Promise<Settlement> => {
+  try {
+    const payload = JSON.parse(message.content.toString())
+    logger.debug('Received message from %s', queue)
+    await callback(payload)
+    logger.debug('Message processed successfully for %s', queue)
+    return 'ack'
+  } catch (error) {
+    logger.error('Error processing message from %s', queue, error)
+    return 'requeue'
+  }
+}
+
+const handleDelivery = async (
+  queue: Queue,
+  callback: SubscriptionCallback,
+  channel: Channel,
+  message: ConsumeMessage,
+) => {
+  const key = deliveryKey(queue, message)
+  const adopted = message.fields.redelivered
+    ? claimOrphanedWork(key)
+    : undefined
+  if (adopted) {
+    logger.warn(
+      'Redelivered message on %s is already being handled by this process; waiting for that run instead of starting another',
+      queue,
+    )
+  }
+  const delivery: Delivery = {
+    key,
+    outcome: adopted ?? runCallback(queue, callback, message),
+  }
+  unsettledDeliveries.get(channel)?.add(delivery)
+
+  const settlement = await delivery.outcome
+
+  if (!unsettledDeliveries.get(channel)?.delete(delivery)) {
+    logger.warn(
+      'Finished a message from %s after its channel closed; its redelivery will be settled instead',
+      queue,
+    )
+    return
+  }
+  try {
+    if (settlement === 'ack') {
+      channel.ack(message)
+    } else {
+      channel.nack(message, false, true)
+    }
+  } catch (error) {
+    // The channel is closing but has not emitted 'close' yet, so this delivery
+    // was not among the ones orphaned there. The broker requeues it all the same.
+    logger.warn(
+      'Could not settle a message from %s on a closing channel: %s',
+      queue,
+      error,
+    )
+    orphan(delivery)
+  }
+}
 
 /**
  * Restores one registered consumer on a freshly opened channel.
@@ -95,15 +254,62 @@ const resubscribeAfterReconnect = async (
   }
 }
 
+const openChannel = async (onClose: () => void): Promise<Channel> => {
+  const connection = await connect(config.rabbitmq.url)
+  // Both listeners are load-bearing. A broker-side channel close (such as a
+  // delivery acknowledgement timeout) is emitted as 'error' on the channel; with
+  // no listener there, amqplib re-raises it as 'error' on the connection, and an
+  // unhandled 'error' on either one terminates the process.
+  connection.on('error', (error) => {
+    logger.error(error as Error, 'RabbitMQ connection error')
+  })
+  try {
+    const channel = await connection.createChannel()
+    channel.on('error', (error) => {
+      logger.error(error as Error, 'RabbitMQ channel error')
+    })
+    unsettledDeliveries.set(channel, new Set())
+    channel.on('close', () => {
+      orphanUnsettledDeliveries(channel)
+      // This connection only ever carries this channel. Deferred because the
+      // event also fires from inside the connection's own teardown.
+      setImmediate(() => connection.close().catch(() => undefined))
+      onClose()
+    })
+    await Promise.all(queues.map((queue) => channel.assertQueue(queue)))
+    await channel.prefetch(config.rabbitmq.prefetch)
+    return channel
+  } catch (error) {
+    connection.close().catch(() => undefined)
+    throw error
+  }
+}
+
+const scheduleReconnect = () => {
+  if (reconnectTimer) {
+    return
+  }
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    getChannel().catch((error) => {
+      logger.error(
+        error as Error,
+        'RabbitMQ reconnect failed; the keepalive will retry',
+      )
+    })
+  }, RECONNECT_DELAY_MS)
+}
+
 const getChannel = async () => {
   if (!channelPromise) {
-    const pending = connect(config.rabbitmq.url).then((connection) =>
-      connection.createChannel().then((channel) => {
-        queues.forEach((q) => channel.assertQueue(q))
-        channel.prefetch(config.rabbitmq.prefetch)
-        return channel
-      }),
-    )
+    const pending: Promise<Channel> = openChannel(() => {
+      // By identity: close() drops the channel before closing it, and that
+      // close must not reconnect.
+      if (channelPromise === pending) {
+        channelPromise = null
+        scheduleReconnect()
+      }
+    })
     channelPromise = pending
 
     // A rejected channel must not stay cached. `getChannel` hands back whatever
@@ -156,7 +362,7 @@ const publish = async (queue: string, message: object) => {
   return withBackingOffRetries(
     async () => {
       const channel = await getChannel()
-      channel.assertQueue(queue)
+      await channel.assertQueue(queue)
       channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), {
         persistent: true,
       })
@@ -253,16 +459,7 @@ const ensureConsumer = (
   const consumerTag = channel
     .consume(queue, async (message: ConsumeMessage | null): Promise<void> => {
       if (message) {
-        try {
-          const payload = JSON.parse(message.content.toString())
-          logger.debug('Received message from %s', queue)
-          await callback(payload)
-          logger.debug('Message processed successfully for %s', queue)
-          channel.ack(message)
-        } catch (error) {
-          logger.error('Error processing message from %s', queue, error)
-          channel.nack(message, false, true)
-        }
+        await handleDelivery(queue, callback, channel, message)
       } else {
         logger.warn('No message received from %s', queue)
       }
@@ -347,6 +544,10 @@ const getMessageCount = async (queue: Queue): Promise<number> => {
 const close = async () => {
   const channel = await channelPromise
   channelPromise = null
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
   for (const queue of queues) {
     subscriptions[queue] = []
     activeConsumers[queue]?.clear()
