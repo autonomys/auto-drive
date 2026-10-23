@@ -25,12 +25,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async has(key: Pair['cid']): Promise<boolean> {
-    const block = await blockstoreRepository.getByCid(
-      this.uploadId,
-      cidToString(key),
-    )
-
-    return block !== null
+    return blockstoreRepository.hasCid(this.uploadId, cidToString(key))
   }
 
   async put(cid: Pair['cid'], data: Uint8Array): Promise<Pair['cid']> {

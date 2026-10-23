@@ -21,10 +21,7 @@ import {
 } from '../../../src/core/uploads/errors.js'
 import { BlockstoreUseCases } from '../../../src/core/uploads/blockstore.js'
 import { ObjectNotFoundError } from '../../../src/errors/index.js'
-import {
-  NodesUseCases,
-  createNodeDeduplicator,
-} from '../../../src/core/objects/nodes.js'
+import { NodesUseCases } from '../../../src/core/objects/nodes.js'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/blockstore.js'
 import { fileProcessingInfoRepository } from '../../../src/infrastructure/repositories/uploads/fileProcessingInfo.js'
@@ -121,6 +118,35 @@ const installFakeBlockstore = () => {
         ),
     )
 
+  jest
+    .spyOn(blockstoreRepository, 'hasCid')
+    .mockImplementation(async (uploadId, cid) =>
+      byUpload(uploadId).some((r) => r.cid === cid),
+    )
+
+  jest
+    .spyOn(blockstoreRepository, 'getDistinctCids')
+    .mockImplementation(async (uploadId) => [
+      ...new Set(byUpload(uploadId).map((r) => r.cid)),
+    ])
+
+  // Counts every payload this hands out, which is what crosses the network.
+  let payloadReads = 0
+  jest
+    .spyOn(blockstoreRepository, 'getFirstEntriesByCids')
+    .mockImplementation(async (uploadId, cids) => {
+      const first = new Map<string, (typeof rows)[number]>()
+      for (const row of byUpload(uploadId)) {
+        if (cids.includes(row.cid) && !first.has(row.cid)) {
+          first.set(row.cid, row)
+        }
+      }
+      payloadReads += first.size
+      return [...first.values()].map(
+        (r) => ({ ...r, node_size: r.node_size.toString() }) as any,
+      )
+    })
+
   // The DAG builder deletes nodes it has folded into a parent. Mirrors the SQL,
   // which deletes every row for that (upload_id, cid) — not just one.
   jest
@@ -135,6 +161,7 @@ const installFakeBlockstore = () => {
 
   return {
     rows,
+    payloadReads: () => payloadReads,
     countOf: (nodeType: MetadataType) =>
       rows.filter((r) => r.node_type === nodeType).length,
     distinctCidsOf: (nodeType: MetadataType) =>
@@ -371,43 +398,11 @@ describe('completeUploadProcessing retry idempotency', () => {
   })
 })
 
-describe('createNodeDeduplicator', () => {
-  const node = (cid: string) => ({ cid: cid as any })
-
-  // The bug this replaces: uniqueNodes was built per batch, so a duplicate more
-  // than BATCH_SIZE rows away from its original survived into nodes, where
-  // nodes.cid has no unique constraint and getCidsByRootCid has no DISTINCT.
-  it('drops a duplicate that arrives in a later batch', () => {
-    const takeUnseen = createNodeDeduplicator(UPLOAD_ID)
-    const firstBatch = Array.from({ length: 100 }, (_, i) => node(`cid-${i}`))
-
-    expect(takeUnseen(firstBatch)).toHaveLength(100)
-    // The duplicate of cid-0 lands 100 rows later, in the next batch.
-    expect(takeUnseen([node('cid-0')])).toHaveLength(0)
-    expect(takeUnseen([node('cid-100')])).toHaveLength(1)
-  })
-
-  it('still drops a duplicate within a single batch', () => {
-    const takeUnseen = createNodeDeduplicator(UPLOAD_ID)
-
-    expect(takeUnseen([node('a'), node('a'), node('b')])).toHaveLength(2)
-  })
-
-  it('keeps deduplication scoped to one upload', () => {
-    const first = createNodeDeduplicator('upload-a')
-    const second = createNodeDeduplicator('upload-b')
-
-    expect(first([node('shared')])).toHaveLength(1)
-    // A node shared between two objects must still be written for each.
-    expect(second([node('shared')])).toHaveLength(1)
-  })
-})
-
-// The deduplicator's unit tests above exercise the filter in isolation, where an
-// empty result is harmless. It is not harmless at the call site: saveNodes([])
-// renders `INSERT INTO nodes (...) VALUES ` and Postgres answers `syntax error at
-// end of input`. So this drives the real migration over a real upload, which is
-// also the only way to show the case is reachable without any broken rows.
+// Drives the real migration over an upload built by the real chunker. A file of
+// repeated content stores one blockstore row per chunk occurrence, so the shape
+// that matters here (whole batches' worth of rows that are all one CID) needs no
+// broken rows to reach. The SQL behind the fake is covered against Postgres in
+// e2e/uploads/migrationRepeatedChunks.spec.ts.
 describe('migrateFromBlockstoreToNodesTable over repeated content', () => {
   afterEach(() => {
     jest.restoreAllMocks()
@@ -483,21 +478,28 @@ describe('migrateFromBlockstoreToNodesTable over repeated content', () => {
     expect(store.rows.length).toBeGreaterThan(200)
     expect(distinctCids.size).toBeLessThan(store.rows.length)
 
-    const insertedBatches: unknown[][] = []
+    const insertedBatches: { cid: string }[][] = []
     jest
       .spyOn(nodesRepository, 'saveNodes')
       .mockImplementation(async (nodes) => {
         insertedBatches.push(nodes)
         return undefined
       })
+    const singleBlockReads = jest.spyOn(blockstoreRepository, 'getByCid')
+    singleBlockReads.mockClear()
 
     await NodesUseCases.migrateFromBlockstoreToNodesTable(UPLOAD_ID)
 
-    // The regression: one of these batches was empty, and the insert built from
-    // it was not valid SQL.
+    // An empty batch once reached saveNodes, and the insert built from it was
+    // not valid SQL.
     expect(insertedBatches.every((batch) => batch.length > 0)).toBe(true)
-    // Each distinct node written exactly once, across every batch.
-    expect(insertedBatches.flat()).toHaveLength(distinctCids.size)
+    // Each distinct node written exactly once, in the order it first appears.
+    expect(insertedBatches.flat().map((node) => node.cid)).toEqual([
+      ...distinctCids,
+    ])
+    // And each payload read once: one per distinct CID, not one per row.
+    expect(store.payloadReads()).toBe(distinctCids.size)
+    expect(singleBlockReads).not.toHaveBeenCalled()
   })
 
   // The guard on this used to be `if (!metadata) return` against a neverthrow
