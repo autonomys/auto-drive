@@ -372,26 +372,33 @@ describe('FilesUseCases', () => {
       const batchSize = config.reclaim.batchSize
 
       const batch = Array.from({ length: batchSize }, (_, i) => `cid-abort-${i}`)
+      const remainingBatch = batch.slice(2)
       const getArchivedSpy = jest
         .spyOn(nodesRepository, 'getArchivedRootCidsWithData')
         .mockImplementation(async (_limit, afterCid) => {
           if (!afterCid) return batch
+          if (afterCid === 'cid-abort-1') return remainingBatch
           return []
         })
 
       const controller = new AbortController()
+      const gatewayCalls: string[] = []
       jest
         .spyOn(FileGateway, 'isRetrievableFromGateway')
         .mockImplementation(async (cid) => {
+          gatewayCalls.push(cid)
           if (cid === 'cid-abort-1') controller.abort()
           return false
         })
 
       await ObjectUseCases.reclaimArchivedNodeData(controller.signal)
 
+      expect(gatewayCalls).toEqual(['cid-abort-0', 'cid-abort-1'])
+
       // The next sweep must resume after cid-abort-1 (the last visited), not the end of the batch
       await ObjectUseCases.reclaimArchivedNodeData()
       expect(getArchivedSpy).toHaveBeenLastCalledWith(batchSize, 'cid-abort-1')
+      expect(gatewayCalls).toContain('cid-abort-2')
     })
   })
 })
