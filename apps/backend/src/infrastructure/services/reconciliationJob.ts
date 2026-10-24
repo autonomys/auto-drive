@@ -12,10 +12,11 @@ let reconciliationInterval: NodeJS.Timeout | null = null
 const enqueueReconciliation = async () => {
   if (await isTaskQueueBusy('reconciliation')) return
 
-  logger.debug('Enqueuing reconcile-archival task')
-  EventRouter.publish(
+  logger.debug('Enqueuing reconcile-archival and reclaim-archived-data tasks')
+  EventRouter.publish([
     createTask({ id: 'reconcile-archival', params: {} }),
-  )
+    createTask({ id: 'reclaim-archived-data', params: {} }),
+  ])
 }
 
 const start = (): void => {

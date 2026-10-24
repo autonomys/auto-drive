@@ -269,14 +269,7 @@ const updateNodePublishedOn = async (
   return db.query({
     text: `UPDATE nodes
            SET block_published_on = $1,
-               tx_published_on = $2,
-               encoded_node = CASE
-                 WHEN EXISTS (
-                   SELECT 1 FROM metadata
-                   WHERE head_cid = nodes.head_cid AND is_archived = true
-                 ) THEN NULL
-                 ELSE encoded_node
-               END
+               tx_published_on = $2
            WHERE cid = $3`,
     values: [blockPublishedOn, txPublishedOn, cid],
   })
@@ -616,6 +609,53 @@ const getUnrecoverablePublishingRootCids = async (
     .then((e) => e.rows)
 }
 
+// One round trip for the whole chunk list. Checks both nodes and
+// uploads.blockstore so pre-migration uploads (whose chunks still live in
+// uploads.blockstore) report their local data as present just like
+// resolveEncodedNodes does.
+const countCidsWithData = async (cids: string[]): Promise<number> => {
+  if (cids.length === 0) return 0
+
+  const distinctCids = [...new Set(cids)]
+  const db = await getDatabase()
+  const result = await db.query<{ count: string }>({
+    text: `SELECT count(*)::int AS count
+           FROM unnest($1::text[]) AS k(cid)
+           WHERE EXISTS (
+             SELECT 1 FROM nodes
+             WHERE nodes.cid = k.cid AND encoded_node IS NOT NULL
+           ) OR EXISTS (
+             SELECT 1 FROM uploads.blockstore
+             WHERE blockstore.cid = k.cid
+           )`,
+    values: [distinctCids],
+  })
+  return Number(result.rows[0].count)
+}
+
+const getArchivedRootCidsWithData = async (
+  limit: number,
+  afterCid: string | null = null,
+): Promise<string[]> => {
+  const db = await getDatabase()
+
+  return db
+    .query<{ head_cid: string }>({
+      text: `
+        SELECT DISTINCT m.head_cid
+        FROM metadata m
+        JOIN nodes n ON n.root_cid = m.head_cid
+        WHERE m.is_archived = true
+          AND n.encoded_node IS NOT NULL
+          AND ($2::text IS NULL OR m.head_cid > $2)
+        ORDER BY m.head_cid ASC
+        LIMIT $1
+      `,
+      values: [limit, afterCid],
+    })
+    .then((e) => e.rows.map((r) => r.head_cid))
+}
+
 export const nodesRepository = {
   getNode,
   resolveEncodedNodes,
@@ -638,6 +678,8 @@ export const nodesRepository = {
   updateNodeBlockchainData,
   updateNodesBlockchainDataBatch,
   hasEncodedNode,
+  countCidsWithData,
+  getArchivedRootCidsWithData,
   getUnreconciledNodes,
   getUnreconciledNodesCount,
   getFullyArchivedHeadCids,
@@ -646,3 +688,4 @@ export const nodesRepository = {
   getUnrecoverablePublishingRootCids,
   touchUnpublishedNodesByRootCid,
 }
+
