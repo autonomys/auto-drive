@@ -797,12 +797,6 @@ const processMigration = async (
   }
   const runId = Symbol('migrationRun')
   migrationsInFlight.set(uploadId, runId)
-  const onAbort = () => {
-    if (migrationsInFlight.get(uploadId) === runId) {
-      migrationsInFlight.delete(uploadId)
-    }
-  }
-  signal?.addEventListener('abort', onAbort, { once: true })
   try {
     const upload = await uploadsRepository.getUploadEntryById(uploadId)
     signal?.throwIfAborted()
@@ -872,7 +866,6 @@ const processMigration = async (
     }
     throw error
   } finally {
-    signal?.removeEventListener('abort', onAbort)
     if (migrationsInFlight.get(uploadId) === runId) {
       migrationsInFlight.delete(uploadId)
     }

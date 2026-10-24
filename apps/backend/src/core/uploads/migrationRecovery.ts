@@ -49,16 +49,9 @@ const processMigrationRecovery = async (
 
   const runId = Symbol('migrationRecoveryRun')
   currentRun = runId
-  const onAbort = () => {
-    if (currentRun === runId) {
-      currentRun = null
-    }
-  }
-  signal?.addEventListener('abort', onAbort, { once: true })
   try {
     await runRecoveryBatch(signal)
   } finally {
-    signal?.removeEventListener('abort', onAbort)
     if (currentRun === runId) {
       currentRun = null
     }

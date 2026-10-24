@@ -54,16 +54,9 @@ const processReconciliation = async (signal?: AbortSignal): Promise<void> => {
 
   const runId = Symbol('reconciliationRun')
   currentRun = runId
-  const onAbort = () => {
-    if (currentRun === runId) {
-      currentRun = null
-    }
-  }
-  signal?.addEventListener('abort', onAbort, { once: true })
   try {
     await runReconciliationBatch(signal)
   } finally {
-    signal?.removeEventListener('abort', onAbort)
     if (currentRun === runId) {
       currentRun = null
     }
