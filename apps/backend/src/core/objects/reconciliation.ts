@@ -21,7 +21,7 @@ const ZERO_PROGRESS_WARN_THRESHOLD = 3
 // Concurrency guard — if a reconciliation is already in flight, skip.
 // Prevents duplicate work when the setInterval tick overlaps with a
 // self-rescheduled drain or when RabbitMQ prefetch delivers two tasks.
-let isRunning = false
+let currentRun: symbol | null = null
 
 /**
  * Reconciles stuck nodes that have been published on-chain but are missing
@@ -45,24 +45,29 @@ let isRunning = false
  * that only timer-triggered runs defer, while self-rescheduled
  * fast-drain batches always execute immediately.
  */
-const processReconciliation = async (): Promise<void> => {
-  if (isRunning) {
+const processReconciliation = async (signal?: AbortSignal): Promise<void> => {
+  signal?.throwIfAborted()
+  if (currentRun !== null) {
     logger.debug('Reconciliation already in progress, skipping')
     return
   }
 
-  isRunning = true
+  const runId = Symbol('reconciliationRun')
+  currentRun = runId
   try {
-    await runReconciliationBatch()
+    await runReconciliationBatch(signal)
   } finally {
-    isRunning = false
+    if (currentRun === runId) {
+      currentRun = null
+    }
   }
 }
 
-const runReconciliationBatch = async (): Promise<void> => {
+const runReconciliationBatch = async (signal?: AbortSignal): Promise<void> => {
   const unreconciledNodes = await nodesRepository.getUnreconciledNodes(
     BATCH_SIZE,
   )
+  signal?.throwIfAborted()
 
   if (unreconciledNodes.length === 0) {
     logger.debug('No unreconciled nodes found, skipping')
@@ -116,13 +121,16 @@ const runReconciliationBatch = async (): Promise<void> => {
   const affectedHeadCids = new Set<string>()
 
   for (let i = 0; i < hashes.length; i += SUB_BATCH_SIZE) {
+    signal?.throwIfAborted()
     const hashBatch = hashes.slice(i, i + SUB_BATCH_SIZE)
 
     const mappings =
       await objectMappingIndexerClient.getObjectMappings(hashBatch)
+    signal?.throwIfAborted()
 
     // Apply resolved mappings
     for (const [hash, pieceIndex, pieceOffset] of mappings) {
+      signal?.throwIfAborted()
       const cid = hashCidMap.get(hash)
       if (!cid) {
         continue
@@ -142,6 +150,7 @@ const runReconciliationBatch = async (): Promise<void> => {
           affectedHeadCids.add(headCid)
         }
       } catch (error) {
+        if (signal?.aborted) throw error
         logger.warn(
           'Failed to set archival data for node %s: %s',
           cid,
@@ -160,6 +169,7 @@ const runReconciliationBatch = async (): Promise<void> => {
 
   // Check if any objects are now fully archived (targeted, single query)
   if (affectedHeadCids.size > 0) {
+    signal?.throwIfAborted()
     await ObjectUseCases.checkArchivalStatusForObjects(
       Array.from(affectedHeadCids),
     )

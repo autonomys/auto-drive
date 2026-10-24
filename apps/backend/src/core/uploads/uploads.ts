@@ -780,10 +780,14 @@ const abortUpload = async (
 // no unique constraint). In-process only, like withDrainLock: the migrate
 // consumer (start:fe:worker) runs as a single process, the same single-worker
 // invariant on-chain publishing relies on.
-const migrationsInFlight = new Set<string>()
+const migrationsInFlight = new Map<string, symbol>()
 
-const processMigration = async (uploadId: string): Promise<void> => {
+const processMigration = async (
+  uploadId: string,
+  signal?: AbortSignal,
+): Promise<void> => {
   logger.debug('processMigration invoked (uploadId=%s)', uploadId)
+  signal?.throwIfAborted()
   if (migrationsInFlight.has(uploadId)) {
     logger.warn(
       'Migration already in progress for upload %s; skipping concurrent run',
@@ -791,19 +795,25 @@ const processMigration = async (uploadId: string): Promise<void> => {
     )
     return
   }
-  migrationsInFlight.add(uploadId)
+  const runId = Symbol('migrationRun')
+  migrationsInFlight.set(uploadId, runId)
   try {
     const upload = await uploadsRepository.getUploadEntryById(uploadId)
+    signal?.throwIfAborted()
     if (!upload) {
       logger.error('Upload not found (uploadId=%s)', uploadId)
       throw new UnrecoverableUploadError('Upload not found', uploadId)
     }
 
     const cid = await BlockstoreUseCases.getUploadCID(uploadId)
+    signal?.throwIfAborted()
     await NodesUseCases.migrateFromBlockstoreToNodesTable(uploadId)
+    signal?.throwIfAborted()
 
     await removeUploadArtifacts(uploadId)
+    signal?.throwIfAborted()
     await scheduleUploadTagging(cidToString(cid))
+    signal?.throwIfAborted()
     await scheduleCachePopulation(cidToString(cid))
   } catch (error) {
     // A permanently broken upload must not be retried. Left to the normal retry
@@ -856,7 +866,9 @@ const processMigration = async (uploadId: string): Promise<void> => {
     }
     throw error
   } finally {
-    migrationsInFlight.delete(uploadId)
+    if (migrationsInFlight.get(uploadId) === runId) {
+      migrationsInFlight.delete(uploadId)
+    }
   }
 }
 

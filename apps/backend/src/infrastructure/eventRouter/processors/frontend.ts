@@ -3,6 +3,7 @@ import { ReconciliationUseCases } from '../../../core/objects/reconciliation.js'
 import { PublishingRecoveryUseCases } from '../../../core/objects/publishingRecovery.js'
 import { MigrationRecoveryUseCases } from '../../../core/uploads/migrationRecovery.js'
 import { UploadsUseCases } from '../../../core/uploads/uploads.js'
+import { config } from '../../../config.js'
 import { Rabbit } from '../../drivers/rabbit.js'
 import { Task } from '../tasks.js'
 import { createHandlerWithRetries } from '../utils.js'
@@ -11,10 +12,10 @@ import { paymentManager } from '../../services/paymentManager/index.js'
 export const frontendErrorPublishedQueue = 'frontend-errors'
 
 export const processFrontendTask = createHandlerWithRetries(
-  (task: Task) => {
+  (task: Task, signal: AbortSignal) => {
     const { id, params } = task
     if (id === 'migrate-upload-nodes') {
-      return UploadsUseCases.processMigration(params.uploadId)
+      return UploadsUseCases.processMigration(params.uploadId, signal)
     } else if (id === 'archive-objects') {
       return NodesUseCases.processNodeArchived(params.objects)
     } else if (id === 'publish-nodes' || id === 'ensure-object-published') {
@@ -38,16 +39,17 @@ export const processFrontendTask = createHandlerWithRetries(
     } else if (id === 'watch-intent-tx') {
       return paymentManager.watchTransaction(params.txHash, params.paymentMethod)
     } else if (id === 'reconcile-archival') {
-      return ReconciliationUseCases.processReconciliation()
+      return ReconciliationUseCases.processReconciliation(signal)
     } else if (id === 'recover-publishing') {
-      return PublishingRecoveryUseCases.processPublishingRecovery()
+      return PublishingRecoveryUseCases.processPublishingRecovery(signal)
     } else if (id === 'recover-migrations') {
-      return MigrationRecoveryUseCases.processMigrationRecovery()
+      return MigrationRecoveryUseCases.processMigrationRecovery(signal)
     } else {
       throw new Error(`Received task ${id} but no handler found.`)
     }
   },
   {
     errorPublishQueue: frontendErrorPublishedQueue,
+    taskTimeoutMs: config.frontendWorker.taskTimeoutMs,
   },
 )

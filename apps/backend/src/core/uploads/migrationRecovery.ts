@@ -7,7 +7,7 @@ import { config } from '../../config.js'
 const logger = createLogger('useCases:uploads:migrationRecovery')
 
 // Concurrency guard — skip if a recovery pass is already running.
-let isRunning = false
+let currentRun: symbol | null = null
 
 /**
  * Recovers uploads stranded in the MIGRATING state.
@@ -38,27 +38,34 @@ let isRunning = false
  * scheduler in migrationRecoveryJob.ts, not here, so task-triggered runs
  * always execute.
  */
-const processMigrationRecovery = async (): Promise<void> => {
-  if (isRunning) {
+const processMigrationRecovery = async (
+  signal?: AbortSignal,
+): Promise<void> => {
+  signal?.throwIfAborted()
+  if (currentRun !== null) {
     logger.debug('Migration recovery already in progress, skipping')
     return
   }
 
-  isRunning = true
+  const runId = Symbol('migrationRecoveryRun')
+  currentRun = runId
   try {
-    await runRecoveryBatch()
+    await runRecoveryBatch(signal)
   } finally {
-    isRunning = false
+    if (currentRun === runId) {
+      currentRun = null
+    }
   }
 }
 
-const runRecoveryBatch = async (): Promise<void> => {
+const runRecoveryBatch = async (signal?: AbortSignal): Promise<void> => {
   const { maxUploadsPerCycle, stalenessMs } = config.migrationRecovery
 
   const stuckUploadIds = await uploadsRepository.getStuckRootMigrations(
     stalenessMs,
     maxUploadsPerCycle,
   )
+  signal?.throwIfAborted()
 
   if (stuckUploadIds.length === 0) {
     logger.debug('No stuck migrations found, skipping')
