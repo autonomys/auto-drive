@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { randomUUID } from 'crypto'
 import { Channel, ConsumeMessage, connect } from 'amqplib'
 import { config } from '../../config.js'
 import { createLogger } from './logger.js'
@@ -55,13 +55,14 @@ const activeConsumers: Partial<
 let channelPromise: Promise<Channel> | null = null
 let keepAliveInterval: NodeJS.Timeout | null = null
 let reconnectTimer: NodeJS.Timeout | null = null
+let reconnectAttempts = 0
 
-const RECONNECT_DELAY_MS = 1000
+const MAX_RECONNECT_DELAY_MS = 60_000
 
 type Settlement = 'ack' | 'requeue'
 
 interface Delivery {
-  key: string
+  key: string | undefined
   outcome: Promise<Settlement>
 }
 
@@ -79,7 +80,8 @@ interface OrphanedWork {
 
 /**
  * Work still running (or just finished) in this process whose delivery died with
- * its channel, keyed by queue and message body.
+ * its channel, keyed by queue and message ID. A message published without an ID
+ * is not tracked, and its redelivery runs again.
  *
  * The broker requeues such a message and redelivers it, normally to this process
  * right after the reconnect. Running the callback for it again would put a second
@@ -94,8 +96,10 @@ const orphanedWork = new Map<string, OrphanedWork[]>()
 // another consumer and then never arrives here.
 const ORPHANED_WORK_TTL_MS = 60 * 60 * 1000
 
-const deliveryKey = (queue: Queue, message: ConsumeMessage) =>
-  `${queue}:${createHash('sha256').update(message.content).digest('hex')}`
+const deliveryKey = (queue: Queue, message: ConsumeMessage) => {
+  const { messageId } = message.properties
+  return messageId ? `${queue}:${messageId}` : undefined
+}
 
 const pruneOrphanedWork = () => {
   const now = Date.now()
@@ -112,16 +116,16 @@ const pruneOrphanedWork = () => {
   }
 }
 
-const orphan = (delivery: Delivery) => {
+const orphan = ({ key, outcome }: Delivery) => {
+  if (key === undefined) {
+    return
+  }
   pruneOrphanedWork()
-  const entry: OrphanedWork = { outcome: delivery.outcome, settledAt: null }
-  delivery.outcome.then(() => {
+  const entry: OrphanedWork = { outcome, settledAt: null }
+  outcome.then(() => {
     entry.settledAt = Date.now()
   })
-  orphanedWork.set(delivery.key, [
-    ...(orphanedWork.get(delivery.key) ?? []),
-    entry,
-  ])
+  orphanedWork.set(key, [...(orphanedWork.get(key) ?? []), entry])
 }
 
 const claimOrphanedWork = (key: string) => {
@@ -141,7 +145,7 @@ const orphanUnsettledDeliveries = (channel: Channel) => {
     return
   }
   logger.warn(
-    'RabbitMQ channel closed with %d deliveries still being handled; they keep running, and their redeliveries will be settled with their outcome',
+    'RabbitMQ channel closed with %d deliveries still being handled; they keep running, and the broker will redeliver them',
     unsettled.size,
   )
   unsettled.forEach(orphan)
@@ -171,9 +175,10 @@ const handleDelivery = async (
   message: ConsumeMessage,
 ) => {
   const key = deliveryKey(queue, message)
-  const adopted = message.fields.redelivered
-    ? claimOrphanedWork(key)
-    : undefined
+  const adopted =
+    message.fields.redelivered && key !== undefined
+      ? claimOrphanedWork(key)
+      : undefined
   if (adopted) {
     logger.warn(
       'Redelivered message on %s is already being handled by this process; waiting for that run instead of starting another',
@@ -190,7 +195,7 @@ const handleDelivery = async (
 
   if (!unsettledDeliveries.get(channel)?.delete(delivery)) {
     logger.warn(
-      'Finished a message from %s after its channel closed; its redelivery will be settled instead',
+      'Finished a message from %s after its channel closed; the broker has requeued it',
       queue,
     )
     return
@@ -285,10 +290,18 @@ const openChannel = async (onClose: () => void): Promise<Channel> => {
   }
 }
 
+// Backs off because a channel that the broker closes during setup (a queue
+// redeclared with different arguments, say) would otherwise be reopened every
+// second for as long as the cause lasts. Reset by any channel that opens.
 const scheduleReconnect = () => {
   if (reconnectTimer) {
     return
   }
+  const delay = Math.min(
+    config.rabbitmq.reconnectDelayMs * 2 ** reconnectAttempts,
+    MAX_RECONNECT_DELAY_MS,
+  )
+  reconnectAttempts++
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
     getChannel().catch((error) => {
@@ -297,7 +310,7 @@ const scheduleReconnect = () => {
         'RabbitMQ reconnect failed; the keepalive will retry',
       )
     })
-  }, RECONNECT_DELAY_MS)
+  }, delay)
 }
 
 const getChannel = async () => {
@@ -326,6 +339,7 @@ const getChannel = async () => {
 
     pending.then(
       () => {
+        reconnectAttempts = 0
         for (const queue of queues) {
           // Snapshotted rather than drained: `subscribe` de-duplicates against
           // `subscriptions` itself, and emptying the list first would leave a
@@ -358,13 +372,13 @@ const getChannel = async () => {
   return channelPromise
 }
 
-const publish = async (queue: string, message: object) => {
+const publish = async (queue: Queue, message: object) => {
   return withBackingOffRetries(
     async () => {
       const channel = await getChannel()
-      await channel.assertQueue(queue)
       channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), {
         persistent: true,
+        messageId: randomUUID(),
       })
     },
     { maxRetries: 3, startingDelay: 1000 },

@@ -35,6 +35,7 @@ type ConsumeHandler = (message: FakeMessage | null) => Promise<void>
 interface FakeMessage {
   content: Buffer
   fields: { deliveryTag: number; redelivered: boolean }
+  properties: { messageId?: string }
 }
 
 interface FakeChannel extends EventEmitter {
@@ -428,10 +429,16 @@ describe('Rabbit channel closed by the broker', () => {
     unhandled.length = 0
   })
 
-  const deliver = (channel: FakeChannel, body: object, redelivered = false) => {
+  const deliver = (
+    channel: FakeChannel,
+    body: object,
+    redelivered = false,
+    messageId?: string,
+  ) => {
     const message: FakeMessage = {
       content: Buffer.from(JSON.stringify(body)),
       fields: { deliveryTag: nextDeliveryTag++, redelivered },
+      properties: { messageId },
     }
     return { message, settled: channel.handlers.get(QUEUE)!(message) }
   }
@@ -500,12 +507,16 @@ describe('Rabbit channel closed by the broker', () => {
       { id: 'migrate-upload-nodes', params: { uploadId: 'u-1' } },
       { id: 'migrate-upload-nodes', params: { uploadId: 'u-2' } },
     ]
-    const originals = bodies.map((body) => deliver(first, body))
+    const originals = bodies.map((body, i) =>
+      deliver(first, body, false, `message-${i}`),
+    )
     expect(callback).toHaveBeenCalledTimes(2)
 
     brokerClosesChannel(first)
     const second = await waitForReplacement(first)
-    const redeliveries = bodies.map((body) => deliver(second, body, true))
+    const redeliveries = bodies.map((body, i) =>
+      deliver(second, body, true, `message-${i}`),
+    )
     await tick(20)
 
     expect(callback).toHaveBeenCalledTimes(2)
@@ -527,14 +538,14 @@ describe('Rabbit channel closed by the broker', () => {
     const callback = await subscribe(() => gate.promise)
     const first = channels.at(-1)!
     const body = { id: 'tag-upload', params: { cid: 'b' } }
-    const original = deliver(first, body)
+    const original = deliver(first, body, false, 'message-b')
 
     brokerClosesChannel(first)
     gate.resolve()
     await original.settled
 
     const second = await waitForReplacement(first)
-    const redelivery = deliver(second, body, true)
+    const redelivery = deliver(second, body, true, 'message-b')
     await redelivery.settled
 
     expect(callback).toHaveBeenCalledTimes(1)
@@ -549,16 +560,44 @@ describe('Rabbit channel closed by the broker', () => {
     })
     const first = channels.at(-1)!
     const body = { id: 'tag-upload', params: { cid: 'c' } }
-    const original = deliver(first, body)
+    const original = deliver(first, body, false, 'message-c')
 
     brokerClosesChannel(first)
     const second = await waitForReplacement(first)
-    const redelivery = deliver(second, body, true)
+    const redelivery = deliver(second, body, true, 'message-c')
     gate.resolve()
     await Promise.all([original.settled, redelivery.settled])
 
     expect(callback).toHaveBeenCalledTimes(1)
     expect(second.nack).toHaveBeenCalledWith(redelivery.message, false, true)
+  })
+
+  // Task bodies are deterministic (a migrate task is just its uploadId), so two
+  // separately published messages can be byte-identical. Only a redelivery of
+  // the same message may take over a run's outcome.
+  it('matches a redelivery to its own run by message ID, not by body', async () => {
+    const gate = deferred()
+    const callback = await subscribe(() => gate.promise)
+    const first = channels.at(-1)!
+    const body = { id: 'migrate-upload-nodes', params: { uploadId: 'u-3' } }
+    const original = deliver(first, body, false, 'message-a')
+
+    brokerClosesChannel(first)
+    const second = await waitForReplacement(first)
+    // A different message that happens to share the body runs on its own...
+    const sameBody = deliver(second, body, true, 'message-b')
+    expect(callback).toHaveBeenCalledTimes(2)
+    // ...while the original's redelivery attaches to the run still going.
+    const redelivery = deliver(second, body, true, 'message-a')
+    expect(callback).toHaveBeenCalledTimes(2)
+
+    gate.resolve()
+    await Promise.all(
+      [original, sameBody, redelivery].map((delivery) => delivery.settled),
+    )
+    expect(callback).toHaveBeenCalledTimes(2)
+    expect(second.ack).toHaveBeenCalledWith(sameBody.message)
+    expect(second.ack).toHaveBeenCalledWith(redelivery.message)
   })
 
   it('still runs a redelivered message it has no record of', async () => {
@@ -570,10 +609,62 @@ describe('Rabbit channel closed by the broker', () => {
       channel,
       { id: 'tag-upload', params: { cid: 'd' } },
       true,
+      'message-d',
     )
     await settled
 
     expect(callback).toHaveBeenCalledTimes(1)
     expect(channel.ack).toHaveBeenCalledWith(message)
+  })
+
+  // Anything queued before message IDs were stamped has none, so there is
+  // nothing to match its redelivery to and it runs again.
+  it('runs the redelivery of a message without an ID again', async () => {
+    const gate = deferred()
+    const callback = await subscribe(() => gate.promise)
+    const first = channels.at(-1)!
+    const body = { id: 'tag-upload', params: { cid: 'e' } }
+    const original = deliver(first, body)
+
+    brokerClosesChannel(first)
+    const second = await waitForReplacement(first)
+    const redelivery = deliver(second, body, true)
+    expect(callback).toHaveBeenCalledTimes(2)
+
+    gate.resolve()
+    await Promise.all([original.settled, redelivery.settled])
+    expect(second.ack).toHaveBeenCalledWith(redelivery.message)
+    expect(first.ack).not.toHaveBeenCalled()
+  })
+})
+
+describe('Rabbit publish', () => {
+  beforeEach(async () => {
+    await Rabbit.close().catch(() => undefined)
+    failCheckQueue = false
+    hangCheckQueue = false
+    failConnect = false
+    channels.length = 0
+  })
+
+  // The ID is what lets a redelivery be matched to its own run; every queue is
+  // already declared when the channel opens, so publishing redeclares none.
+  it('gives every message its own ID without redeclaring the queue', async () => {
+    await Rabbit.publish('task-manager', { id: 'tag-upload' })
+    const channel = channels.at(-1)! as FakeChannel & {
+      sendToQueue: jest.Mock
+      assertQueue: jest.Mock
+    }
+    const declaredAtOpen = channel.assertQueue.mock.calls.length
+
+    await Rabbit.publish('task-manager', { id: 'tag-upload' })
+
+    const ids = channel.sendToQueue.mock.calls.map(
+      ([, , options]) => (options as { messageId?: string }).messageId,
+    )
+    expect(ids).toHaveLength(2)
+    expect(ids.every(Boolean)).toBe(true)
+    expect(new Set(ids).size).toBe(2)
+    expect(channel.assertQueue.mock.calls.length).toBe(declaredAtOpen)
   })
 })
