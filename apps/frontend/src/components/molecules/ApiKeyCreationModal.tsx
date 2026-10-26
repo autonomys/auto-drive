@@ -68,12 +68,14 @@ export const ApiKeyCreationModal = ({
   isOpen,
   onClose,
   onSuccess,
+  initialName = '',
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialName?: string;
 }) => {
-  const [name, setName] = useState('');
+  const [name, setName] = useState(initialName);
   const [preset, setPreset] = useState<ExpiryPreset>('never');
   const [customDate, setCustomDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -85,14 +87,14 @@ export const ApiKeyCreationModal = ({
 
   const reset = useCallback(() => {
     epochRef.current += 1;
-    setName('');
+    setName(initialName);
     setPreset('never');
     setCustomDate('');
     setApiKey(null);
     setHasBeenCopied(false);
     setSubmitting(false);
     setMinDate(todayPlus(1));
-  }, []);
+  }, [initialName]);
 
   useEffect(() => {
     reset();

@@ -1,5 +1,14 @@
-import { jest, describe, it, expect, beforeEach } from '@jest/globals'
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+} from '@jest/globals'
 import { FilesUseCases } from '../../../src/core/objects/files/index.js'
+import { DBObjectFetcher } from '../../../src/core/objects/files/fetchers.js'
+import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { Readable } from 'stream'
 
@@ -9,59 +18,36 @@ describe('FilesUseCases', () => {
     jest.clearAllMocks()
   })
 
-  describe('getNodesForPartialRetrieval', () => {
-    it('should find nodes for byte range within single chunk', async () => {
-      const chunks = [
-        { size: BigInt(1000), cid: 'cid1' },
-        { size: BigInt(1000), cid: 'cid2' },
-      ]
-
-      const result = await FilesUseCases.getNodesForPartialRetrieval(
-        chunks as any,
-        [100, 500],
-      )
-
-      expect(result.nodes).toContain('cid1')
-      expect(result.firstNodeFileOffset).toBe(0)
+  describe('retrieveFileByteRange', () => {
+    afterEach(() => {
+      jest.restoreAllMocks()
     })
 
-    it('should find nodes for byte range spanning multiple chunks', async () => {
-      const chunks = [
-        { size: BigInt(1000), cid: 'cid1' },
-        { size: BigInt(1000), cid: 'cid2' },
-        { size: BigInt(1000), cid: 'cid3' },
-      ]
+    it('should fetch only the first chunk for bytes=0-0', async () => {
+      const chunks = Array.from({ length: 250 }, (_, i) => ({
+        size: BigInt(1000),
+        cid: `chunk${i}`,
+      }))
+      const metadata: OffchainMetadata = {
+        totalSize: '250000',
+        dataCid: 'cid1',
+        type: 'file',
+        chunks,
+      } as any
 
-      const result = await FilesUseCases.getNodesForPartialRetrieval(
-        chunks as any,
-        [500, 2500],
-      )
+      jest.spyOn(ObjectUseCases, 'isArchived').mockResolvedValue(false)
+      const fetchNodesSpy = jest
+        .spyOn(DBObjectFetcher, 'fetchNodes')
+        .mockImplementation(async (cids) =>
+          cids.map(() => Buffer.alloc(1000, 7)),
+        )
 
-      expect(result.nodes.length).toBeGreaterThan(0)
-      expect(result.firstNodeFileOffset).toBeDefined()
-    })
+      const stream = await FilesUseCases.retrieveFileByteRange(metadata, [0, 0])
+      const received: Buffer[] = []
+      for await (const data of stream) received.push(data)
 
-    it('should handle byte range at end of file', async () => {
-      const chunks = [
-        { size: BigInt(1000), cid: 'cid1' },
-        { size: BigInt(1000), cid: 'cid2' },
-      ]
-
-      const result = await FilesUseCases.getNodesForPartialRetrieval(
-        chunks as any,
-        [1500, undefined],
-      )
-
-      expect(result.nodes).toBeDefined()
-      expect(result.firstNodeFileOffset).toBeDefined()
-    })
-
-    it('should throw error for byte range outside file', async () => {
-      const chunks = [{ size: BigInt(1000), cid: 'cid1' }]
-
-      await expect(
-        FilesUseCases.getNodesForPartialRetrieval(chunks as any, [2000, 3000]),
-      ).rejects.toThrow('Byte range not found')
+      expect(Buffer.concat(received)).toEqual(Buffer.from([7]))
+      expect(fetchNodesSpy.mock.calls).toEqual([[['chunk0']]])
     })
   })
 

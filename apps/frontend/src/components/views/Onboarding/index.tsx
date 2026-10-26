@@ -13,6 +13,7 @@ import {
   getNetwork,
 } from '@auto-drive/ui';
 import { getAuthSession } from 'utils/auth';
+import { getCallbackUrlFromLocation } from 'utils/callbackUrl';
 
 const acceptTouAfterOnboarding = async () => {
   try {
@@ -65,7 +66,7 @@ export const Onboarding = () => {
     AuthService.onboardUser()
       .then(async () => {
         await acceptTouAfterOnboarding();
-        window.location.assign(ROUTES.drive());
+        window.location.assign(getCallbackUrlFromLocation() ?? ROUTES.drive());
       })
       .catch((error) => {
         console.error(error);

@@ -211,7 +211,7 @@ s3Controller.use(
   // left req.body as `{}` and broke uploads.
   raw({
     type: () => true,
-    limit: '100mb',
+    limit: '200mb',
   }),
   asyncSafeHandler(async (req: Request, res: Response) => {
     const s3Method = getS3Method(req)

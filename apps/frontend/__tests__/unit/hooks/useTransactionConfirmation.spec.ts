@@ -40,7 +40,14 @@ describe('evaluateIntentStatus', () => {
     });
   });
 
-  it.each(['pending', 'confirmed', 'failed'])(
+  it('is terminal for "failed"', () => {
+    expect(evaluateIntentStatus('failed')).toEqual({
+      state: 'failed',
+      shouldContinue: false,
+    });
+  });
+
+  it.each(['pending', 'confirmed'])(
     'keeps polling, and reports the lock live, for "%s"',
     (status) => {
       expect(evaluateIntentStatus(status)).toEqual({
@@ -53,6 +60,11 @@ describe('evaluateIntentStatus', () => {
   it('never reports both completed and over_cap', () => {
     expect(evaluateIntentStatus('over_cap').state).not.toBe('completed');
     expect(evaluateIntentStatus('completed').state).not.toBe('over_cap');
+  });
+
+  it('never reports failed as live or completed', () => {
+    expect(evaluateIntentStatus('failed').state).not.toBe('live');
+    expect(evaluateIntentStatus('failed').state).not.toBe('completed');
   });
 });
 
