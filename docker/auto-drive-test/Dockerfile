@@ -21,10 +21,8 @@ RUN YARN_ENABLE_SCRIPTS=false yarn install --immutable
 # project and need that project installed too.
 RUN cd submodules/files-gateway && YARN_ENABLE_SCRIPTS=false yarn install --immutable
 RUN yarn workspaces foreach -Rt --from '{backend,auth}' run build
-# The root workspace is included because auth resolves siwe's peer dependency,
-# ethers, from it.
 RUN rm -rf submodules/files-gateway/node_modules \
-    && yarn workspaces focus --production auto-drive backend auth
+    && yarn workspaces focus --production backend auth
 
 FROM postgres:17.9-bookworm
 RUN apt-get update \
