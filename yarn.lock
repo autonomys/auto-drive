@@ -129,6 +129,7 @@ __metadata:
     "@autonomys/auto-dag-data": "npm:1.6.16"
     "@autonomys/file-server": "npm:1.6.16"
     typescript: "npm:^5.7.3"
+    uuid: "npm:^11.1.0"
     zod: "npm:^3.24.2"
   languageName: unknown
   linkType: soft

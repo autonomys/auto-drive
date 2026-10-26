@@ -8,15 +8,24 @@ import { getTypeFromMetadata } from '../../../utils/file';
 import { formatBytes, formatNumberWithCommas } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import { formatCid } from '../../../utils/table';
-import { EXTERNAL_ROUTES } from '@auto-drive/ui';
+import { EXTERNAL_ROUTES, ROUTES } from '@auto-drive/ui';
+import Link from 'next/link';
+import { useNetwork } from 'contexts/network';
+import { CopiableText } from '../../atoms/CopiableText';
 
 export const ObjectUploadDetails = ({
   object,
-  isOwner,
+  ownerPublicIds,
+  myPublicId,
+  ownerAccountIds,
 }: {
   object: ObjectInformation;
-  isOwner: boolean;
+  ownerPublicIds: string[];
+  myPublicId: string | null;
+  /** publicId → current account ID; only filled in for admin viewers. */
+  ownerAccountIds: Record<string, string>;
 }) => {
+  const { network } = useNetwork();
   const { minimumBlockDepth, maximumBlockDepth } = object.uploadState;
 
   const blockRangeDisplay =
@@ -32,18 +41,18 @@ export const ObjectUploadDetails = ({
         </a>
         {maximumBlockDepth != null &&
           maximumBlockDepth !== minimumBlockDepth && (
-          <>
-            <span className='text-gray-400'>→</span>
-            <a
-              href={EXTERNAL_ROUTES.explorer.block(maximumBlockDepth)}
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-primary hover:text-primary/80 hover:underline'
-            >
-              {formatNumberWithCommas(maximumBlockDepth)}
-            </a>
-          </>
-        )}
+            <>
+              <span className='text-gray-400'>→</span>
+              <a
+                href={EXTERNAL_ROUTES.explorer.block(maximumBlockDepth)}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='text-primary hover:text-primary/80 hover:underline'
+              >
+                {formatNumberWithCommas(maximumBlockDepth)}
+              </a>
+            </>
+          )}
       </span>
     ) : (
       'N/A'
@@ -118,8 +127,34 @@ export const ObjectUploadDetails = ({
             <span className='text-sm text-gray-500 dark:text-gray-400'>
               Owner:
             </span>
-            <span className='text-sm font-medium'>
-              {isOwner ? 'You' : 'Unknown'}
+            <span className='flex flex-col items-end gap-1 text-sm font-medium'>
+              {ownerPublicIds.length === 0
+                ? 'Unknown'
+                : ownerPublicIds.map((publicId) => (
+                    <span key={publicId} className='flex items-center gap-2'>
+                      {publicId === myPublicId && (
+                        <span className='text-gray-500'>You</span>
+                      )}
+                      {ownerAccountIds[publicId] ? (
+                        <Link
+                          href={ROUTES.adminOrganization(
+                            network.id,
+                            ownerAccountIds[publicId],
+                          )}
+                          className='font-mono text-primary hover:underline'
+                          title='Open account'
+                        >
+                          {formatCid(publicId)}
+                        </Link>
+                      ) : (
+                        <CopiableText
+                          text={publicId}
+                          displayText={formatCid(publicId)}
+                          className='font-mono'
+                        />
+                      )}
+                    </span>
+                  ))}
             </span>
           </div>
           {object.publishedObjectId && (
@@ -128,7 +163,7 @@ export const ObjectUploadDetails = ({
                 Published ID:
               </span>
               <span
-                className='text-sm font-medium font-mono'
+                className='font-mono text-sm font-medium'
                 title={object.publishedObjectId}
               >
                 {formatCid(object.publishedObjectId)}

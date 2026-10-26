@@ -8,11 +8,11 @@ import {
   userFromTable,
   UserOrPublicId,
   UserRole,
+  deriveUserPublicId,
 } from '@auto-drive/models'
 import { usersRepository } from '../repositories/users.js'
 import { organizationMembersRepository } from '../repositories/organizationMembers.js'
 import { OrganizationsUseCases } from './organizations.js'
-import { v5 } from 'uuid'
 import { createLogger } from '../drivers/logger.js'
 
 const logger = createLogger('useCases:users')
@@ -71,15 +71,7 @@ const resolveUser = async (
   return user
 }
 
-export const deriveUserPublicId = (
-  oauthProvider: string,
-  oauthUserId: string,
-): string => {
-  const USER_PUBLIC_ID_NAMESPACE = 'public-id-user-1'
-
-  const input = `${oauthProvider}-${oauthUserId}`
-  return v5(input, Buffer.from(USER_PUBLIC_ID_NAMESPACE))
-}
+export { deriveUserPublicId }
 
 const getUserWithOrganization = async (
   user: UserOrPublicId,
@@ -173,6 +165,34 @@ const searchUsersByPublicId = async (publicId: string): Promise<string[]> => {
   )
 
   return dbUsers.map((e) => e.public_id)
+}
+
+/**
+ * Admin lookup: users whose publicId contains `query`, plus — when
+ * `organizationId` is given — every member of that organization.
+ */
+const adminSearchUsers = async (
+  query: string,
+  organizationId?: string,
+): Promise<MaybeUserWithOrganization[]> => {
+  const maxResults = 20
+  const matches = query
+    ? await usersRepository.searchUsersByPublicId(query, maxResults)
+    : []
+  const members = organizationId
+    ? await organizationMembersRepository.getOrganizationMemberships(
+        organizationId,
+      )
+    : []
+
+  const publicIds = new Set([
+    ...matches.map((u) => u.public_id).filter((id): id is string => !!id),
+    ...members.map((m) =>
+      deriveUserPublicId(m.oauth_provider, m.oauth_user_id),
+    ),
+  ])
+
+  return getUsersWithOrganizations([...publicIds])
 }
 
 const isAdminUser = async (
@@ -313,6 +333,7 @@ export const UsersUseCases = {
   getUserByPublicId,
   getUsersByPublicIds,
   searchUsersByPublicId,
+  adminSearchUsers,
   isAdminUser,
   updateRole,
   resolveUser,
