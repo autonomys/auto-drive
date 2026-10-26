@@ -1,0 +1,4 @@
+---
+# the single-box staging topology, installed on the host by the auto-drive-host
+# module in autonomys/infra
+compose_file: docker-compose.staging.yml
