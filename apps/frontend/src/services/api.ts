@@ -3,6 +3,7 @@ import {
   AccountInfo,
   AccountInfoWithUser,
   AccountModel,
+  AdminAccountDetails,
   Banner,
   BannerCriticality,
   BannerInteractionType,
@@ -445,6 +446,55 @@ export const createApiService = ({
 
     if (!response.ok) {
       throw new Error(`Failed to search accounts: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  /** Admin: an account by account ID or org ID, or null if there is none. */
+  adminGetAccount: async (id: string): Promise<AdminAccountDetails | null> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw new Error(`Failed to get account: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  /** Admin: each user's current account ID, keyed by publicId. */
+  adminGetAccountIdsByUsers: async (
+    publicIds: string[],
+  ): Promise<Record<string, string>> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/accounts/admin/by-users`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify({ publicIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get accounts: ${response.statusText}`);
     }
 
     return response.json();

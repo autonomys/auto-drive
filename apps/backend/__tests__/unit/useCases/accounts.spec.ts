@@ -450,4 +450,128 @@ describe('AccountsUseCases', () => {
       expect(result._unsafeUnwrap()).toEqual([])
     })
   })
+  describe('adminGetAccount', () => {
+    const admin = { role: UserRole.Admin, publicId: 'admin' } as any
+    const account = {
+      id: 'acc1',
+      organizationId: 'org1',
+      uploadLimit: 10,
+      downloadLimit: 10,
+      model: AccountModel.OneOff,
+    }
+
+    beforeEach(() => {
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: BigInt(5) } as any)
+    })
+
+    it('should reject non-admin executors', async () => {
+      const result = await AccountsUseCases.adminGetAccount(
+        { role: UserRole.User, publicId: 'pub1' } as any,
+        'acc1',
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    })
+
+    it('should return an account with no members', async () => {
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
+      const search = jest
+        .spyOn(AuthManager, 'adminSearchUsers')
+        .mockResolvedValue([])
+
+      const result = await AccountsUseCases.adminGetAccount(admin, 'acc1')
+
+      expect(search).toHaveBeenCalledWith('', 'org1')
+      expect(result._unsafeUnwrap()).toEqual({
+        ...account,
+        pendingUploadCredits: 15,
+        pendingDownloadCredits: 10,
+        members: [],
+      })
+    })
+
+    it('should fall back to an organization ID and list its members', async () => {
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(null)
+      const lookup = jest
+        .spyOn(accountsRepository, 'getByOrganizationId')
+        .mockResolvedValue(account)
+      const search = jest
+        .spyOn(AuthManager, 'adminSearchUsers')
+        .mockResolvedValue([
+          { publicId: 'pub1', organizationId: 'org1' },
+          { publicId: 'pending', organizationId: null },
+        ] as any)
+
+      const result = await AccountsUseCases.adminGetAccount(admin, 'org1')
+
+      expect(lookup).toHaveBeenCalledWith('org1')
+      expect(search).toHaveBeenCalledWith('', 'org1')
+      expect(result._unsafeUnwrap().members.map((m) => m.publicId)).toEqual([
+        'pub1',
+      ])
+    })
+
+    it('should return not found for an unknown ID', async () => {
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(null)
+      jest
+        .spyOn(accountsRepository, 'getByOrganizationId')
+        .mockResolvedValue(null)
+
+      const result = await AccountsUseCases.adminGetAccount(admin, 'nope')
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+    })
+  })
+
+  describe('adminGetAccountIdsByUsers', () => {
+    const admin = { role: UserRole.Admin, publicId: 'admin' } as any
+
+    it('should reject non-admin executors', async () => {
+      const result = await AccountsUseCases.adminGetAccountIdsByUsers(
+        { role: UserRole.User, publicId: 'pub1' } as any,
+        ['pub1'],
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    })
+
+    it('should map users to existing accounts without creating any', async () => {
+      jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
+        { publicId: 'pub1', organizationId: 'org1' },
+        { publicId: 'pub2', organizationId: 'org2' },
+        { publicId: 'gone', organizationId: null },
+      ] as any)
+      jest
+        .spyOn(accountsRepository, 'getByOrganizationId')
+        .mockImplementation(async (orgId) =>
+          orgId === 'org1'
+            ? {
+                id: 'acc1',
+                organizationId: 'org1',
+                uploadLimit: 10,
+                downloadLimit: 10,
+                model: AccountModel.OneOff,
+              }
+            : null,
+        )
+      const create = jest.spyOn(accountsRepository, 'createAccount')
+
+      const result = await AccountsUseCases.adminGetAccountIdsByUsers(admin, [
+        'pub1',
+        'pub2',
+        'gone',
+      ])
+
+      expect(result._unsafeUnwrap()).toEqual({ pub1: 'acc1' })
+      expect(create).not.toHaveBeenCalled()
+    })
+  })
 })

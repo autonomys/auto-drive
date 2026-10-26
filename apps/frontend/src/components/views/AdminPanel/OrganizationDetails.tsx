@@ -30,8 +30,8 @@ import Link from 'next/link';
 import { useNetwork } from 'contexts/network';
 import { ROUTES } from '@auto-drive/ui';
 import {
-  AccountInfoWithUser,
   AccountModel,
+  AdminAccountDetails,
   InteractionType,
   UserRole,
 } from '@auto-drive/models';
@@ -130,10 +130,9 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
   const user = useUserStore(({ user }) => user);
   const apolloClient = useApolloClient();
 
-  // `organizationId` is an account ID or an organization ID, as before. The
-  // lookup returns one row per member of the organisation, each carrying the
-  // same account.
-  const [profile, setProfile] = useState<AccountInfoWithUser[] | null>(null);
+  // `organizationId` is an account ID or an organization ID, as before.
+  const [account, setAccount] = useState<AdminAccountDetails | null>(null);
+  const [accountError, setAccountError] = useState(false);
   const [batches, setBatches] = useState<AdminUserCreditBatch[] | null>(null);
   const [batchesError, setBatchesError] = useState(false);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
@@ -146,9 +145,6 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  const account = profile?.[0] ?? null;
-  const members = useMemo(() => profile?.map((p) => p.user) ?? [], [profile]);
-
   // Redirect non-admin users
   useEffect(() => {
     if (user && user.role !== UserRole.Admin) {
@@ -160,18 +156,11 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
     if (user?.role !== UserRole.Admin) return;
     setIsLoading(true);
     api
-      .adminSearchAccounts(organizationId)
-      .then((results) =>
-        setProfile(
-          results.filter(
-            (r) =>
-              r.id === organizationId || r.organizationId === organizationId,
-          ),
-        ),
-      )
+      .adminGetAccount(organizationId)
+      .then(setAccount)
       .catch((error) => {
         console.error('Error fetching account:', error);
-        setProfile([]);
+        setAccountError(true);
       })
       .finally(() => setIsLoading(false));
   }, [api, organizationId, user?.role]);
@@ -189,9 +178,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       });
   }, [api, account]);
 
-  // Fall back to the raw id, as before, so a link carrying an account ID still
-  // shows activity if the account lookup fails.
-  const accountId = account?.id ?? (profile ? organizationId : null);
+  const accountId = account?.id ?? null;
 
   useEffect(() => {
     if (!accountId) return;
@@ -289,6 +276,11 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
           <div className='flex items-center justify-center py-8'>
             <Loader className='h-6 w-6 animate-spin' />
           </div>
+        ) : accountError ? (
+          <p className='text-sm text-gray-500'>
+            Failed to load account{' '}
+            <span className='font-mono'>{organizationId}</span>.
+          </p>
         ) : !account ? (
           <p className='text-sm text-gray-500'>
             No account found for{' '}
@@ -356,7 +348,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
                   </TableHeadRow>
                 </TableHead>
                 <TableBody>
-                  {members.map((member) => (
+                  {account.members.map((member) => (
                     <TableBodyRow key={member.publicId}>
                       <TableBodyCell>
                         <CopiableText
@@ -371,6 +363,16 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
                       <TableBodyCell>{member.role}</TableBodyCell>
                     </TableBodyRow>
                   ))}
+                  {account.members.length === 0 && (
+                    <TableBodyRow>
+                      <TableBodyCell
+                        colSpan={4}
+                        className='py-6 text-center text-gray-500'
+                      >
+                        No members
+                      </TableBodyCell>
+                    </TableBodyRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -588,7 +590,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
               </TableHeadRow>
             </TableHead>
             <TableBody>
-              {isLoadingActivity ? (
+              {isLoading || (accountId && isLoadingActivity) ? (
                 <TableBodyRow>
                   <TableBodyCell colSpan={4} className='text-center'>
                     <span className='flex items-center justify-center py-4'>

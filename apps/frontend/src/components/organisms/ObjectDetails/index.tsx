@@ -38,12 +38,12 @@ export const ObjectDetails = ({
       o.role === OwnerRole.ADMIN,
   );
 
-  // Ownership rows are only returned to signed-in users, and Hasura nulls the
-  // oauth columns of removed rows, so anonymous viewers get an empty list.
+  // Anonymous visitors get no ownership rows (the page queries without them),
+  // and Hasura hides other owners' removed rows, but not the viewer's own.
   const ownerPublicIds = useMemo(
     () =>
       (owners ?? [])
-        .filter((o) => o.role === OwnerRole.ADMIN && o.oauthUserId)
+        .filter((o) => o.role === OwnerRole.ADMIN)
         .map((o) => deriveUserPublicId(o.oauthProvider, o.oauthUserId)),
     [owners],
   );
@@ -58,14 +58,9 @@ export const ObjectDetails = ({
   >({});
   useEffect(() => {
     if (!isAdminViewer || ownerPublicIds.length === 0) return;
-    Promise.all(
-      ownerPublicIds.map(async (publicId) => {
-        const results = await api.adminSearchAccounts(publicId);
-        const match = results.find((r) => r.user.publicId === publicId);
-        return match ? [[publicId, match.id] as const] : [];
-      }),
-    )
-      .then((entries) => setOwnerAccountIds(Object.fromEntries(entries.flat())))
+    api
+      .adminGetAccountIdsByUsers(ownerPublicIds)
+      .then(setOwnerAccountIds)
       .catch((error) => console.error('Error resolving owners:', error));
   }, [api, isAdminViewer, ownerPublicIds]);
 

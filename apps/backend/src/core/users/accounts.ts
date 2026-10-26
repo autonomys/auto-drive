@@ -10,6 +10,7 @@ import {
   AccountInfo,
   AccountInfoWithUser,
   AccountWithTotalSize,
+  AdminAccountDetails,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
@@ -530,8 +531,74 @@ const adminSearchAccounts = async (
   )
 }
 
+/**
+ * Admin account page: the account for an account ID or an organization ID,
+ * with its members. Members can be empty, e.g. once the only member has
+ * deleted their user: the account and its credits stay.
+ */
+const adminGetAccount = async (
+  executor: User,
+  id: string,
+): Promise<
+  Result<AdminAccountDetails, ForbiddenError | ObjectNotFoundError>
+> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  const account =
+    (await accountsRepository.getById(id)) ??
+    (await accountsRepository.getByOrganizationId(id))
+  if (!account) {
+    return err(new ObjectNotFoundError('Account not found'))
+  }
+
+  const [pendingUploadCredits, pendingDownloadCredits, users] =
+    await Promise.all([
+      getPendingCreditsByAccountAndType(account, InteractionType.Upload),
+      getPendingCreditsByAccountAndType(account, InteractionType.Download),
+      AuthManager.adminSearchUsers('', account.organizationId),
+    ])
+
+  return ok({
+    ...account,
+    pendingUploadCredits,
+    pendingDownloadCredits,
+    // Auth returns only this organization's members; `organizationId` is
+    // their first membership, so it is only used to skip unonboarded users.
+    members: users.filter((u): u is UserWithOrganization => !!u.organizationId),
+  })
+}
+
+/**
+ * Admin: each user's current account ID, keyed by publicId. Read-only, so
+ * users without an organization or account are left out, not given one.
+ */
+const adminGetAccountIdsByUsers = async (
+  executor: User,
+  publicIds: string[],
+): Promise<Result<Record<string, string>, ForbiddenError>> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  const users = await AuthManager.getUsersFromPublicIds(publicIds)
+  const entries = await Promise.all(
+    users.map(async ({ publicId, organizationId }) => {
+      if (!publicId || !organizationId) return []
+      const account =
+        await accountsRepository.getByOrganizationId(organizationId)
+      return account ? [[publicId, account.id] as const] : []
+    }),
+  )
+
+  return ok(Object.fromEntries(entries.flat()))
+}
+
 export const AccountsUseCases = {
   adminSearchAccounts,
+  adminGetAccount,
+  adminGetAccountIdsByUsers,
   updateAccount,
   getOrCreateAccount,
   initAccount,

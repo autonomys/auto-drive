@@ -13,6 +13,7 @@ import { Button, ROUTES } from '@auto-drive/ui';
 import { AdminStats } from './AdminStats';
 import Link from 'next/link';
 import { CreditCard, ChevronRight, Flag } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export const AdminPanel = () => {
   const [accountsWithUsers, setAccountsWithUsers] = useState<
@@ -31,6 +32,7 @@ export const AdminPanel = () => {
   >(null);
 
   const network = useNetwork();
+  const router = useRouter();
 
   const fetchUserList = useCallback(async () => {
     try {
@@ -83,6 +85,15 @@ export const AdminPanel = () => {
 
     try {
       const results = await network.api.adminSearchAccounts(query);
+      // Search lists users, so an account with no members left (e.g. after
+      // its user deleted their account) only matches by its exact ID.
+      if (results.length === 0) {
+        const account = await network.api.adminGetAccount(query);
+        if (account) {
+          router.push(ROUTES.adminOrganization(network.network.id, query));
+          return;
+        }
+      }
       setSearchResults(results);
       setCurrentPage(1);
       if (results.length === 0) setSearchError('No matching users');
