@@ -75,6 +75,17 @@ const getNodesForPartialRetrieval = async (
   }
 }
 
+const selectObjectFetcher = async (metadata: OffchainMetadata) => {
+  const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
+  if (!isArchived) {
+    return DBObjectFetcher
+  }
+
+  return (await ObjectUseCases.hasAllNodeData(metadata))
+    ? DBObjectFetcher
+    : FileGatewayObjectFetcher
+}
+
 const retrieveFileByteRange = async (
   metadata: OffchainMetadata,
   byteRange: ByteRange,
@@ -88,8 +99,7 @@ const retrieveFileByteRange = async (
     byteRange,
   )
 
-  const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
-  const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+  const fetcher = await selectObjectFetcher(metadata)
 
   const reader = await composeNodesDataAsFileReadable({
     fetcher,
@@ -118,8 +128,7 @@ const retrieveFullFile = async (metadata: OffchainMetadata) => {
     metadata.dataCid,
     metadata.type,
   )
-  const isArchived = await ObjectUseCases.isArchived(metadata.dataCid)
-  const fetcher = isArchived ? FileGatewayObjectFetcher : DBObjectFetcher
+  const fetcher = await selectObjectFetcher(metadata)
 
   return fetcher.fetchFile(metadata.dataCid)
 }
