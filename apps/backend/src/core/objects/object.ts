@@ -521,17 +521,22 @@ const onObjectArchived = async (cid: string, signal?: AbortSignal) => {
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
   logger.debug('Attempting to publish object (cid=%s)', cid)
-  const objects = await publishedObjectsRepository.getPublishedObjectById(cid)
-  if (objects) {
-    logger.debug('Object already published (cid=%s)', cid)
-    return objects
-  }
   if (!user.publicId) {
     logger.warn(
       'Failed to publish object - user has no public ID (userId=%s)',
       user.oauthUserId,
     )
     throw new Error('User public ID is required')
+  }
+  // Look up by owner too: downloads through a public link are charged to its owner
+  const objects =
+    await publishedObjectsRepository.getPublishedObjectByCidAndPublicId(
+      cid,
+      user.publicId,
+    )
+  if (objects) {
+    logger.debug('Object already published (cid=%s)', cid)
+    return objects
   }
 
   const publishedObject =
@@ -586,23 +591,16 @@ const unpublishObject = async (
   cid: string,
 ): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
   logger.debug('Attempting to unpublish object (cid=%s)', cid)
-  const publishedObject =
-    await publishedObjectsRepository.getPublishedObjectByCid(cid)
-  if (!publishedObject) {
-    logger.debug('Object not published, nothing to unpublish (cid=%s)', cid)
+  // Each user has their own public links for a CID, so only the caller's are removed
+  if (!user.publicId) {
+    logger.debug('User has no public ID, nothing to unpublish (cid=%s)', cid)
     return ok()
   }
 
-  if (publishedObject.publicId !== user.publicId) {
-    logger.warn(
-      'User (%s) attempted to unpublish object without access (cid=%s)',
-      user.publicId,
-      cid,
-    )
-    return err(new ForbiddenError('User does not have access to this object'))
-  }
-
-  await publishedObjectsRepository.deletePublishedObjectByCid(cid)
+  await publishedObjectsRepository.deletePublishedObjectsByCidAndPublicId(
+    cid,
+    user.publicId,
+  )
   logger.info('Object unpublished successfully (cid=%s)', cid)
 
   return ok()
