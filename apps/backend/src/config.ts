@@ -279,6 +279,9 @@ export const config = {
     url: env('RABBITMQ_URL'),
     prefetch: Number(env('RABBITMQ_PREFETCH', '10')),
     keepAliveInterval: Number(env('RABBITMQ_KEEP_ALIVE_INTERVAL', '60000')),
+    // First delay before reopening a channel the broker closed; doubles on
+    // each consecutive failure, up to a minute.
+    reconnectDelayMs: Number(env('RABBITMQ_RECONNECT_DELAY_MS', '1000')),
   },
   // Alerting for tasks that exhausted their retries. Without a consumer the
   // error queues grow forever and nobody finds out a task died.
