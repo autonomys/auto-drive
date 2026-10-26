@@ -11,11 +11,7 @@ import { PBNode } from '@ipld/dag-pb'
 import { CID } from 'multiformats'
 import { nodesRepository } from '../../infrastructure/repositories/index.js'
 import { uploadsRepository } from '../../infrastructure/repositories/uploads/uploads.js'
-import { getUploadBlockstore } from '../../infrastructure/services/upload/uploadProcessorCache/index.js'
-import {
-  asyncIterableForEach,
-  asyncIterableToPromiseOfArray,
-} from '@autonomys/asynchronous'
+import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
 import { UnrecoverableUploadError } from '../uploads/errors.js'
 import {
@@ -155,40 +151,7 @@ const getUploadCID = async (uploadId: string): Promise<CID> => {
   return cid
 }
 
-/**
- * Returns a filter that keeps only nodes whose CID it has not seen before,
- * across every call — i.e. across every batch of one upload's migration.
- *
- * Deduplicating per batch is not enough. getAllKeys yields in sort_id
- * (insertion) order, so a duplicate row appended by a later completion pass
- * lands in a DIFFERENT batch from its original whenever the two are more than
- * BATCH_SIZE rows apart, and a per-batch Map cannot see it. Verified: a 100-row
- * blockstore plus one duplicate root row produced 101 nodes rows with the root
- * present twice. nodes.cid has no unique constraint and getCidsByRootCid has no
- * DISTINCT, so that fans straight out into duplicate on-chain publish work —
- * exactly what the removeNodeByRootCid comment warns about.
- *
- * Holds one CID string per unique node for the duration of the upload's
- * migration, the same order of magnitude as the batch data already in flight.
- */
-export const createNodeDeduplicator = (uploadId: string) => {
-  const seenCids = new Set<string>()
-
-  return <T extends { cid: CID }>(nodes: T[]): T[] =>
-    nodes.filter((node) => {
-      const cid = cidToString(node.cid)
-      if (seenCids.has(cid)) {
-        logger.warn(
-          'Skipping duplicate blockstore node (uploadId=%s, cid=%s)',
-          uploadId,
-          cid,
-        )
-        return false
-      }
-      seenCids.add(cid)
-      return true
-    })
-}
+const MIGRATION_BATCH_SIZE = 100
 
 const migrateFromBlockstoreToNodesTable = async (
   uploadId: string,
@@ -244,64 +207,40 @@ const migrateFromBlockstoreToNodesTable = async (
 
   for (const upload of uploads) {
     const headCID = await getUploadCID(upload.id)
-    const blockstore = await getUploadBlockstore(upload.id)
+    const cids = await blockstoreRepository.getDistinctCids(upload.id)
 
-    const takeUnseenNodes = createNodeDeduplicator(upload.id)
-
-    const BATCH_SIZE = 100
-    await asyncIterableForEach(
-      blockstore.getAllKeys(),
-      async (batch) => {
-        const nodes = await asyncIterableToPromiseOfArray(
-          blockstore.getMany(batch),
+    for (let i = 0; i < cids.length; i += MIGRATION_BATCH_SIZE) {
+      const batch = cids.slice(i, i + MIGRATION_BATCH_SIZE)
+      const entries = await blockstoreRepository.getFirstEntriesByCids(
+        upload.id,
+        batch,
+      )
+      if (entries.length !== batch.length) {
+        throw new Error(
+          `Blockstore of upload ${upload.id} changed during migration: expected ${batch.length} nodes in this batch, read ${entries.length}`,
         )
-        const uniqueNodes = takeUnseenNodes(nodes)
+      }
 
-        // An empty batch is ordinary, not exceptional, and it must not reach
-        // saveNodes. getAllKeys yields one key per blockstore ROW, so a file
-        // holding a long run of identical chunks — a sparse file, a zero-padded
-        // disk image, a padded archive — fills whole batches with CIDs the
-        // filter has already seen; a batch-aligned run of BATCH_SIZE * 2
-        // identical chunks (about 13 MB at DEFAULT_MAX_CHUNK_SIZE) is enough.
-        //
-        // saveNodes([]) is not a no-op: pg-format expands `VALUES %L` over an
-        // empty array to nothing, so Postgres receives `INSERT INTO nodes (...)
-        // VALUES ` and answers `syntax error at end of input`. That is not an
-        // UnrecoverableUploadError, so processMigration rethrows it, the task
-        // burns its three retries, dead-letters to frontend-errors, and leaves
-        // the upload MIGRATING for the recovery sweep to re-drive every
-        // staleness window — the unbounded dead-letter loop this branch exists
-        // to close, reachable from an ordinary upload.
-        //
-        // The per-batch Map that createNodeDeduplicator replaced could never
-        // return zero for a non-empty batch, which is why nothing downstream
-        // was ever built to survive it.
-        if (uniqueNodes.length === 0) {
-          logger.info(
-            'Every node in this batch was already migrated; skipping the insert (uploadId=%s, batchSize=%d)',
-            upload.id,
-            nodes.length,
-          )
-          return
-        }
+      await nodesRepository.saveNodes(
+        entries.map((entry) => ({
+          cid: entry.cid,
+          root_cid: cidToString(rootCID),
+          head_cid: cidToString(headCID),
+          type: decodeIPLDNodeData(entry.data).type,
+          encoded_node: entry.data.toString('base64'),
+          block_published_on: null,
+          tx_published_on: null,
+          piece_index: null,
+          piece_offset: null,
+        })),
+      )
+    }
 
-        await nodesRepository.saveNodes(
-          uniqueNodes.map((e) => ({
-            cid: cidToString(e.cid),
-            root_cid: cidToString(rootCID),
-            head_cid: cidToString(headCID),
-            type: decodeIPLDNodeData(Buffer.from(e.block)).type,
-            encoded_node: Buffer.from(e.block).toString('base64'),
-            block_published_on: null,
-            tx_published_on: null,
-            piece_index: null,
-            piece_offset: null,
-          })),
-        )
-
-        logger.info(`Saved nodes from headCID=${headCID}`)
-      },
-      BATCH_SIZE,
+    logger.info(
+      'Migrated %d distinct nodes to the nodes table (uploadId=%s, headCid=%s)',
+      cids.length,
+      upload.id,
+      cidToString(headCID),
     )
   }
 }
