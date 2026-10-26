@@ -1,5 +1,9 @@
 import { config } from '../../../config.js'
-import { DeletionRequest, UserWithOrganization } from '@auto-drive/models'
+import {
+  DeletionRequest,
+  MaybeUserWithOrganization,
+  UserWithOrganization,
+} from '@auto-drive/models'
 
 /**
  * A token lookup against the auth service did not yield a user.
@@ -154,6 +158,33 @@ const getUsersFromPublicIds = async (
   return response.json()
 }
 
+/**
+ * Admin search: users whose publicId contains `query`, plus the members of
+ * `organizationId` when given.
+ */
+const adminSearchUsers = async (
+  query: string,
+  organizationId?: string,
+): Promise<MaybeUserWithOrganization[]> => {
+  const params = new URLSearchParams({ q: query })
+  if (organizationId) params.set('organizationId', organizationId)
+
+  const response = await fetch(
+    `${config.authService.url}/users/admin/search?${params}`,
+    {
+      headers: {
+        Authorization: `Bearer ${config.authService.token}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error('Failed to search users')
+  }
+
+  return response.json()
+}
+
 const getDeletionRequestsDue = async (): Promise<DeletionRequest[]> => {
   const response = await fetch(
     `${config.authService.url}/users/admin/deletions/due`,
@@ -261,6 +292,7 @@ export const AuthManager = {
   getUserFromAccessToken,
   getUserFromPublicId,
   getUsersFromPublicIds,
+  adminSearchUsers,
   getDeletionRequestsDue,
   markDeletionAsProcessing,
   executeAuthAnonymisation,

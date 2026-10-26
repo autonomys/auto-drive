@@ -63,7 +63,9 @@ const getSummary = async (
   user: UserWithOrganization,
 ): Promise<CreditSummary> => {
   const account = await AccountsUseCases.getOrCreateAccount(user)
-  const summary = await purchasedCreditsRepository.getRemainingCredits(account.id)
+  const summary = await purchasedCreditsRepository.getRemainingCredits(
+    account.id,
+  )
 
   const cap = config.credits.maxBytesPerUser
 
@@ -188,6 +190,24 @@ const getUserBatches = async (
   }
   const rows = await purchasedCreditsRepository.getByUserPublicId(userPublicId)
   return ok(rows)
+}
+
+// ---------------------------------------------------------------------------
+// getAccountBatches
+// Admin-only: every batch credited to an account, whichever member bought it.
+// Returns 403 for non-admin callers.
+// ---------------------------------------------------------------------------
+
+const getAccountBatches = async (
+  executor: User,
+  accountId: string,
+): Promise<Result<AdminUserCreditBatchRow[], ForbiddenError>> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('Admin access required'))
+  }
+  return ok(
+    await purchasedCreditsRepository.getByAccountIdWithIntent(accountId),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -407,6 +427,7 @@ export const CreditsUseCases = {
   getEconomics,
   getAllBatches,
   getUserBatches,
+  getAccountBatches,
   refundBatch,
   refundBatches,
 }
