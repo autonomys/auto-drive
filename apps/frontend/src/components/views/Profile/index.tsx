@@ -6,8 +6,9 @@ import { useUserStore } from 'globalStates/user';
 import { useDeletionStore } from 'globalStates/deletion';
 import { DefaultPasswordModal } from '../../molecules/DefaultPasswordModal';
 import { DeleteAccountModal } from './DeleteAccountModal';
-import { Button } from '@auto-drive/ui';
+import { Button, ROUTES } from '@auto-drive/ui';
 import { useLogOut } from '@/hooks/useAuth';
+import { useNetwork } from '@/contexts/network';
 import { LogOut, Trash2 } from 'lucide-react';
 
 export const Profile = () => {
@@ -18,6 +19,7 @@ export const Profile = () => {
 
   const publicId = useUserStore((state) => state.user?.publicId);
   const { logOut } = useLogOut();
+  const { network } = useNetwork();
 
   const copyPublicId = useCallback(() => {
     if (!publicId) return;
@@ -71,7 +73,9 @@ export const Profile = () => {
             <Button
               variant='lightDanger'
               className='flex items-center gap-2 text-sm'
-              onClick={() => logOut()}
+              onClick={() =>
+                logOut({ callbackUrl: ROUTES.globalFeed(network.id) })
+              }
             >
               Log out
               <LogOut className='h-4 w-4' />

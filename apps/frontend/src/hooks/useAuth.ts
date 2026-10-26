@@ -1,5 +1,5 @@
 import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
 import { useQueryClient } from '@tanstack/react-query';
 import { getMessageToSign } from '../app/api/auth/[...nextauth]/web3';
@@ -25,11 +25,15 @@ export const useLogIn = (): UseAuth => {
   const { address } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const [isClicked, setIsClicked] = useState<AuthProvider>();
+  // The wallet sign-in completes asynchronously (connect, then sign), so the
+  // requested return target is held until signInWithWallet runs.
+  const walletCallbackUrl = useRef<string>();
 
   const signIn = useCallback(
     (provider: AuthProvider, options?: SignInOptions) => {
       setIsClicked(provider);
       if (provider === 'web3-wallet') {
+        walletCallbackUrl.current = options?.callbackUrl;
         if (openConnectModal) openConnectModal();
       } else {
         nextAuthSignIn(provider, {
@@ -52,7 +56,7 @@ export const useLogIn = (): UseAuth => {
       message,
       signature,
       redirect: true,
-      callbackUrl: `/${defaultNetworkId}/drive`,
+      callbackUrl: walletCallbackUrl.current ?? `/${defaultNetworkId}/drive`,
     });
   }, [address, signMessageAsync]);
 

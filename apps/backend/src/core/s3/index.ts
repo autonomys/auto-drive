@@ -4,9 +4,14 @@ import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
 import {
   ForbiddenError,
+  IllegalContentError,
+  NotAcceptableError,
   ObjectNotFoundError,
+  PaymentRequiredError,
   RangeNotSatisfiableError,
 } from '../../errors/index.js'
+import { config } from '../../config.js'
+import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import {
   CompleteMultipartUploadCommandParams,
   CompleteMultipartUploadCommandResult,
@@ -99,7 +104,7 @@ type CopyObjectResult = {
   Cid: string
 }
 import { UploadsUseCases } from '../uploads/uploads.js'
-import { UserWithOrganization } from '@auto-drive/models'
+import { FileDownload, UserWithOrganization } from '@auto-drive/models'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import {
@@ -181,23 +186,18 @@ type GetObjectParams = GetObjectCommandParams & {
 }
 
 /**
- * Turn a suffix range into absolute offsets against the content at `cid`, or
- * refuse it.
+ * Turn a suffix range into absolute offsets against the object `metadata`
+ * describes, or refuse it.
  *
  * A zero-length suffix, or any suffix of an empty object, names no bytes: S3
  * answers 416 rather than an empty 206. A suffix longer than the object clamps to
  * the whole object, which is what RFC 7233 requires.
  */
-const resolveSuffixLength = async (
-  cid: string,
+const resolveSuffixLength = (
+  metadata: OffchainMetadata,
   suffixLength: number,
-): Promise<
-  Result<ByteRange, ObjectNotFoundError | RangeNotSatisfiableError>
-> => {
-  const metadataResult = await ObjectUseCases.getMetadata(cid)
-  if (metadataResult.isErr()) return err(metadataResult.error)
-
-  const total = Number(metadataResult.value.totalSize)
+): Result<ByteRange, RangeNotSatisfiableError> => {
+  const total = Number(metadata.totalSize)
   if (suffixLength === 0 || total === 0) {
     return err(
       new RangeNotSatisfiableError(
@@ -210,31 +210,58 @@ const resolveSuffixLength = async (
 }
 
 /**
- * The byte range to read `cid` with: an offset range passes straight through (it
- * names its bytes without needing the size, and the HTTP layer refuses a start
- * past the last byte once the download reports it), a suffix range is resolved
- * against this cid's size, and no range stays undefined.
+ * The byte range to read an object with: an offset range passes straight through
+ * (it names its bytes without needing the size, and the HTTP layer refuses a
+ * start past the last byte once the download reports it), a suffix range is
+ * resolved against the object's size, and no range stays undefined.
  */
-const resolveRequestedByteRange = async (
-  cid: string,
+const resolveRequestedByteRange = (
+  metadata: OffchainMetadata,
   params: GetObjectParams,
-): Promise<
-  Result<ByteRange | undefined, ObjectNotFoundError | RangeNotSatisfiableError>
-> =>
+): Result<ByteRange | undefined, RangeNotSatisfiableError> =>
   params.SuffixLength === undefined
     ? ok(params.Range)
-    : resolveSuffixLength(cid, params.SuffixLength)
+    : resolveSuffixLength(metadata, params.SuffixLength)
+
+type ReadError =
+  | ObjectNotFoundError
+  | NotAcceptableError
+  | IllegalContentError
+  | PaymentRequiredError
+  | RangeNotSatisfiableError
+
+/**
+ * Open a read of `cid`. Objects up to the anonymous download cap are read the
+ * way an anonymous caller would read them, so they are free. Larger ones are
+ * read as the caller and charged to their download credits, but the credit
+ * check and the charge both run inside startDownload(), so HeadObject, which
+ * never calls it, is free at any size.
+ */
+const openRead = async (
+  user: UserWithOrganization,
+  cid: string,
+  params: GetObjectParams,
+): Promise<Result<FileDownload, ReadError>> => {
+  const metadata = await ObjectUseCases.getMetadata(cid)
+  if (metadata.isErr()) return err(metadata.error)
+
+  const byteRange = resolveRequestedByteRange(metadata.value, params)
+  if (byteRange.isErr()) return err(byteRange.error)
+
+  const options = { byteRange: byteRange.value }
+  return metadata.value.totalSize > config.params.maxAnonymousDownloadSize
+    ? DownloadUseCase.downloadObjectByUser(user, cid, options)
+    : DownloadUseCase.downloadObjectByAnonymous(cid, options)
+}
 
 const getObject = async (
   user: UserWithOrganization,
   params: GetObjectParams,
-): Promise<
-  Result<GetObjectUseCaseResult, ObjectNotFoundError | RangeNotSatisfiableError>
-> => {
+): Promise<Result<GetObjectUseCaseResult, ReadError>> => {
   // Versioned read (GET/HEAD ?versionId=<cid>): fetch the specific version's
   // content by CID rather than the current pointer. The version must belong to
   // this key in the caller's namespace; the download itself still runs the
-  // moderation/ban checks (downloadObjectByAnonymous → authorizeDownload), so a
+  // moderation/ban checks (authorizeDownload, on either download path), so a
   // removed/banned version is not retrievable even though it is retained.
   if (params.VersionId) {
     const version = await s3ObjectMappingsRepository.findVersionByCid(
@@ -251,15 +278,8 @@ const getObject = async (
         ),
       )
     }
-    const versionedRange = await resolveRequestedByteRange(version.cid, params)
-    if (versionedRange.isErr()) return err(versionedRange.error)
-
-    const versionedDownload = await DownloadUseCase.downloadObjectByAnonymous(
-      version.cid,
-      { byteRange: versionedRange.value },
-    )
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (versionedDownload as any).map((dl: GetObjectCommandResult) => ({
+    const versionedDownload = await openRead(user, version.cid, params)
+    return versionedDownload.map((dl) => ({
       ...dl,
       cid: version.cid,
       etag: version.md5 ? formatETag(version.md5) : null,
@@ -297,19 +317,9 @@ const getObject = async (
   )
   const lastModified = currentVersion?.createdAt ?? mapping.updatedAt
 
-  const byteRange = await resolveRequestedByteRange(mapping.cid, params)
-  if (byteRange.isErr()) return err(byteRange.error)
+  const downloadResult = await openRead(user, mapping.cid, params)
 
-  const downloadResult = await DownloadUseCase.downloadObjectByAnonymous(
-    mapping.cid,
-    { byteRange: byteRange.value },
-  )
-
-  // Use .map() to attach cid/etag to the ok value and propagate any error
-  // unchanged. The error type from downloadObjectByAnonymous is wider than
-  // ObjectNotFoundError but handleError in the controller accepts any Error.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (downloadResult as any).map((dl: GetObjectCommandResult) => ({
+  return downloadResult.map((dl) => ({
     ...dl,
     cid: mapping.cid,
     // Objects uploaded before this feature have null md5; fall back to null

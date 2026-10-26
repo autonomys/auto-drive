@@ -4,6 +4,7 @@ import {
   ForbiddenError,
   RangeNotSatisfiableError,
   ChunkNotFoundError,
+  PaymentRequiredError,
 } from '../../../errors/index.js'
 import {
   UploadCompletionInProgressError,
@@ -675,6 +676,10 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   try {
     stream = await startDownload()
   } catch (error) {
+    if (error instanceof PaymentRequiredError) {
+      handleS3Error(error, res)
+      return
+    }
     if (error instanceof ChunkNotFoundError) {
       logger.warn(
         'Object is momentarily unresolvable, answering ServiceUnavailable (cid=%s, chunkCid=%s)',

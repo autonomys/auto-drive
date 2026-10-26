@@ -35,6 +35,8 @@ import {
 import { config } from '../../../src/config.js'
 import { AccountsUseCases, ObjectUseCases } from '../../../src/core/index.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
+import { downloadService } from '../../../src/infrastructure/services/download/index.js'
+import { InteractionType } from '@auto-drive/models'
 
 /** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
 const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
@@ -2236,6 +2238,209 @@ describe('AWS S3 - SDK', () => {
         'B owns a different thing',
       )
     })
+  })
+
+  // S3 reads of objects up to the anonymous download cap are free, like any
+  // anonymous read. Larger objects are read as the caller and charged to their
+  // download credits; the anonymous path used to refuse them with a 402, even to
+  // their owner. The cap is lowered here so small fixtures sit either side of it.
+  describe('Reads over the anonymous cap are charged to the caller', () => {
+    const CAP = 1024
+    const anonymousCap = config.params.maxAnonymousDownloadSize
+    const fixtures = {
+      small: { key: 'credits-test/small.bin', body: randomBytes(100) },
+      atCap: { key: 'credits-test/at-cap.bin', body: randomBytes(CAP) },
+      overCap: { key: 'credits-test/over-cap.bin', body: randomBytes(CAP + 1) },
+      large: { key: 'credits-test/large.bin', body: randomBytes(64 * 1024) },
+    }
+    const cids = {} as Record<keyof typeof fixtures, string>
+    // Two versions of one key, one either side of the cap.
+    const VersionedKey = 'credits-test/versioned.bin'
+    const LargeVersionBody = randomBytes(32 * 1024)
+    const SmallVersionBody = randomBytes(200)
+    let largeVersion: string
+    let smallVersion: string
+
+    let checkCredits: jest.SpiedFunction<
+      typeof AccountsUseCases.getPendingCreditsByUserAndType
+    >
+    let charge: jest.SpiedFunction<typeof AccountsUseCases.registerInteraction>
+    let buildStream: jest.SpiedFunction<typeof downloadService.download>
+
+    const get = (
+      Key: string,
+      extra: { Range?: string; VersionId?: string } = {},
+    ) => s3Client.send(new GetObjectCommand({ Bucket, Key, ...extra }))
+
+    const expectCharged = (bytes: number, cid: string) => {
+      expect(charge).toHaveBeenCalledTimes(1)
+      expect(charge).toHaveBeenCalledWith(
+        expect.objectContaining({ oauthUserId: user.oauthUserId }),
+        InteractionType.Download,
+        BigInt(bytes),
+        cid,
+      )
+    }
+
+    // Uploads are charged through registerInteraction too, so every fixture is
+    // written before the spies exist.
+    beforeAll(async () => {
+      config.params.maxAnonymousDownloadSize = CAP
+      for (const [name, { key, body }] of Object.entries(fixtures)) {
+        const put = await s3Client.send(
+          new PutObjectCommand({ Bucket, Key: key, Body: body }),
+        )
+        cids[name as keyof typeof fixtures] = put.VersionId!
+      }
+      const v1 = await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: VersionedKey,
+          Body: LargeVersionBody,
+        }),
+      )
+      const v2 = await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: VersionedKey,
+          Body: SmallVersionBody,
+        }),
+      )
+      largeVersion = v1.VersionId!
+      smallVersion = v2.VersionId!
+    }, 30_000)
+
+    // Restored one by one: restoreAllMocks would also drop the suite's
+    // AuthManager and Rabbit mocks.
+    beforeEach(() => {
+      checkCredits = jest.spyOn(
+        AccountsUseCases,
+        'getPendingCreditsByUserAndType',
+      )
+      charge = jest.spyOn(AccountsUseCases, 'registerInteraction')
+      buildStream = jest.spyOn(downloadService, 'download')
+    })
+
+    afterEach(() => {
+      checkCredits.mockRestore()
+      charge.mockRestore()
+      buildStream.mockRestore()
+    })
+
+    afterAll(() => {
+      config.params.maxAnonymousDownloadSize = anonymousCap
+    })
+
+    it('serves an object under the cap without consulting credits, even with none left', async () => {
+      checkCredits.mockResolvedValue(0)
+
+      const result = await get(fixtures.small.key)
+
+      expect(result.$metadata.httpStatusCode).toBe(200)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        fixtures.small.body,
+      )
+      expect(checkCredits).not.toHaveBeenCalled()
+      expect(charge).not.toHaveBeenCalled()
+    }, 15_000)
+
+    it('serves an object exactly at the cap for free', async () => {
+      const result = await get(fixtures.atCap.key)
+
+      expect(result.$metadata.httpStatusCode).toBe(200)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        fixtures.atCap.body,
+      )
+      expect(charge).not.toHaveBeenCalled()
+    }, 15_000)
+
+    it('charges an object one byte over the cap', async () => {
+      const result = await get(fixtures.overCap.key)
+
+      expect(result.$metadata.httpStatusCode).toBe(200)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        fixtures.overCap.body,
+      )
+      expectCharged(CAP + 1, cids.overCap)
+    }, 15_000)
+
+    it('serves a large object in full to its owner and charges its size', async () => {
+      const result = await get(fixtures.large.key)
+
+      expect(result.$metadata.httpStatusCode).toBe(200)
+      expect(result.ContentLength).toBe(fixtures.large.body.length)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        fixtures.large.body,
+      )
+      expectCharged(fixtures.large.body.length, cids.large)
+    }, 15_000)
+
+    it('charges a ranged read of a large object only for the range, even one under the cap', async () => {
+      const result = await get(fixtures.large.key, { Range: 'bytes=1000-1999' })
+
+      expect(result.$metadata.httpStatusCode).toBe(206)
+      expect(result.ContentRange).toBe(
+        `bytes 1000-1999/${fixtures.large.body.length}`,
+      )
+      expect(result.ContentLength).toBe(1000)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        fixtures.large.body.subarray(1000, 2000),
+      )
+      expectCharged(1000, cids.large)
+    }, 15_000)
+
+    it('answers HeadObject on a large object without checking credits, charging, or building a stream', async () => {
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket, Key: fixtures.large.key }),
+      )
+
+      expect(head.$metadata.httpStatusCode).toBe(200)
+      expect(head.ContentLength).toBe(fixtures.large.body.length)
+      expect(checkCredits).not.toHaveBeenCalled()
+      expect(charge).not.toHaveBeenCalled()
+      expect(buildStream).not.toHaveBeenCalled()
+    }, 15_000)
+
+    it('answers a large read the caller cannot pay for with 402 PaymentRequired XML', async () => {
+      checkCredits.mockResolvedValue(0)
+
+      await expect(get(fixtures.large.key)).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 402 },
+        Code: 'PaymentRequired',
+        message: 'Insufficient credits to process download',
+        $response: {
+          headers: {
+            'content-type': expect.stringContaining('application/xml'),
+          },
+        },
+      })
+      // Not retried, and refused before a stream was built or anything charged.
+      expect(checkCredits).toHaveBeenCalledTimes(1)
+      expect(buildStream).not.toHaveBeenCalled()
+      expect(charge).not.toHaveBeenCalled()
+    }, 15_000)
+
+    it('charges a versioned read of a version over the cap', async () => {
+      const result = await get(VersionedKey, { VersionId: largeVersion })
+
+      expect(result.$metadata.httpStatusCode).toBe(200)
+      expect(result.VersionId).toBe(largeVersion)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        LargeVersionBody,
+      )
+      expectCharged(LargeVersionBody.length, largeVersion)
+    }, 15_000)
+
+    it('serves a versioned read of a version under the cap for free', async () => {
+      const result = await get(VersionedKey, { VersionId: smallVersion })
+
+      expect(result.$metadata.httpStatusCode).toBe(200)
+      expect(result.VersionId).toBe(smallVersion)
+      expect(Buffer.from(await result.Body!.transformToByteArray())).toEqual(
+        SmallVersionBody,
+      )
+      expect(charge).not.toHaveBeenCalled()
+    }, 15_000)
   })
 
   // Issue #815: an unresolvable chunk used to be discovered only after 200 +
