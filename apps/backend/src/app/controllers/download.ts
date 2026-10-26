@@ -13,8 +13,9 @@ import {
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { downloadService } from '../../infrastructure/services/download/index.js'
 import {
-  getByteRange,
   handleDownloadResponseHeaders,
+  resolveByteRange,
+  sendRangeNotSatisfiable,
 } from '@autonomys/file-server'
 import { handleError, ChunkNotFoundError, HttpError } from '../../errors/index.js'
 import {
@@ -99,7 +100,6 @@ downloadController.get(
         ?.toString()
         .split(',')
         .filter((e) => e.trim())
-      const requestedByteRange = getByteRange(req)
 
       const optionalAuthResult = await handleOptionalAuth(req, res)
       if (!optionalAuthResult) {
@@ -111,8 +111,7 @@ downloadController.get(
       const user =
         typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
 
-      // First, get metadata to check if we need decompression
-      // We need this to decide whether to pass byte range to download service
+      // First, get the metadata that the requested byte range is resolved against
       const metadataResultPromise = !user
         ? DownloadUseCase.downloadObjectByAnonymous(cid, { blockingTags })
         : DownloadUseCase.downloadObjectByUser(user, cid, { blockingTags })
@@ -128,18 +127,17 @@ downloadController.get(
 
       const { metadata } = metadataResult.value
 
-      // Check if this is a media file that needs decompression
-      const mimeType = (metadata.mimeType || '').toLowerCase()
-      const isMediaType =
-        mimeType.startsWith('video/') || mimeType.startsWith('audio/')
-      const needsDecompression =
-        metadata.isCompressed && !metadata.isEncrypted && isMediaType
+      // Resolved before the body is fetched, so a range past the end of the
+      // file is answered with 416. A compressed file is always served whole.
+      const range = resolveByteRange(req, metadata)
+      if (range.kind === 'unsatisfiable') {
+        sendRangeNotSatisfiable(res, metadata.size!)
+        return
+      }
 
-      // If we need decompression, we can't use byte ranges on compressed data
-      // We must decompress the full file first
       const downloadOptions = {
         blockingTags,
-        byteRange: needsDecompression ? undefined : requestedByteRange,
+        byteRange: range.kind === 'partial' ? range.byteRange : undefined,
       }
 
       const downloadResultPromise = !user
@@ -164,16 +162,12 @@ downloadController.get(
       // cannot interpret (issue #815).
       const sourceStream = await startDownload()
 
-      // For media files needing decompression, we handle byte ranges ourselves after decompression
-      const effectiveByteRange = needsDecompression
-        ? requestedByteRange
-        : resultingByteRange
       const { shouldDecompressBody } = handleDownloadResponseHeaders(
         req,
         res,
         metadata,
         {
-          byteRange: effectiveByteRange,
+          byteRange: resultingByteRange,
         },
       )
 
