@@ -17,6 +17,7 @@ import {
   metadataRepository,
   nodesRepository,
   ownershipRepository,
+  s3ObjectMappingsRepository,
 } from '../../infrastructure/repositories/index.js'
 import { OwnershipUseCases } from './ownership.js'
 import { UploadStatusUseCases } from './uploadStatus.js'
@@ -361,10 +362,47 @@ const restoreObject = async (
     return err(new ForbiddenError('User is not an owner of this object'))
   }
 
+  // The trash time for this owner — S3 keys hidden at/after it are the ones this
+  // trash removed, so only those are un-hidden on restore (see
+  // restoreMappingsByCid); keys deleted individually earlier stay hidden.
+  const trashedAt = isUserOwner.marked_as_deleted
+
   await OwnershipUseCases.restoreObject(executor, cid)
+  // Un-hide the executor's OWN S3 keys this trash removed so restoring brings the
+  // object back to its S3 name too (scoped to the executor so a dedup co-owner's
+  // keys aren't touched; no-op when there are none).
+  await s3ObjectMappingsRepository.restoreMappingsByCid(
+    executor.oauthProvider,
+    executor.oauthUserId,
+    cid,
+    trashedAt,
+  )
   logger.info('Object restored successfully (cid=%s)', cid)
 
   return ok()
+}
+
+/**
+ * An object is considered deleted (removed by its owner) once the root
+ * object(s) containing it have at least one admin/owner ownership but none
+ * that is still active — i.e. every owner has moved it to their Trash.
+ *
+ * Removal is tracked per root upload: removing a folder only marks the folder
+ * root's ownership as deleted, while each child file keeps its own active admin
+ * row from upload finalization. We therefore resolve the cid to its root
+ * object(s) (see getAdminOwnershipState) instead of inspecting the cid's own
+ * ownership, so children of a trashed folder are correctly reported as deleted.
+ *
+ * Shared (non-admin) viewers removing the object from their own view does not
+ * delete it globally; restoring it by the owner reverses this. A cid that no
+ * admin-owned root references (e.g. an internal child node) is never treated as
+ * deleted, so legitimate access is unaffected.
+ */
+const isObjectDeleted = async (cid: string): Promise<boolean> => {
+  const { totalAdmins, activeAdmins } =
+    await ownershipRepository.getAdminOwnershipState(cid)
+
+  return totalAdmins > 0 && activeAdmins === 0
 }
 
 const isArchived = async (cid: string) => {
@@ -444,9 +482,7 @@ const populateCaches = async (cid: string, signal?: AbortSignal) => {
         stream.destroy(new Error('Cache population aborted by task timeout'))
       } else {
         signal.addEventListener('abort', onAbort, { once: true })
-        stream.once('close', () =>
-          signal.removeEventListener('abort', onAbort),
-        )
+        stream.once('close', () => signal.removeEventListener('abort', onAbort))
       }
     }
 
@@ -455,10 +491,7 @@ const populateCaches = async (cid: string, signal?: AbortSignal) => {
     await consumeStream(stream)
   } catch (e) {
     if (signal?.aborted) {
-      logger.warn(
-        'Cache population aborted for object (cid=%s)',
-        cid,
-      )
+      logger.warn('Cache population aborted for object (cid=%s)', cid)
       return
     }
     logger.warn(
@@ -488,17 +521,22 @@ const onObjectArchived = async (cid: string, signal?: AbortSignal) => {
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
   logger.debug('Attempting to publish object (cid=%s)', cid)
-  const objects = await publishedObjectsRepository.getPublishedObjectById(cid)
-  if (objects) {
-    logger.debug('Object already published (cid=%s)', cid)
-    return objects
-  }
   if (!user.publicId) {
     logger.warn(
       'Failed to publish object - user has no public ID (userId=%s)',
       user.oauthUserId,
     )
     throw new Error('User public ID is required')
+  }
+  // Look up by owner too: downloads through a public link are charged to its owner
+  const objects =
+    await publishedObjectsRepository.getPublishedObjectByCidAndPublicId(
+      cid,
+      user.publicId,
+    )
+  if (objects) {
+    logger.debug('Object already published (cid=%s)', cid)
+    return objects
   }
 
   const publishedObject =
@@ -553,23 +591,16 @@ const unpublishObject = async (
   cid: string,
 ): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
   logger.debug('Attempting to unpublish object (cid=%s)', cid)
-  const publishedObject =
-    await publishedObjectsRepository.getPublishedObjectByCid(cid)
-  if (!publishedObject) {
-    logger.debug('Object not published, nothing to unpublish (cid=%s)', cid)
+  // Each user has their own public links for a CID, so only the caller's are removed
+  if (!user.publicId) {
+    logger.debug('User has no public ID, nothing to unpublish (cid=%s)', cid)
     return ok()
   }
 
-  if (publishedObject.publicId !== user.publicId) {
-    logger.warn(
-      'User (%s) attempted to unpublish object without access (cid=%s)',
-      user.publicId,
-      cid,
-    )
-    return err(new ForbiddenError('User does not have access to this object'))
-  }
-
-  await publishedObjectsRepository.deletePublishedObjectByCid(cid)
+  await publishedObjectsRepository.deletePublishedObjectsByCidAndPublicId(
+    cid,
+    user.publicId,
+  )
   logger.info('Object unpublished successfully (cid=%s)', cid)
 
   return ok()
@@ -646,16 +677,27 @@ const checkArchivalStatusForObjects = async (
   }
 }
 
+// A head_cid can span several metadata rows (one per root_cid) with
+// diverging tags, and getMetadata returns an arbitrary one — so don't guard
+// the updates on a single row's tags here. The repository updates are
+// per-row idempotent (dedup in addTag's SQL, array_remove is a no-op for
+// absent tags), making both calls safe to run unconditionally.
 const addTag = async (cid: string, tag: string) => {
-  const tags = await metadataRepository.getMetadata(cid)
-  if (!tags) {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
     throw new Error('Object not found')
   }
 
-  // If the tag is already present, do nothing
-  if (tags.tags?.includes(tag)) return
-
   await metadataRepository.addTag(cid, tag)
+}
+
+const removeTag = async (cid: string, tag: string) => {
+  const metadata = await metadataRepository.getMetadata(cid)
+  if (!metadata) {
+    throw new Error('Object not found')
+  }
+
+  await metadataRepository.removeTag(cid, tag)
 }
 
 const banObject = async (
@@ -680,8 +722,38 @@ const banObject = async (
   return ok()
 }
 
+const unbanObject = async (
+  executor: User,
+  cid: string,
+): Promise<Result<void, ForbiddenError>> => {
+  logger.debug('Attempting to unban object (cid=%s)', cid)
+  if (!isAdminUser(executor)) {
+    logger.warn(
+      'User (%s) attempted to unban object without admin rights (cid=%s)',
+      executor.oauthUserId,
+      cid,
+    )
+    return err(new ForbiddenError('User is not an admin'))
+  }
+
+  // Gateway first so a gateway failure fails closed: the DB tag is only
+  // cleared once the gateway no longer bans the file. The reverse order
+  // would leave the file unbanned locally but still banned at the gateway
+  // (and syncingIsObjectBanned would silently re-add the tag later).
+  await FileGateway.unbanFile(cid)
+  await ObjectUseCases.removeTag(cid, ObjectTag.Banned)
+
+  logger.info('Object unbanned successfully (cid=%s)', cid)
+
+  return ok()
+}
+
 const reportObject = async (cid: string) => {
   logger.debug('Attempting to report object (cid=%s)', cid)
+  // Clear any earlier dismissal first: a file that was reported, dismissed by an
+  // admin, and then reported again must re-surface in the review queue. Without
+  // this the lingering `report-dismissed` tag would keep it hidden forever.
+  await ObjectUseCases.removeTag(cid, ObjectTag.ReportDismissed)
   await ObjectUseCases.addTag(cid, ObjectTag.ToBeReviewed)
 
   logger.info('Object reported successfully (cid=%s)', cid)
@@ -694,7 +766,7 @@ const dismissReport = async (
   logger.debug('Attempting to dismiss report (cid=%s)', cid)
   if (!isAdminUser(executor)) {
     logger.warn(
-      'User (%s) attempted to ban object without admin rights (cid=%s)',
+      'User (%s) attempted to dismiss report without admin rights (cid=%s)',
       executor.oauthUserId,
       cid,
     )
@@ -702,7 +774,7 @@ const dismissReport = async (
   }
 
   await ObjectUseCases.addTag(cid, ObjectTag.ReportDismissed)
-  logger.info('Object reported successfully (cid=%s)', cid)
+  logger.info('Report dismissed successfully (cid=%s)', cid)
 
   return ok()
 }
@@ -724,6 +796,14 @@ const authorizeDownload = async (
 > => {
   const metadata = await metadataRepository.getMetadata(cid)
   if (!metadata) {
+    return err(new ObjectNotFoundError('Object not found'))
+  }
+
+  // Objects removed by their owner must not be downloadable by anyone (the
+  // owner can still restore them from Trash). Treat them as not found so we
+  // don't leak their existence.
+  if (await ObjectUseCases.isObjectDeleted(cid)) {
+    logger.info('Download blocked for deleted object (cid=%s)', cid)
     return err(new ObjectNotFoundError('Object not found'))
   }
 
@@ -750,14 +830,28 @@ const authorizeDownload = async (
   return ok()
 }
 
-const getToBeReviewedList = async (limit: number, offset: number) => {
+const getToBeReviewedList = async (
+  executor: User,
+  limit: number,
+  offset: number,
+): Promise<Result<string[], ForbiddenError>> => {
+  // The review queue lists other users' reported content, so restrict it to
+  // admins — matching banObject/dismissReport which already gate on admin.
+  if (!isAdminUser(executor)) {
+    logger.warn(
+      'User (%s) attempted to list reported objects without admin rights',
+      executor.oauthUserId,
+    )
+    return err(new ForbiddenError('User is not an admin'))
+  }
+
   const metadata = await metadataRepository.getMetadataByTagIncludeExclude(
     [ObjectTag.ToBeReviewed],
     [ObjectTag.Banned, ObjectTag.ReportDismissed],
     limit,
     offset,
   )
-  return metadata.rows.map((e) => e.head_cid)
+  return ok(metadata.rows.map((e) => e.head_cid))
 }
 
 export const ObjectUseCases = {
@@ -773,6 +867,7 @@ export const ObjectUseCases = {
   getMarkedAsDeletedRoots,
   markAsDeleted,
   restoreObject,
+  isObjectDeleted,
   getObjectSummaryByCID,
   isArchived,
   hasAllNodesArchived,
@@ -785,7 +880,9 @@ export const ObjectUseCases = {
   checkArchivalStatusForObjects,
   populateCaches,
   addTag,
+  removeTag,
   banObject,
+  unbanObject,
   reportObject,
   dismissReport,
   authorizeDownload,

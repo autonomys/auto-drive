@@ -20,13 +20,30 @@
     '../../infrastructure/services/paymentManager/index.js'
   )
 
-  const { Rabbit } = await import(
-    '../../infrastructure/drivers/rabbit.js'
+  const { Rabbit } = await import('../../infrastructure/drivers/rabbit.js')
+
+  const { startShutdownWatchdog, shutdownStep } = await import(
+    '../../shared/utils/shutdown.js'
   )
+
+  // Ungated by feature flags: a task that exhausted its retries needs to be
+  // reported regardless of which subsystems this host runs.
+  EventRouter.listenTaskErrors()
 
   let somethingActive = false
   if (config.featureFlags.flags.taskManager.active) {
     EventRouter.listenFrontendEvents()
+
+    // Re-drive uploads stranded in `migrating` when their one-shot
+    // migrate-upload-nodes task was lost or exhausted its retries. This needs
+    // only the task-manager consumer (which processes both recover-migrations
+    // and the migrate tasks it re-enqueues), so unlike the archival/publishing
+    // recovery jobs below it is not gated on the object mapping archiver.
+    const { migrationRecoveryJob } = await import(
+      '../../infrastructure/services/migrationRecoveryJob.js'
+    )
+    migrationRecoveryJob.start()
+
     somethingActive = true
   }
   if (config.featureFlags.flags.objectMappingArchiver.active) {
@@ -54,6 +71,17 @@
   ) {
     paymentManager.start()
 
+    // Beside the payment watchers, and for the same reason they are here: one
+    // process. It is the single writer of the treasury balance gate, which every
+    // API replica then READS from the database — an in-memory gate would be
+    // unknown, and therefore closed, in every process that quotes.
+    //
+    // A no-op when this deployment has no USDC configuration.
+    const { usdcGatesJob } = await import(
+      '../../infrastructure/services/usdcGatesJob.js'
+    )
+    usdcGatesJob.start()
+
     const { creditExpiryJob } = await import(
       '../../infrastructure/services/creditExpiryJob.js'
     )
@@ -74,6 +102,11 @@
 
   const shutdown = async () => {
     logger.info('Shutting down frontend worker...')
+    // Armed before the first step: Docker allows 10s between SIGTERM and
+    // SIGKILL, and the awaits below can want far longer than that — the alert
+    // drain makes up to five sends of 10s each, and cancelling a consumer or
+    // closing a channel waits on a broker reply that may never come.
+    const stopWatchdog = startShutdownWatchdog(logger)
     objectMappingArchiver.stop()
     // Stop periodic recovery jobs (safe even if never started — stop() is a no-op)
     if (
@@ -90,7 +123,17 @@
       )
       publishingRecoveryJob.stop()
     }
+    if (config.featureFlags.flags.taskManager.active) {
+      const { migrationRecoveryJob } = await import(
+        '../../infrastructure/services/migrationRecoveryJob.js'
+      )
+      migrationRecoveryJob.stop()
+    }
     paymentManager.stop()
+    const { usdcGatesJob } = await import(
+      '../../infrastructure/services/usdcGatesJob.js'
+    )
+    usdcGatesJob.stop()
     const { creditExpiryJob } = await import(
       '../../infrastructure/services/creditExpiryJob.js'
     )
@@ -99,7 +142,26 @@
       '../../infrastructure/services/deletionAnonymisationJob.js'
     )
     deletionAnonymisationJob.stop()
-    await Rabbit.close()
+    // Send anything still inside the batching window before the channel closes,
+    // so a deploy doesn't swallow the alerts it may itself have caused. Stop
+    // consuming first, or failures keep arriving while the final send is awaited
+    // and land in a batch created after the flush decided it was finished.
+    await shutdownStep(logger, 'stop error consumers', 2_000, () =>
+      EventRouter.stopTaskErrors(),
+    )
+    const { flushTaskErrorAlerts } = await import(
+      '../../infrastructure/eventRouter/taskErrorNotifier.js'
+    )
+    // The flush talks to Slack, not to the broker, so a cancel that timed out
+    // above must not cost us the alerts it was making room for.
+    await shutdownStep(logger, 'flush task error alerts', 4_000, () =>
+      flushTaskErrorAlerts(),
+    )
+    await shutdownStep(logger, 'close rabbit channel', 2_000, () =>
+      Rabbit.close(),
+    )
+
+    stopWatchdog()
     logger.info('Frontend worker shut down successfully')
     process.exit(0)
   }

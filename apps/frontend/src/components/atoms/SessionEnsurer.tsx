@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CreditSummaryResponse } from '../../services/api';
 import { TouChangeType } from '@auto-drive/models';
 import { TouAcceptanceInterstitial } from '../views/TouAcceptance';
+import { CALLBACK_URL_PARAM } from '../../utils/callbackUrl';
 
 export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
@@ -35,7 +36,12 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
             setUser(user);
           } else {
             setUser(null);
-            router.push('/onboarding');
+            // Carry the current page through onboarding so a first-time user
+            // who arrived via a deep link still lands where they were going.
+            const here = `${window.location.pathname}${window.location.search}`;
+            router.push(
+              `/onboarding?${CALLBACK_URL_PARAM}=${encodeURIComponent(here)}`,
+            );
           }
         })
         .catch(() => {
@@ -75,16 +81,28 @@ export const SessionEnsurer = ({ children }: { children: React.ReactNode }) => {
   }, [touStatusData, setTouStatus]);
 
   useEffect(() => {
+    // Disabling a query (enabled: false) stops refetching but does not clear
+    // its previously cached `data` — so once signed out, `account` may still
+    // hold the last-fetched (now stale) value. Only apply it while a session
+    // is actually present, so we don't resurrect a previous account's data.
+    if (!session?.data) {
+      setAccount(null);
+      return;
+    }
     if (account) setAccount(account);
-  }, [account, setAccount]);
+  }, [session?.data, account, setAccount]);
 
   useEffect(() => {
+    if (!session?.data) {
+      setFeatures({});
+      return;
+    }
     if (features) setFeatures(features);
-  }, [features, setFeatures]);
+  }, [session?.data, features, setFeatures]);
 
   useEffect(() => {
-    setCreditSummary(creditSummary ?? null);
-  }, [creditSummary, setCreditSummary]);
+    setCreditSummary(session?.data ? (creditSummary ?? null) : null);
+  }, [session?.data, creditSummary, setCreditSummary]);
 
   if (session === undefined) {
     // TODO: Add a loading state

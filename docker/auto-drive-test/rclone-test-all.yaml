@@ -1,0 +1,17 @@
+# rclone's integration test runner config (fstest/test_all), for the S3 backend
+# suite against an auto-drive-test container. Unlike rclone's own config.yaml,
+# the suite runs in full, without -short.
+tests:
+  - path: backend
+    addbackend: true
+    nobinary: true
+backends:
+  - backend: "s3"
+    remote: "TestS3Autonomys:"
+    fastlist: true
+    ignore:
+      # There are no bucket endpoints (#779): Rmdir of a bucket sends a request
+      # with no key, which is handled as a DeleteObject and always succeeds.
+      # This also makes FsMkdir's second purge succeed.
+      - TestIntegration/FsMkdir/FsPutFiles/FsRmdirFull
+      - TestIntegration/FsRmdirNotFound

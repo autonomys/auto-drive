@@ -25,9 +25,14 @@ submodules:
 
 common: install submodules models s3 ui
 
-test: install
+# The frontend suite is here deliberately. It was absent, so every frontend spec
+# in the repo — including the ones covering the USDC purchase state machine —
+# passed or failed without gating a merge. It needs no Docker and runs in
+# seconds, unlike the backend's TestContainers suites.
+test: install common
 	yarn backend test
 	yarn auth test
+	yarn frontend test
 
 lint: install
 	yarn backend lint

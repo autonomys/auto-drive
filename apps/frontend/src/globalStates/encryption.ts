@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 interface EncryptionStore {
   password: string;
   setPassword: (password: string) => void;
+  clearPassword: () => void;
 }
 
 export const useEncryptionStore = create<EncryptionStore>()(
@@ -11,6 +12,7 @@ export const useEncryptionStore = create<EncryptionStore>()(
     (set) => ({
       password: '',
       setPassword: (password) => set({ password }),
+      clearPassword: () => set({ password: '' }),
     }),
     {
       name: 'encryption-storage',

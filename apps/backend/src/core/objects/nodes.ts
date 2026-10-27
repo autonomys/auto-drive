@@ -11,12 +11,9 @@ import { PBNode } from '@ipld/dag-pb'
 import { CID } from 'multiformats'
 import { nodesRepository } from '../../infrastructure/repositories/index.js'
 import { uploadsRepository } from '../../infrastructure/repositories/uploads/uploads.js'
-import { getUploadBlockstore } from '../../infrastructure/services/upload/uploadProcessorCache/index.js'
-import {
-  asyncIterableForEach,
-  asyncIterableToPromiseOfArray,
-} from '@autonomys/asynchronous'
+import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
 import { BlockstoreUseCases } from '../uploads/blockstore.js'
+import { UnrecoverableUploadError } from '../uploads/errors.js'
 import {
   UploadType,
   ObjectMapping,
@@ -69,34 +66,48 @@ const saveNode = async (
   })
 }
 
+/**
+ * Resolve the payload of many chunks at once, returning a CID -> data map that
+ * simply omits whatever could not be resolved.
+ *
+ * Batched because the alternative is what caused issue #815 to be reachable so
+ * often. composeNodesDataAsFileReadable fetches up to `concurrentChunks` (100)
+ * chunks at a time; resolving them one CID at a time meant up to 200 statements
+ * per batch against a pg.Pool with the default max of 10 connections. A given
+ * chunk's second statement could therefore be queued for hundreds of
+ * milliseconds behind its own first one — which is what let a reader straddle
+ * the migration's commit and the blockstore cleanup. One statement per batch
+ * removes both the straddle (see resolveEncodedNodes) and the queueing.
+ */
+const getChunksData = async (
+  cids: (string | CID)[],
+): Promise<Map<string, Buffer>> => {
+  const cidStrings = cids.map((cid) =>
+    typeof cid === 'string' ? cid : cidToString(cid),
+  )
+
+  const encodedNodes = await nodesRepository.resolveEncodedNodes(cidStrings)
+
+  const chunks = new Map<string, Buffer>()
+  for (const [cidString, encodedNode] of encodedNodes) {
+    const decoded = decodeIPLDNodeData(
+      new Uint8Array(Buffer.from(encodedNode, 'base64')),
+    )
+    // A node that carries no data is not a chunk we can serve. Left out of the
+    // map rather than mapped to an empty buffer, so callers cannot mistake
+    // "resolved to nothing" for "resolved".
+    if (decoded?.data) {
+      chunks.set(cidString, Buffer.from(decoded.data))
+    }
+  }
+
+  return chunks
+}
+
 const getChunkData = async (cid: string | CID): Promise<Buffer | undefined> => {
   const cidString = typeof cid === 'string' ? cid : cidToString(cid)
 
-  let ipldNodeBytes: Buffer | undefined = await nodesRepository
-    .getNode(cidString)
-    .then((e) => {
-      if (!e || !e.encoded_node) {
-        return undefined
-      }
-
-      return Buffer.from(e.encoded_node, 'base64')
-    })
-
-  if (!ipldNodeBytes) {
-    ipldNodeBytes = await BlockstoreUseCases.getNode(cidString)
-  }
-
-  if (!ipldNodeBytes) {
-    return undefined
-  }
-
-  const chunkData = decodeIPLDNodeData(new Uint8Array(ipldNodeBytes))
-
-  if (!chunkData) {
-    return undefined
-  }
-
-  return chunkData.data ? Buffer.from(chunkData.data) : undefined
+  return (await getChunksData([cidString])).get(cidString)
 }
 
 const saveNodes = async (
@@ -140,49 +151,96 @@ const getUploadCID = async (uploadId: string): Promise<CID> => {
   return cid
 }
 
+const MIGRATION_BATCH_SIZE = 100
+
 const migrateFromBlockstoreToNodesTable = async (
   uploadId: string,
 ): Promise<void> => {
   const uploads = await uploadsRepository.getUploadsByRoot(uploadId)
   const rootCID = await getUploadCID(uploadId)
 
+  // getMetadata returns a neverthrow Result, and a Result object is always truthy,
+  // so the `if (!metadata) return` this replaces could never fire — migration ran
+  // regardless of whether the object had a metadata row.
+  //
+  // Proceeding is the worst of the options. handleFileUploadFinalization and
+  // handleFolderUploadFinalization save the metadata strictly BEFORE the upload
+  // flips to MIGRATING and the migrate task is enqueued, and migrate only ever
+  // runs on a root upload, so a missing row means the completion never got that
+  // far and no retry will change it. Migrating anyway writes the nodes, deletes the
+  // upload artifacts, then hands tag-upload a cid it cannot resolve — tagUpload
+  // returns its error before reaching scheduleNodesPublish, so the object ends up
+  // with nodes in the database, nothing enqueued to publish them, and no upload row
+  // left for the recovery sweep to find.
+  //
+  // Restoring the original intent would only trade that for a silent return, which
+  // leaves the row MIGRATING for the sweep to re-drive every staleness window,
+  // forever. Parking it as FAILED is what this branch already does with the other
+  // permanently-broken shapes: the sweep stops selecting it, the task acks instead
+  // of dead-lettering, and auto_drive_upload_migration_unrecoverable makes it
+  // visible.
   const metadata = await ObjectUseCases.getMetadata(cidToString(rootCID))
-  if (!metadata) {
-    return
+  if (metadata.isErr()) {
+    logger.error(
+      'No metadata for the root of a migrating upload (uploadId=%s, rootCid=%s)',
+      uploadId,
+      cidToString(rootCID),
+    )
+    throw new UnrecoverableUploadError(
+      `No metadata found for the root of upload ${uploadId} (rootCid=${cidToString(rootCID)})`,
+      uploadId,
+    )
   }
+
+  // Clear any nodes already written for this root before re-inserting. migrate
+  // is not idempotent on its own: nodes.cid has no unique constraint
+  // (nodes_pkey was dropped in 20250924123851), so a re-driven migration — the
+  // recovery sweep, a handler retry, or a redelivery after a worker restart —
+  // would re-INSERT and silently duplicate rows (which then fan out into
+  // duplicate publish work via getCidsByRootCid). Deleting by root_cid first
+  // makes each run produce a clean set. The per-upload guard in processMigration
+  // prevents a concurrent run from racing this delete+insert; deletion is scoped
+  // to this root_cid, so nodes shared with other objects are untouched, and only
+  // not-yet-published nodes are affected (a published object's upload row is
+  // already gone, so it is never re-driven).
+  await nodesRepository.removeNodeByRootCid(cidToString(rootCID))
 
   for (const upload of uploads) {
     const headCID = await getUploadCID(upload.id)
-    const blockstore = await getUploadBlockstore(upload.id)
+    const cids = await blockstoreRepository.getDistinctCids(upload.id)
 
-    const BATCH_SIZE = 100
-    await asyncIterableForEach(
-      blockstore.getAllKeys(),
-      async (batch) => {
-        const nodes = await asyncIterableToPromiseOfArray(
-          blockstore.getMany(batch),
+    for (let i = 0; i < cids.length; i += MIGRATION_BATCH_SIZE) {
+      const batch = cids.slice(i, i + MIGRATION_BATCH_SIZE)
+      const entries = await blockstoreRepository.getFirstEntriesByCids(
+        upload.id,
+        batch,
+      )
+      if (entries.length !== batch.length) {
+        throw new Error(
+          `Blockstore of upload ${upload.id} changed during migration: expected ${batch.length} nodes in this batch, read ${entries.length}`,
         )
-        const uniqueNodes = Array.from(
-          new Map(nodes.map((node) => [cidToString(node.cid), node])).values(),
-        )
+      }
 
-        await nodesRepository.saveNodes(
-          uniqueNodes.map((e) => ({
-            cid: cidToString(e.cid),
-            root_cid: cidToString(rootCID),
-            head_cid: cidToString(headCID),
-            type: decodeIPLDNodeData(Buffer.from(e.block)).type,
-            encoded_node: Buffer.from(e.block).toString('base64'),
-            block_published_on: null,
-            tx_published_on: null,
-            piece_index: null,
-            piece_offset: null,
-          })),
-        )
+      await nodesRepository.saveNodes(
+        entries.map((entry) => ({
+          cid: entry.cid,
+          root_cid: cidToString(rootCID),
+          head_cid: cidToString(headCID),
+          type: decodeIPLDNodeData(entry.data).type,
+          encoded_node: entry.data.toString('base64'),
+          block_published_on: null,
+          tx_published_on: null,
+          piece_index: null,
+          piece_offset: null,
+        })),
+      )
+    }
 
-        logger.info(`Saved nodes from headCID=${headCID}`)
-      },
-      BATCH_SIZE,
+    logger.info(
+      'Migrated %d distinct nodes to the nodes table (uploadId=%s, headCid=%s)',
+      cids.length,
+      upload.id,
+      cidToString(headCID),
     )
   }
 }
@@ -252,13 +310,19 @@ const setPublishedOn = async (
   return
 }
 
-const ensureObjectPublished = async (cid: string): Promise<void> => {
+const ensureObjectPublished = async (
+  cid: string,
+  signal?: AbortSignal,
+): Promise<void> => {
   const nodes = await nodesRepository.getNodesByRootCid(cid)
   if (nodes.length === 0) {
     throw new Error(`Nodes not found for ${cid}`)
   }
 
-  await OnchainPublisher.publishNodes(nodes.map((node) => node.cid))
+  await OnchainPublisher.publishNodes(
+    nodes.map((node) => node.cid),
+    signal,
+  )
 }
 
 const handleRepeatedNodes = async (nodes: Node[]): Promise<void> => {
@@ -302,6 +366,7 @@ export const NodesUseCases = {
   getNode,
   saveNode,
   getChunkData,
+  getChunksData,
   saveNodes,
   migrateFromBlockstoreToNodesTable,
   processNodeArchived,

@@ -5,11 +5,14 @@ import { LogOut, UserRoundIcon } from 'lucide-react';
 import { useLogOut } from '@/hooks/useAuth';
 import { CopiableText } from '@/components/atoms/CopiableText';
 import { formatCid } from '@/utils/table';
+import { useNetwork } from '@/contexts/network';
+import { ROUTES } from '@auto-drive/ui';
 
 export const ProfileDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUserStore((state) => state);
   const { logOut } = useLogOut();
+  const { network } = useNetwork();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const toggleDropdown = () => setIsOpen(!isOpen);
@@ -68,7 +71,9 @@ export const ProfileDropdown: React.FC = () => {
           </div>
           <div className='py-1'>
             <button
-              onClick={logOut}
+              onClick={() =>
+                logOut({ callbackUrl: ROUTES.globalFeed(network.id) })
+              }
               className='flex w-full items-center gap-2 px-4 py-2 text-left text-base text-red-600 hover:bg-background-hover dark:text-red-500'
             >
               Logout

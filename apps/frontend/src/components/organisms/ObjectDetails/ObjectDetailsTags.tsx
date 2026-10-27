@@ -1,4 +1,10 @@
-import { ObjectInformation, ObjectTag, UserRole } from '@auto-drive/models';
+import {
+  ObjectInformation,
+  UserRole,
+  isBanned,
+  isInsecure,
+  isToBeReviewed,
+} from '@auto-drive/models';
 import { ConditionalRender } from '../../atoms/ConditionalRender';
 import { RoleProtected } from '../../atoms/RoleProtected';
 import { Badge } from '@/components/atoms/Badge';
@@ -21,22 +27,17 @@ export const ObjectDetailsTags = ({
         {getTypeFromMetadata(object.metadata)} •{' '}
         {formatBytes(Number(object.metadata.totalSize), 0)}
         <Badge label={object.status} status={object.status} />
-        <ConditionalRender condition={object.tags.includes('insecure')}>
+        <ConditionalRender condition={isInsecure(object.tags)}>
           <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
             Insecure
           </span>
         </ConditionalRender>
-        <ConditionalRender
-          condition={
-            object.tags.includes(ObjectTag.ToBeReviewed) &&
-            !object.tags.includes(ObjectTag.Banned)
-          }
-        >
+        <ConditionalRender condition={isToBeReviewed(object.tags)}>
           <span className='ml-2 rounded-lg bg-orange-500 p-1 text-xs font-semibold text-white'>
-            On review
+            Reported
           </span>
         </ConditionalRender>
-        <ConditionalRender condition={object.tags.includes(ObjectTag.Banned)}>
+        <ConditionalRender condition={isBanned(object.tags)}>
           <span className='ml-2 rounded-lg bg-red-500 p-1 text-xs font-semibold text-white'>
             Banned
           </span>

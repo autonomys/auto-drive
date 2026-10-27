@@ -96,7 +96,28 @@ export const createAccountManager = async (api: ApiPromise) => {
       }
     })
 
+  // Resync an account's nonce from chain without removing it from the pool.
+  // Used when a transaction is dropped by a chain reorg: the in-memory nonce
+  // counter has already advanced past the dropped transaction, but the
+  // on-chain nonce did not move (the transaction was never canonical). Keeping
+  // the account in the pool — rather than removing it — avoids draining the
+  // signer pool during the very reorgs this manager is meant to survive.
+  const resyncAccount = (address: string) =>
+    uniqueExec(async () => {
+      // Re-add the account if a prior failure had removed it from the pool.
+      if (!accounts.some((account) => account.address === address)) {
+        const account = getAccount(address)
+        if (account) {
+          accounts.push(account)
+        }
+      }
+
+      const nonce = await getOnChainNonce(api, address)
+      nonceByAccount[address] = nonce
+      logger.info('Resynced account %s to on-chain nonce %d', address, nonce)
+    })
+
   await uniqueExec(() => initAccounts())
 
-  return { registerTransaction, removeAccount }
+  return { registerTransaction, removeAccount, resyncAccount }
 }

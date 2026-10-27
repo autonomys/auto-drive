@@ -1,5 +1,5 @@
 import { createLogger } from '../drivers/logger.js'
-import { Rabbit } from '../drivers/rabbit.js'
+import { Queue, Rabbit } from '../drivers/rabbit.js'
 import { EventRouter } from './index.js'
 import { Task, TaskSchema } from './tasks.js'
 import { withTimeout, TimeoutError } from '../../shared/utils/timeout.js'
@@ -12,14 +12,14 @@ export const createHandlerWithRetries =
   (
     handler: Handler,
     {
-      errorPublishQueue = 'errors',
+      errorPublishQueue,
       errorRetries = 3,
       taskTimeoutMs = 0,
     }: {
-      errorPublishQueue?: string | null
+      errorPublishQueue: Queue | null
       errorRetries?: number
       taskTimeoutMs?: number
-    } = {},
+    },
   ) =>
   async (obj: unknown) => {
     const parsingResult = TaskSchema.safeParse(obj)
@@ -65,6 +65,11 @@ export const createHandlerWithRetries =
           Rabbit.publish(errorPublishQueue, {
             ...parsingResult.data,
             retriesLeft: errorRetries,
+            // The reason is carried on the message, not just logged: the error
+            // queues are the only record that a task died, and a consumer that
+            // can name the task but not why it failed cannot be acted on.
+            error: error instanceof Error ? error.message : String(error),
+            failedAt: new Date().toISOString(),
           })
         }
         logger.error(error as Error, 'Task failed')

@@ -9,7 +9,7 @@ interface UserStore {
   features: Record<string, boolean>;
   creditSummary: CreditSummaryResponse | null;
   setFeatures: (features: Record<string, boolean>) => void;
-  setAccount: (account: AccountInfo) => void;
+  setAccount: (account: AccountInfo | null) => void;
   setUser: (user: User | null) => void;
   setCreditSummary: (summary: CreditSummaryResponse | null) => void;
   clearUser: () => void;
@@ -27,7 +27,7 @@ export const useUserStore = create<UserStore>()(
         }),
       clearUser: () =>
         set({ user: null, account: null, creditSummary: null, features: {} }),
-      setAccount: (account: AccountInfo) =>
+      setAccount: (account: AccountInfo | null) =>
         set({
           account,
         }),

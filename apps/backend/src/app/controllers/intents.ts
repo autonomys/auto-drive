@@ -2,15 +2,37 @@ import { Router } from 'express'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { IntentsUseCases } from '../../core/users/intents.js'
-import {
-  handleInternalError,
-  handleInternalErrorResult,
-} from '../../shared/utils/neverthrow.js'
+import { handleInternalErrorResult } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 import { config } from '../../config.js'
 import { hasGoogleAuth } from '../../core/featureFlags/index.js'
+import { Intent, IntentMispayment } from '@auto-drive/models'
 
 export const intentsController = Router()
+
+// res.json() throws on a raw BigInt, so every bigint field has to be
+// stringified before an intent is sent. Doing it in one place rather than at
+// each response site: the fields are spread wholesale, so a field added to
+// Intent and forgotten here does not fail at compile time — it throws at
+// runtime, on the first request for a row that happens to have it set. The
+// token_* fields are set for the first time by the USDC creation path, so this
+// is now load-bearing rather than latent.
+const serializeIntent = (intent: Intent) => ({
+  ...intent,
+  shannonsPerByte: intent.shannonsPerByte.toString(),
+  paymentAmount: intent.paymentAmount?.toString(),
+  tokenAmount: intent.tokenAmount?.toString(),
+  quotedTokenAmount: intent.quotedTokenAmount?.toString(),
+  quotedAi3Shannons: intent.quotedAi3Shannons?.toString(),
+  usdRateAtCreation: intent.usdRateAtCreation?.toString(),
+})
+
+// Same reason as serializeIntent: res.json() throws on a raw BigInt.
+const serializeMispayment = (mispayment: IntentMispayment) => ({
+  ...mispayment,
+  paymentAmount: mispayment.paymentAmount?.toString(),
+  tokenAmount: mispayment.tokenAmount?.toString(),
+})
 
 // ---------------------------------------------------------------------------
 // POST /intents/
@@ -43,20 +65,46 @@ intentsController.post(
       return
     }
 
-    const result = await handleInternalError(
-      IntentsUseCases.createIntent(user),
+    // Optional: a request with no body at all is valid and behaves as it always
+    // has (no size recorded, no cap pre-check). `req.body` is `{}` under
+    // express.json() for a body-less request, but stays optional-chained so a
+    // route mounted without the parser cannot throw here.
+    const requestedBytes = IntentsUseCases.parseRequestedBytes(
+      req.body?.requestedBytes,
+    )
+    if (requestedBytes.isErr()) {
+      handleError(requestedBytes.error, res)
+      return
+    }
+
+    // Absent means AI3, so a body-less request keeps its current meaning. An
+    // unrecognised value is rejected rather than defaulted — see
+    // parsePaymentMethod.
+    const paymentMethod = IntentsUseCases.parsePaymentMethod(
+      req.body?.paymentMethod,
+    )
+    if (paymentMethod.isErr()) {
+      handleError(paymentMethod.error, res)
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      IntentsUseCases.createIntent(user, {
+        requestedBytes: requestedBytes.value,
+        paymentMethod: paymentMethod.value,
+      }),
       'Failed to create intent',
     )
     if (result.isErr()) {
+      // CreditCapExceededError, UsdcPaymentsDisabledError and QuoteFailedError
+      // each carry their own { error: <CODE>, message } response shape, so the
+      // generic path emits them — and their 400 / 403 / 503 statuses —
+      // correctly.
       handleError(result.error, res)
       return
     }
 
-    res.status(200).json({
-      ...result.value,
-      shannonsPerByte: result.value.shannonsPerByte.toString(),
-      paymentAmount: result.value.paymentAmount?.toString(),
-    })
+    res.status(200).json(serializeIntent(result.value))
   }),
 )
 
@@ -88,13 +136,43 @@ intentsController.get(
       return
     }
 
-    res.status(200).json(
-      result.value.map((intent) => ({
-        ...intent,
-        shannonsPerByte: intent.shannonsPerByte.toString(),
-        paymentAmount: intent.paymentAmount?.toString(),
-      })),
+    res.status(200).json(result.value.map(serializeIntent))
+  }),
+)
+
+// ---------------------------------------------------------------------------
+// GET /intents/mispayments  (admin only)
+// Lists on-chain payments written down for admin review. Mostly payments refused
+// rather than attached to an intent — an unknown intent id, the wrong asset, a
+// lapsed price lock, an intent another transfer already settled. The intent
+// itself is untouched in every one of those, so nothing about its row records
+// that money arrived; this is the only place it does.
+//
+// Rows with reason 'amount_off_quote' were accepted and credited; they are here
+// because the amount paid differed from the amount quoted and nothing else says
+// so. Filter on `reason` before working the list as a queue.
+//
+// NOTE: like /over-cap, this static route must be registered BEFORE GET /:id.
+// ---------------------------------------------------------------------------
+
+intentsController.get(
+  '/mispayments',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      IntentsUseCases.getMispayments(user),
+      'Failed to get mispayments',
     )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json(result.value.map(serializeMispayment))
   }),
 )
 
@@ -119,13 +197,14 @@ intentsController.get(
       return
     }
 
-    res.status(200).json({
-      ...result.value,
-      paymentAmount: result.value.paymentAmount?.toString(),
-      shannonsPerByte: result.value.shannonsPerByte.toString(),
-    })
+    res.status(200).json(serializeIntent(result.value))
   }),
 )
+
+// An EVM transaction hash: 32 bytes, hex, lower-cased by the handler before it
+// is tested. Deliberately not a viem `isHash` call — the shape is the whole
+// check, and keeping it here keeps it next to the normalisation it depends on.
+const TX_HASH_PATTERN = /^0x[0-9a-f]{64}$/
 
 // ---------------------------------------------------------------------------
 // POST /intents/:id/watch
@@ -140,10 +219,54 @@ intentsController.post(
       return
     }
 
-    const txHash = req.body.txHash
-    if (typeof txHash !== 'string') {
+    const rawTxHash = req.body.txHash
+    if (typeof rawTxHash !== 'string') {
       res.status(400).json({
         error: 'Missing or invalid field: txHash',
+      })
+      return
+    }
+
+    // Lower-cased here, at the boundary, because everything downstream compares
+    // this string byte for byte and nothing else normalises it.
+    //
+    // A transaction hash carries no checksum encoding, so wallets emit lowercase
+    // and viem hands the event subscription lowercase — but a hand-rolled API
+    // client is free to post `0xAB12…` for the very same transaction. That value
+    // is then stored in `intents.tx_hash` and travels on the watch task, and the
+    // three consequences are all silent:
+    //
+    //   • the watcher's inFlight map is keyed by hash, so the mixed-case task and
+    //     the lowercase event are two entries — two concurrent settlements of one
+    //     transaction, one of which is filed as an ALREADY_SETTLED mispayment
+    //     telling an admin to reconcile a second transfer that never happened;
+    //   • markIntentAsConfirmed's replay guard tests `intent.txHash !== txHash`,
+    //     so a later replay of that row reads as a different transaction;
+    //   • intent_mispayments is unique on (tx_hash, log_index), which two spellings
+    //     of one hash do not collide on.
+    //
+    // Trimmed for the same reason the address variables are: a value pasted out
+    // of a block explorer arrives with whitespace more often than not.
+    const txHash = rawTxHash.trim().toLowerCase()
+
+    // A transaction hash, not merely a string.
+    //
+    // Recording one is not inert. The hash is written to intents.tx_hash, and a
+    // row carrying a hash is understood everywhere downstream to mean "a payment
+    // for this is in flight": the cleanup sweep leaves it alone rather than race
+    // the watcher for it, getIntent keeps serving it while settlement could still
+    // land, and the startup recovery sweep re-watches it after every restart. All
+    // three are reasonable for a real hash and wrong for anything else, and a
+    // value that is not 32 hex bytes cannot be a real one — viem will not even
+    // look it up, so the watch task can only fail and retry its way onto
+    // frontend-errors.
+    //
+    // Checked after the lower-casing above so the pattern does not have to accept
+    // both cases, which would let two spellings of one hash through — the exact
+    // thing the normalisation is there to prevent.
+    if (!TX_HASH_PATTERN.test(txHash)) {
+      res.status(400).json({
+        error: 'Invalid field: txHash must be a 0x-prefixed 32-byte hex hash',
       })
       return
     }

@@ -29,7 +29,13 @@ export const ExpiryWarningBanner = () => {
     enabled: !!session?.data,
   });
 
-  if (!expiringBatches || expiringBatches.length === 0) return null;
+  // Guard on the live session, not just on `expiringBatches`: disabling a
+  // query (enabled: false) stops refetching but doesn't clear previously
+  // cached/persisted `data`, so a signed-out user could otherwise still see
+  // the previous account's expiring-credits data.
+  if (!session?.data || !expiringBatches || expiringBatches.length === 0) {
+    return null;
+  }
 
   // Find the soonest expiry date across all expiring batches
   const soonestExpiry = expiringBatches.reduce<Date | null>((acc, batch) => {

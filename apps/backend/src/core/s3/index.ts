@@ -1,7 +1,17 @@
 import { s3ObjectMappingsRepository } from '../../infrastructure/repositories/index.js'
 import { DownloadUseCase } from '../downloads/index.js'
+import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
-import { ObjectNotFoundError } from '../../errors/index.js'
+import {
+  ForbiddenError,
+  IllegalContentError,
+  NotAcceptableError,
+  ObjectNotFoundError,
+  PaymentRequiredError,
+  RangeNotSatisfiableError,
+} from '../../errors/index.js'
+import { config } from '../../config.js'
+import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import {
   CompleteMultipartUploadCommandParams,
   CompleteMultipartUploadCommandResult,
@@ -15,13 +25,19 @@ import {
   UploadPartCommandResult,
 } from '@auto-drive/s3'
 import {
+  buildListVersionsResult,
+  ByteRange,
   computeListObjectsDbLimit,
+  computeListObjectVersionsDbLimit,
+  DeleteObjectResult,
   finalizeListObjects,
   formatETag,
   ListObjectsParams,
   ListObjectsResult,
+  ListObjectVersionsParams,
   md5Hex,
   multipartETag,
+  resolveDeleteMarkerResult,
 } from '@autonomys/file-server'
 
 // Local extensions to the shared DTOs — kept in the backend rather than
@@ -30,8 +46,17 @@ import {
 /** PutObject result extended with the Autonomys CID for the x-amz-meta-cid header. */
 type PutObjectResult = PutObjectCommandResult & { Cid: string }
 
-/** CompleteMultipartUpload result extended with the Autonomys CID. */
-type CompleteMultipartUploadResult = CompleteMultipartUploadCommandResult & {
+/** CompleteMultipartUpload result extended with the Autonomys CID.
+ *
+ *  `Location` is intentionally omitted here. Per the S3 spec it is the absolute
+ *  URL of the new object, which depends on the public endpoint the client used
+ *  (the dedicated S3 subdomain vs. the legacy /s3 path). That is request/host
+ *  state the HTTP layer owns, so it is built in `completeMultipartUploadHandler`
+ *  and this use case stays host-agnostic. */
+type CompleteMultipartUploadResult = Omit<
+  CompleteMultipartUploadCommandResult,
+  'Location'
+> & {
   Cid: string
 }
 
@@ -40,19 +65,89 @@ type CompleteMultipartUploadResult = CompleteMultipartUploadCommandResult & {
 type CompleteMultipartUploadParams = CompleteMultipartUploadCommandParams & {
   Parts?: Array<{ PartNumber: number; ETag: string }>
 }
+
+/** PutObject params extended with the client modification time (x-amz-meta-mtime)
+ *  and the standard S3 object metadata captured from the request headers.
+ *  Mtime is kept local rather than in the shared DTO — it is an rclone/tooling
+ *  convention, not part of the standard S3 PutObject contract. */
+type PutObjectParams = PutObjectCommandParams & {
+  Mtime?: string | null
+  Metadata?: S3ObjectMetadata | null
+}
+
+/** CreateMultipartUpload params extended with the client mtime and object
+ *  metadata, both stashed by upload id so completeMultipartUpload can persist
+ *  them (S3 sends them on create but not on complete). */
+type CreateMultipartUploadParams = CreateMultipartUploadCommandParams & {
+  Mtime?: string | null
+  Metadata?: S3ObjectMetadata | null
+}
+
+/** CopyObject params. Source is resolved from the x-amz-copy-source header in
+ *  the HTTP layer; Mtime carries an x-amz-meta-mtime when the client replaces
+ *  metadata (rclone's SetModTime copies an object onto itself with a new mtime). */
+type CopyObjectParams = {
+  SourceBucket: string
+  SourceKey: string
+  Bucket: string
+  Key: string
+  /** When set, overrides the source mtime on the destination (metadata REPLACE). */
+  Mtime?: string | null
+  /**
+   * Metadata directive for the destination. `undefined` means COPY: the
+   * destination inherits the source metadata. A value (or explicit null) means
+   * REPLACE: the destination's metadata is exactly this, discarding the source's.
+   */
+  Metadata?: S3ObjectMetadata | null
+}
+
+/** CopyObject result: the standard fields the <CopyObjectResult> body needs,
+ *  plus the Autonomys CID for the x-amz-meta-cid header. */
+type CopyObjectResult = {
+  ETag: string
+  LastModified: Date
+  Cid: string
+}
 import { UploadsUseCases } from '../uploads/uploads.js'
-import { UserWithOrganization } from '@auto-drive/models'
+import { FileDownload, UserWithOrganization } from '@auto-drive/models'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
-import { S3BucketInfo } from '../../infrastructure/repositories/s3/objectMappings.js'
+import { fitDagName } from './dagName.js'
+import {
+  S3BucketInfo,
+  S3KeyMapping,
+  S3ObjectMetadata,
+} from '../../infrastructure/repositories/s3/objectMappings.js'
 
 const logger = createLogger('useCases:s3')
 
+const dagNameForKey = (key: string): string => {
+  const name = key.split('/').pop()!
+  const dagName = fitDagName(name)
+  if (dagName !== name) {
+    logger.warn(
+      'Shortened the DAG name of an S3 object to fit the name limit (key=%s, dagName=%s)',
+      key,
+      dagName,
+    )
+  }
+  return dagName
+}
+
+// The S3 key namespace is scoped per user: (owner, bucket, key) is the mapping
+// identity, so every read/write below is scoped to the requesting user. There is
+// no cross-user contention over a shared (bucket, key), hence no ownership gates,
+// guarded upserts, or pre-finalize checks — the scoped findByKey/createMapping IS
+// the boundary. The user's identity comes from handleS3Auth in the HTTP layer.
+
 const listObjects = async (
+  user: UserWithOrganization,
   params: ListObjectsParams,
 ): Promise<ListObjectsResult> => {
   const dbLimit = computeListObjectsDbLimit(params.maxKeys, params.delimiter)
   const allMatching = await s3ObjectMappingsRepository.listObjects(
+    user.oauthProvider,
+    user.oauthUserId,
     params.bucket,
     params.prefix,
     params.continuationToken,
@@ -67,14 +162,155 @@ type GetObjectUseCaseResult = GetObjectCommandResult & {
   cid: string
   /** null for objects uploaded before MD5 ETag support was introduced. */
   etag: string | null
-  /** Mapping's last-write time, surfaced as the S3 Last-Modified header. */
+  /** The current version's write time (object_versions.created_at), surfaced as
+   *  the S3 Last-Modified header — stable across soft-delete/restore, unlike
+   *  the mapping's updated_at. */
   lastModified: Date
+  /**
+   * Client-supplied modification time (x-amz-meta-mtime), echoed back verbatim
+   * so tools like rclone read the same value they wrote. null when unset.
+   */
+  mtime: string | null
+  /**
+   * Stored S3 object metadata (Content-Type, Cache-Control, x-amz-meta-*, …),
+   * emitted verbatim on the response by the HTTP layer. null for objects written
+   * before metadata persistence (they fall back to the IPLD-derived headers).
+   */
+  objectMetadata: S3ObjectMetadata | null
+}
+
+/** GetObject params extended with an optional versionId (the CID of a specific
+ *  version). Kept local — versioning is an Autonomys extension over the shared
+ *  DTO, and versionId maps to the content CID. */
+type GetObjectParams = GetObjectCommandParams & {
+  VersionId?: string
+  /**
+   * A suffix range — `bytes=-N`, the LAST N bytes — resolved here rather than by
+   * the caller.
+   *
+   * It has to be resolved where the object is chosen, because it means nothing
+   * until the size is known and the size is a property of the specific content
+   * being read. A caller that fetched the size in one lookup and then asked for
+   * the key again would be describing one object and reading another: a
+   * PutObject landing in between makes the second lookup a different CID, and the
+   * offsets computed from the old size get cut out of the new content and shipped
+   * as a 206 with the new ETag beside them — a torn read that looks coherent to
+   * the client.
+   *
+   * Resolving against the cid this call already settled on closes that: the
+   * content address IS the identity, so the size measured and the bytes returned
+   * cannot belong to different objects.
+   */
+  SuffixLength?: number
+}
+
+/**
+ * Turn a suffix range into absolute offsets against the object `metadata`
+ * describes, or refuse it.
+ *
+ * A zero-length suffix, or any suffix of an empty object, names no bytes: S3
+ * answers 416 rather than an empty 206. A suffix longer than the object clamps to
+ * the whole object, which is what RFC 7233 requires.
+ */
+const resolveSuffixLength = (
+  metadata: OffchainMetadata,
+  suffixLength: number,
+): Result<ByteRange, RangeNotSatisfiableError> => {
+  const total = Number(metadata.totalSize)
+  if (suffixLength === 0 || total === 0) {
+    return err(
+      new RangeNotSatisfiableError(
+        'The requested range is not satisfiable',
+        BigInt(total),
+      ),
+    )
+  }
+  return ok([Math.max(0, total - suffixLength), total - 1])
+}
+
+/**
+ * The byte range to read an object with: an offset range passes straight through
+ * (it names its bytes without needing the size, and the HTTP layer refuses a
+ * start past the last byte once the download reports it), a suffix range is
+ * resolved against the object's size, and no range stays undefined.
+ */
+const resolveRequestedByteRange = (
+  metadata: OffchainMetadata,
+  params: GetObjectParams,
+): Result<ByteRange | undefined, RangeNotSatisfiableError> =>
+  params.SuffixLength === undefined
+    ? ok(params.Range)
+    : resolveSuffixLength(metadata, params.SuffixLength)
+
+type ReadError =
+  | ObjectNotFoundError
+  | NotAcceptableError
+  | IllegalContentError
+  | PaymentRequiredError
+  | RangeNotSatisfiableError
+
+/**
+ * Open a read of `cid`. Objects up to the anonymous download cap are read the
+ * way an anonymous caller would read them, so they are free. Larger ones are
+ * read as the caller and charged to their download credits, but the credit
+ * check and the charge both run inside startDownload(), so HeadObject, which
+ * never calls it, is free at any size.
+ */
+const openRead = async (
+  user: UserWithOrganization,
+  cid: string,
+  params: GetObjectParams,
+): Promise<Result<FileDownload, ReadError>> => {
+  const metadata = await ObjectUseCases.getMetadata(cid)
+  if (metadata.isErr()) return err(metadata.error)
+
+  const byteRange = resolveRequestedByteRange(metadata.value, params)
+  if (byteRange.isErr()) return err(byteRange.error)
+
+  const options = { byteRange: byteRange.value }
+  return metadata.value.totalSize > config.params.maxAnonymousDownloadSize
+    ? DownloadUseCase.downloadObjectByUser(user, cid, options)
+    : DownloadUseCase.downloadObjectByAnonymous(cid, options)
 }
 
 const getObject = async (
-  params: GetObjectCommandParams,
-): Promise<Result<GetObjectUseCaseResult, ObjectNotFoundError>> => {
+  user: UserWithOrganization,
+  params: GetObjectParams,
+): Promise<Result<GetObjectUseCaseResult, ReadError>> => {
+  // Versioned read (GET/HEAD ?versionId=<cid>): fetch the specific version's
+  // content by CID rather than the current pointer. The version must belong to
+  // this key in the caller's namespace; the download itself still runs the
+  // moderation/ban checks (authorizeDownload, on either download path), so a
+  // removed/banned version is not retrievable even though it is retained.
+  if (params.VersionId) {
+    const version = await s3ObjectMappingsRepository.findVersionByCid(
+      user.oauthProvider,
+      user.oauthUserId,
+      params.Bucket,
+      params.Key,
+      params.VersionId,
+    )
+    if (!version) {
+      return err(
+        new ObjectNotFoundError(
+          `Version ${params.VersionId} of ${params.Bucket}/${params.Key} not found`,
+        ),
+      )
+    }
+    const versionedDownload = await openRead(user, version.cid, params)
+    return versionedDownload.map((dl) => ({
+      ...dl,
+      cid: version.cid,
+      etag: version.md5 ? formatETag(version.md5) : null,
+      lastModified: version.createdAt,
+      mtime: version.mtime,
+      objectMetadata: version.metadata,
+    }))
+  }
+
   const mapping = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
     params.Bucket,
     params.Key,
   )
@@ -84,30 +320,70 @@ const getObject = async (
     )
   }
 
-  const downloadResult = await DownloadUseCase.downloadObjectByAnonymous(
+  // Anchor Last-Modified to the current version's immutable write time, not
+  // mapping.updatedAt: a BEFORE UPDATE trigger bumps updated_at on soft-delete
+  // and Trash restore (which write no new version), so it would drift after a
+  // restore and disagree with GET/HEAD ?versionId and ListObjectVersions, which
+  // read object_versions.created_at. Mirrors getObjectWriteTime, including its
+  // fallback for a current cid with no version row — see the note there for the
+  // one window that produces those.
+  const currentVersion = await s3ObjectMappingsRepository.findVersionByCid(
+    user.oauthProvider,
+    user.oauthUserId,
+    params.Bucket,
+    params.Key,
     mapping.cid,
-    { byteRange: params.Range },
   )
+  const lastModified = currentVersion?.createdAt ?? mapping.updatedAt
 
-  // Use .map() to attach cid/etag to the ok value and propagate any error
-  // unchanged. The error type from downloadObjectByAnonymous is wider than
-  // ObjectNotFoundError but handleError in the controller accepts any Error.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (downloadResult as any).map((dl: GetObjectCommandResult) => ({
+  const downloadResult = await openRead(user, mapping.cid, params)
+
+  return downloadResult.map((dl) => ({
     ...dl,
     cid: mapping.cid,
     // Objects uploaded before this feature have null md5; fall back to null
     // so the controller can omit the ETag header for legacy objects.
     etag: mapping.md5 ? formatETag(mapping.md5) : null,
-    lastModified: mapping.updatedAt,
+    lastModified,
+    mtime: mapping.mtime,
+    objectMetadata: mapping.metadata,
   }))
+}
+
+// ── ListObjectVersions ─────────────────────────────────────────────────────
+
+/**
+ * ListObjectVersions: enumerate the version history for a bucket/prefix in the
+ * caller's namespace, newest version first per key, with a synthesised delete
+ * marker as the latest entry of any soft-deleted or owner-removed key. The
+ * repository returns WHOLE keys (every version row of up to maxKeys + 1
+ * distinct keys), so a key's history is never split across a page boundary.
+ *
+ * KNOWN LIMITATION (tracked in #790): maxKeys bounds distinct keys, not
+ * entries, and there is no version-id-marker resume. See
+ * buildListVersionsResult in @autonomys/file-server.
+ */
+const getObjectVersions = async (
+  user: UserWithOrganization,
+  params: ListObjectVersionsParams,
+): Promise<ReturnType<typeof buildListVersionsResult>> => {
+  const rows = await s3ObjectMappingsRepository.listObjectVersions(
+    user.oauthProvider,
+    user.oauthUserId,
+    params.bucket,
+    params.prefix,
+    params.keyMarker,
+    computeListObjectVersionsDbLimit(params.maxKeys),
+  )
+
+  return buildListVersionsResult(rows, params.maxKeys)
 }
 
 const createMultipartUpload = async (
   user: UserWithOrganization,
-  params: CreateMultipartUploadCommandParams,
+  params: CreateMultipartUploadParams,
 ): Promise<Result<CreateMultipartUploadCommandResult, ObjectNotFoundError>> => {
-  const name = params.Key.split('/').pop()!
+  const name = dagNameForKey(params.Key)
   const upload = await UploadsUseCases.createFileUpload(
     user,
     name,
@@ -116,6 +392,16 @@ const createMultipartUpload = async (
     null,
     null,
   )
+
+  // Stash the client mtime and object metadata (if any) so
+  // completeMultipartUpload can persist them onto the mapping — S3 sends them
+  // here, on create, not on completion. Skip the write when there is nothing to
+  // stash so uploads that carry neither don't touch the staging table.
+  const mtime = params.Mtime ?? null
+  const metadata = params.Metadata ?? null
+  if (mtime || metadata) {
+    await s3ObjectMappingsRepository.setMultipartMeta(upload.id, mtime, metadata)
+  }
 
   return ok({
     UploadId: upload.id,
@@ -164,12 +450,23 @@ const completeMultipartUpload = async (
   // for an MD5 on subsequent GET/HEAD requests.
   const md5ForStorage = hasValidParts ? etag.replace(/"/g, '') : null
 
+  // Persist the mtime and object metadata stashed at CreateMultipartUpload, then
+  // clear the staging row. Both are null when the client sent neither.
+  const { mtime, metadata } = await s3ObjectMappingsRepository.getMultipartMeta(
+    params.UploadId,
+  )
+
   const mapping = await s3ObjectMappingsRepository.createMapping(
+    user.oauthProvider,
+    user.oauthUserId,
     params.Bucket,
     params.Key,
     cid,
     md5ForStorage,
+    mtime,
+    metadata,
   )
+  await s3ObjectMappingsRepository.deleteMultipartMeta(params.UploadId)
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
     mapping.bucket,
@@ -179,7 +476,6 @@ const completeMultipartUpload = async (
   )
 
   return ok({
-    Location: objectDownloadPath(params.Bucket, params.Key),
     Bucket: params.Bucket,
     Key: params.Key,
     ETag: etag,
@@ -189,9 +485,9 @@ const completeMultipartUpload = async (
 
 const putObject = async (
   user: UserWithOrganization,
-  params: PutObjectCommandParams,
+  params: PutObjectParams,
 ): Promise<Result<PutObjectResult, ObjectNotFoundError>> => {
-  const name = params.Key.split('/').pop()!
+  const name = dagNameForKey(params.Key)
 
   // Compute MD5 before upload so we have it ready for storage.
   const md5 = md5Hex(params.Body)
@@ -216,10 +512,14 @@ const putObject = async (
   const cid = await UploadsUseCases.completeUpload(user, upload.id)
 
   const mapping = await s3ObjectMappingsRepository.createMapping(
+    user.oauthProvider,
+    user.oauthUserId,
     params.Bucket,
     params.Key,
     cid,
     md5,
+    params.Mtime ?? null,
+    params.Metadata ?? null,
   )
   logger.debug(
     'Created mapping: bucket=(%s) key=(%s) -> cid=(%s) etag=(%s)',
@@ -232,20 +532,280 @@ const putObject = async (
   return ok({ ETag: formatETag(md5), Cid: cid })
 }
 
-const listBuckets = async (): Promise<S3BucketInfo[]> => {
-  return s3ObjectMappingsRepository.listBuckets()
+/**
+ * S3 DeleteObject — soft-delete the caller's (bucket, key) mapping. The content
+ * is never removed from the Autonomys DSN; only the S3 name is hidden. Always
+ * resolves to success (S3 returns 204 whether or not the key existed).
+ *
+ * The lookup is scoped to the caller, so a key that isn't theirs simply isn't
+ * found (no cross-user authorization needed). When the deleted key was the
+ * caller's LAST active mapping for its content, the object is also moved to
+ * their web-app Trash (markAsDeleted) so an rclone delete is reflected in the UI
+ * and stays recoverable — the "unified with UI Trash" behaviour.
+ */
+const deleteObject = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<Result<DeleteObjectResult, never>> => {
+  const mapping = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+  )
+
+  // No live key. If it is already soft-deleted (a repeat DeleteObject), the
+  // current state IS a delete marker: report it (with the existing marker's
+  // versionId) even though this idempotent call creates nothing new — a
+  // versioning-aware client expects the marker headers whenever the current
+  // state is a marker. A key that never existed has no marker (bare 204).
+  if (!mapping) {
+    const deleted = await s3ObjectMappingsRepository.findSoftDeletedByKey(
+      user.oauthProvider,
+      user.oauthUserId,
+      bucket,
+      key,
+    )
+    return ok(resolveDeleteMarkerResult(deleted?.deletedAt))
+  }
+
+  const trashObject = async () => {
+    const result = await ObjectUseCases.markAsDeleted(user, mapping.cid)
+    if (result.isErr()) {
+      // The mapping is (or will be) hidden regardless; failure to also trash the
+      // object must not fail the delete.
+      logger.warn(
+        'Could not move object to Trash on delete (cid=%s): %s',
+        mapping.cid,
+        result.error.message,
+      )
+    }
+  }
+
+  // Is this the caller's last active key for the content? The count is scoped to
+  // the caller, and includes the still-active mapping being deleted, so <= 1
+  // means it's their last one.
+  const countActive = () =>
+    s3ObjectMappingsRepository.countActiveMappingsByCid(
+      user.oauthProvider,
+      user.oauthUserId,
+      mapping.cid,
+    )
+
+  const activeBefore = await countActive()
+  const isLastKey = activeBefore <= 1
+
+  if (isLastKey) {
+    // Move the object to the web-app Trash BEFORE hiding the mapping, so its
+    // deleted_at is stamped at/after the object's Trash time — restore then
+    // un-hides this key but not earlier, individually-deleted aliases.
+    await trashObject()
+  }
+
+  const softDeleted = await s3ObjectMappingsRepository.softDeleteMapping(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+  )
+
+  if (!isLastKey) {
+    // Race guard: between the count above and this hide, a concurrent
+    // DeleteObject (same user, e.g. rclone --transfers) may have removed the
+    // sibling last key. Re-check now that ours is hidden; if none of the
+    // caller's keys remain, this delete emptied the content and must move it to
+    // Trash. (If two concurrent deletes both reach here, markAsDeleted is
+    // effectively idempotent: the second is a harmless no-op.)
+    const activeAfter = await countActive()
+    if (activeAfter === 0) {
+      await trashObject()
+    }
+  }
+
+  logger.debug('Soft-deleted S3 mapping: bucket=(%s) key=(%s)', bucket, key)
+  // A delete marker was created iff this call actually hid an active row. (A
+  // concurrent delete may have hidden it first — softDeleteMapping then returns
+  // null and this call created nothing.)
+  return ok(resolveDeleteMarkerResult(softDeleted?.deletedAt))
 }
 
-const objectDownloadPath = (bucket: string, key: string) => {
-  return `/s3/${bucket}/${key}`
+/**
+ * S3 CopyObject — copy the caller's source (bucket, key) to a destination key.
+ * In content-addressed storage this is a cheap remap: the destination mapping
+ * points at the source's cid, with no data transfer. This is what makes rclone
+ * server-side copy and move work (rclone implements Move as Copy + Remove).
+ *
+ * The source lookup is scoped to the caller, so you can only copy your own keys.
+ * mtime: with the default COPY metadata directive the destination inherits the
+ * source mtime; when the client sends an x-amz-meta-mtime (metadata REPLACE, as
+ * rclone's SetModTime does by copying an object onto itself) that value wins.
+ */
+const copyObject = async (
+  user: UserWithOrganization,
+  params: CopyObjectParams,
+): Promise<Result<CopyObjectResult, ObjectNotFoundError>> => {
+  const source = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
+    params.SourceBucket,
+    params.SourceKey,
+  )
+  if (!source) {
+    return err(
+      new ObjectNotFoundError(
+        `Object ${params.SourceBucket}/${params.SourceKey} not found`,
+      ),
+    )
+  }
+
+  // Don't copy a source that isn't actually readable (owner-removed via the web
+  // app, banned, or otherwise blocked) into a new key that would then 404/451 on
+  // read. Treat as NoSuchKey.
+  const authorized = await ObjectUseCases.authorizeDownload(source.cid)
+  if (authorized.isErr()) {
+    return err(
+      new ObjectNotFoundError(
+        `Object ${params.SourceBucket}/${params.SourceKey} not found`,
+      ),
+    )
+  }
+
+  const mtime = params.Mtime !== undefined ? params.Mtime : source.mtime
+
+  // Metadata directive: undefined ⇒ COPY (inherit the source's metadata); a
+  // value or explicit null ⇒ REPLACE (the destination's metadata is exactly what
+  // the request carried, discarding the source's). Mirrors the mtime handling.
+  const metadata =
+    params.Metadata !== undefined ? params.Metadata : source.metadata
+
+  // The destination key is created in the caller's namespace.
+  const mapping = await s3ObjectMappingsRepository.createMapping(
+    user.oauthProvider,
+    user.oauthUserId,
+    params.Bucket,
+    params.Key,
+    source.cid,
+    source.md5,
+    mtime,
+    metadata,
+  )
+
+  logger.debug(
+    'Copied S3 mapping: %s/%s -> %s/%s (cid=%s)',
+    params.SourceBucket,
+    params.SourceKey,
+    params.Bucket,
+    params.Key,
+    source.cid,
+  )
+
+  return ok({
+    // Mirror GET/HEAD: MD5 ETag when known, else the CID for legacy objects.
+    ETag: source.md5 ? formatETag(source.md5) : `"${source.cid}"`,
+    LastModified: mapping.updatedAt,
+    Cid: source.cid,
+  })
+}
+
+const abortMultipartUpload = async (
+  user: UserWithOrganization,
+  uploadId: string,
+): Promise<Result<void, ObjectNotFoundError | ForbiddenError>> => {
+  const result = await UploadsUseCases.abortUpload(user, uploadId)
+  // Clear any stashed metadata for this upload once it's genuinely aborted (only
+  // on success, so a forbidden/unknown abort doesn't drop another upload's row).
+  if (result.isOk()) {
+    await s3ObjectMappingsRepository.deleteMultipartMeta(uploadId)
+  }
+  return result
+}
+
+const listBuckets = async (
+  user: UserWithOrganization,
+): Promise<S3BucketInfo[]> => {
+  return s3ObjectMappingsRepository.listBuckets(
+    user.oauthProvider,
+    user.oauthUserId,
+  )
+}
+
+// The caller's mapping for (bucket, key) IF it exists and is not hidden by
+// owner-removal. A mapping the owner has since removed via the web app (moved to
+// Trash) is treated as not found by GET and ListObjects (notRemovedByOwnerSQL /
+// isObjectDeleted); mirror that here so the object-lock endpoints
+// (GetObjectRetention / GetObjectLegalHold) don't report on a hidden key.
+const findVisibleMapping = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<S3KeyMapping | null> => {
+  const mapping = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+  )
+  if (!mapping) return null
+  if (await ObjectUseCases.isObjectDeleted(mapping.cid)) return null
+  return mapping
+}
+
+const objectExists = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<boolean> => (await findVisibleMapping(user, bucket, key)) !== null
+
+// The current version's write time, or null when the key isn't visible. Object
+// Lock retention anchors its COMPLIANCE window to when the content was written
+// (RetainUntilDate = write time + the retention years), so GetObjectRetention
+// needs this rather than a bare existence check.
+//
+// Anchored to the current version's object_versions.created_at, NOT the mapping's
+// updated_at: a soft-delete or Trash restore (restoreMappingsByCid) bumps
+// updated_at to now WITHOUT writing a new version, which would drift the
+// RetainUntilDate to the restore instant. The version row's created_at is stamped
+// once at write and never moves.
+//
+// The fallback to updated_at is for a mapping whose CURRENT cid has no version
+// row. The #781 backfill covered every mapping that existed (no WHERE clause),
+// and createMapping — the only writer of object_mappings.cid — appends the
+// version row in the same statement, so the only way to reach it is a write
+// served by pre-#781 code after the backfill's snapshot, i.e. an old pod during
+// a rolling deploy. Rare, but not impossible, so no read may depend on the row
+// being there. (Older versions of a key are a different matter: the backfill
+// reconstructed one row per mapping, its current cid only, so history genuinely
+// starts at #781.)
+const getObjectWriteTime = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+): Promise<Date | null> => {
+  const mapping = await findVisibleMapping(user, bucket, key)
+  if (!mapping) return null
+  const version = await s3ObjectMappingsRepository.findVersionByCid(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+    mapping.cid,
+  )
+  return version ? version.createdAt : mapping.updatedAt
 }
 
 export const S3UseCases = {
   getObject,
+  getObjectVersions,
   createMultipartUpload,
   uploadPart,
   completeMultipartUpload,
   putObject,
+  deleteObject,
+  copyObject,
+  abortMultipartUpload,
   listBuckets,
   listObjects,
+  objectExists,
+  getObjectWriteTime,
 }

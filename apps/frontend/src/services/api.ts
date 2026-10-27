@@ -1,7 +1,9 @@
 import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
   AccountInfo,
+  AccountInfoWithUser,
   AccountModel,
+  AdminAccountDetails,
   Banner,
   BannerCriticality,
   BannerInteractionType,
@@ -10,10 +12,15 @@ import {
   ObjectInformation,
   DownloadStatus,
   Intent,
+  PaymentMethod,
+  StoragePrice,
   TouChangeType,
   TouStatus,
   TouVersion,
   TouVersionWithStats,
+  UsdcAvailability,
+  UsdcPaymentsStatus,
+  UsdcPaymentTarget,
 } from '@auto-drive/models';
 
 // Wire-format of GET /credits/summary (bigint fields serialised as strings)
@@ -48,9 +55,17 @@ export type ExpiringCreditBatch = {
 };
 
 // Wire-format of rows from GET /credits/batches/all (admin endpoint).
-// Extends ExpiringCreditBatch with the owner's userPublicId.
+// Extends ExpiringCreditBatch with the owner's userPublicId and refund state.
 export type AdminCreditBatch = ExpiringCreditBatch & {
   userPublicId: string;
+  /** ISO timestamp of the refund action, or null if not yet refunded. */
+  refundedAt: string | null;
+  /** On-chain tx hash of the refund transfer, or null if not refunded. */
+  refundTxHash: string | null;
+  /** EVM purchasing wallet that paid for the batch, if known. */
+  fromAddress: string | null;
+  /** The asset the batch was paid in; the paying wallet does not say which. */
+  paymentMethod: PaymentMethod;
 };
 
 // Wire-format of GET /credits/economics (admin)
@@ -72,16 +87,29 @@ export type OverCapIntent = {
 };
 
 // Wire-format of rows from GET /credits/batches/user/:userPublicId (admin).
-// Extends ExpiringCreditBatch with intent fields so the admin can see the
-// AI3 price paid and the EVM wallet address used for the on-chain payment.
+// Extends ExpiringCreditBatch with the intent fields a refund is sized and
+// sent from: the asset paid in, the amount paid in that asset, the quote it
+// was charged against, the wallet it came from and the transaction it arrived
+// on. All bigints cross as strings of base units, as everywhere else.
 export type AdminUserCreditBatch = ExpiringCreditBatch & {
   userPublicId: string;
+  /** AI3 shannons received. Null on a USDC purchase — see `tokenAmount`. */
   paymentAmount: string | null;
   shannonsPerByte: string;
   txHash: string | null;
   fromAddress: string | null;
   /** ISO timestamp of the refund action, or null if not yet refunded. */
   refundedAt: string | null;
+  /** On-chain tx hash of the refund transfer, or null if not refunded. */
+  refundTxHash: string | null;
+  /** The asset this purchase was paid in. Refunds are always in AI3. */
+  paymentMethod: PaymentMethod;
+  /** USDC base units actually received. May differ from the quote. */
+  tokenAmount: string | null;
+  /** USDC base units quoted; with `quotedAi3Shannons`, the effective rate. */
+  quotedTokenAmount: string | null;
+  /** The AI3 (shannons) the USDC charge was quoted for. */
+  quotedAi3Shannons: string | null;
 };
 import { getAuthSession } from 'utils/auth';
 import { uploadFileContent } from 'utils/file';
@@ -90,6 +118,19 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /**
+     * The backend's machine-readable error code, when the body carried one.
+     *
+     * Present only for the errors that send `{ error: CODE, message }` —
+     * CREDIT_CAP_EXCEEDED, USDC_PAYMENTS_UNAVAILABLE, PRICE_ORACLE_UNAVAILABLE
+     * and friends. Undefined for the plain `{ error: <message> }` shape, whose
+     * `error` is prose and must never be mistaken for a code.
+     *
+     * Exists so a caller can BRANCH rather than match on prose: the purchase
+     * flow falls back to AI3 on a closed USDC path, and the wording of that
+     * sentence is not something a fallback should depend on.
+     */
+    public readonly code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -100,6 +141,89 @@ export interface UploadResponse {
   cid: string;
 }
 
+/**
+ * An intent as it comes back from `POST /intents`, with its bigints parsed.
+ *
+ * Only the fields the purchase flow uses. `quotedTokenAmount` is the whole
+ * reason this is an object rather than the id it used to be: a USDC purchase is
+ * a specific number of USDC base units that the backend computed and locked, and
+ * the client has no way to recompute it — the oracle rate and the margin both
+ * live server-side.
+ */
+export type CreatedIntent = {
+  id: string;
+  /**
+   * Present from the USDC path onward; absent on rows created before the column
+   * existed. Read it as AI3_NATIVE when missing, exactly as the backend does.
+   */
+  paymentMethod?: PaymentMethod;
+  /** The price lock. Null on intents created before expiry existed. */
+  expiresAt: Date | null;
+  /**
+   * USDC base units the buyer must transfer — the exact amount, margin included
+   * and rounded up. Null on the AI3 path, which locks a per-byte rate instead
+   * and settles against whatever arrives.
+   */
+  quotedTokenAmount: bigint | null;
+};
+
+/** Options for `createIntent`. */
+export type CreateIntentOptions = {
+  requestedBytes?: bigint;
+  /**
+   * Omitted means AI3, which is what the backend defaults to — so an
+   * option-less call behaves exactly as it always has.
+   */
+  paymentMethod?: PaymentMethod;
+};
+
+/**
+ * The error a failed API response should become.
+ *
+ * One reader for two body shapes, because the backend has two. Errors carrying
+ * a machine-readable code send `{ error: CODE, message }`, and that `message` is
+ * written to be read by whoever is buying. The HttpError default sends
+ * `{ error: <the message> }` with no `message` key at all.
+ *
+ * So `message` is taken at any status, and `error` only below 500. On a 5xx the
+ * plain shape is not a sentence about the request — it is a raw exception,
+ * because handleInternalErrorResult builds the body as
+ * `Failed to ...: ${e.message}`. Passing that through puts
+ * `connect ECONNREFUSED 10.0.3.7:9944` under the Send button whenever the
+ * consensus WebSocket is down.
+ *
+ * Gating on the status alone would fail in the other direction: a 503 carrying
+ * USDC_PAYMENTS_UNAVAILABLE or PRICE_ORACLE_UNAVAILABLE has a message that is
+ * exactly what the user needs. Keying on which field is PRESENT rather than on
+ * the status is what makes both arrive correctly.
+ *
+ * Shared rather than inlined per call site, so a caller that branches on `code`
+ * — the purchase flow falls back to AI3 on a closed USDC path — gets the same
+ * answer from every endpoint instead of only the ones that remembered to parse.
+ */
+const toApiError = async (
+  response: Response,
+  fallback: string,
+): Promise<ApiError> => {
+  const parsed = await response
+    .json()
+    .then((body: { message?: string; error?: string }) => ({
+      detail:
+        response.status < 500 ? (body?.message ?? body?.error) : body?.message,
+      // Only the coded shape has both keys, and only there is `error` a code
+      // rather than prose. Without this guard the plain shape's sentence would
+      // arrive as a `code`, and a caller branching on it would match nothing
+      // while looking like it might.
+      code:
+        body?.message !== undefined && body?.error !== undefined
+          ? body.error
+          : undefined,
+    }))
+    .catch(() => ({ detail: undefined, code: undefined }));
+
+  return new ApiError(response.status, parsed.detail ?? fallback, parsed.code);
+};
+
 export type Api = ReturnType<typeof createApiService>;
 
 export const createApiService = ({
@@ -109,7 +233,10 @@ export const createApiService = ({
   apiBaseUrl: string;
   downloadApiUrl: string;
 }) => ({
-  createIntent: async (): Promise<string> => {
+  createIntent: async ({
+    requestedBytes,
+    paymentMethod,
+  }: CreateIntentOptions = {}): Promise<CreatedIntent> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -125,15 +252,84 @@ export const createApiService = ({
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
       },
-      body: JSON.stringify({ expiresAt }),
+      // As a decimal string: JSON.stringify cannot serialize a BigInt, and the
+      // backend takes the string form as canonical anyway.
+      body: JSON.stringify({
+        expiresAt,
+        ...(requestedBytes !== undefined && {
+          requestedBytes: requestedBytes.toString(),
+        }),
+        // Omitted rather than defaulted to AI3, so a body from this client is
+        // byte-for-byte what it has always been on the AI3 path.
+        ...(paymentMethod !== undefined && { paymentMethod }),
+      }),
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      // The cap rejection is the one failure here a user can act on, and it
+      // names the cap and their balance. Surfacing statusText instead would turn
+      // "you have 2 GiB of room left" into "Forbidden". See toApiError for how
+      // the two body shapes are told apart.
+      throw await toApiError(
+        response,
+        `Network response was not ok: ${response.statusText}`,
+      );
     }
 
-    const intent = (await response.json()) as { id: string };
-    return intent.id;
+    const intent = (await response.json()) as {
+      id: string;
+      paymentMethod?: PaymentMethod;
+      expiresAt?: string;
+      quotedTokenAmount?: string;
+    };
+    return {
+      id: intent.id,
+      paymentMethod: intent.paymentMethod,
+      // Parsed leniently on purpose. Every field but `id` is absent on some
+      // legitimate response — an AI3 intent has no quote, a pre-expiry row has
+      // no lock — and a strict parse would turn "this intent has no quote"
+      // into a thrown error on the path that was working before USDC existed.
+      expiresAt: intent.expiresAt ? new Date(intent.expiresAt) : null,
+      quotedTokenAmount:
+        intent.quotedTokenAmount !== undefined
+          ? BigInt(intent.quotedTokenAmount)
+          : null,
+    };
+  },
+  /**
+   * Where a USDC payment must be sent, as this deployment reports it.
+   *
+   * Fetched rather than compiled in: the chain and the receiver are the
+   * backend's environment, and a client that guessed would approve USDC to a
+   * contract on a chain nobody watches. See UsdcPaymentTarget.
+   *
+   * 403 (USDC_PAYMENTS_DISABLED) when the deployment has no Ethereum
+   * configuration at all, which is a normal state rather than a fault.
+   */
+  getUsdcPaymentTarget: async (): Promise<UsdcPaymentTarget> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/payments/usdc/target`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      // Through toApiError like every other call, so the 403's
+      // USDC_PAYMENTS_DISABLED code survives to whoever is deciding whether to
+      // offer the option at all.
+      throw await toApiError(
+        response,
+        `Failed to read the USDC payment target: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<UsdcPaymentTarget>;
   },
   watchIntent: async (intentId: string, txHash: string): Promise<void> => {
     const session = await getAuthSession();
@@ -152,7 +348,16 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      // ApiError rather than Error so the status survives. 410 is the one
+      // answer here a caller can act on: the backend refuses to record a hash
+      // against a lapsed lock (isIntentExpired). That is a CAUTION, not a
+      // verdict — the payment is usually still credited — so the USDC panel
+      // raises it at once rather than after six confirmations, and withdraws it
+      // on the first successful read of the intent.
+      throw await toApiError(
+        response,
+        `Network response was not ok: ${response.statusText}`,
+      );
     }
   },
   getIntent: async (intentId: string): Promise<Intent> => {
@@ -162,6 +367,7 @@ export const createApiService = ({
     }
 
     const response = await fetch(`${apiBaseUrl}/intents/${intentId}`, {
+      cache: 'no-store',
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         'X-Auth-Provider': session.authProvider,
@@ -169,8 +375,11 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new ApiError(
-        response.status,
+      // Through toApiError like the rest: 410 is what the polling loop reads,
+      // and a code the backend may add later then survives without a second
+      // change here.
+      throw await toApiError(
+        response,
         `Network response was not ok: ${response.statusText}`,
       );
     }
@@ -212,6 +421,80 @@ export const createApiService = ({
 
     if (!response.ok) {
       throw new Error(`Failed to get features: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  /** Admin: accounts matching a partial publicId, account ID or org ID. */
+  adminSearchAccounts: async (
+    query: string,
+  ): Promise<AccountInfoWithUser[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/accounts/admin/search?q=${encodeURIComponent(query)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to search accounts: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  /** Admin: an account by account ID or org ID, or null if there is none. */
+  adminGetAccount: async (id: string): Promise<AdminAccountDetails | null> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw new Error(`Failed to get account: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+  /** Admin: each user's current account ID, keyed by publicId. */
+  adminGetAccountIdsByUsers: async (
+    publicIds: string[],
+  ): Promise<Record<string, string>> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/accounts/admin/by-users`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+      body: JSON.stringify({ publicIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get accounts: ${response.statusText}`);
     }
 
     return response.json();
@@ -397,6 +680,24 @@ export const createApiService = ({
       throw new Error(`Failed to ban file: ${response.statusText}`);
     }
   },
+  unbanFile: async (headCid: string): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/objects/${headCid}/unban`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to unban file: ${response.statusText}`);
+    }
+  },
   dismissReport: async (headCid: string): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
@@ -425,9 +726,15 @@ export const createApiService = ({
       password?: string;
       skipDecryption?: boolean;
       authMode?: 'auto' | 'anonymous' | 'session';
+      signal?: AbortSignal;
     },
   ): Promise<AsyncIterable<Buffer>> => {
-    const { password, skipDecryption, authMode = 'auto' } = options ?? {};
+    const {
+      password,
+      skipDecryption,
+      authMode = 'auto',
+      signal,
+    } = options ?? {};
     const session = await getAuthSession().catch(() => null);
 
     if (
@@ -459,10 +766,10 @@ export const createApiService = ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let metadata: any = null;
     if (!skipDecryption) {
-      const metadataRes = await api.sendAPIRequest(
-        `/objects/${cid}/metadata`,
-        { method: 'GET' },
-      );
+      const metadataRes = await api.sendAPIRequest(`/objects/${cid}/metadata`, {
+        method: 'GET',
+        signal,
+      });
       if (!metadataRes.ok) {
         throw new Error('Failed to retrieve file metadata');
       }
@@ -471,7 +778,7 @@ export const createApiService = ({
 
     const response = await api.sendDownloadRequest(
       `/downloads/${cid}?ignoreEncoding=true`,
-      { method: 'GET' },
+      { method: 'GET', signal },
     );
     if (!response.ok) {
       let errorMsg: string;
@@ -547,23 +854,18 @@ export const createApiService = ({
       throw new Error('No session');
     }
 
-    const response = await fetch(
-      `${apiBaseUrl}/banners/${bannerId}/interact`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.accessToken}`,
-          'X-Auth-Provider': session.authProvider,
-        },
-        body: JSON.stringify({ type }),
+    const response = await fetch(`${apiBaseUrl}/banners/${bannerId}/interact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
       },
-    );
+      body: JSON.stringify({ type }),
+    });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to interact with banner: ${response.statusText}`,
-      );
+      throw new Error(`Failed to interact with banner: ${response.statusText}`);
     }
   },
   // Admin banner methods
@@ -612,7 +914,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create banner: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to create banner: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<Banner>;
@@ -646,7 +951,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to update banner: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to update banner: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<Banner>;
@@ -671,7 +979,10 @@ export const createApiService = ({
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to toggle banner: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to toggle banner: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<Banner>;
@@ -713,7 +1024,9 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create async download: ${response.statusText}`);
+      throw new Error(
+        `Failed to create async download: ${response.statusText}`,
+      );
     }
   },
   dismissAsyncDownload: async (id: string): Promise<void> => {
@@ -722,13 +1035,22 @@ export const createApiService = ({
       throw new Error('No session');
     }
 
-    await fetch(`${downloadApiUrl}/downloads/async/${id}/dismiss`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
-        'X-Auth-Provider': session.authProvider,
+    const response = await fetch(
+      `${downloadApiUrl}/downloads/async/${id}/dismiss`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
       },
-    });
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to dismiss async download: ${response.statusText}`,
+      );
+    }
   },
   checkDownloadStatus: async (cid: string): Promise<DownloadStatus> => {
     const session = await getAuthSession();
@@ -808,18 +1130,19 @@ export const createApiService = ({
 
     return response.json() as Promise<ExpiringCreditBatch[]>;
   },
-  getCreditPrice: async (): Promise<{ price: number; pricePerGB: number }> => {
+  getCreditPrice: async (): Promise<StoragePrice> => {
+    // GET /intents/price is a public endpoint (registered before the auth /
+    // feature-flag middleware). Attach auth headers when a session exists, but
+    // don't require one — this lets the purchase screen show live pricing to
+    // logged-out and non-Google visitors too.
     const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
+    const headers: Record<string, string> = {};
+    if (session?.authProvider && session.accessToken) {
+      headers['X-Auth-Provider'] = session.authProvider;
+      headers['Authorization'] = `Bearer ${session.accessToken}`;
     }
 
-    const response = await fetch(`${apiBaseUrl}/intents/price`, {
-      headers: {
-        'X-Auth-Provider': session.authProvider,
-        Authorization: `Bearer ${session.accessToken}`,
-      },
-    });
+    const response = await fetch(`${apiBaseUrl}/intents/price`, { headers });
 
     if (!response.ok) {
       throw new Error(`Network response was not ok: ${response.statusText}`);
@@ -1008,7 +1331,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create ToU version: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to create ToU version: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<TouVersion>;
@@ -1039,7 +1365,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to update ToU version: ${response.statusText}`);
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error || `Failed to update ToU version: ${response.statusText}`,
+      );
     }
 
     return response.json() as Promise<TouVersion>;
@@ -1089,9 +1418,7 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to activate ToU version: ${response.statusText}`,
-      );
+      throw new Error(`Failed to activate ToU version: ${response.statusText}`);
     }
 
     return response.json() as Promise<TouVersion>;
@@ -1112,9 +1439,7 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to archive ToU version: ${response.statusText}`,
-      );
+      throw new Error(`Failed to archive ToU version: ${response.statusText}`);
     }
 
     return response.json() as Promise<TouVersion>;
@@ -1187,9 +1512,7 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to get deletion stats: ${response.statusText}`,
-      );
+      throw new Error(`Failed to get deletion stats: ${response.statusText}`);
     }
 
     return response.json();
@@ -1199,6 +1522,32 @@ export const createApiService = ({
   // Admin: get all credit batches for a specific user with intent data
   // GET /credits/batches/user/:userPublicId
   // -------------------------------------------------------------------------
+
+  /** Admin: every batch credited to an account, with each batch's buyer. */
+  getAccountCreditBatches: async (
+    accountId: string,
+  ): Promise<AdminUserCreditBatch[]> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/credits/batches/account/${encodeURIComponent(accountId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    return response.json() as Promise<AdminUserCreditBatch[]>;
+  },
 
   getUserCreditBatches: async (
     userPublicId: string,
@@ -1228,9 +1577,14 @@ export const createApiService = ({
   // -------------------------------------------------------------------------
   // Admin: mark a credit batch as refunded
   // POST /credits/batches/:id/refund
+  // The on-chain refund transaction hash is mandatory — the backend rejects
+  // requests without it and the batch is NOT marked as refunded.
   // -------------------------------------------------------------------------
 
-  refundCreditBatch: async (batchId: string): Promise<void> => {
+  refundCreditBatch: async (
+    batchId: string,
+    refundTxHash: string,
+  ): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
       throw new Error('No session');
@@ -1243,12 +1597,138 @@ export const createApiService = ({
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
           'X-Auth-Provider': session.authProvider,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refundTxHash }),
+      },
+    );
+
+    if (!response.ok) {
+      const message = await response
+        .json()
+        .then((body) => body?.error as string | undefined)
+        .catch(() => undefined);
+      throw new Error(
+        message ?? `Network response was not ok: ${response.statusText}`,
+      );
+    }
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin: mark several credit batches as refunded in one atomic operation
+  // POST /credits/batches/refund
+  // The same on-chain refund transaction hash is recorded on every batch
+  // (one AI3 transfer can cover multiple batches of the same account).
+  // -------------------------------------------------------------------------
+
+  refundCreditBatches: async (
+    batchIds: string[],
+    refundTxHash: string,
+  ): Promise<{ refundedCount: number; alreadyRefundedCount: number }> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/credits/batches/refund`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ batchIds, refundTxHash }),
+    });
+
+    if (!response.ok) {
+      const message = await response
+        .json()
+        .then((body) => body?.error as string | undefined)
+        .catch(() => undefined);
+      throw new Error(
+        message ?? `Network response was not ok: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<{
+      refundedCount: number;
+      alreadyRefundedCount: number;
+    }>;
+  },
+
+  // ── USDC payment gates (admin) ─────────────────────────────────────────
+  // Every gate on the USDC path plus the oracle's health. Not cached on the
+  // server: a kill switch whose state waits out a TTL is not the control an
+  // incident needs.
+  getUsdcPaymentsStatus: async (): Promise<UsdcPaymentsStatus> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/payments/usdc/status`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Auth-Provider': session.authProvider,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get USDC payment status: ${response.statusText}`,
+      );
+    }
+
+    return response.json() as Promise<UsdcPaymentsStatus>;
+  },
+
+  // Flip the manual gate. `changed` is false when the gate already held this
+  // value, which is also when no Slack alert was posted. `availability` is the
+  // composite AFTER the flip — enabling the switch does not open the path if the
+  // treasury is over its cap.
+  //
+  // Optional: the flip is the result, the re-read is a convenience, and the
+  // server omits the composite rather than failing a flip that already happened.
+  setUsdcPayments: async (
+    enabled: boolean,
+  ): Promise<{
+    enabled: boolean;
+    changed: boolean;
+    availability?: UsdcAvailability;
+  }> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/payments/usdc/${enabled ? 'enable' : 'disable'}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
         },
       },
     );
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      const message = await response
+        .json()
+        .then((body) => body?.error as string | undefined)
+        .catch(() => undefined);
+      throw new Error(
+        message ??
+          `Failed to ${enabled ? 'enable' : 'disable'} USDC payments: ${
+            response.statusText
+          }`,
+      );
     }
+
+    return response.json() as Promise<{
+      enabled: boolean;
+      changed: boolean;
+      availability?: UsdcAvailability;
+    }>;
   },
 });

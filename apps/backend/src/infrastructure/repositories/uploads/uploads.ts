@@ -14,6 +14,19 @@ export type UploadEntry = {
   oauth_provider: string
   oauth_user_id: string
   upload_options: FileUploadOptions | null
+  // Always selected (every read is SELECT *) but previously untyped. Every status
+  // transition that anything waits on sets it explicitly — updateUploadEntry,
+  // claimUploadForCompletion, releaseUploadCompletionClaim,
+  // markMigrationRecoveryAttempt — since the set_timestamp trigger is AFTER
+  // UPDATE and therefore a no-op. The one exception is
+  // updateUploadStatusByRootUploadId (parking as FAILED), which leaves it stale;
+  // that is harmless because nothing selects FAILED rows by age.
+  //
+  // Do NOT compute an age from this in JS. The column is `timestamp` with no time
+  // zone, so node-postgres parses it in the process's zone while Postgres wrote
+  // it in the session's — see getUploadAgeMs, which is what every age comparison
+  // goes through.
+  updated_at: Date
 }
 
 export const createUploadEntry = async (
@@ -63,13 +76,21 @@ export const getUploadEntryById = async (
   return result.rows.at(0) ?? null
 }
 
+// Sets updated_at explicitly on every edit. The set_timestamp trigger on
+// uploads.uploads is declared AFTER UPDATE, so its NEW.updated_at assignment is
+// a no-op and the column is otherwise never refreshed. Migration recovery
+// depends on this: completeUpload flips a root upload to MIGRATING through this
+// function, so updated_at then marks when the upload *entered* MIGRATING —
+// which getStuckRootMigrations uses as the staleness anchor. Without this, the
+// column would keep the row's created_at and recovery could re-enqueue while
+// the original migration is still running.
 export const updateUploadEntry = async (
   upload: UploadEntry,
 ): Promise<UploadEntry> => {
   const db = await getDatabase()
 
   const result = await db.query(
-    'UPDATE uploads.uploads SET status = $2, file_tree = $3, mime_type = $4, root_upload_id = $5, relative_id = $6, upload_options = $7 WHERE id = $1 RETURNING *',
+    'UPDATE uploads.uploads SET status = $2, file_tree = $3, mime_type = $4, root_upload_id = $5, relative_id = $6, upload_options = $7, updated_at = NOW() WHERE id = $1 RETURNING *',
     [
       upload.id,
       upload.status,
@@ -82,6 +103,94 @@ export const updateUploadEntry = async (
   )
 
   return result.rows[0]
+}
+
+/**
+ * Atomically claims a PENDING upload for completion, returning false if someone
+ * else holds the claim.
+ *
+ * A plain read-then-act guard in completeUpload is not enough: two overlapping
+ * calls for the same upload (a client timeout retry while the first is still in
+ * flight) would both read PENDING and both run the completion processing, which
+ * re-charges upload credits (and, before blockstore_root_node_unique_idx, also
+ * duplicated the root blockstore node). A single conditional UPDATE makes the
+ * transition a compare-and-swap, so exactly one caller can win regardless of how
+ * many API processes are running.
+ *
+ * A claim older than staleClaimMs is re-claimable so a process that died
+ * mid-completion does not strand the upload: COMPLETING is not selected by
+ * getStuckRootMigrations (correctly — there is no root node to migrate yet), so
+ * without this the row would never become completable again.
+ */
+export const claimUploadForCompletion = async (
+  id: string,
+  staleClaimMs: number,
+): Promise<boolean> => {
+  const db = await getDatabase()
+
+  const result = await db.query(
+    `UPDATE uploads.uploads
+     SET status = $2, updated_at = NOW()
+     WHERE id = $1
+       AND (
+         status = $3
+         OR (status = $2 AND updated_at < NOW() - ($4::bigint * INTERVAL '1 millisecond'))
+       )
+     RETURNING id`,
+    [id, UploadStatus.COMPLETING, UploadStatus.PENDING, staleClaimMs],
+  )
+
+  return result.rowCount === 1
+}
+
+/**
+ * How long ago an upload's updated_at was stamped, in milliseconds, computed by
+ * Postgres.
+ *
+ * The subtraction has to happen in SQL. uploads.uploads.updated_at is `timestamp`
+ * with no time zone and every writer sets it with NOW(), so the stored value is
+ * the DB session's local wall clock; node-postgres then parses that string in the
+ * *process's* zone. `Date.now() - new Date(upload.updated_at).getTime()` is
+ * therefore only right while the two zones agree, and nothing pins TZ in the
+ * pool, the compose files or the Dockerfile — one DB string parses to 12:00:00Z,
+ * 11:00:00Z or 19:00:00Z under UTC, Europe/London and America/Los_Angeles.
+ *
+ * The consequences are not symmetric but both are bad. Under a positive offset
+ * every age reads too old, so a claim taken seconds ago looks stale and
+ * abortUpload would tear down a LIVE completion — precisely what it promises not
+ * to do. Under a negative offset nothing is ever stale, so a stranded COMPLETING
+ * row stays un-abortable and a migration re-drive never fires.
+ *
+ * Subtracting inside a single session cancels the zone out, which is what
+ * getStuckRootMigrations and claimUploadForCompletion already get for free by
+ * comparing in SQL. Returns null when the row does not exist.
+ */
+export const getUploadAgeMs = async (id: string): Promise<number | null> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ age_ms: string }>(
+    `SELECT EXTRACT(EPOCH FROM (NOW() - updated_at)) * 1000 AS age_ms
+     FROM uploads.uploads
+     WHERE id = $1`,
+    [id],
+  )
+
+  const ageMs = result.rows.at(0)?.age_ms
+  return ageMs === undefined ? null : Number(ageMs)
+}
+
+// Releases a completion claim so the client can retry. Only ever moves a row we
+// still hold (COMPLETING) back to PENDING — never touches an upload that has
+// already reached MIGRATING or a terminal state.
+export const releaseUploadCompletionClaim = async (
+  id: string,
+): Promise<void> => {
+  const db = await getDatabase()
+
+  await db.query(
+    'UPDATE uploads.uploads SET status = $2, updated_at = NOW() WHERE id = $1 AND status = $3',
+    [id, UploadStatus.PENDING, UploadStatus.COMPLETING],
+  )
 }
 
 export const updateUploadStatusByRootUploadId = async (
@@ -176,6 +285,45 @@ const deleteEntriesByRootUploadId = async (
   ])
 }
 
+// Root uploads that have been MIGRATING longer than the staleness window.
+// updated_at is set explicitly when the upload enters MIGRATING (completeUpload
+// -> updateUploadEntry) and again on each recovery attempt
+// (markMigrationRecoveryAttempt); the AFTER-UPDATE set_timestamp trigger cannot
+// maintain the column, so those explicit writes are what make it track time in
+// MIGRATING. The window therefore excludes migrations still legitimately in
+// flight and rate-limits re-drives of genuinely stuck ones.
+const getStuckRootMigrations = async (
+  stalenessMs: number,
+  limit: number,
+): Promise<string[]> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ id: string }>(
+    `SELECT id FROM uploads.uploads
+      WHERE status = $1
+        AND id = root_upload_id
+        AND updated_at < NOW() - (INTERVAL '1 millisecond' * $2)
+      ORDER BY updated_at ASC
+      LIMIT $3`,
+    [UploadStatus.MIGRATING, stalenessMs, limit],
+  )
+
+  return result.rows.map((row) => row.id)
+}
+
+// Stamp updated_at so the given root uploads drop out of
+// getStuckRootMigrations for a full staleness window after a recovery attempt.
+const markMigrationRecoveryAttempt = async (ids: string[]): Promise<void> => {
+  if (ids.length === 0) return
+  const db = await getDatabase()
+
+  await db.query(
+    `UPDATE uploads.uploads SET updated_at = NOW()
+      WHERE id = ANY($1) AND id = root_upload_id AND status = $2`,
+    [ids, UploadStatus.MIGRATING],
+  )
+}
+
 export const uploadsRepository = {
   createUploadEntry,
   getUploadEntryById,
@@ -185,6 +333,11 @@ export const uploadsRepository = {
   getUploadEntriesByRelativeId,
   getUploadsByStatus,
   getStatusByCID,
+  claimUploadForCompletion,
+  releaseUploadCompletionClaim,
+  getUploadAgeMs,
   updateUploadStatusByRootUploadId,
   deleteEntriesByRootUploadId,
+  getStuckRootMigrations,
+  markMigrationRecoveryAttempt,
 }

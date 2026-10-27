@@ -1,5 +1,5 @@
 import z from 'zod'
-import { ObjectMappingSchema } from '@auto-drive/models'
+import { ObjectMappingSchema, PaymentMethod } from '@auto-drive/models'
 import { config } from '../../config.js'
 import { exhaustiveCheck } from '../../shared/utils/misc.js'
 
@@ -60,6 +60,14 @@ export const TaskSchema = z.discriminatedUnion('id', [
     retriesLeft: z.number().default(MAX_RETRIES),
     params: z.object({
       txHash: z.string(),
+      // Which chain the hash was submitted to. Optional, defaulting to AI3, for
+      // the tasks already on the queue when this field was added: they are all
+      // AI3 by construction, and rejecting them would drop watch requests for
+      // payments that are already on chain.
+      paymentMethod: z
+        .nativeEnum(PaymentMethod)
+        .optional()
+        .default(PaymentMethod.AI3_NATIVE),
     }),
   }),
   z.object({
@@ -76,6 +84,11 @@ export const TaskSchema = z.discriminatedUnion('id', [
   }),
   z.object({
     id: z.literal('recover-publishing'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({}),
+  }),
+  z.object({
+    id: z.literal('recover-migrations'),
     retriesLeft: z.number().default(MAX_RETRIES),
     params: z.object({}),
   }),
@@ -131,6 +144,11 @@ type TaskCreateParams =
       id: 'watch-intent-tx'
       params: {
         txHash: string
+        // Required of every publisher, optional on the wire. The schema above
+        // defaults it so a task queued before this field existed still parses;
+        // this type has no such history to accommodate, and a publisher that
+        // omitted it would be choosing a chain by accident.
+        paymentMethod: PaymentMethod
       }
     }
   | {
@@ -145,6 +163,10 @@ type TaskCreateParams =
     }
   | {
       id: 'recover-publishing'
+      params: Record<string, never>
+    }
+  | {
+      id: 'recover-migrations'
       params: Record<string, never>
     }
 
@@ -211,6 +233,12 @@ export const createTask = (task: TaskCreateParams): Task => {
         retriesLeft: MAX_RETRIES,
       }
     case 'recover-publishing':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
+    case 'recover-migrations':
       return {
         id: task.id,
         params: task.params,

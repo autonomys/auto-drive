@@ -6,20 +6,25 @@ import { Section } from '../atoms/Section';
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { Zap, AlertTriangle, Info } from 'lucide-react';
 import { CreditCurrentPrice } from '../CreditCurrentPrice';
+import { UsdEstimateNote } from '../UsdEstimateNote';
 import { GoBackButton } from '../../../atoms/GoBackButton';
 import { usePrices } from '../../../../hooks/usePrices';
-import { formatBytes } from '../../../../utils/number';
+import { formatStorageSize } from '../../../../utils/number';
+import { normaliseMib } from '../../../../utils/credits';
 import { useUserStore } from '../../../../globalStates/user';
 import {
   UNITS,
   type Unit,
-  MIB_PER_UNIT,
   bestUnit,
   mibToDisplay,
   sanitizeAmountInput,
   inputToMib,
   isCustomAmountOverCap,
+  readPaymentMethod,
 } from '../../../../utils/purchaseCredits';
+import { PaymentMethod } from '@auto-drive/models';
+import { useUsdcAvailability } from '../../../../hooks/useUsdcAvailability';
+import { PaymentMethodSelector } from '../molecules/PaymentMethodSelector';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -40,6 +45,62 @@ export const PurchaseStep2ConnectWallet = ({
 
   const isCustom = String(context.packageId ?? 'custom') === 'custom';
 
+  // -------------------------------------------------------------------------
+  // Payment method
+  // -------------------------------------------------------------------------
+
+  const {
+    isAvailable: usdcAvailable,
+    isLoading: usdcLoading,
+    chain: usdcChain,
+    isUnsupported: usdcUnsupported,
+  } = useUsdcAvailability();
+
+  // The URL is the source of truth here, as it is for the package and the size,
+  // so a refresh or a back-navigation keeps the choice. `readPaymentMethod`
+  // rejects anything that is not exactly the USDC value, because this arrives
+  // from the query string.
+  const paymentMethod = readPaymentMethod(context.paymentMethod);
+
+  // A method chosen while it was on offer and closed since — a gate flipped, or
+  // a deep link from a session where it was open. Corrected rather than
+  // preserved: the alternative is a screen that quotes USDC and a Pay button
+  // that 503s.
+  //
+  // Never while the answer is still loading. `isAvailable` is false during the
+  // in-flight window too, and treating that as "closed" would silently discard a
+  // perfectly valid USDC choice a fraction of a second after the page opened.
+  const usdcClosedAfterChoosing =
+    paymentMethod === PaymentMethod.USDC_ETH && !usdcLoading && !usdcAvailable;
+
+  const effectiveMethod = usdcClosedAfterChoosing
+    ? PaymentMethod.AI3_NATIVE
+    : paymentMethod;
+
+  // The same fact, latched — because the correction below erases its own cause.
+  // Writing AI3 into the context makes `usdcClosedAfterChoosing` false on the
+  // very next render, and with `usdcAvailable` false too the selector hits its
+  // own `if (!usdcAvailable && !closedNotice) return null`: the USDC button and
+  // the sentence explaining its absence both left the screen within a frame, so
+  // neither branch of the notice below was ever readable.
+  //
+  // The FACT and not the sentence, so the wording is still chosen at render:
+  // `usdcUnsupported` can resolve after the gate has already closed, and a
+  // frozen string would keep saying "temporarily" about something permanent.
+  //
+  // Cleared when USDC comes back, so a reopened gate does not leave a stale
+  // notice sitting under two live buttons.
+  const [usdcClosedOnMe, setUsdcClosedOnMe] = useState(false);
+
+  useEffect(() => {
+    if (usdcClosedAfterChoosing) {
+      setUsdcClosedOnMe(true);
+      onContextChange({ paymentMethod: PaymentMethod.AI3_NATIVE });
+    } else if (usdcAvailable) {
+      setUsdcClosedOnMe(false);
+    }
+  }, [usdcClosedAfterChoosing, usdcAvailable, onContextChange]);
+
   const currentPurchasedBytes = useUserStore((s) =>
     s.creditSummary ? Number(s.creditSummary.uploadBytesRemaining) : 0,
   );
@@ -56,13 +117,20 @@ export const PurchaseStep2ConnectWallet = ({
     const id = String(context.packageId ?? 'custom');
     switch (id) {
       case 'starter':
-        return { title: 'Starter', sizeMB: 10 };
+        return { title: 'Starter', sizeMB: 100 };
       case 'pro':
-        return { title: 'Professional Package', sizeMB: 100 };
+        return { title: 'Professional Package', sizeMB: 1024 };
       case 'ent':
-        return { title: 'Enterprise', sizeMB: 1024 };
+        return { title: 'Enterprise', sizeMB: 102400 };
       default:
-        return { title: 'Custom Amount', sizeMB: (context.sizeMB as number) ?? 0 };
+        // Normalised, not cast. This arrives from the query string, and now that
+        // it is the purchase size rather than a seed for the input box, a
+        // fractional or non-numeric one would reach `BigInt` in the cap check
+        // and take the screen down with it.
+        return {
+          title: 'Custom Amount',
+          sizeMB: normaliseMib(context.sizeMB) ?? 0,
+        };
     }
   }, [context.packageId, context.sizeMB]);
 
@@ -85,10 +153,24 @@ export const PurchaseStep2ConnectWallet = ({
     }
   }, [isCustom, sizeMB, inputValue]);
 
-  /** MiB value derived from the current input + unit. */
+  // Whether the buyer has touched the amount since this screen opened.
+  //
+  // It decides which of two values is the purchase size, and the difference is
+  // not cosmetic. `mibToDisplay` trims to four significant figures, so the
+  // string in the box is lossy: deriving the size back out of an UNTOUCHED box
+  // silently resizes the purchase. Arriving here with 20,000 MiB shows
+  // "19.53 GB" and confirms 19,999 — and 90% of custom sizes above 1 GB drift
+  // that way, which is every return to this step from the one after it.
+  //
+  // Nothing is lost by preferring the context: both handlers below already write
+  // the size they parsed into it, so it is the typed value the moment there is
+  // one.
+  const [amountEdited, setAmountEdited] = useState(false);
+
+  /** The purchase size: what the buyer typed, or what they arrived with. */
   const customSizeMib = useMemo(
-    () => inputToMib(inputValue, unit),
-    [inputValue, unit],
+    () => (amountEdited ? inputToMib(inputValue, unit) : sizeMB),
+    [amountEdited, inputValue, unit, sizeMB],
   );
 
   /** The effective MiB value for price calculations. */
@@ -118,6 +200,7 @@ export const PurchaseStep2ConnectWallet = ({
       // Allow only digits and a single decimal point — prevents leading zeros,
       // scientific notation ("1e5"), and negative values.
       const sanitised = sanitizeAmountInput(raw);
+      setAmountEdited(true);
       setInputValue(sanitised);
       onContextChange({ sizeMB: inputToMib(sanitised, unit) });
     },
@@ -126,18 +209,27 @@ export const PurchaseStep2ConnectWallet = ({
 
   const handleUnitChange = useCallback(
     (newUnit: Unit) => {
+      // Picking the unit already shown is not a change, and must not be treated
+      // as one. The display is rounded, so round-tripping the purchase through
+      // it would resize the purchase on a click that asked for nothing.
+      if (newUnit === unit) return;
       // Convert the current MiB value into the new unit to keep the
-      // displayed number consistent with the underlying purchase size.
-      const currentMib = parseFloat(inputValue) * MIB_PER_UNIT[unit];
+      // displayed number consistent with the underlying purchase size. From the
+      // size, not from the string that displays it: the string is the rounded
+      // one, and this is the last place it could quietly become the size.
+      const currentMib = customSizeMib;
       const newDisplay =
-        isFinite(currentMib) && currentMib > 0 ? mibToDisplay(currentMib, newUnit) : '';
+        isFinite(currentMib) && currentMib > 0
+          ? mibToDisplay(currentMib, newUnit)
+          : '';
+      setAmountEdited(true);
       setUnit(newUnit);
       setInputValue(newDisplay);
       // Keep context.sizeMB in sync so Step 3 sees the correct value
       // even if the user navigates forward without re-typing.
       onContextChange({ sizeMB: inputToMib(newDisplay, newUnit) });
     },
-    [inputValue, unit, onContextChange],
+    [customSizeMib, unit, onContextChange],
   );
 
   // -------------------------------------------------------------------------
@@ -147,6 +239,7 @@ export const PurchaseStep2ConnectWallet = ({
   const ai3Amount = formatCreditsInMbAsAi3(effectiveMib);
   const usdAmount = formatCreditsInMbAsUsd(effectiveMib);
   const afterPurchaseBytes = currentPurchasedBytes + effectiveMib * 1024 * 1024;
+  const isUsdc = effectiveMethod === PaymentMethod.USDC_ETH;
 
   const canConfirm = effectiveMib > 0 && !capExceeded;
 
@@ -183,7 +276,7 @@ export const PurchaseStep2ConnectWallet = ({
                 </div>
                 <div className='text-right'>
                   <div className='text-xl font-bold'>
-                    {formatBytes(effectiveMib * 1024 * 1024, 2)}
+                    {formatStorageSize(effectiveMib * 1024 * 1024, 2)}
                   </div>
                   <div className='text-xs text-muted-foreground'>Storage</div>
                 </div>
@@ -233,8 +326,8 @@ export const PurchaseStep2ConnectWallet = ({
                           That means:
                         </p>
                         <ul className='mt-1.5 space-y-0.5 text-gray-200'>
-                          <li>1 GB&nbsp;=&nbsp;1,024 MiB&nbsp;<span className='text-gray-400'>(not 1,000 MB)</span></li>
-                          <li>1 TB&nbsp;=&nbsp;1,024 GiB&nbsp;<span className='text-gray-400'>(not 1,000 GB)</span></li>
+                          <li>1 GB&nbsp;=&nbsp;1,024 MB</li>
+                          <li>1 TB&nbsp;=&nbsp;1,024 GB</li>
                         </ul>
                       </div>
                     </div>
@@ -247,7 +340,7 @@ export const PurchaseStep2ConnectWallet = ({
                       <span>
                         Exceeds your remaining cap.{' '}
                         Maximum you can purchase:{' '}
-                        <strong>{formatBytes(maxPurchasableMib * 1024 * 1024, 2)}</strong>
+                        <strong>{formatStorageSize(maxPurchasableMib * 1024 * 1024, 2)}</strong>
                       </span>
                     </div>
                   )}
@@ -261,10 +354,30 @@ export const PurchaseStep2ConnectWallet = ({
                 </div>
               )}
 
+              {/* How to pay. Absent entirely when AI3 is the only option. */}
+              <PaymentMethodSelector
+                value={effectiveMethod}
+                onChange={(method) => onContextChange({ paymentMethod: method })}
+                usdcAvailable={usdcAvailable}
+                usdcChainName={usdcChain?.name}
+                closedNotice={
+                  usdcClosedOnMe
+                    ? usdcUnsupported
+                      ? // Not the same sentence as a closed gate, and not for
+                        // tidiness: that one clears on its own and is worth
+                        // waiting out, this one never does.
+                        'This version of the app cannot pay USDC on the ' +
+                        'network this deployment uses — you can pay with AI3.'
+                      : 'USDC payments are temporarily unavailable — you can ' +
+                        'pay with AI3.'
+                    : null
+                }
+              />
+
               {/* Price breakdown (read-only) */}
               <InfoRow
                 label='Storage Amount'
-                value={<span>{formatBytes(effectiveMib * 1024 * 1024, 2)}</span>}
+                value={<span>{formatStorageSize(effectiveMib * 1024 * 1024, 2)}</span>}
               />
               <InfoRow
                 label='AI3 Token Amount'
@@ -276,10 +389,17 @@ export const PurchaseStep2ConnectWallet = ({
                 label='USD Equivalent'
                 value={
                   <span>
-                    {usdAmount > 0 ? `$${usdAmount.toFixed(2)}` : '—'}
+                    {usdAmount !== null && usdAmount > 0
+                      ? `$${usdAmount.toFixed(2)}`
+                      : '—'}
                   </span>
                 }
               />
+              {/* Sits directly under the figure it qualifies: this is the
+                  screen where an amount is confirmed, so a rate that has
+                  stopped tracking the market has to be visible next to the
+                  number, not somewhere on the page. */}
+              <UsdEstimateNote className='-mt-1' />
               <div className='flex flex-col rounded-md border-b-2 border-gray-200' />
               <div className='mt-2'>
                 <InfoRow
@@ -292,6 +412,19 @@ export const PurchaseStep2ConnectWallet = ({
                   accent
                 />
               </div>
+              {isUsdc && (
+                // The USD figure above is CoinGecko's, and the USDC charge is
+                // the backend's oracle rate plus a quote margin. They will not
+                // match, and the difference is not an error — so the number is
+                // named an estimate here and the binding one is quoted on the
+                // next step, where it is locked for ten minutes. Promising an
+                // exact amount this screen cannot compute would be worse than
+                // promising nothing.
+                <div className='text-xs text-muted-foreground'>
+                  Paying in USDC: the exact amount is quoted and locked on the
+                  next step. The figure above is an estimate.
+                </div>
+              )}
             </Section>
           </div>
         </div>
@@ -303,15 +436,15 @@ export const PurchaseStep2ConnectWallet = ({
               <InfoRow
                 label='Current Purchased Credits'
                 className='rounded-md bg-gray-100 p-4 dark:bg-gray-800'
-                value={<span>{formatBytes(currentPurchasedBytes, 2)}</span>}
+                value={<span>{formatStorageSize(currentPurchasedBytes, 2)}</span>}
               />
               <InfoRow
                 label='After Purchase'
                 value={
                   <span className='font-semibold'>
                     {effectiveMib > 0
-                      ? formatBytes(afterPurchaseBytes, 2)
-                      : formatBytes(currentPurchasedBytes, 2)}
+                      ? formatStorageSize(afterPurchaseBytes, 2)
+                      : formatStorageSize(currentPurchasedBytes, 2)}
                   </span>
                 }
                 className='rounded-md bg-primary/20 p-4'
@@ -324,7 +457,16 @@ export const PurchaseStep2ConnectWallet = ({
                 <Button
                   disabled={!canConfirm}
                   onClick={() => {
-                    if (canConfirm) onNext({ sizeMB: effectiveMib });
+                    // The method travels forward explicitly rather than being
+                    // re-derived on the next step: `effectiveMethod` may differ
+                    // from what the URL says (a closed gate corrects it), and the
+                    // step that takes the money must act on the same value this
+                    // screen priced.
+                    if (canConfirm)
+                      onNext({
+                        sizeMB: effectiveMib,
+                        paymentMethod: effectiveMethod,
+                      });
                   }}
                   className='w-2/3'
                 >
@@ -332,8 +474,11 @@ export const PurchaseStep2ConnectWallet = ({
                 </Button>
               </div>
               <div className='text-xs text-muted-foreground'>
-                Next, you will connect your wallet to complete the AI3 token
-                transfer
+                {isUsdc
+                  ? 'Next, you will connect your wallet to approve and send the ' +
+                    'USDC transfer'
+                  : 'Next, you will connect your wallet to complete the AI3 ' +
+                    'token transfer'}
               </div>
             </div>
           </Section>

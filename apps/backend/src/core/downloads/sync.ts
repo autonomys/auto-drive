@@ -36,12 +36,7 @@ const downloadObjectByUser = async (
   reader: UserWithOrganization,
   cid: string,
   options: DownloadOptions = {},
-): Promise<
-  Result<
-    FileDownload,
-    ObjectNotFoundError | NotAcceptableError
-  >
-> => {
+): Promise<Result<FileDownload, ObjectNotFoundError | NotAcceptableError>> => {
   logger.debug(
     'downloadObjectByUser requested (cid=%s, userId=%s)',
     cid,
@@ -52,20 +47,6 @@ const downloadObjectByUser = async (
     return err(getResult.error)
   }
   const metadata = getResult.value
-
-  // NOTE: Download credit enforcement is intentionally disabled.
-  // The infrastructure exists for future use, but download limits are not
-  // enforced right now: purchased download bytes are not allocated on purchase,
-  // so users have no way to replenish a depleted download quota — making the
-  // block permanent. Re-enable once download credit purchasing is wired up.
-  //
-  // const pendingCredits = await AccountsUseCases.getPendingCreditsByUserAndType(
-  //   reader,
-  //   InteractionType.Download,
-  // )
-  // if (pendingCredits < metadata.totalSize) {
-  //   return err(new PaymentRequiredError('Not enough download credits'))
-  // }
 
   const authResult = await ObjectUseCases.authorizeDownload(
     cid,
@@ -99,14 +80,47 @@ const downloadObjectByUser = async (
         cid,
         reader.oauthUserId,
       )
-      await AccountsUseCases.registerInteraction(
-        reader,
-        InteractionType.Download,
-        totalSize,
-        cid,
-      )
+      // registerInteraction enforces the free-tier download limit. Check before
+      // allocating a stream, but charge only after initial resolution succeeds
+      // so retries of an unavailable object do not consume the reader's quota.
+      // Zero-byte downloads do not spend credits, even on an overdrawn account.
+      if (totalSize > 0n) {
+        const availableCredits =
+          await AccountsUseCases.getPendingCreditsByUserAndType(
+            reader,
+            InteractionType.Download,
+          )
+        if (BigInt(availableCredits) < totalSize) {
+          throw new PaymentRequiredError(
+            'Insufficient credits to process download',
+          )
+        }
+      }
 
       const download = await downloadService.download(cid, options)
+
+      // The check above is not a lock, so a concurrent download can still
+      // consume the budget in between. That leaves the stream already built, so
+      // drain it rather than leaking it — this is the narrow race, not the
+      // common path.
+      try {
+        await AccountsUseCases.registerInteraction(
+          reader,
+          InteractionType.Download,
+          totalSize,
+          cid,
+        )
+      } catch (error) {
+        // Drain it, do not destroy it. stream-fork's Fork writes to every branch
+        // on each chunk and does not check whether one has gone away, so
+        // destroying this fork makes the next write throw `Cannot call write
+        // after a stream was destroyed` from inside the Fork, where nothing is
+        // listening. Draining lets the source and the cache branches run to
+        // completion and end normally, which is what actually releases them.
+        download.on('error', () => {})
+        download.resume()
+        throw error
+      }
 
       return download
     },

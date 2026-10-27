@@ -9,7 +9,7 @@ import {
   handleInternalError,
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
-import { handleError } from '../../errors/index.js'
+import { handleError, ChunkNotFoundError, HttpError } from '../../errors/index.js'
 import { sendMetricToVictoria } from '../../infrastructure/drivers/vmetrics.js'
 import { config } from '../../config.js'
 
@@ -168,7 +168,7 @@ objectController.get(
     }
 
     const summary = summaryResult.value
-    if (!summary) {
+    if (!summary || (await ObjectUseCases.isObjectDeleted(cid))) {
       res.status(404).json({
         error: 'Metadata not found',
       })
@@ -194,6 +194,14 @@ objectController.get(
       return
     }
 
+    // A removed object must not be discoverable by its CID.
+    if (await ObjectUseCases.isObjectDeleted(cid)) {
+      res.status(404).json({
+        error: `Object with cid=${cid} not found`,
+      })
+      return
+    }
+
     const metadata = metadataResult.value
 
     res.json(metadata)
@@ -212,6 +220,14 @@ objectController.get(
 
     if (statusResult.isErr()) {
       handleError(statusResult.error, res)
+      return
+    }
+
+    // A removed object must not be discoverable by its CID.
+    if (await ObjectUseCases.isObjectDeleted(cid)) {
+      res.status(404).json({
+        error: `Object with cid=${cid} not found`,
+      })
       return
     }
 
@@ -315,7 +331,7 @@ objectController.get(
     }
 
     const objectInformation = objectResult.value
-    if (!objectInformation) {
+    if (!objectInformation || (await ObjectUseCases.isObjectDeleted(cid))) {
       res.status(404).json({
         error: 'Object not found',
       })
@@ -380,14 +396,35 @@ objectController.get(
       return
     }
 
+    // Resolve the stream before staging headers, so an unresolvable object
+    // yields a real status instead of a mid-stream reset (see issue #815 and
+    // the S3 GetObject handler, which does the same).
+    let stream
+    try {
+      stream = await startDownload()
+    } catch (error) {
+      if (error instanceof ChunkNotFoundError) {
+        logger.warn(
+          'Published object is momentarily unresolvable (id=%s, chunkCid=%s)',
+          id,
+          error.cid,
+        )
+      }
+      if (error instanceof HttpError && !res.headersSent) {
+        handleError(error, res)
+        return
+      }
+      throw error
+    }
+
     handleDownloadResponseHeaders(req, res, metadata, {
       byteRange: resultingByteRange,
     })
 
-    pipeline(await startDownload(), res, (err) => {
+    pipeline(stream, res, (err) => {
       if (err) {
         if (res.headersSent) return
-        logger.error('Error streaming data:', err)
+        logger.error('Error streaming data (id=%s)', id, err)
         res.status(500).json({
           error: 'Failed to stream data',
           details: err.message,
@@ -436,6 +473,29 @@ objectController.post(
     )
     if (banResult.isErr()) {
       handleError(banResult.error, res)
+      return
+    }
+
+    res.sendStatus(204)
+  }),
+)
+
+objectController.post(
+  '/:cid/unban',
+  asyncSafeHandler(async (req, res) => {
+    const { cid } = req.params
+
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
+    const unbanResult = await handleInternalErrorResult(
+      ObjectUseCases.unbanObject(executor, cid),
+      'Failed to unban object',
+    )
+    if (unbanResult.isErr()) {
+      handleError(unbanResult.error, res)
       return
     }
 
@@ -499,12 +559,17 @@ objectController.post(
 objectController.get(
   '/to-be-reviewed/list',
   asyncSafeHandler(async (req, res) => {
+    const executor = await handleAuth(req, res)
+    if (!executor) {
+      return
+    }
+
     const { limit, offset } = req.query
     const limitNumber = limit ? parseInt(limit as string) : 100
     const offsetNumber = offset ? parseInt(offset as string) : 0
 
-    const toBeReviewedList = await handleInternalError(
-      ObjectUseCases.getToBeReviewedList(limitNumber, offsetNumber),
+    const toBeReviewedList = await handleInternalErrorResult(
+      ObjectUseCases.getToBeReviewedList(executor, limitNumber, offsetNumber),
       'Failed to get to be reviewed list',
     )
     if (toBeReviewedList.isErr()) {

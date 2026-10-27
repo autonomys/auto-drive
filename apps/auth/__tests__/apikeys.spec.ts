@@ -3,6 +3,7 @@ import { UsersUseCases, ApiKeysUseCases } from '../src/useCases/index.js'
 import { PreconditionError } from './utils/error.js'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
 import { apiKeysRepository } from '../src/repositories/index.js'
+import { ApiKeyNotFoundError } from '../src/errors/apikeys.js'
 import { ApiKeyAuth } from '../src/services/authManager/providers/apikey.js'
 import { dbMigration } from './utils/dbMigrate.js'
 import { MOCK_UNONBOARDED_USER } from './utils/mocks.js'
@@ -107,6 +108,12 @@ describe('ApiKeyUseCases', () => {
     await expect(
       ApiKeysUseCases.deleteApiKey(user, apiKey.id),
     ).rejects.toThrow('API key has already been deleted')
+  })
+
+  it('should throw ApiKeyNotFoundError when the repository deletes an already-deleted key', async () => {
+    await expect(apiKeysRepository.deleteApiKey(apiKey.id)).rejects.toThrow(
+      ApiKeyNotFoundError,
+    )
   })
 
   it('should not be able to authenticate with a deleted API key', async () => {

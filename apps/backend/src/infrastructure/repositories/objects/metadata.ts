@@ -2,6 +2,7 @@ import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
 import { PaginatedResult } from '@auto-drive/models'
 import { stringify } from '../../../shared/utils/misc.js'
+import { ownershipSQL } from './ownership.js'
 
 export interface MetadataEntry {
   root_cid: string
@@ -37,8 +38,19 @@ const setMetadata = async (
 ) => {
   const db = await getDatabase()
 
+  // Tags (moderation state: reported/banned/dismissed) belong to the content
+  // (head_cid), not to one (root_cid, head_cid) row — a new row for already
+  // known content must inherit the union of its siblings' tags, or a banned
+  // file re-uploaded under a new root would surface as a clean row. The
+  // conflict branch leaves tags untouched.
   return db.query({
-    text: 'INSERT INTO metadata (root_cid, head_cid, metadata, name) VALUES ($1, $2, $3, $4) ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata, name = EXCLUDED.name',
+    text: `INSERT INTO metadata (root_cid, head_cid, metadata, name, tags)
+      VALUES ($1, $2, $3, $4, (
+        SELECT array_agg(DISTINCT tag)
+        FROM metadata m, unnest(m.tags) AS tag
+        WHERE m.head_cid = $2
+      ))
+      ON CONFLICT (root_cid, head_cid) DO UPDATE SET metadata = EXCLUDED.metadata, name = EXCLUDED.name`,
     values: [rootCid, headCid, stringify(metadata), metadata.name],
   })
 }
@@ -51,7 +63,15 @@ const searchMetadataByCID = async (
 
   return db
     .query<MetadataEntry>({
-      text: 'SELECT metadata.* FROM metadata join object_ownership on metadata.head_cid = object_ownership.cid WHERE metadata.head_cid LIKE $1 LIMIT $2',
+      // Hide objects an owner has removed (moved to Trash). Removal is tracked
+      // on the root upload's ownership row, so we must resolve each match to its
+      // root before checking admin ownership — otherwise children of a removed
+      // folder (which keep vestigial active admin rows) would still surface.
+      // Mirrors ObjectUseCases.isObjectDeleted.
+      text: `SELECT DISTINCT metadata.* FROM metadata
+        WHERE metadata.head_cid LIKE $1
+        AND ${ownershipSQL.notRemovedByOwnerSQL('metadata.head_cid')}
+        LIMIT $2`,
       values: [`%${cid}%`, limit],
     })
     .then((entries) => entries.rows)
@@ -111,8 +131,12 @@ const searchMetadataByName = async (query: string, limit: number) => {
 
   return db
     .query<MetadataEntry>({
-      // eslint-disable-next-line quotes
-      text: `SELECT * FROM metadata WHERE metadata->>'name' ILIKE $1 LIMIT $2`,
+      // See searchMetadataByCID: resolve each match to its root before applying
+      // the removal filter so children of a removed folder stay hidden.
+      text: `SELECT DISTINCT m.* FROM metadata m
+        WHERE m.metadata->>'name' ILIKE $1
+        AND ${ownershipSQL.notRemovedByOwnerSQL('m.head_cid')}
+        LIMIT $2`,
       values: [`%${query}%`, limit],
     })
     .then((entries) => entries.rows)
@@ -151,8 +175,9 @@ const getRootObjects = async (
       )
       SELECT root_objects.head_cid, COUNT(*) OVER() AS total_count
       FROM root_objects
-      INNER JOIN object_ownership oo ON root_objects.head_cid = oo.cid 
-      WHERE oo.marked_as_deleted IS NULL 
+      INNER JOIN object_ownership oo ON root_objects.head_cid = oo.cid
+      WHERE oo.is_admin IS TRUE
+      AND oo.marked_as_deleted IS NULL
       GROUP BY root_objects.head_cid
       LIMIT $1 OFFSET $2`,
       values: [limit, offset],
@@ -212,6 +237,16 @@ const getSharedRootObjectsByUser = async (
           AND oo.oauth_user_id = $2 
           AND oo.is_admin IS FALSE 
           AND oo.marked_as_deleted IS NULL 
+          -- Hide shares whose owner has removed the object globally. The
+          -- recipient's own (non-admin) row stays active, so we must also
+          -- require a still-active admin owner, mirroring the GetSharedFiles
+          -- GraphQL filter and ObjectUseCases.isObjectDeleted.
+          AND EXISTS (
+            SELECT 1 FROM object_ownership admin_oo
+            WHERE admin_oo.cid = m.root_cid
+              AND admin_oo.is_admin IS TRUE
+              AND admin_oo.marked_as_deleted IS NULL
+          )
         LIMIT $3 OFFSET $4`,
       values: [provider, userId, limit, offset],
     })
@@ -284,8 +319,20 @@ const getMetadataByIsArchived = async (isArchived: boolean) => {
 const addTag = async (cid: string, tag: string) => {
   const db = await getDatabase()
 
+  // The same head_cid can have several rows (one per root_cid) whose tags
+  // may diverge, so dedup per row here rather than pre-checking one row.
   await db.query({
-    text: 'UPDATE metadata SET tags = array_append(tags, $1) WHERE head_cid = $2',
+    text: `UPDATE metadata SET tags = array_append(COALESCE(tags, '{}'), $1)
+      WHERE head_cid = $2 AND NOT (COALESCE(tags, '{}') @> ARRAY[$1])`,
+    values: [tag, cid],
+  })
+}
+
+const removeTag = async (cid: string, tag: string) => {
+  const db = await getDatabase()
+
+  await db.query({
+    text: 'UPDATE metadata SET tags = array_remove(tags, $1) WHERE head_cid = $2',
     values: [tag, cid],
   })
 }
@@ -297,9 +344,16 @@ const getMetadataByTagIncludeExclude = async (
   offset: number,
 ) => {
   const db = await getDatabase()
-  return db.query<MetadataEntryWithTotalCount>({
+  // `&&` (overlap) excludes rows carrying ANY of the excluded tags; `@>`
+  // (contains) would only exclude rows carrying ALL of them at once.
+  // DISTINCT ON collapses the several rows the same head_cid can have (one
+  // per root_cid), and the ORDER BY it requires also keeps limit/offset
+  // pagination stable.
+  return db.query<MetadataEntry>({
     text: `
-      SELECT * FROM metadata WHERE tags @> $1 AND NOT tags @> $2
+      SELECT DISTINCT ON (head_cid) * FROM metadata
+      WHERE tags @> $1 AND NOT (tags && $2)
+      ORDER BY head_cid
       LIMIT $3 OFFSET $4
     `,
     values: [tagIncludes, tagToExclude, limit, offset],
@@ -323,5 +377,6 @@ export const metadataRepository = {
   markAsArchived,
   getMetadataByIsArchived,
   addTag,
+  removeTag,
   getMetadataByTagIncludeExclude,
 }

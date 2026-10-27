@@ -119,3 +119,77 @@
 
 - The `minimumBalance` default (1e12 wei) matches Auto-EVM's existential deposit requirement.
 - Consider using a multisig as the owner for production deployments.
+
+---
+
+## AutoDriveUSDCReceiver
+
+**Purpose**: ERC20 (USDC) counterpart of `AutoDriveCreditsReceiver`, for paying credit-purchase intents with a token on Ethereum. The backend watches `IntentTokenPaymentReceived` and grants credits at the intent's locked USD price (deferred-conversion / "Option C"). Owner can pause payments, sweep collected tokens to any recipient, and transfer ownership via two steps.
+
+### Inheritance
+
+- `Ownable2Step`
+- `ReentrancyGuard`
+- `Pausable`
+
+### State
+
+- `IERC20 public immutable token` — the accepted token (USDC), fixed at deploy. Redeploy for a different token/chain.
+
+### Events
+
+- `IntentTokenPaymentReceived(bytes32 indexed intentId, address token, uint256 amount, address indexed payer)` — emitted on each payment. `amount` is the **actual balance delta received**; `payer` is carried in the event (not read from the tx sender) because ERC20 payments can be relayed.
+- `Swept(address indexed caller, address indexed to, uint256 amount)` — emitted when the owner sweeps tokens.
+
+### Errors
+
+- `InvalidAmount(uint256 amount)` — zero (or zero received) amount.
+- `InvalidToken(address token)` — zero or non-contract token address at construction.
+- `InvalidRecipient(address recipient)` — zero sweep recipient.
+- `InsufficientBalance(uint256 balance, uint256 amount)` — sweep exceeds balance.
+- `RenounceOwnershipDisabled()` — `renounceOwnership` is disabled (see below).
+
+### Functions
+
+- `payIntentWithToken(bytes32 intentId, uint256 amount) external nonReentrant whenNotPaused`
+  - Pulls `amount` of `token` from the caller (who must have approved first) and emits `IntentTokenPaymentReceived` with the **actual received delta**, so a fee-on-transfer token can never cause over-crediting.
+
+- `sweep(address to, uint256 amount) external onlyOwner nonReentrant`
+  - Transfers `amount` of `token` to `to`. `onlyOwner` because the destination is caller-specified (`to` may later be a swapper contract). **Callable while paused** so the owner can always move funds to safety.
+
+- `sweepAll(address to) external onlyOwner nonReentrant`
+  - Transfers the entire `token` balance to `to`.
+
+- `pause() external onlyOwner` / `unpause() external onlyOwner`
+  - Halts/resumes `payIntentWithToken`.
+
+- `renounceOwnership() public view override onlyOwner`
+  - Always reverts with `RenounceOwnershipDisabled`. Renouncing ownership would permanently strand any tokens held by the contract, since sweeps are owner-gated.
+
+### Security Considerations
+
+- `SafeERC20` for all token transfers (does not assume a bool return); `ReentrancyGuard` on the pay and sweep paths.
+- The constructor rejects a token address with no deployed code, catching typos and wrong-chain addresses at deploy time.
+- `renounceOwnership` is disabled so the contract can never end up ownerless with stranded funds.
+- No `minimumBalance`: that exists only for Auto-EVM's existential deposit and is meaningless for an ERC20 balance on Ethereum.
+- Sweeps are `onlyOwner` (unlike the native receiver's permissionless sweep) because the destination is arbitrary — use a multisig owner in production.
+- Permit2 / EIP-2612 (collapsing approve + pay into one signature) is intentionally deferred to a later iteration.
+
+### Typical Flow
+
+1. Deploy with `(initialOwner, token)`.
+2. User calls `token.approve(receiver, amount)` then `payIntentWithToken(intentId, amount)`.
+3. Backend confirms `IntentTokenPaymentReceived` and grants credits.
+4. Owner periodically calls `sweep(to, amount)` / `sweepAll(to)` to move collected USDC to the treasury/swapper.
+
+### Deploy
+
+Uses `script/DeployAutoDriveUSDCReceiver.s.sol`. Required env: `PRIVATE_KEY`; optional `USDC_TOKEN_ADDRESS` (defaults to [Circle's canonical USDC](https://developers.circle.com/stablecoins/usdc-contract-addresses) on mainnet/Sepolia; required on other chains) and `OWNER` (defaults to deployer — use a multisig in production). The script verifies the token address has code on the target chain before deploying.
+
+```bash
+# Defaults: Ethereum mainnet 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+#           Sepolia          0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+PRIVATE_KEY=0x... OWNER=0x... \
+  forge script script/DeployAutoDriveUSDCReceiver.s.sol \
+  --rpc-url "$ETH_RPC_URL" --broadcast --verify
+```

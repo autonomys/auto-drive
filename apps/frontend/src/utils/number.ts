@@ -36,3 +36,20 @@ export const formatBytes = (
     (match) => mappers[match as keyof typeof mappers],
   );
 };
+
+/**
+ * Format a byte count for user-facing display using the familiar consumer
+ * labels (MB / GB / TB).  Scaling is binary (1 GB = 1,024 MB), matching how
+ * the rest of the app counts storage and credits — but unlike `formatBytes`
+ * the labels are kept as MB/GB/TB rather than relabeled to MiB/GiB, so users
+ * don't have to care about the binary detail under the hood.
+ */
+export const formatStorageSize = (
+  amount: number,
+  decimalPlaces: number = 2,
+): string => {
+  const formatted = bytes(amount, { decimalPlaces, unitSeparator: ' ' });
+  if (!formatted) return 'N/A';
+
+  return formatted;
+};

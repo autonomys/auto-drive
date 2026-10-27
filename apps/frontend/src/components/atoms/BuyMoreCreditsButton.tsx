@@ -7,7 +7,11 @@ export const BuyMoreCreditsButton = () => {
 
   return (
     <InternalLink href={ROUTES.purchase(network.id)} className='contents'>
-      <Button variant='outline' size='sm' className='w-full text-xs'>
+      <Button
+        variant='primary'
+        size='sm'
+        className='w-full text-xs font-semibold'
+      >
         Buy more credits
       </Button>
     </InternalLink>

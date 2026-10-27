@@ -1,5 +1,9 @@
 query FilesToBeReviewed($limit: Int!, $offset: Int!) {
-  metadata_roots(
+  # Reads from `metadata` (not the roots-only `metadata_roots` view) so a
+  # reported file nested inside a folder still counts here — see the
+  # AdminReportedFiles query for the same reasoning. distinct_on/distinct
+  # collapse duplicate rows the same cid can have from content deduplication.
+  metadata(
     where: {
       _and: [
         { tags: { _contains: ["reported"] } }
@@ -7,9 +11,30 @@ query FilesToBeReviewed($limit: Int!, $offset: Int!) {
         { _not: { tags: { _contains: ["report-dismissed"] } } }
       ]
     }
+    distinct_on: [head_cid]
     limit: $limit
     offset: $offset
+    order_by: [{ head_cid: asc }, { created_at: desc }]
   ) {
     headCid: head_cid
+    tags
+    type: metadata(path: "type")
+    name: metadata(path: "name")
+    mimeType: metadata(path: "mimeType")
+    size: metadata(path: "totalSize")
+    createdAt: created_at
+  }
+  metadata_aggregate(
+    where: {
+      _and: [
+        { tags: { _contains: ["reported"] } }
+        { _not: { tags: { _contains: ["banned"] } } }
+        { _not: { tags: { _contains: ["report-dismissed"] } } }
+      ]
+    }
+  ) {
+    aggregate {
+      count(columns: head_cid, distinct: true)
+    }
   }
 }

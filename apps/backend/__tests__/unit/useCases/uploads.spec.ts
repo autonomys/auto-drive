@@ -2,6 +2,11 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { NodesUseCases } from '../../../src/core/objects/nodes.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
+import {
+  uploadsRepository,
+  type UploadEntry,
+} from '../../../src/infrastructure/repositories/uploads/uploads.js'
+import { UploadStatus } from '@auto-drive/models'
 
 describe('UploadsUseCases.scheduleNodesPublish', () => {
   beforeEach(() => {
@@ -96,5 +101,51 @@ describe('UploadsUseCases.scheduleNodesPublish', () => {
     await UploadsUseCases.scheduleNodesPublish('my-root-cid')
 
     expect(getCidsSpy).toHaveBeenCalledWith('my-root-cid')
+  })
+})
+
+describe('UploadsUseCases.processMigration', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('skips a concurrent migration for an upload already being migrated', async () => {
+    // Block the first run at the upload lookup so it stays in flight, holding
+    // the per-upload guard, while we fire a second run for the same upload.
+    // getUploadEntryById is called synchronously before the first await, so by
+    // the time the second call runs, the upload is already marked in flight.
+    let resolveLookup: (value: UploadEntry | null) => void = () => {}
+    const lookupGate = new Promise<UploadEntry | null>((resolve) => {
+      resolveLookup = resolve
+    })
+    const getSpy = jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockReturnValue(lookupGate)
+    // A missing upload is unrecoverable, so processMigration parks it as failed
+    // and resolves rather than throwing (see UnrecoverableUploadError) — stub the
+    // status write so the guard assertions below don't reach the database.
+    const setStatusSpy = jest
+      .spyOn(uploadsRepository, 'updateUploadStatusByRootUploadId')
+      .mockResolvedValue(undefined)
+
+    const first = UploadsUseCases.processMigration('upload-1')
+    // Second run for the same upload must short-circuit before touching the repo.
+    await UploadsUseCases.processMigration('upload-1')
+    expect(getSpy).toHaveBeenCalledTimes(1)
+
+    // Let the first run finish; an unknown upload is parked, releasing the guard.
+    resolveLookup(null)
+    await expect(first).resolves.toBeUndefined()
+    expect(setStatusSpy).toHaveBeenCalledWith('upload-1', UploadStatus.FAILED)
+
+    // Guard released — a later run for the same upload proceeds again.
+    await expect(
+      UploadsUseCases.processMigration('upload-1'),
+    ).resolves.toBeUndefined()
+    expect(getSpy).toHaveBeenCalledTimes(2)
   })
 })

@@ -234,7 +234,9 @@ files.map((file, index) => {
 
         // Tag the upload
         await UploadsUseCases.tagUpload(cidToString(cid))
-        expect(rabbitMock).toHaveBeenCalledWith('task-manager', {
+        // publish-nodes is isolated on its own queue/worker (publish-manager),
+        // so it is no longer enqueued on the task-manager fast lane.
+        expect(rabbitMock).toHaveBeenCalledWith('publish-manager', {
           id: 'publish-nodes',
           params: {
             nodes: expect.arrayContaining([cidToString(cid)]),

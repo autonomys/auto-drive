@@ -334,6 +334,33 @@ userController.get('/list', async (req: Request, res: Response) => {
   }
 })
 
+// Admin search: partial publicId match, plus the members of `organizationId`
+// when given (the backend passes it after resolving an account ID).
+userController.get('/admin/search', async (req: Request, res: Response) => {
+  const isAdmin = await handleAdminAuth(req, res)
+  if (!isAdmin) {
+    return
+  }
+
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+  const organizationId =
+    typeof req.query.organizationId === 'string'
+      ? req.query.organizationId.trim() || undefined
+      : undefined
+  if (!query && !organizationId) {
+    res.status(400).json({ error: 'q or organizationId is required' })
+    return
+  }
+
+  try {
+    const users = await UsersUseCases.adminSearchUsers(query, organizationId)
+    res.json(users)
+  } catch (error) {
+    logger.error(error)
+    res.status(500).json({ error: 'Failed to search users' })
+  }
+})
+
 userController.post('/batch', async (req: Request, res: Response) => {
   const isAdmin = await handleAdminAuth(req, res)
   if (!isAdmin) {
