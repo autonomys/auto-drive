@@ -1,6 +1,6 @@
-import { ApiPromise, Keyring } from '@polkadot/api'
 import { config } from '../../../../config.js'
 import { getOnChainNonce } from '../../../../shared/utils/networkApi.js'
+import { ApiPromise, Keyring } from '../../../../shared/utils/polkadot.js'
 import { createLogger } from '../../../drivers/logger.js'
 import pLimit from 'p-limit'
 
