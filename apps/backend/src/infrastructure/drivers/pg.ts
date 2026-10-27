@@ -2,9 +2,21 @@ import pg from 'pg'
 import { config } from '../../config.js'
 import { createLogger } from './logger.js'
 
-let db: pg.Pool | undefined
+// Cache the pending promise, not the resolved pool: concurrent first callers
+// must share one pool instead of each creating their own.
+let db: Promise<pg.Pool> | undefined
 
 const logger = createLogger('drivers:pg')
+
+// Short host/database label for the connection log line
+const describeTarget = (url: string) => {
+  try {
+    const { hostname, port, pathname } = new URL(url)
+    return `${hostname}:${port}${pathname}`
+  } catch {
+    return '<unparseable DATABASE_URL>'
+  }
+}
 
 const createDB = async (): Promise<pg.Pool> => {
   const pool = new pg.Pool({
@@ -22,7 +34,10 @@ const createDB = async (): Promise<pg.Pool> => {
   const client = await pool.connect()
   client.release()
 
-  logger.info('Connected to PostgreSQL at %s', config.postgres.url)
+  logger.info(
+    'Connected to PostgreSQL at %s',
+    describeTarget(config.postgres.url),
+  )
 
   // DEBUG: wrap query for tracing
   const origQuery = pool.query.bind(pool)
@@ -39,7 +54,10 @@ const createDB = async (): Promise<pg.Pool> => {
 
 export const getDatabase = async () => {
   if (!db) {
-    db = await createDB()
+    db = createDB().catch((error) => {
+      db = undefined
+      throw error
+    })
   }
 
   return db
@@ -47,8 +65,11 @@ export const getDatabase = async () => {
 
 export const closeDatabase = async () => {
   if (db) {
-    await db.end()
+    const pending = db
     db = undefined
+    // A pool that never connected has nothing to end
+    const pool = await pending.catch(() => undefined)
+    await pool?.end()
   }
 }
 
