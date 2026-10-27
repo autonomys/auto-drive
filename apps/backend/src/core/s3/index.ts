@@ -107,6 +107,7 @@ import { UploadsUseCases } from '../uploads/uploads.js'
 import { FileDownload, UserWithOrganization } from '@auto-drive/models'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { fitDagName } from './dagName.js'
 import {
   S3BucketInfo,
   S3KeyMapping,
@@ -114,6 +115,19 @@ import {
 } from '../../infrastructure/repositories/s3/objectMappings.js'
 
 const logger = createLogger('useCases:s3')
+
+const dagNameForKey = (key: string): string => {
+  const name = key.split('/').pop()!
+  const dagName = fitDagName(name)
+  if (dagName !== name) {
+    logger.warn(
+      'Shortened the DAG name of an S3 object to fit the name limit (key=%s, dagName=%s)',
+      key,
+      dagName,
+    )
+  }
+  return dagName
+}
 
 // The S3 key namespace is scoped per user: (owner, bucket, key) is the mapping
 // identity, so every read/write below is scoped to the requesting user. There is
@@ -485,7 +499,7 @@ const createMultipartUpload = async (
   user: UserWithOrganization,
   params: CreateMultipartUploadParams,
 ): Promise<Result<CreateMultipartUploadCommandResult, ObjectNotFoundError>> => {
-  const name = params.Key.split('/').pop()!
+  const name = dagNameForKey(params.Key)
   const upload = await UploadsUseCases.createFileUpload(
     user,
     name,
@@ -589,7 +603,7 @@ const putObject = async (
   user: UserWithOrganization,
   params: PutObjectParams,
 ): Promise<Result<PutObjectResult, ObjectNotFoundError>> => {
-  const name = params.Key.split('/').pop()!
+  const name = dagNameForKey(params.Key)
 
   // Compute MD5 before upload so we have it ready for storage.
   const md5 = md5Hex(params.Body)

@@ -1105,74 +1105,72 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
-  // The object's name in the DAG is the key's last path segment.
+  // The object's name in the DAG is the key's last path segment, shortened when
+  // it is over the DAG name limit. The key itself is never changed.
   describe('Object name length', () => {
-    const rejection = async (request: () => Promise<unknown>) => {
-      try {
-        await request()
-      } catch (e) {
-        const err = e as {
-          $metadata?: { httpStatusCode?: number }
-          name?: string
-          message?: string
-        }
-        return {
-          status: err.$metadata?.httpStatusCode,
-          code: err.name,
-          message: err.message,
-        }
-      }
-      throw new Error('expected the request to be rejected')
-    }
+    const NameBucket = `${BASE_PATH}/s3/name-length`
 
-    const tooLongError = {
-      status: 400,
-      code: 'InvalidRequest',
-      message: 'Filename is too long: 258 > 255 bytes',
-    }
+    const dagName = async (cid: string | undefined) =>
+      (await ObjectUseCases.getMetadata(cid!))._unsafeUnwrap().name
 
-    it('accepts a 255-byte last segment', async () => {
+    it('keeps a 255-byte last segment as the DAG name', async () => {
       const Key = `name-length/${'€'.repeat(85)}`
-      await s3Client.send(
+      const put = await s3Client.send(
         new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
       )
 
-      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
-      expect(head.ContentLength).toBe(4)
+      expect(await dagName(put.VersionId)).toBe('€'.repeat(85))
     })
 
     it('accepts a key over 255 bytes whose last segment fits', async () => {
       const Key = `name-length/${'d'.repeat(300)}/short.txt`
-      await s3Client.send(
+      const put = await s3Client.send(
         new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
       )
 
+      expect(await dagName(put.VersionId)).toBe('short.txt')
+    })
+
+    it('shortens a longer last segment on PutObject, keeping the extension and the key', async () => {
+      const name = `${'€'.repeat(86)}.txt`
+      const Key = `name-length/${name}`
+      const put = await s3Client.send(
+        new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
+      )
+
+      expect(await dagName(put.VersionId)).toBe(`${'€'.repeat(83)}.txt`)
       const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
       expect(head.ContentLength).toBe(4)
+      const list = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: NameBucket, Prefix: name }),
+      )
+      expect(list.Contents?.map((c) => c.Key)).toEqual([name])
     })
 
-    it('rejects PutObject with a 258-byte last segment', async () => {
-      const Key = `name-length/${'€'.repeat(86)}`
-      expect(
-        await rejection(() =>
-          s3Client.send(
-            new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
-          ),
-        ),
-      ).toEqual(tooLongError)
-
-      await expect(
-        s3Client.send(new HeadObjectCommand({ Bucket, Key })),
-      ).rejects.toThrow()
-    })
-
-    it('rejects CreateMultipartUpload with a 258-byte last segment', async () => {
+    it('shortens a longer last segment on a multipart upload', async () => {
       const Key = `name-length/${'文'.repeat(86)}`
-      expect(
-        await rejection(() =>
-          s3Client.send(new CreateMultipartUploadCommand({ Bucket, Key })),
-        ),
-      ).toEqual(tooLongError)
+      const { UploadId } = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key }),
+      )
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId,
+          PartNumber: 1,
+          Body: Buffer.from('data'),
+        }),
+      )
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId,
+          MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag }] },
+        }),
+      )
+
+      expect(await dagName(complete.VersionId)).toBe('文'.repeat(85))
     })
   })
 
