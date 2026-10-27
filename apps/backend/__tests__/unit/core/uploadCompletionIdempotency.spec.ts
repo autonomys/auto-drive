@@ -103,9 +103,8 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
       .spyOn(UploadFileProcessingUseCase, 'completeUploadProcessing')
       .mockResolvedValue(CID as any)
 
-    // An HttpError, not a bare Error: the caller's fault, not ours. Both flatten
-    // to a 500 through handleInternalError today, but the type is what makes this
-    // a 4xx for free once that is fixed.
+    // An HttpError, not a bare Error: the caller's fault, not ours, so the REST
+    // route answers it as a 400 rather than a 500.
     await expect(
       UploadsUseCases.completeUpload(mockUser, upload.id),
     ).rejects.toBeInstanceOf(BadRequestError)

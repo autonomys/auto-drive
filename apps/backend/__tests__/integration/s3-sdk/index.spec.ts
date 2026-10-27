@@ -1105,6 +1105,99 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  // The object's name in the DAG is the key's last path segment, shortened when
+  // it is over the DAG name limit. The key itself is never changed.
+  describe('Object name length', () => {
+    const NameBucket = `${BASE_PATH}/s3/name-length`
+
+    const dagName = async (cid: string | undefined) =>
+      (await ObjectUseCases.getMetadata(cid!))._unsafeUnwrap().name
+
+    it('keeps a 255-byte last segment as the DAG name', async () => {
+      const Key = `name-length/${'€'.repeat(85)}`
+      const put = await s3Client.send(
+        new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
+      )
+
+      expect(await dagName(put.VersionId)).toBe('€'.repeat(85))
+    })
+
+    it('accepts a key over 255 bytes whose last segment fits', async () => {
+      const Key = `name-length/${'d'.repeat(300)}/short.txt`
+      const put = await s3Client.send(
+        new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
+      )
+
+      expect(await dagName(put.VersionId)).toBe('short.txt')
+    })
+
+    it('shortens a longer last segment on PutObject, keeping the extension and the key', async () => {
+      const name = `${'€'.repeat(86)}.txt`
+      const Key = `name-length/${name}`
+      const put = await s3Client.send(
+        new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
+      )
+
+      expect(await dagName(put.VersionId)).toBe(`${'€'.repeat(83)}.txt`)
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.ContentLength).toBe(4)
+      const list = await s3Client.send(
+        new ListObjectsV2Command({ Bucket: NameBucket, Prefix: name }),
+      )
+      expect(list.Contents?.map((c) => c.Key)).toEqual([name])
+    })
+
+    it('shortens a longer last segment on a multipart upload', async () => {
+      const Key = `name-length/${'文'.repeat(86)}`
+      const { UploadId } = await s3Client.send(
+        new CreateMultipartUploadCommand({ Bucket, Key }),
+      )
+      const part = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId,
+          PartNumber: 1,
+          Body: Buffer.from('data'),
+        }),
+      )
+      const complete = await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId,
+          MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag }] },
+        }),
+      )
+
+      expect(await dagName(complete.VersionId)).toBe('文'.repeat(85))
+    })
+  })
+
+  describe('Uploads the caller cannot pay for', () => {
+    it('answers PutObject with 402 PaymentRequired and stores nothing', async () => {
+      const Key = 'upload-credits/unpaid.txt'
+      const noCredits = jest
+        .spyOn(AccountsUseCases, 'getPendingCreditsByUserAndType')
+        .mockResolvedValue(0)
+
+      await expect(
+        s3Client.send(
+          new PutObjectCommand({ Bucket, Key, Body: Buffer.from('data') }),
+        ),
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 402 },
+        Code: 'PaymentRequired',
+        message: 'Not enough upload credits',
+      })
+      noCredits.mockRestore()
+
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key })),
+      ).rejects.toThrow()
+    })
+  })
+
   // S3 stores object metadata (system headers + arbitrary x-amz-meta-*) once at
   // write and returns it verbatim on GET/HEAD; CopyObject carries or replaces it
   // per the metadata directive. See issue #786.
