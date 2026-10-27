@@ -8,6 +8,7 @@ import {
 } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 import { PurchasedCredit } from '@auto-drive/models'
+import type { AdminUserCreditBatchRow } from '../../infrastructure/repositories/users/purchasedCredits.js'
 
 export const creditsController = Router()
 
@@ -18,6 +19,19 @@ export const creditsController = Router()
 // PurchasedCredit rows contain bigint fields that cannot be JSON-serialised
 // directly.  We convert each bigint to a string so the wire format is stable
 // and the frontend can parse them with BigInt() or a numeric library.
+const serializeBatchWithIntent = (batch: AdminUserCreditBatchRow) => ({
+  ...serializeCredit(batch),
+  userPublicId: batch.userPublicId,
+  paymentAmount: batch.paymentAmount?.toString() ?? null,
+  shannonsPerByte: batch.shannonsPerByte.toString(),
+  txHash: batch.txHash ?? null,
+  fromAddress: batch.fromAddress ?? null,
+  paymentMethod: batch.paymentMethod,
+  tokenAmount: batch.tokenAmount?.toString() ?? null,
+  quotedTokenAmount: batch.quotedTokenAmount?.toString() ?? null,
+  quotedAi3Shannons: batch.quotedAi3Shannons?.toString() ?? null,
+})
+
 const serializeCredit = (credit: PurchasedCredit) => ({
   ...credit,
   uploadBytesOriginal: credit.uploadBytesOriginal.toString(),
@@ -186,20 +200,35 @@ creditsController.get(
       return
     }
 
-    res.status(200).json(
-      result.value.map((batch) => ({
-        ...serializeCredit(batch),
-        userPublicId: batch.userPublicId,
-        paymentAmount: batch.paymentAmount?.toString() ?? null,
-        shannonsPerByte: batch.shannonsPerByte.toString(),
-        txHash: batch.txHash ?? null,
-        fromAddress: batch.fromAddress ?? null,
-        paymentMethod: batch.paymentMethod,
-        tokenAmount: batch.tokenAmount?.toString() ?? null,
-        quotedTokenAmount: batch.quotedTokenAmount?.toString() ?? null,
-        quotedAi3Shannons: batch.quotedAi3Shannons?.toString() ?? null,
-      })),
+    res.status(200).json(result.value.map(serializeBatchWithIntent))
+  }),
+)
+
+// ---------------------------------------------------------------------------
+// GET /credits/batches/account/:accountId
+// Admin-only: all credit batches credited to an account, newest-first, with
+// the buyer (userPublicId) and payment fields of each batch's intent.
+// Returns 403 for non-admin callers.
+// ---------------------------------------------------------------------------
+
+creditsController.get(
+  '/batches/account/:accountId',
+  asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      CreditsUseCases.getAccountBatches(user, req.params.accountId),
+      'Failed to get account credit batches',
     )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(200).json(result.value.map(serializeBatchWithIntent))
   }),
 )
 

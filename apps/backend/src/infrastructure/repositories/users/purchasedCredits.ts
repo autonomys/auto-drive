@@ -628,9 +628,7 @@ const markManyAsRefunded = async (
     // single-wallet constraints apply to the pending rows alone.
     const pendingRows = existing.rows.filter((r) => r.refunded_at === null)
     const accountIds = [...new Set(pendingRows.map((r) => r.account_id))]
-    const walletAddresses = [
-      ...new Set(pendingRows.map((r) => r.from_address)),
-    ]
+    const walletAddresses = [...new Set(pendingRows.map((r) => r.from_address))]
 
     // Pending rows with no remaining upload bytes are depleted — nothing
     // was forfeited, so no refund is owed on them. Their presence rejects
@@ -768,8 +766,12 @@ const mapRowWithIntent = (
     : null,
 })
 
-const getByUserPublicId = async (
-  userPublicId: string,
+// Batches joined to their intent, filtered on one column. Admin views select
+// by buyer (`i.user_public_id`) or by the account credited
+// (`pc.account_id`); the two differ once an organisation has several members.
+const getWithIntentWhere = async (
+  column: 'i.user_public_id' | 'pc.account_id',
+  value: string,
 ): Promise<AdminUserCreditBatchRow[]> => {
   const db = await getDatabase()
   const result = await db.query<DBPurchasedCreditWithIntent>(
@@ -785,12 +787,18 @@ const getByUserPublicId = async (
             i.quoted_ai3_shannons
      FROM purchased_credits pc
      JOIN intents i ON i.id = pc.intent_id
-     WHERE i.user_public_id = $1
+     WHERE ${column} = $1
      ORDER BY pc.purchased_at DESC`,
-    [userPublicId],
+    [value],
   )
   return result.rows.map(mapRowWithIntent)
 }
+
+const getByUserPublicId = (userPublicId: string) =>
+  getWithIntentWhere('i.user_public_id', userPublicId)
+
+const getByAccountIdWithIntent = (accountId: string) =>
+  getWithIntentWhere('pc.account_id', accountId)
 
 // ---------------------------------------------------------------------------
 // getAllWithUserPublicId
@@ -847,4 +855,5 @@ export const purchasedCreditsRepository = {
   markAsRefunded,
   markManyAsRefunded,
   getByUserPublicId,
+  getByAccountIdWithIntent,
 }

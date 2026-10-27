@@ -7,3 +7,4 @@ export * from "./jwt.js";
 export * from "./intent.js";
 export * from "./purchasedCredit.js";
 export * from "./payments.js";
+export * from "./publicId.js";
