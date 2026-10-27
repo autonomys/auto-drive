@@ -117,7 +117,9 @@ describe('Upload routes answer client errors with their own status', () => {
 
   describe('name too long (400)', () => {
     const tooLongName = '€'.repeat(86)
-    const tooLongError = { error: 'Filename is too long: 258 > 255 bytes' }
+    const tooLongError = {
+      error: `Name "${tooLongName}" is too long: 258 > 255 bytes`,
+    }
 
     it('POST /uploads/file', async () => {
       const accepted = await postJson('/uploads/file', {

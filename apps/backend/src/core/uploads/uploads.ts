@@ -76,7 +76,7 @@ const assertNameFits = (name: string): void => {
   const bytes = Buffer.byteLength(name, 'utf8')
   if (bytes > MAX_NAME_SIZE) {
     throw new BadRequestError(
-      `Filename is too long: ${bytes} > ${MAX_NAME_SIZE} bytes`,
+      `Name ${JSON.stringify(name)} is too long: ${bytes} > ${MAX_NAME_SIZE} bytes`,
     )
   }
 }

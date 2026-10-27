@@ -29,10 +29,14 @@ const tooLongNames: [string, string, number][] = [
   ['86 CJK characters (258 bytes)', '文'.repeat(86), 258],
 ]
 
-const expectTooLong = async (attempt: Promise<unknown>, bytes: number) => {
+const expectTooLong = async (
+  attempt: Promise<unknown>,
+  name: string,
+  bytes: number,
+) => {
   await expect(attempt).rejects.toBeInstanceOf(BadRequestError)
   await expect(attempt).rejects.toThrow(
-    `Filename is too long: ${bytes} > 255 bytes`,
+    `Name "${name}" is too long: ${bytes} > 255 bytes`,
   )
 }
 
@@ -83,6 +87,7 @@ describe('Upload name byte length', () => {
 
         await expectTooLong(
           UploadsUseCases.createFileUpload(user, name, null, null),
+          name,
           bytes,
         )
         expect(createUploadEntry).not.toHaveBeenCalled()
@@ -130,6 +135,7 @@ describe('Upload name byte length', () => {
             name,
             null,
           ),
+          name,
           bytes,
         )
         expect(createUploadEntry).not.toHaveBeenCalled()
@@ -205,6 +211,7 @@ describe('Upload name byte length', () => {
             fileTree,
             null,
           ),
+          name,
           bytes,
         )
         expect(createUploadEntry).not.toHaveBeenCalled()
