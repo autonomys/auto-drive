@@ -2,6 +2,10 @@ import { OAuthUser } from '@auto-drive/models'
 import jwt from 'jsonwebtoken'
 import { SiweMessage } from 'siwe'
 
+// The wallet proof is exchanged for a session right after it is signed
+const MAX_PROOF_AGE_MS = 10 * 60 * 1000
+const MAX_CLOCK_SKEW_MS = 60 * 1000
+
 interface Web3AuthToken {
   address: string
   message: string
@@ -24,11 +28,21 @@ export const getUserFromAccessToken = async (
   })
 
   if (!success) throw new Error(`Invalid signature: ${error}`)
+  if (address !== siweMessage.address) throw new Error('Address mismatch')
+
+  const issuedAt = Date.parse(siweMessage.issuedAt ?? '')
+  const age = Date.now() - issuedAt
+  if (
+    Number.isNaN(issuedAt) ||
+    age > MAX_PROOF_AGE_MS ||
+    age < -MAX_CLOCK_SKEW_MS
+  )
+    throw new Error('Expired proof')
 
   return {
     provider: 'web3-wallet',
-    id: address,
-    username: address,
+    id: siweMessage.address,
+    username: siweMessage.address,
   }
 }
 
