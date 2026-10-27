@@ -39,6 +39,8 @@ select_permissions:
                 _eq: X-Hasura-Oauth-Provider
               oauth_user_id:
                 _eq: X-Hasura-Oauth-User-Id
+      computed_fields:
+        - has_active_owner
       allow_aggregations: true
     comment: ""
   - role: anonymous
@@ -74,6 +76,12 @@ select_permissions:
                 _is_null: true
       allow_aggregations: true
     comment: ""
+computed_fields:
+  - name: has_active_owner
+    definition:
+      function:
+        name: metadata_roots_has_active_owner
+        schema: public
 object_relationships:
   - name: inner_metadata
     using:

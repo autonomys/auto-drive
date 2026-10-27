@@ -21,12 +21,7 @@ query GetSharedFiles(
             }
           }
         }
-        {
-          object_ownership: {
-            is_admin: { _eq: true }
-            marked_as_deleted: { _is_null: true }
-          }
-        }
+        { has_active_owner: { _eq: true } }
       ]
     }
     limit: $limit
@@ -84,12 +79,7 @@ query GetSharedFiles(
             }
           }
         }
-        {
-          object_ownership: {
-            is_admin: { _eq: true }
-            marked_as_deleted: { _is_null: true }
-          }
-        }
+        { has_active_owner: { _eq: true } }
       ]
     }
   ) {

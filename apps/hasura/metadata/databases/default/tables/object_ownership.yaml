@@ -12,13 +12,28 @@ select_permissions:
         - marked_as_deleted
         - created_at
         - updated_at
-      # Enforce removal at the permission layer for authenticated users, not
-      # just via the query documents: a logged-in user must never be able to read
-      # or enumerate another owner's trashed ownership rows (incl. the
-      # marked_as_deleted column) with a raw GraphQL query. A row is visible when
-      # it is still active (needed to display ownership of public/shared objects
-      # and to drive the is_admin/marked_as_deleted filters) or when it belongs to
-      # the requesting user, so their own Trash keeps working.
+      # A user reads only their own ownership rows (any state, so their Trash
+      # keeps working). Row filters on metadata and metadata_roots are evaluated
+      # against the table itself, so they are unaffected by this filter.
+      filter:
+        oauth_provider:
+          _eq: X-Hasura-Oauth-Provider
+        oauth_user_id:
+          _eq: X-Hasura-Oauth-User-Id
+      allow_aggregations: true
+    comment: ""
+  - role: app-admin
+    permission:
+      columns:
+        - cid
+        - oauth_provider
+        - oauth_user_id
+        - is_admin
+        - marked_as_deleted
+        - created_at
+        - updated_at
+      # Admins see every active ownership row, to show who owns an object, plus
+      # their own removed rows.
       filter:
         _or:
           - marked_as_deleted:

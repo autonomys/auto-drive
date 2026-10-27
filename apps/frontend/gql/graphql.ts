@@ -1250,6 +1250,8 @@ export type Metadata_Prepend_Input = {
 export type Metadata_Roots = {
   __typename?: 'metadata_roots';
   created_at?: Maybe<Scalars['timestamp']['output']>;
+  /** A computed field, executes function "metadata_roots_has_active_owner" */
+  has_active_owner?: Maybe<Scalars['Boolean']['output']>;
   head_cid?: Maybe<Scalars['String']['output']>;
   /** An object relationship */
   inner_metadata?: Maybe<Metadata>;
@@ -1300,6 +1302,7 @@ export type Metadata_Roots_Bool_Exp = {
   _not?: InputMaybe<Metadata_Roots_Bool_Exp>;
   _or?: InputMaybe<Array<Metadata_Roots_Bool_Exp>>;
   created_at?: InputMaybe<Timestamp_Comparison_Exp>;
+  has_active_owner?: InputMaybe<Boolean_Comparison_Exp>;
   head_cid?: InputMaybe<String_Comparison_Exp>;
   inner_metadata?: InputMaybe<Metadata_Bool_Exp>;
   is_archived?: InputMaybe<Boolean_Comparison_Exp>;
@@ -1372,6 +1375,7 @@ export type Metadata_Roots_Mutation_Response = {
 /** Ordering options when selecting data from "metadata_roots". */
 export type Metadata_Roots_Order_By = {
   created_at?: InputMaybe<Order_By>;
+  has_active_owner?: InputMaybe<Order_By>;
   head_cid?: InputMaybe<Order_By>;
   inner_metadata?: InputMaybe<Metadata_Order_By>;
   is_archived?: InputMaybe<Order_By>;
@@ -3782,7 +3786,7 @@ export type GetGlobalFilesQueryResult = Apollo.QueryResult<GetGlobalFilesQuery, 
 export const GetSharedFilesDocument = gql`
     query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $aggregateLimit: Int!) {
   metadata_roots(
-    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}
+    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {has_active_owner: {_eq: true}}]}
     limit: $limit
     offset: $offset
     order_by: $orderBy
@@ -3820,7 +3824,7 @@ export const GetSharedFilesDocument = gql`
   }
   metadata_roots_aggregate(
     limit: $aggregateLimit
-    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}
+    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {has_active_owner: {_eq: true}}]}
   ) {
     aggregate {
       count
