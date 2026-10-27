@@ -25,14 +25,19 @@ import {
   UploadPartCommandResult,
 } from '@auto-drive/s3'
 import {
+  buildListVersionsResult,
   ByteRange,
   computeListObjectsDbLimit,
+  computeListObjectVersionsDbLimit,
+  DeleteObjectResult,
   finalizeListObjects,
   formatETag,
   ListObjectsParams,
   ListObjectsResult,
+  ListObjectVersionsParams,
   md5Hex,
   multipartETag,
+  resolveDeleteMarkerResult,
 } from '@autonomys/file-server'
 
 // Local extensions to the shared DTOs — kept in the backend rather than
@@ -347,152 +352,31 @@ const getObject = async (
 
 // ── ListObjectVersions ─────────────────────────────────────────────────────
 
-export interface S3VersionEntry {
-  key: string
-  /** versionId = the content CID. */
-  versionId: string
-  isLatest: boolean
-  lastModified: Date
-  /** Quoted ETag: the MD5 when known, else the CID (matching GET/HEAD/List). */
-  etag: string
-  size: bigint
-}
-
-export interface S3DeleteMarkerEntry {
-  key: string
-  versionId: string
-  isLatest: boolean
-  lastModified: Date
-}
-
-export interface ListObjectVersionsParams {
-  bucket: string
-  prefix: string
-  keyMarker: string | null
-  maxKeys: number
-}
-
-export interface ListObjectVersionsResult {
-  versions: S3VersionEntry[]
-  deleteMarkers: S3DeleteMarkerEntry[]
-  isTruncated: boolean
-  nextKeyMarker: string | null
-}
-
-// A synthesised delete marker's versionId. Markers are not stored — they are
-// derived from the mapping's deleted_at — so their id is derived too, from the
-// delete time. The same value is reported by ListObjectVersions and on the
-// DeleteObject response for a given delete. Display-only: a ?versionId=dm-…
-// GET/DELETE still 404s/403s (a version can't be fetched or destroyed by it).
-const deleteMarkerVersionId = (deletedAt: Date): string =>
-  `dm-${deletedAt.getTime()}`
-
 /**
  * ListObjectVersions: enumerate the version history for a bucket/prefix in the
- * caller's namespace, newest version first per key. IsLatest marks the current
- * content version of each live key; for a key that is soft-deleted OR
- * owner-removed (web-app Trash / moderation) — i.e. absent on every other read
- * API — a delete marker is synthesised as the latest entry instead (its versionId
- * derived from the delete time — markers are display-only, since
- * DeleteObject?versionId always 403s). Pagination is key-level: up to maxKeys
- * keys are returned, with nextKeyMarker set when more remain. The repository
- * returns WHOLE keys (every version row of up to maxKeys + 1 distinct keys), so
- * a key's history is never split across a page boundary.
+ * caller's namespace, newest version first per key, with a synthesised delete
+ * marker as the latest entry of any soft-deleted or owner-removed key. The
+ * repository returns WHOLE keys (every version row of up to maxKeys + 1
+ * distinct keys), so a key's history is never split across a page boundary.
  *
- * KNOWN LIMITATION (tracked in #790): maxKeys bounds the number of distinct KEYS,
- * not entries. S3 defines max-keys as a hard bound on Version+DeleteMarker
- * entries with version-id-marker resume; here a single key with > maxKeys
- * versions returns them all in one page. This is deliberate — whole keys are
- * never split, so no version is silently dropped (the higher-severity concern) —
- * at the cost of an oversized page for a pathologically-overwritten key. Proper
- * entry-level pagination is deferred: it needs an opaque object_versions.id
- * cursor (versionId=CID isn't monotonic) plus SQL-level DISTINCT ON dedup, per
- * #790.
+ * KNOWN LIMITATION (tracked in #790): maxKeys bounds distinct keys, not
+ * entries, and there is no version-id-marker resume. See
+ * buildListVersionsResult in @autonomys/file-server.
  */
 const getObjectVersions = async (
   user: UserWithOrganization,
   params: ListObjectVersionsParams,
-): Promise<ListObjectVersionsResult> => {
-  // maxKeys + 1: the extra key (if any) signals more history to page through.
-  // Because whole keys are fetched, that extra key is complete too — nothing is
-  // cut, so paging with `key > nextKeyMarker` can't skip any of a key's history.
+): Promise<ReturnType<typeof buildListVersionsResult>> => {
   const rows = await s3ObjectMappingsRepository.listObjectVersions(
     user.oauthProvider,
     user.oauthUserId,
     params.bucket,
     params.prefix,
     params.keyMarker,
-    params.maxKeys + 1,
+    computeListObjectVersionsDbLimit(params.maxKeys),
   )
 
-  const versions: S3VersionEntry[] = []
-  const deleteMarkers: S3DeleteMarkerEntry[] = []
-  let keysEmitted = 0
-  let lastKey: string | null = null
-  let isTruncated = false
-
-  // Rows arrive ordered by key asc, then newest version first, so a key's rows
-  // are contiguous and the first row of each key is its newest version.
-  let i = 0
-  while (i < rows.length) {
-    const key = rows[i].key
-    // New key: enforce the maxKeys page limit before emitting its group. Since
-    // maxKeys + 1 keys were fetched, seeing another key here means more remain.
-    if (keysEmitted >= params.maxKeys) {
-      isTruncated = true
-      break
-    }
-    // The key's current state is a delete marker (no content version is IsLatest)
-    // when the pointer is soft-deleted OR the content is owner-removed (web-app
-    // Trash / moderation). Both make GET / ListObjectsV2 / GetObjectRetention
-    // treat the key as absent, so ListObjectVersions must agree.
-    const pointerDeletedAt = rows[i].pointerDeletedAt
-    const isDeleted = pointerDeletedAt != null || rows[i].ownerRemoved
-    // Rows are newest-first, so the first row is the newest version — used as the
-    // marker time for an owner-removed key that has no deleted_at.
-    const newestVersionTime = rows[i].lastModified
-    // versionId = CID, so multiple rows sharing a CID (repeated same-content
-    // writes — e.g. an mtime-only copy-to-self) are ONE version. Collapse them,
-    // keeping the newest occurrence (first in id-desc order) and its metadata.
-    const seenCids = new Set<string>()
-    let isNewestOfKey = true
-    while (i < rows.length && rows[i].key === key) {
-      const row = rows[i]
-      i++
-      if (seenCids.has(row.cid)) continue
-      seenCids.add(row.cid)
-      versions.push({
-        key: row.key,
-        versionId: row.cid,
-        isLatest: isNewestOfKey && !isDeleted,
-        lastModified: row.lastModified,
-        etag: row.md5 ? `"${row.md5}"` : `"${row.cid}"`,
-        size: row.size,
-      })
-      isNewestOfKey = false
-    }
-    if (isDeleted) {
-      // Soft-delete has a precise deleted_at; an owner-removed key with no
-      // deleted_at falls back to the newest version's time (markers are
-      // display-only, so this just sorts the marker as latest).
-      const markerTime = pointerDeletedAt ?? newestVersionTime
-      deleteMarkers.push({
-        key,
-        versionId: deleteMarkerVersionId(markerTime),
-        isLatest: true,
-        lastModified: markerTime,
-      })
-    }
-    keysEmitted++
-    lastKey = key
-  }
-
-  return {
-    versions,
-    deleteMarkers,
-    isTruncated,
-    nextKeyMarker: isTruncated ? lastKey : null,
-  }
+  return buildListVersionsResult(rows, params.maxKeys)
 }
 
 const createMultipartUpload = async (
@@ -659,16 +543,6 @@ const putObject = async (
  * their web-app Trash (markAsDeleted) so an rclone delete is reflected in the UI
  * and stays recoverable — the "unified with UI Trash" behaviour.
  */
-/** DeleteObject result: whether this call created a delete marker (soft-deleted
- *  an active key) and, if so, the marker's synthesised versionId. Surfaced as
- *  the x-amz-delete-marker / x-amz-version-id response headers so a
- *  versioning-aware client can tell a marker was written rather than data
- *  destroyed (which never happens on the DSN). */
-interface DeleteObjectResult {
-  deleteMarker: boolean
-  versionId: string | null
-}
-
 const deleteObject = async (
   user: UserWithOrganization,
   bucket: string,
@@ -693,14 +567,7 @@ const deleteObject = async (
       bucket,
       key,
     )
-    return ok(
-      deleted
-        ? {
-            deleteMarker: true,
-            versionId: deleteMarkerVersionId(deleted.deletedAt),
-          }
-        : { deleteMarker: false, versionId: null },
-    )
+    return ok(resolveDeleteMarkerResult(deleted?.deletedAt))
   }
 
   const trashObject = async () => {
@@ -760,14 +627,7 @@ const deleteObject = async (
   // A delete marker was created iff this call actually hid an active row. (A
   // concurrent delete may have hidden it first — softDeleteMapping then returns
   // null and this call created nothing.)
-  return ok(
-    softDeleted
-      ? {
-          deleteMarker: true,
-          versionId: deleteMarkerVersionId(softDeleted.deletedAt),
-        }
-      : { deleteMarker: false, versionId: null },
-  )
+  return ok(resolveDeleteMarkerResult(softDeleted?.deletedAt))
 }
 
 /**

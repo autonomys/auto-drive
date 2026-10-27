@@ -104,7 +104,7 @@ const getByCid = async (uploadId: string, cid: string) => {
   const db = await getDatabase()
 
   const result = await db.query<BlockstoreEntry>(
-    'SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2 ORDER BY sort_id ASC',
+    'SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2 ORDER BY sort_id ASC LIMIT 1',
     [uploadId, cid],
   )
 
@@ -115,18 +115,68 @@ const getByCIDWithoutData = async (uploadId: string, cid: string) => {
   const db = await getDatabase()
 
   const result = await db.query<BlockstoreEntry>(
-    'SELECT upload_id, cid, node_type, node_size FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2 ORDER BY sort_id ASC',
+    'SELECT upload_id, cid, node_type, node_size FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2 ORDER BY sort_id ASC LIMIT 1',
     [uploadId, cid],
   )
 
   return result.rows.map(parseEntry).at(0) ?? null
 }
 
+const hasCid = async (uploadId: string, cid: string): Promise<boolean> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ exists: boolean }>(
+    'SELECT EXISTS (SELECT 1 FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2) AS exists',
+    [uploadId, cid],
+  )
+
+  return result.rows[0].exists
+}
+
+/**
+ * Every distinct CID in an upload's blockstore, ordered by where it first
+ * appears. Repeated content stores one row per occurrence (a zero-filled file is
+ * thousands of rows of one chunk CID); the DAG builder needs every occurrence,
+ * anything keyed by CID needs only one.
+ */
+const getDistinctCids = async (uploadId: string): Promise<string[]> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ cid: string }>(
+    'SELECT cid FROM uploads.blockstore WHERE upload_id = $1 GROUP BY cid ORDER BY MIN(sort_id) ASC',
+    [uploadId],
+  )
+
+  return result.rows.map((row) => row.cid)
+}
+
+/**
+ * The first-written row for each of `cids`, so a CID's payload is read once
+ * however many rows repeat it. The duplicates are resolved on sort_id alone and
+ * only the chosen rows are fetched with their data.
+ */
+const getFirstEntriesByCids = async (uploadId: string, cids: string[]) => {
+  const db = await getDatabase()
+
+  const result = await db.query<BlockstoreEntry>(
+    `SELECT * FROM uploads.blockstore
+      WHERE sort_id IN (
+        SELECT MIN(sort_id) FROM uploads.blockstore
+         WHERE upload_id = $1 AND cid = ANY($2)
+         GROUP BY cid
+      )
+      ORDER BY sort_id ASC`,
+    [uploadId, cids],
+  )
+
+  return result.rows.map(parseEntry)
+}
+
 const getByCIDAndRootUploadId = async (rootUploadId: string, cid: string) => {
   const db = await getDatabase()
 
   const result = await db.query<BlockstoreEntry>(
-    'SELECT uploads.blockstore.* FROM uploads.uploads inner join uploads.blockstore on uploads.uploads.id = uploads.blockstore.upload_id WHERE uploads.uploads.root_upload_id = $1 AND uploads.blockstore.cid = $2',
+    'SELECT uploads.blockstore.upload_id, uploads.blockstore.cid, uploads.blockstore.node_type, uploads.blockstore.node_size FROM uploads.uploads inner join uploads.blockstore on uploads.uploads.id = uploads.blockstore.upload_id WHERE uploads.uploads.root_upload_id = $1 AND uploads.blockstore.cid = $2 ORDER BY uploads.blockstore.sort_id ASC LIMIT 1',
     [rootUploadId, cid],
   )
 
@@ -158,6 +208,9 @@ export const blockstoreRepository = {
   getBlockstoreEntriesWithoutData,
   getByType,
   getByCid,
+  hasCid,
+  getDistinctCids,
+  getFirstEntriesByCids,
   deleteBlockstoreEntry,
   getByCIDWithoutData,
   getByCIDAndRootUploadId,

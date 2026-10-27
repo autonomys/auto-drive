@@ -1,9 +1,15 @@
 'use client';
 
-import { OwnerRole, ObjectInformation } from '@auto-drive/models';
+import {
+  OwnerRole,
+  ObjectInformation,
+  UserRole,
+  deriveUserPublicId,
+} from '@auto-drive/models';
 import { getTypeFromMetadata } from 'utils/file';
 import { useUserStore } from 'globalStates/user';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNetwork } from 'contexts/network';
 import { Loader } from 'lucide-react';
 import { FilePreview } from '@/components/molecules/FilePreview';
 import { IconByFileType } from '@/components/atoms/IconByFileType';
@@ -32,6 +38,32 @@ export const ObjectDetails = ({
       o.role === OwnerRole.ADMIN,
   );
 
+  // Anonymous visitors get no ownership rows (the page queries without them),
+  // and Hasura hides other owners' removed rows, but not the viewer's own.
+  const ownerPublicIds = useMemo(
+    () =>
+      (owners ?? [])
+        .filter((o) => o.role === OwnerRole.ADMIN)
+        .map((o) => deriveUserPublicId(o.oauthProvider, o.oauthUserId)),
+    [owners],
+  );
+
+  // Admins link each owner to the account they belong to now. Ownership is
+  // per person, so this is their current account, not necessarily the one
+  // charged for this upload.
+  const { api } = useNetwork();
+  const isAdminViewer = user?.role === UserRole.Admin;
+  const [ownerAccountIds, setOwnerAccountIds] = useState<
+    Record<string, string>
+  >({});
+  useEffect(() => {
+    if (!isAdminViewer || ownerPublicIds.length === 0) return;
+    api
+      .adminGetAccountIdsByUsers(ownerPublicIds)
+      .then(setOwnerAccountIds)
+      .catch((error) => console.error('Error resolving owners:', error));
+  }, [api, isAdminViewer, ownerPublicIds]);
+
   const isCached = useFileInCache(object?.metadata.dataCid ?? '');
 
   const isLoading = object === null;
@@ -59,9 +91,18 @@ export const ObjectDetails = ({
           </div>
           <ObjectDetailsTags object={object} isCached={isCached} />
         </div>
-        <ObjectDetailsActions isOwner={isOwner} object={object} isCached={isCached} />
+        <ObjectDetailsActions
+          isOwner={isOwner}
+          object={object}
+          isCached={isCached}
+        />
       </div>
-      <ObjectUploadDetails object={object} isOwner={isOwner} />
+      <ObjectUploadDetails
+        object={object}
+        ownerPublicIds={ownerPublicIds}
+        myPublicId={user?.publicId ?? null}
+        ownerAccountIds={ownerAccountIds}
+      />
       <ObjectUploadOptions object={object} />
       {object.metadata.type === 'file' && (
         <div className='rounded-lg border border-border bg-card p-6'>

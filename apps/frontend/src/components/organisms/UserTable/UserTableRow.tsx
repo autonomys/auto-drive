@@ -11,7 +11,9 @@ import {
   TableBodyCell,
   TableBodyRow,
 } from '@/components/molecules/Table/TableBody';
-import { Button } from '@auto-drive/ui';
+import { Button, ROUTES } from '@auto-drive/ui';
+import Link from 'next/link';
+import { useNetwork } from 'contexts/network';
 import { shortenString } from 'utils/misc';
 import { handleEnterOrSpace } from 'utils/eventHandler';
 import { formatBytes } from '../../../utils/number';
@@ -22,6 +24,7 @@ type UserTableRowProps = {
 
 export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
   const user = useUserStore(({ user }) => user);
+  const { network } = useNetwork();
   const [isUpdateRoleOpen, setIsUpdateRoleOpen] = useState(false);
   const [isCreditsUpdateModalOpen, setIsCreditsUpdateModalOpen] =
     useState(false);
@@ -61,6 +64,15 @@ export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
         >
           {shortenString(accountWithUser.user.publicId!, 16)} <Copy size={16} />
         </div>
+      </TableBodyCell>
+      <TableBodyCell>
+        <Link
+          href={ROUTES.adminOrganization(network.id, accountWithUser.id)}
+          className='font-mono text-sm text-primary hover:underline'
+          title={accountWithUser.id}
+        >
+          {shortenString(accountWithUser.id, 16)}
+        </Link>
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-foreground-hover text-sm'>

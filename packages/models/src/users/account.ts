@@ -25,3 +25,8 @@ export type AccountInfo = Account & {
   pendingUploadCredits: number;
   pendingDownloadCredits: number;
 };
+
+/** Admin account page: an account and its members, which may be none. */
+export type AdminAccountDetails = AccountInfo & {
+  members: User[];
+};

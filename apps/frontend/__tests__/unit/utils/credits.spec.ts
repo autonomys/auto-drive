@@ -1,4 +1,5 @@
-import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, isBatchRefundable, mibToBytes, normaliseMib } from '../../../src/utils/credits'
+import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, isBatchRefundable, mibToBytes, normaliseMib, summarizePurchases } from '../../../src/utils/credits'
+import { PaymentMethod } from '@auto-drive/models'
 
 // ---------------------------------------------------------------------------
 // isMibOverCap (shared helper used by both package and custom-amount flows)
@@ -354,5 +355,60 @@ describe('normaliseMib', () => {
     expect(normaliseMib(Number.MAX_SAFE_INTEGER + 2)).toBeNull()
     // The boundary itself is still a number, however absurd a purchase.
     expect(normaliseMib(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// summarizePurchases
+// ---------------------------------------------------------------------------
+
+describe('summarizePurchases', () => {
+  const batch = (overrides: Partial<Parameters<typeof summarizePurchases>[0][number]> = {}) => ({
+    paymentMethod: PaymentMethod.AI3_NATIVE,
+    paymentAmount: (BigInt(10) ** BigInt(18)).toString(),
+    tokenAmount: null,
+    quotedTokenAmount: null,
+    quotedAi3Shannons: null,
+    uploadBytesOriginal: '100',
+    uploadBytesRemaining: '40',
+    expired: false,
+    refundedAt: null,
+    ...overrides,
+  })
+
+  it('returns zeroes and no amounts for no purchases', () => {
+    expect(summarizePurchases([])).toEqual({
+      batchCount: 0,
+      bytesPurchased: BigInt(0),
+      bytesRemaining: BigInt(0),
+      paid: [],
+      refundedCount: 0,
+    })
+  })
+
+  it('keeps AI3 and USDC totals separate', () => {
+    const summary = summarizePurchases([
+      batch(),
+      batch(),
+      batch({
+        paymentMethod: PaymentMethod.USDC_ETH,
+        paymentAmount: null,
+        tokenAmount: '2500000',
+      }),
+    ])
+
+    expect(summary.paid).toEqual(['2 AI3', '2.50 USDC'])
+    expect(summary.bytesPurchased).toBe(BigInt(300))
+  })
+
+  it('excludes expired and refunded batches from the remaining bytes', () => {
+    const summary = summarizePurchases([
+      batch(),
+      batch({ expired: true }),
+      batch({ refundedAt: '2026-01-01T00:00:00Z' }),
+    ])
+
+    expect(summary.bytesRemaining).toBe(BigInt(40))
+    expect(summary.refundedCount).toBe(1)
   })
 })
