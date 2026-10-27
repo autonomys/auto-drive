@@ -28,6 +28,8 @@ curl https://rclone.org/install.sh | sudo bash
 winget install Rclone.Rclone
 ```
 
+rclone has an `Autonomys` provider from v1.76. Until v1.76 is released, install a beta: `curl https://rclone.org/install.sh | sudo bash -s beta`.
+
 **3. Configure the Auto Drive remote**
 
 Create or edit `~/.config/rclone/rclone.conf`:
@@ -35,14 +37,13 @@ Create or edit `~/.config/rclone/rclone.conf`:
 ```ini
 [autodrive]
 type = s3
-provider = Other
+provider = Autonomys
 access_key_id = YOUR_API_KEY_HERE
 secret_access_key = placeholder
-endpoint = https://s3.auto-drive.autonomys.xyz
-no_check_bucket = true
-list_version = 2
-list_url_encode = true
+endpoint = s3.auto-drive.autonomys.xyz
 ```
+
+With rclone v1.75 or earlier, use `provider = Other` and the extra options in the [Setup Guide](setup.md#older-rclone-versions-provider--other).
 
 **4. Verify the connection**
 
@@ -62,7 +63,7 @@ rclone copy autodrive:my-archive/my-file.txt ./downloaded/
 | Operation | Status | Notes |
 |---|---|---|
 | Upload files (`copy`, `copyto`, `rcat`) | ✅ Supported | Content is stored permanently on the DSN |
-| Download files (`copy`, `cat`) | ✅ Supported | Full and byte-range downloads |
+| Download files (`copy`, `cat`) | ✅ Supported | Full and byte-range downloads. Free up to 100 MiB per file; larger files use download credits |
 | Head/stat files | ✅ Supported | MD5 ETag, size, modification time, metadata |
 | List files (`ls`, `lsl`, `lsjson`) | ✅ Supported | ListObjectsV2 |
 | List directories (`lsd`, `tree`) | ✅ Supported | Virtual directories via delimiter |
@@ -75,7 +76,7 @@ rclone copy autodrive:my-archive/my-file.txt ./downloaded/
 | Sync (`sync`) | ✅ Supported | Removed files are hidden, not erased |
 | Overwrite files | ✅ Supported | Adds a new version; old versions stay readable |
 | Version history (`--s3-versions`, `--s3-version-at`) | ✅ Supported | Versioning is always on |
-| `purge` | ❌ Fails | Tries to destroy versions, which is refused. Use `rclone delete` |
+| `purge` | ✅ Supported | Hides every file under the path. With `provider = Other` it fails (403); use `rclone delete` |
 | Delete a specific version | ❌ Refused by design | Versions are permanent (403) |
 | Public links (`rclone link`) | ❌ Not supported | Use the Autonomys gateway link instead |
 
@@ -90,7 +91,7 @@ The first segment of an object key is treated as the bucket name:
 | `rclone copy ./file.txt autodrive:my-archive/` | `my-archive` | `file.txt` |
 | `rclone copy ./file.txt autodrive:my-archive/sub/` | `my-archive` | `sub/file.txt` |
 
-- **Buckets are created on first write.** There is no CreateBucket call, so `no_check_bucket = true` is required.
+- **Buckets are created on first write.** There is no CreateBucket call. The `Autonomys` provider never sends one; with `provider = Other`, set `no_check_bucket = true`.
 - **Buckets are private to your account.** `rclone lsd autodrive:` lists only your buckets. Two accounts can use the same bucket name without seeing each other's files.
 - **Legacy keys.** Objects uploaded before bucket support was introduced (flat keys with no `/`) are in the `default` bucket.
 
@@ -103,6 +104,8 @@ The S3 view behaves like a versioned bucket with COMPLIANCE-mode Object Lock:
 - **Destroying a version** is refused with `403 AccessDenied`, because the DSN cannot erase data.
 
 Every upload is permanent storage and uses credits. Deleting a key does not refund credits.
+
+Because nothing you upload can be erased, try your commands first against the [local test endpoint](setup.md#try-it-locally-first).
 
 For archives you never want to change, add `--immutable`. rclone then refuses to replace a file that already exists at the same key with different content:
 

@@ -10,11 +10,22 @@
 # Buckets are created on first write and are private to your account.
 # Organize files using key prefixes (the path after the bucket name).
 
+# rclone v1.76 and later (or a beta until v1.76 is released).
+# The Autonomys provider sets path-style requests, ListObjectsV2 listings,
+# single-request server-side copies, and no bucket checks.
 [autodrive]
+type = s3
+provider = Autonomys
+access_key_id = YOUR_API_KEY_HERE
+# Required by rclone but not checked by Auto Drive: the API key is the credential.
+secret_access_key = placeholder
+endpoint = s3.auto-drive.autonomys.xyz
+
+# rclone v1.75 and earlier have no Autonomys provider. Use this remote instead.
+[autodrive-legacy]
 type = s3
 provider = Other
 access_key_id = YOUR_API_KEY_HERE
-# Required by rclone but not checked by Auto Drive: the API key is the credential.
 secret_access_key = placeholder
 endpoint = https://s3.auto-drive.autonomys.xyz
 # Required: Auto Drive has no bucket-level endpoints (CreateBucket, HeadBucket).
@@ -25,5 +36,11 @@ list_version = 2
 # Recommended: URL-encode listings so keys with special characters list correctly.
 list_url_encode = true
 
-# For local development, use:
-# endpoint = http://localhost:3000/s3
+# Local test endpoint: nothing is stored permanently and no credits are used.
+#   docker run --rm -d -p 127.0.0.1:28640:80 ghcr.io/autonomys/auto-drive-test
+[autodrive-test]
+type = s3
+provider = Autonomys
+endpoint = http://127.0.0.1:28640
+access_key_id = 0123456789abcdef0123456789abcdef
+secret_access_key = auto-drive-test

@@ -4,7 +4,7 @@ Common recipes for using rclone with Auto Drive. Each workflow is self-contained
 
 All workflows assume you have completed the [Setup Guide](setup.md) and have a working `autodrive` remote configured.
 
-**Storage costs:** Every upload of new content uses credits from your Auto Drive account, because the content is stored permanently. Deletes, renames, moves, and server-side copies within Auto Drive do not upload content, so they use no credits. Deleting a file does not refund its credits. Check your balance at [ai3.storage](https://ai3.storage). See [Setup Guide - Purchase Storage Credits](setup.md#3-purchase-storage-credits-optional) for purchasing details.
+**Storage costs:** Every upload of new content uses credits from your Auto Drive account, because the content is stored permanently. Deletes, renames, moves, and server-side copies within Auto Drive do not upload content, so they use no credits. Deleting a file does not refund its credits. Downloading a file of 100 MiB or less is free; larger downloads use download credits from your free tier. Check your balance at [ai3.storage](https://ai3.storage). See [Setup Guide - Purchase Storage Credits](setup.md#3-purchase-storage-credits-optional) for purchasing details.
 
 ---
 
@@ -150,7 +150,7 @@ rclone move autodrive:my-archive/2025/ autodrive:cold-archive/2025/ -v
 rclone copy autodrive:my-archive/reports/ autodrive:shared/reports/
 ```
 
-Files of about 4.6 GiB and over cannot be copied server-side. Add `--disable copy` to have rclone download and re-upload them.
+With `provider = Other`, files of about 4.6 GiB and over cannot be copied server-side. Add `--disable copy` to have rclone download and re-upload them, or use the `Autonomys` provider, which copies files of any size.
 
 ---
 
@@ -239,7 +239,7 @@ rclone copy <source-remote>:<source-path>/ autodrive:<bucket>/<destination-prefi
 - If interrupted, re-run the same command: only the remaining files are transferred
 - Run `rclone check <source> autodrive:<destination>` afterwards to verify every file
 
-**Cost note:** A migration uses credits for every file written. For large datasets, check the total size first with `rclone size <source-remote>:<source-path>` and make sure you have enough credits. Test the workflow on a small subset with the free tier before you migrate everything.
+**Cost note:** A migration uses credits for every file written. For large datasets, check the total size first with `rclone size <source-remote>:<source-path>` and make sure you have enough credits. Test the workflow on a small subset first, against the [local test image](setup.md#try-it-locally-first) or with the free tier, before you migrate everything.
 
 ---
 
@@ -265,19 +265,18 @@ jobs:
       - name: Build
         run: make build
 
+      # The Autonomys provider needs rclone v1.76 or later. Until v1.76 is
+      # released, install a beta: `sudo bash -s beta`.
       - name: Install rclone
-        run: curl https://rclone.org/install.sh | sudo bash
+        run: curl https://rclone.org/install.sh | sudo bash -s beta
 
       - name: Archive build artifacts
         env:
           RCLONE_CONFIG_AUTODRIVE_TYPE: s3
-          RCLONE_CONFIG_AUTODRIVE_PROVIDER: Other
+          RCLONE_CONFIG_AUTODRIVE_PROVIDER: Autonomys
           RCLONE_CONFIG_AUTODRIVE_ACCESS_KEY_ID: ${{ secrets.AUTO_DRIVE_API_KEY }}
           RCLONE_CONFIG_AUTODRIVE_SECRET_ACCESS_KEY: placeholder
-          RCLONE_CONFIG_AUTODRIVE_ENDPOINT: https://s3.auto-drive.autonomys.xyz
-          RCLONE_CONFIG_AUTODRIVE_NO_CHECK_BUCKET: 'true'
-          RCLONE_CONFIG_AUTODRIVE_LIST_VERSION: '2'
-          RCLONE_CONFIG_AUTODRIVE_LIST_URL_ENCODE: 'true'
+          RCLONE_CONFIG_AUTODRIVE_ENDPOINT: s3.auto-drive.autonomys.xyz
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           rclone copy ./dist/ \
@@ -293,15 +292,14 @@ The `RCLONE_CONFIG_<REMOTE>_<OPTION>` variables define the remote without writin
 ```yaml
 archive-artifacts:
   stage: deploy
-  image: rclone/rclone:latest
+  # The Autonomys provider needs rclone v1.76 or later. Until v1.76 is
+  # released, use the beta image.
+  image: rclone/rclone:beta
   variables:
     RCLONE_CONFIG_AUTODRIVE_TYPE: s3
-    RCLONE_CONFIG_AUTODRIVE_PROVIDER: Other
+    RCLONE_CONFIG_AUTODRIVE_PROVIDER: Autonomys
     RCLONE_CONFIG_AUTODRIVE_SECRET_ACCESS_KEY: placeholder
-    RCLONE_CONFIG_AUTODRIVE_ENDPOINT: https://s3.auto-drive.autonomys.xyz
-    RCLONE_CONFIG_AUTODRIVE_NO_CHECK_BUCKET: 'true'
-    RCLONE_CONFIG_AUTODRIVE_LIST_VERSION: '2'
-    RCLONE_CONFIG_AUTODRIVE_LIST_URL_ENCODE: 'true'
+    RCLONE_CONFIG_AUTODRIVE_ENDPOINT: s3.auto-drive.autonomys.xyz
   script:
     # AUTO_DRIVE_API_KEY is a masked CI/CD variable
     - export RCLONE_CONFIG_AUTODRIVE_ACCESS_KEY_ID="${AUTO_DRIVE_API_KEY}"

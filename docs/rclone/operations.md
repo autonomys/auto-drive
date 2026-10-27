@@ -89,6 +89,8 @@ rclone copy autodrive:my-archive/backup-2026-05-03/ ./restored/
 
 **Status:** Fully supported, including byte-range downloads.
 
+Reading a file of 100 MiB or less is free. Reading a larger file uses download credits from your free tier, for the bytes read; a byte-range read uses only the length of the range. Purchased credits do not add download credits. If you do not have enough, the read fails with `402 PaymentRequired` before any data is sent. Stat calls (`HeadObject`) are free at any size.
+
 ### cat
 
 Read file contents to stdout.
@@ -100,7 +102,7 @@ rclone cat autodrive:my-archive/logs/app.log
 rclone cat autodrive:my-archive/logs/app.log --offset 1024 --count 512
 ```
 
-**Status:** Fully supported.
+**Status:** Fully supported. A byte-range request that starts at or past the end of the file is answered with `416 InvalidRange`.
 
 ---
 
@@ -210,7 +212,7 @@ rclone copy autodrive:my-archive/reports/ autodrive:shared-reports/
 
 **Status:** Supported. The new key points at the existing content, so nothing is re-uploaded and no extra credits are used.
 
-Exception: files of about 4.6 GiB or more (rclone's `--s3-copy-cutoff`) cannot be copied server-side, because Auto Drive does not implement UploadPartCopy (`501 NotImplemented`). To copy or move such a file, add `--disable copy` so rclone downloads and re-uploads it instead.
+The `Autonomys` provider copies files of any size in one request. With `provider = Other`, files of about 4.6 GiB or more (rclone's `--s3-copy-cutoff`) are copied in parts with UploadPartCopy, which Auto Drive does not implement (`501 NotImplemented`). To copy or move such a file with `provider = Other`, add `--disable copy` so rclone downloads and re-uploads it instead.
 
 ### sync
 
@@ -285,7 +287,7 @@ Versions are permanent. Commands that destroy versions are refused with `403 Acc
 
 - `rclone deletefile --s3-versions` on an old version
 - `rclone backend cleanup-hidden`
-- `rclone purge` (see below)
+- `rclone purge` with `provider = Other` (see [purge](#purge))
 
 ---
 
@@ -315,25 +317,23 @@ A gateway link is public: anyone who has it can read the file.
 
 ---
 
-## Not supported
-
-### purge
+## purge
 
 ```bash
 rclone purge autodrive:my-archive/old/
 ```
 
-**What you see:** `403 AccessDenied` errors.
+**Status:** Supported with the `Autonomys` provider. rclone hides every current file under the path, like `rclone delete`. Earlier versions stay readable with `--s3-versions`. Directories are virtual, so the path disappears once it has no visible files.
 
-**Why:** Auto Drive reports versioning as enabled. rclone's `purge` then tries to delete every version of every file, and versions cannot be destroyed. The same thing happens on any S3 bucket with COMPLIANCE-mode Object Lock.
-
-**Instead:** use `rclone delete`, which hides all current files under the path:
+**With `provider = Other`:** `purge` fails with `403 AccessDenied`. Auto Drive reports versioning as enabled, so rclone tries to delete every version of every file, and versions cannot be destroyed. The same thing happens on any S3 bucket with COMPLIANCE-mode Object Lock. Use `rclone delete` instead:
 
 ```bash
 rclone delete autodrive:my-archive/old/
 ```
 
-Directories are virtual, so the path disappears once it has no visible files.
+---
+
+## Not supported
 
 ### mkdir / rmdir / rmdirs
 
@@ -373,7 +373,7 @@ rclone about autodrive:
 | Command | Status | Notes |
 |---|---|---|
 | `copy` / `copyto` (upload) | ✅ Supported | Multipart from 200 MiB |
-| `copy` (download) | ✅ Supported | Byte-range downloads supported |
+| `copy` (download) | ✅ Supported | Byte-range downloads supported. Files over 100 MiB use download credits |
 | `cat` | ✅ Supported | Supports `--offset` / `--count` |
 | `rcat` | ✅ Supported | Upload from stdin |
 | `ls` / `lsl` / `lsjson` | ✅ Supported | Modification times and metadata included |
@@ -383,14 +383,14 @@ rclone about autodrive:
 | `size` | ✅ Supported | Current versions only |
 | `delete` / `deletefile` | ✅ Supported | Hides the file; content stays on the DSN |
 | `move` / `moveto` | ✅ Supported | Server-side copy + delete |
-| server-side copy | ✅ Supported | Not for files of ~4.6 GiB and over |
+| server-side copy | ✅ Supported | Any size with the `Autonomys` provider; up to ~4.6 GiB with `provider = Other` |
 | `sync` | ✅ Supported | Removed files are hidden |
+| `purge` | ✅ Supported | Hides every file. Fails (403) with `provider = Other`; use `rclone delete` |
 | `mount` | ✅ Supported | Each save in a read-write mount is a new version |
 | `--s3-versions` / `--s3-version-at` | ✅ Supported | Read old versions |
 | `backend versioning` | ✅ Supported | Always `Enabled` |
 | `mkdir` / `rmdir` / `rmdirs` | ⚠️ No effect | Buckets and directories are virtual |
 | `link` | ❌ Not supported | Use `https://gateway.autonomys.xyz/file/<CID>` |
-| `purge` | ❌ Fails (403) | Use `rclone delete` |
 | delete a specific version, `backend cleanup-hidden` | ❌ Refused by design (403) | Versions are permanent |
 | `cleanup` | ❌ Not implemented (501) | `ListMultipartUploads` not implemented |
 | `about` | ❌ Not implemented | No quota API |

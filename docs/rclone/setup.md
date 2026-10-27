@@ -31,6 +31,8 @@ Storage pricing reflects the on-chain storage cost plus a service fee. For detai
 
 Credits are used when content is uploaded. Deletes, renames, and server-side copies do not upload new content, so they use no credits, and a delete does not refund any.
 
+Downloads have their own allowance. Reading a file of 100 MiB or less is free. Reading a larger file uses download credits from your free tier, for the bytes read (a byte-range read uses only the length of the range). Purchased credits are for uploads and do not add download credits. Listings and stat calls (`HeadObject`) are always free.
+
 ## 4. Install rclone
 
 ### macOS
@@ -60,6 +62,16 @@ sudo pacman -S rclone
 
 Distribution packages can be several releases behind. If a command or flag in this guide is missing, install the latest version with the script above.
 
+### rclone version
+
+rclone has an `Autonomys` provider from v1.76. Until v1.76 is released, install a beta:
+
+```bash
+curl https://rclone.org/install.sh | sudo bash -s beta
+```
+
+Betas for all platforms are also at [beta.rclone.org](https://beta.rclone.org). With v1.75 or earlier, see [Older rclone versions](#older-rclone-versions-provider--other).
+
 ### Windows
 
 ```powershell
@@ -83,13 +95,10 @@ Create or edit `~/.config/rclone/rclone.conf` (Linux/macOS) or `%APPDATA%\rclone
 ```ini
 [autodrive]
 type = s3
-provider = Other
+provider = Autonomys
 access_key_id = YOUR_API_KEY_HERE
 secret_access_key = placeholder
-endpoint = https://s3.auto-drive.autonomys.xyz
-no_check_bucket = true
-list_version = 2
-list_url_encode = true
+endpoint = s3.auto-drive.autonomys.xyz
 ```
 
 ### Option B: Use rclone config interactively
@@ -101,34 +110,81 @@ rclone config
 1. Select `n` for new remote
 2. Name it `autodrive`
 3. Select `s3` (Amazon S3 Compliant Storage Providers)
-4. Select `Other` as the provider
-5. Enter your API key as the `access_key_id`
-6. Enter `placeholder` (or any non-empty value) for `secret_access_key`
-7. Enter `https://s3.auto-drive.autonomys.xyz` as the endpoint
-8. Accept defaults for all remaining options
-
-Then set the three options that the interactive flow does not ask for:
-
-```bash
-rclone config update autodrive no_check_bucket true list_version 2 list_url_encode true
-```
+4. Select `Autonomys` as the provider
+5. Enter `false` for `env_auth`
+6. Enter your API key as the `access_key_id`
+7. Enter `placeholder` (or any non-empty value) for `secret_access_key`
+8. Select `s3.auto-drive.autonomys.xyz` as the endpoint
+9. Accept defaults for all remaining options
 
 ### Configuration notes
 
 | Option | Value | Notes |
 |---|---|---|
 | `type` | `s3` | Use the S3 backend |
-| `provider` | `Other` | Generic S3-compatible mode |
+| `provider` | `Autonomys` | Auto Drive provider, rclone v1.76 and later |
 | `access_key_id` | Your API key | Obtain from the Developers section in the web UI |
 | `secret_access_key` | Any non-empty string | Required by rclone but ignored by Auto Drive |
-| `endpoint` | `https://s3.auto-drive.autonomys.xyz` | Auto Drive S3 API |
-| `no_check_bucket` | `true` | **Required.** Auto Drive has no bucket-level endpoints (CreateBucket, HeadBucket). Buckets are created on first write |
-| `list_version` | `2` | **Required.** Auto Drive implements ListObjectsV2 only. With `provider = Other`, rclone defaults to V1 and listing fails |
-| `list_url_encode` | `true` | Recommended. Keys with special characters list correctly. With `provider = Other`, rclone defaults to off |
+| `endpoint` | `s3.auto-drive.autonomys.xyz` | Auto Drive S3 API |
+
+The `Autonomys` provider sets everything else Auto Drive needs:
+
+- It never checks or creates buckets. Auto Drive has no bucket-level endpoints, and buckets are created on first write.
+- It lists with ListObjectsV2 and URL-encoded keys.
+- It copies files server-side in one request at any size. Auto Drive does not implement UploadPartCopy.
+- `rclone purge` hides every file under a path, instead of trying to delete every version.
 
 **Use the `s3.` endpoint.** The older `https://public.auto-drive.autonomys.xyz/s3` endpoint still works for existing clients, but it runs through a CDN that can decompress objects stored with `Content-Encoding: gzip`. The `s3.auto-drive.autonomys.xyz` endpoint returns stored bytes exactly.
 
+### Older rclone versions (`provider = Other`)
+
+rclone v1.75 and earlier have no `Autonomys` provider. Use the generic provider and set the options it does not set for you:
+
+```ini
+[autodrive]
+type = s3
+provider = Other
+access_key_id = YOUR_API_KEY_HERE
+secret_access_key = placeholder
+endpoint = https://s3.auto-drive.autonomys.xyz
+no_check_bucket = true
+list_version = 2
+list_url_encode = true
+```
+
+| Option | Value | Notes |
+|---|---|---|
+| `no_check_bucket` | `true` | **Required.** Auto Drive has no bucket-level endpoints (CreateBucket, HeadBucket) |
+| `list_version` | `2` | **Required.** Auto Drive implements ListObjectsV2 only. With `provider = Other`, rclone defaults to V1 and listing fails |
+| `list_url_encode` | `true` | Recommended. Keys with special characters list correctly. With `provider = Other`, rclone defaults to off |
+
+With `provider = Other`, two commands behave differently:
+
+- `rclone purge` fails with `403 AccessDenied`. Use `rclone delete` instead.
+- Files of about 4.6 GiB and over cannot be copied or moved server-side. Add `--disable copy` to have rclone download and re-upload them.
+
+### Try it locally first
+
+Everything you upload to Auto Drive is permanent. To try commands and scripts without writing permanent data or using credits, run the Auto Drive test image. It runs the same S3 API on local storage, and nothing it stores reaches the network:
+
+```bash
+docker run --rm -d -p 127.0.0.1:28640:80 ghcr.io/autonomys/auto-drive-test
+```
+
+```ini
+[autodrive-test]
+type = s3
+provider = Autonomys
+endpoint = http://127.0.0.1:28640
+access_key_id = 0123456789abcdef0123456789abcdef
+secret_access_key = auto-drive-test
+```
+
+The container starts empty, and its data is lost when it stops. See the [test image README](../../docker/auto-drive-test/README.md) for details.
+
 ### Local development
+
+To run rclone against an Auto Drive backend that you build from source, start the download API (`yarn backend start:download`). It serves the S3 API under `/s3` on its port (default 3000):
 
 ```ini
 endpoint = http://localhost:3000/s3
@@ -175,7 +231,6 @@ Objects uploaded before bucket support was introduced (flat keys with no `/`) re
 ### Upload size limits
 
 rclone sends files smaller than `--s3-upload-cutoff` (default 200 MiB) as a single request, and larger files as multipart uploads in `--s3-chunk-size` parts (default 5 MiB). Auto Drive accepts requests of up to 200 MiB. Keep `--s3-upload-cutoff` and `--s3-chunk-size` at 200M or below.
-
 ### Checksums
 
 Auto Drive returns MD5 hashes as ETags, and keeps the MD5 that rclone attaches to multipart uploads. `rclone check` and `rclone md5sum` work without any special flags.

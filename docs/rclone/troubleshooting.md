@@ -28,7 +28,13 @@ ListObjects, ... StatusCode: 404, ... NoSuchKey: The specified key does not exis
 
 **Why it happens:** Auto Drive implements the **ListObjectsV2** API only. With `provider = Other`, rclone uses the older **ListObjectsV1** API by default. Auto Drive does not recognise it and treats the request as a download of a missing key.
 
-**Solution:** Set `list_version = 2` in your rclone config:
+**Solution:** Use the `Autonomys` provider (rclone v1.76 and later), which lists with ListObjectsV2:
+
+```bash
+rclone config update autodrive provider Autonomys
+```
+
+With an older rclone, keep `provider = Other` and set `list_version = 2`:
 
 ```bash
 rclone config update autodrive list_version 2
@@ -67,9 +73,17 @@ rclone does not retry this error, because a rejected key will not start working 
 PaymentRequired: ... StatusCode: 402
 ```
 
-**Why it happens:** Your account does not have enough storage credits for the upload.
+**Why it happens:** There are two causes:
 
-**Solution:** Check your balance at [ai3.storage](https://ai3.storage) and purchase more credits. See [Setup Guide - Purchase Storage Credits](setup.md#3-purchase-storage-credits-optional). Downloads, listings, deletes, renames, and server-side copies do not need credits and keep working.
+1. **On an upload:** your account does not have enough storage credits.
+2. **On a download of a file over 100 MiB:** your account does not have enough download credits. Reads of files of 100 MiB or less are free. Reads of larger files use download credits from your free tier, and purchased credits do not add to them. The error comes before any data is sent.
+
+**Solution:**
+
+- For uploads, check your balance at [ai3.storage](https://ai3.storage) and purchase more credits. See [Setup Guide - Purchase Storage Credits](setup.md#3-purchase-storage-credits-optional).
+- For downloads, read only the part of the file you need (a byte-range read uses only the length of the range). You can also share the file's [gateway link](#public-link-does-not-open) and download it from there.
+
+Listings, stat calls, deletes, renames, and server-side copies do not need credits and keep working.
 
 ---
 
@@ -81,9 +95,15 @@ PaymentRequired: ... StatusCode: 402
 ERROR : file.txt: Couldn't delete: AccessDenied: Versions are permanent and cannot be destroyed. ...
 ```
 
-**Why it happens:** Auto Drive reports versioning as enabled, so `rclone purge` tries to delete every version of every file. Versions on the DSN cannot be destroyed. Commands that delete a specific version (`deletefile --s3-versions`, `backend cleanup-hidden`) fail the same way.
+**Why it happens:** Your remote uses `provider = Other`. Auto Drive reports versioning as enabled, so `rclone purge` tries to delete every version of every file. Versions on the DSN cannot be destroyed. Commands that delete a specific version (`deletefile --s3-versions`, `backend cleanup-hidden`) fail the same way with any provider.
 
-**Solution:** Use `rclone delete` to hide the current files:
+**Solution:** Switch to the `Autonomys` provider (rclone v1.76 and later), where `purge` hides the current files:
+
+```bash
+rclone config update autodrive provider Autonomys
+```
+
+Or use `rclone delete`, which does the same with any provider:
 
 ```bash
 rclone delete autodrive:my-archive/old/
@@ -136,6 +156,40 @@ ERROR : file.txt: Failed to copy: ... StatusCode: 503
 **Why it happens:** After an upload, Auto Drive moves the file's data through its processing and archiving pipeline. For a short time a single object may not be ready to serve. Nothing is lost, and the error is temporary.
 
 **Solution:** rclone retries `503` automatically. If it still fails, wait a few minutes and run the command again.
+
+---
+
+### Range Not Satisfiable (416 InvalidRange)
+
+**What you see:**
+
+```
+InvalidRange: The requested range is not satisfiable ... StatusCode: 416
+```
+
+**Why it happens:** A byte-range read starts at or past the end of the file, for example `rclone cat --offset` with an offset larger than the file.
+
+**Solution:** Check the file size with `rclone lsl` and use an offset smaller than the size.
+
+---
+
+### Server-Side Copy of a Large File Fails (501 NotImplemented)
+
+**What you see:** `rclone copy`, `move`, or `moveto` between two Auto Drive paths fails for a file of about 4.6 GiB or more:
+
+```
+NotImplemented: This S3 operation is not supported by Auto Drive. ... StatusCode: 501
+```
+
+**Why it happens:** Your remote uses `provider = Other`. rclone copies files above `--s3-copy-cutoff` (4.6 GiB) in parts with UploadPartCopy, which Auto Drive does not implement.
+
+**Solution:** Switch to the `Autonomys` provider (rclone v1.76 and later), which copies files of any size in one request:
+
+```bash
+rclone config update autodrive provider Autonomys
+```
+
+With an older rclone, add `--disable copy` so rclone downloads and re-uploads the file instead.
 
 ---
 
@@ -281,7 +335,11 @@ rclone copy ./test-file.txt autodrive:test-bucket/test/ \
 rclone version
 ```
 
-Use a recent rclone release. `--s3-versions` needs v1.59 or later, and `--s3-version-at` needs v1.61 or later.
+Use a recent rclone release. The `Autonomys` provider needs v1.76 or later (or a beta until v1.76 is released), `--s3-versions` needs v1.59 or later, and `--s3-version-at` needs v1.61 or later.
+
+### Reproduce without touching your data
+
+Run the same commands against the [local test image](setup.md#try-it-locally-first). If they work there but fail against Auto Drive, the cause is your account, your network, or the service, not your rclone configuration.
 
 ---
 

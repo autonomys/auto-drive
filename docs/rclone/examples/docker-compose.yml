@@ -18,20 +18,19 @@
 
 services:
   rclone:
-    image: rclone/rclone:latest
+    # The Autonomys provider needs rclone v1.76 or later. Until v1.76 is
+    # released, use the beta image.
+    image: rclone/rclone:beta
     container_name: rclone-autodrive
     restart: unless-stopped
     environment:
       # The remote is defined with RCLONE_CONFIG_<REMOTE>_<OPTION> variables,
       # so no config file is needed and the API key is never written to disk.
       RCLONE_CONFIG_AUTODRIVE_TYPE: s3
-      RCLONE_CONFIG_AUTODRIVE_PROVIDER: Other
+      RCLONE_CONFIG_AUTODRIVE_PROVIDER: Autonomys
       RCLONE_CONFIG_AUTODRIVE_ACCESS_KEY_ID: ${AUTO_DRIVE_API_KEY:?Set AUTO_DRIVE_API_KEY environment variable}
       RCLONE_CONFIG_AUTODRIVE_SECRET_ACCESS_KEY: placeholder
-      RCLONE_CONFIG_AUTODRIVE_ENDPOINT: https://s3.auto-drive.autonomys.xyz
-      RCLONE_CONFIG_AUTODRIVE_NO_CHECK_BUCKET: 'true'
-      RCLONE_CONFIG_AUTODRIVE_LIST_VERSION: '2'
-      RCLONE_CONFIG_AUTODRIVE_LIST_URL_ENCODE: 'true'
+      RCLONE_CONFIG_AUTODRIVE_ENDPOINT: s3.auto-drive.autonomys.xyz
     volumes:
       # Mount a local directory for uploading files
       - ./data:/data:ro
