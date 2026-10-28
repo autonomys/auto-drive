@@ -15,6 +15,12 @@ import { config } from '../../../config.js'
 const JWT_SECRET = Buffer.from(config.jwtSecret, 'base64').toString('utf-8')
 const JWT_SECRET_ALGORITHM = config.jwtSecretAlgorithm as jwt.Algorithm
 
+// Applies to access and refresh tokens alike.
+const isIssuedBeforeCutoff = ({ iat }: jwt.JwtPayload) =>
+  config.revokeTokenEmittedBeforeInSeconds > 0 &&
+  !!iat &&
+  iat < config.revokeTokenEmittedBeforeInSeconds
+
 const getUserFromAccessToken = async (
   accessToken: string,
 ): Promise<OAuthUser> => {
@@ -25,10 +31,8 @@ const getUserFromAccessToken = async (
     throw new Error('Invalid access token')
   }
 
-  if (config.revokeTokenEmittedBeforeInSeconds > 0) {
-    if (decoded.iat && decoded.iat < config.revokeTokenEmittedBeforeInSeconds) {
-      throw new Error('Invalid access token')
-    }
+  if (isIssuedBeforeCutoff(decoded)) {
+    throw new Error('Invalid access token')
   }
 
   const isPresent = await jwtTokenRegistry.isPresentOnRegistry(
@@ -130,6 +134,9 @@ const getUserFromRefreshToken = async (
     throw new Error('Invalid refresh token')
   }
   if (!decoded.isRefreshToken) {
+    throw new Error('Invalid refresh token')
+  }
+  if (isIssuedBeforeCutoff(decoded)) {
     throw new Error('Invalid refresh token')
   }
 
