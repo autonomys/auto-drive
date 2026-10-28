@@ -366,11 +366,15 @@ objectController.get(
       return
     }
 
-    // The owners depend on the credentials, so shared caches must not keep this
+    const [withOwners, publishedObjectId] = await Promise.all([
+      OwnershipUseCases.withVisibleOwners(objectInformation, cid, viewer),
+      ObjectUseCases.getPublishedObjectId(cid, viewer),
+    ])
+
+    // The owners and the public link depend on the credentials, so shared
+    // caches must not keep this
     res.set('Cache-Control', 'private')
-    res.json(
-      await OwnershipUseCases.withVisibleOwners(objectInformation, cid, viewer),
-    )
+    res.json({ ...withOwners, publishedObjectId })
   }),
 )
 

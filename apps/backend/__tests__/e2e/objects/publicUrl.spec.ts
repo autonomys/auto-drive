@@ -72,6 +72,27 @@ describe('Public URL', () => {
     expect(otherPublishedObject.id).not.toBe(publishedObject.id)
   })
 
+  it('should show each viewer only their own public link', async () => {
+    const otherUser = createMockUser()
+    const otherLink = await ObjectUseCases.publishObject(otherUser, fileCid)
+
+    await expect(
+      ObjectUseCases.getPublishedObjectId(fileCid, user),
+    ).resolves.toBe(publishedObject.id)
+    await expect(
+      ObjectUseCases.getPublishedObjectId(fileCid, otherUser),
+    ).resolves.toBe(otherLink.id)
+    await expect(
+      ObjectUseCases.getPublishedObjectId(fileCid, createMockUser()),
+    ).resolves.toBeNull()
+    await expect(
+      ObjectUseCases.getPublishedObjectId(fileCid, null),
+    ).resolves.toBeNull()
+
+    const information = await ObjectUseCases.getObjectInformation(fileCid)
+    expect(information?.publishedObjectId).toBeNull()
+  })
+
   it('should be downloadable by public id and credits should be deducted', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(user)
     jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())

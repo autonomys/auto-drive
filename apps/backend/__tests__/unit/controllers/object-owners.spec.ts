@@ -20,6 +20,7 @@ import {
 import { objectController } from '../../../src/app/controllers/object.js'
 import { ObjectUseCases } from '../../../src/core/index.js'
 import { ownershipRepository } from '../../../src/infrastructure/repositories/index.js'
+import { publishedObjectsRepository } from '../../../src/infrastructure/repositories/objects/publishedObjects.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { createMockUser } from '../../utils/mocks.js'
 
@@ -72,6 +73,9 @@ describe('Object routes and owners', () => {
     jest
       .spyOn(ownershipRepository, 'getAllOwnerships')
       .mockResolvedValue([row(owner, true), row(sharee, false)])
+    jest
+      .spyOn(publishedObjectsRepository, 'getPublishedObjectByCidAndPublicId')
+      .mockResolvedValue(null)
     jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(false)
     jest
       .spyOn(ObjectUseCases, 'getObjectInformation')
@@ -112,6 +116,36 @@ describe('Object routes and owners', () => {
       expect((await get(path)).headers.get('cache-control')).toBe('private')
     },
   )
+
+  it('returns the public link on /objects/:cid only to its publisher', async () => {
+    mockObject()
+    jest.spyOn(ObjectUseCases, 'getObjectInformation').mockResolvedValue({
+      cid: 'bafkreiobject',
+      owners,
+      publishedObjectId: 'another-link',
+    } as ObjectInformation)
+    const links: Record<string, string> = {
+      [owner.publicId!]: 'owner-link',
+      [admin.publicId!]: 'admin-link',
+    }
+    jest
+      .spyOn(publishedObjectsRepository, 'getPublishedObjectByCidAndPublicId')
+      .mockImplementation(async (cid, publicId) =>
+        links[publicId] ? { id: links[publicId], publicId, cid } : null,
+      )
+
+    const publishedObjectId = async (viewer?: typeof owner) =>
+      (
+        (await (
+          await get('/objects/bafkreiobject', viewer)
+        ).json()) as ObjectInformation
+      ).publishedObjectId
+
+    expect(await publishedObjectId()).toBeNull()
+    expect(await publishedObjectId(owner)).toBe('owner-link')
+    expect(await publishedObjectId(sharee)).toBeNull()
+    expect(await publishedObjectId(admin)).toBe('admin-link')
+  })
 
   it('lists the removed row of the viewer in their Trash', async () => {
     jest
