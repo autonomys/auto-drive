@@ -21,7 +21,7 @@ query GetSharedFiles(
             }
           }
         }
-        { has_active_owner: { _eq: true } }
+        { is_removed: { _eq: false } }
       ]
     }
     limit: $limit
@@ -79,7 +79,7 @@ query GetSharedFiles(
             }
           }
         }
-        { has_active_owner: { _eq: true } }
+        { is_removed: { _eq: false } }
       ]
     }
   ) {

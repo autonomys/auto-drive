@@ -20,9 +20,9 @@ select_permissions:
       # (root_cid -> cid), not inner_metadata, so a removed folder (whose children
       # keep vestigial active admin rows) stays hidden.
       #
-      # The third branch additionally keeps a user's OWN roots visible regardless
-      # of removal state so their Trash view keeps working — the only difference
-      # from the anonymous role.
+      # The third branch additionally keeps roots the user is an admin owner of
+      # visible regardless of removal state so their Trash view keeps working —
+      # the only difference from the anonymous role.
       filter:
         _or:
           - _not:
@@ -39,8 +39,10 @@ select_permissions:
                 _eq: X-Hasura-Oauth-Provider
               oauth_user_id:
                 _eq: X-Hasura-Oauth-User-Id
+              is_admin:
+                _eq: true
       computed_fields:
-        - has_active_owner
+        - is_removed
       allow_aggregations: true
     comment: ""
   - role: anonymous
@@ -74,13 +76,15 @@ select_permissions:
                 _eq: true
               marked_as_deleted:
                 _is_null: true
+      computed_fields:
+        - is_removed
       allow_aggregations: true
     comment: ""
 computed_fields:
-  - name: has_active_owner
+  - name: is_removed
     definition:
       function:
-        name: metadata_roots_has_active_owner
+        name: metadata_roots_is_removed
         schema: public
 object_relationships:
   - name: inner_metadata
