@@ -89,6 +89,7 @@ jobs:
 
       - name: Run Ansible Playbook
         run: |
+          set -o pipefail
           ansible-playbook ansible/auto-drive-deployment.yml \
             --private-key ansible/ssh_private_key.pem \
             -i ansible/hosts.ini \
