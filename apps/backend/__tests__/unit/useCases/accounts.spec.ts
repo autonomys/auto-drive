@@ -574,4 +574,63 @@ describe('AccountsUseCases', () => {
       expect(create).not.toHaveBeenCalled()
     })
   })
+
+  describe('getUserListAccount', () => {
+    const admin = { role: UserRole.Admin, publicId: 'admin' } as any
+
+    it('should reject non-admin executors before any lookup', async () => {
+      const lookup = jest
+        .spyOn(AuthManager, 'getUsersFromPublicIds')
+        .mockResolvedValue([])
+
+      const result = await AccountsUseCases.getUserListAccount(
+        { role: UserRole.User, publicId: 'pub1' } as any,
+        ['pub2'],
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+      expect(lookup).not.toHaveBeenCalled()
+    })
+
+    it('should return account info keyed by publicId for known users', async () => {
+      jest
+        .spyOn(AuthManager, 'getUsersFromPublicIds')
+        .mockResolvedValue([
+          { publicId: 'pub1', organizationId: 'org1' },
+        ] as any)
+      jest.spyOn(accountsRepository, 'getByOrganizationId').mockResolvedValue({
+        id: 'acc1',
+        organizationId: 'org1',
+        uploadLimit: 100,
+        downloadLimit: 50,
+        model: AccountModel.OneOff,
+      })
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: 0n } as any)
+
+      const result = await AccountsUseCases.getUserListAccount(admin, [
+        'pub1',
+        'unknown',
+      ])
+
+      expect(result._unsafeUnwrap()).toEqual({
+        pub1: {
+          id: 'acc1',
+          organizationId: 'org1',
+          uploadLimit: 100,
+          downloadLimit: 50,
+          model: AccountModel.OneOff,
+          pendingUploadCredits: 100,
+          pendingDownloadCredits: 50,
+        },
+      })
+    })
+  })
 })
