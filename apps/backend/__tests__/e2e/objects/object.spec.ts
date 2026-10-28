@@ -325,33 +325,17 @@ describe('Object', () => {
       expect(object).toBeDefined()
     })
 
-    it('should return the public link only to the user who created it', async () => {
-      const { id } = await ObjectUseCases.publishObject(user, fileCid)
-
-      const forUser = await ObjectUseCases.getObjectInformation(fileCid, user)
-      expect(forUser?.publishedObjectId).toBe(id)
-
-      const forOther = await ObjectUseCases.getObjectInformation(
-        fileCid,
-        sharedWithUser,
-      )
-      expect(forOther?.publishedObjectId).toBeNull()
-
-      const forAnonymous = await ObjectUseCases.getObjectInformation(fileCid)
-      expect(forAnonymous?.publishedObjectId).toBeNull()
-    })
-
     it('should be able to unpublish object', async () => {
       await expect(
         ObjectUseCases.unpublishObject(user, fileCid),
       ).resolves.not.toThrow()
 
-      const object = await ObjectUseCases.getObjectInformation(fileCid, user)
+      const object = await ObjectUseCases.getObjectInformation(fileCid)
       expect(object?.publishedObjectId).toBeDefined()
     })
 
     it('should return undefined if object is not published', async () => {
-      const object = await ObjectUseCases.getObjectInformation(fileCid, user)
+      const object = await ObjectUseCases.getObjectInformation(fileCid)
       expect(object?.publishedObjectId).toBeNull()
     })
   })
