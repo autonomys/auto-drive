@@ -1,8 +1,8 @@
+import { jest } from '@jest/globals'
 import { HDNodeWallet, Wallet } from 'ethers'
 import jwt from 'jsonwebtoken'
 import { SiweMessage } from 'siwe'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
-import { walletNoncesRepository } from '../src/repositories/index.js'
 import { Web3Auth } from '../src/services/authManager/providers/web3.js'
 import { dbMigration } from './utils/dbMigrate.js'
 
@@ -36,7 +36,7 @@ const signProof = async (
   overrides: Partial<SiweMessage> = {},
   address: string = wallet.address,
 ) => {
-  const { nonce } = await Web3Auth.createNonce()
+  const { nonce } = Web3Auth.createNonce()
   const message = createMessage(wallet.address, nonce, overrides)
   const signature = await wallet.signMessage(message)
 
@@ -56,11 +56,11 @@ describe('Web3Auth', () => {
     await dbMigration.down()
   })
 
-  it('issues random nonces that expire in ten minutes', async () => {
-    const first = await Web3Auth.createNonce()
-    const second = await Web3Auth.createNonce()
+  it('issues random nonces that expire in ten minutes', () => {
+    const first = Web3Auth.createNonce()
+    const second = Web3Auth.createNonce()
 
-    expect(first.nonce).toMatch(/^[0-9a-f]{32}$/)
+    expect(first.nonce).toMatch(/^[0-9a-f]{72}$/)
     expect(first.nonce).not.toEqual(second.nonce)
 
     const ttl = Date.parse(first.expiresAt) - Date.now()
@@ -83,7 +83,7 @@ describe('Web3Auth', () => {
 
     await expect(Web3Auth.getUserFromAccessToken(token)).resolves.toBeTruthy()
     await expect(Web3Auth.getUserFromAccessToken(token)).rejects.toThrow(
-      'Unknown or expired nonce',
+      'Nonce already used',
     )
   })
 
@@ -97,7 +97,9 @@ describe('Web3Auth', () => {
   })
 
   it('rejects a nonce that was not issued', async () => {
-    const message = createMessage(wallet.address, 'abcdef0123456789')
+    const { nonce } = Web3Auth.createNonce()
+    const forged = nonce.slice(0, -1) + (nonce.endsWith('0') ? '1' : '0')
+    const message = createMessage(wallet.address, forged)
     const signature = await wallet.signMessage(message)
     const token = encodeProof({ address: wallet.address, message, signature })
 
@@ -107,11 +109,10 @@ describe('Web3Auth', () => {
   })
 
   it('rejects an expired nonce', async () => {
-    const nonce = 'fedcba9876543210'
-    await walletNoncesRepository.createNonce(
-      nonce,
-      new Date(Date.now() - 60_000),
-    )
+    jest
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(Date.now() - TEN_MINUTES_MS - 1000)
+    const { nonce } = Web3Auth.createNonce()
     const message = createMessage(wallet.address, nonce)
     const signature = await wallet.signMessage(message)
     const token = encodeProof({ address: wallet.address, message, signature })
@@ -160,7 +161,7 @@ describe('Web3Auth', () => {
 
   it('rejects a signature from another wallet', async () => {
     const other = Wallet.createRandom()
-    const { nonce } = await Web3Auth.createNonce()
+    const { nonce } = Web3Auth.createNonce()
     const message = createMessage(wallet.address, nonce)
     const signature = await other.signMessage(message)
     const token = encodeProof({ address: wallet.address, message, signature })

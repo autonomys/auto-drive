@@ -1,5 +1,5 @@
--- One-time nonces handed out for wallet (SIWE) sign-in. A row is deleted when
--- its sign-in completes, and expired rows are pruned when new ones are issued.
+-- Nonces that wallet (SIWE) sign-ins have used, kept until they expire so each
+-- nonce works once. Expired rows are pruned when new ones are recorded.
 CREATE TABLE users.wallet_nonces (
   nonce text NOT NULL,
   expires_at timestamptz NOT NULL,

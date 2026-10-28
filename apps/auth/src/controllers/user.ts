@@ -53,13 +53,8 @@ userController.post('/@me/accessToken', async (req: Request, res: Response) => {
     .json({ accessToken })
 })
 
-userController.post('/web3/nonce', async (_req: Request, res: Response) => {
-  try {
-    res.json(await Web3Auth.createNonce())
-  } catch (error) {
-    logger.error(error)
-    res.status(500).json({ error: 'Failed to create nonce' })
-  }
+userController.post('/web3/nonce', (_req: Request, res: Response) => {
+  res.json(Web3Auth.createNonce())
 })
 
 userController.post(
