@@ -35,40 +35,48 @@ const restoreObject = async (user: User, cid: string) => {
   )
 }
 
+const toOwner = (ownership: {
+  oauth_provider: string
+  oauth_user_id: string
+  is_admin: boolean
+}): Owner => ({
+  oauthProvider: ownership.oauth_provider,
+  oauthUserId: ownership.oauth_user_id,
+  role: ownership.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
+})
+
 const getOwners = async (cid: string): Promise<Owner[]> => {
   const ownerships = await ownershipRepository.getOwnerships(cid)
 
-  return ownerships.map((ownership) => ({
-    oauthProvider: ownership.oauth_provider,
-    oauthUserId: ownership.oauth_user_id,
-    role: ownership.is_admin ? OwnerRole.ADMIN : OwnerRole.VIEWER,
-  }))
+  return ownerships.map(toOwner)
 }
 
 const getAdmins = async (cid: string) => {
   return ownershipRepository.getAdmins(cid)
 }
 
-// Admins see every owner, other users see their own rows, and anonymous
+// The same rule as the Hasura roles: admins see every active owner plus their
+// own removed rows, other users see their own rows in any state, and anonymous
 // viewers see none
-const visibleOwners = (owners: Owner[], viewer: User | null): Owner[] => {
-  if (!viewer) return []
-  if (isAdminUser(viewer)) return owners
-
-  return owners.filter(
-    (owner) =>
-      owner.oauthProvider === viewer.oauthProvider &&
-      owner.oauthUserId === viewer.oauthUserId,
-  )
-}
-
-const withVisibleOwners = <T extends { owners: Owner[] }>(
+const withVisibleOwners = async <T extends { owners: Owner[] }>(
   object: T,
+  cid: string,
   viewer: User | null,
-): T => ({
-  ...object,
-  owners: visibleOwners(object.owners, viewer),
-})
+): Promise<T> => {
+  if (!viewer) return { ...object, owners: [] }
+
+  const ownerships = await ownershipRepository.getAllOwnerships(cid)
+  const owners = ownerships
+    .filter(
+      (ownership) =>
+        (ownership.oauth_provider === viewer.oauthProvider &&
+          ownership.oauth_user_id === viewer.oauthUserId) ||
+        (isAdminUser(viewer) && !ownership.marked_as_deleted),
+    )
+    .map(toOwner)
+
+  return { ...object, owners }
+}
 
 export const OwnershipUseCases = {
   setUserAsOwner,

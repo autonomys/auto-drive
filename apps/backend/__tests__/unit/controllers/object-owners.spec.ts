@@ -14,10 +14,12 @@ import {
   ObjectInformation,
   ObjectSummary,
   OwnerRole,
+  User,
   UserRole,
 } from '@auto-drive/models'
 import { objectController } from '../../../src/app/controllers/object.js'
 import { ObjectUseCases } from '../../../src/core/index.js'
+import { ownershipRepository } from '../../../src/infrastructure/repositories/index.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { createMockUser } from '../../utils/mocks.js'
 
@@ -58,7 +60,18 @@ describe('Object routes and owners', () => {
     jest.restoreAllMocks()
   })
 
+  const row = (user: User, isAdmin: boolean, removed = false) => ({
+    cid: 'bafkreiobject',
+    oauth_provider: user.oauthProvider,
+    oauth_user_id: user.oauthUserId,
+    is_admin: isAdmin,
+    marked_as_deleted: removed ? new Date() : null,
+  })
+
   const mockObject = () => {
+    jest
+      .spyOn(ownershipRepository, 'getAllOwnerships')
+      .mockResolvedValue([row(owner, true), row(sharee, false)])
     jest.spyOn(ObjectUseCases, 'isObjectDeleted').mockResolvedValue(false)
     jest
       .spyOn(ObjectUseCases, 'getObjectInformation')
@@ -68,7 +81,7 @@ describe('Object routes and owners', () => {
       .mockResolvedValue({ headCid: 'bafkreiobject', owners } as ObjectSummary)
   }
 
-  const getOwners = async (path: string, viewer?: typeof owner) => {
+  const get = async (path: string, viewer?: typeof owner) => {
     const headers: Record<string, string> = {}
     if (viewer) {
       jest
@@ -81,8 +94,11 @@ describe('Object routes and owners', () => {
     const response = await fetch(`${baseUrl}${path}`, { headers })
     expect(response.status).toBe(200)
 
-    return ((await response.json()) as { owners: unknown[] }).owners
+    return response
   }
+
+  const getOwners = async (path: string, viewer?: typeof owner) =>
+    ((await (await get(path, viewer)).json()) as { owners: unknown[] }).owners
 
   it.each(['/objects/bafkreiobject', '/objects/bafkreiobject/summary'])(
     'scopes owners on %s to the viewer',
@@ -93,6 +109,24 @@ describe('Object routes and owners', () => {
       expect(await getOwners(path, owner)).toEqual([owners[0]])
       expect(await getOwners(path, sharee)).toEqual([owners[1]])
       expect(await getOwners(path, admin)).toEqual(owners)
+      expect((await get(path)).headers.get('cache-control')).toBe('private')
     },
   )
+
+  it('lists the removed row of the viewer in their Trash', async () => {
+    jest
+      .spyOn(ownershipRepository, 'getAllOwnerships')
+      .mockResolvedValue([row(owner, true, true), row(sharee, false)])
+    jest.spyOn(ObjectUseCases, 'getMarkedAsDeletedRoots').mockResolvedValue({
+      rows: [
+        { headCid: 'bafkreiobject', owners: [owners[1]] } as ObjectSummary,
+      ],
+      totalCount: 1,
+    })
+
+    const response = await get('/objects/roots/deleted', owner)
+    const { rows } = (await response.json()) as { rows: ObjectSummary[] }
+
+    expect(rows[0].owners).toEqual([owners[0]])
+  })
 })

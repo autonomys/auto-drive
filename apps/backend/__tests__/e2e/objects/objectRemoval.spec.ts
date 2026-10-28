@@ -1,5 +1,5 @@
-import { UserWithOrganization } from '@auto-drive/models'
-import { ObjectUseCases } from '../../../src/core/index.js'
+import { OwnerRole, UserWithOrganization } from '@auto-drive/models'
+import { ObjectUseCases, OwnershipUseCases } from '../../../src/core/index.js'
 import {
   AsyncDownloadsUseCases,
   DownloadUseCase,
@@ -181,6 +181,24 @@ describe('Object removal', () => {
     it('is visible to the owner in Trash', async () => {
       const deleted = await ObjectUseCases.getMarkedAsDeletedRoots(owner)
       expect(deleted.rows).toMatchObject([{ headCid: fileCid }])
+    })
+
+    it('lists the removed row of the owner in their Trash entry', async () => {
+      const {
+        rows: [entry],
+      } = await ObjectUseCases.getMarkedAsDeletedRoots(owner)
+      const { owners } = await OwnershipUseCases.withVisibleOwners(
+        entry,
+        entry.headCid,
+        owner,
+      )
+      expect(owners).toEqual([
+        {
+          oauthProvider: owner.oauthProvider,
+          oauthUserId: owner.oauthUserId,
+          role: OwnerRole.ADMIN,
+        },
+      ])
     })
 
     it('is no longer visible in the global explorer', async () => {

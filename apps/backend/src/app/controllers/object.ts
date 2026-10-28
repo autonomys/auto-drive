@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
+import { ObjectSummary, PaginatedResult, User } from '@auto-drive/models'
 import {
   handleAuth,
   tryAuthenticate,
@@ -23,6 +24,18 @@ import { config } from '../../config.js'
 const logger = createLogger('http:controllers:object')
 
 const objectController = Router()
+
+const withVisibleRowOwners = async (
+  page: PaginatedResult<ObjectSummary>,
+  viewer: User,
+) => ({
+  ...page,
+  rows: await Promise.all(
+    page.rows.map((row) =>
+      OwnershipUseCases.withVisibleOwners(row, row.headCid, viewer),
+    ),
+  ),
+})
 
 objectController.get(
   '/roots',
@@ -57,12 +70,7 @@ objectController.get(
       return
     }
 
-    res.json({
-      ...getResult.value,
-      rows: getResult.value.rows.map((row) =>
-        OwnershipUseCases.withVisibleOwners(row, user),
-      ),
-    })
+    res.json(await withVisibleRowOwners(getResult.value, user))
   }),
 )
 
@@ -88,12 +96,7 @@ objectController.get(
       return
     }
 
-    res.json({
-      ...getResult.value,
-      rows: getResult.value.rows.map((row) =>
-        OwnershipUseCases.withVisibleOwners(row, user),
-      ),
-    })
+    res.json(await withVisibleRowOwners(getResult.value, user))
   }),
 )
 
@@ -119,12 +122,7 @@ objectController.get(
       return
     }
 
-    res.json({
-      ...deleteResult.value,
-      rows: deleteResult.value.rows.map((row) =>
-        OwnershipUseCases.withVisibleOwners(row, user),
-      ),
-    })
+    res.json(await withVisibleRowOwners(deleteResult.value, user))
   }),
 )
 
@@ -179,10 +177,13 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const summaryResult = await handleInternalError(
-      ObjectUseCases.getObjectSummaryByCID(cid),
-      'Failed to get object summary',
-    )
+    const [summaryResult, viewer] = await Promise.all([
+      handleInternalError(
+        ObjectUseCases.getObjectSummaryByCID(cid),
+        'Failed to get object summary',
+      ),
+      tryAuthenticate(req),
+    ])
 
     if (summaryResult.isErr()) {
       handleError(summaryResult.error, res)
@@ -197,8 +198,9 @@ objectController.get(
       return
     }
 
-    const viewer = await tryAuthenticate(req)
-    res.json(OwnershipUseCases.withVisibleOwners(summary, viewer))
+    // The owners depend on the credentials, so shared caches must not keep this
+    res.set('Cache-Control', 'private')
+    res.json(await OwnershipUseCases.withVisibleOwners(summary, cid, viewer))
   }),
 )
 
@@ -343,10 +345,13 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const objectResult = await handleInternalError(
-      ObjectUseCases.getObjectInformation(cid),
-      'Failed to get object information',
-    )
+    const [objectResult, viewer] = await Promise.all([
+      handleInternalError(
+        ObjectUseCases.getObjectInformation(cid),
+        'Failed to get object information',
+      ),
+      tryAuthenticate(req),
+    ])
 
     if (objectResult.isErr()) {
       handleError(objectResult.error, res)
@@ -361,8 +366,11 @@ objectController.get(
       return
     }
 
-    const viewer = await tryAuthenticate(req)
-    res.json(OwnershipUseCases.withVisibleOwners(objectInformation, viewer))
+    // The owners depend on the credentials, so shared caches must not keep this
+    res.set('Cache-Control', 'private')
+    res.json(
+      await OwnershipUseCases.withVisibleOwners(objectInformation, cid, viewer),
+    )
   }),
 )
 
