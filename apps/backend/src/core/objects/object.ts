@@ -239,6 +239,7 @@ const getObjectSummaryByCID = async (cid: string) => {
 
 const getObjectInformation = async (
   cid: string,
+  viewer: User | null = null,
 ): Promise<ObjectInformation | undefined> => {
   const metadata = await metadataRepository.getMetadata(cid)
   if (!metadata) {
@@ -247,8 +248,13 @@ const getObjectInformation = async (
 
   const uploadState = await UploadStatusUseCases.getUploadStatus(cid)
   const owners: Owner[] = await OwnershipUseCases.getOwners(cid)
-  const publishedObjectId =
-    await publishedObjectsRepository.getPublishedObjectByCid(cid)
+  // Each user has their own public link for a CID, so only the viewer's is returned
+  const publishedObject = viewer
+    ? await publishedObjectsRepository.getPublishedObjectByCidAndPublicId(
+        cid,
+        viewer.publicId,
+      )
+    : null
 
   return {
     cid,
@@ -257,7 +263,7 @@ const getObjectInformation = async (
     uploadState: uploadState,
     owners,
     status: objectStatus(uploadState),
-    publishedObjectId: publishedObjectId?.id ?? null,
+    publishedObjectId: publishedObject?.id ?? null,
     createdAt: metadata.created_at.toISOString(),
   }
 }

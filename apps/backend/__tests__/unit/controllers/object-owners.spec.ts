@@ -113,6 +113,22 @@ describe('Object routes and owners', () => {
     },
   )
 
+  it('looks the object up for the viewer', async () => {
+    mockObject()
+
+    await get('/objects/bafkreiobject')
+    expect(ObjectUseCases.getObjectInformation).toHaveBeenLastCalledWith(
+      'bafkreiobject',
+      null,
+    )
+
+    await get('/objects/bafkreiobject', owner)
+    expect(ObjectUseCases.getObjectInformation).toHaveBeenLastCalledWith(
+      'bafkreiobject',
+      owner,
+    )
+  })
+
   it('lists the removed row of the viewer in their Trash', async () => {
     jest
       .spyOn(ownershipRepository, 'getAllOwnerships')

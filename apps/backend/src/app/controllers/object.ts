@@ -345,13 +345,11 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const [objectResult, viewer] = await Promise.all([
-      handleInternalError(
-        ObjectUseCases.getObjectInformation(cid),
-        'Failed to get object information',
-      ),
-      tryAuthenticate(req),
-    ])
+    const viewer = await tryAuthenticate(req)
+    const objectResult = await handleInternalError(
+      ObjectUseCases.getObjectInformation(cid, viewer),
+      'Failed to get object information',
+    )
 
     if (objectResult.isErr()) {
       handleError(objectResult.error, res)
@@ -366,7 +364,8 @@ objectController.get(
       return
     }
 
-    // The owners depend on the credentials, so shared caches must not keep this
+    // The owners and the public link depend on the credentials, so shared
+    // caches must not keep this
     res.set('Cache-Control', 'private')
     res.json(
       await OwnershipUseCases.withVisibleOwners(objectInformation, cid, viewer),
