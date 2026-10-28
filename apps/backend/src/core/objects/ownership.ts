@@ -1,4 +1,4 @@
-import { User, Owner, OwnerRole } from '@auto-drive/models'
+import { User, Owner, OwnerRole, isAdminUser } from '@auto-drive/models'
 import { ownershipRepository } from '../../infrastructure/repositories/index.js'
 
 const setUserAsOwner = async (user: User, cid: string) => {
@@ -49,6 +49,27 @@ const getAdmins = async (cid: string) => {
   return ownershipRepository.getAdmins(cid)
 }
 
+// Admins see every owner, other users see their own rows, and anonymous
+// viewers see none
+const visibleOwners = (owners: Owner[], viewer: User | null): Owner[] => {
+  if (!viewer) return []
+  if (isAdminUser(viewer)) return owners
+
+  return owners.filter(
+    (owner) =>
+      owner.oauthProvider === viewer.oauthProvider &&
+      owner.oauthUserId === viewer.oauthUserId,
+  )
+}
+
+const withVisibleOwners = <T extends { owners: Owner[] }>(
+  object: T,
+  viewer: User | null,
+): T => ({
+  ...object,
+  owners: visibleOwners(object.owners, viewer),
+})
+
 export const OwnershipUseCases = {
   setUserAsOwner,
   setUserAsAdmin,
@@ -56,4 +77,5 @@ export const OwnershipUseCases = {
   getOwners,
   getAdmins,
   restoreObject,
+  withVisibleOwners,
 }

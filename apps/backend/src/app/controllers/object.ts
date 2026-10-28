@@ -1,7 +1,14 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
-import { handleAuth } from '../../infrastructure/services/auth/express.js'
-import { ObjectUseCases, UploadStatusUseCases } from '../../core/index.js'
+import {
+  handleAuth,
+  tryAuthenticate,
+} from '../../infrastructure/services/auth/express.js'
+import {
+  ObjectUseCases,
+  OwnershipUseCases,
+  UploadStatusUseCases,
+} from '../../core/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleDownloadResponseHeaders } from '@autonomys/file-server'
@@ -50,7 +57,12 @@ objectController.get(
       return
     }
 
-    res.json(getResult.value)
+    res.json({
+      ...getResult.value,
+      rows: getResult.value.rows.map((row) =>
+        OwnershipUseCases.withVisibleOwners(row, user),
+      ),
+    })
   }),
 )
 
@@ -76,7 +88,12 @@ objectController.get(
       return
     }
 
-    res.json(getResult.value)
+    res.json({
+      ...getResult.value,
+      rows: getResult.value.rows.map((row) =>
+        OwnershipUseCases.withVisibleOwners(row, user),
+      ),
+    })
   }),
 )
 
@@ -102,7 +119,12 @@ objectController.get(
       return
     }
 
-    res.json(deleteResult.value)
+    res.json({
+      ...deleteResult.value,
+      rows: deleteResult.value.rows.map((row) =>
+        OwnershipUseCases.withVisibleOwners(row, user),
+      ),
+    })
   }),
 )
 
@@ -175,7 +197,8 @@ objectController.get(
       return
     }
 
-    res.json(summary)
+    const viewer = await tryAuthenticate(req)
+    res.json(OwnershipUseCases.withVisibleOwners(summary, viewer))
   }),
 )
 
@@ -338,7 +361,8 @@ objectController.get(
       return
     }
 
-    res.json(objectInformation)
+    const viewer = await tryAuthenticate(req)
+    res.json(OwnershipUseCases.withVisibleOwners(objectInformation, viewer))
   }),
 )
 
