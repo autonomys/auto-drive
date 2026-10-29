@@ -113,6 +113,28 @@ describe('Object routes and owners', () => {
     },
   )
 
+  it.each<[string, 'getRootObjects' | 'getSharedRoots']>([
+    ['/objects/roots?scope=global', 'getRootObjects'],
+    ['/objects/roots/shared', 'getSharedRoots'],
+  ])('scopes row owners on %s to the viewer', async (path, list) => {
+    mockObject()
+    jest.spyOn(ObjectUseCases, list).mockResolvedValue({
+      rows: [{ headCid: 'bafkreiobject', owners } as ObjectSummary],
+      totalCount: 1,
+    })
+
+    const getRowOwners = async (viewer: typeof owner) => {
+      const response = await get(path, viewer)
+      return ((await response.json()) as { rows: ObjectSummary[] }).rows[0]
+        .owners
+    }
+
+    expect(await getRowOwners(createMockUser())).toEqual([])
+    expect(await getRowOwners(owner)).toEqual([owners[0]])
+    expect(await getRowOwners(sharee)).toEqual([owners[1]])
+    expect(await getRowOwners(admin)).toEqual(owners)
+  })
+
   it('lists the removed row of the viewer in their Trash', async () => {
     jest
       .spyOn(ownershipRepository, 'getAllOwnerships')
