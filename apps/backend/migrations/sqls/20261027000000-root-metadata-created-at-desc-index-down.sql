@@ -1,1 +1,0 @@
-DROP INDEX IF EXISTS public.idx_root_metadata_created_at_desc_nulls_last;
