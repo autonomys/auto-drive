@@ -38,8 +38,8 @@ export const ObjectDetails = ({
       o.role === OwnerRole.ADMIN,
   );
 
-  // Anonymous visitors get no ownership rows (the page queries without them),
-  // and Hasura hides other owners' removed rows, but not the viewer's own.
+  // Anonymous visitors get no ownership rows (the page queries without them).
+  // Signed-in users get their own rows; admins also get other active owners.
   const ownerPublicIds = useMemo(
     () =>
       (owners ?? [])

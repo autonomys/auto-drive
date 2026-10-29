@@ -932,6 +932,8 @@ export type Metadata = {
   head?: Maybe<Nodes>;
   head_cid: Scalars['String']['output'];
   is_archived: Scalars['Boolean']['output'];
+  /** A computed field, executes function "metadata_is_removed" */
+  is_removed?: Maybe<Scalars['Boolean']['output']>;
   metadata?: Maybe<Scalars['jsonb']['output']>;
   /** An array relationship */
   metadata_list_by_root_id: Array<Metadata>;
@@ -1098,6 +1100,7 @@ export type Metadata_Bool_Exp = {
   head?: InputMaybe<Nodes_Bool_Exp>;
   head_cid?: InputMaybe<String_Comparison_Exp>;
   is_archived?: InputMaybe<Boolean_Comparison_Exp>;
+  is_removed?: InputMaybe<Boolean_Comparison_Exp>;
   metadata?: InputMaybe<Jsonb_Comparison_Exp>;
   metadata_list_by_root_id?: InputMaybe<Metadata_Bool_Exp>;
   metadata_list_by_root_id_aggregate?: InputMaybe<Metadata_Aggregate_Bool_Exp>;
@@ -1223,6 +1226,7 @@ export type Metadata_Order_By = {
   head?: InputMaybe<Nodes_Order_By>;
   head_cid?: InputMaybe<Order_By>;
   is_archived?: InputMaybe<Order_By>;
+  is_removed?: InputMaybe<Order_By>;
   metadata?: InputMaybe<Order_By>;
   metadata_list_by_root_id_aggregate?: InputMaybe<Metadata_Aggregate_Order_By>;
   name?: InputMaybe<Order_By>;
@@ -1254,6 +1258,8 @@ export type Metadata_Roots = {
   /** An object relationship */
   inner_metadata?: Maybe<Metadata>;
   is_archived?: Maybe<Scalars['Boolean']['output']>;
+  /** A computed field, executes function "metadata_roots_is_removed" */
+  is_removed?: Maybe<Scalars['Boolean']['output']>;
   metadata?: Maybe<Scalars['jsonb']['output']>;
   name?: Maybe<Scalars['String']['output']>;
   root_cid?: Maybe<Scalars['String']['output']>;
@@ -1303,6 +1309,7 @@ export type Metadata_Roots_Bool_Exp = {
   head_cid?: InputMaybe<String_Comparison_Exp>;
   inner_metadata?: InputMaybe<Metadata_Bool_Exp>;
   is_archived?: InputMaybe<Boolean_Comparison_Exp>;
+  is_removed?: InputMaybe<Boolean_Comparison_Exp>;
   metadata?: InputMaybe<Jsonb_Comparison_Exp>;
   name?: InputMaybe<String_Comparison_Exp>;
   root_cid?: InputMaybe<String_Comparison_Exp>;
@@ -1375,6 +1382,7 @@ export type Metadata_Roots_Order_By = {
   head_cid?: InputMaybe<Order_By>;
   inner_metadata?: InputMaybe<Metadata_Order_By>;
   is_archived?: InputMaybe<Order_By>;
+  is_removed?: InputMaybe<Order_By>;
   metadata?: InputMaybe<Order_By>;
   name?: InputMaybe<Order_By>;
   root_cid?: InputMaybe<Order_By>;
@@ -3701,7 +3709,7 @@ export type MyUndismissedAsyncDownloadsQueryResult = Apollo.QueryResult<MyUndism
 export const GetGlobalFilesDocument = gql`
     query GetGlobalFiles($aggregateLimit: Int!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $search: String) {
   metadata_roots(
-    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {_or: [{_not: {object_ownership: {is_admin: {_eq: true}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {_not: {_and: [{object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: false}}}, {is_removed: {_eq: true}}]}}]}
     limit: $limit
     offset: $offset
     order_by: $orderBy
@@ -3734,7 +3742,7 @@ export const GetGlobalFilesDocument = gql`
   }
   metadata_roots_aggregate(
     limit: $aggregateLimit
-    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {_or: [{_not: {object_ownership: {is_admin: {_eq: true}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {_not: {_and: [{object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: false}}}, {is_removed: {_eq: true}}]}}]}
   ) {
     aggregate {
       count
@@ -3782,7 +3790,7 @@ export type GetGlobalFilesQueryResult = Apollo.QueryResult<GetGlobalFilesQuery, 
 export const GetSharedFilesDocument = gql`
     query GetSharedFiles($oauthUserId: String!, $oauthProvider: String!, $limit: Int!, $offset: Int!, $orderBy: [metadata_roots_order_by!], $aggregateLimit: Int!) {
   metadata_roots(
-    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}
+    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {is_removed: {_eq: false}}]}
     limit: $limit
     offset: $offset
     order_by: $orderBy
@@ -3820,7 +3828,7 @@ export const GetSharedFilesDocument = gql`
   }
   metadata_roots_aggregate(
     limit: $aggregateLimit
-    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}]}
+    where: {_and: [{inner_metadata: {object_ownership: {_and: {oauth_user_id: {_eq: $oauthUserId}, oauth_provider: {_eq: $oauthProvider}, marked_as_deleted: {_is_null: true}, is_admin: {_eq: false}}}}}, {is_removed: {_eq: false}}]}
   ) {
     aggregate {
       count
@@ -4047,7 +4055,7 @@ export type GetMyFilesQueryResult = Apollo.QueryResult<GetMyFilesQuery, GetMyFil
 export const GetMetadataByHeadCidDocument = gql`
     query GetMetadataByHeadCID($headCid: String!) {
   metadata(
-    where: {_and: [{_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}, {_or: [{_not: {root_metadata: {object_ownership: {is_admin: {_eq: true}}}}}, {root_metadata: {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}]}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}, {is_removed: {_eq: false}}]}
   ) {
     head_cid
     tags
@@ -4121,7 +4129,7 @@ export type GetMetadataByHeadCidQueryResult = Apollo.QueryResult<GetMetadataByHe
 export const GetMetadataByHeadCidWithOwnershipDocument = gql`
     query GetMetadataByHeadCIDWithOwnership($headCid: String!) {
   metadata(
-    where: {_and: [{_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}, {_or: [{_not: {root_metadata: {object_ownership: {is_admin: {_eq: true}}}}}, {root_metadata: {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}]}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $headCid}}, {name: {_ilike: $headCid}}]}, {is_removed: {_eq: false}}]}
   ) {
     head_cid
     tags
@@ -4201,7 +4209,7 @@ export const SearchGlobalMetadataByCidOrNameDocument = gql`
     query SearchGlobalMetadataByCIDOrName($search: String!, $limit: Int!) {
   metadata(
     distinct_on: root_cid
-    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {_or: [{_not: {root_metadata: {object_ownership: {is_admin: {_eq: true}}}}}, {root_metadata: {object_ownership: {is_admin: {_eq: true}, marked_as_deleted: {_is_null: true}}}}]}]}
+    where: {_and: [{_or: [{head_cid: {_ilike: $search}}, {name: {_ilike: $search}}]}, {is_removed: {_eq: false}}]}
     limit: $limit
   ) {
     type: metadata(path: "type")
