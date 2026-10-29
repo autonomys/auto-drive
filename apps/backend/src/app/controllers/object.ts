@@ -1,7 +1,15 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
-import { handleAuth } from '../../infrastructure/services/auth/express.js'
-import { ObjectUseCases, UploadStatusUseCases } from '../../core/index.js'
+import { ObjectSummary, PaginatedResult, User } from '@auto-drive/models'
+import {
+  handleAuth,
+  tryAuthenticate,
+} from '../../infrastructure/services/auth/express.js'
+import {
+  ObjectUseCases,
+  OwnershipUseCases,
+  UploadStatusUseCases,
+} from '../../core/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleDownloadResponseHeaders } from '@autonomys/file-server'
@@ -16,6 +24,18 @@ import { config } from '../../config.js'
 const logger = createLogger('http:controllers:object')
 
 const objectController = Router()
+
+const withVisibleRowOwners = async (
+  page: PaginatedResult<ObjectSummary>,
+  viewer: User,
+) => ({
+  ...page,
+  rows: await Promise.all(
+    page.rows.map((row) =>
+      OwnershipUseCases.withVisibleOwners(row, row.headCid, viewer),
+    ),
+  ),
+})
 
 objectController.get(
   '/roots',
@@ -50,7 +70,7 @@ objectController.get(
       return
     }
 
-    res.json(getResult.value)
+    res.json(await withVisibleRowOwners(getResult.value, user))
   }),
 )
 
@@ -76,7 +96,7 @@ objectController.get(
       return
     }
 
-    res.json(getResult.value)
+    res.json(await withVisibleRowOwners(getResult.value, user))
   }),
 )
 
@@ -102,7 +122,7 @@ objectController.get(
       return
     }
 
-    res.json(deleteResult.value)
+    res.json(await withVisibleRowOwners(deleteResult.value, user))
   }),
 )
 
@@ -157,10 +177,13 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const summaryResult = await handleInternalError(
-      ObjectUseCases.getObjectSummaryByCID(cid),
-      'Failed to get object summary',
-    )
+    const [summaryResult, viewer] = await Promise.all([
+      handleInternalError(
+        ObjectUseCases.getObjectSummaryByCID(cid),
+        'Failed to get object summary',
+      ),
+      tryAuthenticate(req),
+    ])
 
     if (summaryResult.isErr()) {
       handleError(summaryResult.error, res)
@@ -175,7 +198,9 @@ objectController.get(
       return
     }
 
-    res.json(summary)
+    // The owners depend on the credentials, so shared caches must not keep this
+    res.set('Cache-Control', 'private')
+    res.json(await OwnershipUseCases.withVisibleOwners(summary, cid, viewer))
   }),
 )
 
@@ -320,10 +345,13 @@ objectController.get(
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
-    const objectResult = await handleInternalError(
-      ObjectUseCases.getObjectInformation(cid),
-      'Failed to get object information',
-    )
+    const [objectResult, viewer] = await Promise.all([
+      handleInternalError(
+        ObjectUseCases.getObjectInformation(cid),
+        'Failed to get object information',
+      ),
+      tryAuthenticate(req),
+    ])
 
     if (objectResult.isErr()) {
       handleError(objectResult.error, res)
@@ -338,7 +366,11 @@ objectController.get(
       return
     }
 
-    res.json(objectInformation)
+    // The owners depend on the credentials, so shared caches must not keep this
+    res.set('Cache-Control', 'private')
+    res.json(
+      await OwnershipUseCases.withVisibleOwners(objectInformation, cid, viewer),
+    )
   }),
 )
 
