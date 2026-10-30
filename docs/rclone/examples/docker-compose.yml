@@ -1,0 +1,49 @@
+# rclone + Auto Drive in Docker
+#
+# This runs rclone as a service that serves Auto Drive files over HTTP.
+# FUSE mounts require --privileged or --cap-add SYS_ADMIN and --device /dev/fuse,
+# so we use "rclone serve http" instead for simpler Docker compatibility.
+#
+# Usage:
+#   1. Set your API key: export AUTO_DRIVE_API_KEY=your_key_here
+#   2. Set your bucket:  export AUTO_DRIVE_BUCKET=my-archive
+#   3. Start the service: docker compose up -d
+#   4. Browse files at http://localhost:8181
+#
+# The HTTP server has no authentication, so the port is bound to localhost only.
+# Anyone who can reach it can read the served bucket.
+#
+# To upload files from the container:
+#   docker compose exec rclone rclone copy /data autodrive:my-archive/ --immutable
+
+services:
+  rclone:
+    # The Autonomys provider needs rclone v1.76 or later. Until v1.76 is
+    # released, use the beta image.
+    image: rclone/rclone:beta
+    container_name: rclone-autodrive
+    restart: unless-stopped
+    environment:
+      # The remote is defined with RCLONE_CONFIG_<REMOTE>_<OPTION> variables,
+      # so no config file is needed and the API key is never written to disk.
+      RCLONE_CONFIG_AUTODRIVE_TYPE: s3
+      RCLONE_CONFIG_AUTODRIVE_PROVIDER: Autonomys
+      RCLONE_CONFIG_AUTODRIVE_ACCESS_KEY_ID: ${AUTO_DRIVE_API_KEY:?Set AUTO_DRIVE_API_KEY environment variable}
+      RCLONE_CONFIG_AUTODRIVE_SECRET_ACCESS_KEY: placeholder
+      RCLONE_CONFIG_AUTODRIVE_ENDPOINT: s3.auto-drive.autonomys.xyz
+    volumes:
+      # Mount a local directory for uploading files
+      - ./data:/data:ro
+    ports:
+      # HTTP file server port (localhost only)
+      - '127.0.0.1:8181:8181'
+    # Serve Auto Drive content over HTTP (read-only)
+    command:
+      - serve
+      - http
+      - autodrive:${AUTO_DRIVE_BUCKET:-my-archive}/
+      - --addr
+      - :8181
+      - --read-only
+      - --vfs-cache-mode
+      - full
