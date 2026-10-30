@@ -1,3 +1,4 @@
+import pg from 'pg'
 import { v4 } from 'uuid'
 import { InteractionSource, InteractionType } from '@auto-drive/models'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
@@ -32,7 +33,9 @@ const createInteraction = async (
   size: bigint,
   source: InteractionSource,
   cid?: string,
-): Promise<void> => {
+  apiKeyId?: string,
+  executor?: pg.PoolClient,
+): Promise<string> => {
   logger.debug(
     'Creating new interaction (accountId=%s, type=%s, size=%d, source=%s, cid=%s)',
     accountId,
@@ -59,6 +62,8 @@ const createInteraction = async (
       size,
       source,
       cid,
+      apiKeyId,
+      executor,
     )
     logger.info(
       'Interaction created successfully (id=%s, accountId=%s, type=%s, source=%s, cid=%s)',
@@ -68,6 +73,7 @@ const createInteraction = async (
       source,
       cid,
     )
+    return interactionId
   } catch (error) {
     logger.error(
       'Failed to create interaction (accountId=%s, type=%s): %s',

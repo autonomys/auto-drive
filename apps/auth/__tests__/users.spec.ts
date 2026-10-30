@@ -50,6 +50,22 @@ describe('UsersUseCases', () => {
     })
   })
 
+  // `/@me` relies on this to pass the API key on to the backend.
+  it('should keep the API key that authenticated the request', async () => {
+    const onboardedUser = await UsersUseCases.onboardUser(
+      createUnonboardedUser(),
+    )
+    if (!onboardedUser) {
+      expect(onboardedUser).toBeTruthy()
+      return
+    }
+
+    const authenticated = { ...onboardedUser, apiKeyId: 'k1' }
+    const userInfo = await UsersUseCases.getUserWithOrganization(authenticated)
+
+    expect(userInfo).toMatchObject({ apiKeyId: 'k1' })
+  })
+
   it('should onboard a user', async () => {
     const user = await UsersUseCases.onboardUser(MOCK_UNONBOARDED_USER)
 

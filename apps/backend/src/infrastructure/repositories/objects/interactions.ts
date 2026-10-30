@@ -1,3 +1,4 @@
+import pg from 'pg'
 import { getDatabase } from '../../drivers/pg.js'
 import { InteractionSource, InteractionType } from '@auto-drive/models'
 
@@ -8,6 +9,7 @@ type DBInteraction = {
   size: string
   source: InteractionSource
   cid: string | null
+  api_key_id: string | null
   created_at: string | Date
 }
 
@@ -17,6 +19,9 @@ type Interaction = Omit<DBInteraction, 'size' | 'created_at'> & {
   accountId: string
   cid: string | null
 }
+
+// A pool, or a client holding an open transaction.
+type Executor = pg.Pool | pg.PoolClient
 
 const mapRows = (rows: DBInteraction[]): Interaction[] => {
   return rows.map((e) => ({
@@ -35,15 +40,43 @@ const createInteraction = async (
   size: bigint,
   source: InteractionSource,
   cid?: string,
+  apiKeyId?: string,
+  executor?: Executor,
 ): Promise<Interaction> => {
-  const db = await getDatabase()
+  const db = executor ?? (await getDatabase())
 
   const interaction = await db.query<DBInteraction>(
-    'INSERT INTO interactions (id, account_id, type, size, source, cid) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-    [id, accountId, type, size.toString(), source, cid ?? null],
+    'INSERT INTO interactions (id, account_id, type, size, source, cid, api_key_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+    [
+      id,
+      accountId,
+      type,
+      size.toString(),
+      source,
+      cid ?? null,
+      apiKeyId ?? null,
+    ],
   )
 
   return mapRows(interaction.rows)[0]
+}
+
+const createCreditConsumption = async (
+  interactionId: string,
+  consumption: { purchasedCreditId: string; bytes: bigint }[],
+  executor: Executor,
+): Promise<void> => {
+  if (consumption.length === 0) return
+
+  await executor.query(
+    `INSERT INTO interaction_credit_consumption (interaction_id, purchased_credit_id, bytes)
+     SELECT $1, * FROM UNNEST($2::uuid[], $3::int8[])`,
+    [
+      interactionId,
+      consumption.map((c) => c.purchasedCreditId),
+      consumption.map((c) => c.bytes.toString()),
+    ],
+  )
 }
 
 const getInteractionsByAccountIdAndTypeInTimeRange = async (
@@ -52,8 +85,9 @@ const getInteractionsByAccountIdAndTypeInTimeRange = async (
   start: Date,
   end: Date,
   source?: InteractionSource,
+  executor?: Executor,
 ): Promise<Interaction[]> => {
-  const db = await getDatabase()
+  const db = executor ?? (await getDatabase())
 
   const interactions = await db.query<DBInteraction>(
     `SELECT * FROM interactions
@@ -72,5 +106,6 @@ const getInteractionsByAccountIdAndTypeInTimeRange = async (
 
 export const interactionsRepository = {
   createInteraction,
+  createCreditConsumption,
   getInteractionsByAccountIdAndTypeInTimeRange,
 }

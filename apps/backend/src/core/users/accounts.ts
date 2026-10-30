@@ -17,6 +17,7 @@ import { interactionsRepository } from '../../infrastructure/repositories/object
 import { purchasedCreditsRepository } from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
+import { getDatabase } from '../../infrastructure/drivers/pg.js'
 import { config } from '../../config.js'
 import { err, ok, Result } from 'neverthrow'
 import {
@@ -262,142 +263,118 @@ const registerInteraction = async (
     size,
   )
 
-  // Atomically consume as many bytes as possible from purchased credits in a
-  // single transaction. Returns the number of bytes actually deducted. This
-  // avoids the TOCTOU race that existed with the previous two-phase approach
-  // where releasing FOR UPDATE locks between calls allowed concurrent requests
-  // to consume the same credits.
-  //
-  // Downloads use only the free-tier guard below. Purchased download bytes
-  // are not allocated on purchase or consumed here; consumeUpTo and its
-  // compensation logic are upload-only for now.
-  const fromPurchased =
-    type === InteractionType.Upload
-      ? await purchasedCreditsRepository.consumeUpTo(
-          account.id,
-          creditType,
-          size,
-        )
-      : BigInt(0)
+  // One transaction for the whole interaction: drawing down purchased batches,
+  // the free-tier guard, and writing the interactions with their per-batch
+  // consumption rows. Any failure rolls all of it back, so the ledger never
+  // disagrees with the balances and nothing needs a compensating refund.
+  const db = await getDatabase()
+  const client = await db.connect()
+  try {
+    await client.query('BEGIN')
 
-  const fromFree = size - fromPurchased
-
-  // Guard: verify the user has enough free-tier budget to cover any remainder
-  // BEFORE writing any interaction records.  This is the last line of defence
-  // against double-spend races: consumeUpTo serialises the purchased pool, but
-  // a concurrent request that only received a partial purchased allocation must
-  // not silently overflow into free-tier credits it does not own.
-  //
-  // Critically, this check runs before either interaction ledger entry is
-  // written so that if the guard fires, the compensating refund leaves the
-  // system in a fully clean state — no dangling Purchased ledger entries.
-  if (fromFree > BigInt(0)) {
-    const end = new Date()
-    const start =
-      account.model === AccountModel.Monthly
-        ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
-        : new Date(0)
-
-    const freeTierInteractions =
-      await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
-        account.id,
-        type,
-        start,
-        end,
-        InteractionSource.FreeTier,
-      )
-
-    const spentFree = freeTierInteractions.reduce(
-      (acc, i) => acc + BigInt(i.size),
-      BigInt(0),
-    )
-    const freeLimit = BigInt(
+    // consumeUpTo locks the account's purchased rows until commit, which
+    // serialises concurrent uploads against the purchased pool.
+    //
+    // Downloads use only the free-tier guard below. Purchased download bytes
+    // are not allocated on purchase or consumed here.
+    const consumed =
       type === InteractionType.Upload
-        ? account.uploadLimit
-        : account.downloadLimit,
-    )
-    const freeAvailable =
-      freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
+        ? await purchasedCreditsRepository.consumeUpTo(
+            client,
+            account.id,
+            creditType,
+            size,
+          )
+        : []
+    const fromPurchased = consumed.reduce((acc, c) => acc + c.bytes, BigInt(0))
+    const fromFree = size - fromPurchased
 
-    if (fromFree > freeAvailable) {
-      logger.warn(
-        'registerInteraction: insufficient free-tier credits — refunding purchased bytes and rejecting (accountId=%s, fromFree=%d, freeAvailable=%d)',
-        account.id,
-        fromFree,
-        freeAvailable,
-      )
-      if (fromPurchased > BigInt(0)) {
-        await purchasedCreditsRepository.refundCredits(
+    // Guard: a request that only received a partial purchased allocation must
+    // not silently overflow into free-tier credits it does not own.
+    if (fromFree > BigInt(0)) {
+      const end = new Date()
+      const start =
+        account.model === AccountModel.Monthly
+          ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
+          : new Date(0)
+
+      const freeTierInteractions =
+        await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
           account.id,
-          creditType,
-          fromPurchased,
+          type,
+          start,
+          end,
+          InteractionSource.FreeTier,
+          client,
+        )
+
+      const spentFree = freeTierInteractions.reduce(
+        (acc, i) => acc + BigInt(i.size),
+        BigInt(0),
+      )
+      const freeLimit = BigInt(
+        type === InteractionType.Upload
+          ? account.uploadLimit
+          : account.downloadLimit,
+      )
+      const freeAvailable =
+        freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
+
+      if (fromFree > freeAvailable) {
+        logger.warn(
+          'registerInteraction: insufficient free-tier credits — rejecting (accountId=%s, fromFree=%d, freeAvailable=%d)',
+          account.id,
+          fromFree,
+          freeAvailable,
+        )
+        throw new PaymentRequiredError(
+          `Insufficient credits to process ${creditType}`,
         )
       }
-      throw new PaymentRequiredError(
-        `Insufficient credits to process ${creditType}`,
-      )
     }
-  }
 
-  // consumeUpTo commits its own transaction before we record the interaction.
-  // If createInteraction fails, the credits are already deducted with no
-  // ledger entry — permanent financial loss. Guard with a compensating refund.
-  if (fromPurchased > BigInt(0)) {
-    try {
-      await InteractionsUseCases.createInteraction(
+    if (fromPurchased > BigInt(0)) {
+      const interactionId = await InteractionsUseCases.createInteraction(
         account.id,
         type,
         fromPurchased,
         InteractionSource.Purchased,
         cid,
+        user.apiKeyId,
+        client,
       )
-    } catch (interactionError) {
-      logger.error(
-        interactionError,
-        'registerInteraction: purchased interaction recording failed after consumeUpTo committed — attempting compensating refund (accountId=%s, type=%s, bytes=%d)',
-        account.id,
-        creditType,
-        fromPurchased,
+      await interactionsRepository.createCreditConsumption(
+        interactionId,
+        consumed,
+        client,
       )
-      try {
-        await purchasedCreditsRepository.refundCredits(
-          account.id,
-          creditType,
-          fromPurchased,
-        )
-        logger.warn(
-          'registerInteraction: compensating refund succeeded (accountId=%s, bytes=%d)',
-          account.id,
-          fromPurchased,
-        )
-      } catch (refundError) {
-        logger.error(
-          refundError,
-          'CRITICAL: registerInteraction: interaction recording AND refund both failed — manual recovery required (accountId=%s, type=%s, bytes=%d)',
-          account.id,
-          creditType,
-          fromPurchased,
-        )
-      }
-      throw interactionError
     }
-  }
 
-  if (fromFree > BigInt(0)) {
-    logger.debug(
-      'Covering remainder from free-tier (accountId=%s, fromPurchased=%d, fromFree=%d)',
-      account.id,
-      fromPurchased,
-      fromFree,
-    )
+    if (fromFree > BigInt(0)) {
+      logger.debug(
+        'Covering remainder from free-tier (accountId=%s, fromPurchased=%d, fromFree=%d)',
+        account.id,
+        fromPurchased,
+        fromFree,
+      )
 
-    await InteractionsUseCases.createInteraction(
-      account.id,
-      type,
-      fromFree,
-      InteractionSource.FreeTier,
-      cid,
-    )
+      await InteractionsUseCases.createInteraction(
+        account.id,
+        type,
+        fromFree,
+        InteractionSource.FreeTier,
+        cid,
+        user.apiKeyId,
+        client,
+      )
+    }
+
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
   }
 }
 
