@@ -1,14 +1,13 @@
 import { LRUCache } from 'lru-cache'
-import {
-  asyncIterableToBuffer,
-  bufferToAsyncIterable,
-} from '@autonomys/asynchronous'
+import { bufferToAsyncIterable } from '@autonomys/asynchronous'
 import { AwaitIterable } from 'interface-store'
 import { config } from '../../../../config.js'
 import { DownloadServiceOptions } from '@auto-drive/models'
 
+const maxCacheSize = config.memoryDownloadCache.maxCacheSize
+
 const cache = new LRUCache<string, Buffer>({
-  maxSize: config.memoryDownloadCache.maxCacheSize,
+  maxSize: maxCacheSize,
 })
 
 const has = (cid: string) => {
@@ -36,10 +35,22 @@ const set = async (
   cid: string,
   value: AwaitIterable<Buffer>,
 ): Promise<void> => {
-  const buffer = await asyncIterableToBuffer(value)
+  const chunks: Buffer[] = []
+  let size = 0
+  // Drain to the end even once the object is too large to cache: the download
+  // service forks the response from this stream, and the fork only advances as
+  // fast as its slowest branch.
+  for await (const chunk of value) {
+    size += chunk.length
+    if (size > maxCacheSize) {
+      chunks.length = 0
+      continue
+    }
+    chunks.push(chunk)
+  }
 
-  if (buffer.length > 0) {
-    cache.set(cid, buffer, {
+  if (size > 0 && size <= maxCacheSize) {
+    cache.set(cid, Buffer.concat(chunks, size), {
       sizeCalculation: (value) => value.length,
     })
   }
