@@ -247,8 +247,6 @@ const getObjectInformation = async (
 
   const uploadState = await UploadStatusUseCases.getUploadStatus(cid)
   const owners: Owner[] = await OwnershipUseCases.getOwners(cid)
-  const publishedObjectId =
-    await publishedObjectsRepository.getPublishedObjectByCid(cid)
 
   return {
     cid,
@@ -257,7 +255,8 @@ const getObjectInformation = async (
     uploadState: uploadState,
     owners,
     status: objectStatus(uploadState),
-    publishedObjectId: publishedObjectId?.id ?? null,
+    // Public links are per user, see getPublishedObjectId
+    publishedObjectId: null,
     createdAt: metadata.created_at.toISOString(),
   }
 }
@@ -548,6 +547,22 @@ const publishObject = async (user: UserWithOrganization, cid: string) => {
   logger.info('Object published successfully (cid=%s)', cid)
 
   return publishedObject
+}
+
+// Each user has their own public link for a CID, so a viewer gets only theirs
+const getPublishedObjectId = async (
+  cid: string,
+  viewer: User | null,
+): Promise<string | null> => {
+  if (!viewer?.publicId) return null
+
+  const publishedObject =
+    await publishedObjectsRepository.getPublishedObjectByCidAndPublicId(
+      cid,
+      viewer.publicId,
+    )
+
+  return publishedObject?.id ?? null
 }
 
 const downloadPublishedObject = async (
@@ -874,6 +889,7 @@ export const ObjectUseCases = {
   getNonArchivedObjects,
   onObjectArchived,
   publishObject,
+  getPublishedObjectId,
   downloadPublishedObject,
   unpublishObject,
   checkObjectsArchivalStatus,
