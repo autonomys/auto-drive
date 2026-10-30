@@ -26,6 +26,25 @@
     "quotes": ["error", "single"],
     "no-duplicate-imports": "error"
   },
+  "overrides": [
+    {
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@polkadot/*"],
+                "allowTypeImports": true,
+                "message": "Import @polkadot values from shared/utils/polkadot.ts, which loads the CommonJS build the Auto SDK uses."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
   "ignorePatterns": [
     "dist/**/*",
     "build/**/*",

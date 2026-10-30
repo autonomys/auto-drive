@@ -1,10 +1,12 @@
-import { ApiPromise } from '@polkadot/api'
-import {
+import type {
   SubmittableExtrinsic,
   SubmittableResultValue,
 } from '@polkadot/api/types'
-import { KeyringPair } from '@polkadot/keyring/types'
-import { waitReady } from '@polkadot/wasm-crypto'
+import type { KeyringPair } from '@polkadot/keyring/types'
+import {
+  ApiPromise,
+  cryptoWaitReady,
+} from '../../../../shared/utils/polkadot.js'
 import { createConnection } from '../../../drivers/substrate.js'
 import { Transaction, TransactionResult } from '@auto-drive/models'
 import { createLogger } from '../../../drivers/logger.js'
@@ -562,7 +564,7 @@ export const createTransactionManager = () => {
   const uniqueExecution = pLimit(1)
   const ensureInitialized = () =>
     uniqueExecution(async (): Promise<void> => {
-      await waitReady()
+      await cryptoWaitReady()
       api = api ?? (await createConnection())
       accountManager = accountManager ?? (await createAccountManager(api))
     })

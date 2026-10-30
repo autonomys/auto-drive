@@ -1,6 +1,5 @@
-import { ApiPromise } from '@polkadot/api'
-import { Keyring } from '@polkadot/keyring'
-import { KeyringPair } from '@polkadot/keyring/types'
+import type { KeyringPair } from '@polkadot/keyring/types'
+import { ApiPromise, Keyring } from './polkadot.js'
 
 export const createKeyPair = (uri: string): KeyringPair => {
   const keyring = new Keyring({
