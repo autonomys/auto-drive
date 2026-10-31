@@ -323,4 +323,55 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
       expect(usdc?.fromAddress).toBe(USDC_WALLET)
     })
   })
+  describe('getByAccountIdWithIntent', () => {
+    it('returns every buyer credited to the account and nothing else', async () => {
+      await createBatch({
+        intentId: 'account-buyer-a',
+        uploadOriginal: 100n,
+        uploadRemaining: 100n,
+        expiresAt: futureDate,
+        userPublicId: 'buyer-a',
+      })
+      await createBatch({
+        intentId: 'account-buyer-b',
+        uploadOriginal: 200n,
+        uploadRemaining: 200n,
+        expiresAt: futureDate,
+        userPublicId: 'buyer-b',
+      })
+      // buyer-a's purchase on a different account must not appear.
+      const OTHER_ACCOUNT = 'account-other-spec'
+      await accountsRepository.createAccount(
+        OTHER_ACCOUNT,
+        'org-other-spec',
+        'monthly',
+        0,
+        0,
+      )
+      await intentsRepository.createIntent({
+        id: 'account-other-intent',
+        userPublicId: 'buyer-a',
+        status: IntentStatus.COMPLETED,
+        shannonsPerByte: 1000n,
+        expiresAt: new Date('2030-01-01T00:00:00Z'),
+        paymentMethod: PaymentMethod.AI3_NATIVE,
+      })
+      await purchasedCreditsRepository.createPurchasedCredit({
+        accountId: OTHER_ACCOUNT,
+        intentId: 'account-other-intent',
+        uploadBytesOriginal: 300n,
+        downloadBytesOriginal: 0n,
+        expiresAt: futureDate,
+      })
+
+      const rows =
+        await purchasedCreditsRepository.getByAccountIdWithIntent(ACCOUNT_ID)
+      const byIntent = new Map(rows.map((r) => [r.intentId, r]))
+
+      expect(byIntent.get('account-buyer-a')?.userPublicId).toBe('buyer-a')
+      expect(byIntent.get('account-buyer-b')?.userPublicId).toBe('buyer-b')
+      expect(byIntent.has('account-other-intent')).toBe(false)
+      expect(rows.every((r) => r.accountId === ACCOUNT_ID)).toBe(true)
+    })
+  })
 })

@@ -55,6 +55,7 @@ The service supports multiple authentication providers:
 
 - Ethereum wallet authentication using Sign-In with Ethereum
 - Validates signed messages using the `siwe` library
+- Messages carry a one-time nonce from `POST /users/web3/nonce` and must be issued for an origin in `WEB3_AUTH_ALLOWED_ORIGINS`
 - Uses wallet address as both user ID and username
 
 ### 5. **API Key Authentication**
@@ -82,6 +83,7 @@ Environment variables:
 - `JWT_SECRET_ALGORITHM`: JWT algorithm (default: RS256)
 - `API_SECRET`: Secret for admin API authentication
 - `REVOKE_TOKEN_EMITTED_BEFORE_IN_SECONDS`: Tokens issued before this time are revoked (0 = disabled)
+- `WEB3_AUTH_ALLOWED_ORIGINS`: Comma-separated frontend origins that wallet sign-in messages may be issued for (default: `https://explorer.ai3.storage`)
 
 ## Hasura Integration
 

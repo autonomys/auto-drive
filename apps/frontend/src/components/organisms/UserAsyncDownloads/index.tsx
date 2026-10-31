@@ -1,4 +1,12 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { SessionContext } from 'next-auth/react';
 import {
   MyUndismissedAsyncDownloadsDocument,
   MyUndismissedAsyncDownloadsQuery,
@@ -36,6 +44,8 @@ export const UserAsyncDownloads = () => {
     (e) => e.removePendingAutoDownload,
   );
   const { gql, api, downloadService } = useNetwork();
+  const session = useContext(SessionContext);
+  const isSignedIn = !!session?.data;
   const updateAsyncDownloads = useUserAsyncDownloadsStore((e) => e.update);
   const [isOpen, setIsOpen] = useState(false);
   const autoDownloadingRef = useRef<Set<string>>(new Set());
@@ -64,13 +74,15 @@ export const UserAsyncDownloads = () => {
   }, [dismissOutdatedAsyncDownloads]);
 
   const fetcher = useCallback(async () => {
+    if (!isSignedIn) return [];
+
     const { data } = await gql.query<MyUndismissedAsyncDownloadsQuery>({
       query: MyUndismissedAsyncDownloadsDocument,
       fetchPolicy: 'network-only',
     });
 
     return (data?.async_downloads as AsyncDownload[]) ?? [];
-  }, [gql]);
+  }, [gql, isSignedIn]);
 
   useEffect(() => {
     setFetcher(fetcher);

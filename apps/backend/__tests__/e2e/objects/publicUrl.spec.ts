@@ -1,5 +1,9 @@
 import { InteractionType, UserWithOrganization } from '@auto-drive/models'
-import { PublishedObject } from '../../../src/infrastructure/repositories/objects/publishedObjects.js'
+import {
+  PublishedObject,
+  publishedObjectsRepository,
+} from '../../../src/infrastructure/repositories/objects/publishedObjects.js'
+import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { ObjectUseCases, AccountsUseCases } from '../../../src/core/index.js'
 import { asyncIterableToPromiseOfArray } from '@autonomys/asynchronous'
@@ -12,6 +16,7 @@ import {
 import { uploadFile } from '../../utils/uploads.js'
 import { jest } from '@jest/globals'
 import { ok } from 'neverthrow'
+import { v4 } from 'uuid'
 
 describe('Public URL', () => {
   let user: UserWithOrganization
@@ -39,6 +44,53 @@ describe('Public URL', () => {
       cid: fileCid,
       id: expect.any(String),
     })
+  })
+
+  it('should return the same public link when publishing again', async () => {
+    const publishedAgain = await ObjectUseCases.publishObject(user, fileCid)
+
+    expect(publishedAgain).toMatchObject({
+      id: publishedObject.id,
+      publicId: user.publicId,
+      cid: fileCid,
+    })
+  })
+
+  it('should give another user publishing the same cid their own public link', async () => {
+    const otherUser = createMockUser()
+    await uploadFile(otherUser, 'test.txt', content, 'text/plain')
+
+    const otherPublishedObject = await ObjectUseCases.publishObject(
+      otherUser,
+      fileCid,
+    )
+
+    expect(otherPublishedObject).toMatchObject({
+      publicId: otherUser.publicId,
+      cid: fileCid,
+    })
+    expect(otherPublishedObject.id).not.toBe(publishedObject.id)
+  })
+
+  it('should show each viewer only their own public link', async () => {
+    const otherUser = createMockUser()
+    const otherLink = await ObjectUseCases.publishObject(otherUser, fileCid)
+
+    await expect(
+      ObjectUseCases.getPublishedObjectId(fileCid, user),
+    ).resolves.toBe(publishedObject.id)
+    await expect(
+      ObjectUseCases.getPublishedObjectId(fileCid, otherUser),
+    ).resolves.toBe(otherLink.id)
+    await expect(
+      ObjectUseCases.getPublishedObjectId(fileCid, createMockUser()),
+    ).resolves.toBeNull()
+    await expect(
+      ObjectUseCases.getPublishedObjectId(fileCid, null),
+    ).resolves.toBeNull()
+
+    const information = await ObjectUseCases.getObjectInformation(fileCid)
+    expect(information?.publishedObjectId).toBeNull()
   })
 
   it('should be downloadable by public id and credits should be deducted', async () => {
@@ -78,5 +130,69 @@ describe('Public URL', () => {
     expect(updatedPendingCredits).toBe(
       pendingCredits - downloadedContent.length,
     )
+  })
+
+  it('should return the oldest public link when the user already has several', async () => {
+    const duplicatesUser = createMockUser()
+    await uploadFile(duplicatesUser, 'test.txt', content, 'text/plain')
+
+    // Links created twice before the fix. The newer row is inserted first, so
+    // a lookup without ORDER BY finds it before the oldest one.
+    const newer = await publishedObjectsRepository.createPublishedObject(
+      v4(),
+      duplicatesUser.publicId!,
+      fileCid,
+    )
+    const oldest = await publishedObjectsRepository.createPublishedObject(
+      v4(),
+      duplicatesUser.publicId!,
+      fileCid,
+    )
+    const db = await getDatabase()
+    await db.query(
+      'UPDATE public.published_objects SET created_at = $1 WHERE id = $2',
+      [new Date(Date.now() - 24 * 60 * 60 * 1000), oldest.id],
+    )
+
+    const publishedAgain = await ObjectUseCases.publishObject(
+      duplicatesUser,
+      fileCid,
+    )
+
+    expect(publishedAgain.id).toBe(oldest.id)
+    expect(publishedAgain.id).not.toBe(newer.id)
+  })
+
+  it('should only remove the public link of the caller when unpublishing', async () => {
+    const userA = createMockUser()
+    const userB = createMockUser()
+    await uploadFile(userA, 'test.txt', content, 'text/plain')
+    await uploadFile(userB, 'test.txt', content, 'text/plain')
+    const linkA = await ObjectUseCases.publishObject(userA, fileCid)
+    const linkB = await ObjectUseCases.publishObject(userB, fileCid)
+
+    const result = await ObjectUseCases.unpublishObject(userB, fileCid)
+
+    expect(result.isOk()).toBe(true)
+    await expect(
+      publishedObjectsRepository.getPublishedObjectById(linkB.id),
+    ).resolves.toBeNull()
+    await expect(
+      publishedObjectsRepository.getPublishedObjectById(linkA.id),
+    ).resolves.toMatchObject({ id: linkA.id, publicId: userA.publicId })
+  })
+
+  it('should do nothing when the caller has no public link for the cid', async () => {
+    const userWithoutLink = createMockUser()
+
+    const result = await ObjectUseCases.unpublishObject(
+      userWithoutLink,
+      fileCid,
+    )
+
+    expect(result.isOk()).toBe(true)
+    await expect(
+      publishedObjectsRepository.getPublishedObjectById(publishedObject.id),
+    ).resolves.toMatchObject({ id: publishedObject.id })
   })
 })

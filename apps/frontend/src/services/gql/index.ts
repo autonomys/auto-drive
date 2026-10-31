@@ -9,8 +9,11 @@ const authLink = setContext(async (_, { headers }) => {
   return {
     headers: {
       ...headers,
-      ...(token ? { authorization: `Bearer ${token.accessToken}` } : {}),
-      'X-Hasura-Role': token ? 'user' : 'anonymous',
+      // Signed-in requests use the token's default role (`app-admin` for
+      // admins, `user` otherwise)
+      ...(token
+        ? { authorization: `Bearer ${token.accessToken}` }
+        : { 'X-Hasura-Role': 'anonymous' }),
     },
   };
 });

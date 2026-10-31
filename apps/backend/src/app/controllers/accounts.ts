@@ -46,13 +46,19 @@ accountController.post(
       return
     }
 
-    if (!req.body.userPublicIds) {
-      res.status(400).json({ error: 'userPublicIds is required' })
+    const userPublicIds = z
+      .array(z.string())
+      .max(100)
+      .safeParse(req.body.userPublicIds)
+    if (!userPublicIds.success) {
+      res
+        .status(400)
+        .json({ error: 'userPublicIds must be an array of strings' })
       return
     }
 
-    const accountByPublicId = await handleInternalError(
-      AccountsUseCases.getUserListAccount(req.body.userPublicIds),
+    const accountByPublicId = await handleInternalErrorResult(
+      AccountsUseCases.getUserListAccount(user, userPublicIds.data),
       'Failed to get user list accounts',
     )
     if (accountByPublicId.isErr()) {
@@ -63,6 +69,85 @@ accountController.post(
 
     logger.trace('User list accounts', accountByPublicId.value)
     res.json(accountByPublicId.value)
+  }),
+)
+
+// Admin-only: find accounts by partial user publicId, account ID or
+// organization ID. Each result carries the matching user.
+accountController.get(
+  '/admin/search',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+    if (!query) {
+      res.status(400).json({ error: 'Missing query parameter `q`' })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.adminSearchAccounts(user, query),
+      'Failed to search accounts',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+// Admin-only: each user's current account ID, keyed by publicId.
+accountController.post(
+  '/admin/by-users',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const publicIds = z.array(z.string()).max(100).safeParse(req.body.publicIds)
+    if (!publicIds.success) {
+      res.status(400).json({ error: 'publicIds must be an array of strings' })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.adminGetAccountIdsByUsers(user, publicIds.data),
+      'Failed to get accounts by users',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+// Admin-only: one account by account ID or organization ID, with its members.
+accountController.get(
+  '/admin/:id',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.adminGetAccount(user, req.params.id),
+      'Failed to get account',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
   }),
 )
 

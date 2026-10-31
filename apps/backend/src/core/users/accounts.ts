@@ -8,7 +8,9 @@ import {
   InteractionType,
   InteractionSource,
   AccountInfo,
+  AccountInfoWithUser,
   AccountWithTotalSize,
+  AdminAccountDetails,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
@@ -219,9 +221,14 @@ const getAccountInfo = async (
 }
 
 const getUserListAccount = async (
+  executor: User,
   userPublicIds: string[],
-): Promise<Record<string, AccountInfo>> => {
-  if (userPublicIds.length === 0) return {}
+): Promise<Result<Record<string, AccountInfo>, ForbiddenError>> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  if (userPublicIds.length === 0) return ok({})
 
   const users = await AuthManager.getUsersFromPublicIds(userPublicIds)
   const usersByPublicId = new Map(users.map((u) => [u.publicId, u]))
@@ -232,7 +239,7 @@ const getUserListAccount = async (
       .map(async (id) => [id, await getAccountInfo(usersByPublicId.get(id)!)]),
   )
 
-  return Object.fromEntries(entries)
+  return ok(Object.fromEntries(entries))
 }
 
 const getPendingCreditsByUserAndType = async (
@@ -271,7 +278,11 @@ const registerInteraction = async (
   // compensation logic are upload-only for now.
   const fromPurchased =
     type === InteractionType.Upload
-      ? await purchasedCreditsRepository.consumeUpTo(account.id, creditType, size)
+      ? await purchasedCreditsRepository.consumeUpTo(
+          account.id,
+          creditType,
+          size,
+        )
       : BigInt(0)
 
   const fromFree = size - fromPurchased
@@ -306,9 +317,12 @@ const registerInteraction = async (
       BigInt(0),
     )
     const freeLimit = BigInt(
-      type === InteractionType.Upload ? account.uploadLimit : account.downloadLimit,
+      type === InteractionType.Upload
+        ? account.uploadLimit
+        : account.downloadLimit,
     )
-    const freeAvailable = freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
+    const freeAvailable =
+      freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
 
     if (fromFree > freeAvailable) {
       logger.warn(
@@ -324,7 +338,9 @@ const registerInteraction = async (
           fromPurchased,
         )
       }
-      throw new PaymentRequiredError(`Insufficient credits to process ${creditType}`)
+      throw new PaymentRequiredError(
+        `Insufficient credits to process ${creditType}`,
+      )
     }
   }
 
@@ -406,18 +422,19 @@ const addCreditsToAccount = async (
   // protected by a per-account advisory lock. This prevents two concurrent
   // onConfirmedIntent calls for different intents from both passing the cap
   // check and both inserting, which would push the account over the cap.
-  const result = await purchasedCreditsRepository.createPurchasedCreditWithCapCheck(
-    {
-      accountId: account.id,
-      intentId,
-      uploadBytesOriginal: credits,
-      // Download credits are not allocated on purchase — infrastructure is
-      // kept for future use but download limits are not enforced right now.
-      downloadBytesOriginal: 0n,
-      expiresAt,
-    },
-    config.credits.maxBytesPerUser,
-  )
+  const result =
+    await purchasedCreditsRepository.createPurchasedCreditWithCapCheck(
+      {
+        accountId: account.id,
+        intentId,
+        uploadBytesOriginal: credits,
+        // Download credits are not allocated on purchase — infrastructure is
+        // kept for future use but download limits are not enforced right now.
+        downloadBytesOriginal: 0n,
+        expiresAt,
+      },
+      config.credits.maxBytesPerUser,
+    )
 
   if (result.isErr()) {
     logger.warn(
@@ -472,7 +489,121 @@ const getTopAccounts = async (
   )
 }
 
+/**
+ * Admin lookup by any identifier an admin is likely to hold: a (partial) user
+ * publicId, an account ID or an organization ID. An account ID is translated to
+ * its organization so the auth service can return that organization's members.
+ */
+const adminSearchAccounts = async (
+  executor: User,
+  query: string,
+): Promise<Result<AccountInfoWithUser[], ForbiddenError>> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  const account = await accountsRepository.getById(query)
+  const users = await AuthManager.adminSearchUsers(
+    query,
+    account?.organizationId ?? query,
+  )
+
+  type MemberUser = UserWithOrganization & { organizationId: string }
+  const onboarded = users.filter((u): u is MemberUser => !!u.organizationId)
+
+  // One lookup per organisation: getAccountInfo may create the account, and
+  // concurrent creates for members of the same organisation would collide.
+  const byOrganization = new Map<string, MemberUser>()
+  for (const user of onboarded) {
+    if (!byOrganization.has(user.organizationId)) {
+      byOrganization.set(user.organizationId, user)
+    }
+  }
+  const accountInfos = new Map(
+    await Promise.all(
+      [...byOrganization].map(
+        async ([organizationId, user]) =>
+          [organizationId, await getAccountInfo(user)] as const,
+      ),
+    ),
+  )
+
+  return ok(
+    onboarded.map((user) => ({
+      ...accountInfos.get(user.organizationId)!,
+      user,
+    })),
+  )
+}
+
+/**
+ * Admin account page: the account for an account ID or an organization ID,
+ * with its members. Members can be empty, e.g. once the only member has
+ * deleted their user: the account and its credits stay.
+ */
+const adminGetAccount = async (
+  executor: User,
+  id: string,
+): Promise<
+  Result<AdminAccountDetails, ForbiddenError | ObjectNotFoundError>
+> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  const account =
+    (await accountsRepository.getById(id)) ??
+    (await accountsRepository.getByOrganizationId(id))
+  if (!account) {
+    return err(new ObjectNotFoundError('Account not found'))
+  }
+
+  const [pendingUploadCredits, pendingDownloadCredits, users] =
+    await Promise.all([
+      getPendingCreditsByAccountAndType(account, InteractionType.Upload),
+      getPendingCreditsByAccountAndType(account, InteractionType.Download),
+      AuthManager.adminSearchUsers('', account.organizationId),
+    ])
+
+  return ok({
+    ...account,
+    pendingUploadCredits,
+    pendingDownloadCredits,
+    // Auth returns only this organization's members; `organizationId` is
+    // their first membership, so it is only used to skip unonboarded users.
+    members: users.filter((u): u is UserWithOrganization => !!u.organizationId),
+  })
+}
+
+/**
+ * Admin: each user's current account ID, keyed by publicId. Read-only, so
+ * users without an organization or account are left out, not given one.
+ */
+const adminGetAccountIdsByUsers = async (
+  executor: User,
+  publicIds: string[],
+): Promise<Result<Record<string, string>, ForbiddenError>> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  const users = await AuthManager.getUsersFromPublicIds(publicIds)
+  const entries = await Promise.all(
+    users.map(async ({ publicId, organizationId }) => {
+      if (!publicId || !organizationId) return []
+      const account =
+        await accountsRepository.getByOrganizationId(organizationId)
+      return account ? [[publicId, account.id] as const] : []
+    }),
+  )
+
+  return ok(Object.fromEntries(entries.flat()))
+}
+
 export const AccountsUseCases = {
+  adminSearchAccounts,
+  adminGetAccount,
+  adminGetAccountIdsByUsers,
   updateAccount,
   getOrCreateAccount,
   initAccount,

@@ -11,6 +11,7 @@ import { ApiKeysUseCases } from '../useCases/apikeys.js'
 import { ApiKeyError } from '../errors/apikeys.js'
 import { DeletionRequestStatus, UserRole } from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
+import { Web3Auth } from '../services/authManager/providers/web3.js'
 import { createLogger } from '../drivers/logger.js'
 
 const logger = createLogger('controllers:user')
@@ -50,6 +51,10 @@ userController.post('/@me/accessToken', async (req: Request, res: Response) => {
       sameSite: 'strict',
     })
     .json({ accessToken })
+})
+
+userController.post('/web3/nonce', (_req: Request, res: Response) => {
+  res.json(Web3Auth.createNonce())
 })
 
 userController.post(
@@ -331,6 +336,33 @@ userController.get('/list', async (req: Request, res: Response) => {
       error: 'Failed to get user list',
     })
     return
+  }
+})
+
+// Admin search: partial publicId match, plus the members of `organizationId`
+// when given (the backend passes it after resolving an account ID).
+userController.get('/admin/search', async (req: Request, res: Response) => {
+  const isAdmin = await handleAdminAuth(req, res)
+  if (!isAdmin) {
+    return
+  }
+
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+  const organizationId =
+    typeof req.query.organizationId === 'string'
+      ? req.query.organizationId.trim() || undefined
+      : undefined
+  if (!query && !organizationId) {
+    res.status(400).json({ error: 'q or organizationId is required' })
+    return
+  }
+
+  try {
+    const users = await UsersUseCases.adminSearchUsers(query, organizationId)
+    res.json(users)
+  } catch (error) {
+    logger.error(error)
+    res.status(500).json({ error: 'Failed to search users' })
   }
 })
 

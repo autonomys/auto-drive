@@ -78,9 +78,10 @@ const searchUsersByPublicId = async (
 ): Promise<User[]> => {
   const db = await getDatabase()
 
+  const escaped = publicId.replace(/[\\%_]/g, (c) => `\\${c}`)
   const users = await db.query(
-    'SELECT * FROM users.users WHERE publicId LIKE $1 limit $2',
-    [`%${publicId}%`, limit],
+    'SELECT * FROM users.users WHERE public_id ILIKE $1 ORDER BY public_id LIMIT $2',
+    [`%${escaped}%`, limit],
   )
 
   return users.rows
