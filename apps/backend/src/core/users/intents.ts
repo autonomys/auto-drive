@@ -843,7 +843,7 @@ const amountInIntentAsset = (
  * payment that lost the conditional transition — and both need the same answer,
  * because they are the same event reached at different moments. Every log is
  * delivered several times over: paymentManager.start() runs in the frontend API
- * and the frontend worker, each with its own watchContractEvent over the
+ * and the frontend worker, each with its own payment event poll over the
  * contract, and the queued watch-intent-tx task calls watchTransaction again.
  * Whether a duplicate arrives after the settling write commits (the guard) or
  * races it (the transition) is a matter of scheduling, not of what happened on
@@ -1191,7 +1191,7 @@ const markIntentAsConfirmed = async ({
     // THIS payment settled it, delivered twice. The common case, and the reason
     // the read-back exists. Every log is delivered by several callers —
     // paymentManager.start() runs in both the frontend API and the frontend
-    // worker, each with its own watchContractEvent, and the queued
+    // worker, each with its own payment event poll, and the queued
     // watch-intent-tx task calls watchTransaction again — with the same intent
     // id, hash and amount, unserialised. One wins here and the others land in
     // this branch. Filing them reports a second payment for money that arrived
