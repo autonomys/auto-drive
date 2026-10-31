@@ -83,6 +83,10 @@ export type PaymentChain<
   // transaction that takes two minutes to be mined would time out, retry, and
   // eventually raise a payment-failed alert for a payment that was fine.
   receiptTimeoutMs: number
+  // How many blocks behind the head the event poll starts reading on start(),
+  // so a payment mined while the worker was down is still seen. Replaying one
+  // that already settled is a no-op in markIntentAsConfirmed.
+  eventLookbackBlocks: number
   abi: abi
   eventName: eventName
   toPayment: (
@@ -111,8 +115,14 @@ export type PaymentChain<
   ) => Promise<{ ok: true } | { ok: false; problem: string }>
 }
 
+const EVENT_POLL_INTERVAL_MS = 4_000
+
+// Bounds one eth_getLogs call during the startup lookback or a catch-up after an
+// RPC outage. Steady-state polls read a block or two.
+const MAX_LOG_RANGE_BLOCKS = 500n
+
 /**
- * One chain's payment watcher: event subscription, receipt confirmation, and
+ * One chain's payment watcher: event poll, receipt confirmation, and
  * the startup sweep that re-watches transactions submitted before a restart.
  *
  * Deliberately does NOT include the confirmed-intent polling loop that grants
@@ -136,7 +146,7 @@ export const createPaymentWatcher = <
   // transaction at the same time.
   //
   // Three paths reach watchTransaction independently: the contract-event
-  // subscription, the watch-intent-tx task, and the startup sweep. Two of them
+  // poll, the watch-intent-tx task, and the startup sweep. Two of them
   // arriving together — a redelivered task landing while the sweep re-watches
   // the same row, which is the normal shape of a worker restart — means two
   // markIntentAsConfirmed calls for the SAME payment, with the same hash and the
@@ -154,7 +164,7 @@ export const createPaymentWatcher = <
   // run concurrently below.
   //
   // Keyed on the LOWER-CASED hash, because the three feeders do not agree on
-  // case. viem hands the subscription a lowercase transactionHash; the task and
+  // case. viem hands the event poll a lowercase transactionHash; the task and
   // the sweep carry whatever was written to intents.tx_hash. The controller now
   // normalises what it accepts, so new rows agree — but rows already stored, and
   // any caller that reaches this function another way, still do not, and one
@@ -308,7 +318,62 @@ export const createPaymentWatcher = <
     return viemParseEventLogs<parseAbi, strict, parseEventName>(parameters)
   }
 
-  let unwatchContractEvent: (() => void) | null = null
+  // Payment events are read with eth_getLogs over a block cursor, not viem's
+  // watchContractEvent. That installs one eth_newFilter and only rebuilds it on
+  // a -32000 error, while Auto EVM's node drops every filter 100 blocks after
+  // creating it, polled or not, and reports the loss as -32603.
+  let nextBlock: bigint | null = null
+  let activeLoop: symbol | null = null
+  let pollTimer: ReturnType<typeof setTimeout> | null = null
+
+  const pollPaymentEvents = async () => {
+    const head = await watcher._viemClient.getBlockNumber()
+    // Only blocks waitForTransactionReceipt would already accept, so a reorg
+    // shallower than `confirmations` cannot swap out a block already read.
+    const confirmedHead = head - BigInt(chain.confirmations - 1)
+
+    if (nextBlock === null) {
+      const lookbackStart =
+        confirmedHead - BigInt(chain.eventLookbackBlocks) + 1n
+      nextBlock = lookbackStart > 0n ? lookbackStart : 0n
+    }
+
+    let fromBlock: bigint = nextBlock
+    while (fromBlock <= confirmedHead) {
+      const rangeEnd = fromBlock + MAX_LOG_RANGE_BLOCKS - 1n
+      const toBlock = rangeEnd < confirmedHead ? rangeEnd : confirmedHead
+      const logs = await watcher._viemClient.getContractEvents({
+        abi: chain.abi,
+        address: chain.contractAddress,
+        eventName: chain.eventName,
+        fromBlock,
+        toBlock,
+      })
+      if (logs.length > 0) {
+        watcher._onLogs(logs)
+      }
+      fromBlock = toBlock + 1n
+      nextBlock = fromBlock
+    }
+  }
+
+  // A failed poll leaves the cursor where it was, so the next one re-reads the
+  // same blocks. `loop` stops a poll that was in flight during stop() from
+  // scheduling another.
+  const runPollLoop = async (loop: symbol) => {
+    try {
+      await watcher._pollPaymentEvents()
+    } catch (error) {
+      logger.error('Payment event poll failed', {
+        chain: chain.name,
+        fromBlock: nextBlock?.toString(),
+        error,
+      })
+    }
+    if (activeLoop === loop) {
+      pollTimer = setTimeout(() => runPollLoop(loop), EVENT_POLL_INTERVAL_MS)
+    }
+  }
 
   // On startup, re-watch any PENDING intents that already have a tx_hash.
   // These represent transactions submitted by users before the last service
@@ -405,7 +470,7 @@ export const createPaymentWatcher = <
           title: `:rotating_light: ${chain.name} payment watcher is misconfigured — payments will not be observed`,
           details:
             `No contract code at ${chain.contractAddress}. The watcher is ` +
-            'subscribed to an address that cannot emit payment events.',
+            'watching an address that cannot emit payment events.',
         })
         return
       }
@@ -447,9 +512,8 @@ export const createPaymentWatcher = <
   }
 
   const start = () => {
-    if (unwatchContractEvent) {
-      // A second subscription would process every event twice and leak the
-      // first unsubscribe, leaving a watcher that stop() cannot turn off.
+    if (activeLoop) {
+      // A second loop would read every block twice.
       logger.warn('Payment watcher already running — ignoring start', {
         chain: chain.name,
       })
@@ -467,30 +531,18 @@ export const createPaymentWatcher = <
     safeCallback(watcher._verifyConfiguration)()
     safeCallback(watcher._recoverOrphanedTransactions)()
 
-    unwatchContractEvent = watcher._viemClient.watchContractEvent({
-      abi: chain.abi,
-      address: chain.contractAddress,
-      eventName: chain.eventName,
-      onLogs: watcher._onLogs,
-      // viem swallows poll failures into this callback, so without one a bad
-      // endpoint, an expired filter or a rate-limited provider yields zero logs
-      // and zero log lines — indefinitely, and indistinguishable from a chain
-      // nobody is paying on. The primary observation channel for real money must
-      // not be able to fail quietly.
-      onError: (error) => {
-        logger.error('Payment event subscription error', {
-          chain: chain.name,
-          error,
-        })
-      },
-    })
+    const loop = Symbol(chain.name)
+    activeLoop = loop
+    nextBlock = null
+    void runPollLoop(loop)
   }
 
   const stop = () => {
     logger.info('Stopping payment watcher', { chain: chain.name })
-    if (unwatchContractEvent) {
-      unwatchContractEvent()
-      unwatchContractEvent = null
+    activeLoop = null
+    if (pollTimer) {
+      clearTimeout(pollTimer)
+      pollTimer = null
     }
   }
 
@@ -500,6 +552,7 @@ export const createPaymentWatcher = <
     start,
     stop,
     _onLogs: onLogs,
+    _pollPaymentEvents: pollPaymentEvents,
     _recoverOrphanedTransactions,
     _verifyConfiguration,
     _viemClient: viemClient,
