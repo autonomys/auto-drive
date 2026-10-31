@@ -1,12 +1,15 @@
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { NodesUseCases } from '../../../src/core/objects/nodes.js'
+import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import {
   uploadsRepository,
   type UploadEntry,
 } from '../../../src/infrastructure/repositories/uploads/uploads.js'
+import { config } from '../../../src/config.js'
 import { UploadStatus } from '@auto-drive/models'
+import { ok } from 'neverthrow'
 
 describe('UploadsUseCases.scheduleNodesPublish', () => {
   beforeEach(() => {
@@ -102,6 +105,72 @@ describe('UploadsUseCases.scheduleNodesPublish', () => {
 
     expect(getCidsSpy).toHaveBeenCalledWith('my-root-cid')
   })
+})
+
+describe('UploadsUseCases.tagUpload', () => {
+  const cid = 'file-cid'
+  let addTagSpy: jest.SpiedFunction<typeof ObjectUseCases.addTag>
+  let publishSpy: jest.SpiedFunction<typeof EventRouter.publish>
+
+  beforeEach(() => {
+    jest.replaceProperty(config.params, 'forbiddenExtensions', ['exe', 'bin'])
+    addTagSpy = jest.spyOn(ObjectUseCases, 'addTag').mockResolvedValue()
+    jest.spyOn(NodesUseCases, 'getCidsByRootCid').mockResolvedValue([cid])
+    publishSpy = jest.spyOn(EventRouter, 'publish').mockReturnValue()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  const tagFile = (name: string) => {
+    jest.spyOn(ObjectUseCases, 'getMetadata').mockResolvedValue(
+      ok({
+        type: 'file',
+        dataCid: cid,
+        name,
+        totalSize: BigInt(1),
+        totalChunks: 1,
+        chunks: [],
+      }),
+    )
+    return UploadsUseCases.tagUpload(cid)
+  }
+
+  it.each(['setup.exe', 'SETUP.EXE', 'firmware.Bin', 'archive.tar.exe'])(
+    'tags %s as insecure',
+    async (name) => {
+      await tagFile(name)
+      expect(addTagSpy).toHaveBeenCalledWith(cid, 'insecure')
+    },
+  )
+
+  it.each([
+    'photo.x',
+    'notes.e',
+    'setup.exe.txt',
+    'exe',
+    'README',
+    'trailing.',
+  ])('does not tag %s', async (name) => {
+    await tagFile(name)
+    expect(addTagSpy).not.toHaveBeenCalled()
+  })
+
+  it.each(['notes.[v2', 'scan.(1', 'x.*'])(
+    'schedules publishing for %s',
+    async (name) => {
+      const result = await tagFile(name)
+      expect(result.isOk()).toBe(true)
+      expect(addTagSpy).not.toHaveBeenCalled()
+      expect(publishSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'publish-nodes',
+          params: { nodes: [cid] },
+        }),
+      )
+    },
+  )
 })
 
 describe('UploadsUseCases.processMigration', () => {

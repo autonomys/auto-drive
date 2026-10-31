@@ -120,6 +120,9 @@ export const rawListEnv = (raw?: string): string[] =>
     .map((value) => value.trim())
     .filter((value) => value)
 
+export const extensionListEnv = (raw?: string): string[] =>
+  rawListEnv(raw).map((ext) => ext.replace(/^\./, '').toLowerCase())
+
 export const config = {
   postgres: {
     url: env('DATABASE_URL'),
@@ -706,7 +709,7 @@ export const config = {
         env('WEB3_DEFAULT_ACCOUNT_DOWNLOAD_LIMIT', ONE_HUNDRED_MiB.toString()),
       ),
     },
-    forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
+    forbiddenExtensions: extensionListEnv(env('FORBIDDEN_EXTENSIONS', '')),
     taskManagerMaxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
     downloadInactivityTimeoutMs: Number(
       env('DOWNLOAD_INACTIVITY_TIMEOUT_MS', '300000'),
