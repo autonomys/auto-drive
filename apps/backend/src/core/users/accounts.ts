@@ -221,9 +221,14 @@ const getAccountInfo = async (
 }
 
 const getUserListAccount = async (
+  executor: User,
   userPublicIds: string[],
-): Promise<Record<string, AccountInfo>> => {
-  if (userPublicIds.length === 0) return {}
+): Promise<Result<Record<string, AccountInfo>, ForbiddenError>> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  if (userPublicIds.length === 0) return ok({})
 
   const users = await AuthManager.getUsersFromPublicIds(userPublicIds)
   const usersByPublicId = new Map(users.map((u) => [u.publicId, u]))
@@ -234,7 +239,7 @@ const getUserListAccount = async (
       .map(async (id) => [id, await getAccountInfo(usersByPublicId.get(id)!)]),
   )
 
-  return Object.fromEntries(entries)
+  return ok(Object.fromEntries(entries))
 }
 
 const getPendingCreditsByUserAndType = async (

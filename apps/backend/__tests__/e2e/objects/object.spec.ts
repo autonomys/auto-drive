@@ -330,13 +330,9 @@ describe('Object', () => {
         ObjectUseCases.unpublishObject(user, fileCid),
       ).resolves.not.toThrow()
 
-      const object = await ObjectUseCases.getObjectInformation(fileCid)
-      expect(object?.publishedObjectId).toBeDefined()
-    })
-
-    it('should return undefined if object is not published', async () => {
-      const object = await ObjectUseCases.getObjectInformation(fileCid)
-      expect(object?.publishedObjectId).toBeNull()
+      await expect(
+        ObjectUseCases.getPublishedObjectId(fileCid, user),
+      ).resolves.toBeNull()
     })
   })
 })

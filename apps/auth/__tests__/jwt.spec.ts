@@ -9,6 +9,7 @@ import { AuthManager } from '../src/services/authManager/index.js'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
 import { dbMigration } from './utils/dbMigrate.js'
 import { createMockUser } from './utils/mocks.js'
+import { config } from '../src/config.js'
 
 describe('JWT', () => {
   let user: User
@@ -113,6 +114,28 @@ describe('JWT', () => {
     await expect(
       CustomJWTAuth.refreshAccessToken(refreshTokenString),
     ).rejects.toThrow('Invalid refresh token')
+  })
+
+  it('should reject access and refresh tokens issued before the revocation cutoff', async () => {
+    const tokens = await CustomJWTAuth.createSessionTokens(user)
+    const previousCutoff = config.revokeTokenEmittedBeforeInSeconds
+    config.revokeTokenEmittedBeforeInSeconds =
+      Math.floor(Date.now() / 1000) + 60
+
+    try {
+      await expect(
+        AuthManager.getUserFromAccessToken('custom-jwt', tokens.accessToken),
+      ).rejects.toThrow('Invalid access token')
+      await expect(
+        CustomJWTAuth.refreshAccessToken(tokens.refreshToken),
+      ).rejects.toThrow('Invalid refresh token')
+    } finally {
+      config.revokeTokenEmittedBeforeInSeconds = previousCutoff
+    }
+
+    await expect(
+      CustomJWTAuth.refreshAccessToken(tokens.refreshToken),
+    ).resolves.toBeDefined()
   })
 
   it('should not be able to authenticate with the access token after invalidating the refresh token', async () => {

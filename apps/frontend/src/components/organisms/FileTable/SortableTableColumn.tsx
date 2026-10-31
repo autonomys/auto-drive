@@ -25,8 +25,8 @@ export const SortableTableColumn = ({
   const searchParams = useSearchParams();
 
   const isActive = sortedBy[sortingKey];
-  const isAsc = isActive && isActive === Order_By.AscNullsLast;
-  const isDesc = isActive && isActive === Order_By.DescNullsLast;
+  const isAsc = isActive && isActive === Order_By.Asc;
+  const isDesc = isActive && isActive === Order_By.Desc;
 
   const triangle = isAsc ? (
     <ChevronUpIcon className='h-4 w-4' fill='currentColor' />
@@ -42,9 +42,7 @@ export const SortableTableColumn = ({
   const toggleSort = useCallback(() => {
     // Only update if initialization is complete
     if (!isInitialized) return;
-    const newSortOrder = isDesc
-      ? Order_By.AscNullsLast
-      : Order_By.DescNullsLast;
+    const newSortOrder = isDesc ? Order_By.Asc : Order_By.Desc;
     // Update the sort state
     setSortBy({
       [sortingKey]: newSortOrder,

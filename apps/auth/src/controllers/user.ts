@@ -11,6 +11,7 @@ import { ApiKeysUseCases } from '../useCases/apikeys.js'
 import { ApiKeyError } from '../errors/apikeys.js'
 import { DeletionRequestStatus, UserRole } from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
+import { Web3Auth } from '../services/authManager/providers/web3.js'
 import { createLogger } from '../drivers/logger.js'
 
 const logger = createLogger('controllers:user')
@@ -50,6 +51,10 @@ userController.post('/@me/accessToken', async (req: Request, res: Response) => {
       sameSite: 'strict',
     })
     .json({ accessToken })
+})
+
+userController.post('/web3/nonce', (_req: Request, res: Response) => {
+  res.json(Web3Auth.createNonce())
 })
 
 userController.post(
